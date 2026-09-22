@@ -131,7 +131,10 @@ Waitron's tunnel and recovery components for reuse against its current SQLite de
 their existence does not establish compatibility with this milestone. Cloud owns
 registration, routing, storage access and service status. Waitron owns the local
 integration and the rules for activating a recovered server. Record the shared
-contract and verification responsibilities before implementation.
+contract and verification responsibilities before implementation. The
+[integration contract](waitron-integration-contract.md) is the implementation proposal
+for those exchanges and the first registration slice. It targets the incoming SQLite
+implementation; registration can proceed independently of the storage engine landing.
 
 ## Domains, certificates and local access
 
