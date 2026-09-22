@@ -48,6 +48,9 @@ this milestone is implemented by documenting it.
   internet connection is down. Define route permissions and the unavailable-page
   experience; cloud copies and offline booking acceptance are future capabilities.
 - Provide self-service recovery onto a replacement server without routine staff assistance.
+  Use Cloud-managed recovery keys by default for the stream and managed snapshots:
+  an authorised owner must not need the original server or a separately saved backup
+  key. Preserve the existing owner-held key model for customer-managed archives.
   Normally restore the latest recoverable continuous Litestream backup. Retained
   snapshots provide point-in-time archives and recovery if continuous backup data
   disappears. Start with daily snapshots retained for 30 days and monthly snapshots
@@ -97,7 +100,7 @@ this milestone is implemented by documenting it.
 | Waitron boundary | Signup inside Waitron, distinct Cloud and local staff logins, explicit identity linking and an independent Cloud portal are agreed. Venue linking requires Cloud permission to add venues and local administrator approval; one person or different people may provide them. Define the approval exchange, ownership proof, already-linked venue handling, configuration, credentials, status and version compatibility. |
 | Server lifecycle | One guided replacement flow covers planned upgrades and server failure, preserving venue, subscription and customer-facing addresses. Use fresh installation credentials, verify restored data before trading, retire old credentials and follow Waitron's activation rules. Specify final-backup handover, concurrent requests, interrupted replacement and a returning old server. Define connection and standalone revocation, including the latter's effects on subscriptions, retained backups and reconnection. |
 | Recovery promise | Specify tolerated data loss, recovery time and promotion authority for each service. Existing Waitron designs use human promotion; automation is not approved by this discussion. |
-| Backup recovery | Self-service restoration is agreed; staff intervention is an exceptional fallback. Use continuous backups for the latest recoverable version and retained snapshots for archives or missing continuous data. Start with daily snapshots for 30 days, monthly snapshots for 12 months and longer paid retention for selected snapshots. Preserve the last verified snapshot against automatic expiry while subscribed, marking it out of date when backups stop. Define verification, continuous-backup retention, schedule details, extended-retention terms and prices, and independent storage/deletion controls. Test recovery with continuous data absent. |
+| Backup recovery | Self-service restoration is agreed; staff intervention is an exceptional fallback. Use continuous backups for the latest recoverable version and retained snapshots for archives or missing continuous data. Start with daily snapshots for 30 days, monthly snapshots for 12 months and longer paid retention for selected snapshots. Preserve the last verified snapshot against automatic expiry while subscribed, marking it out of date when backups stop. Use Cloud-managed recovery without a saved owner key; validate the inherited hourly stream snapshot/30-day retention baseline and define verification, schedule details, extended-retention terms and prices, and independent storage/deletion controls. Test recovery with continuous data absent. |
 
 ## Platform work to scope
 
@@ -154,10 +157,20 @@ this milestone is implemented by documenting it.
   Implement the starting snapshot policy: daily for 30 days, monthly for 12 months
   and longer paid retention for selected snapshots. Define snapshot timing, monthly
   selection and missed-snapshot handling; validate storage costs before pricing.
-  Decide continuous-backup retention. Protect the last verified snapshot from automatic
+  Validate the inherited continuous-backup retention baseline. Protect the last verified snapshot from automatic
   expiry while the backup subscription is active. Specify verification before a newer
   snapshot takes its place; test failed new snapshots and interrupted cleanup. Explicit
   deletion and cancellation policies remain open.
+  Carry forward the existing topology's proposed hourly stream snapshots and 30-day
+  stream retention as a baseline to validate. Implement Cloud-managed recovery-key
+  custody and authorised delivery, respecting the existing external vault-key design.
+  Map backup contents, manifests, module restore hooks and per-secret handling before
+  defining the integration APIs. Test key rotation with retained snapshots and recovery
+  after loss of the original server without an owner-held backup key. See the
+  [existing-design reconciliation](documentation-ownership.md#backup-and-recovery-design-reconciliation).
+  Cloud registration credentials must respect Waitron's different node-identity rules
+  for stream and archive restores. Keep the on-prem-archive-to-cloud vault re-encryption
+  follow-up explicit; it is not proved by an ordinary backup download.
 
 ## Initial services and future candidates
 

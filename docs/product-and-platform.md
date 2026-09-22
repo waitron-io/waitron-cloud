@@ -194,8 +194,10 @@ plus a way to preserve a particular recovery point for longer.
 
 Validate storage costs before setting prices. The time of day, monthly selection rule,
 missed-snapshot handling, extended-retention terms and cancellation behaviour still
-need to be defined. Continuous-backup retention is a separate decision; these snapshot
-periods do not set its recovery window.
+need to be defined. Continuous-backup retention is separate from retained snapshots.
+Waitron's existing topology proposes hourly stream snapshots with 30 days' retention;
+carry that forward as the working baseline to validate, rather than treating it as
+unspecified. It remains a design proposal, not a measured recovery promise.
 
 Confirmed safeguard: while your backup subscription remains active, automatic cleanup
 must preserve the last verified snapshot even after its normal retention period ends.
@@ -218,12 +220,45 @@ backup data missing. This verifies the intended snapshot fallback before offerin
 to customers. Cloud owns backup selection and access; coordinate installation and
 safe activation of the replacement with Waitron's recovery logic.
 
+### Recovery keys and existing Waitron designs
+
+Confirmed default: Cloud-managed backups, including retained snapshots, support
+recovery through your authorised Cloud account without requiring a separately saved
+encryption key. Cloud must protect and supply the recovery secrets needed by an
+authorised replacement even when the original server is lost. The recovery service
+therefore has the technical ability to unlock these backups. Staff access still
+requires the agreed approval and audit controls; service access does not grant staff
+routine access to customer data.
+
+This builds on existing Waitron decisions. The continuous stream uses provider
+encryption under a per-venue key, and the cloud-node design assigns vault-key delivery
+to a Cloud secrets service using machine identity. The new decision extends managed
+recovery to the Cloud backup service and its retained snapshots. Exact key storage,
+rotation, authorisation and recovery delivery remain implementation work.
+
+Customer-managed archives retain their existing owner-held recovery-key model. That
+path already exists in Waitron's design; it is not a future Cloud feature. Subscribing
+must not silently transfer custody of keys for those archives. The older shared-store
+assumption that Cloud never holds recovery keys no longer governs managed Cloud
+recovery. The [design reconciliation](documentation-ownership.md#backup-and-recovery-design-reconciliation)
+records the source decisions and their scope.
+
+Keep backup encryption keys, application vault keys, machine credentials and staff
+TLS private keys distinct in the integration contract. Authorising managed recovery
+does not settle which individual secrets are captured or change the proposed
+venue-only custody of staff TLS private keys. Define per-secret capture, delivery
+and replacement rules, and test recovery without the original server or a saved
+backup key. The backup format and module restore hooks remain Waitron's responsibility.
+
 ## Venue identity and server replacement
 
 Confirmed model: a venue keeps its identity when you replace its server. Register
 each replacement as a distinct installation with fresh machine credentials. Restoring
 backup data must not automatically grant two installations authority to act as the
 venue's active primary. Use Waitron's ownership and recovery rules for activation.
+The fresh Cloud installation and its credentials must be mapped to Waitron's node
+identity rules for the selected restore path. They do not require every archive
+restore to generate a new Waitron node id.
 
 Confirmed replacement journey: support planned hardware upgrades and recovery after
 server failure from the outset, sharing the same guided flow wherever possible.
@@ -529,8 +564,9 @@ of a venue already connected to an organisation remain implementation decisions.
   before Google Cloud is called supported?
 - Are services purchased individually, in bundles, or both? What happens to retained
   data and access after cancellation or failed payment?
-- How long should the continuous backup remain recoverable, and what verification
-  must a new snapshot pass before replacing the protected last verified copy? Daily
+- What tests and costs validate the inherited proposal of hourly stream snapshots
+  with 30-day retention, and what verification must a new retained snapshot pass
+  before replacing the protected last verified copy? Daily
   snapshots for 30 days and monthly snapshots for 12 months are the starting policy;
   selected snapshots can have longer paid retention, with terms and prices still open.
 - How are independently deployed service groups arranged inside cells, and which
