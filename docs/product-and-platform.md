@@ -54,9 +54,13 @@ same city. You connect your venue, enable remote access and backups, and can see
 whether those services are working. Adding another venue should follow the same
 simple flow.
 
-The proposed first release lets you reach Waitron remotely and protects your data
-with automatic backups, visible backup health and a tested restore path. Decide the
-remote pages and users in scope, backup retention and restore experience next.
+Confirmed remote-access scope includes both owners and staff using Waitron remotely
+and customers reaching public pages such as menus and bookings. The proposed access
+model preserves Waitron's permissions for staff and exposes the intended public pages
+to customers. Define the exact routes and behaviour when the venue is offline.
+
+The proposed first release protects your data with automatic backups, visible backup
+health and a tested restore path. Decide backup retention and restore experience next.
 The exact balance of continuous backup and retained snapshots remains to be scoped.
 
 Keep the underlying organisation and legal-business model able to represent larger
