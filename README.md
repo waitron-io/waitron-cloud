@@ -7,6 +7,8 @@ instances, bookings and reporting.
 The product is being designed. Start with the [product and platform discussion](docs/product-and-platform.md),
 then the [cloud backlog](docs/backlog.md). The [documentation ownership map](docs/documentation-ownership.md)
 records the material moved from Waitron and the shared designs that remain there.
+The [Waitron integration contract](docs/waitron-integration-contract.md) maps registration,
+service configuration and recovery to the existing interfaces and the incoming SQLite work.
 
 ## Development
 

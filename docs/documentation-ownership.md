@@ -75,9 +75,11 @@ section 7.5 gives different node-identity rules for stream and archive restores;
 fresh Cloud registration credentials must respect those rules. Its point-in-time
 inspection path must not become an in-place rollback of a live ledger.
 
-Next, map the exact backup contents, per-secret custody, manifests and restore hooks
-to the Cloud registration and recovery APIs. Include key rotation and old snapshots,
-the externally keyed target, and a lost original server in the verification plan.
+The [integration contract](waitron-integration-contract.md) now maps inspected interfaces,
+backup contents, per-secret custody, manifests and restore hooks to proposed Cloud
+operations. It includes key rotation and old snapshots, the externally keyed target
+and a lost original server in the verification plan. Recheck concrete interfaces when
+the incoming SQLite work lands before implementing the backup adapter.
 Cloud owns the managed service and key-delivery contract; Waitron owns capture,
 restore and activation. Update the Waitron integration docs alongside implementation
 so the two repositories do not acquire competing recovery protocols.

@@ -24,12 +24,13 @@ Use two test venues sharing one cell. Implement and verify in this order:
 5. Replace the gateway, measure reconnection time with unchanged customer-facing
    addresses and verify that backups continue.
 
-Next: specify the protocols for connection, the agreed replacement journey and
-revocation of a server's Cloud access. Cloud owns registration, routing, storage access
-and service status; Waitron owns local integration and recovered
-server activation. Inspect reuse candidates against the SQLite design and define the
-shared contract and verification responsibilities before implementation. No part of
-this milestone is implemented by documenting it.
+The [integration contract](waitron-integration-contract.md) now maps the existing
+interfaces to proposed connection, configuration, backup, replacement and revocation
+operations, with ownership and acceptance checks. Next: implement registration state
+and specify the bound approval proof and first-contact trust before exposing public
+registration endpoints. This can proceed independently of SQLite landing. Recheck the
+new SQLite capture/restore interfaces before integrating backups; do not build a new
+PostgreSQL path. No part of this milestone is implemented by documenting it.
 
 ## Initial focus
 
@@ -130,6 +131,9 @@ this milestone is implemented by documenting it.
   recovery, show the recovery point and potential data loss, and require confirmation
   that the old server is taken out of service under Waitron's recovery rules. Preserve
   venue, subscription and addresses; test interrupted activation and route changes.
+  Start with the integration contract's registration slice: durable operations,
+  approvals bound to installation/venue/organisation, safe retries and separate service
+  readiness. Test expired/replayed approvals, concurrent linking and cross-venue denial.
 - **Provisioning and placement.** Country/provider/cell registry, repeatable resource
   creation, recovery from partial failures, capacity and customer movement.
   Place venues independently, preserve their addresses on movement and test replacement
@@ -164,13 +168,20 @@ this milestone is implemented by documenting it.
   Carry forward the existing topology's proposed hourly stream snapshots and 30-day
   stream retention as a baseline to validate. Implement Cloud-managed recovery-key
   custody and authorised delivery, respecting the existing external vault-key design.
-  Map backup contents, manifests, module restore hooks and per-secret handling before
-  defining the integration APIs. Test key rotation with retained snapshots and recovery
+  Implement the integration contract's mapped backup contents, manifests, module
+  restore hooks and per-secret handling after checking the incoming SQLite interfaces.
+  Test key rotation with retained snapshots and recovery
   after loss of the original server without an owner-held backup key. See the
   [existing-design reconciliation](documentation-ownership.md#backup-and-recovery-design-reconciliation).
   Cloud registration credentials must respect Waitron's different node-identity rules
   for stream and archive restores. Keep the on-prem-archive-to-cloud vault re-encryption
   follow-up explicit; it is not proved by an ordinary backup download.
+  The inspected archive format includes TLS private keys and backup settings, so
+  reconcile capture with venue-only staff TLS key custody and fresh Cloud installation
+  credentials before using it for managed Cloud backups. Implement restore verification
+  separately from file-upload freshness; keep verifier runs from activating a primary
+  or contacting fiscal/payment services. Define the external-key format extension
+  rather than assuming it exists in the inspected manifest v1.
 
 ## Initial services and future candidates
 
