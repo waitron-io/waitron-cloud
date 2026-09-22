@@ -141,6 +141,18 @@ outage, including router filtering and devices that use their own DNS settings. 
 router/device configuration, address stability and resolver failure behaviour remain
 implementation work; the chosen approach must preserve internet-independent local trading.
 
+Agreed evaluation: test the Plex approach as an additional option that may reduce
+customer configuration. A public hostname resolves to the venue's private LAN address,
+and the venue serves a publicly trusted certificate for that name. The client must
+select the local or remote connection address; public DNS does not automatically
+change its answer based on whether the client is inside the venue.
+
+This is a candidate to test, with local DNS overrides still preferred for dependable
+offline access. Verify router rebinding protection and fresh-device connections after
+internet loss and DNS-cache expiry before claiming a complete solution. See
+[Plex's secure-connection guidance](https://support.plex.tv/articles/206225077-how-to-use-secure-server-connections/)
+and [Waitron's existing LAN HTTPS investigation](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/specs/2026-09-08-handheld-app-store-and-kiosk-findings.md).
+
 ## Backups and self-service recovery
 
 Confirmed recovery model: you normally restore the most recent recoverable version
