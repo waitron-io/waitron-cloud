@@ -66,9 +66,22 @@ permissions to operate the Cloud platform, so each can be granted and revoked
 independently. For example, a billing role could handle subscriptions and an operations
 role could manage cells. The exact roles and permitted actions remain to be agreed.
 
-The proposed support model gives staff explicit, scoped access to customer data and
-records privileged actions. Decide whether that access requires customer approval,
-how long it lasts and how emergency access works before implementing support tools.
+Confirmed support policy: staff access to customer data requires your approval for
+a limited period, with scoped permissions and an audit of privileged actions. An
+exceptional emergency route must be explicitly authorised and audited; who can
+authorise it and under which circumstances remain to be defined.
+
+SSH access to your on-prem server is a possible additional support capability. If
+offered, it requires your explicit permission for that server and a limited period.
+Approving access to cloud data does not grant SSH access. The emergency route above
+does not waive the requirement for your explicit approval of SSH access.
+
+The proposed access grant records the approving customer, authorised support staff,
+target, permitted actions, reason and expiry. You should be able to revoke it early.
+For SSH, design expiry and revocation to end active sessions as well as prevent new
+connections. Connection setup, operating-system permissions and audit detail remain
+implementation decisions shared with Waitron's on-prem integration.
+
 Sharing authentication code does not itself grant either customer or staff permissions.
 
 Waitron's identity module is the starting point for reuse. Its
@@ -229,8 +242,9 @@ is unavailable; the cloud portal is the proposed independent entry point.
 
 - Which data may an organisation's shared identity and cross-country reporting layer
   hold when its legal businesses operate in several countries?
-- Which permissions do Cloud staff need, and when does access to customer data require
-  customer approval? How should exceptional emergency access work?
+- Which permissions do Cloud staff need, who may approve support access for a
+  customer, and who may authorise exceptional emergency access? If SSH support is
+  offered, how are server permissions, session termination and audit enforced?
 - Is the venue the smallest placement unit, and should a business's venues share a
   cell or be spread across cells?
 - What availability promise does each service make? How much recent data can recovery
