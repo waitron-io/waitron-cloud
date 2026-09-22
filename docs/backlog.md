@@ -30,11 +30,16 @@ operations, with ownership and acceptance checks. Next: implement registration s
 and specify the bound approval proof and first-contact trust before exposing public
 registration endpoints. This can proceed independently of SQLite landing. Recheck the
 new SQLite capture/restore interfaces before integrating backups; do not build a new
-PostgreSQL path. No part of this milestone is implemented by documenting it.
+PostgreSQL backup adapter for Waitron. No part of this milestone is implemented by
+documenting it.
 The [registration plan](registration-implementation-plan.md) now sequences persistence,
 identity reuse, the bound approval exchange and a two-installation connection proof.
-The normal connection journey is agreed; proof encoding and Cloud persistence choice
-remain implementation decisions to settle before exposing public endpoints.
+The normal connection journey and PostgreSQL for Cloud management data are agreed.
+Start with one management database and test concurrent completion and restart against
+PostgreSQL. Proof encoding and initial trust remain to be settled before exposing
+public endpoints. Country partitioning, database availability and per-cell storage
+remain deployment work; existing services must tolerate a management outage within
+the credential and revocation rules still to be defined.
 
 ## Initial focus
 
@@ -110,8 +115,10 @@ remain implementation decisions to settle before exposing public endpoints.
 ## Platform work to scope
 
 - **Identity and organisations.** Reuse suitable Waitron user management code and
-  behavioural tests; add cloud memberships and permissions for organisations that
-  can contain several legal businesses across countries. Include Cloud staff logins
+  behavioural tests from `pre-sqlite-migration`, pinned to
+  `c9d80c59a30ab1ae7a4acc0a6999e6a342de924e` in the registration plan. Adapt its
+  PostgreSQL schema and dependencies; add cloud memberships and permissions for
+  organisations that can contain several legal businesses across countries. Include Cloud staff logins
   and explicit links between distinct Cloud and local identities; local till staff
   need no Cloud account. Support one Cloud login managing several authorised venues
   and separate platform permissions. Implement the agreed support approval and expiry policy.

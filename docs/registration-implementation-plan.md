@@ -11,16 +11,33 @@ Cloud service during connection and finish the same requests without duplicate
 venues or credentials. Each installation can read only its own service configuration,
 and new services remain visibly unconfigured until provisioning succeeds.
 
+## Cloud persistence
+
+Confirmed choice: PostgreSQL for Cloud accounts, organisations, venues, permissions,
+connection requests and durable job records. Start with one management database for
+this registration slice. Use transactions and uniqueness constraints to coordinate
+multiple Cloud workers, and test against PostgreSQL through separate connections.
+Waitron's operational databases remain SQLite; backup files belong in object storage.
+
+Country partitioning and each cell's own state storage remain deployment decisions.
+Existing remote access and backups must not require a management-database query for
+every request. Define and test continued operation during a management outage,
+including credential expiry and revocation, before deploying those services.
+
 ## Identity reuse
 
-Use Waitron's management-login behaviour as the reference, with distinct Cloud
-accounts and organisation memberships. Its [identity package](https://github.com/clintongormley/waitron/blob/4ce2db502173d87d14d2e1aad5dc92b19be38363/packages/identity/package.json)
+Use Waitron's `pre-sqlite-migration` tag as the source for identity code and its
+behavioural tests, pinned to commit `c9d80c59a30ab1ae7a4acc0a6999e6a342de924e`. Keep
+distinct Cloud accounts and organisation memberships. Its [identity package](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/package.json)
 depends on Waitron's database, shared errors and sync-enrolment packages. Avoid copying
 that full dependency graph merely to get a login.
 
-Inspect and adapt the [password/secret helpers](https://github.com/clintongormley/waitron/blob/4ce2db502173d87d14d2e1aad5dc92b19be38363/packages/identity/src/secret-hash.ts),
-[management sessions](https://github.com/clintongormley/waitron/blob/4ce2db502173d87d14d2e1aad5dc92b19be38363/packages/identity/src/management-session.ts)
-and their behavioural tests. Session code is coupled to local person roles and
+Inspect and adapt the [password/secret helpers](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/secret-hash.ts),
+[management sessions](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/management-session.ts)
+and the [secret-helper tests](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/secret-hash.test.ts)
+and [session tests](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/management-session.test.ts).
+The tagged [session schema](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/schema/management-sessions.ts)
+already uses PostgreSQL. Session code is coupled to local person roles and
 database transactions; Cloud needs its own membership and platform-permission checks.
 Keep suspension/logout enforcement and distinguish background polling from human
 activity. Record the source revision and copied tests so security fixes can be
@@ -34,8 +51,8 @@ is not a security review or evidence that the copied code needs no changes.
    approval binding, Cloud approval, resulting venue/installation link and separate
    service states. Use database transactions and uniqueness constraints for completion;
    a process-local lock is insufficient for two running workers. Test restart and
-   concurrent completion through separate database connections. Finalise the Cloud
-   persistence choice in this step; it is independent of Waitron's SQLite migration.
+   concurrent completion through separate PostgreSQL connections. Include schema
+   migrations and test persistence after restarting the application.
 2. **Identity and approval exchange.** Integrate real Cloud account sessions and
    permission checks with the local Waitron administrator flow. Bind the expiring
    request to its installation identity, local venue, environment and Cloud

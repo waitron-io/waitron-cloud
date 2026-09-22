@@ -353,14 +353,33 @@ implementation decisions shared with Waitron's on-prem integration.
 
 Sharing authentication code does not itself grant either customer or staff permissions.
 
-Waitron's identity module is the starting point for reuse. Its
-[package manifest](https://github.com/clintongormley/waitron/blob/830cf71fe854c7aa0b0d8c95078d3fe49ca05a10/packages/identity/package.json)
+Confirmed reuse source: Waitron's identity module at tag `pre-sqlite-migration`,
+pinned to commit `c9d80c59a30ab1ae7a4acc0a6999e6a342de924e`. Its
+[package manifest](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/package.json)
 depends on Waitron's database, shared code and sync-enrolment packages. Its
-[public interface](https://github.com/clintongormley/waitron/blob/830cf71fe854c7aa0b0d8c95078d3fe49ca05a10/packages/identity/src/index.ts)
+[public interface](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/index.ts)
 includes invitations, management sessions, password recovery, passkeys and MFA.
 Those are useful foundations to copy or extract with their behavioural tests. Cloud
 organisations, memberships and cross-venue permissions need their own model. Choose
 how shared security fixes reach both repositories before creating a permanent fork.
+
+## Cloud management storage
+
+Confirmed choice: use PostgreSQL for Cloud accounts, organisations, venue and
+installation records, permissions, subscriptions and durable operations. Several
+Cloud processes need to update this shared information, so start with a database
+server they can access through transactions. The first registration implementation
+uses one management database. Waitron's venue databases remain SQLite, and backup
+files and snapshots go to object storage; PostgreSQL holds their catalogue and job
+records.
+
+Keep running services independent of a management-database query on every request,
+so a management outage does not immediately interrupt established remote access or
+backups. Country partitioning, database availability and each cell's own state
+storage remain deployment decisions. This choice does not settle where cross-country
+account data may live or make the management database a shared store for all cell
+traffic. The [registration plan](registration-implementation-plan.md) records the
+initial implementation and identity source.
 
 ## Country and mini-zone structure
 
