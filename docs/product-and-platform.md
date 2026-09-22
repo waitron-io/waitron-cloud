@@ -57,7 +57,15 @@ simple flow.
 Confirmed remote-access scope includes both owners and staff using Waitron remotely
 and customers reaching public pages such as menus and bookings. The proposed access
 model preserves Waitron's permissions for staff and exposes the intended public pages
-to customers. Define the exact routes and behaviour when the venue is offline.
+to customers. The exact routes remain to be defined.
+
+Confirmed initial availability policy: temporary unavailability is acceptable when
+the venue server or its internet connection is down. This applies to staff access
+and public pages, including bookings. The initial remote-access service depends on
+the venue being online; serving cloud copies and accepting bookings while it is
+offline remain future capabilities. Show a clear temporary-unavailability message
+as the proposed customer experience. The independent Cloud management portal remains
+available for account and service management, subject to its own availability.
 
 Confirmed requirement: remote access must include bot and traffic-abuse protection
 in Cloud, before requests reach your on-prem server. This covers staff access and

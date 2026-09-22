@@ -15,7 +15,9 @@ agreed initial services; their detailed scope and implementation sequence remain
   city. Keep the usual connection flow to one action that verifies both Cloud and
   local permissions.
 - Remote access covers owners and staff plus customer-facing pages such as menus
-  and bookings. Define route permissions and behaviour when the venue is offline.
+  and bookings. Temporary unavailability is acceptable when the venue server or its
+  internet connection is down. Define route permissions and the unavailable-page
+  experience; cloud copies and offline booking acceptance are future capabilities.
   Scope backups alongside visible service health, retention and the restore experience.
 - Filter bots and abusive traffic in Cloud before forwarding requests to on-prem
   servers. Scope request-rate and concurrency limits per venue, prevent bypass routes,
@@ -79,12 +81,12 @@ agreed initial services; their detailed scope and implementation sequence remain
 
 | Service | Design work still needed |
 | --- | --- |
-| Remote access (initial) | Include owner/staff access and customer-facing menus and booking pages. Require bot/abuse protection before requests reach on-prem servers; choose the provider, traffic limits and handling of legitimate automated clients. Define route permissions and offline behaviour. Reconcile the shared gateway handoff with the per-venue endpoint decision; define tunnels, domains, TLS termination and customer isolation. |
+| Remote access (initial) | Include owner/staff access and customer-facing menus and booking pages. Temporary unavailability when the venue is offline is accepted; design the unavailable-page experience. Require bot/abuse protection before requests reach on-prem servers; choose the provider, traffic limits and handling of legitimate automated clients. Define route permissions. Reconcile the shared gateway handoff with the per-venue endpoint decision; define tunnels, domains, TLS termination and customer isolation. |
 | Backups (initial) | Scope continuous backup and retained snapshots. Provision scoped storage access for Litestream, surface freshness and interruption, define retention and test restore against each provider selected for launch. |
 | SQLite snapshots | Define scheduled and retained recovery points, consistency, customer restore controls and relation to the continuous stream. |
 | Failover to cloud | Allocate a replacement instance, coordinate promotion with Waitron, connect devices, stream the new primary and support return to the venue. |
 | Hosted Waitron | Provision isolated operational instances, local print connectivity, upgrades, capacity and cloud-only recovery. |
-| Bookings and public pages | Define booking availability and the authority for accepting reservations when the venue is offline; include menus, ordering and payment-page candidates. |
+| Bookings and public pages | Initial remote access may be unavailable while the venue is offline. Future independent cloud hosting needs rules for accepting reservations and synchronising them with the venue; include menus, ordering and payment-page candidates. |
 | Invoice archive | Define the archived objects and access grants, including owner-approved AEAT/advisor access, retention, download and customer exit. Have hosting/archive questions reviewed for the launch country. |
 | Analytics and reports | Choose ingestion, supported source versions, country and cell placement, search/aggregation engine, scheduled reports and group reporting. Elasticsearch is a candidate. |
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |
