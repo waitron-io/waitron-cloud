@@ -3,8 +3,8 @@
 Status: brainstorm, 2026-09-22. The product requirements below come from the owner.
 The platform structure and customer model include proposals for discussion; confirmed
 requirements are identified below. Remote access and backups are the agreed initial
-services. Their detailed scope, deployment architecture, pricing and implementation
-sequence remain to be decided.
+services. The first integration milestone is agreed below; detailed implementation,
+deployment architecture and pricing remain to be decided.
 
 ## The product
 
@@ -108,6 +108,31 @@ customers from the outset. Detailed international administration, separate-appro
 workflows and ownership transfers can be designed when needed; they should not
 complicate the usual owner-led setup.
 
+## First working milestone
+
+Confirmed milestone: prove the initial services with two test venues sharing one
+cell. This is an integration milestone, with these steps in order:
+
+1. Connect a venue from Waitron. Verify the owner's Cloud and local permissions,
+   assign its names and issue credentials limited to that venue.
+2. Provide public access through cloud inspection and staff access encrypted to the
+   venue. Test that neither venue can reach the other's services and that public
+   routes cannot expose staff functions.
+3. Send backups directly to object storage, independently of the remote-access
+   gateway. Show the latest recoverable time in the Cloud portal.
+4. Restore onto a replacement server from both a continuous backup and a retained
+   snapshot. Include a restore with the continuous backup data absent.
+5. Replace the gateway and verify that both venues reconnect without changing their
+   customer-facing addresses. Measure the interruption and confirm backups continue.
+
+Start by specifying how to connect and replace a venue server, and how to revoke
+an installation's Cloud access. Inspect
+Waitron's tunnel and recovery components for reuse against its current SQLite design;
+their existence does not establish compatibility with this milestone. Cloud owns
+registration, routing, storage access and service status. Waitron owns the local
+integration and the rules for activating a recovered server. Record the shared
+contract and verification responsibilities before implementation.
+
 ## Domains, certificates and local access
 
 Provide an assigned Waitron hostname, such as `venue.waitron.io`, or instructions
@@ -174,6 +199,28 @@ by restoring onto a replacement machine, including a separate test with continuo
 backup data missing. This verifies the intended snapshot fallback before offering it
 to customers. Cloud owns backup selection and access; coordinate installation and
 safe activation of the replacement with Waitron's recovery logic.
+
+## Venue identity and server replacement
+
+Confirmed model: a venue keeps its identity when you replace its server. Register
+each replacement as a distinct installation with fresh machine credentials. Restoring
+backup data must not automatically grant two installations authority to act as the
+venue's active primary. Use Waitron's ownership and recovery rules for activation.
+
+Cloud service access and authority to trade locally are separate concerns. Revoking
+a server's Cloud credentials is not proof that it has stopped serving the venue
+offline. Waitron's [recovery design](https://github.com/clintongormley/waitron/blob/4ce2db502173d87d14d2e1aad5dc92b19be38363/docs/superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)
+sections 5.1 and 5.3 describe human-authorised replacement and the risk of an old
+primary continuing while disconnected. These are design constraints to implement
+and test, not evidence that the Cloud replacement flow already works.
+
+Define how Cloud verifies installation ownership, handles repeated or concurrent
+requests, retires old credentials and resumes interrupted replacement. Include a
+returning old server in the tests. Revoking an installation's Cloud access means
+withdrawing its gateway and storage permissions, for example after theft or retirement.
+The effects on subscriptions, retained backups and reconnecting remain a product
+decision. This describes an operation to design, not a requirement for a separate
+everyday "disconnect" button.
 
 ## Proposed customer and identity model
 

@@ -7,7 +7,28 @@ Waitron's backlog owns the on-prem application and its side of the integration.
 Start with the [product discussion](product-and-platform.md). The
 [inherited inventory](reference/2026-08-29-cloud-services-inventory.md) holds the wider
 candidate list and previous commercial reasoning. Remote access and backups are the
-agreed initial services; their detailed scope and implementation sequence remain open.
+agreed initial services. The first integration milestone is agreed; detailed
+implementation and release scope remain open.
+
+## First working milestone
+
+Use two test venues sharing one cell. Implement and verify in this order:
+
+1. Connect a venue through owner approval, assigned names and venue-scoped credentials.
+2. Prove public cloud inspection and staff TLS passthrough, including isolation between
+   venues and protection of staff functions from public routes.
+3. Upload backups directly to object storage and show the latest recoverable time.
+4. Restore onto a replacement from the continuous backup and from a retained snapshot,
+   including with continuous data absent.
+5. Replace the gateway, measure reconnection time with unchanged customer-facing
+   addresses and verify that backups continue.
+
+Next: specify connection, replacement and revocation of a server's Cloud access.
+Cloud owns registration,
+routing, storage access and service status; Waitron owns local integration and recovered
+server activation. Inspect reuse candidates against the SQLite design and define the
+shared contract and verification responsibilities before implementation. No part of
+this milestone is implemented by documenting it.
 
 ## Initial focus
 
@@ -67,6 +88,7 @@ agreed initial services; their detailed scope and implementation sequence remain
 | Product packages | Remote access and backups are the initial services. Define their release scope, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
 | Usage policy | Define lookup and other usage units, customer visibility, allowances and excess-use behaviour. Decide which measurements affect pricing and how retries, failed calls, cached results and batches count. |
 | Waitron boundary | Signup inside Waitron, distinct Cloud and local staff logins, explicit identity linking and an independent Cloud portal are agreed. Venue linking requires Cloud permission to add venues and local administrator approval; one person or different people may provide them. Define the approval exchange, ownership proof, already-linked venue handling, configuration, credentials, status and version compatibility. |
+| Server lifecycle | Keep venue identity across replacements; give each installation fresh machine credentials and use Waitron's recovery rules before activating it. Define connection, replacement and revocation of an installation's Cloud access, concurrent requests, interrupted replacement, retiring old credentials and a returning old server. Decide how revocation affects subscriptions, retained backups and reconnection. |
 | Recovery promise | Specify tolerated data loss, recovery time and promotion authority for each service. Existing Waitron designs use human promotion; automation is not approved by this discussion. |
 | Backup recovery | Self-service restoration is agreed; staff intervention is an exceptional fallback. Use continuous backups for the latest recoverable version and retained snapshots for archives or missing continuous data. Define retention, snapshot scheduling and independent snapshot storage/deletion controls; test recovery with continuous data absent. |
 
@@ -89,6 +111,10 @@ agreed initial services; their detailed scope and implementation sequence remain
   action. Preserve the policy allowing different approvers; design that workflow when
   needed. Enforce one organisation per venue. Define handling
   for existing links, machine identities, credential renewal, replacement and revocation.
+  Keep venue identity stable across replacement and issue fresh installation credentials.
+  Test that restoring data alone does not grant primary authority and that a returning
+  old server follows Waitron's recovery rules. Cloud revocation alone does not establish
+  that an offline server has stopped trading.
 - **Provisioning and placement.** Country/provider/cell registry, repeatable resource
   creation, recovery from partial failures, capacity and customer movement.
   Place venues independently, preserve their addresses on movement and test replacement
