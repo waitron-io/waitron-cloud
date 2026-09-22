@@ -13,6 +13,16 @@ existing Waitron installation to services that connect, protect and extend your 
 You can also run Waitron itself in the cloud. A business with several venues can
 manage them centrally.
 
+Confirmed product principle: make as much as possible self-service, with the aim of
+operating without a dedicated support team. You should be able to set up services,
+manage accounts and billing, diagnose common problems, restore backups and cancel
+services without staff intervention. Build clear status, actionable errors, guided
+recovery and safe retries into those flows so you can resolve routine problems yourself.
+
+Staff support is an exceptional fallback. Existing staff permissions and approved
+support-access policies define how that fallback works; they do not imply that routine
+customer journeys require staff or that a staffed support service is promised.
+
 The owner wants customers divided into small deployment groups, called mini-zones,
 across multiple availability zones. This should let operators upgrade a small group,
 contain failures and move groups between hosts. The proposed residency policy is to
@@ -79,8 +89,8 @@ the gateway. Prevent direct routes that bypass these controls, and monitor rejec
 traffic and false positives. The provider and exact limits remain to be selected.
 
 The initial backup service provides automatic continuous backups, retained snapshots,
-visible backup health and a tested self-service restore path, with support available
-when needed. The recovery model below defines the purpose of each backup type;
+visible backup health and a tested self-service restore path, with staff intervention
+as an exceptional fallback. The recovery model below defines the purpose of each backup type;
 retention periods and snapshot scheduling remain to be decided.
 
 Keep the underlying organisation and legal-business model able to represent larger
@@ -97,7 +107,8 @@ remain restorable without the continuous backup data it is intended to protect a
 losing. Storage layout, deletion permissions and retention need to preserve that
 independence; the exact mechanism remains to be designed and tested.
 
-You can restore onto a replacement server yourself, with support available if needed.
+You can restore onto a replacement server yourself without waiting for staff approval
+or assistance, subject to your account's recovery permissions.
 The agreed journey is to install Waitron, sign into Cloud, choose your venue and
 restore its backup. The proposed interface defaults to the latest recoverable
 continuous backup and lets you explicitly choose a retained snapshot. Show the
