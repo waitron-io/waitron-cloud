@@ -31,6 +31,10 @@ and specify the bound approval proof and first-contact trust before exposing pub
 registration endpoints. This can proceed independently of SQLite landing. Recheck the
 new SQLite capture/restore interfaces before integrating backups; do not build a new
 PostgreSQL path. No part of this milestone is implemented by documenting it.
+The [registration plan](registration-implementation-plan.md) now sequences persistence,
+identity reuse, the bound approval exchange and a two-installation connection proof.
+The normal connection journey is agreed; proof encoding and Cloud persistence choice
+remain implementation decisions to settle before exposing public endpoints.
 
 ## Initial focus
 

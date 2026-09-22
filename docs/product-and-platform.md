@@ -537,6 +537,13 @@ also allows different people to approve their respective sides. The detailed flo
 for separate approvers can wait until needed; it is not a requirement to make the
 initial signup more elaborate.
 
+Confirmed connection flow: the signed-in local administrator starts a short-lived
+request tied to the installation, signs into Cloud and confirms the organisation
+and venue. The server retrieves approval outbound and completes the same request,
+with safe retries after lost replies. Show remote-access and backup setup separately.
+The [integration contract](waitron-integration-contract.md#agreed-connection-journey)
+and [registration plan](registration-implementation-plan.md) define the build scope.
+
 The separate Cloud portal lets you manage services and recovery when your on-prem
 server is unavailable. Its login and account recovery must work independently of
 that server. The exact recovery operations remain to be designed.
