@@ -3,9 +3,10 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { after, before, beforeEach, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
+import { inspect } from 'node:util';
 import { Pool } from 'pg';
 import { login, requirePlatformPermission } from '@waitron-cloud/identity';
-import { SignupStore, type SignupEmail, type SignupDetails } from '../src/index.ts';
+import { SignupStore, SignupError, type SignupEmail, type SignupDetails } from '../src/index.ts';
 import { migrate } from '../src/migrate.ts';
 import { transaction } from '../src/transaction.ts';
 
@@ -90,8 +91,25 @@ test('unknown, malformed, expired and consumed tokens cannot create accounts', a
 
 test('request cooldown is durable, generic and shared by concurrent workers', async () => {
   const second = new SignupStore(pool, { async sendVerification(message) { messages.push(message); } });
-  const results = await Promise.all([store.request(email), second.request(email), store.request(email.toUpperCase())]);
-  assert.deepEqual(results, Array(3).fill({ status: 'accepted' }));
+  const blocker = await pool.connect();
+  let requests: Promise<{status: 'accepted'}[]> | undefined;
+  try {
+    const workers = await Promise.all([pool.connect(), pool.connect(), pool.connect()]);
+    for (const worker of workers) worker.release();
+    await blocker.query('BEGIN');
+    // Hold inserts until all workers overlap. Without serialisation all three read an empty history.
+    await blocker.query('LOCK TABLE signup_requests IN SHARE MODE');
+    requests = Promise.all([store.request(email), second.request(email), store.request(email.toUpperCase())]);
+    let overlapping = false;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const { rows } = await admin.query("SELECT count(*) FROM pg_stat_activity WHERE application_name = $1 AND wait_event_type = 'Lock'", [schema]);
+      if (Number(rows[0].count) === 3) { overlapping = true; break; }
+      await delay(20);
+    }
+    await blocker.query('COMMIT');
+    assert.deepEqual(await requests, Array(3).fill({ status: 'accepted' }));
+    assert.ok(overlapping, 'all three requests must overlap before any insert commits');
+  } finally { await blocker.query('ROLLBACK'); blocker.release(); await requests; }
   assert.equal(messages.length, 1);
   assert.equal(await count('signup_requests'), 1);
   await pool.query("UPDATE signup_requests SET created_at = clock_timestamp() - interval '61 seconds'");
@@ -126,8 +144,19 @@ test('a new verification request never replaces or re-enables an existing accoun
 });
 
 test('delivery failure exposes no provider detail and can recover with a fresh request', async () => {
-  const broken = new SignupStore(pool, { async sendVerification(message) { throw new Error(`provider secret ${message.token}`); } });
-  await expectCode(broken.request(email), 'delivery_unavailable');
+  let deliveredToken = '';
+  const broken = new SignupStore(pool, { async sendVerification(message) {
+    deliveredToken = message.token;
+    throw new Error(`provider secret ${message.token}`);
+  } });
+  await assert.rejects(broken.request(email), error => {
+    assert.ok(error instanceof SignupError);
+    assert.equal(error.code, 'delivery_unavailable');
+    assert.ok(deliveredToken);
+    assert.ok(!inspect(error).includes(deliveredToken));
+    assert.ok(!inspect(error).includes('provider secret'));
+    return true;
+  });
   assert.equal(await count('signup_requests'), 1);
   assert.equal(await count('cloud_accounts'), 0);
   await pool.query("UPDATE signup_requests SET created_at = clock_timestamp() - interval '61 seconds'");

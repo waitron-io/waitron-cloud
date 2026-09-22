@@ -29,8 +29,9 @@ Use `SignupStore(pool, mailer)` for the independent Cloud account backend. Its
 `mailer.sendVerification({ email, token, expiresAt })`. The return value is
 `{ status: 'accepted' }`, including during the one-minute cooldown. The mailer alone
 receives the token; never include it in a browser response or logs. The current email
-parser accepts ASCII dot-atom addresses and ordinary domain names, including punycode.
-Quoted addresses and international local parts need later provider support.
+parser accepts ASCII dot-atom addresses. International domains must already be
+punycode-encoded; raw Unicode domains, quoted addresses and international local parts
+need later normalisation/provider support.
 
 Once you have the emailed token, call `complete(token, { password, organisationName,
 legalBusinessName, countryCode })`. It returns `{ accountId, organisationId,
@@ -46,7 +47,9 @@ a token cannot create a session, reset a password or add another organisation.
 
 `signup_invalid` identifies malformed input. `verification_unavailable` covers an
 unknown, expired or used token and an email that already has an account.
-`delivery_unavailable` hides email-provider errors. Request a fresh link after the
+`delivery_unavailable` deliberately drops email-provider errors, which may contain
+the token. The mailer adapter owns sanitised diagnostics; do not attach the original
+error as a cause or log its message. Request a fresh link after the
 cooldown if delivery fails or the process stops after commit. There is no durable
 delivery queue; the provider adapter and its retry policy remain deployment work.
 

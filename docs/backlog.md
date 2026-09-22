@@ -141,6 +141,8 @@ the credential and revocation rules still to be defined.
   expected deployment size. Add a compromised-password check before public signup.
   Decide delivery retry/queue policy and monitor failures; a crash between request
   commit and delivery currently requires requesting a fresh link after the cooldown.
+  Keep sanitised provider diagnostics inside the mail adapter. When building the
+  public web adapter, assess whether cooldown response timing reveals recent requests.
   Review the inherited password cost for deployment and apply the source map's
   security-fix process to both repositories. Further reuse should take code and
   behavioural tests from `pre-sqlite-migration`, pinned to

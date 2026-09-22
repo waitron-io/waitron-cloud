@@ -34,6 +34,7 @@ export class SignupStore {
     if (message) {
       // Delivery follows commit so the emailed token always has a durable verification record.
       try { await this.#mailer.sendVerification(message); }
+      // Provider errors may contain the token; the adapter owns sanitised diagnostics.
       catch { throw new SignupError('delivery_unavailable'); }
     }
     return { status: 'accepted' };
@@ -54,7 +55,7 @@ export class SignupStore {
       if (!candidate.rowCount) throw new SignupError('verification_unavailable');
       const passwordHash = await hashSecret(input.password);
       const request = (await client.query('SELECT email, expires_at, consumed_at FROM signup_requests WHERE token_hash = $1 FOR UPDATE', [tokenHash])).rows[0];
-      // Read wall time after acquiring the request lock; contention must not preserve an expired token.
+      // Exit early after a request-lock wait; the final consume check also covers later write waits.
       const now: Date = (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
       if (!request || request.consumed_at || request.expires_at <= now) throw new SignupError('verification_unavailable');
       const accountId = randomUUID();
