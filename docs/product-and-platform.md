@@ -2,8 +2,9 @@
 
 Status: brainstorm, 2026-09-22. The product requirements below come from the owner.
 The platform structure and customer model include proposals for discussion; confirmed
-requirements are identified below. No service, deployment architecture, pricing or
-implementation order has been approved.
+requirements are identified below. Remote access and backups are the agreed initial
+services. Their detailed scope, deployment architecture, pricing and implementation
+sequence remain to be decided.
 
 ## The product
 
@@ -23,7 +24,9 @@ country imposes the same legal storage obligation.
 
 ## Services a venue can buy
 
-This is a catalogue of candidates, not a build order or a set of subscription plans.
+Remote access and backups are selected as the initial services. The wider catalogue
+below describes possible scope; it does not set subscription plans or commit every
+listed capability to the initial release.
 The complete earlier inventory is in the [service inventory](reference/2026-08-29-cloud-services-inventory.md).
 
 | Service family | What you get |
@@ -44,6 +47,46 @@ The older inventory also records excluded or conditional ideas. Hardware fulfilm
 operating mailboxes and a booking marketplace should not silently become commitments
 through this list. Pricing, support scope and operating costs need their own decisions.
 
+## Initial product focus
+
+Design the first experience for an owner with one venue, or several venues in the
+same city. You connect your venue, enable remote access and backups, and can see
+whether those services are working. Adding another venue should follow the same
+simple flow.
+
+Confirmed remote-access scope includes both owners and staff using Waitron remotely
+and customers reaching public pages such as menus and bookings. The proposed access
+model preserves Waitron's permissions for staff and exposes the intended public pages
+to customers. The exact routes remain to be defined.
+
+Confirmed initial availability policy: temporary unavailability is acceptable when
+the venue server or its internet connection is down. This applies to staff access
+and public pages, including bookings. The initial remote-access service depends on
+the venue being online; serving cloud copies and accepting bookings while it is
+offline remain future capabilities. Show a clear temporary-unavailability message
+as the proposed customer experience. The independent Cloud management portal remains
+available for account and service management, subject to its own availability.
+
+Confirmed requirement: remote access must include bot and traffic-abuse protection
+in Cloud, before requests reach your on-prem server. This covers staff access and
+public pages. The proposed controls combine bot filtering with limits on request
+rates and simultaneous requests per venue, so even traffic that passes the bot
+filter cannot consume unlimited local capacity. Challenge suspicious browser traffic
+where appropriate and define suitable handling for legitimate automated clients.
+
+Choose the protection service and its relationship to TLS termination when designing
+the gateway. Prevent direct routes that bypass these controls, and monitor rejected
+traffic and false positives. The provider and exact limits remain to be selected.
+
+The proposed first release protects your data with automatic backups, visible backup
+health and a tested restore path. Decide backup retention and restore experience next.
+The exact balance of continuous backup and retained snapshots remains to be scoped.
+
+Keep the underlying organisation and legal-business model able to represent larger
+customers from the outset. Detailed international administration, separate-approver
+workflows and ownership transfers can be designed when needed; they should not
+complicate the usual owner-led setup.
+
 ## Proposed customer and identity model
 
 Start with a business account that subscribes and pays, people who belong to it, and
@@ -51,14 +94,23 @@ venues to which those people have permissions. Keep the business account distinc
 from each taxpayer's legal identity, each venue, and the machines running that venue.
 Confirmed requirement: one organisation must support several legal businesses with
 different tax identities, potentially across countries, from the beginning. Most
-customers will have one legal business. The proposed signup should create the simple
+customers will have one legal business. The agreed signup should create the simple
 structure for you and expose additional businesses only when you need them. A venue
 would belong to a legal business, which would belong to an organisation.
+
+Confirmed requirement: a venue belongs to one Cloud organisation at a time. The
+process for transferring a venue between organisations remains future design work.
 
 A person could manage several businesses, and a business could give an accountant,
 manager or other member different access to different venues. A cloud account,
 a local staff identity and a box's machine credential need explicit relationships.
 Matching email addresses alone must not grant access to a venue.
+
+Confirmed identity boundary: your Cloud login is distinct from your local Waitron
+staff login. Restaurant staff do not need Cloud accounts to use the till. As an owner
+or manager, you can explicitly link your identities and use one Cloud login to manage
+several venues, subject to your permissions. The linking mechanism remains to be
+designed; an identity link must not itself grant additional permissions.
 
 Waitron Cloud staff and administrators also need logins and permissions. This is a
 confirmed requirement. The proposed model separates customer memberships from
@@ -152,7 +204,7 @@ service groups independently where their workload or failure boundary warrants i
 | Venue and node registry | Prove which account owns a venue and which machines act for it; enrol, replace, revoke and rotate credentials. |
 | Placement and provisioning | Create resources, allocate cells, track capacity and finish or undo interrupted operations without creating duplicates. |
 | Work execution | Durable background jobs, retries, schedules and progress for backups, restores, messages, reports and upgrades. |
-| Connectivity | Names, certificates, routing, tunnels and customer isolation. |
+| Connectivity | Names, certificates, routing, tunnels, customer isolation and bot/abuse protection before traffic reaches on-prem servers. |
 | Data lifecycle | Retention, restoration, export, deletion, encryption and audit of privileged access. |
 | Monitoring and usage metering | Service checks, performance, customer consumption, limits and cost attribution by venue, service and cell. |
 | Operations | Health, customer-visible incidents, resource and spend limits, release waves, pause controls and recovery procedures. |
@@ -224,19 +276,36 @@ documentation checks, not deployment tests or a legal assessment.
 
 ## Signup from Waitron
 
-Proposed journey:
+Agreed journey for connecting your first venue:
 
-1. Open Cloud services in the venue's Waitron dashboard.
-2. Create or sign into a cloud account and prove authority to connect this venue.
-3. Choose services and see the country, terms and price before subscribing.
-4. Cloud provisions the resources and returns a status the dashboard can follow.
-5. The box receives credentials scoped to its services and starts using them.
-6. The owner can manage, cancel or change services and export data through a clear lifecycle.
+1. As a venue administrator, open Cloud services in the venue's Waitron dashboard.
+2. Create a Cloud login or sign into an existing one.
+3. If you are a new customer, create your organisation and first legal business,
+   using details from Waitron for you to confirm.
+4. Obtain approval from someone permitted to add venues to the Cloud organisation
+   and from an administrator of the local Waitron installation. Cloud verifies both
+   approvals before linking the venue.
+5. Choose services and follow setup progress inside Waitron.
+
+The usual case is one owner who has both permissions. Present connecting the venue
+as one action while verifying both permissions underneath. Confirmed linking policy
+also allows different people to approve their respective sides. The detailed flow
+for separate approvers can wait until needed; it is not a requirement to make the
+initial signup more elaborate.
+
+The separate Cloud portal lets you manage services and recovery when your on-prem
+server is unavailable. Its login and account recovery must work independently of
+that server. The exact recovery operations remain to be designed.
+
+The proposed service lifecycle shows the country, terms and price before subscribing.
+Cloud provisions resources, reports progress and issues the box credentials scoped
+to its services. You can manage, cancel or change services and export data through
+a clear lifecycle.
 
 Payment success, account creation and resource provisioning can finish at different
 times. Model those states explicitly so retrying signup cannot charge twice or leave
-an unusable subscription. Decide how an owner manages recovery when the box itself
-is unavailable; the cloud portal is the proposed independent entry point.
+an unusable subscription. The ownership proof, identity-linking protocol and handling
+of a venue already connected to an organisation remain implementation decisions.
 
 ## Questions for the next discussion
 
@@ -259,5 +328,5 @@ is unavailable; the cloud portal is the proposed independent entry point.
   The [shared gateway handoff](reference/2026-09-21-cloud-ingress-wireguard-gateway-design.md)
   and [earlier decision](reference/2026-09-05-relay-decision.md) are not reconciled.
 
-Use the [backlog](backlog.md) to track these decisions and the eventual implementation
-slices. No first service has been selected by this brainstorm.
+Use the [backlog](backlog.md) to track these decisions and the implementation slices
+for the initial remote access and backup services.
