@@ -101,7 +101,7 @@ implementation choices. [Nginx documents TLS passthrough](https://nginx.org/en/d
 The initial backup service provides automatic continuous backups, retained snapshots,
 visible backup health and a tested self-service restore path, with staff intervention
 as an exceptional fallback. The recovery model below defines the purpose of each backup type;
-retention periods and snapshot scheduling remain to be decided.
+the starting snapshot schedule and retention policy are recorded below.
 
 Keep the underlying organisation and legal-business model able to represent larger
 customers from the outset. Detailed international administration, separate-approver
@@ -186,6 +186,24 @@ archives and as a fallback if the continuous backup data disappears. A snapshot 
 remain restorable without the continuous backup data it is intended to protect against
 losing. Storage layout, deletion permissions and retention need to preserve that
 independence; the exact mechanism remains to be designed and tested.
+
+Confirmed starting snapshot policy: take daily snapshots and retain them for 30 days,
+and retain monthly snapshots for 12 months. Offer longer paid retention for snapshots
+you select. This gives you automatic history without having to configure a schedule,
+plus a way to preserve a particular recovery point for longer.
+
+Validate storage costs before setting prices. The time of day, monthly selection rule,
+missed-snapshot handling, extended-retention terms and cancellation behaviour still
+need to be defined. Continuous-backup retention is a separate decision; these snapshot
+periods do not set its recovery window.
+
+Confirmed safeguard: while your backup subscription remains active, automatic cleanup
+must preserve the last verified snapshot even after its normal retention period ends.
+If new backups stop, show that snapshot's recovery timestamp and clearly mark backup
+health as out of date. A newer snapshot must pass verification before it can replace
+the protected copy. Define and test verification, including a failed new snapshot and
+an interruption during cleanup. This exception governs automatic expiry; explicit
+deletion and subscription cancellation still need their own policies.
 
 You can restore onto a replacement server yourself without waiting for staff approval
 or assistance, subject to your account's recovery permissions.
@@ -511,6 +529,10 @@ of a venue already connected to an organisation remain implementation decisions.
   before Google Cloud is called supported?
 - Are services purchased individually, in bundles, or both? What happens to retained
   data and access after cancellation or failed payment?
+- How long should the continuous backup remain recoverable, and what verification
+  must a new snapshot pass before replacing the protected last verified copy? Daily
+  snapshots for 30 days and monthly snapshots for 12 months are the starting policy;
+  selected snapshots can have longer paid retention, with terms and prices still open.
 - How are independently deployed service groups arranged inside cells, and which
   shared dependencies are acceptable?
 - How should the shared gateway's public HTTPS and staff passthrough paths be
