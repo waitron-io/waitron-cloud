@@ -79,16 +79,24 @@ offline remain future capabilities. Show a clear temporary-unavailability messag
 as the proposed customer experience. The independent Cloud management portal remains
 available for account and service management, subject to its own availability.
 
-Confirmed requirement: remote access must include bot and traffic-abuse protection
-in Cloud, before requests reach your on-prem server. This covers staff access and
-public pages. The proposed controls combine bot filtering with limits on request
-rates and simultaneous requests per venue, so even traffic that passes the bot
-filter cannot consume unlimited local capacity. Challenge suspicious browser traffic
-where appropriate and define suitable handling for legitimate automated clients.
+Confirmed compromise: public pages terminate HTTPS in Cloud for bot and web-request
+inspection, with an encrypted onward connection to your venue. Staff access uses a
+separate hostname and TLS passthrough, keeping request contents encrypted until they
+reach the venue. Cloud can inspect public-page traffic, including booking submissions;
+staff request contents remain outside that inspection path.
 
-Choose the protection service and its relationship to TLS termination when designing
-the gateway. Prevent direct routes that bypass these controls, and monitor rejected
-traffic and false positives. The provider and exact limits remain to be selected.
+Protect both entry points before forwarding traffic, with different controls. Public
+access can use bot challenges and request-level limits. Staff passthrough can use
+network filtering and connection limits; application-level checks run at the venue.
+It therefore cannot offer the same cloud request inspection as public access.
+The exact controls and capacity limits remain to be selected and tested.
+
+The public route must expose only the intended public functionality. Define and test
+hostname, route and session separation so it cannot become an alternative path into
+staff functions. Prevent direct routes that bypass the intended protection, and monitor
+rejected traffic and false positives. The gateway software and provider services remain
+implementation choices. [Nginx documents TLS passthrough](https://nginx.org/en/docs/stream/ngx_stream_ssl_preread_module.html);
+[AWS documents web-request inspection](https://docs.aws.amazon.com/waf/latest/developerguide/waf-chapter.html).
 
 The initial backup service provides automatic continuous backups, retained snapshots,
 visible backup health and a tested self-service restore path, with staff intervention
@@ -99,6 +107,26 @@ Keep the underlying organisation and legal-business model able to represent larg
 customers from the outset. Detailed international administration, separate-approver
 workflows and ownership transfers can be designed when needed; they should not
 complicate the usual owner-led setup.
+
+## Domains, certificates and local access
+
+Provide an assigned Waitron hostname, such as `venue.waitron.io`, or instructions
+for pointing your own domain to Cloud. The venue server must serve both local and
+internet users over trusted HTTPS, with automated Let's Encrypt certificates.
+The precise public, staff and local hostname layout remains to be designed.
+
+The proposed certificate flow keeps staff private keys on the venue server and uses
+DNS validation, with Cloud managing the validation records. Custom domains can
+delegate the certificate-validation records. Let's Encrypt supports
+[DNS validation and delegation](https://letsencrypt.org/docs/challenge-types/)
+without requiring a publicly reachable web server.
+
+Local discovery must fit self-service setup and keep local trading independent of
+the internet. Split DNS, where a name resolves differently inside and outside the
+venue, is an option rather than an agreed requirement. Evaluate router hostname
+overrides, managed-device configuration and a separate local hostname; test browser
+behaviour, router filtering and fresh connections during an internet outage. Avoid
+assuming customers can make every device use the venue server as its DNS resolver.
 
 ## Backups and self-service recovery
 
@@ -365,9 +393,12 @@ of a venue already connected to an organisation remain implementation decisions.
   data and access after cancellation or failed payment?
 - How are independently deployed service groups arranged inside cells, and which
   shared dependencies are acceptable?
-- Which remote-access model replaces or retains the older per-venue endpoint decision?
-  The [shared gateway handoff](reference/2026-09-21-cloud-ingress-wireguard-gateway-design.md)
-  and [earlier decision](reference/2026-09-05-relay-decision.md) are not reconciled.
+- How should the public HTTPS and staff passthrough paths be deployed within cells?
+  The agreed split replaces the all-traffic TLS choices in the
+  [shared gateway handoff](reference/2026-09-21-cloud-ingress-wireguard-gateway-design.md)
+  and [earlier decision](reference/2026-09-05-relay-decision.md); shared versus per-venue
+  gateways remain open. Which local discovery method minimises customer setup while
+  supporting trusted HTTPS and internet-independent local trading?
 
 Use the [backlog](backlog.md) to track these decisions and the implementation slices
 for the initial remote access and backup services.
