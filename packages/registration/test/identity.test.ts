@@ -89,6 +89,58 @@ test('logout is idempotent and ended or unknown tokens cannot resolve', async ()
   await expectCode(run(client => resolveSession(client, digest(session.token))), 'session_unavailable');
 });
 
+test('incorrect passwords fail generically even while the account row is locked', async () => {
+  const blocker = await pool.connect();
+  try {
+    await blocker.query('BEGIN');
+    await blocker.query('SELECT id FROM cloud_accounts WHERE id = $1 FOR UPDATE', [accountId]);
+    for (const email of ['owner@example.test', 'unknown@example.test']) {
+      await expectCode(run(async client => {
+        await client.query("SET LOCAL statement_timeout = '500ms'");
+        return login(client, { email, password: 'incorrect' });
+      }), 'credentials_invalid');
+    }
+  } finally {
+    await blocker.query('ROLLBACK');
+    blocker.release();
+  }
+});
+
+test('login rechecks credentials and suspension after waiting for the account lock', async () => {
+  const { setTimeout: delay } = await import('node:timers/promises');
+  for (const change of ['password', 'suspension']) {
+    await pool.query('UPDATE cloud_accounts SET disabled_at = NULL');
+    await pool.query('UPDATE cloud_credentials SET password_hash = $1', [await hashSecret('venue-owner-password')]);
+    const blocker = await pool.connect();
+    let completion: Promise<void> | undefined;
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query('SELECT id FROM cloud_accounts WHERE id = $1 FOR UPDATE', [accountId]);
+      completion = expectCode(signIn(), 'credentials_invalid');
+      let blocked = false;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const { rows } = await admin.query(`SELECT query FROM pg_stat_activity WHERE query LIKE '%cloud_accounts%FOR SHARE%'
+          AND wait_event_type = 'Lock' AND application_name = $1`, [schema]);
+        if (rows.length) { blocked = true; break; }
+        await delay(20);
+      }
+      if (change === 'password') {
+        await blocker.query('UPDATE cloud_credentials SET password_hash = $1', [await hashSecret('new-password')]);
+      } else {
+        await blocker.query('UPDATE cloud_accounts SET disabled_at = clock_timestamp()');
+      }
+      await blocker.query('COMMIT');
+      await completion;
+      assert.ok(blocked, 'login must wait for the account lock');
+      assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count, '0');
+    } finally {
+      await blocker.query('ROLLBACK');
+      blocker.release();
+      await completion;
+    }
+  }
+});
+
 test('passive reads do not extend idle expiry while human activity does', async () => {
   const session = await signIn();
   await pool.query("UPDATE cloud_sessions SET last_seen_at = clock_timestamp() - interval '10 minutes'");
@@ -121,6 +173,16 @@ test('organisation membership never grants platform permission and platform gran
   assert.equal((await run(client => requirePlatformPermission(client, session.token, 'platform.view_status'))).accountId, accountId);
   await pool.query('DELETE FROM platform_permissions');
   await expectCode(run(client => requirePlatformPermission(client, session.token, 'platform.view_status')), 'permission_denied');
+});
+
+test('platform mutation permission checks require the supplied session CSRF token', async () => {
+  const session = await signIn();
+  const another = await signIn();
+  await pool.query('INSERT INTO platform_permissions (account_id, permission) VALUES ($1, $2)', [accountId, 'platform.manage']);
+  for (const csrfToken of ['incorrect', undefined, another.csrfToken, session.token]) {
+    await expectCode(run(client => requirePlatformPermission(client, session.token, 'platform.manage', { csrfToken })), 'csrf_invalid');
+  }
+  assert.equal((await run(client => requirePlatformPermission(client, session.token, 'platform.manage', { csrfToken: session.csrfToken }))).accountId, accountId);
 });
 
 test('Cloud approval takes the account from the session and requires its CSRF token', async () => {

@@ -25,21 +25,20 @@ export async function login(client: PoolClient, input: {email: string; password:
   if (typeof input.email !== 'string' || input.email.length > 254 || typeof input.password !== 'string'
     || Buffer.byteLength(input.password) > 1024) throw new IdentityError('credentials_invalid');
   const email = input.email.trim().toLowerCase();
-  const lookup = await client.query('SELECT account_id FROM cloud_credentials WHERE email = $1', [email]);
+  const lookup = await client.query(`SELECT c.account_id, c.password_hash FROM cloud_credentials c
+    JOIN cloud_accounts a ON a.id = c.account_id WHERE c.email = $1 AND a.disabled_at IS NULL`, [email]);
   const accountId: string | undefined = lookup.rows[0]?.account_id;
-  let passwordHash: string | undefined;
-  if (accountId) {
-    // Account first, then credential/session rows: keep this order in account lifecycle operations.
-    const account = await client.query('SELECT id FROM cloud_accounts WHERE id = $1 AND disabled_at IS NULL FOR SHARE', [accountId]);
-    if (account.rowCount) {
-      const credentials = await client.query('SELECT password_hash FROM cloud_credentials WHERE account_id = $1 AND email = $2 FOR SHARE', [accountId, email]);
-      passwordHash = credentials.rows[0]?.password_hash ?? undefined;
-    }
-  }
+  const passwordHash: string | undefined = lookup.rows[0]?.password_hash ?? undefined;
   const usable = passwordHash !== undefined && isSecretHash(passwordHash);
-  // Every ordinary failed login pays for one password derivation without identifying the account.
+  // Failed passwords pay for one derivation without waiting on account-specific row locks.
   const correct = await verifySecret(input.password, usable ? passwordHash! : DUMMY_PASSWORD_HASH);
   if (!accountId || !usable || !correct) throw new IdentityError('credentials_invalid');
+  // Account first, then credential/session rows: keep this order in account lifecycle operations.
+  const account = await client.query('SELECT id FROM cloud_accounts WHERE id = $1 AND disabled_at IS NULL FOR SHARE', [accountId]);
+  if (!account.rowCount) throw new IdentityError('credentials_invalid');
+  const credentials = await client.query('SELECT password_hash FROM cloud_credentials WHERE account_id = $1 AND email = $2 FOR SHARE', [accountId, email]);
+  // A password or account change during derivation/lock contention must invalidate this attempt.
+  if (credentials.rows[0]?.password_hash !== passwordHash) throw new IdentityError('credentials_invalid');
   const token = randomBytes(32).toString('base64url');
   const csrfToken = randomBytes(32).toString('base64url');
   await client.query('INSERT INTO cloud_sessions (token_hash, csrf_hash, account_id) VALUES ($1, $2, $3)',
@@ -77,14 +76,15 @@ export async function resolveSession(client: PoolClient, token: string, options:
 }
 
 export async function endSession(client: PoolClient, token: string): Promise<boolean> {
+  // When combining logout with account updates, lock the account first to avoid reversing resolveSession's lock order.
   if (!isToken(token)) return false;
   const { rowCount } = await client.query('UPDATE cloud_sessions SET ended_at = clock_timestamp() WHERE token_hash = $1 AND ended_at IS NULL', [digest(token)]);
   return rowCount === 1;
 }
 
-export async function requirePlatformPermission(client: PoolClient, token: string, permission: string): Promise<Session> {
-  const session = await resolveSession(client, token, { touch: false });
+export async function requirePlatformPermission(client: PoolClient, token: string, permission: string, options: {csrfToken?: string} = {}): Promise<Session> {
+  const session = await resolveSession(client, token, { ...options, touch: false });
   const { rowCount } = await client.query('SELECT 1 FROM platform_permissions WHERE account_id = $1 AND permission = $2 FOR SHARE', [session.accountId, permission]);
   if (!rowCount) throw new IdentityError('permission_denied');
-  return resolveSession(client, token);
+  return resolveSession(client, token, options);
 }

@@ -127,7 +127,8 @@ the credential and revocation rules still to be defined.
   tokens, passive polling and separate platform permission checks. Session-backed
   Cloud approval derives the account from the live session in its transaction.
   Implement signup/email verification, recovery, MFA/passkeys, public login throttling,
-  Origin/cookie handling and the platform role catalogue before public use.
+  Origin/cookie handling and the platform role catalogue before public use. Define
+  session retention and cleanup, and measure it against the expected deployment size.
   Review the inherited password cost for deployment and apply the source map's
   security-fix process to both repositories. Further reuse should take code and
   behavioural tests from `pre-sqlite-migration`, pinned to

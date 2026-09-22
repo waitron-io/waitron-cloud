@@ -25,6 +25,9 @@ including handling idle-connection errors.
 the session. Organisation membership grants no platform access. Platform permissions
 grant no customer organisation access. The exact platform role catalogue, MFA policy
 and customer-approved support grants still need their own implementation.
+For operations that change state, pass `{ csrfToken }` as its fourth argument;
+an undefined or incorrect `csrfToken` value is rejected. Read-only checks can omit
+the options object. The future HTTP adapter must also check the request Origin.
 
 Use `RegistrationStore.approveCloudWithSession(binding, token, csrfToken)` for Cloud
 approval. It derives the account from the session, checks the CSRF token and current
@@ -34,6 +37,7 @@ permission lock wait. The older account-ID method is only for trusted adapters.
 This package exposes no HTTP routes or signup UI. Before public use, implement the
 web adapter's Origin checks, cookie handling, login/request throttling, signup/email
 verification, password recovery and the selected additional authentication factors.
+Define retention and cleanup for ended and expired sessions before deployment.
 Review the inherited password cost against the chosen deployment. No local Waitron
 administrator proof is verified here; the complete pairing flow remains a separate
 gate before exposing connection endpoints.
