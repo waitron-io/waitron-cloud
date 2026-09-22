@@ -43,6 +43,14 @@ agreed initial services; their detailed scope and implementation sequence remain
   that can reduce customer configuration. Test certificate trust, local/remote address
   selection and router rebinding protection. Require a verified offline connection
   path after restart and DNS-cache expiry; local DNS overrides remain the preference.
+- Place venues independently in cells, with a shared remote-access gateway per cell
+  and separate venue tunnels and credentials. Keep customer-facing addresses stable
+  when moving venues. A short remote-access interruption during cell replacement is
+  accepted; define the recovery-time target and prove the replacement procedure.
+- Keep stored backups and portal recovery independent of gateway machines. Test
+  recovery with the gateway absent. Keep account management separate from traffic
+  handling so a portal outage does not immediately interrupt established connections
+  or backups; define credential expiry and revocation during that outage.
 - Keep support for multiple legal businesses and countries in the underlying model.
   Detailed international administration, separate-approver workflows and ownership
   transfers can wait until needed. Each venue belongs to one organisation at a time.
@@ -54,7 +62,7 @@ agreed initial services; their detailed scope and implementation sequence remain
 | Customer model | Support an organisation with several legal businesses and tax identities across countries from the outset. A venue belongs to one organisation at a time. Focus signup on one owner with one venue or several venues in the same city; defer the ownership-transfer workflow. |
 | Cloud staff access | Customer-approved, time-limited support access and an explicitly authorised, audited emergency route are agreed. Define platform roles, eligible approvers, grant scope and enforcement. Possible on-prem SSH support requires separate, explicit customer approval for a limited period. |
 | Residency | Spain is the first deployment country. Define the country policy for operational data, backups, archives, analytics, identities, logs and messages; verify AWS service locations and actual obligations before making customer promises. |
-| Cells | Choose the customer placement unit, group size and availability-zone layout. Define acceptable shared dependencies, movement and staged rollout. |
+| Cells | Venues are independently placed, with a shared gateway per cell and stable customer-facing addresses on movement. Short remote-access interruptions during cell replacement are accepted. Define group size, availability-zone layout, recovery-time target and tested replacement. Specify shared dependencies, movement and staged rollout; keep backups and portal recovery independent of gateway machines. |
 | Provider support | AWS is the first provider, deploying in Spain. Select and verify the required region and services. Keep Google Cloud as a future target and define the evidence needed to support it. Decide separately whether cross-provider failover is wanted. |
 | Product packages | Remote access and backups are the initial services. Define their release scope, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
 | Usage policy | Define lookup and other usage units, customer visibility, allowances and excess-use behaviour. Decide which measurements affect pricing and how retries, failed calls, cached results and batches count. |
@@ -83,6 +91,9 @@ agreed initial services; their detailed scope and implementation sequence remain
   for existing links, machine identities, credential renewal, replacement and revocation.
 - **Provisioning and placement.** Country/provider/cell registry, repeatable resource
   creation, recovery from partial failures, capacity and customer movement.
+  Place venues independently, preserve their addresses on movement and test replacement
+  against an explicit recovery-time target. Define how established connections and
+  backups continue during a portal outage, including credential expiry and revocation.
 - **Provider integration.** Storage, compute, email, notifications, jobs, keys and
   telemetry, with AWS and Google implementations where needed.
 - **Operations.** Customer and operator portals, health checks, incidents, audit,
@@ -107,7 +118,7 @@ agreed initial services; their detailed scope and implementation sequence remain
 
 | Service | Design work still needed |
 | --- | --- |
-| Remote access (initial) | Public HTTPS terminates in Cloud for bot inspection; staff uses a separate hostname with TLS passthrough and network controls. Define and test route/session isolation, tunnel and gateway placement, traffic limits and legitimate automated-client handling. Provide assigned/custom domains and automated certificates; implement the preferred local DNS overrides with router-specific setup and offline/recovery tests. Decide the bootstrap role of waitron.local. Temporary unavailability of remote access while the venue is offline is accepted. |
+| Remote access (initial) | Public HTTPS terminates in Cloud for bot inspection; staff uses a separate hostname with TLS passthrough and network controls. Share a gateway within each cell, with separate venue tunnels and credentials. Define and test route/session isolation, traffic limits and legitimate automated-client handling. Provide assigned/custom domains and automated certificates; implement the preferred local DNS overrides with router-specific setup and offline/recovery tests. Decide the bootstrap role of waitron.local. Temporary unavailability while the venue is offline and short interruptions during cell replacement are accepted; define and test the cell recovery-time target. |
 | Backups (initial) | Implement self-service restore onto a replacement server, normally using the latest recoverable Litestream backup. Provision scoped storage access, show recovery-point time and backup health, alert on interruption, define retention and test restore against each provider selected for launch. Coordinate safe replacement activation with Waitron. |
 | SQLite snapshots (initial backup service) | Retain point-in-time archives that remain restorable if continuous backup data disappears. Define scheduling, consistency, retention and independent storage/deletion controls. Provide explicit snapshot selection and prove restoration with continuous backup data absent. |
 | Failover to cloud | Allocate a replacement instance, coordinate promotion with Waitron, connect devices, stream the new primary and support return to the venue. |
