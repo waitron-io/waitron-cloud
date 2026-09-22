@@ -2,7 +2,9 @@
 
 Status: implementation plan, 2026-09-22. The owner approved the connection journey
 in the [integration contract](waitron-integration-contract.md#agreed-connection-journey).
-This plan builds that journey; no registration service is implemented yet.
+Step 1 is implemented in the [internal registration package](../packages/registration/README.md),
+with PostgreSQL tests for approvals, retries, concurrency, expiry and process restart.
+There is no public registration service yet; steps 2 and 3 remain to be built.
 
 ## Outcome
 

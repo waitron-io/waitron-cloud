@@ -1,7 +1,7 @@
 # Waitron Cloud backlog
 
-Updated 2026-09-22. The repository has a pnpm foundation and is in product discussion.
-No cloud service is implemented. This file owns cloud product and platform work;
+Updated 2026-09-22. The repository has a pnpm workspace and internal PostgreSQL
+registration state. No public cloud service is implemented. This file owns cloud product and platform work;
 Waitron's backlog owns the on-prem application and its side of the integration.
 
 Start with the [product discussion](product-and-platform.md). The
@@ -26,17 +26,17 @@ Use two test venues sharing one cell. Implement and verify in this order:
 
 The [integration contract](waitron-integration-contract.md) now maps the existing
 interfaces to proposed connection, configuration, backup, replacement and revocation
-operations, with ownership and acceptance checks. Next: implement registration state
+operations, with ownership and acceptance checks. Registration persistence is implemented
+with real PostgreSQL concurrency and process-restart tests. Next: integrate identity
 and specify the bound approval proof and first-contact trust before exposing public
 registration endpoints. This can proceed independently of SQLite landing. Recheck the
 new SQLite capture/restore interfaces before integrating backups; do not build a new
-PostgreSQL backup adapter for Waitron. No part of this milestone is implemented by
-documenting it.
+PostgreSQL backup adapter for Waitron. The full two-venue milestone remains unproved.
 The [registration plan](registration-implementation-plan.md) now sequences persistence,
 identity reuse, the bound approval exchange and a two-installation connection proof.
 The normal connection journey and PostgreSQL for Cloud management data are agreed.
-Start with one management database and test concurrent completion and restart against
-PostgreSQL. Proof encoding and initial trust remain to be settled before exposing
+The internal package uses one management database and tests concurrent completion
+and restart against PostgreSQL. Proof encoding and initial trust remain to be settled before exposing
 public endpoints. Country partitioning, database availability and per-cell storage
 remain deployment work; existing services must tolerate a management outage within
 the credential and revocation rules still to be defined.
@@ -142,10 +142,20 @@ the credential and revocation rules still to be defined.
   recovery, show the recovery point and potential data loss, and require confirmation
   that the old server is taken out of service under Waitron's recovery rules. Preserve
   venue, subscription and addresses; test interrupted activation and route changes.
-  Start with the integration contract's registration slice: durable operations,
-  approvals bound to installation/venue/organisation, safe retries and separate service
-  readiness. Test expired/replayed approvals, concurrent linking and cross-venue denial.
-- **Provisioning and placement.** Country/provider/cell registry, repeatable resource
+  Registration persistence now records bound approvals and results with transactional
+  completion, expiry, retries, permission rechecks and separate service states. Real
+  PostgreSQL tests cover concurrent workers and process restart. Next, implement the
+  actual proof verifier, login adapter and credential lifecycle; IDs alone are not
+  authentication. Replace the initial one-installation-per-venue constraint with an
+  explicit history model when building replacement. Validate local-venue identifier
+  provenance and handling of cloned identities in the approval flow. When replacement
+  gains a UI, define the permitted diagnostics for an already-linked or revoked
+  installation; this slice rejects a different installation as a registration conflict.
+  Terminated database connections and lost replies have regression tests; actual
+  database failover and recovery under deployment credentials still need proof.
+- **Provisioning and placement.** Use Kubernetes for orchestration when needed;
+  cluster provisioning and manifests are deferred until there is a service to deploy
+  and a concrete operational need. Country/provider/cell registry, repeatable resource
   creation, recovery from partial failures, capacity and customer movement.
   Place venues independently, preserve their addresses on movement and test replacement
   against an explicit recovery-time target. Define how established connections and

@@ -381,6 +381,15 @@ account data may live or make the management database a shared store for all cel
 traffic. The [registration plan](registration-implementation-plan.md) records the
 initial implementation and identity source.
 
+## Orchestration
+
+Confirmed direction: use Kubernetes for Cloud orchestration when needed. Keep the
+initial local development and registration implementation simple. Cluster provisioning,
+provider-specific Kubernetes services and deployment manifests are deferred until
+there is a concrete operational need. Kubernetes does not by itself define the cell
+failure boundary; cluster sharing, country placement and database dependencies still
+need to follow the isolation and residency decisions below.
+
 ## Country and mini-zone structure
 
 Use a mini-zone, or **cell**, as the independently operated home of a bounded group
