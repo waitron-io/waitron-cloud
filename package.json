@@ -5,5 +5,15 @@
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "pnpm -r typecheck",
+    "test": "node scripts/test-postgres.mjs",
+    "test:registration": "pnpm --filter @waitron-cloud/registration test",
+    "db:migrate": "pnpm --filter @waitron-cloud/registration db:migrate"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^7.0.2"
   }
 }
