@@ -52,7 +52,7 @@ test('signup and recovery travel through SMTP and can be read in the local inbox
 });
 
 test('local mailer rejects external portal origins and invalid ports', () => {
-  for (const portalOrigin of ['https://example.com', 'http://localhost:3000/path', 'http://user:secret@localhost:3000']) {
+  for (const portalOrigin of ['', 'not a url', 'https://example.com', 'http://localhost:3000/path', 'http://user:secret@localhost:3000']) {
     assert.throws(() => createLocalAccountMailer({ portalOrigin }), /local mail configuration/);
   }
   for (const port of [0, 65536, NaN, 1.5]) assert.throws(() => createLocalAccountMailer({ port }), /local mail configuration/);

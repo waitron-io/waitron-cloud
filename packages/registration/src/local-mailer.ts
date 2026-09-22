@@ -6,7 +6,9 @@ import nodemailer from 'nodemailer';
 /** Development capture only; the SMTP host is fixed to loopback and has no production configuration. */
 export function createLocalAccountMailer(options: {port?: number; portalOrigin?: string} = {}): SignupMailer & PasswordRecoveryMailer {
   const port = options.port ?? 1125;
-  const origin = new URL(options.portalOrigin ?? 'http://localhost:3000');
+  let origin: URL;
+  try { origin = new URL(options.portalOrigin ?? 'http://localhost:3000'); }
+  catch { throw new Error('Invalid local mail configuration'); }
   if (process.env.NODE_ENV === 'production' || !Number.isInteger(port) || port < 1 || port > 65535
     || !['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname) || !['http:', 'https:'].includes(origin.protocol)
     || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash) {

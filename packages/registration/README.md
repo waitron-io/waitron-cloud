@@ -84,8 +84,9 @@ delivery remain required HTTP integration work; this internal method awaits the 
 `complete(token, newPassword)` returns `{ status: 'completed' }` after changing the
 password, consuming the token and ending all that account's sessions in one transaction.
 It does not issue a session. Sign in normally afterwards, including after a lost reply.
-Passwords follow signup's policy. `recovery_invalid` identifies invalid inputs;
-`reset_unavailable` covers unknown, expired, consumed or invalidated links and accounts
+Passwords follow signup's policy. `recovery_invalid` identifies an invalid email or
+new password; `reset_unavailable` covers malformed tokens, unknown, expired, consumed
+or invalidated links and accounts
 that are no longer eligible. Account email, verification and permissions do not change.
 
 Reset links last 30 minutes. A password-hash fingerprint invalidates every earlier link
