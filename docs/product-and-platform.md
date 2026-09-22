@@ -195,8 +195,15 @@ plus a way to preserve a particular recovery point for longer.
 Validate storage costs before setting prices. The time of day, monthly selection rule,
 missed-snapshot handling, extended-retention terms and cancellation behaviour still
 need to be defined. Continuous-backup retention is a separate decision; these snapshot
-periods do not set its recovery window. Define what happens to the last usable recovery
-points when no new backups arrive before implementing automatic deletion.
+periods do not set its recovery window.
+
+Confirmed safeguard: while your backup subscription remains active, automatic cleanup
+must preserve the last verified snapshot even after its normal retention period ends.
+If new backups stop, show that snapshot's recovery timestamp and clearly mark backup
+health as out of date. A newer snapshot must pass verification before it can replace
+the protected copy. Define and test verification, including a failed new snapshot and
+an interruption during cleanup. This exception governs automatic expiry; explicit
+deletion and subscription cancellation still need their own policies.
 
 You can restore onto a replacement server yourself without waiting for staff approval
 or assistance, subject to your account's recovery permissions.
@@ -522,8 +529,8 @@ of a venue already connected to an organisation remain implementation decisions.
   before Google Cloud is called supported?
 - Are services purchased individually, in bundles, or both? What happens to retained
   data and access after cancellation or failed payment?
-- How long should the continuous backup remain recoverable, and how should retention
-  protect the last usable recovery points when a venue stops sending backups? Daily
+- How long should the continuous backup remain recoverable, and what verification
+  must a new snapshot pass before replacing the protected last verified copy? Daily
   snapshots for 30 days and monthly snapshots for 12 months are the starting policy;
   selected snapshots can have longer paid retention, with terms and prices still open.
 - How are independently deployed service groups arranged inside cells, and which

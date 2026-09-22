@@ -54,6 +54,9 @@ this milestone is implemented by documenting it.
   for 12 months, plus longer paid retention for selected snapshots. Validate costs and
   define prices, schedule details and continuous-backup retention. Show backup health
   and alert on interruption.
+  While the backup subscription is active, protect the last verified snapshot from
+  automatic expiry and mark it as out of date when backups stop. Verify a new snapshot
+  before allowing it to replace the protected copy.
 - Terminate public HTTPS in Cloud for bot and request inspection, then encrypt the
   onward connection. Keep staff traffic encrypted to the venue through a separate
   hostname using TLS passthrough, with network and connection controls in Cloud.
@@ -94,7 +97,7 @@ this milestone is implemented by documenting it.
 | Waitron boundary | Signup inside Waitron, distinct Cloud and local staff logins, explicit identity linking and an independent Cloud portal are agreed. Venue linking requires Cloud permission to add venues and local administrator approval; one person or different people may provide them. Define the approval exchange, ownership proof, already-linked venue handling, configuration, credentials, status and version compatibility. |
 | Server lifecycle | One guided replacement flow covers planned upgrades and server failure, preserving venue, subscription and customer-facing addresses. Use fresh installation credentials, verify restored data before trading, retire old credentials and follow Waitron's activation rules. Specify final-backup handover, concurrent requests, interrupted replacement and a returning old server. Define connection and standalone revocation, including the latter's effects on subscriptions, retained backups and reconnection. |
 | Recovery promise | Specify tolerated data loss, recovery time and promotion authority for each service. Existing Waitron designs use human promotion; automation is not approved by this discussion. |
-| Backup recovery | Self-service restoration is agreed; staff intervention is an exceptional fallback. Use continuous backups for the latest recoverable version and retained snapshots for archives or missing continuous data. Start with daily snapshots for 30 days, monthly snapshots for 12 months and longer paid retention for selected snapshots. Define continuous-backup retention, schedule details, extended-retention terms and prices, independent storage/deletion controls and protection of the last usable recovery points when backups stop. Test recovery with continuous data absent. |
+| Backup recovery | Self-service restoration is agreed; staff intervention is an exceptional fallback. Use continuous backups for the latest recoverable version and retained snapshots for archives or missing continuous data. Start with daily snapshots for 30 days, monthly snapshots for 12 months and longer paid retention for selected snapshots. Preserve the last verified snapshot against automatic expiry while subscribed, marking it out of date when backups stop. Define verification, continuous-backup retention, schedule details, extended-retention terms and prices, and independent storage/deletion controls. Test recovery with continuous data absent. |
 
 ## Platform work to scope
 
@@ -151,8 +154,10 @@ this milestone is implemented by documenting it.
   Implement the starting snapshot policy: daily for 30 days, monthly for 12 months
   and longer paid retention for selected snapshots. Define snapshot timing, monthly
   selection and missed-snapshot handling; validate storage costs before pricing.
-  Decide continuous-backup retention and what happens to the last usable recovery
-  points when new backups stop before implementing automatic deletion.
+  Decide continuous-backup retention. Protect the last verified snapshot from automatic
+  expiry while the backup subscription is active. Specify verification before a newer
+  snapshot takes its place; test failed new snapshots and interrupted cleanup. Explicit
+  deletion and cancellation policies remain open.
 
 ## Initial services and future candidates
 
@@ -160,7 +165,7 @@ this milestone is implemented by documenting it.
 | --- | --- |
 | Remote access (initial) | Public HTTPS terminates in Cloud for bot inspection; staff uses a separate hostname with TLS passthrough and network controls. Share a gateway within each cell, with separate venue tunnels and credentials. Define and test route/session isolation, traffic limits and legitimate automated-client handling. Provide assigned/custom domains and automated certificates; implement the preferred local DNS overrides with router-specific setup and offline/recovery tests. Decide the bootstrap role of waitron.local. Temporary unavailability while the venue is offline and short interruptions during cell replacement are accepted; define and test the cell recovery-time target. |
 | Backups (initial) | Implement self-service restore onto a replacement server, normally using the latest recoverable Litestream backup. Provision scoped storage access, show recovery-point time and backup health, alert on interruption, define retention and test restore against each provider selected for launch. Coordinate safe replacement activation with Waitron. |
-| SQLite snapshots (initial backup service) | Retain daily snapshots for 30 days and monthly snapshots for 12 months, with longer paid retention for selected snapshots. Each must remain restorable if continuous backup data disappears. Define schedule details, consistency, extended-retention terms and prices, and independent storage/deletion controls. Decide protection of the last usable recovery points when backups stop. Provide explicit snapshot selection and prove restoration with continuous backup data absent. |
+| SQLite snapshots (initial backup service) | Retain daily snapshots for 30 days and monthly snapshots for 12 months, with longer paid retention for selected snapshots. Each must remain restorable if continuous backup data disappears. Protect the last verified snapshot from automatic expiry while subscribed; verify a newer copy before replacing it and show stale backup health. Define schedule details, consistency, extended-retention terms and prices, and independent storage/deletion controls. Provide explicit snapshot selection and prove restoration with continuous backup data absent. |
 | Failover to cloud | Allocate a replacement instance, coordinate promotion with Waitron, connect devices, stream the new primary and support return to the venue. |
 | Hosted Waitron | Provision isolated operational instances, local print connectivity, upgrades, capacity and cloud-only recovery. |
 | Bookings and public pages | Initial remote access may be unavailable while the venue is offline. Future independent cloud hosting needs rules for accepting reservations and synchronising them with the venue; include menus, ordering and payment-page candidates. |
