@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { resolveSession } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
 
 export interface ConnectionBinding {
@@ -141,15 +142,27 @@ export class RegistrationStore {
     }
   }
 
+  async approveCloudWithSession(input: ConnectionBinding, sessionToken: string, csrfToken: string): Promise<void> {
+    await this.#request(input, async (client, row, binding) => {
+      const session = await resolveSession(client, sessionToken, { csrfToken, touch: false });
+      await this.#approveCloud(client, row, binding, session.accountId);
+      // Permission contention can outlast the session; an expired session rolls back the approval.
+      await resolveSession(client, sessionToken, { csrfToken });
+    });
+  }
+
+  /** Trusted adapter entry point. Browser callers must use approveCloudWithSession. */
   async approveCloud(input: ConnectionBinding, accountId: string): Promise<void> {
     requireUuid(accountId);
-    await this.#request(input, async (client, row, binding) => {
-      await requirePermission(client, accountId, binding.organisationId);
-      await requireUnexpired(client, binding);
-      if (row.cloud_account_id && row.cloud_account_id !== accountId) throw new RegistrationError('approval_conflict');
-      await client.query('UPDATE connection_requests SET cloud_account_id = $3 WHERE installation_key = $1 AND operation_id = $2',
-        [...key(binding), accountId]);
-    });
+    await this.#request(input, (client, row, binding) => this.#approveCloud(client, row, binding, accountId));
+  }
+
+  async #approveCloud(client: PoolClient, row: RequestRow, binding: ConnectionBinding, accountId: string): Promise<void> {
+    await requirePermission(client, accountId, binding.organisationId);
+    await requireUnexpired(client, binding);
+    if (row.cloud_account_id && row.cloud_account_id !== accountId) throw new RegistrationError('approval_conflict');
+    await client.query('UPDATE connection_requests SET cloud_account_id = $3 WHERE installation_key = $1 AND operation_id = $2',
+      [...key(binding), accountId]);
   }
 
   async complete(input: ConnectionBinding): Promise<Registration> {

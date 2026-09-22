@@ -4,7 +4,10 @@ Status: implementation plan, 2026-09-22. The owner approved the connection journ
 in the [integration contract](waitron-integration-contract.md#agreed-connection-journey).
 Step 1 is implemented in the [internal registration package](../packages/registration/README.md),
 with PostgreSQL tests for approvals, retries, concurrency, expiry and process restart.
-There is no public registration service yet; steps 2 and 3 remain to be built.
+The [identity slice](cloud-identity-implementation.md) now implements password sessions
+and session-backed Cloud approval. Local administrator proof, the matching-code
+pairing flow and the browser/end-to-end portions of steps 2 and 3 remain to be built.
+There is no public registration service yet.
 
 ## Outcome
 

@@ -10,7 +10,8 @@
     "typecheck": "pnpm -r typecheck",
     "test": "node scripts/test-postgres.mjs",
     "test:registration": "pnpm --filter @waitron-cloud/registration test",
-    "db:migrate": "pnpm --filter @waitron-cloud/registration db:migrate"
+    "db:migrate": "pnpm --filter @waitron-cloud/registration db:migrate",
+    "test:packages": "pnpm -r --workspace-concurrency=1 test"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

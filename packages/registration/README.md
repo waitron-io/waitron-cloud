@@ -7,19 +7,20 @@ completion without creating duplicate venues or installations.
 ## Trust boundary
 
 You must verify identities and approvals before calling this package. There is no
-HTTP endpoint, login flow, proof verifier or credential issuer here. An installation
+HTTP endpoint, browser login flow, local proof verifier or machine credential issuer here. An installation
 key identifier, account ID or local receipt ID is a reference, never a credential.
 Do not expose these methods directly as public endpoints.
 
 The surrounding service must supply the authenticated installation's canonical key
 identifier. The local approval adapter must verify local administrator authority and
-issue a unique receipt bound to the complete request. The Cloud approval adapter must
-supply the account from its authenticated session. This package also checks the
+issue a unique receipt bound to the complete request. Browser-facing adapters must use `approveCloudWithSession` with its session and CSRF
+tokens. The account-ID approval method is reserved for trusted adapters. This package also checks the
 account's current registration permission in PostgreSQL when approving and completing.
 
-The minimal account and membership tables support that check. Login, platform staff
-roles and account lifecycle will come from the planned identity integration using
-Waitron's `pre-sqlite-migration` tag; no identity code has been copied yet.
+The [identity package](../identity/README.md) now supplies password sessions and
+explicit platform permission checks, adapted from `pre-sqlite-migration`. The public
+web adapter, signup/recovery, additional authentication factors and platform role
+catalogue remain to be implemented.
 
 ## State and completion
 

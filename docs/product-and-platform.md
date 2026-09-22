@@ -363,6 +363,21 @@ Those are useful foundations to copy or extract with their behavioural tests. Cl
 organisations, memberships and cross-venue permissions need their own model. Choose
 how shared security fixes reach both repositories before creating a permanent fork.
 
+## Shared UI
+
+Direction: reuse Waitron's existing UI foundation across Waitron and Waitron Cloud.
+The inspected [UI package](https://github.com/clintongormley/waitron/blob/4ce2db502173d87d14d2e1aad5dc92b19be38363/packages/ui/package.json)
+uses Lit, and its [exports](https://github.com/clintongormley/waitron/blob/4ce2db502173d87d14d2e1aad5dc92b19be38363/packages/ui/src/index.ts)
+include colours and spacing, buttons, form controls, dialogs and tables, alongside
+venue-specific floor-plan components. The package currently has a workspace dependency
+on `@waitron/shared`; it is not yet a distributable cross-repository dependency.
+
+Before building Cloud screens, define general-purpose entry points and a versioned
+package consumed by both repositories, preserving the existing browser and accessibility
+tests. Keep authentication, permissions, API clients and product workflows in their
+own applications. Decide package ownership, build output and private distribution
+when implementing that extraction; no shared package has been published by this decision.
+
 ## Cloud management storage
 
 Confirmed choice: use PostgreSQL for Cloud accounts, organisations, venue and
@@ -380,6 +395,14 @@ storage remain deployment decisions. This choice does not settle where cross-cou
 account data may live or make the management database a shared store for all cell
 traffic. The [registration plan](registration-implementation-plan.md) records the
 initial implementation and identity source.
+
+## First-connection confirmation
+
+Confirmed first-pairing interaction: show a short matching code inside signed-in local
+Waitron and ask the owner to confirm it in Cloud. Bind the exchange to the installation,
+venue and selected organisation; expire it and limit guesses. Possession of an
+installation key alone is not proof of local administrator authority. The local
+adapter and complete browser journey remain to be implemented.
 
 ## Orchestration
 

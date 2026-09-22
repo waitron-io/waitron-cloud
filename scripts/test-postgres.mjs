@@ -37,7 +37,7 @@ try {
   }
   if (!ready) throw new Error('Test PostgreSQL did not become ready within 30 seconds');
   const port = docker('port', name, '5432/tcp').split(':').at(-1);
-  child = spawn('pnpm', ['test:registration'], {
+  child = spawn('pnpm', ['test:packages'], {
     stdio: 'inherit',
     env: { ...process.env, TEST_DATABASE_URL: `postgres://postgres:${password}@127.0.0.1:${port}/cloud_test` },
   });
