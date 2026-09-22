@@ -125,12 +125,39 @@ service groups independently where their workload or failure boundary warrants i
 | Work execution | Durable background jobs, retries, schedules and progress for backups, restores, messages, reports and upgrades. |
 | Connectivity | Names, certificates, routing, tunnels and customer isolation. |
 | Data lifecycle | Retention, restoration, export, deletion, encryption and audit of privileged access. |
+| Monitoring and usage metering | Service checks, performance, customer consumption, limits and cost attribution by venue, service and cell. |
 | Operations | Health, customer-visible incidents, resource and spend limits, release waves, pause controls and recovery procedures. |
 | Waitron integration | Versioned APIs, signup and status screens, local credentials, configuration delivery and compatibility across installed versions. |
 
 Cloud infrastructure, cloud application services and customer Waitron installations
 are three upgrade targets. Each needs staged rollout and recovery rules. A release
 that changes stored data may require more than restarting the previous image.
+
+## Monitoring, usage and operating controls
+
+Service health monitoring and customer usage metering are explicit requirements.
+As an operator, you need to know whether services work, which customers are affected,
+how much they consume and what it costs to serve them.
+
+- **Service health.** Check real operations such as a lookup, a booking or backup
+  retrieval. Track response times, errors, queued work, backup freshness and capacity.
+  Some checks and alert delivery must run outside the cell being checked so a failed
+  cell can still be reported. Define customer-visible status and operator alerts.
+- **Customer usage.** Count lookups and API calls, reports, stored and transferred
+  bytes, messages and compute consumption where relevant. Attribute usage to the
+  account, venue, service and time period, with cell and provider for cost analysis.
+  Give customers a view of their allowance and consumption. Decide which units, if
+  any, determine charges; collecting a metric does not set a pricing policy.
+- **Operating controls.** Define rate limits, subscription allowances, capacity
+  thresholds and spend alerts. Decide how to handle sustained excess, sudden traffic
+  spikes and a customer consuming enough resources to affect others. Health signals
+  should help operators pause a rollout or plan a cell move.
+
+For any billable unit, specify how retries, failed requests, cached results and batch
+requests count. Use durable usage records that can be reconciled after delayed or
+duplicate delivery. Cells need a defined policy for recording usage and applying
+limits during a central metering outage. Include telemetry and usage records in the
+country, retention and access policies.
 
 ## Deployment on AWS and Google Cloud
 

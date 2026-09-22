@@ -18,6 +18,7 @@ selects the first service to build.
 | Cells | Choose the customer placement unit, group size and availability-zone layout. Define acceptable shared dependencies, movement and staged rollout. |
 | Provider support | Design for AWS and Google Cloud; choose the first provider and the evidence needed to support the second. Decide separately whether cross-provider failover is wanted. |
 | Product packages | Choose services, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
+| Usage policy | Define lookup and other usage units, customer visibility, allowances and excess-use behaviour. Decide which measurements affect pricing and how retries, failed calls, cached results and batches count. |
 | Waitron boundary | Agree signup, ownership proof, configuration, credentials, status and version compatibility with the on-prem application. |
 | Recovery promise | Specify tolerated data loss, recovery time and promotion authority for each service. Existing Waitron designs use human promotion; automation is not approved by this discussion. |
 
@@ -36,6 +37,13 @@ selects the first service to build.
   telemetry, with AWS and Google implementations where needed.
 - **Operations.** Customer and operator portals, health checks, incidents, audit,
   budgets, quotas, staged releases, maintenance and recovery controls.
+- **Service monitoring.** Check representative operations from outside the affected
+  cell; track errors, response times, queued work, backup freshness and capacity.
+  Define alerts, affected-customer views and rollout pause criteria.
+- **Usage metering.** Attribute lookups/API calls, reports, storage, transfers,
+  messages and compute to customers and services. Show consumption and allowances,
+  track provider costs and define limits. Any billing records need durable capture,
+  duplicate handling, reconciliation and a metering-outage policy.
 - **Data lifecycle.** Retention, restore checks, export, deletion and access review;
   define what survives subscription termination and for how long.
 
@@ -54,7 +62,7 @@ selects the first service to build.
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |
 | Messaging | Administrative email via SES or another provider, notification channels, sender identities, preferences, delivery failures and message location policy. |
 | Automated upgrades | Treat cloud services, cloud-hosted Waitron and on-prem installations separately; choose rollout groups, compatibility, maintenance windows, pause and recovery behaviour. |
-| Monitoring | External venue health and backup/filing/device signals, customer alerts and cloud service incidents. |
+| Monitoring | External venue health and backup/filing/device signals, functional cloud-service checks, performance, customer alerts and incidents. Platform usage metering also tracks consumption, limits and costs. |
 
 Further candidates remain in the complete inventory: loyalty and gift cards,
 e-receipts, opening-hours publishing, accounting/delivery connectors, AI-assisted
