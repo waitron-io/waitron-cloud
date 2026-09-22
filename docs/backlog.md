@@ -29,9 +29,14 @@ agreed initial services; their detailed scope and implementation sequence remain
   Normally restore the latest recoverable continuous Litestream backup. Retained
   snapshots provide point-in-time archives and recovery if continuous backup data
   disappears. Define retention and scheduling, show backup health and alert on interruption.
-- Filter bots and abusive traffic in Cloud before forwarding requests to on-prem
-  servers. Scope request-rate and concurrency limits per venue, prevent bypass routes,
-  and monitor rejected traffic and false positives across staff and public access.
+- Terminate public HTTPS in Cloud for bot and request inspection, then encrypt the
+  onward connection. Keep staff traffic encrypted to the venue through a separate
+  hostname using TLS passthrough, with network and connection controls in Cloud.
+  Test that the public route cannot expose staff functions; define limits and monitor
+  false positives. Staff application-level filtering remains at the venue.
+- Provide assigned or customer-owned hostnames and automatic Let's Encrypt certificates.
+  Choose a self-service LAN discovery method that also works without internet access;
+  split DNS is an option, with router and managed-device alternatives still to evaluate.
 - Keep support for multiple legal businesses and countries in the underlying model.
   Detailed international administration, separate-approver workflows and ownership
   transfers can wait until needed. Each venue belongs to one organisation at a time.
@@ -96,7 +101,7 @@ agreed initial services; their detailed scope and implementation sequence remain
 
 | Service | Design work still needed |
 | --- | --- |
-| Remote access (initial) | Include owner/staff access and customer-facing menus and booking pages. Temporary unavailability when the venue is offline is accepted; design the unavailable-page experience. Require bot/abuse protection before requests reach on-prem servers; choose the provider, traffic limits and handling of legitimate automated clients. Define route permissions. Reconcile the shared gateway handoff with the per-venue endpoint decision; define tunnels, domains, TLS termination and customer isolation. |
+| Remote access (initial) | Public HTTPS terminates in Cloud for bot inspection; staff uses a separate hostname with TLS passthrough and network controls. Define and test route/session isolation, tunnel and gateway placement, traffic limits and legitimate automated-client handling. Provide assigned/custom domains and automated certificates; select LAN discovery without making local trading depend on internet access. Temporary unavailability of remote access while the venue is offline is accepted. |
 | Backups (initial) | Implement self-service restore onto a replacement server, normally using the latest recoverable Litestream backup. Provision scoped storage access, show recovery-point time and backup health, alert on interruption, define retention and test restore against each provider selected for launch. Coordinate safe replacement activation with Waitron. |
 | SQLite snapshots (initial backup service) | Retain point-in-time archives that remain restorable if continuous backup data disappears. Define scheduling, consistency, retention and independent storage/deletion controls. Provide explicit snapshot selection and prove restoration with continuous backup data absent. |
 | Failover to cloud | Allocate a replacement instance, coordinate promotion with Waitron, connect devices, stream the new primary and support return to the venue. |
