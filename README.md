@@ -28,5 +28,6 @@ pnpm test
 ```
 
 See [registration development](packages/registration/README.md) for the trust boundary,
-migrations and test setup. The workspace packages are private. Public registration,
-login and service provisioning are still to be implemented.
+migrations and test setup. The workspace packages are private. The [identity package](packages/identity/README.md)
+provides internal password sessions used for Cloud approval. Public registration, the
+browser login flow and service provisioning are still to be implemented.

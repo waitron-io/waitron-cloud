@@ -15,8 +15,17 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
+  packages/identity:
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
+
   packages/registration:
     dependencies:
+      '@waitron-cloud/identity':
+        specifier: workspace:*
+        version: link:../identity
       pg:
         specifier: ^8.23.0
         version: 8.23.0

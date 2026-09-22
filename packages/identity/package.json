@@ -1,0 +1,13 @@
+{
+  "name": "@waitron-cloud/identity",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p ../../tsconfig.json",
+    "test": "node --test --test-timeout=30000 test/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
+  }
+}

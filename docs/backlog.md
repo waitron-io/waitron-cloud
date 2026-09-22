@@ -1,7 +1,8 @@
 # Waitron Cloud backlog
 
 Updated 2026-09-22. The repository has a pnpm workspace and internal PostgreSQL
-registration state. No public cloud service is implemented. This file owns cloud product and platform work;
+registration state, internal password sessions and session-backed Cloud approval.
+No public cloud service is implemented. This file owns cloud product and platform work;
 Waitron's backlog owns the on-prem application and its side of the integration.
 
 Start with the [product discussion](product-and-platform.md). The
@@ -27,8 +28,10 @@ Use two test venues sharing one cell. Implement and verify in this order:
 The [integration contract](waitron-integration-contract.md) now maps the existing
 interfaces to proposed connection, configuration, backup, replacement and revocation
 operations, with ownership and acceptance checks. Registration persistence is implemented
-with real PostgreSQL concurrency and process-restart tests. Next: integrate identity
-and specify the bound approval proof and first-contact trust before exposing public
+with real PostgreSQL concurrency and process-restart tests. Password sessions and
+session-backed Cloud approval are implemented. Next: implement the local administrator
+adapter and matching-code exchange, including bound proof and first-contact trust,
+before exposing public
 registration endpoints. This can proceed independently of SQLite landing. Recheck the
 new SQLite capture/restore interfaces before integrating backups; do not build a new
 PostgreSQL backup adapter for Waitron. The full two-venue milestone remains unproved.
@@ -114,7 +117,19 @@ the credential and revocation rules still to be defined.
 
 ## Platform work to scope
 
-- **Identity and organisations.** Reuse suitable Waitron user management code and
+- **Shared UI.** Reuse the general controls and styling from Waitron's existing
+  `@waitron/ui` as a versioned dependency for both repositories before building Cloud
+  screens. Audit the `@waitron/shared` dependency and venue-specific exports, define
+  package ownership/build/distribution and preserve browser/accessibility tests.
+  No shared UI package has been extracted or published yet.
+- **Identity and organisations.** Password helpers and management-session behaviours
+  have been adapted with a pinned source map, PostgreSQL tests, hashed session/CSRF
+  tokens, passive polling and separate platform permission checks. Session-backed
+  Cloud approval derives the account from the live session in its transaction.
+  Implement signup/email verification, recovery, MFA/passkeys, public login throttling,
+  Origin/cookie handling and the platform role catalogue before public use.
+  Review the inherited password cost for deployment and apply the source map's
+  security-fix process to both repositories. Further reuse should take code and
   behavioural tests from `pre-sqlite-migration`, pinned to
   `c9d80c59a30ab1ae7a4acc0a6999e6a342de924e` in the registration plan. Adapt its
   PostgreSQL schema and dependencies; add cloud memberships and permissions for
@@ -145,8 +160,11 @@ the credential and revocation rules still to be defined.
   Registration persistence now records bound approvals and results with transactional
   completion, expiry, retries, permission rechecks and separate service states. Real
   PostgreSQL tests cover concurrent workers and process restart. Next, implement the
-  actual proof verifier, login adapter and credential lifecycle; IDs alone are not
-  authentication. Replace the initial one-installation-per-venue constraint with an
+  actual local proof verifier, browser adapter and credential lifecycle; IDs alone
+  are not authentication. The owner approved matching-code confirmation between
+  signed-in local Waitron and Cloud. Define code/proof formats, expiry, attempt limits
+  and canonical request binding; implement the Waitron-side administrator check and
+  prove two real installations cannot exchange or replay their approvals. Replace the initial one-installation-per-venue constraint with an
   explicit history model when building replacement. Validate local-venue identifier
   provenance and handling of cloned identities in the approval flow. When replacement
   gains a UI, define the permitted diagnostics for an already-linked or revoked
