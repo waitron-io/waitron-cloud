@@ -4,6 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { execFileSync } from 'node:child_process';
 import { after, before, beforeEach, test } from 'node:test';
 import { Pool } from 'pg';
+import { EmailDeliveryError, type EmailDeliveryContext, type EmailDeliveryReceipt } from '../src/email-delivery.ts';
 import { EmailOutbox, EmailWorker } from '../src/email-outbox.ts';
 import { SignupStore } from '../src/signup.ts';
 import { PasswordRecoveryStore } from '../src/password-recovery.ts';
@@ -321,4 +322,75 @@ test('token-hash and expiry metadata cannot redirect eligibility checks for inta
   await pool.query("UPDATE email_outbox SET expires_at = expires_at + interval '1 hour'");
   await worker.runOnce(); assert.equal(delivered.length, 0);
   assert.equal((await row()).last_error, 'payload_unavailable');
+});
+
+test('permanent SMTP rejection stops retrying and erases the payload; temporary responses retry', async () => {
+  await enqueue();
+  const rejected = new EmailWorker(pool, outbox, {...mailer, async sendVerification() {throw new EmailDeliveryError('delivery_rejected');}});
+  await rejected.runOnce();
+  assert.equal((await row()).status, 'failed'); assert.equal((await row()).attempts, 1);
+  assert.equal((await row()).last_error, 'delivery_rejected'); assert.equal((await row()).payload, null);
+  assert.equal(await worker.runOnce(), false);
+  await clean(); await enqueue('temporary@example.test');
+  const deferred = new EmailWorker(pool, outbox, {...mailer, async sendVerification() {throw new EmailDeliveryError('delivery_deferred');}});
+  await deferred.runOnce(); assert.equal((await row()).status, 'pending');
+  assert.equal((await row()).last_error, 'delivery_deferred');
+  await due(); await worker.runOnce(); assert.equal((await row()).status, 'sent');
+});
+
+test('worker timeout aborts the adapter and passes a stable queue delivery ID', async () => {
+  await enqueue(); const id = (await row()).id;
+  let seen: EmailDeliveryContext | undefined; let aborted = false;
+  const hanging = new EmailWorker(pool, outbox, {...mailer, async sendVerification(_message, context?: EmailDeliveryContext) {
+    seen = context;
+    if (!context) throw new Error('Missing delivery context');
+    await new Promise<void>((_, reject) => context.signal.addEventListener('abort', () => {aborted = true; reject(new Error('raw transport cancellation'));}, {once: true}));
+  }}, {sendTimeoutMs: 10});
+  await hanging.runOnce();
+  assert.equal(seen?.deliveryId, id); assert.equal(aborted, true);
+  assert.equal((await row()).last_error, 'delivery_timeout'); assert.equal((await row()).failures, 1);
+});
+
+test('accepted SMTP receipts are retained only by the current claim', async () => {
+  await enqueue(); const id = (await row()).id;
+  const receipt = {transport: 'smtp' as const, messageId: `<${id}@example.test>`};
+  const accepted = new EmailWorker(pool, outbox, {...mailer, async sendVerification() {return receipt;}});
+  await accepted.runOnce();
+  assert.equal((await row()).transport, 'smtp'); assert.equal((await row()).message_id, receipt.messageId);
+  assert.equal((await row()).payload, null);
+  await clean(); await enqueue('superseded@example.test');
+  let resume!: () => void; let reached!: () => void;
+  const held = new Promise<void>(resolve => {resume = resolve;}); const started = new Promise<void>(resolve => {reached = resolve;});
+  const stale = new EmailWorker(pool, outbox, {...mailer, async sendVerification() {reached(); await held; return receipt;}}).runOnce();
+  try {
+    await started; await pool.query("UPDATE email_outbox SET lease_until = clock_timestamp() - interval '1 second'");
+    await worker.runOnce();
+  } finally {resume(); await stale;}
+  assert.equal((await row()).status, 'sent'); assert.equal((await row()).message_id, null);
+});
+
+test('status command works in production without delivery credentials or encryption keys', async () => {
+  const env = {...process.env, NODE_ENV: 'production', DATABASE_URL: process.env.TEST_DATABASE_URL, PGOPTIONS: `-c search_path=${schema}`};
+  for (const key of ['CLOUD_EMAIL_KEYS', 'CLOUD_EMAIL_ACTIVE_KEY_ID', 'CLOUD_SMTP_PASSWORD', 'CLOUD_SMTP_USER', 'CLOUD_SMTP_HOST']) delete env[key as keyof typeof env];
+  const output = execFileSync(process.execPath, ['src/email-worker-cli.ts', '--status'], {env, encoding: 'utf8', timeout: 10000, stdio: ['ignore', 'pipe', 'pipe']});
+  assert.equal(JSON.parse(output).counts.pending, 0);
+});
+
+
+test('an accepted send with malformed receipt metadata finishes without retrying or retaining it', async () => {
+  for (const receipt of [
+    {transport: 'smtp', messageId: 'invalid receipt'},
+    {transport: 'unknown', messageId: '<id@example.test>'},
+    {transport: 'smtp', messageId: `<${'x'.repeat(520)}@example.test>`},
+  ]) {
+    await clean(); await enqueue(); let sends = 0;
+    const accepted = new EmailWorker(pool, outbox, {...mailer, async sendVerification() {
+      sends++; return receipt as EmailDeliveryReceipt;
+    }});
+    await accepted.runOnce(); await due(); await accepted.runOnce();
+    const record = await row();
+    assert.equal(record.status, 'sent'); assert.equal(sends, 1);
+    assert.equal(record.transport, null); assert.equal(record.message_id, null);
+    assert.equal(record.payload, null); assert.equal(record.failures, 0);
+  }
 });

@@ -4,8 +4,10 @@ import { resolveSession } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
 export { SignupStore, SignupError, type SignupEmail, type SignupMailer, type SignupDetails, type SignupResult } from './signup.ts';
 export { PasswordRecoveryStore, PasswordRecoveryError, type PasswordRecoveryMailer } from './password-recovery.ts';
-export { EmailOutbox, EmailWorker, type EmailKind, type EmailDeliveryStatus } from './email-outbox.ts';
+export { EmailOutbox, EmailWorker, emailDeliveryStatus, type EmailKind, type EmailDeliveryStatus } from './email-outbox.ts';
 export type { AccountEmail } from './account-input.ts';
+export { createSmtpAccountMailer, type SmtpAccountMailConfig } from './smtp-mailer.ts';
+export { EmailDeliveryError, type EmailDeliveryContext, type EmailDeliveryReceipt } from './email-delivery.ts';
 export { createLocalAccountMailer } from './local-mailer.ts';
 
 export interface ConnectionBinding {

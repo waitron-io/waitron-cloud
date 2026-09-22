@@ -47,7 +47,8 @@ a token cannot create a session, reset a password or add another organisation.
 
 `signup_invalid` identifies malformed input. `verification_unavailable` covers an
 unknown, expired or used token and an email that already has an account.
-Delivery failures are recorded by the worker and retried automatically. Database or
+Delivery failures are recorded by the worker. Temporary failures retry automatically;
+permanent rejections stop retrying. Database or
 queue failures still reject the request and roll back both records. The worker uses
 fixed error codes and never persists a provider's error message. See
 [reliable account email](../../docs/email-delivery-implementation.md) for the key
@@ -60,8 +61,9 @@ pnpm test
 ```
 
 They exercise signup, login, concurrent links, delivery failure and a fresh-process
-completion. Mailpit now captures local SMTP delivery; production email and HTTP routes
-are not connected. The
+completion. Mailpit captures local SMTP delivery. The production SMTP adapter is
+tested against a local authenticated TLS server; a live provider and HTTP routes
+are not configured. The
 [signup plan](../../docs/cloud-signup-implementation.md) records the public deployment
 gates. `email_verified_at` records proof for this flow; the older trusted provisioning
 path owns its verification policy. `is_owner` records the initial customer owner and
@@ -73,6 +75,14 @@ Use `PasswordRecoveryStore(pool, outbox)` with the same queue. The worker's mail
 with the same `{ email, token, expiresAt }` shape as signup and `sendPasswordChanged`
 with `{ email }`. `createLocalAccountMailer()` implements the worker's delivery interfaces and
 delivers to Cloud's loopback-only Mailpit. See the [local inbox commands](../../README.md#local-email-inbox).
+
+`createSmtpAccountMailer(config)` supplies the same methods for production relays.
+The worker passes an optional second argument, `{ deliveryId, signal }`, containing
+its queue UUID and cancellation signal. The SMTP adapter returns
+`{ transport: 'smtp', messageId }`; existing capture/local adapters may return nothing.
+The worker saves receipts only while it still owns the claim. Use the
+[production email guide](../../docs/production-email-implementation.md) for relay
+configuration, retry classification and the live-delivery requirements.
 
 `request(email)` returns `{ status: 'accepted' }` for eligible, unknown, disabled,
 unverified and passwordless accounts, during cooldown, and when delivery fails. Only

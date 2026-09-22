@@ -1,12 +1,13 @@
 import type { Pool } from 'pg';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { hashSecret } from '@waitron-cloud/identity';
+import type { EmailDeliveryContext, EmailDeliveryReceipt } from './email-delivery.ts';
 import type { EmailOutbox } from './email-outbox.ts';
 import { transaction } from './transaction.ts';
 import { normaliseEmail, validNewPassword, type AccountEmail } from './account-input.ts';
 
 export type SignupEmail = AccountEmail;
-export interface SignupMailer { sendVerification(message: SignupEmail): Promise<void>; }
+export interface SignupMailer { sendVerification(message: SignupEmail, context?: EmailDeliveryContext): Promise<void | EmailDeliveryReceipt>; }
 export interface SignupDetails { password: string; organisationName: string; legalBusinessName: string; countryCode: string; }
 export interface SignupResult { accountId: string; organisationId: string; legalBusinessId: string; }
 export class SignupError extends Error {
