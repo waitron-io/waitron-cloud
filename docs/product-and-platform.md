@@ -1,8 +1,9 @@
 # Waitron Cloud: product and platform discussion
 
 Status: brainstorm, 2026-09-22. The product requirements below come from the owner.
-The platform structure and customer model are proposals for discussion. No service,
-deployment architecture, pricing or implementation order has been approved.
+The platform structure and customer model include proposals for discussion; confirmed
+requirements are identified below. No service, deployment architecture, pricing or
+implementation order has been approved.
 
 ## The product
 
@@ -48,12 +49,27 @@ through this list. Pricing, support scope and operating costs need their own dec
 Start with a business account that subscribes and pays, people who belong to it, and
 venues to which those people have permissions. Keep the business account distinct
 from each taxpayer's legal identity, each venue, and the machines running that venue.
-One account may eventually span several taxpayers and countries; that is still open.
+Confirmed requirement: one organisation must support several legal businesses with
+different tax identities, potentially across countries, from the beginning. Most
+customers will have one legal business. The proposed signup should create the simple
+structure for you and expose additional businesses only when you need them. A venue
+would belong to a legal business, which would belong to an organisation.
 
 A person could manage several businesses, and a business could give an accountant,
-manager or support operator different access to different venues. A cloud account,
+manager or other member different access to different venues. A cloud account,
 a local staff identity and a box's machine credential need explicit relationships.
 Matching email addresses alone must not grant access to a venue.
+
+Waitron Cloud staff and administrators also need logins and permissions. This is a
+confirmed requirement. The proposed model separates customer memberships from
+permissions to operate the Cloud platform, so each can be granted and revoked
+independently. For example, a billing role could handle subscriptions and an operations
+role could manage cells. The exact roles and permitted actions remain to be agreed.
+
+The proposed support model gives staff explicit, scoped access to customer data and
+records privileged actions. Decide whether that access requires customer approval,
+how long it lasts and how emergency access works before implementing support tools.
+Sharing authentication code does not itself grant either customer or staff permissions.
 
 Waitron's identity module is the starting point for reuse. Its
 [package manifest](https://github.com/clintongormley/waitron/blob/830cf71fe854c7aa0b0d8c95078d3fe49ca05a10/packages/identity/package.json)
@@ -118,7 +134,7 @@ service groups independently where their workload or failure boundary warrants i
 
 | Capability | Responsibility |
 | --- | --- |
-| Accounts and access | People, organisations, venue membership, roles, invitations, recovery and support access. |
+| Accounts and access | People, organisations, legal businesses, venue membership, invitations and recovery; Cloud staff logins, platform permissions and scoped support access. |
 | Commercial lifecycle | Service catalogue, subscriptions, billing, trials, usage limits, cancellation and the record of which services a customer may use. |
 | Venue and node registry | Prove which account owns a venue and which machines act for it; enrol, replace, revoke and rotate credentials. |
 | Placement and provisioning | Create resources, allocate cells, track capacity and finish or undo interrupted operations without creating duplicates. |
@@ -211,8 +227,10 @@ is unavailable; the cloud portal is the proposed independent entry point.
 
 ## Questions for the next discussion
 
-- Can one business account own venues and taxpayers in several countries? Which data
-  may its shared identity and cross-country reporting layer hold?
+- Which data may an organisation's shared identity and cross-country reporting layer
+  hold when its legal businesses operate in several countries?
+- Which permissions do Cloud staff need, and when does access to customer data require
+  customer approval? How should exceptional emergency access work?
 - Is the venue the smallest placement unit, and should a business's venues share a
   cell or be spread across cells?
 - What availability promise does each service make? How much recent data can recovery

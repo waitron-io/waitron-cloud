@@ -13,7 +13,8 @@ selects the first service to build.
 
 | Decision | Next step |
 | --- | --- |
-| Customer model | Agree how accounts, people, legal taxpayers, venues and nodes relate, including a business operating in several countries. |
+| Customer model | Support an organisation with several legal businesses and tax identities across countries from the outset. Agree the remaining relationships between people, organisations, businesses, venues and nodes, keeping signup simple for a single business. |
+| Cloud staff access | Staff and administrator logins and permissions are required. Define platform roles, their separation from customer memberships, and approval, scope, duration and audit of support access. |
 | Residency | Define the country policy for operational data, backups, archives, analytics, identities, logs and messages; identify supported launch countries. Verify actual obligations for each market before making customer promises. |
 | Cells | Choose the customer placement unit, group size and availability-zone layout. Define acceptable shared dependencies, movement and staged rollout. |
 | Provider support | Design for AWS and Google Cloud; choose the first provider and the evidence needed to support the second. Decide separately whether cross-provider failover is wanted. |
@@ -25,8 +26,10 @@ selects the first service to build.
 ## Platform work to scope
 
 - **Identity and organisations.** Reuse suitable Waitron user management code and
-  behavioural tests; add cloud memberships and permissions. Review database and
-  module dependencies, and establish how security fixes reach both codebases.
+  behavioural tests; add cloud memberships and permissions for organisations that
+  can contain several legal businesses across countries. Include Cloud staff logins
+  and platform permissions, with support access rules agreed separately. Review
+  database and module dependencies, and establish how security fixes reach both codebases.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
   services, usage accounting, trials, failed payment and cancellation.
 - **Venue and node registration.** Signup inside Waitron, account linking, ownership
