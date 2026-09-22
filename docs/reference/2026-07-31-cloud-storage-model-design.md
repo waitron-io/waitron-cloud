@@ -4,6 +4,10 @@
 > and [cloud backlog](../backlog.md) for current scope and unresolved decisions.
 > Technical and legal claims below have not been revalidated as part of this move.
 
+> The current Cloud-managed recovery decision supersedes section 6's owner-only
+> key-custody rule for managed Cloud backups. Customer-managed archives keep their
+> existing recovery-key model. See the [design reconciliation](../documentation-ownership.md#backup-and-recovery-design-reconciliation).
+
 # The cloud storage model: a sync root, not a shared system of record
 
 **Date:** 2026-07-31

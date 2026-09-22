@@ -47,3 +47,37 @@ Shared unfinished work stays visible on both sides through references. In partic
 moving a provider-validation or promotion follow-up does not discharge its test gate.
 The cloud subscription journey starts inside Waitron, so its UI and local credential
 handling will need corresponding Waitron changes once the contract is agreed.
+
+## Backup and recovery design reconciliation
+
+Read existing Waitron decisions before treating a Cloud question as new. The following
+reconciliation uses Waitron commit `4ce2db502173d87d14d2e1aad5dc92b19be38363`.
+These are design receipts, not verification of runtime behaviour.
+
+| Source | Existing decision and current Cloud interpretation |
+| --- | --- |
+| [Backup and restore regime, section 3](https://github.com/clintongormley/waitron/blob/4ce2db502173d87d14d2e1aad5dc92b19be38363/docs/superpowers/specs/2026-09-04-backup-restore-regime-design.md) | Back up the whole database and module-owned extra state, with a versioned manifest and restore hooks. Owner-managed archives use a recovery key. Preserve that contract while reconciling its older PostgreSQL and filesystem-media assumptions with the SQLite work. |
+| [Fiscal certificate distribution, sections 4.1–4.3](https://github.com/clintongormley/waitron/blob/4ce2db502173d87d14d2e1aad5dc92b19be38363/docs/superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md) | Cloud supplies cloud-node vault keys through a secrets service after machine authentication. Externally keyed node backups exclude that vault key. Re-encrypting an on-prem archive's vault for a cloud target is a separate follow-up; record it in the integration contract rather than assuming restore is complete. |
+| [Recovery-key wizard, section 3.5](https://github.com/clintongormley/waitron/blob/4ce2db502173d87d14d2e1aad5dc92b19be38363/docs/superpowers/specs/2026-09-09-backup-recovery-key-wizard-design.md) | Owners save the archive recovery key. This remains the customer-managed archive path. The new Cloud-managed recovery default does not silently take custody of those keys. |
+| [SQLite/Litestream topology, sections 0.3 and 7](https://github.com/clintongormley/waitron/blob/4ce2db502173d87d14d2e1aad5dc92b19be38363/docs/superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md) | Provider encryption under a per-venue key is already chosen for the continuous stream. Hourly stream snapshots and 30 days' retention are an existing proposal to validate. Stream and archive recovery are separate paths; an archive is not fast-forwarded with stream changes. |
+| [Historical shared storage model, section 6](reference/2026-07-31-cloud-storage-model-design.md) | Its rule that Cloud never holds the recovery key ring is superseded for the managed Cloud backup service by the current account-based recovery decision. Preserve the historical source; do not apply that rule to the new service. |
+
+The current Cloud decisions add independently recoverable retained snapshots to the
+managed service, with daily/monthly retention and protection for the last verified
+snapshot. This supersedes the topology's section 7.1 assumption that the managed
+service stores only the stream and no additional database copy. Customer-managed
+extra copies remain optional.
+
+Cloud-managed recovery now covers the stream and managed snapshots without a
+separately saved owner key. It must preserve the distinction between backup decryption,
+application vault access and permission to activate a server. Waitron's topology
+section 7.5 gives different node-identity rules for stream and archive restores;
+fresh Cloud registration credentials must respect those rules. Its point-in-time
+inspection path must not become an in-place rollback of a live ledger.
+
+Next, map the exact backup contents, per-secret custody, manifests and restore hooks
+to the Cloud registration and recovery APIs. Include key rotation and old snapshots,
+the externally keyed target, and a lost original server in the verification plan.
+Cloud owns the managed service and key-delivery contract; Waitron owns capture,
+restore and activation. Update the Waitron integration docs alongside implementation
+so the two repositories do not acquire competing recovery protocols.
