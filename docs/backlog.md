@@ -23,7 +23,8 @@ Use two test venues sharing one cell. Implement and verify in this order:
 5. Replace the gateway, measure reconnection time with unchanged customer-facing
    addresses and verify that backups continue.
 
-Next: specify connect, disconnect and replace operations. Cloud owns registration,
+Next: specify connection, replacement and revocation of a server's Cloud access.
+Cloud owns registration,
 routing, storage access and service status; Waitron owns local integration and recovered
 server activation. Inspect reuse candidates against the SQLite design and define the
 shared contract and verification responsibilities before implementation. No part of
@@ -87,7 +88,7 @@ this milestone is implemented by documenting it.
 | Product packages | Remote access and backups are the initial services. Define their release scope, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
 | Usage policy | Define lookup and other usage units, customer visibility, allowances and excess-use behaviour. Decide which measurements affect pricing and how retries, failed calls, cached results and batches count. |
 | Waitron boundary | Signup inside Waitron, distinct Cloud and local staff logins, explicit identity linking and an independent Cloud portal are agreed. Venue linking requires Cloud permission to add venues and local administrator approval; one person or different people may provide them. Define the approval exchange, ownership proof, already-linked venue handling, configuration, credentials, status and version compatibility. |
-| Server lifecycle | Keep venue identity across replacements; give each installation fresh machine credentials and use Waitron's recovery rules before activating it. Define connect/disconnect/replace operations, concurrent requests, interrupted replacement, retiring old credentials and a returning old server. Decide how disconnection affects subscriptions, retained backups and reconnection. |
+| Server lifecycle | Keep venue identity across replacements; give each installation fresh machine credentials and use Waitron's recovery rules before activating it. Define connection, replacement and revocation of an installation's Cloud access, concurrent requests, interrupted replacement, retiring old credentials and a returning old server. Decide how revocation affects subscriptions, retained backups and reconnection. |
 | Recovery promise | Specify tolerated data loss, recovery time and promotion authority for each service. Existing Waitron designs use human promotion; automation is not approved by this discussion. |
 | Backup recovery | Self-service restoration is agreed; staff intervention is an exceptional fallback. Use continuous backups for the latest recoverable version and retained snapshots for archives or missing continuous data. Define retention, snapshot scheduling and independent snapshot storage/deletion controls; test recovery with continuous data absent. |
 

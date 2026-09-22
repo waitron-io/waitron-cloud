@@ -125,7 +125,8 @@ cell. This is an integration milestone, with these steps in order:
 5. Replace the gateway and verify that both venues reconnect without changing their
    customer-facing addresses. Measure the interruption and confirm backups continue.
 
-Start by specifying how to connect, disconnect and replace a venue server. Inspect
+Start by specifying how to connect and replace a venue server, and how to revoke
+an installation's Cloud access. Inspect
 Waitron's tunnel and recovery components for reuse against its current SQLite design;
 their existence does not establish compatibility with this milestone. Cloud owns
 registration, routing, storage access and service status. Waitron owns the local
@@ -215,8 +216,11 @@ and test, not evidence that the Cloud replacement flow already works.
 
 Define how Cloud verifies installation ownership, handles repeated or concurrent
 requests, retires old credentials and resumes interrupted replacement. Include a
-returning old server in the tests. The effects of disconnecting on subscriptions,
-retained backups and reconnecting remain a product decision.
+returning old server in the tests. Revoking an installation's Cloud access means
+withdrawing its gateway and storage permissions, for example after theft or retirement.
+The effects on subscriptions, retained backups and reconnecting remain a product
+decision. This describes an operation to design, not a requirement for a separate
+everyday "disconnect" button.
 
 ## Proposed customer and identity model
 
