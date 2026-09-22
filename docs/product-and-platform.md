@@ -233,12 +233,31 @@ Those are useful foundations to copy or extract with their behavioural tests. Cl
 organisations, memberships and cross-venue permissions need their own model. Choose
 how shared security fixes reach both repositories before creating a permanent fork.
 
-## Proposed country and mini-zone structure
+## Country and mini-zone structure
 
 Use a mini-zone, or **cell**, as the independently operated home of a bounded group
 of customers. AWS uses the term [cell](https://docs.aws.amazon.com/wellarchitected/latest/reducing-scope-of-impact-with-cell-based-architecture/what-is-a-cell-based-architecture.html)
 for this isolation pattern. Country placement, provider choice and cell assignment
 are separate decisions.
+
+Confirmed placement unit: each venue can be placed independently. Venues belonging
+to one organisation may occupy different cells, while you manage them together in
+the Cloud portal. Cell placement should not complicate the usual setup experience.
+
+Confirmed gateway model: share a remote-access gateway within each cell for a limited
+group of venues. It handles public HTTPS termination and staff TLS passthrough, with
+separate tunnels and credentials for each venue. Gateway software, capacity and
+the number of running instances remain implementation decisions.
+
+Confirmed initial recovery policy: a short remote-access interruption is acceptable
+while a failed cell is replaced. Set an explicit recovery-time target and test the
+replacement procedure before making an availability promise. The acceptable duration
+and recovery capacity are still open; this does not approve automatic promotion of
+an on-prem primary into Cloud.
+
+Backups must remain independent of the machines running the cell. Losing or replacing
+a gateway must neither lose stored backups nor prevent recovery through the Cloud
+portal. Design and test storage access and the recovery path with the gateway absent.
 
 ```mermaid
 flowchart TB
@@ -253,9 +272,10 @@ flowchart TB
 ```
 
 Each cell would carry its provider, region, allowed country, availability-zone layout,
-capacity and software versions. Its customers would keep stable identities and public
-addresses when their placement changes. The migration procedure must move state and
-queued work, preserve access rules, and prove completion before retiring the source.
+capacity and software versions. Confirmed requirement: venues keep stable identities
+and customer-facing addresses when their placement changes. The migration procedure
+must move state and queued work, preserve access rules, and prove completion before
+retiring the source.
 
 An availability zone is an infrastructure location. A cell is our deployment and
 failure boundary. We still need to choose whether a cell spans zones or runs in one
@@ -263,13 +283,15 @@ zone with recovery capacity elsewhere. Merely placing different customers in dif
 zones does not define how an affected customer's service recovers.
 
 The intended isolation needs to cover application state, queues, resource limits,
-credentials and rollout operations. A shared mutable database, gateway or analytics
-cluster could widen a failure beyond one cell. Record every shared dependency and
+credentials and rollout operations. A mutable database, gateway or analytics cluster
+shared across cells could widen a failure beyond one cell. Record every shared dependency and
 decide its acceptable scope instead of claiming that cells isolate all failures.
 
-The management layer should handle signup, subscriptions, provisioning and movement.
-Running services should have enough local configuration and authority to continue
-during a management outage; the exact authentication and revocation policy is open.
+Keep account management separate from traffic handling. The management layer handles
+signup, subscriptions, provisioning and movement. Confirmed requirement: a portal
+outage must not immediately interrupt established remote connections or backups.
+Running services need enough local configuration and authority to continue; credential
+expiry, authentication and revocation during a management outage remain to be defined.
 On-prem trading must retain its existing independence from cloud add-ons. A venue
 whose primary is hosted in the cloud has a different availability dependency.
 
@@ -407,8 +429,8 @@ of a venue already connected to an organisation remain implementation decisions.
 - Which permissions do Cloud staff need, who may approve support access for a
   customer, and who may authorise exceptional emergency access? If SSH support is
   offered, how are server permissions, session termination and audit enforced?
-- Is the venue the smallest placement unit, and should a business's venues share a
-  cell or be spread across cells?
+- How many venues should a cell hold, and what determines their initial placement
+  and movement? Venue placement is independent of organisation membership.
 - What availability promise does each service make? How much recent data can recovery
   lose, how long may it take, and who authorises promotion?
 - Which AWS services and region will the initial Spain deployment use, and do their
@@ -418,12 +440,13 @@ of a venue already connected to an organisation remain implementation decisions.
   data and access after cancellation or failed payment?
 - How are independently deployed service groups arranged inside cells, and which
   shared dependencies are acceptable?
-- How should the public HTTPS and staff passthrough paths be deployed within cells?
-  The agreed split replaces the all-traffic TLS choices in the
+- How should the shared gateway's public HTTPS and staff passthrough paths be
+  implemented and sized? What recovery-time target and replacement procedure can be
+  demonstrated? The agreed split replaces the all-traffic TLS choices in the
   [shared gateway handoff](reference/2026-09-21-cloud-ingress-wireguard-gateway-design.md)
-  and [earlier decision](reference/2026-09-05-relay-decision.md); shared versus per-venue
-  gateways remain open. How can local DNS overrides be configured and recovered with
-  minimal customer effort across supported routers and devices?
+  and [earlier decision](reference/2026-09-05-relay-decision.md); gateways are now agreed
+  to be shared within each cell. How can local DNS overrides be configured and
+  recovered with minimal customer effort across supported routers and devices?
 
 Use the [backlog](backlog.md) to track these decisions and the implementation slices
 for the initial remote access and backup services.
