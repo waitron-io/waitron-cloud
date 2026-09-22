@@ -59,6 +59,23 @@ must not activate trading or change fiscal identity.
 
 ## Exchanges to implement
 
+### Agreed connection journey
+
+1. You open Cloud services while signed into the local Waitron administrator account.
+2. Waitron creates a short-lived connection request tied to that installation.
+3. You sign into Cloud, choose your organisation and confirm the venue.
+4. The local server retrieves the approval through an outbound connection and completes
+   registration. Cloud does not need an inbound route to the venue for this exchange.
+5. Waitron shows remote-access and backup setup separately. Registration alone does
+   not imply either service is ready.
+
+Both approvals must refer to the same request. Expired or replayed approvals are
+rejected. If a reply is lost, retrying must return the existing registration rather
+than create another. These are agreed requirements; the proof encoding and durable
+implementation follow the [registration plan](registration-implementation-plan.md).
+
+### Operation boundaries
+
 These are logical operations, not final HTTP paths. Version the wire contract
 independently of the application release and reject unsupported capabilities before
 changing either side. Each mutation carries an operation id scoped to its actor and
@@ -136,6 +153,8 @@ Start with registration state and the approval exchange using two isolated test
 installations. Define the proof format and first-contact trust in that slice before
 adding public endpoints. Build durable operations, scoped identity checks and
 configuration revisions before provisioning real customer services.
+The [registration implementation plan](registration-implementation-plan.md) orders
+that work and identifies which identity components can be reused.
 
 Use failing behavioural tests first. The initial slice must prove:
 
