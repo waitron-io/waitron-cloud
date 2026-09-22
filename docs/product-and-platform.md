@@ -26,8 +26,10 @@ customer journeys require staff or that a staffed support service is promised.
 The owner wants customers divided into small deployment groups, called mini-zones,
 across multiple availability zones. This should let operators upgrade a small group,
 contain failures and move groups between hosts. The proposed residency policy is to
-keep each country's customer data in that country. AWS and Google Cloud are deployment
-targets to design for; the first provider and launch countries remain undecided.
+keep each country's customer data in that country. Spain is the confirmed first
+deployment country and AWS the first provider. Keep the design able to support other
+countries and Google Cloud later. Exact regions and service availability still need
+verification against the residency policy before provisioning.
 
 These are product requirements and proposed policies. They are not claims that every
 country imposes the same legal storage obligation.
@@ -275,6 +277,11 @@ country, retention and access policies.
 
 ## Deployment on AWS and Google Cloud
 
+Start with one deployment in Spain on AWS for the initial remote-access and backup
+services. Google Cloud remains a future deployment target; define the evidence needed
+to support it before claiming compatibility. The first deployment does not settle
+cross-provider failover or the eventual cell and availability-zone layout.
+
 Describe the capability in product code and put provider SDKs and resource identifiers
 behind a small integration layer. Provisioning will still need provider-specific
 implementations. Initial interpretation: a cell can run on either provider. Active
@@ -351,8 +358,9 @@ of a venue already connected to an organisation remain implementation decisions.
   cell or be spread across cells?
 - What availability promise does each service make? How much recent data can recovery
   lose, how long may it take, and who authorises promotion?
-- Which country and provider launch first? What evidence is needed before the second
-  provider is called supported?
+- Which AWS services and region will the initial Spain deployment use, and do their
+  processing and storage locations meet the residency policy? What evidence is needed
+  before Google Cloud is called supported?
 - Are services purchased individually, in bundles, or both? What happens to retained
   data and access after cancellation or failed payment?
 - How are independently deployed service groups arranged inside cells, and which

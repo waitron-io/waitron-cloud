@@ -11,6 +11,9 @@ agreed initial services; their detailed scope and implementation sequence remain
 
 ## Initial focus
 
+- Launch first in Spain on AWS. Verify the region and required services against the
+  residency policy before provisioning. Preserve support for other countries and
+  Google Cloud in the design; implement and validate those deployments later.
 - Make routine customer journeys self-service, aiming to operate without a dedicated
   support team. Cover setup, account management, billing, troubleshooting, backup
   recovery and cancellation with clear status, actionable errors and safe retries.
@@ -39,9 +42,9 @@ agreed initial services; their detailed scope and implementation sequence remain
 | --- | --- |
 | Customer model | Support an organisation with several legal businesses and tax identities across countries from the outset. A venue belongs to one organisation at a time. Focus signup on one owner with one venue or several venues in the same city; defer the ownership-transfer workflow. |
 | Cloud staff access | Customer-approved, time-limited support access and an explicitly authorised, audited emergency route are agreed. Define platform roles, eligible approvers, grant scope and enforcement. Possible on-prem SSH support requires separate, explicit customer approval for a limited period. |
-| Residency | Define the country policy for operational data, backups, archives, analytics, identities, logs and messages; identify supported launch countries. Verify actual obligations for each market before making customer promises. |
+| Residency | Spain is the first deployment country. Define the country policy for operational data, backups, archives, analytics, identities, logs and messages; verify AWS service locations and actual obligations before making customer promises. |
 | Cells | Choose the customer placement unit, group size and availability-zone layout. Define acceptable shared dependencies, movement and staged rollout. |
-| Provider support | Design for AWS and Google Cloud; choose the first provider and the evidence needed to support the second. Decide separately whether cross-provider failover is wanted. |
+| Provider support | AWS is the first provider, deploying in Spain. Select and verify the required region and services. Keep Google Cloud as a future target and define the evidence needed to support it. Decide separately whether cross-provider failover is wanted. |
 | Product packages | Remote access and backups are the initial services. Define their release scope, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
 | Usage policy | Define lookup and other usage units, customer visibility, allowances and excess-use behaviour. Decide which measurements affect pricing and how retries, failed calls, cached results and batches count. |
 | Waitron boundary | Signup inside Waitron, distinct Cloud and local staff logins, explicit identity linking and an independent Cloud portal are agreed. Venue linking requires Cloud permission to add venues and local administrator approval; one person or different people may provide them. Define the approval exchange, ownership proof, already-linked venue handling, configuration, credentials, status and version compatibility. |
