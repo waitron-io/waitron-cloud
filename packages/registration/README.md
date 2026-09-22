@@ -35,12 +35,14 @@ subject to the approval protocol's final policy. Repeating `start` never extends
 An operation ID is scoped to its installation key; changing other binding fields is
 an error. A different installation cannot consume the request or its approval receipt.
 
-`approveLocal` and `approveCloud` persist the approvals. `complete` locks the request,
-checks both approvals and current permission, and records the registration in the
+`approveLocal` and `approveCloud` persist the approvals. For a new registration,
+`complete` locks the request, checks both approvals and current permission, and records it in the
 same transaction as its venue, installation and service rows. Permission rows remain
 locked until commit. Expiry is checked after lock waits using wall time. A completed
-request can return its original result after expiry, provided its Cloud permission
-and installation remain active; it cannot issue credentials or create another link.
+request can return its original result after expiry, provided its installation remains
+active. Retrieving that recorded result is independent
+of the original approver's current permission; it cannot issue credentials or create
+another link. New completions always require current Cloud permission.
 
 Local venue UUIDs are unique within an environment in this registry. A conflicting
 organisation, legal business or installation is rejected rather than silently taking
@@ -74,7 +76,10 @@ only its randomly named test schema.
 
 Tests use independent database connections and observe blocked workers through
 `pg_stat_activity`. Separate Node processes prove that pending approvals and committed
-results survive application restarts. This is not a database failover test.
+results survive application restarts. Terminated database connections must reject the
+transaction without killing the process, and its pool must remain usable. These are
+connection-failure tests, not database failover tests. The application that owns the
+pool must also handle its idle-connection `error` events.
 
 To apply the schema to a development database, set `DATABASE_URL` in your shell and run:
 

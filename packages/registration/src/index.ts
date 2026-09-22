@@ -82,8 +82,9 @@ async function requirePermission(client: PoolClient, accountId: string, organisa
     FOR SHARE OF a, m`, [accountId, organisationId]);
   if (!rowCount) throw new RegistrationError('permission_denied');
 }
-function isUniqueViolation(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
+function isUniqueViolation(error: unknown, constraints: readonly string[]): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505'
+    && 'constraint' in error && typeof error.constraint === 'string' && constraints.includes(error.constraint);
 }
 
 /**
@@ -135,7 +136,7 @@ export class RegistrationStore {
           [...key(binding), receiptId]);
       });
     } catch (error) {
-      if (isUniqueViolation(error)) throw new RegistrationError('approval_conflict');
+      if (isUniqueViolation(error, ['connection_requests_local_receipt_id_key'])) throw new RegistrationError('approval_conflict');
       throw error;
     }
   }
@@ -155,14 +156,14 @@ export class RegistrationStore {
     try {
       return await this.#request(input, async (client, row, binding) => {
         if (!row.local_receipt_id || !row.cloud_account_id) throw new RegistrationError('approval_required');
-        // Hold permission rows until commit so revocation cannot commit between checking and linking.
-        await requirePermission(client, row.cloud_account_id, binding.organisationId);
         if (row.result) {
           const active = await client.query('SELECT id FROM installations WHERE id = $1 AND revoked_at IS NULL FOR SHARE',
             [row.result.installationId]);
           if (!active.rowCount) throw new RegistrationError('installation_unavailable');
           return row.result;
         }
+        // Hold permission rows until commit so revocation cannot commit between checking and linking.
+        await requirePermission(client, row.cloud_account_id, binding.organisationId);
         await requireUnexpired(client, binding);
         await client.query(`INSERT INTO venues (id, organisation_id, legal_business_id, local_venue_id, environment)
           VALUES ($1, $2, $3, $4, $5) ON CONFLICT (environment, local_venue_id) DO NOTHING`,
@@ -196,7 +197,9 @@ export class RegistrationStore {
         return result;
       });
     } catch (error) {
-      if (isUniqueViolation(error)) throw new RegistrationError('registration_conflict');
+      if (isUniqueViolation(error, ['installations_public_key_key', 'installations_venue_id_key'])) {
+        throw new RegistrationError('registration_conflict');
+      }
       throw error;
     }
   }

@@ -57,7 +57,7 @@ beforeEach(async () => {
     [accountId, organisationId, secondOrganisationId]);
 });
 
-test('migration is repeatable and concurrent migration runners apply one version', async () => {
+test('migration remains repeatable after concurrent initial application', async () => {
   await migrate(pool);
   assert.equal(await count('schema_migrations'), 1);
 });
@@ -291,4 +291,75 @@ test('expiry uses wall time after waiting for the permission lock', async () => 
       assert.equal(rows[0].started_before_expiry, true);
       await delay(1100);
     }, 'request_expired');
+});
+
+for (const mode of ['query', 'between-queries']) {
+  test(`terminated transaction backend rejects without killing the process (${mode})`, () => {
+    const output = execFileSync(process.execPath, ['test/fixtures/connection-loss.ts', mode], {
+      cwd: new URL('..', import.meta.url), encoding: 'utf8', timeout: 10_000,
+      env: process.env, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    assert.deepEqual(JSON.parse(output), { rejected: true, poolUsable: true });
+  });
+}
+
+test('completed result survives approver permission loss without creating new authority', async () => {
+  const input = await approved();
+  const result = await store.complete(input);
+  await pool.query('UPDATE organisation_memberships SET can_register_venues = false');
+  assert.deepEqual(await store.complete(input), result);
+  await pool.query('UPDATE cloud_accounts SET disabled_at = clock_timestamp()');
+  assert.deepEqual(await store.complete(input), result);
+  assert.equal(await count('installations'), 1);
+  await pool.query('UPDATE installations SET revoked_at = clock_timestamp()');
+  await expectCode(store.complete(input), 'installation_unavailable');
+});
+
+test('expiry during a venue insert wait rolls back the installation, services and result', async () => {
+  const input = await approved();
+  await pool.query("UPDATE connection_requests SET expires_at = clock_timestamp() + interval '1 second'");
+  const blocker = await pool.connect();
+  let completion: Promise<void> | undefined;
+  try {
+    await blocker.query('BEGIN');
+    await blocker.query(`INSERT INTO venues (id, organisation_id, legal_business_id, local_venue_id, environment)
+      VALUES ($1, $2, $3, $4, $5)`, [randomUUID(), organisationId, legalBusinessId, input.localVenueId, input.environment]);
+    completion = expectCode(other.complete(input), 'request_expired');
+    let blocked = false;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const { rows } = await admin.query(`SELECT query FROM pg_stat_activity
+        WHERE application_name = $1 AND wait_event_type = 'Lock'`, [`${schema}_second`]);
+      if (rows[0]?.query.startsWith('INSERT INTO venues')) { blocked = true; break; }
+      await delay(20);
+    }
+    await delay(1100);
+    await blocker.query('COMMIT');
+    await completion;
+    assert.ok(blocked, 'completion must wait on the venue insert after its first expiry check');
+    assert.equal(await count('installations'), 0);
+    assert.equal(await count('installation_services'), 0);
+    const { rows } = await pool.query('SELECT result, completed_at FROM connection_requests');
+    assert.deepEqual(rows[0], { result: null, completed_at: null });
+  } finally {
+    await blocker.query('ROLLBACK');
+    blocker.release();
+    await completion;
+  }
+});
+
+test('unexpected database uniqueness errors remain distinguishable from registration conflicts', async () => {
+  const input = await approved();
+  await pool.query(`CREATE FUNCTION inject_collision() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN RAISE unique_violation USING MESSAGE = 'injected failure', CONSTRAINT = 'unexpected_collision'; END $$;
+    CREATE TRIGGER inject_collision BEFORE INSERT ON installation_services
+    FOR EACH ROW EXECUTE FUNCTION inject_collision()`);
+  try {
+    await assert.rejects(store.complete(input), (error: unknown) =>
+      typeof error === 'object' && error !== null && 'code' in error && error.code === '23505'
+        && 'constraint' in error && error.constraint === 'unexpected_collision');
+    assert.equal(await count('venues'), 0);
+    assert.equal(await count('installations'), 0);
+  } finally {
+    await pool.query('DROP TRIGGER inject_collision ON installation_services; DROP FUNCTION inject_collision()');
+  }
 });

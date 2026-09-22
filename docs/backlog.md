@@ -148,7 +148,11 @@ the credential and revocation rules still to be defined.
   actual proof verifier, login adapter and credential lifecycle; IDs alone are not
   authentication. Replace the initial one-installation-per-venue constraint with an
   explicit history model when building replacement. Validate local-venue identifier
-  provenance and handling of cloned identities in the approval flow.
+  provenance and handling of cloned identities in the approval flow. When replacement
+  gains a UI, define the permitted diagnostics for an already-linked or revoked
+  installation; this slice rejects a different installation as a registration conflict.
+  Terminated database connections and lost replies have regression tests; actual
+  database failover and recovery under deployment credentials still need proof.
 - **Provisioning and placement.** Use Kubernetes for orchestration when needed;
   cluster provisioning and manifests are deferred until there is a service to deploy
   and a concrete operational need. Country/provider/cell registry, repeatable resource
