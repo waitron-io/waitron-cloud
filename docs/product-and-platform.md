@@ -13,6 +13,16 @@ existing Waitron installation to services that connect, protect and extend your 
 You can also run Waitron itself in the cloud. A business with several venues can
 manage them centrally.
 
+Confirmed product principle: make as much as possible self-service, with the aim of
+operating without a dedicated support team. You should be able to set up services,
+manage accounts and billing, diagnose common problems, restore backups and cancel
+services without staff intervention. Build clear status, actionable errors, guided
+recovery and safe retries into those flows so you can resolve routine problems yourself.
+
+Staff support is an exceptional fallback. Existing staff permissions and approved
+support-access policies define how that fallback works; they do not imply that routine
+customer journeys require staff or that a staffed support service is promised.
+
 The owner wants customers divided into small deployment groups, called mini-zones,
 across multiple availability zones. This should let operators upgrade a small group,
 contain failures and move groups between hosts. The proposed residency policy is to
@@ -78,14 +88,37 @@ Choose the protection service and its relationship to TLS termination when desig
 the gateway. Prevent direct routes that bypass these controls, and monitor rejected
 traffic and false positives. The provider and exact limits remain to be selected.
 
-The proposed first release protects your data with automatic backups, visible backup
-health and a tested restore path. Decide backup retention and restore experience next.
-The exact balance of continuous backup and retained snapshots remains to be scoped.
+The initial backup service provides automatic continuous backups, retained snapshots,
+visible backup health and a tested self-service restore path, with staff intervention
+as an exceptional fallback. The recovery model below defines the purpose of each backup type;
+retention periods and snapshot scheduling remain to be decided.
 
 Keep the underlying organisation and legal-business model able to represent larger
 customers from the outset. Detailed international administration, separate-approver
 workflows and ownership transfers can be designed when needed; they should not
 complicate the usual owner-led setup.
+
+## Backups and self-service recovery
+
+Confirmed recovery model: you normally restore the most recent recoverable version
+from the continuous Litestream backup. Retained snapshots serve as point-in-time
+archives and as a fallback if the continuous backup data disappears. A snapshot must
+remain restorable without the continuous backup data it is intended to protect against
+losing. Storage layout, deletion permissions and retention need to preserve that
+independence; the exact mechanism remains to be designed and tested.
+
+You can restore onto a replacement server yourself without waiting for staff approval
+or assistance, subject to your account's recovery permissions.
+The agreed journey is to install Waitron, sign into Cloud, choose your venue and
+restore its backup. The proposed interface defaults to the latest recoverable
+continuous backup and lets you explicitly choose a retained snapshot. Show the
+recovery point's time before confirmation, so falling back to older data is visible.
+
+Show the last successful backup and alert when backups stop. Prove the recovery path
+by restoring onto a replacement machine, including a separate test with continuous
+backup data missing. This verifies the intended snapshot fallback before offering it
+to customers. Cloud owns backup selection and access; coordinate installation and
+safe activation of the replacement with Waitron's recovery logic.
 
 ## Proposed customer and identity model
 

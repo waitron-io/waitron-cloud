@@ -11,6 +11,10 @@ agreed initial services; their detailed scope and implementation sequence remain
 
 ## Initial focus
 
+- Make routine customer journeys self-service, aiming to operate without a dedicated
+  support team. Cover setup, account management, billing, troubleshooting, backup
+  recovery and cancellation with clear status, actionable errors and safe retries.
+  Reserve staff intervention for exceptional cases; avoid required manual support steps.
 - Build around one owner connecting one venue, or adding several venues in the same
   city. Keep the usual connection flow to one action that verifies both Cloud and
   local permissions.
@@ -18,7 +22,10 @@ agreed initial services; their detailed scope and implementation sequence remain
   and bookings. Temporary unavailability is acceptable when the venue server or its
   internet connection is down. Define route permissions and the unavailable-page
   experience; cloud copies and offline booking acceptance are future capabilities.
-  Scope backups alongside visible service health, retention and the restore experience.
+- Provide self-service recovery onto a replacement server without routine staff assistance.
+  Normally restore the latest recoverable continuous Litestream backup. Retained
+  snapshots provide point-in-time archives and recovery if continuous backup data
+  disappears. Define retention and scheduling, show backup health and alert on interruption.
 - Filter bots and abusive traffic in Cloud before forwarding requests to on-prem
   servers. Scope request-rate and concurrency limits per venue, prevent bypass routes,
   and monitor rejected traffic and false positives across staff and public access.
@@ -39,6 +46,7 @@ agreed initial services; their detailed scope and implementation sequence remain
 | Usage policy | Define lookup and other usage units, customer visibility, allowances and excess-use behaviour. Decide which measurements affect pricing and how retries, failed calls, cached results and batches count. |
 | Waitron boundary | Signup inside Waitron, distinct Cloud and local staff logins, explicit identity linking and an independent Cloud portal are agreed. Venue linking requires Cloud permission to add venues and local administrator approval; one person or different people may provide them. Define the approval exchange, ownership proof, already-linked venue handling, configuration, credentials, status and version compatibility. |
 | Recovery promise | Specify tolerated data loss, recovery time and promotion authority for each service. Existing Waitron designs use human promotion; automation is not approved by this discussion. |
+| Backup recovery | Self-service restoration is agreed; staff intervention is an exceptional fallback. Use continuous backups for the latest recoverable version and retained snapshots for archives or missing continuous data. Define retention, snapshot scheduling and independent snapshot storage/deletion controls; test recovery with continuous data absent. |
 
 ## Platform work to scope
 
@@ -67,6 +75,10 @@ agreed initial services; their detailed scope and implementation sequence remain
   budgets, quotas, staged releases, maintenance and recovery controls.
   Customer portal login and account recovery must work when the venue server is
   unavailable, so customers can manage services and recovery independently.
+- **Self-service journeys.** Define completion and failure paths for setup, account
+  and billing changes, diagnostics, restore and cancellation. Verify customers can
+  complete routine flows without staff, including recovery from interrupted operations.
+  Give exceptional failures useful diagnostics for investigation under the support policy.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
   Define alerts, affected-customer views and rollout pause criteria.
@@ -82,8 +94,8 @@ agreed initial services; their detailed scope and implementation sequence remain
 | Service | Design work still needed |
 | --- | --- |
 | Remote access (initial) | Include owner/staff access and customer-facing menus and booking pages. Temporary unavailability when the venue is offline is accepted; design the unavailable-page experience. Require bot/abuse protection before requests reach on-prem servers; choose the provider, traffic limits and handling of legitimate automated clients. Define route permissions. Reconcile the shared gateway handoff with the per-venue endpoint decision; define tunnels, domains, TLS termination and customer isolation. |
-| Backups (initial) | Scope continuous backup and retained snapshots. Provision scoped storage access for Litestream, surface freshness and interruption, define retention and test restore against each provider selected for launch. |
-| SQLite snapshots | Define scheduled and retained recovery points, consistency, customer restore controls and relation to the continuous stream. |
+| Backups (initial) | Implement self-service restore onto a replacement server, normally using the latest recoverable Litestream backup. Provision scoped storage access, show recovery-point time and backup health, alert on interruption, define retention and test restore against each provider selected for launch. Coordinate safe replacement activation with Waitron. |
+| SQLite snapshots (initial backup service) | Retain point-in-time archives that remain restorable if continuous backup data disappears. Define scheduling, consistency, retention and independent storage/deletion controls. Provide explicit snapshot selection and prove restoration with continuous backup data absent. |
 | Failover to cloud | Allocate a replacement instance, coordinate promotion with Waitron, connect devices, stream the new primary and support return to the venue. |
 | Hosted Waitron | Provision isolated operational instances, local print connectivity, upgrades, capacity and cloud-only recovery. |
 | Bookings and public pages | Initial remote access may be unavailable while the venue is offline. Future independent cloud hosting needs rules for accepting reservations and synchronising them with the venue; include menus, ordering and payment-page candidates. |
