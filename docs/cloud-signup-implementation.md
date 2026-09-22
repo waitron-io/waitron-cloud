@@ -6,9 +6,11 @@ wait until changes in the Waitron repository can resume.
 
 ## Journey and boundary
 
-1. Supply your email address. The backend commits a verification request, then gives
-   a delivery adapter a random 32-byte token. The public result is always `accepted`.
-   The database stores only its SHA-256 hash. No account or password exists yet.
+1. Supply your email address. The backend commits a verification request and an
+   encrypted pending email together. The request result is `accepted`, without
+   contacting the mail provider. Verification records store the random 32-byte token
+   as a SHA-256 hash; the queue holds its encrypted delivery copy until delivery ends.
+   No account or password exists yet.
 2. Follow the email and submit your password, organisation name, legal-business name
    and two-letter country code. The token lasts 30 minutes and can complete signup
    once. Reading a link must not consume it; completion belongs in a future POST route.
@@ -31,9 +33,10 @@ sign in with the chosen password; replaying the link never issues a new session.
 Allow one verification email per address per minute across workers. A later request
 does not invalidate an earlier unexpired link. Whichever link first creates the
 account wins. Other links cannot add organisations or reset its password. Delivery
-happens after the transaction commits; a failed delivery can be retried with a new
-request after the cooldown. A process crash between commit and delivery has the same
-recovery. This slice has no durable delivery queue or live email provider.
+happens after the transaction commits. The [email worker](email-delivery-implementation.md)
+retries failures and resumes abandoned work after a restart. You can request another
+link after the cooldown if delivery exhausts its retries or the link expires. A
+production email provider is not connected yet.
 
 Use the existing password hash format. New passwords require 15 characters and allow
 spaces and Unicode, up to 1024 UTF-8 bytes. Public deployment also needs a compromised
@@ -48,7 +51,7 @@ future link must use a configured trusted HTTPS origin and avoid referrer leakag
    evidence and owner membership. Keep prior migrations unchanged.
 2. Write failing PostgreSQL tests for verification, generic request results, cooldown,
    expiry after contention, replay, existing-account protection and atomic creation.
-3. Implement the signup store with an injected email adapter and existing identity
+3. Implement the signup store with a transactional email queue and existing identity
    helpers. Test delivery failures and login after signup with a capture adapter.
 4. Prove concurrent links create one account and one organisation. Keep the existing
    identity and registration regressions, run types and CI, and complete branch review.

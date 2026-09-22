@@ -24,11 +24,11 @@ catalogue remain to be implemented.
 
 ## Cloud account signup
 
-Use `SignupStore(pool, mailer)` for the independent Cloud account backend. Its
-`request(email)` method commits a verification request, then calls
-`mailer.sendVerification({ email, token, expiresAt })`. The return value is
-`{ status: 'accepted' }`, including during the one-minute cooldown. The mailer alone
-receives the token; never include it in a browser response or logs. The current email
+Use `SignupStore(pool, outbox)` for the independent Cloud account backend. Its
+`request(email)` method saves the verification request and encrypted pending email
+in one transaction. It returns `{ status: 'accepted' }`, including during the
+one-minute cooldown, without waiting for a mail provider. The worker decrypts the
+token for delivery; never include it in a browser response or logs. The current email
 parser accepts ASCII dot-atom addresses. International domains must already be
 punycode-encoded; raw Unicode domains, quoted addresses and international local parts
 need later normalisation/provider support.
@@ -47,11 +47,11 @@ a token cannot create a session, reset a password or add another organisation.
 
 `signup_invalid` identifies malformed input. `verification_unavailable` covers an
 unknown, expired or used token and an email that already has an account.
-`delivery_unavailable` deliberately drops email-provider errors, which may contain
-the token. The mailer adapter owns sanitised diagnostics; do not attach the original
-error as a cause or log its message. Request a fresh link after the
-cooldown if delivery fails or the process stops after commit. There is no durable
-delivery queue; the provider adapter and its retry policy remain deployment work.
+Delivery failures are recorded by the worker and retried automatically. Database or
+queue failures still reject the request and roll back both records. The worker uses
+fixed error codes and never persists a provider's error message. See
+[reliable account email](../../docs/email-delivery-implementation.md) for the key
+configuration, retry limits and local commands.
 
 The integration tests use an in-memory capture mailer and disposable PostgreSQL:
 
@@ -69,20 +69,21 @@ does not imply platform permission or introduce a full organisation role catalog
 
 ## Password recovery
 
-Use `PasswordRecoveryStore(pool, mailer)`. The mailer implements `sendPasswordReset`
+Use `PasswordRecoveryStore(pool, outbox)` with the same queue. The worker's mailer implements `sendPasswordReset`
 with the same `{ email, token, expiresAt }` shape as signup and `sendPasswordChanged`
-with `{ email }`. `createLocalAccountMailer()` implements both stores' interfaces and
+with `{ email }`. `createLocalAccountMailer()` implements the worker's delivery interfaces and
 delivers to Cloud's loopback-only Mailpit. See the [local inbox commands](../../README.md#local-email-inbox).
 
 `request(email)` returns `{ status: 'accepted' }` for eligible, unknown, disabled,
 unverified and passwordless accounts, during cooldown, and when delivery fails. Only
 enabled accounts with verified email and an existing password receive a reset link.
 Normalised addresses have a shared one-minute cooldown. Unknown addresses also have
-request records but no usable account binding. Public response timing and asynchronous
-delivery remain required HTTP integration work; this internal method awaits the mailer.
+request records but no usable account binding or queued email. Delivery runs in the
+background. Public response timing still needs assessment because database paths differ.
 
 `complete(token, newPassword)` returns `{ status: 'completed' }` after changing the
-password, consuming the token and ending all that account's sessions in one transaction.
+password, consuming the token, ending all that account's sessions and queuing a
+password-change notification in one transaction.
 It does not issue a session. Sign in normally afterwards, including after a lost reply.
 Passwords follow signup's policy. `recovery_invalid` identifies an invalid email or
 new password; `reset_unavailable` covers malformed tokens, unknown, expired, consumed
@@ -96,9 +97,10 @@ so an old link cannot change a different email's password or re-enable a disable
 The account lock serialises completion with login; a login committed first is revoked,
 and an old-password login waiting behind reset must fail its credential recheck.
 
-Emails are sent after commit. Provider errors are dropped; the adapter owns sanitised
-diagnostics. Notification failure does not undo a completed reset. Define durable
-delivery, audit and cleanup for requests before deployment. Password reset is not MFA
+Emails are sent after commit. The queue encrypts recipients and tokens, retries failures
+and discards expired or invalidated links. A notification queue failure rolls back the
+reset; a later delivery failure cannot undo it. Define production audit and cleanup
+for requests and delivery metadata before deployment. Password reset is not MFA
 recovery. HTTP protections and recovery screens are covered in the
 [implementation plan](../../docs/password-recovery-implementation.md).
 

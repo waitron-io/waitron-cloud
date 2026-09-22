@@ -6,7 +6,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { inspect } from 'node:util';
 import { Pool } from 'pg';
 import { login, requirePlatformPermission } from '@waitron-cloud/identity';
-import { SignupStore, SignupError, type SignupEmail, type SignupDetails } from '../src/index.ts';
+import { type SignupEmail, type SignupDetails } from '../src/index.ts';
+import { signupAndDeliver } from './fixtures/delivery.ts';
 import { migrate } from '../src/migrate.ts';
 import { transaction } from '../src/transaction.ts';
 
@@ -16,7 +17,7 @@ const admin = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
 const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL,
   options: `-c search_path=${schema} -c statement_timeout=10000`, application_name: schema });
 const messages: SignupEmail[] = [];
-const store = new SignupStore(pool, { async sendVerification(message) { messages.push(message); } });
+const store = signupAndDeliver(pool, { async sendVerification(message) { messages.push(message); } });
 const details: SignupDetails = { password: 'my long café password', organisationName: 'Café Sol', legalBusinessName: 'Café Sol SL', countryCode: 'ES' };
 const email = 'owner@example.test';
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -33,10 +34,10 @@ async function expectCode(action: Promise<unknown>, code: string) {
 }
 before(async () => { await admin.query(`CREATE SCHEMA ${schema}`); await migrate(pool); });
 after(async () => { await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end(); });
-beforeEach(async () => { messages.length = 0; await pool.query('TRUNCATE cloud_accounts, organisations, signup_requests CASCADE'); });
+beforeEach(async () => { messages.length = 0; await pool.query('TRUNCATE cloud_accounts, organisations, signup_requests, email_outbox CASCADE'); });
 
 test('signup sends a committed hashed token and creates nothing before email proof', async () => {
-  const sender = new SignupStore(pool, { async sendVerification(message) {
+  const sender = signupAndDeliver(pool, { async sendVerification(message) {
     const { rows } = await pool.query('SELECT * FROM signup_requests WHERE token_hash = $1', [digest(message.token)]);
     assert.equal(rows.length, 1, 'delivery sees the committed request through another connection');
     assert.equal(rows[0].email, email);
@@ -90,7 +91,7 @@ test('unknown, malformed, expired and consumed tokens cannot create accounts', a
 });
 
 test('request cooldown is durable, generic and shared by concurrent workers', async () => {
-  const second = new SignupStore(pool, { async sendVerification(message) { messages.push(message); } });
+  const second = signupAndDeliver(pool, { async sendVerification(message) { messages.push(message); } });
   const blocker = await pool.connect();
   let requests: Promise<{status: 'accepted'}[]> | undefined;
   try {
@@ -143,24 +144,23 @@ test('a new verification request never replaces or re-enables an existing accoun
   assert.equal(await count('cloud_accounts'), 1, 'failed duplicate signup leaves no orphan account');
 });
 
-test('delivery failure exposes no provider detail and can recover with a fresh request', async () => {
+test('delivery failure exposes no provider detail and can retry the original request', async () => {
   let deliveredToken = '';
-  const broken = new SignupStore(pool, { async sendVerification(message) {
+  const broken = signupAndDeliver(pool, { async sendVerification(message) {
     deliveredToken = message.token;
     throw new Error(`provider secret ${message.token}`);
   } });
-  await assert.rejects(broken.request(email), error => {
-    assert.ok(error instanceof SignupError);
-    assert.equal(error.code, 'delivery_unavailable');
-    assert.ok(deliveredToken);
-    assert.ok(!inspect(error).includes(deliveredToken));
-    assert.ok(!inspect(error).includes('provider secret'));
-    return true;
-  });
+  assert.deepEqual(await broken.request(email), {status: 'accepted'});
+  const queued = (await pool.query('SELECT * FROM email_outbox')).rows[0];
+  assert.equal(queued.status, 'pending');
+  assert.equal(queued.last_error, 'delivery_failed');
+  assert.ok(deliveredToken);
+  assert.ok(!inspect(queued).includes(deliveredToken));
+  assert.ok(!inspect(queued).includes('provider secret'));
   assert.equal(await count('signup_requests'), 1);
   assert.equal(await count('cloud_accounts'), 0);
-  await pool.query("UPDATE signup_requests SET created_at = clock_timestamp() - interval '61 seconds'");
-  await store.complete((await request()).token, details);
+  // An uncertain send can still arrive; its original link remains valid.
+  await store.complete(deliveredToken, details);
   assert.equal(await count('cloud_accounts'), 1);
 });
 

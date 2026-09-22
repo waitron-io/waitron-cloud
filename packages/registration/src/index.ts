@@ -4,6 +4,7 @@ import { resolveSession } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
 export { SignupStore, SignupError, type SignupEmail, type SignupMailer, type SignupDetails, type SignupResult } from './signup.ts';
 export { PasswordRecoveryStore, PasswordRecoveryError, type PasswordRecoveryMailer } from './password-recovery.ts';
+export { EmailOutbox, EmailWorker, type EmailKind, type EmailDeliveryStatus } from './email-outbox.ts';
 export type { AccountEmail } from './account-input.ts';
 export { createLocalAccountMailer } from './local-mailer.ts';
 

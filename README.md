@@ -54,3 +54,8 @@ passwords and revokes existing sessions atomically. `pnpm test` starts its own
 PostgreSQL and Mailpit containers on random ports and exercises real SMTP delivery
 without clearing your development inbox. Public HTTP routes and production email
 delivery remain separate work.
+
+Account messages now use a [durable PostgreSQL queue](docs/email-delivery-implementation.md).
+After configuring your database and persistent encryption key, run `pnpm mail:worker`
+to deliver pending mail to Mailpit, or `pnpm mail:status` to inspect delivery counts.
+The preview command remains independent of the database.
