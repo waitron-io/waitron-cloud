@@ -38,7 +38,9 @@ This package exposes no HTTP routes or signup UI. The registration package's
 [signup backend](../registration/README.md#cloud-account-signup) verifies email tokens
 before creating new customer credentials. Before public use, implement live email
 delivery, the web adapter's Origin checks, cookie handling, login/request throttling,
-password recovery and the selected additional authentication factors.
+the public recovery journey and the selected additional authentication factors.
+The registration package's [recovery backend](../registration/README.md#password-recovery)
+resets verified password accounts and ends their sessions in one transaction.
 Define retention and cleanup for ended and expired sessions before deployment.
 Review the inherited password cost against the chosen deployment. No local Waitron
 administrator proof is verified here; the complete pairing flow remains a separate

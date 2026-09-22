@@ -3,6 +3,7 @@
 Updated 2026-09-22. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
+Cloud password recovery is implemented internally, with Mailpit for local email capture.
 No public cloud service is implemented. This file owns cloud product and platform work;
 Waitron's backlog owns the on-prem application and its side of the integration.
 
@@ -32,8 +33,10 @@ operations, with ownership and acceptance checks. Registration persistence is im
 with real PostgreSQL concurrency and process-restart tests. Password sessions and
 session-backed Cloud approval are implemented. The independent Cloud signup backend
 now verifies email tokens and creates the first organisation, business and owner
-membership together. Next: connect live email delivery and the Cloud web adapter,
-including public-request protections and account recovery, before exposing signup.
+membership together. Password recovery now changes credentials and ends existing
+sessions atomically. Local Mailpit captures signup, reset and change-notification emails;
+tests exercise SMTP delivery. Next: connect production email delivery and the Cloud web
+adapter, including public-request protections and account/recovery screens, before exposure.
 Waitron-side work is paused until its SQLite switch finishes. Resume the local
 administrator adapter and matching-code exchange after that, including bound proof
 and first-contact trust, before exposing public registration endpoints. Recheck the
@@ -134,15 +137,24 @@ the credential and revocation rules still to be defined.
   The signup backend now issues hashed, expiring email tokens with a shared per-address
   cooldown and creates a verified customer account, named organisation, first legal
   business and owner membership atomically. It grants no platform access. The email
-  adapter is tested with capture/failure adapters; no live provider is connected.
-  Implement live delivery, the public signup journey, recovery, MFA/passkeys, public login throttling,
+  adapter is tested with capture/failure adapters and SMTP through local Mailpit.
+  Password recovery now uses expiring single-use tokens bound to the account, email
+  and current password hash; completion invalidates older links and revokes all existing
+  sessions without changing permissions. Unknown/ineligible accounts and delivery
+  failures receive the same accepted result. Notifications follow commit and cannot
+  undo a successful reset. Recovery requires verified email and an existing password;
+  define recovery for legacy unverified and passwordless accounts separately.
+  Implement production delivery, public signup/recovery screens, MFA/passkeys, public login throttling,
   Origin/cookie handling and the platform role catalogue before public use. Define
-  session and signup-request retention and cleanup, and measure them against the
+  session, signup-request and password-reset-request retention and cleanup, including
+  reset records for unknown addresses, and measure them against the
   expected deployment size. Add a compromised-password check before public signup.
   Decide delivery retry/queue policy and monitor failures; a crash between request
   commit and delivery currently requires requesting a fresh link after the cooldown.
-  Keep sanitised provider diagnostics inside the mail adapter. When building the
-  public web adapter, assess whether cooldown response timing reveals recent requests.
+  Keep sanitised provider diagnostics inside the mail adapter. Recovery currently
+  awaits delivery, so the public web adapter must prevent account/cooldown timing
+  disclosure through asynchronous delivery or uniform response timing. Define durable
+  password-change notifications and security audit events before production.
   Review the inherited password cost for deployment and apply the source map's
   security-fix process to both repositories. Further reuse should take code and
   behavioural tests from `pre-sqlite-migration`, pinned to

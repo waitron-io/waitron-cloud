@@ -2,8 +2,9 @@ import type { Pool } from 'pg';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { hashSecret } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
+import { normaliseEmail, validNewPassword, type AccountEmail } from './account-input.ts';
 
-export interface SignupEmail { email: string; token: string; expiresAt: string; }
+export type SignupEmail = AccountEmail;
 export interface SignupMailer { sendVerification(message: SignupEmail): Promise<void>; }
 export interface SignupDetails { password: string; organisationName: string; legalBusinessName: string; countryCode: string; }
 export interface SignupResult { accountId: string; organisationId: string; legalBusinessId: string; }
@@ -18,6 +19,7 @@ export class SignupStore {
 
   async request(input: string): Promise<{status: 'accepted'}> {
     const email = normaliseEmail(input);
+    if (!email) throw new SignupError('signup_invalid');
     const message = await transaction(this.#pool, async client => {
       // Serialise requests for an address across workers; hash collisions only share a cooldown lock.
       await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema() || ':signup'), hashtext($1))", [email]);
@@ -42,8 +44,7 @@ export class SignupStore {
 
   async complete(token: string, input: SignupDetails): Promise<SignupResult> {
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new SignupError('verification_unavailable');
-    if (!input || typeof input.password !== 'string' || Buffer.byteLength(input.password) > 1024
-      || [...input.password].length < 15) throw new SignupError('signup_invalid');
+    if (!input || !validNewPassword(input.password)) throw new SignupError('signup_invalid');
     const organisationName = name(input.organisationName);
     const legalBusinessName = name(input.legalBusinessName);
     if (typeof input.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(input.countryCode)) throw new SignupError('signup_invalid');
@@ -84,18 +85,4 @@ const digest = (token: string) => createHash('sha256').update(token).digest('hex
 function name(value: string): string {
   if (typeof value !== 'string' || value.length > 200 || !value.trim() || /[\u0000-\u001f\u007f]/.test(value)) throw new SignupError('signup_invalid');
   return value.trim();
-}
-function normaliseEmail(value: string): string {
-  if (typeof value !== 'string' || value.length > 254) throw new SignupError('signup_invalid');
-  const email = value.trim().toLowerCase();
-  const parts = email.split('@');
-  const local = parts[0] ?? '';
-  const domain = parts[1] ?? '';
-  const labels = domain.split('.');
-  // Start with ASCII dot-atom addresses; quoted local parts and SMTPUTF8 need provider support.
-  if (parts.length !== 2 || local.length > 64 || !/^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*$/.test(local)
-    || labels.length < 2 || labels.some(label => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) {
-    throw new SignupError('signup_invalid');
-  }
-  return email;
 }

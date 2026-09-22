@@ -11,8 +11,9 @@ and suspension, ends sessions and checks explicit platform permissions. Organisa
 registration permission stays in the existing membership table. Neither permission
 set implies the other. The original slice uses trusted test/setup credentials.
 The subsequent [signup backend](cloud-signup-implementation.md) creates customer
-credentials after email proof. Live delivery, public signup routes, password recovery,
-MFA and passkeys remain integration work before public use.
+credentials after email proof. The [recovery backend](password-recovery-implementation.md)
+now resets passwords and revokes existing sessions. Production delivery, public account
+routes, MFA and passkeys remain integration work before public use.
 
 Store only hashes of session and CSRF tokens. Keep Waitron's 30-minute sliding idle
 limit and passive-polling distinction. Add a 12-hour absolute limit for this internal
