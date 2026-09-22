@@ -35,8 +35,10 @@ agreed initial services; their detailed scope and implementation sequence remain
   Test that the public route cannot expose staff functions; define limits and monitor
   false positives. Staff application-level filtering remains at the venue.
 - Provide assigned or customer-owned hostnames and automatic Let's Encrypt certificates.
-  Choose a self-service LAN discovery method that also works without internet access;
-  split DNS is an option, with router and managed-device alternatives still to evaluate.
+  Prefer local DNS overrides so the registered staff hostname and venue certificate
+  work on both LAN and internet paths. Define router-specific setup, address stability,
+  resolver recovery and initial bootstrap. Test fresh local connections without internet.
+  Google Wifi may require a local custom DNS service, adding a network-wide DNS dependency.
 - Keep support for multiple legal businesses and countries in the underlying model.
   Detailed international administration, separate-approver workflows and ownership
   transfers can wait until needed. Each venue belongs to one organisation at a time.
@@ -101,7 +103,7 @@ agreed initial services; their detailed scope and implementation sequence remain
 
 | Service | Design work still needed |
 | --- | --- |
-| Remote access (initial) | Public HTTPS terminates in Cloud for bot inspection; staff uses a separate hostname with TLS passthrough and network controls. Define and test route/session isolation, tunnel and gateway placement, traffic limits and legitimate automated-client handling. Provide assigned/custom domains and automated certificates; select LAN discovery without making local trading depend on internet access. Temporary unavailability of remote access while the venue is offline is accepted. |
+| Remote access (initial) | Public HTTPS terminates in Cloud for bot inspection; staff uses a separate hostname with TLS passthrough and network controls. Define and test route/session isolation, tunnel and gateway placement, traffic limits and legitimate automated-client handling. Provide assigned/custom domains and automated certificates; implement the preferred local DNS overrides with router-specific setup and offline/recovery tests. Decide the bootstrap role of waitron.local. Temporary unavailability of remote access while the venue is offline is accepted. |
 | Backups (initial) | Implement self-service restore onto a replacement server, normally using the latest recoverable Litestream backup. Provision scoped storage access, show recovery-point time and backup health, alert on interruption, define retention and test restore against each provider selected for launch. Coordinate safe replacement activation with Waitron. |
 | SQLite snapshots (initial backup service) | Retain point-in-time archives that remain restorable if continuous backup data disappears. Define scheduling, consistency, retention and independent storage/deletion controls. Provide explicit snapshot selection and prove restoration with continuous backup data absent. |
 | Failover to cloud | Allocate a replacement instance, coordinate promotion with Waitron, connect devices, stream the new primary and support return to the venue. |

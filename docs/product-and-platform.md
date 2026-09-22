@@ -121,12 +121,25 @@ delegate the certificate-validation records. Let's Encrypt supports
 [DNS validation and delegation](https://letsencrypt.org/docs/challenge-types/)
 without requiring a publicly reachable web server.
 
-Local discovery must fit self-service setup and keep local trading independent of
-the internet. Split DNS, where a name resolves differently inside and outside the
-venue, is an option rather than an agreed requirement. Evaluate router hostname
-overrides, managed-device configuration and a separate local hostname; test browser
-behaviour, router filtering and fresh connections during an internet outage. Avoid
-assuming customers can make every device use the venue server as its DNS resolver.
+Confirmed preference: use local DNS overrides so the registered staff hostname
+resolves directly to the venue server on the LAN and to the passthrough gateway
+over the internet. The venue serves a certificate for that hostname in both cases.
+Public customer pages retain their separate hostname and cloud HTTPS termination.
+This makes the registered staff hostname the intended everyday local address; the
+role of `waitron.local` during initial setup and recovery remains to be decided.
+
+Choose a setup path that fits the customer's router and devices. Prefer a hostname
+override or domain-specific forwarding where supported. Google Wifi documents custom
+DNS-server selection rather than individual overrides, so it may need a local DNS
+service that answers Waitron names and forwards other queries. That would make other
+network DNS queries depend on the service too. Document the setup and recovery steps
+before offering it as a self-service path. See [Google's DNS settings](https://support.google.com/googlehome/answer/6274141?hl=en)
+and [rebinding protection](https://support.google.com/googlehome/answer/9144137?hl=en).
+
+Test local resolution and trusted HTTPS on freshly started devices during an internet
+outage, including router filtering and devices that use their own DNS settings. The
+router/device configuration, address stability and resolver failure behaviour remain
+implementation work; the chosen approach must preserve internet-independent local trading.
 
 ## Backups and self-service recovery
 
@@ -397,8 +410,8 @@ of a venue already connected to an organisation remain implementation decisions.
   The agreed split replaces the all-traffic TLS choices in the
   [shared gateway handoff](reference/2026-09-21-cloud-ingress-wireguard-gateway-design.md)
   and [earlier decision](reference/2026-09-05-relay-decision.md); shared versus per-venue
-  gateways remain open. Which local discovery method minimises customer setup while
-  supporting trusted HTTPS and internet-independent local trading?
+  gateways remain open. How can local DNS overrides be configured and recovered with
+  minimal customer effort across supported routers and devices?
 
 Use the [backlog](backlog.md) to track these decisions and the implementation slices
 for the initial remote access and backup services.
