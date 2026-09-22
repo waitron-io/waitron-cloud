@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { createHash, randomBytes } from 'node:crypto';
 import { hashSecret } from '@waitron-cloud/identity';
+import type { EmailOutbox } from './email-outbox.ts';
 import { transaction } from './transaction.ts';
 import { normaliseEmail, validNewPassword, type AccountEmail } from './account-input.ts';
 export interface PasswordRecoveryMailer {
@@ -13,13 +14,13 @@ export class PasswordRecoveryError extends Error {
 }
 export class PasswordRecoveryStore {
   readonly #pool: Pool;
-  readonly #mailer: PasswordRecoveryMailer;
-  constructor(pool: Pool, mailer: PasswordRecoveryMailer) { this.#pool = pool; this.#mailer = mailer; }
+  readonly #outbox: EmailOutbox;
+  constructor(pool: Pool, outbox: EmailOutbox) { this.#pool = pool; this.#outbox = outbox; }
 
   async request(input: string): Promise<{status: 'accepted'}> {
     const email = normaliseEmail(input);
     if (!email) throw new PasswordRecoveryError('recovery_invalid');
-    const message = await transaction(this.#pool, async client => {
+    await transaction(this.#pool, async client => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema() || ':password-reset'), hashtext($1))", [email]);
       const recent = await client.query("SELECT 1 FROM password_reset_requests WHERE email = $1 AND created_at > clock_timestamp() - interval '1 minute' LIMIT 1", [email]);
       if (recent.rowCount) return undefined;
@@ -41,13 +42,8 @@ export class PasswordRecoveryStore {
       // Ineligible addresses also get cooldown records, but never usable account bindings.
       await client.query(`INSERT INTO password_reset_requests (token_hash, email, account_id, password_fingerprint, created_at, expires_at)
         VALUES ($1, $2, $3, $4, $5, $6)`, [digest(token), email, accountId, fingerprint, now, expiresAt]);
-      return accountId ? { email, token, expiresAt } : undefined;
+      if (accountId) await this.#outbox.enqueue(client, 'password_reset', { email, token, expiresAt });
     });
-    if (message) {
-      try { await this.#mailer.sendPasswordReset(message); }
-      // Do not reveal eligibility through delivery errors or leak provider messages containing tokens.
-      catch { /* The mailer owns sanitised diagnostics. */ }
-    }
     return { status: 'accepted' };
   }
 
@@ -55,7 +51,7 @@ export class PasswordRecoveryStore {
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new PasswordRecoveryError('reset_unavailable');
     if (!validNewPassword(password)) throw new PasswordRecoveryError('recovery_invalid');
     const tokenHash = digest(token);
-    const email = await transaction(this.#pool, async client => {
+    await transaction(this.#pool, async client => {
       const candidate = (await client.query(`SELECT account_id FROM password_reset_requests
         WHERE token_hash = $1 AND account_id IS NOT NULL AND consumed_at IS NULL AND expires_at > clock_timestamp()`, [tokenHash])).rows[0];
       if (!candidate) throw new PasswordRecoveryError('reset_unavailable');
@@ -72,14 +68,11 @@ export class PasswordRecoveryStore {
       // A fresh salted hash invalidates all earlier links, including when reusing the old password.
       await client.query('UPDATE cloud_credentials SET password_hash = $2 WHERE account_id = $1', [candidate.account_id, passwordHash]);
       await client.query('UPDATE cloud_sessions SET ended_at = clock_timestamp() WHERE account_id = $1 AND ended_at IS NULL', [candidate.account_id]);
+      await this.#outbox.enqueue(client, 'password_changed', { email: credential.email });
       const consumed = await client.query(`UPDATE password_reset_requests SET consumed_at = clock_timestamp()
         WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > clock_timestamp()`, [tokenHash]);
       if (!consumed.rowCount) throw new PasswordRecoveryError('reset_unavailable');
-      return credential.email as string;
     });
-    try { await this.#mailer.sendPasswordChanged({ email }); }
-    // The reset is committed; notification failure must not report a failed password change.
-    catch { /* The mailer owns sanitised diagnostics. */ }
     return { status: 'completed' };
   }
 }

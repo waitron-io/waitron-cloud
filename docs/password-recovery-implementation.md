@@ -9,12 +9,12 @@ transaction. Your memberships and platform permissions stay unchanged.
 
 Only enabled accounts with a verified email and an existing password receive reset
 links. Unknown, disabled, unverified and passwordless accounts get the same `accepted`
-request result. Delivery failures also return `accepted`; the adapter owns sanitised
-diagnostics. This prevents provider failures revealing whether an account exists.
+request result. Delivery runs in the background, so provider failures cannot change
+that result. Queue failures roll back the request instead of acknowledging lost work.
 Per-address cooldown is one minute across workers, including unknown addresses.
 Resending does not invalidate a live link or lock the account.
 
-Each random 32-byte token is stored as a SHA-256 hash, bound to the account, email
+Each random 32-byte token has a SHA-256 verification hash, bound to the account, email
 and a fingerprint of its current salted password hash. A successful reset produces
 a new salted hash, invalidating every earlier reset link even when the new password
 matches the old one. Recheck account eligibility and the binding under locks. Lock
@@ -24,15 +24,16 @@ session resolution. Check expiry again after contended writes before committing.
 Share signup's email normalisation and new-password validation: 15 Unicode characters
 minimum, 1024 UTF-8 bytes maximum. The reset token only changes the password; it never
 creates a session or changes verification, suspension or permission state. A lost
-completion reply is recovered by signing in with the new password. Send a notification
-after commit containing no password or token; notification failure cannot undo the reset.
+completion reply is recovered by signing in with the new password. Queue a notification
+containing no password or token in the same transaction. Sending happens afterwards;
+a delivery failure cannot undo the reset. A queue failure rolls the reset back.
 
 This remains an internal API. Before exposing it, add HTTP protections, uniform public
-response timing/asynchronous delivery, IP and token attempt limits, compromised-password
+response timing, IP and token attempt limits, compromised-password
 checks, recovery screens and the selected extra authentication factors. Password recovery
-does not recover MFA. Define durable mail delivery and retention for request records,
-including records for unknown email addresses. A process stopping between commit and
-email delivery still requires a fresh request after the cooldown.
+does not recover MFA. The [email queue](email-delivery-implementation.md) encrypts
+the delivery copy of each token and retries pending messages after a restart. Define
+retention for request and delivery records, including unknown email addresses.
 
 ## Local email viewer
 

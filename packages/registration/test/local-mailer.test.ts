@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { Pool } from 'pg';
 import { login, resolveSession } from '@waitron-cloud/identity';
 import { SignupStore, PasswordRecoveryStore } from '../src/index.ts';
+import { testOutbox, testEmailKeys } from './fixtures/delivery.ts';
+import { EmailWorker } from '../src/email-outbox.ts';
 import { createLocalAccountMailer } from '../src/local-mailer.ts';
 import { migrate } from '../src/migrate.ts';
 import { transaction } from '../src/transaction.ts';
@@ -28,10 +31,16 @@ async function captured(subject: string) {
 
 test('signup and recovery travel through SMTP and can be read in the local inbox', async () => {
   const mailer = createLocalAccountMailer({ port: Number(process.env.MAILPIT_TEST_SMTP_PORT), portalOrigin: 'http://localhost:3000' });
-  const signup = new SignupStore(pool, mailer);
-  const recovery = new PasswordRecoveryStore(pool, mailer);
+  const signup = new SignupStore(pool, testOutbox);
+  const recovery = new PasswordRecoveryStore(pool, testOutbox);
+  const worker = new EmailWorker(pool, testOutbox, mailer);
   const email = 'cafe-owner@example.test';
   await signup.request(email);
+  const cliEnv = {...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL, PGOPTIONS: `-c search_path=${schema}`,
+    CLOUD_EMAIL_KEYS: JSON.stringify(testEmailKeys), CLOUD_EMAIL_ACTIVE_KEY_ID: 'test', MAILPIT_SMTP_PORT: process.env.MAILPIT_TEST_SMTP_PORT};
+  const output = execFileSync(process.execPath, ['src/email-worker-cli.ts', '--once'], {env: cliEnv, encoding: 'utf8', timeout: 10000});
+  assert.equal(JSON.parse(output).counts.sent, 1);
+  assert.ok(!output.includes(email));
   const verification = await captured('Verify your Waitron Cloud email');
   assert.equal(verification.To[0]?.Address, email);
   const signupLink = verification.Text.match(/http:\/\/localhost:3000\/signup\?token=([A-Za-z0-9_-]{43})/);
@@ -39,16 +48,21 @@ test('signup and recovery travel through SMTP and can be read in the local inbox
   await signup.complete(signupLink[1]!, { password: 'original café password', organisationName: 'Café Sol', legalBusinessName: 'Café Sol SL', countryCode: 'ES' });
   const session = await transaction(pool, client => login(client, { email, password: 'original café password' }));
   await recovery.request(email);
+  await worker.runOnce();
   const reset = await captured('Reset your Waitron Cloud password');
   const resetLink = reset.Text.match(/http:\/\/localhost:3000\/reset-password\?token=([A-Za-z0-9_-]{43})/);
   assert.ok(resetLink);
   await recovery.complete(resetLink[1]!, 'replacement café password');
+  await worker.runOnce();
   const notification = await captured('Your Waitron Cloud password changed');
   assert.equal(notification.To[0]?.Address, email);
   assert.ok(!notification.Text.includes('replacement café password'));
   assert.ok(!notification.Text.includes(resetLink[1]!));
   await assert.rejects(transaction(pool, client => resolveSession(client, session.token)), { code: 'session_unavailable' });
   await transaction(pool, client => login(client, { email, password: 'replacement café password' }));
+  const status = JSON.parse(execFileSync(process.execPath, ['src/email-worker-cli.ts', '--status'], {env: cliEnv, encoding: 'utf8', timeout: 10000}));
+  assert.equal(status.counts.sent, 3);
+  assert.equal(status.failures, 0);
 });
 
 test('local mailer rejects external portal origins and invalid ports', () => {

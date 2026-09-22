@@ -4,8 +4,8 @@ import { after, before, beforeEach, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
 import { hashSecret, login, resolveSession } from '@waitron-cloud/identity';
-import { PasswordRecoveryStore } from '../src/password-recovery.ts';
-import { SignupStore, type SignupEmail } from '../src/signup.ts';
+import { recoveryAndDeliver, signupAndDeliver } from './fixtures/delivery.ts';
+import { type SignupEmail } from '../src/signup.ts';
 import { transaction } from '../src/transaction.ts';
 import { migrate } from '../src/migrate.ts';
 
@@ -18,7 +18,7 @@ const messages: SignupEmail[] = [];
 const notices: {email: string}[] = [];
 const mailer = { async sendPasswordReset(message: SignupEmail) { messages.push(message); },
   async sendPasswordChanged(message: {email: string}) { notices.push(message); } };
-const store = new PasswordRecoveryStore(pool, mailer);
+const store = recoveryAndDeliver(pool, mailer);
 const email = 'owner@example.test';
 const oldPassword = 'original café password';
 const newPassword = 'replacement café password';
@@ -42,7 +42,7 @@ before(async () => { await admin.query(`CREATE SCHEMA ${schema}`); await migrate
 after(async () => { await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end(); });
 beforeEach(async () => {
   messages.length = 0; notices.length = 0;
-  await pool.query('TRUNCATE cloud_accounts, organisations, password_reset_requests, signup_requests CASCADE');
+  await pool.query('TRUNCATE cloud_accounts, organisations, password_reset_requests, signup_requests, email_outbox CASCADE');
   await pool.query('INSERT INTO cloud_accounts (id) VALUES ($1)', [accountId]);
   await pool.query('INSERT INTO cloud_credentials (account_id, email, password_hash, email_verified_at) VALUES ($1, $2, $3, clock_timestamp())', [accountId, email, await hashSecret(oldPassword)]);
   await pool.query('INSERT INTO organisations (id) VALUES ($1)', [organisationId]);
@@ -50,10 +50,10 @@ beforeEach(async () => {
   await pool.query("INSERT INTO platform_permissions (account_id, permission) VALUES ($1, 'platform.view_status')", [accountId]);
 });
 
-test('request commits only a hashed reset token and leaves credentials and sessions usable', async () => {
+test('request stores a verification hash and leaves credentials and sessions usable', async () => {
   const session = await signIn();
   const before = (await pool.query('SELECT * FROM cloud_credentials')).rows;
-  const checked = new PasswordRecoveryStore(pool, { ...mailer, async sendPasswordReset(message) {
+  const checked = recoveryAndDeliver(pool, { ...mailer, async sendPasswordReset(message) {
     const { rows } = await pool.query('SELECT * FROM password_reset_requests WHERE token_hash = $1', [digest(message.token)]);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].account_id, accountId);
@@ -109,7 +109,7 @@ test('malformed, unknown, expired and signup tokens cannot reset a password', as
   await pool.query("UPDATE password_reset_requests SET created_at = clock_timestamp() - interval '31 minutes', expires_at = clock_timestamp() - interval '1 second'");
   await expectCode(store.complete(message.token, newPassword), 'reset_unavailable');
   let signupToken = '';
-  const signup = new SignupStore(pool, { async sendVerification(message) { signupToken = message.token; } });
+  const signup = signupAndDeliver(pool, { async sendVerification(message) { signupToken = message.token; } });
   await signup.request(email);
   await expectCode(store.complete(signupToken, newPassword), 'reset_unavailable');
   await signIn();
@@ -171,7 +171,7 @@ test('invalid new passwords leave the reset usable', async () => {
 });
 
 test('mail failures reveal no account status and notification failure cannot undo a reset', async () => {
-  const broken = new PasswordRecoveryStore(pool, {
+  const broken = recoveryAndDeliver(pool, {
     async sendPasswordReset(message) { throw new Error(`secret ${message.token}`); },
     async sendPasswordChanged() { throw new Error('provider secret'); },
   });
@@ -230,4 +230,18 @@ test('an old-password login waiting behind a reset cannot issue a surviving sess
     await blocker.query('COMMIT'); await reset; await attempt;
     assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions WHERE ended_at IS NULL')).rows[0].count, '0');
   } finally { await blocker.query('ROLLBACK'); blocker.release(); await reset; await attempt; }
+});
+
+test('expiry while queuing the notification rolls back password and session changes', async () => {
+  const session = await signIn(); const message = await request();
+  await pool.query("UPDATE password_reset_requests SET expires_at = clock_timestamp() + interval '1 second'");
+  const blocker = await pool.connect(); let completion: Promise<void> | undefined;
+  try {
+    await blocker.query('BEGIN'); await blocker.query('LOCK TABLE email_outbox IN SHARE MODE');
+    completion = expectCode(store.complete(message.token, newPassword), 'reset_unavailable');
+    await waitForLock('INSERT INTO email_outbox'); await delay(1100);
+    await blocker.query('COMMIT'); await completion;
+    await signIn(); await transaction(pool, client => resolveSession(client, session.token));
+    assert.equal((await pool.query("SELECT count(*) FROM email_outbox WHERE kind = 'password_changed'")).rows[0].count, '0');
+  } finally { await blocker.query('ROLLBACK'); blocker.release(); await completion; }
 });

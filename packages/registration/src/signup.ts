@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { hashSecret } from '@waitron-cloud/identity';
+import type { EmailOutbox } from './email-outbox.ts';
 import { transaction } from './transaction.ts';
 import { normaliseEmail, validNewPassword, type AccountEmail } from './account-input.ts';
 
@@ -9,18 +10,18 @@ export interface SignupMailer { sendVerification(message: SignupEmail): Promise<
 export interface SignupDetails { password: string; organisationName: string; legalBusinessName: string; countryCode: string; }
 export interface SignupResult { accountId: string; organisationId: string; legalBusinessId: string; }
 export class SignupError extends Error {
-  readonly code: 'signup_invalid' | 'verification_unavailable' | 'delivery_unavailable';
+  readonly code: 'signup_invalid' | 'verification_unavailable';
   constructor(code: SignupError['code']) { super(code); this.name = 'SignupError'; this.code = code; }
 }
 export class SignupStore {
   readonly #pool: Pool;
-  readonly #mailer: SignupMailer;
-  constructor(pool: Pool, mailer: SignupMailer) { this.#pool = pool; this.#mailer = mailer; }
+  readonly #outbox: EmailOutbox;
+  constructor(pool: Pool, outbox: EmailOutbox) { this.#pool = pool; this.#outbox = outbox; }
 
   async request(input: string): Promise<{status: 'accepted'}> {
     const email = normaliseEmail(input);
     if (!email) throw new SignupError('signup_invalid');
-    const message = await transaction(this.#pool, async client => {
+    await transaction(this.#pool, async client => {
       // Serialise requests for an address across workers; hash collisions only share a cooldown lock.
       await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema() || ':signup'), hashtext($1))", [email]);
       const now: Date = (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
@@ -31,14 +32,8 @@ export class SignupStore {
       const expiresAt = new Date(now.getTime() + 30 * 60_000).toISOString();
       await client.query('INSERT INTO signup_requests (token_hash, email, created_at, expires_at) VALUES ($1, $2, $3, $4)',
         [digest(token), email, now, expiresAt]);
-      return { email, token, expiresAt };
+      await this.#outbox.enqueue(client, 'verification', { email, token, expiresAt });
     });
-    if (message) {
-      // Delivery follows commit so the emailed token always has a durable verification record.
-      try { await this.#mailer.sendVerification(message); }
-      // Provider errors may contain the token; the adapter owns sanitised diagnostics.
-      catch { throw new SignupError('delivery_unavailable'); }
-    }
     return { status: 'accepted' };
   }
 

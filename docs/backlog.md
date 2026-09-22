@@ -3,7 +3,8 @@
 Updated 2026-09-22. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
-Cloud password recovery is implemented internally, with Mailpit for local email capture.
+Cloud password recovery and an encrypted PostgreSQL email queue are implemented
+internally, with a retry worker and Mailpit for local email capture.
 No public cloud service is implemented. This file owns cloud product and platform work;
 Waitron's backlog owns the on-prem application and its side of the integration.
 
@@ -34,8 +35,9 @@ with real PostgreSQL concurrency and process-restart tests. Password sessions an
 session-backed Cloud approval are implemented. The independent Cloud signup backend
 now verifies email tokens and creates the first organisation, business and owner
 membership together. Password recovery now changes credentials and ends existing
-sessions atomically. Local Mailpit captures signup, reset and change-notification emails;
-tests exercise SMTP delivery. Next: connect production email delivery and the Cloud web
+sessions atomically. The same transaction queues encrypted emails for a worker that
+retries failures and resumes after crashes. Local Mailpit tests cover SMTP delivery
+and a separate worker process. Next: connect production email delivery and the Cloud web
 adapter, including public-request protections and account/recovery screens, before exposure.
 Waitron-side work is paused until its SQLite switch finishes. Resume the local
 administrator adapter and matching-code exchange after that, including bound proof
@@ -149,12 +151,18 @@ the credential and revocation rules still to be defined.
   session, signup-request and password-reset-request retention and cleanup, including
   reset records for unknown addresses, and measure them against the
   expected deployment size. Add a compromised-password check before public signup.
-  Decide delivery retry/queue policy and monitor failures; a crash between request
-  commit and delivery currently requires requesting a fresh link after the cooldown.
-  Keep sanitised provider diagnostics inside the mail adapter. Recovery currently
-  awaits delivery, so the public web adapter must prevent account/cooldown timing
-  disclosure through asynchronous delivery or uniform response timing. Define durable
-  password-change notifications and security audit events before production.
+  The PostgreSQL email queue now saves signup/reset messages and password-change
+  notifications with their state changes. It encrypts recipients and tokens, retries
+  at most eight times, expires links, fences late worker acknowledgements, and purges
+  encrypted payloads on completion. Tests cover rollback, concurrency, worker crashes,
+  lost keys, invalidated links and SMTP. Implement the SES adapter next, with a total
+  transport deadline, bounce/complaint handling, delivery alerts and retry classification.
+  Provision separately held encryption keys and document rotation/restore before
+  production; the code accepts an active key plus retained older keys. A send timeout
+  or crash after provider acceptance may duplicate an email. Define retention/cleanup
+  for terminal delivery metadata and security audit events. The public web adapter
+  must assess account/cooldown timing differences in database work; removing provider
+  latency alone does not establish uniform responses.
   Review the inherited password cost for deployment and apply the source map's
   security-fix process to both repositories. Further reuse should take code and
   behavioural tests from `pre-sqlite-migration`, pinned to

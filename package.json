@@ -14,7 +14,9 @@
     "test:packages": "pnpm -r --workspace-concurrency=1 test",
     "mail:up": "docker compose up -d --wait mailpit",
     "mail:down": "docker compose down",
-    "mail:demo": "node --env-file-if-exists=.env packages/registration/src/mail-demo.ts"
+    "mail:demo": "node --env-file-if-exists=.env packages/registration/src/mail-demo.ts",
+    "mail:worker": "node --env-file-if-exists=.env packages/registration/src/email-worker-cli.ts",
+    "mail:status": "node --env-file-if-exists=.env packages/registration/src/email-worker-cli.ts --status"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
