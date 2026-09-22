@@ -20,7 +20,7 @@ selects the first service to build.
 | Provider support | Design for AWS and Google Cloud; choose the first provider and the evidence needed to support the second. Decide separately whether cross-provider failover is wanted. |
 | Product packages | Choose services, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
 | Usage policy | Define lookup and other usage units, customer visibility, allowances and excess-use behaviour. Decide which measurements affect pricing and how retries, failed calls, cached results and batches count. |
-| Waitron boundary | Agree signup, ownership proof, configuration, credentials, status and version compatibility with the on-prem application. |
+| Waitron boundary | Signup inside Waitron, distinct Cloud and local staff logins, explicit identity linking and an independent Cloud portal are agreed. Define ownership proof, linking permissions, already-linked venue handling, configuration, credentials, status and version compatibility. |
 | Recovery promise | Specify tolerated data loss, recovery time and promotion authority for each service. Existing Waitron designs use human promotion; automation is not approved by this discussion. |
 
 ## Platform work to scope
@@ -28,19 +28,25 @@ selects the first service to build.
 - **Identity and organisations.** Reuse suitable Waitron user management code and
   behavioural tests; add cloud memberships and permissions for organisations that
   can contain several legal businesses across countries. Include Cloud staff logins
-  and platform permissions; implement the agreed support approval and expiry policy.
+  and explicit links between distinct Cloud and local identities; local till staff
+  need no Cloud account. Support one Cloud login managing several authorised venues
+  and separate platform permissions. Implement the agreed support approval and expiry policy.
   Define revocation, audit and emergency authorisation. Review
   database and module dependencies, and establish how security fixes reach both codebases.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
   services, usage accounting, trials, failed payment and cancellation.
-- **Venue and node registration.** Signup inside Waitron, account linking, ownership
-  verification, machine identities, credential renewal, replacement and revocation.
+- **Venue and node registration.** Implement the agreed signup from Waitron, creating
+  a new customer's organisation and first legal business from confirmed details.
+  Verify Cloud permissions and local authority before linking a venue. Define handling
+  for existing links, machine identities, credential renewal, replacement and revocation.
 - **Provisioning and placement.** Country/provider/cell registry, repeatable resource
   creation, recovery from partial failures, capacity and customer movement.
 - **Provider integration.** Storage, compute, email, notifications, jobs, keys and
   telemetry, with AWS and Google implementations where needed.
 - **Operations.** Customer and operator portals, health checks, incidents, audit,
   budgets, quotas, staged releases, maintenance and recovery controls.
+  Customer portal login and account recovery must work when the venue server is
+  unavailable, so customers can manage services and recovery independently.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
   Define alerts, affected-customer views and rollout pause criteria.

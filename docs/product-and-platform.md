@@ -51,7 +51,7 @@ venues to which those people have permissions. Keep the business account distinc
 from each taxpayer's legal identity, each venue, and the machines running that venue.
 Confirmed requirement: one organisation must support several legal businesses with
 different tax identities, potentially across countries, from the beginning. Most
-customers will have one legal business. The proposed signup should create the simple
+customers will have one legal business. The agreed signup should create the simple
 structure for you and expose additional businesses only when you need them. A venue
 would belong to a legal business, which would belong to an organisation.
 
@@ -59,6 +59,12 @@ A person could manage several businesses, and a business could give an accountan
 manager or other member different access to different venues. A cloud account,
 a local staff identity and a box's machine credential need explicit relationships.
 Matching email addresses alone must not grant access to a venue.
+
+Confirmed identity boundary: your Cloud login is distinct from your local Waitron
+staff login. Restaurant staff do not need Cloud accounts to use the till. As an owner
+or manager, you can explicitly link your identities and use one Cloud login to manage
+several venues, subject to your permissions. The linking mechanism remains to be
+designed; an identity link must not itself grant additional permissions.
 
 Waitron Cloud staff and administrators also need logins and permissions. This is a
 confirmed requirement. The proposed model separates customer memberships from
@@ -224,19 +230,29 @@ documentation checks, not deployment tests or a legal assessment.
 
 ## Signup from Waitron
 
-Proposed journey:
+Agreed journey for connecting your first venue:
 
-1. Open Cloud services in the venue's Waitron dashboard.
-2. Create or sign into a cloud account and prove authority to connect this venue.
-3. Choose services and see the country, terms and price before subscribing.
-4. Cloud provisions the resources and returns a status the dashboard can follow.
-5. The box receives credentials scoped to its services and starts using them.
-6. The owner can manage, cancel or change services and export data through a clear lifecycle.
+1. As a venue administrator, open Cloud services in the venue's Waitron dashboard.
+2. Create a Cloud login or sign into an existing one.
+3. If you are a new customer, create your organisation and first legal business,
+   using details from Waitron for you to confirm.
+4. Approve linking this venue. Cloud verifies both your Cloud permissions and your
+   authority over the local installation.
+5. Choose services and follow setup progress inside Waitron.
+
+The separate Cloud portal lets you manage services and recovery when your on-prem
+server is unavailable. Its login and account recovery must work independently of
+that server. The exact recovery operations remain to be designed.
+
+The proposed service lifecycle shows the country, terms and price before subscribing.
+Cloud provisions resources, reports progress and issues the box credentials scoped
+to its services. You can manage, cancel or change services and export data through
+a clear lifecycle.
 
 Payment success, account creation and resource provisioning can finish at different
 times. Model those states explicitly so retrying signup cannot charge twice or leave
-an unusable subscription. Decide how an owner manages recovery when the box itself
-is unavailable; the cloud portal is the proposed independent entry point.
+an unusable subscription. The ownership proof, identity-linking protocol and handling
+of a venue already connected to an organisation remain implementation decisions.
 
 ## Questions for the next discussion
 
