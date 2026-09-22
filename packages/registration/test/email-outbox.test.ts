@@ -24,8 +24,8 @@ const mailer = { async sendVerification(message: AccountEmail) { delivered.push(
   async sendPasswordChanged(message: {email: string}) { delivered.push(message); } };
 const worker = new EmailWorker(pool, outbox, mailer);
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
-async function enqueue(email = 'owner@example.test') {
-  const message = {email, token: randomBytes(32).toString('base64url'), expiresAt: new Date(Date.now() + 1800000).toISOString()};
+async function enqueue(email = 'owner@example.test', ttlMs = 1800000) {
+  const message = {email, token: randomBytes(32).toString('base64url'), expiresAt: new Date(Date.now() + ttlMs).toISOString()};
   await transaction(pool, async client => {
     await client.query('INSERT INTO signup_requests (token_hash, email, expires_at, created_at) VALUES ($1,$2,$3,clock_timestamp())', [digest(message.token), email, message.expiresAt]);
     await outbox.enqueue(client, 'verification', message);
@@ -266,4 +266,59 @@ test('ciphertext copied into another message cannot be delivered under its ident
   await worker.runOnce(); await worker.runOnce();
   assert.equal(delivered.length, 1);
   assert.equal((await pool.query('SELECT last_error FROM email_outbox WHERE id = $1', [rows[1].id])).rows[0].last_error, 'payload_unavailable');
+});
+
+// Hold only this worker after its real eligibility query; replacement workers use the ordinary pool.
+function pauseEligibility() {
+  let resume!: () => void; let reached!: () => void;
+  const held = new Promise<void>(resolve => { resume = resolve; });
+  const started = new Promise<void>(resolve => { reached = resolve; });
+  const paused = new Proxy(pool, {get(target, property) {
+    if (property === 'query') return async (sql: string, values?: unknown[]) => {
+      const result = await target.query(sql, values);
+      if (sql.startsWith('SELECT 1 FROM signup_requests')) { reached(); await held; }
+      return result;
+    };
+    const value = Reflect.get(target, property);
+    return typeof value === 'function' ? value.bind(target) : value;
+  }});
+  return {pool: paused, started, resume};
+}
+
+test('a worker superseded during eligibility lookup cannot hand the message to the transport', async () => {
+  await enqueue();
+  const paused = pauseEligibility();
+  const first = new EmailWorker(paused.pool, outbox, mailer).runOnce();
+  try {
+    await paused.started;
+    await pool.query("UPDATE email_outbox SET lease_until = clock_timestamp() - interval '1 second'");
+    await worker.runOnce(); assert.equal(delivered.length, 1);
+  } finally { paused.resume(); await first; }
+  assert.equal(delivered.length, 1); assert.equal((await row()).status, 'sent');
+});
+
+test('a link expiring during eligibility lookup is discarded before transport', async () => {
+  const message = await enqueue('owner@example.test', 1500);
+  const paused = pauseEligibility();
+  const sending = new EmailWorker(paused.pool, outbox, mailer).runOnce();
+  try {
+    await paused.started;
+    await delay(Math.max(0, Date.parse(message.expiresAt) - Date.now()) + 30);
+  } finally { paused.resume(); await sending; }
+  assert.equal(delivered.length, 0); assert.equal((await row()).status, 'expired');
+  assert.equal((await row()).payload, null);
+});
+
+test('token-hash and expiry metadata cannot redirect eligibility checks for intact ciphertext', async () => {
+  const first = await enqueue('owner@example.test');
+  const second = await enqueue('owner@example.test');
+  await pool.query('UPDATE signup_requests SET consumed_at = clock_timestamp() WHERE token_hash = $1', [digest(first.token)]);
+  await pool.query('UPDATE email_outbox SET token_hash = $2 WHERE token_hash = $1', [digest(first.token), digest(second.token)]);
+  await worker.runOnce();
+  assert.equal(delivered.length, 0); assert.equal((await row()).last_error, 'payload_unavailable');
+  await clean();
+  await enqueue('expiry@example.test');
+  await pool.query("UPDATE email_outbox SET expires_at = expires_at + interval '1 hour'");
+  await worker.runOnce(); assert.equal(delivered.length, 0);
+  assert.equal((await row()).last_error, 'payload_unavailable');
 });

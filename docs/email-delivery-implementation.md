@@ -85,7 +85,11 @@ An empty queue produces:
 `attempts` counts claims, including claims abandoned by a crash. `failures` counts
 observed send/decryption failures; a crash can increase attempts without increasing
 failures. Counters cover retained rows, not lifetime totals. `last_error` on a row is
-a fixed code; it may remain after a successful retry. Terminal rows retain metadata
+a fixed code; it may remain after a successful retry. `delivery_failed` records a
+transport error or timeout; `payload_unavailable` records a missing key or failed
+payload validation. `attempts_exhausted` is used when reclaiming an abandoned eighth
+attempt. After a normal eighth failure, `last_error` retains the observed failure
+instead. Use `status = 'failed'` to find all messages that exhausted their attempts. Terminal rows retain metadata
 but erase the recipient and token ciphertext.
 
 ## Use it from the account backend
@@ -109,6 +113,19 @@ link if an older request was never delivered.
 To rotate keys, first make the new key available to every worker while retaining the
 old one, then change the backend's active key ID. Keep each old key until no pending
 or processing rows reference it, including when restoring an older database backup.
+You can check pending key references with this read-only query in your Cloud database:
+
+```sql
+SELECT key_id, count(*) AS pending_messages
+FROM email_outbox
+WHERE status IN ('pending', 'processing')
+GROUP BY key_id;
+```
+
+This query reports identifiers, never key material. `mail:status` reports overall
+counts; it does not replace this key-specific check. Old database backups may still
+need a key even after the current queue has drained.
+
 Missing keys and failed authentication of ciphertext produce `payload_unavailable`
 and use the normal retry limit. Repair configuration before those retries expire;
 terminal messages cannot be replayed after their payload has been erased.
