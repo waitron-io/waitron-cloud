@@ -13,7 +13,8 @@ selects the first service to build.
 
 | Decision | Next step |
 | --- | --- |
-| Customer model | Agree how accounts, people, legal taxpayers, venues and nodes relate, including a business operating in several countries. |
+| Customer model | Support an organisation with several legal businesses and tax identities across countries from the outset. Agree the remaining relationships between people, organisations, businesses, venues and nodes, keeping signup simple for a single business. |
+| Cloud staff access | Customer-approved, time-limited support access and an explicitly authorised, audited emergency route are agreed. Define platform roles, eligible approvers, grant scope and enforcement. Possible on-prem SSH support requires separate, explicit customer approval for a limited period. |
 | Residency | Define the country policy for operational data, backups, archives, analytics, identities, logs and messages; identify supported launch countries. Verify actual obligations for each market before making customer promises. |
 | Cells | Choose the customer placement unit, group size and availability-zone layout. Define acceptable shared dependencies, movement and staged rollout. |
 | Provider support | Design for AWS and Google Cloud; choose the first provider and the evidence needed to support the second. Decide separately whether cross-provider failover is wanted. |
@@ -25,8 +26,11 @@ selects the first service to build.
 ## Platform work to scope
 
 - **Identity and organisations.** Reuse suitable Waitron user management code and
-  behavioural tests; add cloud memberships and permissions. Review database and
-  module dependencies, and establish how security fixes reach both codebases.
+  behavioural tests; add cloud memberships and permissions for organisations that
+  can contain several legal businesses across countries. Include Cloud staff logins
+  and platform permissions; implement the agreed support approval and expiry policy.
+  Define revocation, audit and emergency authorisation. Review
+  database and module dependencies, and establish how security fixes reach both codebases.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
   services, usage accounting, trials, failed payment and cancellation.
 - **Venue and node registration.** Signup inside Waitron, account linking, ownership
@@ -90,10 +94,12 @@ The [ownership map](documentation-ownership.md) records what remains in Waitron.
   The inherited prototype did not cover that path. Cloud provisioning/recovery and
   Waitron's streaming engine both participate; settle the contract before assigning
   implementation tasks or claiming the gap is closed.
-- **Remote support.** Decide whether to offer the proposed owner-enabled access,
-  how it is authorised, audited and terminated, and its relationship to remote
-  access. The [maintenance discussion](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md)
-  remains unapproved and also covers local OS maintenance.
+- **Remote support.** On-prem SSH support is a candidate capability requiring
+  explicit customer approval for a specific server and limited period, separately
+  from cloud data access. Scope the connection mechanism, server permissions, audit,
+  early revocation and termination of active sessions on expiry. The
+  [maintenance discussion](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md)
+  remains an unapproved implementation proposal and also covers local OS maintenance.
 - **Managed devices.** Android Management API enrolment is a cloud candidate.
   Device hardware, kiosk behaviour and the local operating-system image remain
   Waitron work.
