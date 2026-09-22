@@ -19,13 +19,14 @@ Use two test venues sharing one cell. Implement and verify in this order:
    venues and protection of staff functions from public routes.
 3. Upload backups directly to object storage and show the latest recoverable time.
 4. Restore onto a replacement from the continuous backup and from a retained snapshot,
-   including with continuous data absent.
+   including with continuous data absent. Cover planned hardware replacement and
+   recovery after failure through the agreed shared flow.
 5. Replace the gateway, measure reconnection time with unchanged customer-facing
    addresses and verify that backups continue.
 
-Next: specify connection, replacement and revocation of a server's Cloud access.
-Cloud owns registration,
-routing, storage access and service status; Waitron owns local integration and recovered
+Next: specify the protocols for connection, the agreed replacement journey and
+revocation of a server's Cloud access. Cloud owns registration, routing, storage access
+and service status; Waitron owns local integration and recovered
 server activation. Inspect reuse candidates against the SQLite design and define the
 shared contract and verification responsibilities before implementation. No part of
 this milestone is implemented by documenting it.
@@ -88,7 +89,7 @@ this milestone is implemented by documenting it.
 | Product packages | Remote access and backups are the initial services. Define their release scope, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
 | Usage policy | Define lookup and other usage units, customer visibility, allowances and excess-use behaviour. Decide which measurements affect pricing and how retries, failed calls, cached results and batches count. |
 | Waitron boundary | Signup inside Waitron, distinct Cloud and local staff logins, explicit identity linking and an independent Cloud portal are agreed. Venue linking requires Cloud permission to add venues and local administrator approval; one person or different people may provide them. Define the approval exchange, ownership proof, already-linked venue handling, configuration, credentials, status and version compatibility. |
-| Server lifecycle | Keep venue identity across replacements; give each installation fresh machine credentials and use Waitron's recovery rules before activating it. Define connection, replacement and revocation of an installation's Cloud access, concurrent requests, interrupted replacement, retiring old credentials and a returning old server. Decide how revocation affects subscriptions, retained backups and reconnection. |
+| Server lifecycle | One guided replacement flow covers planned upgrades and server failure, preserving venue, subscription and customer-facing addresses. Use fresh installation credentials, verify restored data before trading, retire old credentials and follow Waitron's activation rules. Specify final-backup handover, concurrent requests, interrupted replacement and a returning old server. Define connection and standalone revocation, including the latter's effects on subscriptions, retained backups and reconnection. |
 | Recovery promise | Specify tolerated data loss, recovery time and promotion authority for each service. Existing Waitron designs use human promotion; automation is not approved by this discussion. |
 | Backup recovery | Self-service restoration is agreed; staff intervention is an exceptional fallback. Use continuous backups for the latest recoverable version and retained snapshots for archives or missing continuous data. Define retention, snapshot scheduling and independent snapshot storage/deletion controls; test recovery with continuous data absent. |
 
@@ -115,6 +116,11 @@ this milestone is implemented by documenting it.
   Test that restoring data alone does not grant primary authority and that a returning
   old server follows Waitron's recovery rules. Cloud revocation alone does not establish
   that an offline server has stopped trading.
+  Implement the shared replacement flow for planned upgrades and failure recovery.
+  Verify the final backup after stopping writes during a planned handover. For failure
+  recovery, show the recovery point and potential data loss, and require confirmation
+  that the old server is taken out of service under Waitron's recovery rules. Preserve
+  venue, subscription and addresses; test interrupted activation and route changes.
 - **Provisioning and placement.** Country/provider/cell registry, repeatable resource
   creation, recovery from partial failures, capacity and customer movement.
   Place venues independently, preserve their addresses on movement and test replacement

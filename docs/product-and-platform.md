@@ -190,7 +190,7 @@ independence; the exact mechanism remains to be designed and tested.
 You can restore onto a replacement server yourself without waiting for staff approval
 or assistance, subject to your account's recovery permissions.
 The agreed journey is to install Waitron, sign into Cloud, choose your venue and
-restore its backup. The proposed interface defaults to the latest recoverable
+restore its backup. The agreed interface defaults to the latest recoverable
 continuous backup and lets you explicitly choose a retained snapshot. Show the
 recovery point's time before confirmation, so falling back to older data is visible.
 
@@ -207,6 +207,32 @@ each replacement as a distinct installation with fresh machine credentials. Rest
 backup data must not automatically grant two installations authority to act as the
 venue's active primary. Use Waitron's ownership and recovery rules for activation.
 
+Confirmed replacement journey: support planned hardware upgrades and recovery after
+server failure from the outset, sharing the same guided flow wherever possible.
+The venue, subscription and customer-facing addresses carry across automatically.
+
+1. Install Waitron on the replacement and sign into Cloud with recovery permission.
+2. Choose your existing venue and **Replace server**.
+3. Select the recovery point, defaulting to the latest continuous backup, with a
+   retained snapshot available as an explicit alternative.
+4. Restore and verify the data before enabling trading.
+5. Complete the handover under Waitron's recovery rules, retire the old server's Cloud
+   credentials and move remote access to the replacement.
+
+For a planned replacement, coordinate stopping writes on the old server and taking
+a final backup. The replacement must include that final backup before activation;
+an earlier restore may need to be refreshed. Show the handover progress so you know
+when trading is paused and when the replacement is ready.
+
+For failure recovery, show the backup timestamp and require you to confirm that the
+old server is taken out of service before activating the replacement. Follow Waitron's
+recovery rules for any other local servers that could become primary. The flow must
+make any potential loss of changes after the recovery point clear.
+
+Both paths need tests for interrupted handover and a returning old server. The exact
+protocol and order of activation, credential retirement and route changes remain to
+be specified with Waitron; this journey does not establish that they happen atomically.
+
 Cloud service access and authority to trade locally are separate concerns. Revoking
 a server's Cloud credentials is not proof that it has stopped serving the venue
 offline. Waitron's [recovery design](https://github.com/clintongormley/waitron/blob/4ce2db502173d87d14d2e1aad5dc92b19be38363/docs/superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)
@@ -218,9 +244,9 @@ Define how Cloud verifies installation ownership, handles repeated or concurrent
 requests, retires old credentials and resumes interrupted replacement. Include a
 returning old server in the tests. Revoking an installation's Cloud access means
 withdrawing its gateway and storage permissions, for example after theft or retirement.
-The effects on subscriptions, retained backups and reconnecting remain a product
-decision. This describes an operation to design, not a requirement for a separate
-everyday "disconnect" button.
+For revocation outside replacement, the effects on subscriptions, retained backups
+and reconnecting remain a product decision. This describes an operation to design,
+not a requirement for a separate everyday "disconnect" button.
 
 ## Proposed customer and identity model
 
