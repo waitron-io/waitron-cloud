@@ -34,9 +34,11 @@ approval. It derives the account from the session, checks the CSRF token and cur
 organisation membership, and rolls back approval if the session expires during a
 permission lock wait. The older account-ID method is only for trusted adapters.
 
-This package exposes no HTTP routes or signup UI. Before public use, implement the
-web adapter's Origin checks, cookie handling, login/request throttling, signup/email
-verification, password recovery and the selected additional authentication factors.
+This package exposes no HTTP routes or signup UI. The registration package's
+[signup backend](../registration/README.md#cloud-account-signup) verifies email tokens
+before creating new customer credentials. Before public use, implement live email
+delivery, the web adapter's Origin checks, cookie handling, login/request throttling,
+password recovery and the selected additional authentication factors.
 Define retention and cleanup for ended and expired sessions before deployment.
 Review the inherited password cost against the chosen deployment. No local Waitron
 administrator proof is verified here; the complete pairing flow remains a separate

@@ -9,6 +9,11 @@ and session-backed Cloud approval. Local administrator proof, the matching-code
 pairing flow and the browser/end-to-end portions of steps 2 and 3 remain to be built.
 There is no public registration service yet.
 
+Waitron-side implementation is paused until its SQLite switch finishes. The
+[Cloud signup backend](cloud-signup-implementation.md) proceeds independently and
+now creates the first customer organisation and business after email proof. Finish
+its Cloud delivery/web integration while waiting; resume local pairing afterwards.
+
 ## Outcome
 
 Connect two test installations to their owners' Cloud organisations. Restart the

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { resolveSession } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
+export { SignupStore, SignupError, type SignupEmail, type SignupMailer, type SignupDetails, type SignupResult } from './signup.ts';
 
 export interface ConnectionBinding {
   operationId: string;

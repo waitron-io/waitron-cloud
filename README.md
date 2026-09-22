@@ -29,5 +29,7 @@ pnpm test
 
 See [registration development](packages/registration/README.md) for the trust boundary,
 migrations and test setup. The workspace packages are private. The [identity package](packages/identity/README.md)
-provides internal password sessions used for Cloud approval. Public registration, the
-browser login flow and service provisioning are still to be implemented.
+provides internal password sessions used for Cloud approval. The
+[signup backend](docs/cloud-signup-implementation.md) verifies email tokens and creates
+the first organisation and legal business. Live email delivery, public registration,
+browser screens and service provisioning are still to be implemented.

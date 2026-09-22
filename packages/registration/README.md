@@ -19,8 +19,52 @@ account's current registration permission in PostgreSQL when approving and compl
 
 The [identity package](../identity/README.md) now supplies password sessions and
 explicit platform permission checks, adapted from `pre-sqlite-migration`. The public
-web adapter, signup/recovery, additional authentication factors and platform role
+web adapter, password recovery, additional authentication factors and platform role
 catalogue remain to be implemented.
+
+## Cloud account signup
+
+Use `SignupStore(pool, mailer)` for the independent Cloud account backend. Its
+`request(email)` method commits a verification request, then calls
+`mailer.sendVerification({ email, token, expiresAt })`. The return value is
+`{ status: 'accepted' }`, including during the one-minute cooldown. The mailer alone
+receives the token; never include it in a browser response or logs. The current email
+parser accepts ASCII dot-atom addresses. International domains must already be
+punycode-encoded; raw Unicode domains, quoted addresses and international local parts
+need later normalisation/provider support.
+
+Once you have the emailed token, call `complete(token, { password, organisationName,
+legalBusinessName, countryCode })`. It returns `{ accountId, organisationId,
+legalBusinessId }` after creating all three records and the owner's membership in one
+transaction. New passwords require at least 15 Unicode characters and at most 1024
+UTF-8 bytes. Names have a 200-character limit. Supply a two-letter country code; this
+records a declared country, not verified tax details or a hosting location.
+
+The token expires after 30 minutes and works once. Resending keeps earlier live links
+valid, but email uniqueness permits only one signup. A lost success reply is recovered
+by signing in with the chosen password through the existing identity API. Replaying
+a token cannot create a session, reset a password or add another organisation.
+
+`signup_invalid` identifies malformed input. `verification_unavailable` covers an
+unknown, expired or used token and an email that already has an account.
+`delivery_unavailable` deliberately drops email-provider errors, which may contain
+the token. The mailer adapter owns sanitised diagnostics; do not attach the original
+error as a cause or log its message. Request a fresh link after the
+cooldown if delivery fails or the process stops after commit. There is no durable
+delivery queue; the provider adapter and its retry policy remain deployment work.
+
+The integration tests use an in-memory capture mailer and disposable PostgreSQL:
+
+```sh
+pnpm test
+```
+
+They exercise signup, login, concurrent links, delivery failure and a fresh-process
+completion. Live email delivery and HTTP routes are not connected. The
+[signup plan](../../docs/cloud-signup-implementation.md) records the public deployment
+gates. `email_verified_at` records proof for this flow; the older trusted provisioning
+path owns its verification policy. `is_owner` records the initial customer owner and
+does not imply platform permission or introduce a full organisation role catalogue.
 
 ## State and completion
 
@@ -91,5 +135,6 @@ pnpm db:migrate
 Migrations run in a transaction under a database advisory lock, which makes concurrent
 migration runners wait their turn. Applied SQL files are checked against recorded
 hashes; add another migration instead of editing a file that has been applied.
-The library does not migrate on import or create organisations and accounts for you.
+The library does not migrate on import. Registration assumes existing accounts and
+organisations; call `SignupStore` explicitly to create them through email proof.
 Deployment credentials and database privileges remain to be designed before public use.
