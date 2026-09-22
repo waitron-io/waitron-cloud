@@ -4,7 +4,8 @@ Updated 2026-09-22. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
-internally, with a retry worker and Mailpit for local email capture.
+internally, with a retry worker, authenticated TLS SMTP delivery and Mailpit for local
+email capture. Live provider/sender configuration remains open.
 No public cloud service is implemented. This file owns cloud product and platform work;
 Waitron's backlog owns the on-prem application and its side of the integration.
 
@@ -37,8 +38,9 @@ now verifies email tokens and creates the first organisation, business and owner
 membership together. Password recovery now changes credentials and ends existing
 sessions atomically. The same transaction queues encrypted emails for a worker that
 retries failures and resumes after crashes. Local Mailpit tests cover SMTP delivery
-and a separate worker process. Next: connect production email delivery and the Cloud web
-adapter, including public-request protections and account/recovery screens, before exposure.
+and a separate worker process. Authenticated TLS SMTP now covers production transport,
+bounded cancellation, retry classification and accepted-message receipts. Next: configure
+and prove live provider delivery, and implement the Cloud web adapter, including public-request protections and account/recovery screens, before exposure.
 Waitron-side work is paused until its SQLite switch finishes. Resume the local
 administrator adapter and matching-code exchange after that, including bound proof
 and first-contact trust, before exposing public registration endpoints. Recheck the
@@ -146,7 +148,7 @@ the credential and revocation rules still to be defined.
   failures receive the same accepted result. Notifications follow commit and cannot
   undo a successful reset. Recovery requires verified email and an existing password;
   define recovery for legacy unverified and passwordless accounts separately.
-  Implement production delivery, public signup/recovery screens, MFA/passkeys, public login throttling,
+  Configure live email delivery and implement public signup/recovery screens, MFA/passkeys, public login throttling,
   Origin/cookie handling and the platform role catalogue before public use. Define
   session, signup-request and password-reset-request retention and cleanup, including
   reset records for unknown addresses, and measure them against the
@@ -155,8 +157,16 @@ the credential and revocation rules still to be defined.
   notifications with their state changes. It encrypts recipients and tokens, retries
   at most eight times, expires links, fences late worker acknowledgements, and purges
   encrypted payloads on completion. Tests cover rollback, concurrency, worker crashes,
-  lost keys, invalidated links and SMTP. Implement the SES adapter next, with a total
-  transport deadline, bounce/complaint handling, delivery alerts and retry classification.
+  lost keys, invalidated links and SMTP. The [production SMTP adapter](production-email-implementation.md)
+  now uses verified TLS and authentication, closes timed-out/cancelled sockets, classifies
+  retryable/permanent failures and stores stable Message-IDs on acceptance. Production
+  requires explicit relay configuration; status checks need only database access.
+  Prefer Spain for administrative email processing. SES has no Spain endpoint in the
+  checked endpoint list; Acumbamail is a Madrid-hosted candidate, not a selected account.
+  Next, select the provider and verify its processing locations, retention and tracking
+  controls; configure the sender and prove live delivery. Implement authenticated
+  bounce/complaint ingestion, suppression reconciliation and delivery alerts for that
+  provider before public use.
   Provision separately held encryption keys and document rotation/restore before
   production; the code accepts an active key plus retained older keys. A send timeout
   or crash after provider acceptance may duplicate an email. Define retention/cleanup
@@ -271,7 +281,7 @@ the credential and revocation rules still to be defined.
 | Invoice archive | Define the archived objects and access grants, including owner-approved AEAT/advisor access, retention, download and customer exit. Have hosting/archive questions reviewed for the launch country. |
 | Analytics and reports | Choose ingestion, supported source versions, country and cell placement, search/aggregation engine, scheduled reports and group reporting. Elasticsearch is a candidate. |
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |
-| Messaging | Administrative email via SES or another provider, notification channels, sender identities, preferences, delivery failures and message location policy. |
+| Messaging | Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
 | Automated upgrades | Treat cloud services, cloud-hosted Waitron and on-prem installations separately; choose rollout groups, compatibility, maintenance windows, pause and recovery behaviour. |
 | Monitoring | External venue health and backup/filing/device signals, functional cloud-service checks, performance, customer alerts and incidents. Platform usage metering also tracks consumption, limits and costs. |
 

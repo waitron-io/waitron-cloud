@@ -22,13 +22,13 @@ Save password-change notifications with the password and session changes too.
   days. Check request consumption, account eligibility and credential generation
   immediately before delivery. Expired or invalidated links are discarded.
 - Delivery is at least once within the retry/expiry limits. A provider accepting mail
-  just before a crash can cause a duplicate. The worker stops waiting after 20 seconds; the production transport must also
-  cancel its underlying operation within that deadline. A link can expire or be consumed in transit;
+  just before a crash can cause a duplicate. The worker stops waiting after 20 seconds; the production SMTP adapter closes its socket after 15 seconds or on worker
+  cancellation. A link can expire or be consumed in transit;
   completion always rechecks its validity.
 - Record status, attempts, failure counts and fixed failure codes. Erase encrypted
   payloads when messages reach a terminal state. Provider acceptance is not proof of
   inbox delivery. Production bounce handling, alerts and metadata retention remain
-  follow-ups with the SES adapter.
+  provider-dependent follow-ups. See the [production transport](production-email-implementation.md).
 
 ## Implementation and proof
 
@@ -42,7 +42,7 @@ Save password-change notifications with the password and session changes too.
 
 The Cloud web adapter still needs abuse controls and an assessment of response timing;
 removing provider latency does not make database paths constant-time. Waitron files,
-SES provisioning and public routes remain outside this implementation.
+Live provider provisioning and public routes remain outside this implementation.
 
 ## Run the local worker
 
@@ -69,11 +69,13 @@ pnpm mail:worker
 ```
 
 The worker polls once a second when idle and finishes its current attempt on SIGINT
-or SIGTERM. It sends only to the local Mailpit adapter, which refuses production mode.
+or SIGTERM. Development defaults to the local Mailpit adapter. Production requires explicit
+SMTP configuration; see the [production guide](production-email-implementation.md).
 You can process at most one due message with `pnpm mail:worker --once`, or print a
-JSON summary with `pnpm mail:status`. Database/configuration failures exit nonzero
-with a fixed diagnostic; restart after correcting the cause. Provider failures are
-saved for retry. The worker does not run migrations automatically.
+JSON summary with `pnpm mail:status`. Status needs only `DATABASE_URL`, without
+encryption keys or delivery credentials. Database/configuration failures exit nonzero
+with a fixed diagnostic; restart after correcting the cause. Temporary provider failures are
+saved for retry; permanent rejections finish as failed. The worker does not run migrations automatically.
 
 An empty queue produces:
 
@@ -85,12 +87,17 @@ An empty queue produces:
 `attempts` counts claims, including claims abandoned by a crash. `failures` counts
 observed send/decryption failures; a crash can increase attempts without increasing
 failures. Counters cover retained rows, not lifetime totals. `last_error` on a row is
-a fixed code; it may remain after a successful retry. `delivery_failed` records a
-transport error or timeout; `payload_unavailable` records a missing key or failed
+a fixed code; it may remain after a successful retry. `delivery_failed` records an
+unclassified transport error; `delivery_timeout` records a deadline/cancellation,
+`delivery_deferred` a temporary SMTP response, `delivery_rejected` a permanent
+rejection and `delivery_configuration` an authentication or TLS configuration failure.
+Configuration failures use the bounded retry policy while you repair the settings; `payload_unavailable` records a missing key or failed
 payload validation. `attempts_exhausted` is used when reclaiming an abandoned eighth
 attempt. After a normal eighth failure, `last_error` retains the observed failure
-instead. Use `status = 'failed'` to find all messages that exhausted their attempts. Terminal rows retain metadata
-but erase the recipient and token ciphertext.
+instead. Use `status = 'failed'` to find exhausted retries and permanent rejections. Terminal rows retain metadata
+but erase the recipient and token ciphertext. Accepted production sends also retain
+`transport` and a stable `message_id` for investigation. A repeated ID does not
+guarantee provider deduplication.
 
 ## Use it from the account backend
 

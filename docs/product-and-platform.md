@@ -546,7 +546,7 @@ operation or automatic failover across providers is a separate, unresolved requi
 | --- | --- | --- |
 | Object storage | S3 | Cloud Storage |
 | Compute | EC2, with the workload packaging still to choose | Compute Engine, with the same workload packaging goal |
-| Administrative email | SES where its location and policies fit | An approved email provider through the same email interface |
+| Administrative email | Prefer a Spain-hosted provider through TLS SMTP; SES only where its location and policies fit | An approved email provider through the same email interface |
 | Mobile notifications | SNS with the selected mobile delivery service | FCM or another delivery service appropriate to the client |
 | Jobs, secrets and monitoring | Choose services against required behaviour | Choose services against the same required behaviour |
 
@@ -565,8 +565,12 @@ browser push, SMS or several of these.
 
 Provider service coverage must be checked country by country. For example, the
 [SES endpoint list](https://docs.aws.amazon.com/general/latest/gr/ses.html) checked on
-2026-09-22 does not list Spain. Keep the location of email processing as an explicit
-decision rather than assuming every service shares the compute region. These are
+2026-09-22 does not list Spain. Prefer Spain for administrative email processing too.
+The [production email adapter](production-email-implementation.md) uses authenticated
+TLS SMTP so the relay can be chosen independently of compute. Acumbamail's terms
+place its servers in Madrid; verify the selected service's processing, retention and
+tracking before choosing an account. This does not locate recipients' mail systems
+or all transit in Spain. These are
 documentation checks, not deployment tests or a legal assessment.
 
 ## Signup from Waitron

@@ -3,11 +3,12 @@ import type { Pool, PoolClient } from 'pg';
 import type { SignupMailer } from './signup.ts';
 import type { PasswordRecoveryMailer } from './password-recovery.ts';
 import { normaliseEmail, type AccountEmail } from './account-input.ts';
+import { EmailDeliveryError, type EmailDeliveryFailure, type EmailDeliveryReceipt } from './email-delivery.ts';
 import { transaction } from './transaction.ts';
 
 export type EmailKind = 'verification' | 'password_reset' | 'password_changed';
 type Status = 'pending' | 'processing' | 'sent' | 'expired' | 'cancelled' | 'failed';
-type Failure = 'delivery_failed' | 'payload_unavailable' | 'attempts_exhausted';
+type Failure = EmailDeliveryFailure | 'payload_unavailable' | 'attempts_exhausted';
 interface MessageRow {
   id: string; kind: EmailKind; token_hash: string | null; key_id: string; payload: Buffer;
   expires_at: Date; attempts: number; claim_id: string;
@@ -118,17 +119,28 @@ export class EmailWorker {
     if (!ready.rowCount) return true;
     if (!ready.rows[0].live) { await this.#finish(claim, 'expired'); return true; }
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
+    const context = {deliveryId: claim.id, signal: controller.signal};
+    let receipt: void | EmailDeliveryReceipt;
     try {
-      const send = () => claim.kind === 'verification' ? this.#mailer.sendVerification(message as AccountEmail)
-        : claim.kind === 'password_reset' ? this.#mailer.sendPasswordReset(message as AccountEmail)
-        : this.#mailer.sendPasswordChanged(message);
+      const send = () => claim.kind === 'verification' ? this.#mailer.sendVerification(message as AccountEmail, context)
+        : claim.kind === 'password_reset' ? this.#mailer.sendPasswordReset(message as AccountEmail, context)
+        : this.#mailer.sendPasswordChanged(message, context);
       // A timeout cannot retract a message already accepted by a provider. Retried sends may duplicate it.
-      await Promise.race([Promise.resolve().then(send), new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('Email delivery timed out')), this.#timeout);
+      receipt = await Promise.race([Promise.resolve().then(send), new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new EmailDeliveryError('delivery_timeout'));
+          controller.abort();
+        }, this.#timeout);
       })]);
-    } catch { await this.#fail(claim, 'delivery_failed'); return true; }
+      if (receipt && (receipt.transport !== 'smtp' || typeof receipt.messageId !== 'string' || !/^<[A-Za-z0-9._-]+@[A-Za-z0-9.-]+>$/.test(receipt.messageId) || receipt.messageId.length > 512)) throw new EmailDeliveryError('delivery_failed');
+    } catch (error) {
+      await this.#fail(claim, error instanceof EmailDeliveryError ? error.code : 'delivery_failed',
+        !(error instanceof EmailDeliveryError) || error.retryable);
+      return true;
+    }
     finally { clearTimeout(timer); }
-    await this.#finish(claim, 'sent');
+    await this.#finish(claim, 'sent', receipt);
     return true;
   }
 
@@ -146,32 +158,41 @@ export class EmailWorker {
     return !!credential && digest(credential.password_hash) === credential.password_fingerprint;
   }
 
-  async #finish(row: MessageRow, status: 'sent' | 'expired' | 'cancelled') {
+  async #finish(row: MessageRow, status: 'sent' | 'expired' | 'cancelled', receipt?: void | EmailDeliveryReceipt) {
     await this.#pool.query(`UPDATE email_outbox SET status = $3, payload = NULL, key_id = NULL,
-      claim_id = NULL, lease_until = NULL, finished_at = clock_timestamp()
-      WHERE id = $1 AND claim_id = $2 AND status = 'processing'`, [row.id, row.claim_id, status]);
+      claim_id = NULL, lease_until = NULL, finished_at = clock_timestamp(), transport = $4, message_id = $5
+      WHERE id = $1 AND claim_id = $2 AND status = 'processing'`, [row.id, row.claim_id, status, receipt?.transport ?? null, receipt?.messageId ?? null]);
   }
 
-  async #fail(row: MessageRow, failure: Failure) {
-    const seconds = Math.min(900, 30 * 2 ** (row.attempts - 1));
-    await this.#pool.query(`UPDATE email_outbox SET failures = failures + 1, last_error = $3,
-      status = CASE WHEN expires_at <= clock_timestamp() THEN 'expired' WHEN attempts >= 8 THEN 'failed' ELSE 'pending' END,
-      payload = CASE WHEN expires_at <= clock_timestamp() OR attempts >= 8 THEN NULL ELSE payload END,
-      key_id = CASE WHEN expires_at <= clock_timestamp() OR attempts >= 8 THEN NULL ELSE key_id END,
-      finished_at = CASE WHEN expires_at <= clock_timestamp() OR attempts >= 8 THEN clock_timestamp() ELSE NULL END,
-      claim_id = NULL, lease_until = NULL, available_at = clock_timestamp() + $4 * interval '1 second'
-      WHERE id = $1 AND claim_id = $2 AND status = 'processing'`, [row.id, row.claim_id, failure, seconds]);
+  async #fail(row: MessageRow, failure: Failure, retryable = true) {
+    await transaction(this.#pool, async client => {
+      const current = (await client.query(`SELECT attempts, expires_at FROM email_outbox
+        WHERE id = $1 AND claim_id = $2 AND status = 'processing' FOR UPDATE`, [row.id, row.claim_id])).rows[0];
+      if (!current) return;
+      const now: Date = (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
+      // Choose one outcome under the claim lock so state and payload removal agree at expiry.
+      const status = current.expires_at <= now ? 'expired' : !retryable || current.attempts >= 8 ? 'failed' : 'pending';
+      const seconds = Math.min(900, 30 * 2 ** (current.attempts - 1));
+      await client.query(`UPDATE email_outbox SET failures = failures + 1, last_error = $4, status = $3,
+        payload = CASE WHEN $3 = 'pending' THEN payload ELSE NULL END,
+        key_id = CASE WHEN $3 = 'pending' THEN key_id ELSE NULL END,
+        finished_at = CASE WHEN $3 = 'pending' THEN NULL ELSE $6::timestamptz END,
+        claim_id = NULL, lease_until = NULL, available_at = $6::timestamptz + $5 * interval '1 second'
+        WHERE id = $1 AND claim_id = $2 AND status = 'processing'`, [row.id, row.claim_id, status, failure, seconds, now]);
+    });
   }
 
-  async status(): Promise<EmailDeliveryStatus> {
-    const rows = (await this.#pool.query(`SELECT status, count(*)::integer AS count, sum(attempts)::integer AS attempts,
-      sum(failures)::integer AS failures, min(created_at) AS oldest FROM email_outbox GROUP BY status`)).rows;
-    const result: EmailDeliveryStatus = { counts: {pending: 0, processing: 0, sent: 0, expired: 0, cancelled: 0, failed: 0}, attempts: 0, failures: 0, oldestPendingAt: null };
-    for (const row of rows) {
-      result.counts[row.status as Status] = row.count;
-      result.attempts += row.attempts; result.failures += row.failures;
-      if (['pending', 'processing'].includes(row.status) && (!result.oldestPendingAt || row.oldest.toISOString() < result.oldestPendingAt)) result.oldestPendingAt = row.oldest.toISOString();
-    }
-    return result;
+  async status(): Promise<EmailDeliveryStatus> { return emailDeliveryStatus(this.#pool); }
+}
+
+export async function emailDeliveryStatus(pool: Pool): Promise<EmailDeliveryStatus> {
+  const rows = (await pool.query(`SELECT status, count(*)::integer AS count, sum(attempts)::integer AS attempts,
+    sum(failures)::integer AS failures, min(created_at) AS oldest FROM email_outbox GROUP BY status`)).rows;
+  const result: EmailDeliveryStatus = { counts: {pending: 0, processing: 0, sent: 0, expired: 0, cancelled: 0, failed: 0}, attempts: 0, failures: 0, oldestPendingAt: null };
+  for (const row of rows) {
+    result.counts[row.status as Status] = row.count;
+    result.attempts += row.attempts; result.failures += row.failures;
+    if (['pending', 'processing'].includes(row.status) && (!result.oldestPendingAt || row.oldest.toISOString() < result.oldestPendingAt)) result.oldestPendingAt = row.oldest.toISOString();
   }
+  return result;
 }

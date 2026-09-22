@@ -1,5 +1,6 @@
 import type { SignupMailer } from './signup.ts';
 import type { PasswordRecoveryMailer } from './password-recovery.ts';
+import { accountMail, type AccountMailKind } from './account-mail.ts';
 import type { AccountEmail } from './account-input.ts';
 import nodemailer from 'nodemailer';
 
@@ -22,17 +23,13 @@ export function createLocalAccountMailer(options: {port?: number; portalOrigin?:
     // SMTP errors can contain recipients or secrets; expose only a fixed diagnostic.
     catch { throw new Error('Local email delivery failed'); }
   };
-  const action = (message: AccountEmail, path: string, subject: string) => {
-    const link = new URL(path, origin);
-    link.searchParams.set('token', message.token);
-    return send(message.email, subject, [subject, '', link.href, '',
-      `This single-use link expires at ${message.expiresAt}.`,
-      'If you did not request this email, you can ignore it.'].join('\n'));
+  const action = (kind: AccountMailKind, message: AccountEmail | {email: string}) => {
+    const rendered = accountMail(origin, kind, message);
+    return send(message.email, rendered.subject, rendered.text);
   };
   return {
-    sendVerification: message => action(message, '/signup', 'Verify your Waitron Cloud email'),
-    sendPasswordReset: message => action(message, '/reset-password', 'Reset your Waitron Cloud password'),
-    sendPasswordChanged: message => send(message.email, 'Your Waitron Cloud password changed',
-      'Your Waitron Cloud password has changed. Existing sessions have ended.\nIf you did not make this change, request another password reset.'),
+    sendVerification: message => action('verification', message),
+    sendPasswordReset: message => action('password_reset', message),
+    sendPasswordChanged: message => action('password_changed', message),
   };
 }

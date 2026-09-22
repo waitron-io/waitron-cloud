@@ -31,7 +31,7 @@ See [registration development](packages/registration/README.md) for the trust bo
 migrations and test setup. The workspace packages are private. The [identity package](packages/identity/README.md)
 provides internal password sessions used for Cloud approval. The
 [signup backend](docs/cloud-signup-implementation.md) verifies email tokens and creates
-the first organisation and legal business. Live email delivery, public registration,
+the first organisation and legal business. Live provider setup, public registration,
 browser screens and service provisioning are still to be implemented.
 
 ## Local email inbox
@@ -52,10 +52,14 @@ this removes captured messages. Copy `.env.example` to `.env` to override local 
 The [password recovery backend](docs/password-recovery-implementation.md) changes
 passwords and revokes existing sessions atomically. `pnpm test` starts its own
 PostgreSQL and Mailpit containers on random ports and exercises real SMTP delivery
-without clearing your development inbox. Public HTTP routes and production email
-delivery remain separate work.
+without clearing your development inbox. Public HTTP routes and live provider configuration remain separate work.
 
 Account messages now use a [durable PostgreSQL queue](docs/email-delivery-implementation.md).
 After configuring your database and persistent encryption key, run `pnpm mail:worker`
 to deliver pending mail to Mailpit, or `pnpm mail:status` to inspect delivery counts.
 The preview command remains independent of the database.
+
+For an approved production relay, select `CLOUD_MAIL_TRANSPORT=smtp` and configure
+TLS, authentication and your sender using the [production email guide](docs/production-email-implementation.md).
+Spain is the preferred email-processing location. The adapter is implemented and tested
+against a local TLS server; no live provider account or sender is configured.

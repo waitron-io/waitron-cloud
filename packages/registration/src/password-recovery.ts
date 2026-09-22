@@ -1,12 +1,13 @@
 import type { Pool } from 'pg';
 import { createHash, randomBytes } from 'node:crypto';
 import { hashSecret } from '@waitron-cloud/identity';
+import type { EmailDeliveryContext, EmailDeliveryReceipt } from './email-delivery.ts';
 import type { EmailOutbox } from './email-outbox.ts';
 import { transaction } from './transaction.ts';
 import { normaliseEmail, validNewPassword, type AccountEmail } from './account-input.ts';
 export interface PasswordRecoveryMailer {
-  sendPasswordReset(message: AccountEmail): Promise<void>;
-  sendPasswordChanged(message: {email: string}): Promise<void>;
+  sendPasswordReset(message: AccountEmail, context?: EmailDeliveryContext): Promise<void | EmailDeliveryReceipt>;
+  sendPasswordChanged(message: {email: string}, context?: EmailDeliveryContext): Promise<void | EmailDeliveryReceipt>;
 }
 export class PasswordRecoveryError extends Error {
   readonly code: 'recovery_invalid' | 'reset_unavailable';
