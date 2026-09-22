@@ -19,7 +19,7 @@ account's current registration permission in PostgreSQL when approving and compl
 
 The [identity package](../identity/README.md) now supplies password sessions and
 explicit platform permission checks, adapted from `pre-sqlite-migration`. The public
-web adapter, password recovery, additional authentication factors and platform role
+web adapter, additional authentication factors and platform role
 catalogue remain to be implemented.
 
 ## Cloud account signup
@@ -60,11 +60,46 @@ pnpm test
 ```
 
 They exercise signup, login, concurrent links, delivery failure and a fresh-process
-completion. Live email delivery and HTTP routes are not connected. The
+completion. Mailpit now captures local SMTP delivery; production email and HTTP routes
+are not connected. The
 [signup plan](../../docs/cloud-signup-implementation.md) records the public deployment
 gates. `email_verified_at` records proof for this flow; the older trusted provisioning
 path owns its verification policy. `is_owner` records the initial customer owner and
 does not imply platform permission or introduce a full organisation role catalogue.
+
+## Password recovery
+
+Use `PasswordRecoveryStore(pool, mailer)`. The mailer implements `sendPasswordReset`
+with the same `{ email, token, expiresAt }` shape as signup and `sendPasswordChanged`
+with `{ email }`. `createLocalAccountMailer()` implements both stores' interfaces and
+delivers to Cloud's loopback-only Mailpit. See the [local inbox commands](../../README.md#local-email-inbox).
+
+`request(email)` returns `{ status: 'accepted' }` for eligible, unknown, disabled,
+unverified and passwordless accounts, during cooldown, and when delivery fails. Only
+enabled accounts with verified email and an existing password receive a reset link.
+Normalised addresses have a shared one-minute cooldown. Unknown addresses also have
+request records but no usable account binding. Public response timing and asynchronous
+delivery remain required HTTP integration work; this internal method awaits the mailer.
+
+`complete(token, newPassword)` returns `{ status: 'completed' }` after changing the
+password, consuming the token and ending all that account's sessions in one transaction.
+It does not issue a session. Sign in normally afterwards, including after a lost reply.
+Passwords follow signup's policy. `recovery_invalid` identifies invalid inputs;
+`reset_unavailable` covers unknown, expired, consumed or invalidated links and accounts
+that are no longer eligible. Account email, verification and permissions do not change.
+
+Reset links last 30 minutes. A password-hash fingerprint invalidates every earlier link
+after a password change, including resetting to the same password. Resending a request
+keeps live links usable. Completion checks the account's current email and verification,
+so an old link cannot change a different email's password or re-enable a disabled account.
+The account lock serialises completion with login; a login committed first is revoked,
+and an old-password login waiting behind reset must fail its credential recheck.
+
+Emails are sent after commit. Provider errors are dropped; the adapter owns sanitised
+diagnostics. Notification failure does not undo a completed reset. Define durable
+delivery, audit and cleanup for requests before deployment. Password reset is not MFA
+recovery. HTTP protections and recovery screens are covered in the
+[implementation plan](../../docs/password-recovery-implementation.md).
 
 ## State and completion
 
@@ -113,11 +148,11 @@ pnpm typecheck
 pnpm test
 ```
 
-The test command requires Docker. It starts PostgreSQL 18 on a random loopback port,
-creates a random test schema and removes its container and volume afterwards. It
+The test command requires Docker. It starts PostgreSQL 18 and Mailpit on random loopback
+ports, creates random test schemas and removes its containers and volumes afterwards. It
 never uses `DATABASE_URL`. To use your own disposable PostgreSQL instance, set
-`TEST_DATABASE_URL` and run `pnpm test:registration`; that command creates and drops
-only its randomly named test schema.
+`TEST_DATABASE_URL`, `MAILPIT_TEST_URL` and `MAILPIT_TEST_SMTP_PORT`, then run
+`pnpm test:registration`. Use a disposable inbox as well as a disposable database.
 
 Tests use independent database connections and observe blocked workers through
 `pg_stat_activity`. Separate Node processes prove that pending approvals and committed

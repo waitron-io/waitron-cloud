@@ -33,3 +33,24 @@ provides internal password sessions used for Cloud approval. The
 [signup backend](docs/cloud-signup-implementation.md) verifies email tokens and creates
 the first organisation and legal business. Live email delivery, public registration,
 browser screens and service provisioning are still to be implemented.
+
+## Local email inbox
+
+Use Mailpit to view signup, password-reset and password-change emails locally:
+
+```sh
+pnpm mail:up
+pnpm mail:demo
+```
+
+Open [the Cloud inbox](http://localhost:8125). SMTP listens on `127.0.0.1:1125`,
+so it can run alongside Waitron's Mailpit. The demo sends three preview messages;
+their sample links do not create accounts, and account screens are not served yet.
+No external delivery or relay is configured. Stop the inbox with `pnpm mail:down`;
+this removes captured messages. Copy `.env.example` to `.env` to override local ports.
+
+The [password recovery backend](docs/password-recovery-implementation.md) changes
+passwords and revokes existing sessions atomically. `pnpm test` starts its own
+PostgreSQL and Mailpit containers on random ports and exercises real SMTP delivery
+without clearing your development inbox. Public HTTP routes and production email
+delivery remain separate work.

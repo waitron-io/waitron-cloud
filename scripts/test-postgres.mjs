@@ -6,9 +6,14 @@ import { setTimeout as delay } from 'node:timers/promises';
 const name = `waitron-cloud-test-${randomUUID()}`;
 const password = randomUUID();
 let running = false;
+let mailRunning = false;
 let child;
 const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', timeout: 120_000 }).trim();
 function cleanup() {
+  if (mailRunning) {
+    docker('rm', '-f', '-v', `${name}-mail`);
+    mailRunning = false;
+  }
   if (running) {
     docker('rm', '-f', '-v', name);
     running = false;
@@ -37,9 +42,24 @@ try {
   }
   if (!ready) throw new Error('Test PostgreSQL did not become ready within 30 seconds');
   const port = docker('port', name, '5432/tcp').split(':').at(-1);
+  docker('run', '--detach', '--rm', '--name', `${name}-mail`, '--publish', '127.0.0.1::1025',
+    '--publish', '127.0.0.1::8025', '--env', 'MP_MAX_MESSAGE_SIZE=1', 'axllent/mailpit:v1.31.1');
+  mailRunning = true;
+  const smtpPort = docker('port', `${name}-mail`, '1025/tcp').split(':').at(-1);
+  const inboxPort = docker('port', `${name}-mail`, '8025/tcp').split(':').at(-1);
+  const inboxUrl = `http://127.0.0.1:${inboxPort}`;
+  let mailReady = false;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    try {
+      if ((await fetch(`${inboxUrl}/api/v1/messages`, { signal: AbortSignal.timeout(1000) })).ok) { mailReady = true; break; }
+    } catch { /* The container is still starting. */ }
+    await delay(500);
+  }
+  if (!mailReady) throw new Error('Test Mailpit did not become ready within 30 seconds');
   child = spawn('pnpm', ['test:packages'], {
     stdio: 'inherit',
-    env: { ...process.env, TEST_DATABASE_URL: `postgres://postgres:${password}@127.0.0.1:${port}/cloud_test` },
+    env: { ...process.env, TEST_DATABASE_URL: `postgres://postgres:${password}@127.0.0.1:${port}/cloud_test`,
+      MAILPIT_TEST_URL: inboxUrl, MAILPIT_TEST_SMTP_PORT: smtpPort },
   });
   process.exitCode = await new Promise((resolve, reject) => {
     child.once('error', reject);

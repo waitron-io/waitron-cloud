@@ -11,7 +11,10 @@
     "test": "node scripts/test-postgres.mjs",
     "test:registration": "pnpm --filter @waitron-cloud/registration test",
     "db:migrate": "pnpm --filter @waitron-cloud/registration db:migrate",
-    "test:packages": "pnpm -r --workspace-concurrency=1 test"
+    "test:packages": "pnpm -r --workspace-concurrency=1 test",
+    "mail:up": "docker compose up -d --wait mailpit",
+    "mail:down": "docker compose down",
+    "mail:demo": "node --env-file-if-exists=.env packages/registration/src/mail-demo.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

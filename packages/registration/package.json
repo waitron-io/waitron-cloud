@@ -9,10 +9,12 @@
     "db:migrate": "node src/migrate-cli.ts"
   },
   "dependencies": {
-    "pg": "^8.23.0",
-    "@waitron-cloud/identity": "workspace:*"
+    "@waitron-cloud/identity": "workspace:*",
+    "nodemailer": "^10.0.10",
+    "pg": "^8.23.0"
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1"
   }
 }
