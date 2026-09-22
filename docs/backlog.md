@@ -20,7 +20,7 @@ selects the first service to build.
 | Provider support | Design for AWS and Google Cloud; choose the first provider and the evidence needed to support the second. Decide separately whether cross-provider failover is wanted. |
 | Product packages | Choose services, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
 | Usage policy | Define lookup and other usage units, customer visibility, allowances and excess-use behaviour. Decide which measurements affect pricing and how retries, failed calls, cached results and batches count. |
-| Waitron boundary | Signup inside Waitron, distinct Cloud and local staff logins, explicit identity linking and an independent Cloud portal are agreed. Define ownership proof, linking permissions, already-linked venue handling, configuration, credentials, status and version compatibility. |
+| Waitron boundary | Signup inside Waitron, distinct Cloud and local staff logins, explicit identity linking and an independent Cloud portal are agreed. Venue linking requires Cloud permission to add venues and local administrator approval; one person or different people may provide them. Define the approval exchange, ownership proof, already-linked venue handling, configuration, credentials, status and version compatibility. |
 | Recovery promise | Specify tolerated data loss, recovery time and promotion authority for each service. Existing Waitron designs use human promotion; automation is not approved by this discussion. |
 
 ## Platform work to scope
@@ -37,7 +37,9 @@ selects the first service to build.
   services, usage accounting, trials, failed payment and cancellation.
 - **Venue and node registration.** Implement the agreed signup from Waitron, creating
   a new customer's organisation and first legal business from confirmed details.
-  Verify Cloud permissions and local authority before linking a venue. Define handling
+  Require Cloud approval from someone permitted to add venues and local administrator
+  approval before linking. Support both approvals from one person or from different
+  people, verifying each person's authority for their side. Define handling
   for existing links, machine identities, credential renewal, replacement and revocation.
 - **Provisioning and placement.** Country/provider/cell registry, repeatable resource
   creation, recovery from partial failures, capacity and customer movement.

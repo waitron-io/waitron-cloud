@@ -236,9 +236,16 @@ Agreed journey for connecting your first venue:
 2. Create a Cloud login or sign into an existing one.
 3. If you are a new customer, create your organisation and first legal business,
    using details from Waitron for you to confirm.
-4. Approve linking this venue. Cloud verifies both your Cloud permissions and your
-   authority over the local installation.
+4. Obtain approval from someone permitted to add venues to the Cloud organisation
+   and from an administrator of the local Waitron installation. Cloud verifies both
+   approvals before linking the venue.
 5. Choose services and follow setup progress inside Waitron.
+
+Confirmed linking policy: the same person can provide both approvals when they have
+both permissions, or different people can approve their respective sides. For example,
+a group owner can approve adding a venue to the organisation while a venue manager
+approves the local connection. This lets you delegate setup without giving either
+person the other's permissions. The approval exchange remains to be designed.
 
 The separate Cloud portal lets you manage services and recovery when your on-prem
 server is unavailable. Its login and account recovery must work independently of
