@@ -133,7 +133,8 @@ export class EmailWorker {
           controller.abort();
         }, this.#timeout);
       })]);
-      if (receipt && (receipt.transport !== 'smtp' || typeof receipt.messageId !== 'string' || !/^<[A-Za-z0-9._-]+@[A-Za-z0-9.-]+>$/.test(receipt.messageId) || receipt.messageId.length > 512)) throw new EmailDeliveryError('delivery_failed');
+      // Delivery succeeded; discard invalid optional metadata without sending the message again.
+      if (receipt && (receipt.transport !== 'smtp' || typeof receipt.messageId !== 'string' || !/^<[A-Za-z0-9._-]+@[A-Za-z0-9.-]+>$/.test(receipt.messageId) || receipt.messageId.length > 512)) receipt = undefined;
     } catch (error) {
       await this.#fail(claim, error instanceof EmailDeliveryError ? error.code : 'delivery_failed',
         !(error instanceof EmailDeliveryError) || error.retryable);

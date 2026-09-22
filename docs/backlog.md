@@ -161,6 +161,8 @@ the credential and revocation rules still to be defined.
   now uses verified TLS and authentication, closes timed-out/cancelled sockets, classifies
   retryable/permanent failures and stores stable Message-IDs on acceptance. Production
   requires explicit relay configuration; status checks need only database access.
+  Invalid optional receipt metadata is discarded after a successful send, avoiding
+  a repeat delivery; local tests cover cancellation before the socket opens.
   Prefer Spain for administrative email processing. SES has no Spain endpoint in the
   checked endpoint list; Acumbamail is a Madrid-hosted candidate, not a selected account.
   Next, select the provider and verify its processing locations, retention and tracking

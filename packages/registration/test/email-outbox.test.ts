@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { execFileSync } from 'node:child_process';
 import { after, before, beforeEach, test } from 'node:test';
 import { Pool } from 'pg';
-import { EmailDeliveryError, type EmailDeliveryContext } from '../src/email-delivery.ts';
+import { EmailDeliveryError, type EmailDeliveryContext, type EmailDeliveryReceipt } from '../src/email-delivery.ts';
 import { EmailOutbox, EmailWorker } from '../src/email-outbox.ts';
 import { SignupStore } from '../src/signup.ts';
 import { PasswordRecoveryStore } from '../src/password-recovery.ts';
@@ -374,4 +374,23 @@ test('status command works in production without delivery credentials or encrypt
   for (const key of ['CLOUD_EMAIL_KEYS', 'CLOUD_EMAIL_ACTIVE_KEY_ID', 'CLOUD_SMTP_PASSWORD', 'CLOUD_SMTP_USER', 'CLOUD_SMTP_HOST']) delete env[key as keyof typeof env];
   const output = execFileSync(process.execPath, ['src/email-worker-cli.ts', '--status'], {env, encoding: 'utf8', timeout: 10000, stdio: ['ignore', 'pipe', 'pipe']});
   assert.equal(JSON.parse(output).counts.pending, 0);
+});
+
+
+test('an accepted send with malformed receipt metadata finishes without retrying or retaining it', async () => {
+  for (const receipt of [
+    {transport: 'smtp', messageId: 'invalid receipt'},
+    {transport: 'unknown', messageId: '<id@example.test>'},
+    {transport: 'smtp', messageId: `<${'x'.repeat(520)}@example.test>`},
+  ]) {
+    await clean(); await enqueue(); let sends = 0;
+    const accepted = new EmailWorker(pool, outbox, {...mailer, async sendVerification() {
+      sends++; return receipt as EmailDeliveryReceipt;
+    }});
+    await accepted.runOnce(); await due(); await accepted.runOnce();
+    const record = await row();
+    assert.equal(record.status, 'sent'); assert.equal(sends, 1);
+    assert.equal(record.transport, null); assert.equal(record.message_id, null);
+    assert.equal(record.payload, null); assert.equal(record.failures, 0);
+  }
 });

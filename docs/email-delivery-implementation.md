@@ -69,7 +69,7 @@ pnpm mail:worker
 ```
 
 The worker polls once a second when idle and finishes its current attempt on SIGINT
-or SIGTERM. Development defaults to the local Mailpit adapter. Production requires explicit
+or SIGTERM. Development defaults to the local Mailpit adapter, which refuses production mode. Production requires explicit
 SMTP configuration; see the [production guide](production-email-implementation.md).
 You can process at most one due message with `pnpm mail:worker --once`, or print a
 JSON summary with `pnpm mail:status`. Status needs only `DATABASE_URL`, without

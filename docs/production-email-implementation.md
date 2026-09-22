@@ -69,6 +69,8 @@ configuration failures exit nonzero. No automatic fallback to another relay occu
 
 The worker supplies the queue ID and an abort signal to the adapter. It saves the
 SMTP Message-ID on acceptance, then removes the encrypted recipient and token.
+A successful adapter response with malformed optional receipt metadata still
+finishes the message as sent, discarding the receipt to avoid a duplicate send.
 A permanent SMTP rejection stops retries. Temporary responses, connection failures
 and authentication/certificate errors retry within the queue's existing limits.
 Correct configuration before the attempts or token lifetime run out. Terminal

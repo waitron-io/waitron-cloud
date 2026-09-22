@@ -8,6 +8,8 @@ import { createServer as createTlsServer, type TLSSocket } from 'node:tls';
 import { inspect, promisify } from 'node:util';
 import { after, before, test } from 'node:test';
 import { Pool } from 'pg';
+import nodemailer from 'nodemailer';
+import { setTimeout as delay } from 'node:timers/promises';
 import { EmailOutbox } from '../src/email-outbox.ts';
 import { SignupStore } from '../src/signup.ts';
 import { migrate } from '../src/migrate.ts';
@@ -40,9 +42,10 @@ async function server(options: SMTPServerOptions = {}) {
         to: session.envelope.rcptTo.map(to => to.address), from: session.envelope.mailFrom && session.envelope.mailFrom.address || ''}); callback();});
     }, ...options});
   smtp.on('error', () => {});
+  let connections = 0; smtp.server.on('connection', () => {connections++;});
   await new Promise<void>(resolve => smtp.listen(0, '127.0.0.1', resolve));
   const address = smtp.server.address(); assert.ok(address && typeof address !== 'string');
-  return {data, port: address.port, close: () => new Promise<void>(resolve => smtp.close(resolve))};
+  return {data, get connections() {return connections;}, port: address.port, close: () => new Promise<void>(resolve => smtp.close(resolve))};
 }
 const readable = (raw: string) => raw.replace(/=\r\n/g, '').replace(/=3D/g, '=');
 
@@ -84,12 +87,12 @@ test('untrusted TLS certificates fail closed without sending mail', async () => 
 test('SMTP response classes become fixed errors with no recipient, token or provider detail', async () => {
   for (const [responseCode, code, retryable] of [[451, 'delivery_deferred', true], [550, 'delivery_rejected', false]] as const) {
     const content = message();
-    const smtp = await server({onRcptTo(_address, _session, callback) { callback(Object.assign(new Error(`private ${content.token} ${content.email}`), {responseCode})); }});
+    const smtp = await server({onRcptTo(_address, _session, callback) { callback(Object.assign(new Error(`relay-private-diagnostic:${content.token} ${content.email}`), {responseCode})); }});
     try {
       await assert.rejects(createSmtpAccountMailer({...base, port: smtp.port}, {ca: cert}).sendVerification(content, context()), error => {
         assert.ok(error && typeof error === 'object');
         assert.equal((error as {code: string}).code, code); assert.equal((error as {retryable: boolean}).retryable, retryable);
-        for (const secret of [content.token, content.email, base.password, 'private']) assert.ok(!inspect(error).includes(secret));
+        for (const secret of [content.token, content.email, base.password, 'relay-private-diagnostic:']) assert.ok(!inspect(error).includes(secret));
         return true;
       });
       assert.equal(smtp.data.length, 0);
@@ -149,13 +152,17 @@ test('a trusted certificate for a different hostname is rejected', async () => {
 });
 
 test('production requires explicit SMTP selection and never falls back to local delivery', () => {
-  for (const mode of [undefined, 'local', 'unknown']) {
-    assert.throws(() => configuredAccountMailer({NODE_ENV: 'production', CLOUD_MAIL_TRANSPORT: mode}),
-      {message: 'Invalid email transport configuration'});
-  }
-  assert.throws(() => configuredAccountMailer({NODE_ENV: 'production', CLOUD_MAIL_TRANSPORT: 'smtp'}),
-    {message: 'Invalid production mail configuration'});
-  assert.ok(configuredAccountMailer({}).sendVerification);
+  const original = process.env;
+  try {
+    for (const mode of [undefined, 'local', 'unknown']) {
+      process.env = {NODE_ENV: 'production', ...(mode === undefined ? {} : {CLOUD_MAIL_TRANSPORT: mode})};
+      assert.throws(() => configuredAccountMailer(), {message: 'Invalid email transport configuration'});
+    }
+    process.env = {NODE_ENV: 'production', CLOUD_MAIL_TRANSPORT: 'smtp'};
+    assert.throws(() => configuredAccountMailer(), {message: 'Invalid production mail configuration'});
+    process.env = {};
+    assert.ok(configuredAccountMailer().sendVerification);
+  } finally {process.env = original;}
 });
 
 test('production CLI delivers queued signup through authenticated TLS and records its receipt', {skip: !process.env.TEST_DATABASE_URL}, async () => {
@@ -197,5 +204,41 @@ test('production CLI delivers queued signup through authenticated TLS and record
     }
   } finally {
     await smtp.close(); await pool.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end();
+  }
+});
+
+
+test('cancelling during message preparation prevents a later SMTP connection', async t => {
+  const smtp = await server();
+  const original = nodemailer.createTransport;
+  let finishPreparation!: () => void;
+  let prepared!: () => void;
+  const preparation = new Promise<void>(resolve => {prepared = resolve;});
+  t.mock.method(nodemailer, 'createTransport', (options: Parameters<typeof original>[0]) => {
+    const transport = original(options);
+    transport.use('compile', (_mail, callback) => {finishPreparation = callback; prepared();});
+    return transport;
+  });
+  const cancel = new AbortController();
+  try {
+    const sending = assert.rejects(createSmtpAccountMailer({...base, port: smtp.port}, {ca: cert})
+      .sendVerification(message(), {deliveryId: randomUUID(), signal: cancel.signal}), {code: 'delivery_timeout'});
+    await preparation; cancel.abort(); await sending;
+    finishPreparation(); await delay(100);
+    assert.equal(smtp.connections, 0);
+  } finally { await smtp.close(); }
+});
+
+test('malformed recipients are rejected before connecting to SMTP', async () => {
+  for (const email of ['bad\r\nBcc: leak@example.test', 'Owner@EXAMPLE.TEST', 'not an email']) {
+    await assert.rejects(createSmtpAccountMailer(base).sendVerification({...message(), email}), {code: 'delivery_rejected'});
+  }
+});
+
+test('a successful transport reply must accept exactly one recipient without rejections', async t => {
+  for (const result of [{accepted: [], rejected: []}, {accepted: ['owner@example.test'], rejected: ['another@example.test']}]) {
+    t.mock.method(nodemailer, 'createTransport', () => ({async sendMail() {return result;}, close() {}}));
+    await assert.rejects(createSmtpAccountMailer(base).sendVerification(message()), {code: 'delivery_rejected'});
+    t.mock.restoreAll();
   }
 });

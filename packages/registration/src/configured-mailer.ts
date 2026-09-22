@@ -1,6 +1,7 @@
 import { createLocalAccountMailer } from './local-mailer.ts';
 import { createSmtpAccountMailer } from './smtp-mailer.ts';
-export function configuredAccountMailer(env: NodeJS.ProcessEnv = process.env) {
+export function configuredAccountMailer() {
+  const env = process.env;
   const mode = env.CLOUD_MAIL_TRANSPORT ?? (env.NODE_ENV === 'production' ? undefined : 'local');
   if (mode === 'smtp') return createSmtpAccountMailer({host: env.CLOUD_SMTP_HOST ?? '',
     port: Number(env.CLOUD_SMTP_PORT ?? 465), user: env.CLOUD_SMTP_USER ?? '', password: env.CLOUD_SMTP_PASSWORD ?? '',
