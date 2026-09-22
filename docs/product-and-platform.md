@@ -2,8 +2,9 @@
 
 Status: brainstorm, 2026-09-22. The product requirements below come from the owner.
 The platform structure and customer model include proposals for discussion; confirmed
-requirements are identified below. No service, deployment architecture, pricing or
-implementation order has been approved.
+requirements are identified below. Remote access and backups are the agreed initial
+services. Their detailed scope, deployment architecture, pricing and implementation
+sequence remain to be decided.
 
 ## The product
 
@@ -23,7 +24,9 @@ country imposes the same legal storage obligation.
 
 ## Services a venue can buy
 
-This is a catalogue of candidates, not a build order or a set of subscription plans.
+Remote access and backups are selected as the initial services. The wider catalogue
+below describes possible scope; it does not set subscription plans or commit every
+listed capability to the initial release.
 The complete earlier inventory is in the [service inventory](reference/2026-08-29-cloud-services-inventory.md).
 
 | Service family | What you get |
@@ -44,6 +47,23 @@ The older inventory also records excluded or conditional ideas. Hardware fulfilm
 operating mailboxes and a booking marketplace should not silently become commitments
 through this list. Pricing, support scope and operating costs need their own decisions.
 
+## Initial product focus
+
+Design the first experience for an owner with one venue, or several venues in the
+same city. You connect your venue, enable remote access and backups, and can see
+whether those services are working. Adding another venue should follow the same
+simple flow.
+
+The proposed first release lets you reach Waitron remotely and protects your data
+with automatic backups, visible backup health and a tested restore path. Decide the
+remote pages and users in scope, backup retention and restore experience next.
+The exact balance of continuous backup and retained snapshots remains to be scoped.
+
+Keep the underlying organisation and legal-business model able to represent larger
+customers from the outset. Detailed international administration, separate-approver
+workflows and ownership transfers can be designed when needed; they should not
+complicate the usual owner-led setup.
+
 ## Proposed customer and identity model
 
 Start with a business account that subscribes and pays, people who belong to it, and
@@ -54,6 +74,9 @@ different tax identities, potentially across countries, from the beginning. Most
 customers will have one legal business. The agreed signup should create the simple
 structure for you and expose additional businesses only when you need them. A venue
 would belong to a legal business, which would belong to an organisation.
+
+Confirmed requirement: a venue belongs to one Cloud organisation at a time. The
+process for transferring a venue between organisations remains future design work.
 
 A person could manage several businesses, and a business could give an accountant,
 manager or other member different access to different venues. A cloud account,
@@ -241,11 +264,11 @@ Agreed journey for connecting your first venue:
    approvals before linking the venue.
 5. Choose services and follow setup progress inside Waitron.
 
-Confirmed linking policy: the same person can provide both approvals when they have
-both permissions, or different people can approve their respective sides. For example,
-a group owner can approve adding a venue to the organisation while a venue manager
-approves the local connection. This lets you delegate setup without giving either
-person the other's permissions. The approval exchange remains to be designed.
+The usual case is one owner who has both permissions. Present connecting the venue
+as one action while verifying both permissions underneath. Confirmed linking policy
+also allows different people to approve their respective sides. The detailed flow
+for separate approvers can wait until needed; it is not a requirement to make the
+initial signup more elaborate.
 
 The separate Cloud portal lets you manage services and recovery when your on-prem
 server is unavailable. Its login and account recovery must work independently of
@@ -282,5 +305,5 @@ of a venue already connected to an organisation remain implementation decisions.
   The [shared gateway handoff](reference/2026-09-21-cloud-ingress-wireguard-gateway-design.md)
   and [earlier decision](reference/2026-09-05-relay-decision.md) are not reconciled.
 
-Use the [backlog](backlog.md) to track these decisions and the eventual implementation
-slices. No first service has been selected by this brainstorm.
+Use the [backlog](backlog.md) to track these decisions and the implementation slices
+for the initial remote access and backup services.

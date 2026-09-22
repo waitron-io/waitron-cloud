@@ -6,19 +6,30 @@ Waitron's backlog owns the on-prem application and its side of the integration.
 
 Start with the [product discussion](product-and-platform.md). The
 [inherited inventory](reference/2026-08-29-cloud-services-inventory.md) holds the wider
-candidate list and previous commercial reasoning. Neither this list nor its order
-selects the first service to build.
+candidate list and previous commercial reasoning. Remote access and backups are the
+agreed initial services; their detailed scope and implementation sequence remain open.
+
+## Initial focus
+
+- Build around one owner connecting one venue, or adding several venues in the same
+  city. Keep the usual connection flow to one action that verifies both Cloud and
+  local permissions.
+- Scope remote access and backups together with visible service health. Define the
+  remote pages and users covered, backup retention and the restore experience.
+- Keep support for multiple legal businesses and countries in the underlying model.
+  Detailed international administration, separate-approver workflows and ownership
+  transfers can wait until needed. Each venue belongs to one organisation at a time.
 
 ## Decisions in progress
 
 | Decision | Next step |
 | --- | --- |
-| Customer model | Support an organisation with several legal businesses and tax identities across countries from the outset. Agree the remaining relationships between people, organisations, businesses, venues and nodes, keeping signup simple for a single business. |
+| Customer model | Support an organisation with several legal businesses and tax identities across countries from the outset. A venue belongs to one organisation at a time. Focus signup on one owner with one venue or several venues in the same city; defer the ownership-transfer workflow. |
 | Cloud staff access | Customer-approved, time-limited support access and an explicitly authorised, audited emergency route are agreed. Define platform roles, eligible approvers, grant scope and enforcement. Possible on-prem SSH support requires separate, explicit customer approval for a limited period. |
 | Residency | Define the country policy for operational data, backups, archives, analytics, identities, logs and messages; identify supported launch countries. Verify actual obligations for each market before making customer promises. |
 | Cells | Choose the customer placement unit, group size and availability-zone layout. Define acceptable shared dependencies, movement and staged rollout. |
 | Provider support | Design for AWS and Google Cloud; choose the first provider and the evidence needed to support the second. Decide separately whether cross-provider failover is wanted. |
-| Product packages | Choose services, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
+| Product packages | Remote access and backups are the initial services. Define their release scope, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
 | Usage policy | Define lookup and other usage units, customer visibility, allowances and excess-use behaviour. Decide which measurements affect pricing and how retries, failed calls, cached results and batches count. |
 | Waitron boundary | Signup inside Waitron, distinct Cloud and local staff logins, explicit identity linking and an independent Cloud portal are agreed. Venue linking requires Cloud permission to add venues and local administrator approval; one person or different people may provide them. Define the approval exchange, ownership proof, already-linked venue handling, configuration, credentials, status and version compatibility. |
 | Recovery promise | Specify tolerated data loss, recovery time and promotion authority for each service. Existing Waitron designs use human promotion; automation is not approved by this discussion. |
@@ -38,8 +49,9 @@ selects the first service to build.
 - **Venue and node registration.** Implement the agreed signup from Waitron, creating
   a new customer's organisation and first legal business from confirmed details.
   Require Cloud approval from someone permitted to add venues and local administrator
-  approval before linking. Support both approvals from one person or from different
-  people, verifying each person's authority for their side. Define handling
+  approval before linking. Start with one owner providing both approvals in a single
+  action. Preserve the policy allowing different approvers; design that workflow when
+  needed. Enforce one organisation per venue. Define handling
   for existing links, machine identities, credential renewal, replacement and revocation.
 - **Provisioning and placement.** Country/provider/cell registry, repeatable resource
   creation, recovery from partial failures, capacity and customer movement.
@@ -59,12 +71,12 @@ selects the first service to build.
 - **Data lifecycle.** Retention, restore checks, export, deletion and access review;
   define what survives subscription termination and for how long.
 
-## Service candidates
+## Initial services and future candidates
 
 | Service | Design work still needed |
 | --- | --- |
-| Remote access | Reconcile the shared gateway handoff with the per-venue endpoint decision; define tunnels, domains, TLS termination and customer isolation. |
-| Continuous backup | Provision scoped storage access for Litestream, surface freshness and interruption, define retention and test restore against each provider. |
+| Remote access (initial) | Define the remote pages and users in scope. Reconcile the shared gateway handoff with the per-venue endpoint decision; define tunnels, domains, TLS termination and customer isolation. |
+| Backups (initial) | Scope continuous backup and retained snapshots. Provision scoped storage access for Litestream, surface freshness and interruption, define retention and test restore against each provider selected for launch. |
 | SQLite snapshots | Define scheduled and retained recovery points, consistency, customer restore controls and relation to the continuous stream. |
 | Failover to cloud | Allocate a replacement instance, coordinate promotion with Waitron, connect devices, stream the new primary and support return to the venue. |
 | Hosted Waitron | Provision isolated operational instances, local print connectivity, upgrades, capacity and cloud-only recovery. |
