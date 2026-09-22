@@ -17,6 +17,9 @@ agreed initial services; their detailed scope and implementation sequence remain
 - Remote access covers owners and staff plus customer-facing pages such as menus
   and bookings. Define route permissions and behaviour when the venue is offline.
   Scope backups alongside visible service health, retention and the restore experience.
+- Filter bots and abusive traffic in Cloud before forwarding requests to on-prem
+  servers. Scope request-rate and concurrency limits per venue, prevent bypass routes,
+  and monitor rejected traffic and false positives across staff and public access.
 - Keep support for multiple legal businesses and countries in the underlying model.
   Detailed international administration, separate-approver workflows and ownership
   transfers can wait until needed. Each venue belongs to one organisation at a time.
@@ -76,7 +79,7 @@ agreed initial services; their detailed scope and implementation sequence remain
 
 | Service | Design work still needed |
 | --- | --- |
-| Remote access (initial) | Include owner/staff access and customer-facing menus and booking pages. Define route permissions and offline behaviour. Reconcile the shared gateway handoff with the per-venue endpoint decision; define tunnels, domains, TLS termination and customer isolation. |
+| Remote access (initial) | Include owner/staff access and customer-facing menus and booking pages. Require bot/abuse protection before requests reach on-prem servers; choose the provider, traffic limits and handling of legitimate automated clients. Define route permissions and offline behaviour. Reconcile the shared gateway handoff with the per-venue endpoint decision; define tunnels, domains, TLS termination and customer isolation. |
 | Backups (initial) | Scope continuous backup and retained snapshots. Provision scoped storage access for Litestream, surface freshness and interruption, define retention and test restore against each provider selected for launch. |
 | SQLite snapshots | Define scheduled and retained recovery points, consistency, customer restore controls and relation to the continuous stream. |
 | Failover to cloud | Allocate a replacement instance, coordinate promotion with Waitron, connect devices, stream the new primary and support return to the venue. |

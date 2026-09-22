@@ -59,6 +59,17 @@ and customers reaching public pages such as menus and bookings. The proposed acc
 model preserves Waitron's permissions for staff and exposes the intended public pages
 to customers. Define the exact routes and behaviour when the venue is offline.
 
+Confirmed requirement: remote access must include bot and traffic-abuse protection
+in Cloud, before requests reach your on-prem server. This covers staff access and
+public pages. The proposed controls combine bot filtering with limits on request
+rates and simultaneous requests per venue, so even traffic that passes the bot
+filter cannot consume unlimited local capacity. Challenge suspicious browser traffic
+where appropriate and define suitable handling for legitimate automated clients.
+
+Choose the protection service and its relationship to TLS termination when designing
+the gateway. Prevent direct routes that bypass these controls, and monitor rejected
+traffic and false positives. The provider and exact limits remain to be selected.
+
 The proposed first release protects your data with automatic backups, visible backup
 health and a tested restore path. Decide backup retention and restore experience next.
 The exact balance of continuous backup and retained snapshots remains to be scoped.
@@ -185,7 +196,7 @@ service groups independently where their workload or failure boundary warrants i
 | Venue and node registry | Prove which account owns a venue and which machines act for it; enrol, replace, revoke and rotate credentials. |
 | Placement and provisioning | Create resources, allocate cells, track capacity and finish or undo interrupted operations without creating duplicates. |
 | Work execution | Durable background jobs, retries, schedules and progress for backups, restores, messages, reports and upgrades. |
-| Connectivity | Names, certificates, routing, tunnels and customer isolation. |
+| Connectivity | Names, certificates, routing, tunnels, customer isolation and bot/abuse protection before traffic reaches on-prem servers. |
 | Data lifecycle | Retention, restoration, export, deletion, encryption and audit of privileged access. |
 | Monitoring and usage metering | Service checks, performance, customer consumption, limits and cost attribution by venue, service and cell. |
 | Operations | Health, customer-visible incidents, resource and spend limits, release waves, pause controls and recovery procedures. |
