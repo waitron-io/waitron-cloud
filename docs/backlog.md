@@ -39,6 +39,10 @@ agreed initial services; their detailed scope and implementation sequence remain
   work on both LAN and internet paths. Define router-specific setup, address stability,
   resolver recovery and initial bootstrap. Test fresh local connections without internet.
   Google Wifi may require a local custom DNS service, adding a network-wide DNS dependency.
+- Evaluate Plex-style public DNS names resolving to private LAN addresses as an option
+  that can reduce customer configuration. Test certificate trust, local/remote address
+  selection and router rebinding protection. Require a verified offline connection
+  path after restart and DNS-cache expiry; local DNS overrides remain the preference.
 - Keep support for multiple legal businesses and countries in the underlying model.
   Detailed international administration, separate-approver workflows and ownership
   transfers can wait until needed. Each venue belongs to one organisation at a time.
