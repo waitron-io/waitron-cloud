@@ -68,3 +68,24 @@ test('expiry is checked after a contended lock and ignores the application clock
   assert.equal((await pending).allowed, true);
   assert.equal((await limiter.consume([{...rule, limit: 1}])).allowed, false);
 });
+test('cleanup skips a locked expired counter while a consumer waits, then preserves its new window', async () => {
+  await limiter.consume([rule]);
+  const key = (await db.pool.query('SELECT key FROM account_rate_limits')).rows[0].key;
+  await limiter.consume([{...rule, subject: '192.0.2.2'}]);
+  await db.pool.query("UPDATE account_rate_limits SET expires_at = clock_timestamp() - interval '1 second'");
+  const lock = await db.secondPool.connect();
+  await lock.query('BEGIN'); await lock.query('SELECT key FROM account_rate_limits WHERE key = $1 FOR UPDATE', [key]);
+  const pending = limiter.consume([rule]);
+  try {
+    // Bound the experiment so a cleanup lock wait fails instead of deadlocking fixture teardown.
+    const worker = await db.secondPool.connect();
+    try {
+      await worker.query('SET statement_timeout = 1000');
+      const cleanupPool = {query: worker.query.bind(worker)} as unknown as Pool;
+      assert.equal(await new AccountRateLimiter(cleanupPool, db.rateKey).prune(), 1);
+    } finally {await worker.query('RESET statement_timeout'); worker.release();}
+  } finally {await lock.query('COMMIT'); lock.release();}
+  assert.equal((await pending).allowed, true);
+  assert.equal(await limiter.prune(), 0);
+  assert.equal((await db.pool.query('SELECT attempts FROM account_rate_limits WHERE key = $1', [key])).rows[0].attempts, 1);
+});

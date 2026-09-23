@@ -76,7 +76,10 @@ test('HTTP signup and recovery through Mailpit preserve accounts, cookies and se
   }
   const headers = {cookie: session.header};
   const read = await request('/session', undefined, {headers}); assert.equal(read.status, 200);
-  const oldSeen = (await db.pool.query('SELECT last_seen_at FROM cloud_sessions')).rows[0].last_seen_at.getTime();
+  const storedSession = (await db.pool.query('SELECT created_at, last_seen_at, absolute_expires_at FROM cloud_sessions')).rows[0];
+  const oldSeen = storedSession.last_seen_at.getTime();
+  assert.equal(Date.parse((await read.json() as {expiresAt: string}).expiresAt), oldSeen + 30 * 60_000);
+  assert.ok(Math.abs(storedSession.absolute_expires_at.getTime() - storedSession.created_at.getTime() - 12 * 60 * 60_000) < 1000);
   await request('/session', undefined, {headers});
   assert.equal((await db.pool.query('SELECT last_seen_at FROM cloud_sessions')).rows[0].last_seen_at.getTime(), oldSeen);
   const activity = await request('/session/activity', {}, {headers: {...headers, 'x-csrf-token': session.csrf}});
@@ -226,4 +229,16 @@ test('suspension denies an existing HTTP session and the development cookie stay
   const response = await request('/login', {email: owner.email, password}, {target: dev, url: 'http://localhost:3000/api/account/login', headers: {origin: 'http://localhost:3000'}});
   assert.equal(response.status, 200);
   assert.ok(response.headers.getSetCookie().some(value => value.startsWith('cloud_session=') && value.includes('HttpOnly') && !value.includes('Secure')));
+});
+test('IP-blocked login requests cannot spend another account’s address allowance', async () => {
+  const owner = await account();
+  const otherApp = createAccountApp({pool: db.secondPool, outbox: db.outbox, config: config()});
+  const attempts = await Promise.all(Array.from({length: 31}, (_, i) => request('/login',
+    {email: i % 2 ? owner.email.toUpperCase() : owner.email, password: 'a wrong password'},
+    {peer: i % 2 ? '::ffff:203.0.113.8' : '203.0.113.8', target: i % 2 ? app : otherApp})));
+  assert.equal(attempts.filter(response => response.status === 401).length, 10);
+  assert.equal(attempts.filter(response => response.status === 429).length, 21);
+  const signedIn = await request('/login', {email: owner.email, password}, {peer: '198.51.100.4'});
+  assert.equal(signedIn.status, 200);
+  assert.deepEqual(await signedIn.json(), {accountId: owner.accountId});
 });

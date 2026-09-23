@@ -72,8 +72,9 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
       if ('password' in body && Buffer.byteLength(body.password!) > 1024) throw new AccountHttpError(400, 'invalid_input');
       if ('token' in body && !/^[A-Za-z0-9_-]{43}$/.test(body.token!)) throw new AccountHttpError(400, 'link_unavailable');
       if (path === '/login') {
-        await consume([{scope: 'login-ip', subject: ip, limit: 10, windowSeconds: 60},
-          {scope: 'login-email', subject: email!, limit: 30, windowSeconds: 900}]);
+        // IP-blocked traffic must not spend another person's shared email allowance.
+        await consume([{scope: 'login-ip', subject: ip, limit: 10, windowSeconds: 60}]);
+        await consume([{scope: 'login-email', subject: email!, limit: 30, windowSeconds: 900}]);
         const credentials = await transaction(pool, client => login(client, {email: email!, password: body.password!}));
         writeSessionCookies(c, secure, credentials);
         return c.json({accountId: credentials.accountId});

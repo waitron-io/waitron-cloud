@@ -92,6 +92,8 @@ Apply limits before password hashing or delivery enqueue. Start with these defau
 - Signup/reset completion: 10 attempts per 15 minutes per IP and per token for each route.
 
 Counters include successes and failures, independently of whether an account exists.
+Login checks the IP allowance before charging the email allowance, so traffic already
+refused by the IP limit cannot cheaply lock another person out of their account.
 A blocked request returns 429 with Retry-After. Fail closed with 503 if the limiter
 cannot use PostgreSQL. Store HMAC identifiers using a dedicated deployment key,
 not plaintext IPs, email addresses or tokens. Expired counters have bounded cleanup.

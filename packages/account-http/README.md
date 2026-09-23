@@ -131,7 +131,11 @@ PostgreSQL counters apply across all API instances and survive restarts:
 | Each signup/reset email-request route, per IP | 10 per 15 minutes |
 | Each signup/reset completion route, per IP and token | 10 per 15 minutes |
 
-Successes and failures both count. The existing shared per-address email cooldown
+Successes and failures both count once a request reaches a limit. Login checks the
+IP limit first; requests it refuses do not consume the email allowance. This prevents
+an already-blocked IP from spending another person's address allowance. Requests
+admitted by IP limits can still exhaust that address allowance, so distributed
+attacks also need the deployment's ingress controls. The existing shared per-address email cooldown
 is one minute. Login and email-request responses wait at least 300 ms after body
 reading; this reduces simple timing differences but does not guarantee equal timing
 under contention. Deployment load and timing checks remain required.

@@ -140,3 +140,19 @@ test('shutdown stops admission and bounds the socket drain while database work r
     await assert.rejects(blocked.result);
   } finally {await locker.query('ROLLBACK'); locker.release(); await (closing ?? running.close());}
 });
+test('connection resets during parser rejection do not crash the CLI or leak diagnostics', async () => {
+  const running = cli();
+  try {
+    const port = await running.ready();
+    await Promise.all(Array.from({length: 50}, () => new Promise<void>(resolve => {
+      const socket = connect(port, '127.0.0.1');
+      const deadline = setTimeout(() => socket.destroy(), 2000);
+      socket.on('error', () => {}); socket.on('close', () => {clearTimeout(deadline); resolve();});
+      socket.on('connect', () => socket.write(`GET /api/account/session HTTP/1.1\r\nHost: localhost\r\nX-Sentinel: private-header-${'x'.repeat(9000)}\r\n\r\n`, () => {
+        if (!socket.destroyed) socket.resetAndDestroy();
+      }));
+    })));
+    assert.equal((await send(port).result).status, 401);
+    const outcome = await running.stop(); assert.equal(outcome.code, 0); assert.equal(outcome.stderr, '');
+  } finally {if (running.child.exitCode === null) await running.stop();}
+});

@@ -186,6 +186,13 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   a 300 ms response floor to login/email requests, but deployment timing and load
   measurements must still assess account/cooldown differences under contention.
   Its rate key must be shared across instances; rotation starts new allowances.
+  Login now checks its IP allowance before charging the email allowance, so an
+  already-blocked IP cannot spend another person's address allowance. Admitted
+  attempts across IPs can still exhaust an address allowance; assess targeted
+  lockout mitigation with the public ingress policy before launch.
+  Test follow-up: add independent HTTP assertions for the 1024-byte password limit
+  and early declared Content-Length refusal. The underlying guards work; current
+  tests independently prove the streamed-body bound but not these early checks.
   Review the inherited password cost for deployment and apply the source map's
   security-fix process to both repositories. Further reuse should take code and
   behavioural tests from `pre-sqlite-migration`, pinned to
