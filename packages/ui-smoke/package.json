@@ -1,0 +1,13 @@
+{
+  "name": "@waitron-cloud/ui-smoke",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-timeout=120000 test.mjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright": "1.63.0"
+  }
+}
