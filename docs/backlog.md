@@ -145,9 +145,11 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   passes declaration, Chromium form, theme and accessibility checks. Both UI packages
   retain coverage and weekly mutation gates. The [approved design](superpowers/specs/2026-09-23-shared-ui-extraction-design.md)
   and [execution plan](superpowers/plans/2026-09-23-shared-ui-extraction.md) record the boundary.
-  Next, select and configure private distribution, publish a version and pin it in
-  Cloud's manifest and lockfile before building account screens. No package has been
-  published and Cloud does not depend on it yet. Read the first weekly mutation scores
+  The [release workflow](shared-ui-release.md) builds an exact Waitron commit and stages
+  a private `@waitron-io/ui-core` package under Cloud's permissions. Next, run its
+  first publication, verify private access, and pin the released version in Cloud's
+  manifest and lockfile with a browser smoke test before building account screens.
+  No package has been published and Cloud does not depend on it yet. Read the first weekly mutation scores
   after the split in Waitron; the extraction verifies the wiring and coverage, not the
   new full mutation scores.
 - **Identity and organisations.** Password helpers and management-session behaviours
