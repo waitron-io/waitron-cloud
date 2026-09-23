@@ -34,3 +34,9 @@ test('status carries no code or chosen business; completion requires both chosen
   assert.deepEqual(verify(proof(complete),origin,'complete'),complete);
   for(const key of ['organisationId','legalBusinessId']) assert.throws(()=>verify(proof({...complete,[key]:''}),origin,'complete'));
 });
+test('matches the fixed wire vector shared with the Waitron adapter',async()=>{
+  const {readFile}=await import('node:fs/promises');
+  const v=JSON.parse(await readFile(new URL('./pairing-vector.json',import.meta.url),'utf8'));
+  assert.equal(pairingPayload(v.claims).toString('base64url'),v.payload);
+  assert.deepEqual(verifyPairingProof(v.payload,v.signature,v.claims.origin,v.claims.action,v.claims.issuedAt),v.claims);
+});

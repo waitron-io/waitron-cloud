@@ -1,3 +1,4 @@
+import { PairingController } from './pairing-controller.ts';
 import { render } from 'lit';
 import { accountRequest } from './api.ts';
 import { captureLink, type CapturedLink } from './links.ts';
@@ -21,6 +22,7 @@ export class PortalApp {
   cooldownUntil = 0;
   cooldownOperation = '';
   session: PortalSession;
+  pairing: PairingController;
   #route = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
   constructor(root: HTMLElement) {
@@ -29,11 +31,13 @@ export class PortalApp {
     let saved: string | null = null;
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
     this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
+    this.pairing = new PairingController(() => this.draw());
+    this.pairing.open(this.link.requestId);
     this.session = this.#session();
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
-    document.addEventListener('keydown', event => { if (this.path === '/account') void this.session.activity(event); });
-    document.addEventListener('pointerdown', event => { if (this.path === '/account') void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.session.dispose(); clearTimeout(this.#timer); }, {once: true});
+    document.addEventListener('keydown', event => { if (['/account','/connect'].includes(this.path)) void this.session.activity(event); });
+    document.addEventListener('pointerdown', event => { if (['/account','/connect'].includes(this.path)) void this.session.activity(event); });
+    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -42,8 +46,10 @@ export class PortalApp {
   #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
+    this.pairing.account(state.kind === 'authenticated' ? state.accountId : undefined);
+    if (this.path === '/connect' && state.kind === 'authenticated' && !this.pairing.loaded) void this.pairing.load();
     if (this.path === '/' && state.kind === 'authenticated') this.navigate('/account');
-    else if ((this.path === '/' || this.path === '/account') && state.kind === 'anonymous') this.navigate('/login');
+    else if ((['/', '/account', '/connect'].includes(this.path)) && state.kind === 'anonymous') this.navigate('/login');
     else this.draw();
   }
   get copy() { return translations[this.locale]; }
@@ -55,6 +61,7 @@ export class PortalApp {
     return this.path;
   }
   get waiting() {
+    if (this.path === '/connect') return Math.max(this.pairing.waiting, Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)));
     const deadline = ['/', '/account'].includes(this.path) ? this.session.retryAt : this.cooldownOperation === this.operation ? this.cooldownUntil : 0;
     return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
   }
@@ -67,6 +74,7 @@ export class PortalApp {
   }
   title(): string {
     const c = this.copy;
+    if (this.path === '/connect') return c.connect;
     if (this.notice) return c[this.notice === 'signupReady' ? 'completeSignup' : this.notice === 'resetReady' ? 'reset' : 'login'];
     if (this.requested) return c.checkEmail;
     if (this.path === '/signup') return c[this.link.token ? 'completeSignup' : 'signup'];
@@ -78,19 +86,23 @@ export class PortalApp {
   navigate(path: string, push = true) {
     this.#route++; this.path = path;
     if (push) history.pushState(null, '', path);
-    this.link = this.#capture(); this.locale = this.link.locale ?? this.locale;
+    this.link = this.#capture();
+    if (this.link.requestId || this.link.invalid) this.pairing.open(this.link.requestId);
+    this.locale = this.link.locale ?? this.locale;
     this.fields = {email: '', password: '', legalBusinessName: '', organisationName: ''};
     this.errors = {}; this.error = undefined; this.notice = undefined; this.requested = false;
     this.pending = false; this.reveal = false; this.differentOrg = false;
     // Keep the cooldown across navigation so returning cannot bypass a Retry-After.
     this.draw(); this.focusHeading();
-    if (path === '/account' || path === '/') void this.session.check();
+    if (['/account','/','/connect'].includes(path)) void this.session.check();
   }
   follow(event: MouseEvent, path: string) {
     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault(); this.navigate(path);
   }
   readFields() {
+    const code = this.root.querySelector('wt-input[name="pairingCode"]')?.shadowRoot?.querySelector('input')?.value;
+    if (code !== undefined) this.pairing.code = code;
     for (const key of Object.keys(this.fields) as (keyof Fields)[]) {
       const value = this.root.querySelector(`wt-input[name="${key}"]`)?.shadowRoot?.querySelector('input')?.value;
       if (value !== undefined) this.fields[key] = value;
@@ -109,7 +121,13 @@ export class PortalApp {
       else this.root.querySelector<HTMLElement>('wt-form-error-summary')?.focus();
     });
   }
+  async submitPairing() {
+    this.readFields();
+    if (this.pairing.view) await this.pairing.approve(); else await this.pairing.inspect();
+    if (this.pairing.error) this.#focusErrors(); else this.focusHeading();
+  }
   async submit() {
+    if (this.path === '/connect') { await this.submitPairing(); return; }
     if (this.pending || this.waiting) return;
     this.readFields(); this.errors = {}; this.error = undefined;
     const f = this.fields;
@@ -139,7 +157,7 @@ export class PortalApp {
     if (route !== this.#route) return;
     this.pending = false;
     if (result.ok) {
-      if (path === '/login') { this.session.dispose(); this.session = this.#session(); this.navigate('/account'); return; }
+      if (path === '/login') { this.session.dispose(); this.session = this.#session(); this.navigate(this.pairing.requestId ? '/connect' : '/account'); return; }
       if (path.endsWith('/request')) { this.requested = true; this.cooldownOperation = this.operation; this.cooldownUntil = Date.now() + 60_000; }
       else { this.notice = path === '/signup/complete' ? 'signupReady' : 'resetReady'; this.link = {invalid: false}; this.fields.password = ''; }
     } else {
@@ -147,7 +165,7 @@ export class PortalApp {
       if (path === '/login' && (result.status === 0 || result.status === 503)) {
         this.session.dispose(); this.session = this.#session(); await this.session.check();
         if (route !== this.#route) return;
-        if (priorSession.kind === 'anonymous' && this.session.state.kind === 'authenticated') { this.navigate('/account'); return; }
+        if (priorSession.kind === 'anonymous' && this.session.state.kind === 'authenticated') { this.navigate(this.pairing.requestId ? '/connect' : '/account'); return; }
       }
       this.error = result.code === 'link_unavailable' ? 'linkUnavailable'
         : result.code === 'credentials_invalid' ? 'credentials'
@@ -156,8 +174,9 @@ export class PortalApp {
     }
     this.draw(); if (this.error) this.#focusErrors(); else this.focusHeading();
   }
+  get logoutWaiting() { return Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)); }
   async logout() {
-    if (this.pending || this.waiting) return;
+    if (this.pending || this.logoutWaiting || this.pairing.pending) return;
     this.pending = true; this.error = undefined; this.draw();
     const route = this.#route;
     const success = await this.session.logout();

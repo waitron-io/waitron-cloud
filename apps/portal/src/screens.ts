@@ -1,3 +1,4 @@
+import { pairingScreen } from './pairing-screen.ts';
 import { html, nothing } from 'lit';
 import { submitOnEnter } from '@waitron-io/ui-core/submit-on-enter';
 import '@waitron-io/ui-core/components/wt-card';
@@ -23,7 +24,8 @@ export function screen(app: PortalApp) {
     .loading=${app.pending} @click=${fn}>${app.pending ? c.wait : label}</wt-button></wt-form-actions>`;
   const retryLink = app.path === '/signup' ? '/signup' : '/forgot-password';
   let content;
-  if (app.notice && app.notice !== 'signedOut') content = html`<p role="status">${c[app.notice]}</p>${link('/login', c.login)}`;
+  if (app.path === '/connect') content = pairingScreen(app);
+  else if (app.notice && app.notice !== 'signedOut') content = html`<p role="status">${c[app.notice]}</p>${link('/login', c.login)}`;
   else if (app.path === '/' || app.path === '/account') {
     content = app.session.state.kind === 'authenticated'
       ? html`<p>${c.accountIntro}</p>${action(c.signout, () => {void app.logout();})}<p>${link('/forgot-password', c.forgot)}</p>`
@@ -46,7 +48,7 @@ export function screen(app: PortalApp) {
   } else if (app.path === '/reset-password') content = html`${password()}<p class="help">${c.passwordHelp}</p>${action(c.savePassword)}`;
   else content = html`<p>${app.path === '/signup' ? c.emailIntro : c.resetIntro}</p>${field('email', 'email', 'email', 'email')}
     ${action(app.path === '/signup' ? c.continue : c.sendReset)}<p>${c.loginLink} ${link('/login', c.login)}</p>`;
-  const errors = [...Object.values(app.errors).map(key => c[key!]), ...(app.error ? [c[app.error]] : [])];
+  const errors = [...Object.values(app.errors).map(key => c[key!]), ...(app.error ? [c[app.error]] : []), ...(app.path === '/connect' && app.pairing.error ? [c[app.pairing.error]] : [])];
   return html`<header><a class="brand" href="/" @click=${(event: MouseEvent) => app.follow(event, '/')}>Waitron <strong>Cloud</strong></a>
     <label class="language">${c.language}<select aria-label=${c.language} .value=${app.locale}
       @change=${(event: Event) => app.setLocale((event.target as HTMLSelectElement).value as Locale)}><option value="en">English</option><option value="es">Español</option></select></label></header>

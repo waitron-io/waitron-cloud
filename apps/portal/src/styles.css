@@ -17,3 +17,7 @@ button:disabled { cursor: default; opacity: .6; }
 .disclosure { display: flex; align-items: start; gap: .4rem; margin: 1.25rem 0; }
 :focus-visible { outline: 2px solid var(--wt-color-primary); outline-offset: 3px; }
 @media (max-width: 480px) { #portal { margin: .75rem auto; padding: .75rem; } h1 { font-size: 1.5rem; } }
+
+.venue-id { overflow-wrap: anywhere; margin-inline-start: 0; }
+.business-choice { display: grid; gap: var(--wt-space-2); }
+.business-choice select { max-width: 100%; min-height: 2.75rem; }
