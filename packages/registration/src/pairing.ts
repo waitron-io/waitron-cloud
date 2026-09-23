@@ -72,6 +72,7 @@ export class PairingStore {
   async #browser(id:string,code:string,token:string,csrf:string,choice?:{org:string;business:string}):Promise<PairingView> {
     const result=await transaction(this.#pool,async client=>{
       const row=await lock(client,id);const session=await resolveSession(client,token,{csrfToken:csrf,touch:false});
+      if(row.failed_codes>=5)throw new PairingError('pairing_unavailable');
       await available(client,row);
       if(typeof code!=='string'||!/^\d{8}$/.test(code)||!timingSafeEqual(Buffer.from(digest(code),'hex'),Buffer.from(row.code_hash,'hex'))) {
         await client.query('UPDATE pairing_requests SET failed_codes=LEAST(5,failed_codes+1) WHERE id=$1',[id]);

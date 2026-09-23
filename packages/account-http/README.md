@@ -240,8 +240,9 @@ Completion returns `registration` and state `complete`; services remain unconfig
 The same request returns that registration on retry, including after expiry, unless
 the installation has been revoked. A different key or business cannot take it over.
 
-Pairings expire after ten minutes. Five wrong codes permanently close an unfinished
-request; start a new request UUID/code. Existing approval cannot change account or
+Pairings expire after ten minutes. Five wrong codes close browser confirmation of
+that request, including completed requests. For unfinished pairing, start a new UUID/code.
+The authenticated machine can still retrieve its completed registration. Existing approval cannot change account or
 business. Account permission is checked again before linking. The five-attempt count
 is shared across processes and IPs. Additional allowances are ten starts per 15 minutes
 per IP and key, 60 status/completion calls per minute per IP and key, and 30 browser

@@ -133,3 +133,10 @@ test('a borrowed registration transaction reads its own new configuration and ro
   }),/intentional outer rollback/);
   assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');
 });
+
+test('completed requests retain the browser code-guess bound while machine retries still work',async()=>{
+  const a=machine();await store.start(a);await approve(a);const done=await store.complete(completion(a));
+  for(let i=0;i<5;i++)await unavailable(store.inspect(a.requestId,'87654321',session.token,session.csrfToken));
+  await unavailable(store.inspect(a.requestId,a.code,session.token,session.csrfToken));
+  assert.deepEqual((await store.complete(completion(a))).registration,done.registration);
+});
