@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import type { Pool } from 'pg';
 import { transaction } from './transaction.ts';
 
-const migrations = ['001_registration.sql', '002_identity.sql', '003_signup.sql', '004_password_recovery.sql', '005_email_outbox.sql', '006_email_transport.sql'];
+const migrations = ['001_registration.sql', '002_identity.sql', '003_signup.sql', '004_password_recovery.sql', '005_email_outbox.sql', '006_email_transport.sql', '007_account_http.sql'];
 export async function migrate(pool: Pool): Promise<void> {
   await transaction(pool, async (client) => {
     // Serialise migration runners before creating the ledger, including its first creation.
