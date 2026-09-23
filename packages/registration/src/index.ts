@@ -239,3 +239,4 @@ export class RegistrationStore {
 }
 
 export { transaction } from './transaction.ts';
+export { normaliseEmail } from './account-input.ts';
