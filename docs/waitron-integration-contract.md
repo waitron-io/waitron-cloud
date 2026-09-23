@@ -8,11 +8,10 @@ The first milestone connects two test venues to one cell, proves remote-access
 isolation, restores both backup types and replaces the gateway. Start with venue
 registration; services can then use the same identities and permissions.
 
-SQLite is expected to land soon. Target that implementation; the older PostgreSQL
-source below is a reference for existing contracts, not a reason to build another
-adapter. Registration, permissions and service configuration can proceed independently.
-Recheck the concrete SQLite capture/restore interfaces after landing before wiring
-the backup operations to Waitron.
+The owner confirmed that SQLite landed on 2026-09-23. Recheck its concrete
+capture/restore interfaces before wiring backup operations to Waitron. The older
+PostgreSQL source below remains a reference for historical contracts. Registration,
+permissions and service configuration can proceed against the current SQLite application.
 
 ## What already exists
 

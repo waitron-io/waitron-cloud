@@ -12,8 +12,8 @@ There is no public registration service yet.
 Waitron's SQLite storage switch landed on 2026-09-23, so local pairing work can
 resume against its current interfaces. The [Cloud signup backend](cloud-signup-implementation.md)
 creates the first customer organisation and business after email proof. The
-[Cloud account HTTP API](account-http-design.md) is implemented. Shared UI extraction
-is the next account slice; the local pairing adapter can now be scoped too.
+[Cloud account HTTP API](account-http-design.md) is implemented. Shared UI extraction and the bilingual account portal are now
+implemented too. The local pairing adapter and bound approval exchange are next.
 
 ## Outcome
 
