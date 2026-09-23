@@ -1,3 +1,4 @@
+import { securityHeaders } from './portal.ts';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { HttpBindings } from '@hono/node-server';
@@ -17,7 +18,7 @@ const paths: Record<string, readonly string[]> = {
   '/password-reset/request': ['email'], '/password-reset/complete': ['token', 'password'],
 };
 function protect(c: Context) {
-  c.header('Cache-Control', 'no-store'); c.header('Referrer-Policy', 'no-referrer'); c.header('X-Content-Type-Options', 'nosniff');
+  for (const [name, value] of Object.entries(securityHeaders)) c.header(name, value);
 }
 function publicError(error: unknown): AccountHttpError {
   if (error instanceof AccountHttpError) return error;

@@ -1,0 +1,1 @@
+{"extends":"../../tsconfig.json","compilerOptions":{"lib":["ES2023","DOM","DOM.Iterable"],"skipLibCheck":false},"include":["src/**/*.ts","test/**/*.ts"]}

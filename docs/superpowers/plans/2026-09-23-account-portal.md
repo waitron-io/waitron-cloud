@@ -143,22 +143,22 @@ with that return type to `startAccountServer` options. The CLI loads it only whe
 The map uses URL keys `/index.html`, `/app.js`, `/app.css`; only document routes can
 serve index content. Keep filesystem paths out of request resolution.
 
-- [ ] Add real HTTP tests: all six document paths (`/`, `/signup`, `/login`,
+- [x] Add real HTTP tests: all six document paths (`/`, `/signup`, `/login`,
   `/forgot-password`, `/reset-password`, `/account`) return HTML for GET and no body
   for HEAD; assets have explicit MIME types. Unknown paths, `/index.html`, encoded
   traversal, unknown assets and unsupported methods do not serve the shell.
   Query-bearing `/signup` and `/reset-password` permit old email links; other queries
   remain rejected. API query rejection remains unchanged.
-- [ ] Run
+- [x] Run
   `node scripts/test-postgres.mjs --filter @waitron-cloud/account-http exec node --test test/portal.test.ts`
   and confirm these routes fail before implementation.
-- [ ] Route non-API traffic with configured assets before the account admission gate;
+- [x] Route non-API traffic with configured assets before the account admission gate;
   apply the same validated host rules and security headers. Preserve the existing API
   path and API-only behavior. Return bounded 404/405 responses for static misses.
   Test malformed/foreign Host and eight blocked account operations alongside static
   GET/HEAD requests. Assert page/asset traffic leaves rate-counter rows unchanged,
   then prove the ninth account request remains rejected.
-- [ ] Add the Lit/esbuild package with pinned dependencies matching `ui-smoke`, its
+- [x] Add the Lit/esbuild package with pinned dependencies matching `ui-smoke`, its
   own browser tsconfig (`skipLibCheck: false`), and an external-script HTML entry.
   Build only `dist/index.html`, `dist/app.js`, `dist/app.css`, without source maps.
   The initial entry can render a shared card so static/CSP browser checks are real.
@@ -172,7 +172,7 @@ serve index content. Keep filesystem paths out of request resolution.
   Inline styles are allowed for Lit/shared-control styling; inline scripts remain
   prohibited. Add no-store, no-referrer and nosniff to documents and account responses.
   Preserve transport deadlines, header limits, maxConnections and shutdown behavior.
-- [ ] Add `portal:build` = `pnpm --filter @waitron-cloud/portal build` and document
+- [x] Add `portal:build` = `pnpm --filter @waitron-cloud/portal build` and document
   `pnpm portal:build` then
   `CLOUD_PORTAL_ASSETS_DIR=apps/portal/dist pnpm account:serve` in `.env.example`.
   Re-run focused server tests, browser rendering and typechecking. Commit with

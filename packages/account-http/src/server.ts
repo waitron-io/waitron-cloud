@@ -3,17 +3,25 @@ import { getRequestListener } from '@hono/node-server';
 import type { Pool } from 'pg';
 import type { EmailOutbox } from '@waitron-cloud/registration';
 import type { AccountHttpConfig } from './config.ts';
+import { portalResponse, securityHeaders, type PortalAssets } from './portal.ts';
 import { createAccountApp } from './app.ts';
 function unavailable() {
   return Response.json({error: 'temporarily_unavailable'}, {status: 503, headers: {
     'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff', 'Retry-After': '1',
   }});
 }
-export async function startAccountServer(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig; host?: string; port?: number}): Promise<{server: Server; close(): Promise<void>}> {
+export async function startAccountServer(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig; host?: string; port?: number; portalAssets?: PortalAssets}): Promise<{server: Server; close(): Promise<void>}> {
   const app = createAccountApp(options);
   let active = 0; let stopping = false; let closing: Promise<void> | undefined;
   const listener = getRequestListener(async (request, bindings) => {
-    if (stopping || active >= 8) return unavailable();
+    if (stopping) return unavailable();
+    if (options.portalAssets && !new URL(request.url).pathname.startsWith('/api/')) {
+      const url = new URL(request.url); const host = new URL(options.config.portalOrigin).host;
+      if (url.host !== host || (request.headers.has('host') && request.headers.get('host') !== host))
+        return new Response(null, {status: 403, headers: securityHeaders});
+      return portalResponse(request, options.portalAssets);
+    }
+    if (active >= 8) return unavailable();
     active++;
     try {return await app.fetch(request, bindings);}
     finally {active--;}

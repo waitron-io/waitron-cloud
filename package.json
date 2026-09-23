@@ -18,7 +18,8 @@
     "mail:worker": "node --env-file-if-exists=.env packages/registration/src/email-worker-cli.ts",
     "mail:status": "node --env-file-if-exists=.env packages/registration/src/email-worker-cli.ts --status",
     "account:serve": "node --env-file-if-exists=.env packages/account-http/src/server-cli.ts",
-    "test:ui": "pnpm --filter @waitron-cloud/ui-smoke test"
+    "test:ui": "pnpm --filter @waitron-cloud/ui-smoke test",
+    "portal:build": "pnpm --filter @waitron-cloud/portal build"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
