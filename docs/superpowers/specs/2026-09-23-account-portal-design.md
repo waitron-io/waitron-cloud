@@ -61,7 +61,9 @@ claim about purchased services or data residency. Tax details belong to billing.
 Do not claim the email is verified merely because a token is present. Completion
 verifies the token and creates the account and both business records atomically.
 After success, offer sign-in. Reset completion likewise offers sign-in and explains
-that existing sessions have ended. Neither completion creates a session automatically.
+that existing sessions have ended. Neither completion creates a session automatically. Email completion screens remain
+accessible when a different account is already signed in; they never silently switch
+accounts. Their sign-in action opens the login form even if a session already exists.
 
 Use one password field with a reveal control and password-manager autocomplete.
 New passwords follow the existing rules: at least 15 Unicode code points and at most
