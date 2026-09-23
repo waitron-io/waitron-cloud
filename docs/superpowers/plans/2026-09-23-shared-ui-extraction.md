@@ -15,8 +15,28 @@ fixture to prove the package works outside the workspace.
 Playwright Chromium and axe-core. Reuse Waitron's dependency versions and lockfile.
 
 **Spec:** [Approved shared UI extraction](../specs/2026-09-23-shared-ui-extraction-design.md).
-This plan awaits written-plan review. Source inspection used Waitron commit
-`00786ae779d130f077b1b9dcd8cd45d11c4b702f`; the tests below are work to perform.
+The owner approved inline execution on 2026-09-23. The implementation and review
+receipts are in [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519).
+Source inspection used Waitron commit `00786ae779d130f077b1b9dcd8cd45d11c4b702f`;
+the checklist below preserves the approved implementation instructions.
+
+## Execution record
+
+Waitron now contains the package and compatibility exports. Local verification passed
+191 core tests, 689 retained UI tests, affected application typechecks and all three
+front-end builds. The tarball proof installs outside the workspace, checks declarations
+and all exported files, and exercises real Chromium forms, themes and accessibility.
+Core coverage measured 100% statements, lines and functions and 98.33% branches;
+the retained UI package remains above its existing thresholds.
+
+One Claude review took 544 seconds. It found an accidentally removed workbench command,
+which was restored with a failing-then-passing CLI regression. Copied configuration
+claims and guard documentation were corrected; an intentionally broken secondary export
+proved the added packed-export check. CI and merge receipts belong to the linked PR.
+The first full weekly mutation scores after the split remain to be measured.
+
+Private distribution and Cloud account screens are the next work. This extraction
+does not publish a package or add a Cloud runtime dependency.
 
 ## Global constraints
 
