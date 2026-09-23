@@ -70,8 +70,9 @@ must not activate trading or change fiscal identity.
 
 Both approvals must refer to the same request. Expired or replayed approvals are
 rejected. If a reply is lost, retrying must return the existing registration rather
-than create another. These are agreed requirements; the proof encoding and durable
-implementation follow the [registration plan](registration-implementation-plan.md).
+than create another. The Cloud proof encoding and durable exchange now follow the
+[pairing contract](superpowers/specs/2026-09-23-venue-pairing-design.md). The local
+administrator adapter and real two-installation journey follow next.
 
 ### Operation boundaries
 

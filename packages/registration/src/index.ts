@@ -247,3 +247,5 @@ export { transaction } from './transaction.ts';
 export { normaliseEmail } from './account-input.ts';
 
 export type { AccountLocale, AccountNotification } from './account-input.ts';
+export {PairingStore,type PairingView} from './pairing.ts';
+export {PairingError,verifyPairingProof,pairingPayload,type PairingClaims} from './pairing-proof.ts';

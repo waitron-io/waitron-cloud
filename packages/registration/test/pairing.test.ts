@@ -85,9 +85,10 @@ test('expiry after waiting for membership lock rolls back pairing and registrati
   await block.query('SELECT 1 FROM organisation_memberships FOR UPDATE');
   await db.pool.query("UPDATE pairing_requests SET expires_at=clock_timestamp()+interval '100 milliseconds'");
   const pending=unavailable(store.complete(completion(a)));
-  try { await new Promise(r=>setTimeout(r,150)); }
+  let blocked=false;
+  try { for(let i=0;i<100;i++){if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[db.schema])).rowCount){blocked=true;break;}await new Promise(r=>setTimeout(r,10));} await new Promise(r=>setTimeout(r,150)); }
   finally {await block.query('COMMIT');block.release();}
-  await pending;
+  await pending;assert.equal(blocked,true);assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');
 });
 
 test('a fresh process resumes Cloud approval and reads the committed result after a lost reply',async()=>{
@@ -112,4 +113,13 @@ test('migration eight upgrades a seven-migration schema without changing its exi
     assert.deepEqual((await pool.query('SELECT * FROM installations')).rows,previous);assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'8');
     assert.equal((await pool.query('SELECT count(*) FROM pairing_requests')).rows[0].count,'0');
   }finally{await pool.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();}
+});
+
+test('session expiry while Cloud approval waits on permission leaves no approval',async()=>{
+  const a=machine();await store.start(a);await db.pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '100 milliseconds'");
+  const block=await db.secondPool.connect();await block.query('BEGIN');await block.query('SELECT 1 FROM organisation_memberships FOR UPDATE');
+  const pending=assert.rejects(approve(a),/session_expired/);let blocked=false;
+  try{for(let i=0;i<100;i++){if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[db.schema])).rowCount){blocked=true;break;}await new Promise(r=>setTimeout(r,10));}await new Promise(r=>setTimeout(r,150));}
+  finally{await block.query('COMMIT');block.release();}
+  await pending;assert.equal(blocked,true);assert.equal((await db.pool.query('SELECT cloud_account_id FROM pairing_requests')).rows[0].cloud_account_id,null);
 });

@@ -27,7 +27,7 @@ try {
   const outbox = new EmailOutbox({activeKeyId: process.env.CLOUD_EMAIL_ACTIVE_KEY_ID, keys: JSON.parse(process.env.CLOUD_EMAIL_KEYS)});
   pool = new Pool({connectionString: process.env.DATABASE_URL, max: 10, connectionTimeoutMillis: 5000, statement_timeout: 10000});
   pool.on('error', () => {console.error('Account server database connection failed'); process.exitCode = 1; stop();});
-  if (!(await pool.query("SELECT 1 FROM schema_migrations WHERE name = '007_account_http.sql'")).rowCount) throw new Error();
+  if ((await pool.query("SELECT name FROM schema_migrations WHERE name IN ('007_account_http.sql','008_pairing.sql')")).rowCount !== 2) throw new Error();
   if (!stopRequested) {
     const portalAssets = process.env.CLOUD_PORTAL_ASSETS_DIR ? await loadPortalAssets(process.env.CLOUD_PORTAL_ASSETS_DIR) : undefined;
     running = await startAccountServer({pool, outbox, config, portalAssets, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});

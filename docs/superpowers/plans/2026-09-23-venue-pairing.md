@@ -31,9 +31,9 @@ Produces `verifyPairingProof(payload,signature,origin,action,now?)` returning va
 claims and `pairingPayload(claims)` for the canonical bytes. Claim fields and array order
 are in the spec. Verify exact bytes with `crypto.verify(null, bytes, publicKey, signature)`.
 
-- [ ] Write valid Ed25519 round-trip and reject altered byte/key/action/origin/time/version/shape tests.
-- [ ] Run `pnpm --filter @waitron-cloud/registration exec node --test test/pairing-proof.test.ts`; see missing verifier fail.
-- [ ] Implement strict canonical parsing and signature validation; rerun to pass; commit with `-s`.
+- [x] Write valid Ed25519 round-trip and reject altered byte/key/action/origin/time/version/shape tests.
+- [x] Run `pnpm --filter @waitron-cloud/registration exec node --test test/pairing-proof.test.ts`; see missing verifier fail.
+- [x] Implement strict canonical parsing and signature validation; rerun to pass; commit with `-s`.
 
 ### Task 2: durable approval and completion
 
@@ -43,14 +43,14 @@ uses it for its transactional operations. PairingStore owns the outer transactio
 Produces `start(claims)`, `status(claims)`, `inspect(id,code,token,csrf)`,
 `approve(id,code,org,business,token,csrf)`, `complete(claims)`, `businesses(token)`.
 
-- [ ] Add real PostgreSQL tests: no approval, changed binding, cross-installation,
+- [x] Add real PostgreSQL tests: no approval, changed binding, cross-installation,
   five code failures across workers, CSRF, immutable business choice, permission loss,
   expiry after waits, concurrent completion, expired completed retry/revocation,
   restart from another process and upgrade preserving an existing registration.
-- [ ] Run through `node scripts/test-postgres.mjs --filter @waitron-cloud/registration exec node --test test/pairing.test.ts`; observe absent behavior.
-- [ ] Implement migration/store and borrowed-client transaction support. Code mismatches
+- [x] Run through `node scripts/test-postgres.mjs --filter @waitron-cloud/registration exec node --test test/pairing.test.ts`; observe absent behavior.
+- [x] Implement migration/store and borrowed-client transaction support. Code mismatches
   return a transaction result before throwing so the failed-code count commits.
-- [ ] Preserve registration suite behavior and update its migration count to eight.
+- [x] Preserve registration suite behavior and update its migration count to eight.
   Run pairing plus registration tests and types, commit with `-s`.
 
 ### Task 3: HTTP boundary and usage guide
@@ -59,12 +59,27 @@ Files: `packages/account-http/src/pairing.ts`, `app.ts`, `test/pairing.test.ts`,
 registration/account HTTP READMEs, backlog and integration contract.
 Consumes task 1 proof verifier and task 2 store. Routes and exact fields follow spec.
 
-- [ ] Write HTTP tests for signed start/status/complete and authenticated business
+- [x] Write HTTP tests for signed start/status/complete and authenticated business
   selection/approval, separate machine/browser authority, method/host/origin/body
   refusal, persistent rate limits and generic errors.
-- [ ] Run focused HTTP test to fail; add handler behind shared admission/rate checks.
-- [ ] Run real HTTP journey with two independent keys, lost response and new app instance;
+- [x] Run focused HTTP test to fail; add handler behind shared admission/rate checks.
+- [x] Run real HTTP journey with two independent keys, lost response and new app instance;
   prove no installation is linked from start or Cloud approval alone.
-- [ ] Update docs/backlog with exact implemented scope and local launch gate.
+- [x] Update docs/backlog with exact implemented scope and local launch gate.
 - [ ] Run focused tests/types, signed-off commit, finish-branch review/current-head CI,
   land-branch and immediately begin task 2 of the five-task programme (Waitron screen).
+
+## Execution receipts
+
+Signature tests: 3/3; pairing PostgreSQL: 11/11; existing registration: 22/22;
+HTTP pairing: 5/5 including actual sockets and server restart. Missing migration
+startup check failed by leaving the server running before the new gate, then passed.
+Workspace typecheck passed. Full package tests remain the CI gate.
+
+The owner authorised autonomous decisions instead of further design/plan approval
+questions. Code tests preceded implementation. The first expiry test incorrectly
+compared a timestamp it had deliberately modified; it now checks unchanged registration
+and completed state after expiry. The real-socket fixture uses Node HTTP's explicit
+Host-header handling, as the sibling transport tests do.
+
+Finish/land is in progress; the remaining checkbox in the final step covers that gate.

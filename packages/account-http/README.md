@@ -2,8 +2,8 @@
 
 Use this package to create a Cloud account, sign in and recover a password independently
 of a venue server. The JSON API wraps the existing PostgreSQL identity and registration
-stores. The optional Lit portal uses the same origin. Venue pairing and public
-deployment remain separate work.
+stores. The optional Lit portal uses the same origin. The pairing API supports the local integration described below. Public deployment
+awaits the real Waitron administrator adapter and deployment checks.
 
 ## Run locally
 
@@ -33,7 +33,7 @@ pnpm account:serve
 ```
 
 If you export `DATABASE_URL` in your shell, `pnpm db:migrate` applies the same migrations.
-The server refuses startup without migration `007_account_http.sql`; it never applies
+The server refuses startup without migrations `007_account_http.sql` and `008_pairing.sql`; it never applies
 migrations itself. Its default listener is `127.0.0.1:3000`.
 
 In another terminal, from the same directory:
@@ -205,3 +205,51 @@ cookie attributes and use explicit Cookie headers. The portal suite adds real br
 cookie/session journeys over loopback HTTP, phone layouts, both themes and accessibility.
 Production TLS ingress and browser cookie behavior at the deployed HTTPS origin still
 need deployment verification.
+
+## Pair a venue
+
+The [version 1 pairing contract](../../docs/superpowers/specs/2026-09-23-venue-pairing-design.md)
+binds an installation key, local venue, environment and chosen Cloud business.
+Use this for local integration testing until the Waitron administrator adapter is
+implemented and tested. Cloud verifies signatures and Cloud permission; the adapter
+must check a real local administrator before starting and before signing completion.
+
+Machine POSTs use `/api/pairing/start`, `/api/pairing/status` and
+`/api/pairing/complete`. Send only `payload` and `signature`, encoded as base64url,
+without an Origin header. Generate the Ed25519 key on the installation; sign the
+canonical bytes from `pairingPayload` with Node's `sign(null, bytes, privateKey)`.
+Never send the private key. The signature covers the Cloud origin, action, request UUID,
+public key, venue UUID, environment, matching code or chosen business, and current time.
+The signature is accepted within 60 seconds; retry later with a fresh signature over
+the same request. Start accepts `test` or `production` environment.
+
+The signed start supplies an eight-digit random matching code, which Waitron displays
+locally. Cloud stores its digest. From a signed-in Cloud browser, use:
+
+| Request | Body | Result |
+| --- | --- | --- |
+| GET `/api/account/pairing/businesses` | Session cookie | `{businesses:[{organisationId,organisationName,legalBusinessId,legalBusinessName,countryCode}]}` |
+| POST `/api/account/pairing/inspect` | `requestId`, `code` | Bound local venue and current approval state |
+| POST `/api/account/pairing/approve` | `requestId`, `code`, `organisationId`, `legalBusinessId` | Approval bound to the current account and chosen business |
+
+Both browser POSTs require the exact portal Origin, session cookie and its
+`X-CSRF-Token`. They do not renew the session. Start and approval do not create an
+installation. Waitron polls signed status, shows the selected names locally and requires
+local administrator confirmation before signing complete with the selected IDs.
+Completion returns `registration` and state `complete`; services remain unconfigured.
+The same request returns that registration on retry, including after expiry, unless
+the installation has been revoked. A different key or business cannot take it over.
+
+Pairings expire after ten minutes. Five wrong codes permanently close an unfinished
+request; start a new request UUID/code. Existing approval cannot change account or
+business. Account permission is checked again before linking. The five-attempt count
+is shared across processes and IPs. Additional allowances are ten starts per 15 minutes
+per IP and key, 60 status/completion calls per minute per IP and key, and 30 browser
+pairing calls per minute per account, inside the overall API limit.
+
+Invalid signatures return 401 `invalid_proof`; missing permission returns 403
+`permission_denied`. Unavailable requests, mismatched bindings, absent approval and
+registration conflicts return 400 with fixed codes. Database failures return 503.
+None of these replies echoes request bodies. Keep request bodies, codes and signatures
+out of ingress logs. This slice issues no renewable machine credentials; those follow
+in the installation lifecycle task.
