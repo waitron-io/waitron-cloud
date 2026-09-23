@@ -1,8 +1,9 @@
 # Cloud account HTTP API
 
-Status: proposed design, 2026-09-23. The owner approved building browser access to
+Status: approved design, 2026-09-23. The owner approved building browser access to
 signup, login and recovery, with request protection and PostgreSQL/Mailpit tests.
-This document makes the HTTP contract concrete before implementation.
+The owner approved this written design on 2026-09-23. The
+[implementation plan](superpowers/plans/2026-09-23-account-http.md) sequences the work.
 
 ## Outcome and boundaries
 
