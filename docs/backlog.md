@@ -59,8 +59,8 @@ remain deployment work; existing services must tolerate a management outage with
 the credential and revocation rules still to be defined.
 
 The [Cloud account HTTP API](../packages/account-http/README.md) is implemented and
-tested against PostgreSQL, Mailpit and real sockets. Next, scope shared UI extraction
-against current Waitron, then build Cloud account screens and browser tests. Pairing
+tested against PostgreSQL, Mailpit and real sockets. Next, extract the approved shared
+UI package from Waitron, then arrange private distribution and build Cloud account screens and browser tests. Pairing
 remains a separate exchange requiring both Cloud and local administrator proof.
 
 ## Initial focus
@@ -141,10 +141,13 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   screens. Audit the `@waitron/shared` dependency and venue-specific exports, define
   package ownership/build/distribution and preserve browser/accessibility tests.
   No shared UI package has been extracted or published yet. The SQLite storage switch
-  has landed. The [proposed extraction boundary](superpowers/specs/2026-09-23-shared-ui-extraction-design.md)
+  has landed. The [approved extraction boundary](superpowers/specs/2026-09-23-shared-ui-extraction-design.md)
   starts with account-form controls, preserves Waitron imports and requires a standalone
-  packed-package browser test. Repository ownership and the written design await review;
-  implementation and private registry activation remain separate next steps.
+  packed-package browser test. The owner approved keeping `@waitron/ui-core` in Waitron.
+  The [implementation plan](superpowers/plans/2026-09-23-shared-ui-extraction.md) covers
+  extraction, package verification and CI. Review the written plan, then implement it
+  inline in a managed Waitron worktree. Private registry activation and Cloud screens
+  follow separately; no extraction or publication is complete yet.
 - **Identity and organisations.** Password helpers and management-session behaviours
   have been adapted with a pinned source map, PostgreSQL tests, hashed session/CSRF
   tokens, passive polling and separate platform permission checks. Session-backed
