@@ -41,8 +41,8 @@ production email provider is not connected yet.
 
 Use the existing password hash format. New passwords require 15 characters and allow
 spaces and Unicode, up to 1024 UTF-8 bytes. Public deployment also needs a compromised
-password check, ingress bot controls, browser screens and the chosen additional
-authentication factors. The [account HTTP API](../packages/account-http/README.md)
+password check, ingress bot controls and the chosen additional authentication factors.
+The [bilingual portal](../README.md#run-the-account-portal) now supplies the account screens. The [account HTTP API](../packages/account-http/README.md)
 implements request limits, secure cookies, Origin/CSRF checks and recovery. The email adapter receives
 a bearer secret: do not return it to the requesting browser or put it in logs. The
 link must use a configured trusted HTTPS origin and avoid referrer leakage.
