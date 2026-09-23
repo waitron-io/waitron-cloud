@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = import.meta.dirname;
 test('the pinned registry package renders and responds in a real browser', { timeout: 60000 }, async () => {
+  const consumer = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+  assert.equal(consumer.dependencies['@waitron-io/ui-core'], '0.1.0', 'consumer must pin the registry version');
   const manifestPath = join(dirname(fileURLToPath(import.meta.resolve('@waitron-io/ui-core'))), '../package.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   assert.equal(manifest.name, '@waitron-io/ui-core');

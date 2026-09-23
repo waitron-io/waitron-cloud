@@ -9,5 +9,9 @@
   "devDependencies": {
     "esbuild": "0.28.2",
     "playwright": "1.63.0"
+  },
+  "dependencies": {
+    "@waitron-io/ui-core": "0.1.0",
+    "lit": "3.3.3"
   }
 }

@@ -61,7 +61,8 @@ the credential and revocation rules still to be defined.
 The [Cloud account HTTP API](../packages/account-http/README.md) is implemented and
 tested against PostgreSQL, Mailpit and real sockets. Shared account controls are
 implemented in [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519).
-Next, arrange private package distribution and build Cloud account screens and browser tests. Pairing
+Cloud now pins the private shared UI release and verifies it in Chromium.
+Next, build Cloud account screens and their API/browser tests. Pairing
 remains a separate exchange requiring both Cloud and local administrator proof.
 
 ## Initial focus
@@ -145,11 +146,12 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   passes declaration, Chromium form, theme and accessibility checks. Both UI packages
   retain coverage and weekly mutation gates. The [approved design](superpowers/specs/2026-09-23-shared-ui-extraction-design.md)
   and [execution plan](superpowers/plans/2026-09-23-shared-ui-extraction.md) record the boundary.
-  The [release workflow](shared-ui-release.md) builds an exact Waitron commit and stages
-  a private `@waitron-io/ui-core` package under Cloud's permissions. Next, run its
-  first publication, verify private access, and pin the released version in Cloud's
-  manifest and lockfile with a browser smoke test before building account screens.
-  No package has been published and Cloud does not depend on it yet. Read the first weekly mutation scores
+  The [release workflow](shared-ui-release.md) published private `@waitron-io/ui-core@0.1.0`
+  from Waitron `0a93f4d3557b669661ac8f589aad866e2cd9653f`. Cloud pins it in its
+  manifest and lockfile; a Chromium fixture checks the installed controls and themes,
+  and declaration checking uses `skipLibCheck: false`. Local installs use GitHub CLI
+  authentication; CI uses its package-read token. Next, build signup, verification,
+  login and recovery screens against the existing account API. Read the first weekly mutation scores
   after the split in Waitron; the extraction verifies the wiring and coverage, not the
   new full mutation scores.
 - **Identity and organisations.** Password helpers and management-session behaviours

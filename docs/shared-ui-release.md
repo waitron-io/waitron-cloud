@@ -65,9 +65,28 @@ It does not need your personal credential.
 
 ## Verify the consumer
 
-The next delivery step pins the released version in Cloud's manifest and lockfile
-and adds a Chromium smoke test against that installed package. A local file dependency
-or a workspace source alias does not prove registry installation.
+Cloud pins `@waitron-io/ui-core@0.1.0` and Lit `3.3.3` in `packages/ui-smoke` and the
+workspace lockfile. Install from that lockfile, then run:
+
+```sh
+pnpm --filter @waitron-cloud/ui-smoke exec playwright install chromium
+pnpm test:ui
+pnpm typecheck
+```
+
+The test checks the exact dependency version and recorded Waitron source, bundles
+from installed JavaScript, renders controls in Chromium and verifies input names,
+autocomplete, button interaction and light/dark tokens. Its declaration check keeps
+`skipLibCheck` disabled. A local file dependency fails the version check. The normal
+`pnpm test` includes this fixture; it is test infrastructure, not an account screen.
+
+Version `0.1.0` was published by [release run 35871335561](https://github.com/waitron-io/waitron-cloud/actions/runs/35871335561)
+from Waitron `0a93f4d3557b669661ac8f589aad866e2cd9653f`. GitHub's package API confirms
+private visibility and the Cloud repository association. Local installation used the
+GitHub CLI token helper. CI must install with its own temporary package-read token.
+
+To upgrade, release a new source version, update the dependency and lockfile together,
+update the fixture's expected version/source, and rerun the browser and type checks.
 
 References: [GitHub's npm registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry),
 [package access](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility),

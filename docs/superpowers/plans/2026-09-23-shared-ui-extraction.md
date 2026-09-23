@@ -35,8 +35,10 @@ claims and guard documentation were corrected; an intentionally broken secondary
 proved the added packed-export check. CI and merge receipts belong to the linked PR.
 The first full weekly mutation scores after the split remain to be measured.
 
-Private distribution and Cloud account screens are the next work. This extraction
-does not publish a package or add a Cloud runtime dependency.
+Follow-up delivery published private `@waitron-io/ui-core@0.1.0` and pinned it in
+Cloud's browser fixture. See [release and installation](../../shared-ui-release.md)
+for the publication receipt, authentication and browser checks. Cloud account
+screens remain the next work. Publication was separate from this extraction.
 
 ## Global constraints
 
