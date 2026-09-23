@@ -13,6 +13,12 @@ for(const locale of ['en','es'] as const)test(`${locale} installation status and
   const context=await f.browser.newContext({locale,viewport:{width:375,height:812}}),page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
   const stop=locale==='en'?'Stop Cloud access':'Detener el acceso a Cloud',confirm=locale==='en'?'Confirm stop':'Confirmar detención',cancel=locale==='en'?'Keep Cloud access':'Mantener el acceso a Cloud',stopped=locale==='en'?'Cloud access stopped':'Acceso a Cloud detenido';
+  await page.getByRole('button',{name:stop,exact:true}).waitFor();
+  await f.db.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[installed.installationId]);
+  await f.db.pool.query("INSERT INTO installation_observations(installation_id,service,revision,health,observed_at) VALUES($1,'remote_access',0,'healthy',clock_timestamp()-interval '299 seconds')",[installed.installationId]);
+  await page.getByRole('button',{name:locale==='en'?'Refresh status':'Actualizar estado',exact:true}).click();
+  await page.getByText(locale==='en'?'Configured · Working':'Configurado · Funcionando',{exact:true}).waitFor();
+  await page.getByText(locale==='en'?'Configured · Health unknown':'Configurado · Estado desconocido',{exact:true}).waitFor({timeout:3000});
   await page.getByRole('button',{name:stop,exact:true}).click();await page.getByRole('button',{name:cancel,exact:true}).click();assert.equal((await f.db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[installed.installationId])).rows[0].revoked_at,null);
   await page.getByRole('button',{name:stop,exact:true}).click();await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=> (await window.axe.run(document)).violations),[]);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.screenshot({path:new URL(`../dist/installations-${locale}.png`,import.meta.url).pathname,fullPage:true});

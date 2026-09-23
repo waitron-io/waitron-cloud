@@ -52,7 +52,8 @@ Renewal proves the active installation key, including after lease expiry. Lock t
 installation before granting access; revocation uses the same lock. Recheck wall
 clock after waits. Mutation operation IDs are unique within the installation and
 store the validated semantic request digest and result. A retry with a fresh request
-timestamp returns the recorded result; a changed body conflicts. Replayed renewal
+timestamp and a renewed valid lease returns the recorded result; a changed body conflicts.
+The digest covers the action and body, while every replay validates current authority. Replayed renewal
 returns the original lease and expiry. A new operation obtains a new lease.
 
 Configuration and observations are separate records. Configuration has a monotonically
@@ -63,9 +64,15 @@ configuration writer is added.
 
 Reports name the applied revision and up to three known services, each with bounded
 health (`unknown`, `healthy`, `degraded`, `failed`) and an allowlisted failure code.
+Version 1 requires this exact JSON property order, no whitespace, and explicit null
+when there is no failure: `{"revision":0,"observedAt":0,"services":[{"service":"remote_access","health":"healthy","failure":null}]}`.
+The fixed three-service configuration is a versioned contract; adding another service
+requires capability/version negotiation with older Waitron installations.
+
 Store server receive time separately from the installation's observation time.
 Reject future/older revisions and do not let older reports replace newer observations.
-After five minutes without a fresh report, observed health becomes Unknown. An
+Both receipt and observation must be less than five minutes old; an old observation
+received recently still reads Unknown. Machine request clocks must be within 60 seconds. An
 installation report never verifies restorability or makes an unconfigured service Ready.
 
 Cloud account reads use a live session and organisation membership. Revocation
@@ -79,7 +86,8 @@ that human session. Record revocation actor, reason, time and operation result.
 Extend node-private state with the lease, pending operation, applied revision and
 last Cloud response. Reuse one local operation gate and durable file writes. Persist
 mutation intent before sending, then reconcile the result after restart or a lost
-reply. An unavailable Cloud service keeps the prior configuration with an explicit
+reply. A local stop request waits for the write gate, rechecks permission, then supersedes
+any pending configuration or renewal request before contacting Cloud. An unavailable Cloud service keeps the prior configuration with an explicit
 stale/unavailable status; it must not be mistaken for revocation. A revoked response
 withdraws local Cloud authority without altering local primary or fiscal state.
 

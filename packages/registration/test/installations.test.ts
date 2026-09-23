@@ -101,3 +101,34 @@ test('request freshness and owner session expiry are checked after installation 
   try{await waitForLock();await new Promise(r=>setTimeout(r,300));}finally{await blocker.query('COMMIT');blocker.release();}await expired;
   assert.equal((await db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[a.installationId])).rows[0].revoked_at,null);
 });
+
+test('operation identity survives lease renewal while every replay authenticates current bindings',async()=>{
+  const first=await store.execute('renew',request()),second=await store.execute('renew',request());
+  const id=randomUUID(),one=await store.execute('configuration',request(a,'configuration',first.lease,{},id));
+  assert.deepEqual(await other.execute('configuration',request(a,'configuration',second.lease,{},id)),one);
+  const wrong=(await store.execute('renew',request(b))).lease;
+  await assert.rejects(store.execute('configuration',request(a,'configuration',wrong,{},id)),/invalid_proof/);
+});
+test('machine revocation stores status without adapter authority in either replay or audit',async()=>{
+  await store.configure(a.installationId,0,[{service:'remote_access',state:'ready',configuration:{secret:'adapter-authority'}}]);
+  const proof=request(a,'revoke'),result=await store.execute('revoke',proof);
+  assert.equal(JSON.stringify(result).includes('adapter-authority'),false);
+  assert.equal(JSON.stringify((await db.pool.query('SELECT result FROM installation_revocations')).rows).includes('adapter-authority'),false);
+  assert.equal(JSON.stringify((await db.pool.query('SELECT result FROM installation_operations')).rows).includes('adapter-authority'),false);
+  assert.deepEqual(await other.execute('revoke',proof),result);
+});
+test('leases bind the venue, environment and stored key; renewal and revocation accept no lease',async()=>{
+  const now=Date.now(),input={origin,leaseId:randomUUID(),installationId:a.installationId,venueId:a.venueId,environment:'test' as const,publicKey:a.publicKey,issuedAt:now,expiresAt:now+3600000};
+  for(const change of [{venueId:b.venueId},{environment:'production' as const},{publicKey:b.publicKey}])
+    await assert.rejects(config(a,issuer.issue({...input,...change})),/invalid_proof/);
+  const lease=issuer.issue(input);
+  for(const action of ['renew','revoke'] as const)await assert.rejects(store.execute(action,request(a,action,lease)),/invalid_proof/);
+  assert.equal((await db.pool.query('SELECT count(*) FROM installation_operations')).rows[0].count,'0');
+});
+test('proof expiry during the final configuration read rolls back all writes',async()=>{
+  const blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('LOCK TABLE installation_services IN ACCESS EXCLUSIVE MODE');
+  const expired=assert.rejects(store.execute('renew',request(a,'renew',undefined,{},randomUUID(),Date.now()-59500)),/invalid_proof/);
+  try{await waitForLock();await new Promise(r=>setTimeout(r,600));}finally{await blocker.query('COMMIT');blocker.release();}
+  await expired;assert.equal((await db.pool.query('SELECT count(*) FROM installation_operations')).rows[0].count,'0');
+  assert.equal((await db.pool.query('SELECT lease_expires_at FROM installations WHERE id=$1',[a.installationId])).rows[0].lease_expires_at,null);
+});

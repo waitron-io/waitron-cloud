@@ -73,7 +73,7 @@ export class InstallationStore {
       const row=await lock(client,routing.installationId),now=Date.now();
       const c=verifyMachine(envelope,row.public_key,this.#origin,action,now);
       const report=readBody(action,c.body,now);
-      const digest=createHash('sha256').update(JSON.stringify([action,c.lease,c.body])).digest('hex');
+      const digest=createHash('sha256').update(JSON.stringify([action,c.body])).digest('hex');
       const prior=(await client.query('SELECT digest,result FROM installation_operations WHERE installation_id=$1 AND operation_id=$2',[row.id,c.operationId])).rows[0];
       if(prior&&prior.digest!==digest)fail('conflict');
       if(row.revoked_at){if(action==='revoke'&&prior)return prior.result;return fail('revoked');}
@@ -101,6 +101,7 @@ export class InstallationStore {
       if(action==='revoke')await client.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[row.id]);
       await client.query('UPDATE installations SET last_contact_at=clock_timestamp() WHERE id=$1',[row.id]);
       const result=await view(client,row.id);if(lease)result.lease=lease;
+      if(action==='revoke')for(const s of result.services)s.configuration={};
       verifyMachine(envelope,row.public_key,this.#origin,action);
       if(action==='revoke')await client.query("INSERT INTO installation_revocations(installation_id,actor_kind,actor_id,reason,result) VALUES($1,'installation',$1,'user_requested',$2) ON CONFLICT DO NOTHING",[row.id,result]);
       await client.query('INSERT INTO installation_operations(installation_id,operation_id,digest,result) VALUES($1,$2,$3,$4)',[row.id,c.operationId,digest,result]);

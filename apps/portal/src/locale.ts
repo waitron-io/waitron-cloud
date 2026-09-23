@@ -14,7 +14,7 @@ const en = {
   stopAccess:'Stop Cloud access', confirmStop:'Confirm stop', cancelStop:'Keep Cloud access',
   stopHelp:'This permanently stops this server’s Cloud access, including remote access and new backups. Local trading continues. Your stored backups and subscriptions are kept; this does not cancel billing.',
   stopUncertain:'We could not confirm whether access stopped. Retry or refresh the status.',
-  remoteAccess:'Remote access', continuousBackup:'Livestream backups', retainedSnapshots:'Snapshots',
+  remoteAccess:'Remote access', continuousBackup:'Continuous backups', retainedSnapshots:'Snapshots',
   serviceUnconfigured:'Not configured', serviceProvisioning:'Setting up', serviceReady:'Configured', serviceFailed:'Setup failed',
   healthUnknown:'Health unknown', healthHealthy:'Working', healthDegraded:'Needs attention', healthFailed:'Not working',
 

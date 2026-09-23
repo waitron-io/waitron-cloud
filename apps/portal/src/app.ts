@@ -75,7 +75,7 @@ export class PortalApp {
     const title = this.title(); document.title = `${title} · Waitron Cloud`;
     render(screen(this), this.root);
     clearTimeout(this.#timer);
-    if (this.waiting) this.#timer = setTimeout(() => this.draw(), 1000);
+    if (this.waiting || (this.path === '/account' && this.session.state.kind === 'authenticated')) this.#timer = setTimeout(() => this.draw(), 1000);
   }
   title(): string {
     const c = this.copy;

@@ -32,7 +32,7 @@ async function stop(running){
   if(running.child.exitCode!==null)return;
   running.child.kill('SIGTERM');
   const timeout=setTimeout(()=>running.child.kill('SIGKILL'),5000);
-  try{await running.done;}finally{clearTimeout(timeout);}
+  try{assert.equal(await running.done,0,'Waitron must finish graceful shutdown');}finally{clearTimeout(timeout);}
 }
 try{
   const signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email);
