@@ -104,7 +104,7 @@ test('CLI fails closed with fixed diagnostics for invalid settings and absent mi
     assert.equal(outcome.code, 1); assert.equal(outcome.stdout, '');
     assert.equal(outcome.stderr, 'Account server failed; check database, migrations and configuration\n');
   }
-  for (const migration of ['007_account_http.sql','008_pairing.sql']) {
+  for (const migration of ['007_account_http.sql','008_pairing.sql','009_installation_lifecycle.sql']) {
   const saved = await db.pool.query('DELETE FROM schema_migrations WHERE name = $1 RETURNING *', [migration]);
   try {assert.equal((await cli().exited).code, 1); assert.equal((await db.pool.query('SELECT count(*) FROM schema_migrations WHERE name = $1', [migration])).rows[0].count, '0');}
   finally {await db.pool.query('INSERT INTO schema_migrations(name, digest) VALUES ($1, $2)', [saved.rows[0].name, saved.rows[0].digest]);}

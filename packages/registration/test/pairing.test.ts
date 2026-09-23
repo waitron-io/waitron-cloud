@@ -97,7 +97,7 @@ test('a fresh process resumes Cloud approval and reads the committed result afte
   const first=run();assert.equal(first.state,'complete');assert.deepEqual(run(),first);
   assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'1');
 });
-test('migration eight upgrades a seven-migration schema without changing its existing registration',async()=>{
+test('migrations upgrade a seven-migration schema without changing its existing registration',async()=>{
   const schema=`upgrade_${randomUUID().replaceAll('-','')}`;const admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
   const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${schema}`});
   try {
@@ -109,8 +109,8 @@ test('migration eight upgrades a seven-migration schema without changing its exi
     await pool.query('INSERT INTO organisations(id) VALUES($1)',[org]);await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[biz,org]);
     await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venue,org,biz,randomUUID()]);
     await pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'existing-key')",[installation,venue]);
-    const previous=(await pool.query('SELECT * FROM installations')).rows;await migrate(pool);await migrate(pool);
-    assert.deepEqual((await pool.query('SELECT * FROM installations')).rows,previous);assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'8');
+    const previous=(await pool.query('SELECT id,venue_id,public_key,revoked_at FROM installations')).rows;await migrate(pool);await migrate(pool);
+    assert.deepEqual((await pool.query('SELECT id,venue_id,public_key,revoked_at FROM installations')).rows,previous);assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'9');
     assert.equal((await pool.query('SELECT count(*) FROM pairing_requests')).rows[0].count,'0');
   }finally{await pool.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();}
 });
