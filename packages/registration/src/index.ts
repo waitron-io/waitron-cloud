@@ -231,7 +231,7 @@ export class RegistrationStore {
 
   async configuration(installationKey: string): Promise<Registration & { services: ServiceState[] }> {
     requireText(installationKey, 256);
-    const { rows } = await this.#pool.query(`SELECT i.id AS "installationId", v.id AS "venueId",
+    const { rows } = await (this.#client ?? this.#pool).query(`SELECT i.id AS "installationId", v.id AS "venueId",
       v.organisation_id AS "organisationId", v.legal_business_id AS "legalBusinessId",
       jsonb_agg(jsonb_build_object('service', s.service, 'state', s.state) ORDER BY s.service) AS services
       FROM installations i JOIN venues v ON v.id = i.venue_id

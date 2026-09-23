@@ -8,7 +8,7 @@ import {createHash} from 'node:crypto';
 import {migrate} from '../src/migrate.ts';
 import {login} from '@waitron-cloud/identity';
 import {database} from '../../account-http/test/fixtures.ts';
-import {SignupStore,transaction} from '../src/index.ts';
+import {RegistrationStore,SignupStore,transaction} from '../src/index.ts';
 import {PairingStore} from '../src/pairing.ts';
 import type {PairingClaims} from '../src/pairing-proof.ts';
 let db:Awaited<ReturnType<typeof database>>;let store:PairingStore;let other:PairingStore;
@@ -122,4 +122,14 @@ test('session expiry while Cloud approval waits on permission leaves no approval
   try{for(let i=0;i<100;i++){if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[db.schema])).rowCount){blocked=true;break;}await new Promise(r=>setTimeout(r,10));}await new Promise(r=>setTimeout(r,150));}
   finally{await block.query('COMMIT');block.release();}
   await pending;assert.equal(blocked,true);assert.equal((await db.pool.query('SELECT cloud_account_id FROM pairing_requests')).rows[0].cloud_account_id,null);
+});
+
+test('a borrowed registration transaction reads its own new configuration and rolls it back together',async()=>{
+  const a=machine();const binding={operationId:a.requestId,installationKey:a.publicKey,localVenueId:a.localVenueId,environment:a.environment,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+  await assert.rejects(transaction(db.pool,async client=>{
+    const nested=new RegistrationStore(db.pool,client);await nested.start(binding);await nested.approveLocal(binding,a.requestId);await nested.approveCloud(binding,owner.accountId);
+    const registration=await nested.complete(binding);const config=await nested.configuration(a.publicKey);assert.equal(config.installationId,registration.installationId);assert.equal(config.services.length,3);
+    throw new Error('intentional outer rollback');
+  }),/intentional outer rollback/);
+  assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');
 });
