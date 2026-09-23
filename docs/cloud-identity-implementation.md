@@ -12,8 +12,9 @@ registration permission stays in the existing membership table. Neither permissi
 set implies the other. The original slice uses trusted test/setup credentials.
 The subsequent [signup backend](cloud-signup-implementation.md) creates customer
 credentials after email proof. The [recovery backend](password-recovery-implementation.md)
-now resets passwords and revokes existing sessions. Production delivery, public account
-routes, MFA and passkeys remain integration work before public use.
+now resets passwords and revokes existing sessions. The [account HTTP API](../packages/account-http/README.md)
+provides the account routes. Live delivery, browser screens, MFA and passkeys remain
+integration work before public use.
 
 Store only hashes of session and CSRF tokens. Keep Waitron's 30-minute sliding idle
 limit and passive-polling distinction. Add a 12-hour absolute limit for this internal
@@ -27,8 +28,9 @@ and adaptations so later security fixes can be checked in both repositories.
 Session-backed Cloud approval must resolve the authenticated account, validate the
 session's CSRF token and recheck its organisation permission in the same transaction
 that records approval. No caller-supplied account ID can override that identity.
-The future HTTP layer must additionally enforce its allowed Origin, secure cookies,
-request limits and login throttling. This package does not expose HTTP endpoints.
+The account HTTP layer enforces its allowed Origin, secure cookies and shared request
+limits. This identity package does not expose HTTP endpoints itself; the pairing HTTP
+exchange remains separate work.
 
 The owner approved matching-code confirmation for first pairing: show a short code
 inside signed-in local Waitron and confirm the same code in Cloud. The code must be
