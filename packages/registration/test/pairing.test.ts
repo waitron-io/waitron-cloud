@@ -140,3 +140,40 @@ test('completed requests retain the browser code-guess bound while machine retri
   await unavailable(store.inspect(a.requestId,a.code,session.token,session.csrfToken));
   assert.deepEqual((await store.complete(completion(a))).registration,done.registration);
 });
+
+async function waitForLock(){
+  for(let i=0;i<100;i++){
+    if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[db.schema])).rowCount)return;
+    await new Promise(r=>setTimeout(r,10));
+  }
+  assert.fail('request did not reach the database lock');
+}
+test('pairing expiry during venue insertion rolls back the registration and both approvals',async()=>{
+  const a=machine();await store.start(a);await approve(a);
+  const blocker=await db.secondPool.connect();await blocker.query('BEGIN');
+  await blocker.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[randomUUID(),owner.organisationId,owner.legalBusinessId,a.localVenueId]);
+  await db.pool.query("UPDATE pairing_requests SET expires_at=clock_timestamp()+interval '300 milliseconds'");
+  const pending=unavailable(store.complete(completion(a)));
+  try{await waitForLock();await new Promise(r=>setTimeout(r,350));}finally{await blocker.query('COMMIT');blocker.release();}
+  await pending;assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');
+  assert.equal((await db.pool.query('SELECT count(*) FROM connection_requests')).rows[0].count,'0');
+  assert.equal((await db.pool.query('SELECT result FROM pairing_requests')).rows[0].result,null);
+});
+test('pairing expiry while Cloud approval waits on membership leaves its approval absent',async()=>{
+  const a=machine();await store.start(a);const blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('SELECT 1 FROM organisation_memberships FOR UPDATE');
+  await db.pool.query("UPDATE pairing_requests SET expires_at=clock_timestamp()+interval '300 milliseconds'");
+  const pending=unavailable(approve(a));
+  try{await waitForLock();await new Promise(r=>setTimeout(r,350));}finally{await blocker.query('COMMIT');blocker.release();}
+  await pending;assert.equal((await db.pool.query('SELECT cloud_account_id FROM pairing_requests')).rows[0].cloud_account_id,null);
+});
+test('the passive business read rechecks session expiry after a table maintenance lock',async()=>{
+  const blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('LOCK TABLE legal_businesses IN ACCESS EXCLUSIVE MODE');
+  await db.pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '300 milliseconds'");
+  const pending=assert.rejects(store.businesses(session.token),/session_expired/);
+  try{await waitForLock();await new Promise(r=>setTimeout(r,350));}finally{await blocker.query('COMMIT');blocker.release();}
+  await pending;
+});
+test('a missing business name refuses approval instead of producing a blank local confirmation',async()=>{
+  const a=machine();await store.start(a);await db.pool.query('UPDATE legal_businesses SET name=NULL');
+  await unavailable(approve(a));assert.equal((await db.pool.query('SELECT cloud_account_id FROM pairing_requests')).rows[0].cloud_account_id,null);
+});

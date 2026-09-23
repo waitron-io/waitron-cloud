@@ -31,8 +31,9 @@ async function view(client:PoolClient,row:Row):Promise<PairingView> {
   const result:PairingView={requestId:row.id,localVenueId:row.local_venue_id,environment:row.environment,expiresAt:row.expires_at.toISOString(),state:row.result?'complete':row.cloud_account_id?'awaiting_local':'awaiting_cloud'};
   if(row.organisation_id&&row.legal_business_id) {
     const names=(await client.query('SELECT o.name AS organisation, b.name AS business FROM organisations o JOIN legal_businesses b ON b.organisation_id=o.id WHERE o.id=$1 AND b.id=$2',[row.organisation_id,row.legal_business_id])).rows[0];
+    if(typeof names?.organisation!=='string'||!names.organisation.trim()||typeof names?.business!=='string'||!names.business.trim())throw new PairingError('pairing_unavailable');
     result.organisationId=row.organisation_id;result.legalBusinessId=row.legal_business_id;
-    result.organisationName=names?.organisation??'';result.legalBusinessName=names?.business??'';
+    result.organisationName=names.organisation;result.legalBusinessName=names.business;
   }
   if(row.result)result.registration=row.result;return result;
 }
@@ -66,6 +67,7 @@ export class PairingStore {
         b.name AS "legalBusinessName",b.country_code AS "countryCode" FROM organisation_memberships m
         JOIN organisations o ON o.id=m.organisation_id JOIN legal_businesses b ON b.organisation_id=o.id
         WHERE m.account_id=$1 AND m.can_register_venues ORDER BY o.name,b.name,b.id`,[session.accountId]);
+      // A plain SELECT can wait behind table maintenance past the session deadline.
       await resolveSession(client,token,{touch:false});return result.rows;
     });
   }

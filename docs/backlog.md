@@ -266,7 +266,10 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   gains a UI, define the permitted diagnostics for an already-linked or revoked
   installation; this slice rejects a different installation as a registration conflict.
   Before public exposure, add pairing-request retention/cleanup and approval audit
-  records, and measure denial-of-service behavior for known request IDs.
+  records, and measure denial-of-service behavior for known request IDs. Completed
+  pairing rows reference accounts; define their cleanup before account deletion. The
+  short code has an unkeyed digest, so review database-disclosure protection before
+  launch and retain explicit local business confirmation.
   Terminated database connections and lost replies have regression tests; actual
   database failover and recovery under deployment credentials still need proof.
 - **Provisioning and placement.** Use Kubernetes for orchestration when needed;

@@ -247,6 +247,10 @@ business. Account permission is checked again before linking. The five-attempt c
 is shared across processes and IPs. Additional allowances are ten starts per 15 minutes
 per IP and key, 60 status/completion calls per minute per IP and key, and 30 browser
 pairing calls per minute per account, inside the overall API limit.
+Unsigned start attempts also consume their IP allowance. Venues sharing an internet
+address share that limit; an untrusted forwarding proxy can collapse customers into
+one address. A one-second status poll uses half the overall per-IP minute allowance,
+so prefer explicit refresh or a slower interval.
 
 Invalid signatures return 401 `invalid_proof`; missing permission returns 403
 `permission_denied`. Unavailable requests, mismatched bindings, absent approval and

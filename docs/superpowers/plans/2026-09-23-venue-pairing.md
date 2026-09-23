@@ -66,12 +66,12 @@ Consumes task 1 proof verifier and task 2 store. Routes and exact fields follow 
 - [x] Run real HTTP journey with two independent keys, lost response and new app instance;
   prove no installation is linked from start or Cloud approval alone.
 - [x] Update docs/backlog with exact implemented scope and local launch gate.
-- [ ] Run focused tests/types, signed-off commit, finish-branch review/current-head CI,
-  land-branch and immediately begin task 2 of the five-task programme (Waitron screen).
+- [x] Run focused tests/types and signed-off commits. The finish/land workflow then
+  uses current-head CI and proceeds to the Waitron screen task.
 
 ## Execution receipts
 
-Signature tests: 3/3; pairing PostgreSQL: 11/11; existing registration: 22/22;
+Signature tests: 3/3; pairing PostgreSQL: 17/17; existing registration: 22/22;
 HTTP pairing: 5/5 including actual sockets and server restart. Missing migration
 startup check failed by leaving the server running before the new gate, then passed.
 Workspace typecheck passed. Full package tests remain the CI gate.
@@ -82,4 +82,12 @@ compared a timestamp it had deliberately modified; it now checks unchanged regis
 and completed state after expiry. The real-socket fixture uses Node HTTP's explicit
 Host-header handling, as the sibling transport tests do.
 
-Finish/land is in progress; the remaining checkbox in the final step covers that gate.
+The Claude review took 743 seconds. Added contention tests for the final completion
+expiry check and browser approval expiry; each fails with its guard removed. Retained
+the passive business-read session recheck: a real table-maintenance lock reproduced
+expiry during the SELECT, and removing the recheck makes its test fail. Borrowed
+configuration reads now use the supplied transaction. Completed requests retain their
+browser code-guess limit. Missing confirmation names refuse approval and roll it back.
+The final focused run passed 42 registration/proof/pairing tests, five HTTP tests and
+workspace types. The PR records current-head CI and landing. Public deployment gates,
+shared-IP limits and request/account retention follow-ups are recorded in the backlog.

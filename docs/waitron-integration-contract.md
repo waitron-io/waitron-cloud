@@ -72,7 +72,9 @@ Both approvals must refer to the same request. Expired or replayed approvals are
 rejected. If a reply is lost, retrying must return the existing registration rather
 than create another. The Cloud proof encoding and durable exchange now follow the
 [pairing contract](superpowers/specs/2026-09-23-venue-pairing-design.md). The local
-administrator adapter and real two-installation journey follow next.
+administrator adapter and real two-installation journey follow next. Until that adapter
+lands, the local half is asserted by the installation signature; Cloud does not independently
+verify a local administrator role. Public deployment remains gated on the complete flow.
 
 ### Operation boundaries
 
