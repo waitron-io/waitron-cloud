@@ -5,6 +5,7 @@ on:
   pull_request:
 permissions:
   contents: read
+  packages: read
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -19,6 +20,11 @@ jobs:
         with:
           node-version: '24'
           cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
       - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: pnpm --filter @waitron-cloud/ui-smoke exec playwright install --with-deps chromium
       - run: pnpm typecheck
       - run: pnpm test

@@ -13,12 +13,16 @@ service configuration and recovery to the existing interfaces and the current SQ
 
 ## Development
 
-Use Node.js 24 or later and pnpm 9.15.0 to work in this repository. Install
-dependencies from the lockfile with:
+Use Node.js 24 or later and pnpm 9.15.0 to work in this repository. Follow
+the [GitHub package authentication setup](docs/shared-ui-release.md#install-locally)
+first, then install dependencies and the test browser with:
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm --filter @waitron-cloud/ui-smoke exec playwright install chromium
 ```
+
+Run `pnpm test:ui` for the shared UI browser smoke test on its own.
 
 Check types and run the package tests against a disposable PostgreSQL container
 (requires Docker):
