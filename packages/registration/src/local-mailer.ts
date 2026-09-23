@@ -1,7 +1,7 @@
 import type { SignupMailer } from './signup.ts';
 import type { PasswordRecoveryMailer } from './password-recovery.ts';
 import { accountMail, type AccountMailKind } from './account-mail.ts';
-import type { AccountEmail } from './account-input.ts';
+import type { AccountEmail, AccountNotification } from './account-input.ts';
 import nodemailer from 'nodemailer';
 
 /** Development capture only; the SMTP host is fixed to loopback and has no production configuration. */
@@ -23,7 +23,7 @@ export function createLocalAccountMailer(options: {port?: number; portalOrigin?:
     // SMTP errors can contain recipients or secrets; expose only a fixed diagnostic.
     catch { throw new Error('Local email delivery failed'); }
   };
-  const action = (kind: AccountMailKind, message: AccountEmail | {email: string}) => {
+  const action = (kind: AccountMailKind, message: AccountEmail | AccountNotification) => {
     const rendered = accountMail(origin, kind, message);
     return send(message.email, rendered.subject, rendered.text);
   };

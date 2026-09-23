@@ -1,3 +1,4 @@
+import { securityHeaders } from './portal.ts';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { HttpBindings } from '@hono/node-server';
@@ -17,7 +18,7 @@ const paths: Record<string, readonly string[]> = {
   '/password-reset/request': ['email'], '/password-reset/complete': ['token', 'password'],
 };
 function protect(c: Context) {
-  c.header('Cache-Control', 'no-store'); c.header('Referrer-Policy', 'no-referrer'); c.header('X-Content-Type-Options', 'nosniff');
+  for (const [name, value] of Object.entries(securityHeaders)) c.header(name, value);
 }
 function publicError(error: unknown): AccountHttpError {
   if (error instanceof AccountHttpError) return error;
@@ -63,7 +64,9 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
       const session = await transaction(pool, client => resolveSession(client, readSessionCookie(c, secure) ?? '', {touch: false}));
       return c.json(session);
     }
-    const body = await readAccountBody(c.req.raw, fields!);
+    const body = await readAccountBody(c.req.raw, fields!, ['/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : []);
+    if (body.locale !== undefined && body.locale !== 'en' && body.locale !== 'es') throw new AccountHttpError(400, 'invalid_input');
+    const locale = body.locale ?? 'en';
     const started = performance.now();
     const slow = ['/login', '/signup/request', '/password-reset/request'].includes(path);
     try {
@@ -81,7 +84,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
       }
       if (path.endsWith('/request')) {
         await consume([{scope: `${path}-ip`, subject: ip, limit: 10, windowSeconds: 900}]);
-        const result = await (path === '/signup/request' ? signup.request(email!) : recovery.request(email!));
+        const result = await (path === '/signup/request' ? signup.request(email!, locale) : recovery.request(email!, locale));
         return c.json(result, 202);
       }
       if (path.endsWith('/complete')) {
@@ -90,7 +93,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
         if (path === '/signup/complete') return c.json(await signup.complete(body.token!, {
           password: body.password!, organisationName: body.organisationName!, legalBusinessName: body.legalBusinessName!, countryCode: body.countryCode!,
         }), 201);
-        return c.json(await recovery.complete(body.token!, body.password!));
+        return c.json(await recovery.complete(body.token!, body.password!, locale));
       }
       const token = readSessionCookie(c, secure) ?? '';
       const csrfToken = c.req.header('x-csrf-token') ?? '';

@@ -99,7 +99,7 @@ function cli(overrides: NodeJS.ProcessEnv = {}) {
 }
 test('CLI fails closed with fixed diagnostics for invalid settings and absent migration', async () => {
   for (const overrides of [{CLOUD_HTTP_RATE_KEY: ''}, {CLOUD_EMAIL_KEYS: 'private-secret'}, {CLOUD_HTTP_TRUSTED_PROXY_IPS: '*'},
-    {NODE_ENV: 'production'}, {DATABASE_URL: ''}, {CLOUD_HTTP_PORT: '-1'}]) {
+    {NODE_ENV: 'production'}, {DATABASE_URL: ''}, {CLOUD_HTTP_PORT: '-1'}, {CLOUD_PORTAL_ASSETS_DIR: '/missing-cloud-portal-build'}]) {
     const outcome = await cli(overrides).exited;
     assert.equal(outcome.code, 1); assert.equal(outcome.stdout, '');
     assert.equal(outcome.stderr, 'Account server failed; check database, migrations and configuration\n');

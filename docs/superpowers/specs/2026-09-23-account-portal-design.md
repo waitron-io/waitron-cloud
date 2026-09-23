@@ -2,7 +2,7 @@
 
 Status: approved by the owner, 2026-09-23. English and Spanish, browser-language
 selection and a language switch are agreed. The
-[implementation plan](../plans/2026-09-23-account-portal.md) is ready for review.
+[implementation plan](../plans/2026-09-23-account-portal.md) records the approved implementation.
 
 ## Outcome
 

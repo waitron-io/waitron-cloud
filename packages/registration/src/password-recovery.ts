@@ -4,10 +4,10 @@ import { hashSecret } from '@waitron-cloud/identity';
 import type { EmailDeliveryContext, EmailDeliveryReceipt } from './email-delivery.ts';
 import type { EmailOutbox } from './email-outbox.ts';
 import { transaction } from './transaction.ts';
-import { normaliseEmail, validNewPassword, type AccountEmail } from './account-input.ts';
+import { normaliseEmail, validNewPassword, validLocale, type AccountLocale, type AccountEmail, type AccountNotification } from './account-input.ts';
 export interface PasswordRecoveryMailer {
   sendPasswordReset(message: AccountEmail, context?: EmailDeliveryContext): Promise<void | EmailDeliveryReceipt>;
-  sendPasswordChanged(message: {email: string}, context?: EmailDeliveryContext): Promise<void | EmailDeliveryReceipt>;
+  sendPasswordChanged(message: AccountNotification, context?: EmailDeliveryContext): Promise<void | EmailDeliveryReceipt>;
 }
 export class PasswordRecoveryError extends Error {
   readonly code: 'recovery_invalid' | 'reset_unavailable';
@@ -18,9 +18,9 @@ export class PasswordRecoveryStore {
   readonly #outbox: EmailOutbox;
   constructor(pool: Pool, outbox: EmailOutbox) { this.#pool = pool; this.#outbox = outbox; }
 
-  async request(input: string): Promise<{status: 'accepted'}> {
+  async request(input: string, locale: AccountLocale = 'en'): Promise<{status: 'accepted'}> {
     const email = normaliseEmail(input);
-    if (!email) throw new PasswordRecoveryError('recovery_invalid');
+    if (!email || !validLocale(locale)) throw new PasswordRecoveryError('recovery_invalid');
     await transaction(this.#pool, async client => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema() || ':password-reset'), hashtext($1))", [email]);
       const recent = await client.query("SELECT 1 FROM password_reset_requests WHERE email = $1 AND created_at > clock_timestamp() - interval '1 minute' LIMIT 1", [email]);
@@ -43,14 +43,14 @@ export class PasswordRecoveryStore {
       // Ineligible addresses also get cooldown records, but never usable account bindings.
       await client.query(`INSERT INTO password_reset_requests (token_hash, email, account_id, password_fingerprint, created_at, expires_at)
         VALUES ($1, $2, $3, $4, $5, $6)`, [digest(token), email, accountId, fingerprint, now, expiresAt]);
-      if (accountId) await this.#outbox.enqueue(client, 'password_reset', { email, token, expiresAt });
+      if (accountId) await this.#outbox.enqueue(client, 'password_reset', { email, token, expiresAt, locale });
     });
     return { status: 'accepted' };
   }
 
-  async complete(token: string, password: string): Promise<{status: 'completed'}> {
+  async complete(token: string, password: string, locale: AccountLocale = 'en'): Promise<{status: 'completed'}> {
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new PasswordRecoveryError('reset_unavailable');
-    if (!validNewPassword(password)) throw new PasswordRecoveryError('recovery_invalid');
+    if (!validNewPassword(password) || !validLocale(locale)) throw new PasswordRecoveryError('recovery_invalid');
     const tokenHash = digest(token);
     await transaction(this.#pool, async client => {
       const candidate = (await client.query(`SELECT account_id FROM password_reset_requests
@@ -69,7 +69,7 @@ export class PasswordRecoveryStore {
       // A fresh salted hash invalidates all earlier links, including when reusing the old password.
       await client.query('UPDATE cloud_credentials SET password_hash = $2 WHERE account_id = $1', [candidate.account_id, passwordHash]);
       await client.query('UPDATE cloud_sessions SET ended_at = clock_timestamp() WHERE account_id = $1 AND ended_at IS NULL', [candidate.account_id]);
-      await this.#outbox.enqueue(client, 'password_changed', { email: credential.email });
+      await this.#outbox.enqueue(client, 'password_changed', { email: credential.email, locale });
       const consumed = await client.query(`UPDATE password_reset_requests SET consumed_at = clock_timestamp()
         WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > clock_timestamp()`, [tokenHash]);
       if (!consumed.rowCount) throw new PasswordRecoveryError('reset_unavailable');

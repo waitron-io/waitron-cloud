@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import { EmailOutbox } from '@waitron-cloud/registration';
 import { accountHttpConfig } from './config.ts';
 import { AccountRateLimiter } from './rate-limit.ts';
+import { loadPortalAssets } from './portal.ts';
 import { startAccountServer } from './server.ts';
 let pool: Pool | undefined;
 let running: Awaited<ReturnType<typeof startAccountServer>> | undefined;
@@ -28,7 +29,8 @@ try {
   pool.on('error', () => {console.error('Account server database connection failed'); process.exitCode = 1; stop();});
   if (!(await pool.query("SELECT 1 FROM schema_migrations WHERE name = '007_account_http.sql'")).rowCount) throw new Error();
   if (!stopRequested) {
-    running = await startAccountServer({pool, outbox, config, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    const portalAssets = process.env.CLOUD_PORTAL_ASSETS_DIR ? await loadPortalAssets(process.env.CLOUD_PORTAL_ASSETS_DIR) : undefined;
+    running = await startAccountServer({pool, outbox, config, portalAssets, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
     console.log(JSON.stringify({status: 'listening', port: address.port}));

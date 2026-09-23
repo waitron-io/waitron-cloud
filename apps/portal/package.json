@@ -1,0 +1,6 @@
+{
+  "name": "@waitron-cloud/portal", "private": true, "type": "module",
+  "scripts": {"build": "node build.mjs", "typecheck": "tsc -p tsconfig.json", "test": "pnpm build && node --test --test-timeout=120000 test/*.test.ts"},
+  "dependencies": {"@waitron-io/ui-core": "0.1.0", "lit": "3.3.3"},
+  "devDependencies": {"@waitron-cloud/account-http": "workspace:*", "@waitron-cloud/registration": "workspace:*", "@waitron-cloud/identity": "workspace:*", "esbuild": "0.28.2", "playwright": "1.63.0", "pg": "^8.23.0", "@types/pg": "^8.23.1", "axe-core": "4.13.0"}
+}

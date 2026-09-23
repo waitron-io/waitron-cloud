@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID }
 import type { Pool, PoolClient } from 'pg';
 import type { SignupMailer } from './signup.ts';
 import type { PasswordRecoveryMailer } from './password-recovery.ts';
-import { normaliseEmail, type AccountEmail } from './account-input.ts';
+import { normaliseEmail, validLocale, type AccountEmail, type AccountNotification } from './account-input.ts';
 import { EmailDeliveryError, type EmailDeliveryFailure, type EmailDeliveryReceipt } from './email-delivery.ts';
 import { transaction } from './transaction.ts';
 
@@ -36,11 +36,11 @@ export class EmailOutbox {
     this.#active = config.activeKeyId;
   }
 
-  async enqueue(client: PoolClient, kind: EmailKind, message: AccountEmail | {email: string}): Promise<void> {
-    if (!['verification', 'password_reset', 'password_changed'].includes(kind) || normaliseEmail(message.email) !== message.email) throw new Error('Invalid queued email');
+  async enqueue(client: PoolClient, kind: EmailKind, message: AccountEmail | AccountNotification): Promise<void> {
+    if (!['verification', 'password_reset', 'password_changed'].includes(kind) || normaliseEmail(message.email) !== message.email || (message.locale !== undefined && !validLocale(message.locale))) throw new Error('Invalid queued email');
     let tokenHash: string | null = null;
     let expiresAt: Date;
-    let content: AccountEmail | {email: string} = {email: message.email};
+    let content: AccountEmail | AccountNotification = {email: message.email};
     if (kind === 'password_changed') {
       expiresAt = (await client.query("SELECT clock_timestamp() + interval '7 days' AS expiry")).rows[0].expiry;
     } else {
@@ -49,6 +49,7 @@ export class EmailOutbox {
       content = {email: message.email, token: message.token, expiresAt: expiresAt.toISOString()};
       tokenHash = digest(message.token);
     }
+    if (message.locale !== undefined) content.locale = message.locale;
     const id = randomUUID();
     const nonce = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', this.#keys.get(this.#active)!, nonce);
@@ -60,7 +61,7 @@ export class EmailOutbox {
   }
 
   /** Only the delivery worker should recover plaintext; it must never log this return value. */
-  open(row: MessageRow): AccountEmail | {email: string} {
+  open(row: MessageRow): AccountEmail | AccountNotification {
     try {
       const key = this.#keys.get(row.key_id);
       if (!key || row.payload.length < 29) throw new Error();
@@ -68,7 +69,7 @@ export class EmailOutbox {
       decipher.setAAD(aad(row.id, row.kind, row.key_id));
       decipher.setAuthTag(row.payload.subarray(12, 28));
       const message = JSON.parse(Buffer.concat([decipher.update(row.payload.subarray(28)), decipher.final()]).toString('utf8'));
-      if (!message || typeof message.email !== 'string' || normaliseEmail(message.email) !== message.email) throw new Error();
+      if (!message || typeof message.email !== 'string' || normaliseEmail(message.email) !== message.email || (message.locale !== undefined && !validLocale(message.locale))) throw new Error();
       if (row.kind !== 'password_changed' && (typeof message.token !== 'string' || digest(message.token) !== row.token_hash
         || Date.parse(message.expiresAt) !== row.expires_at.getTime())) throw new Error();
       return message;
@@ -108,7 +109,7 @@ export class EmailWorker {
     });
     if (claim === undefined) return false;
     if (claim === null) return true;
-    let message: AccountEmail | {email: string};
+    let message: AccountEmail | AccountNotification;
     try { message = this.#outbox.open(claim); }
     catch { await this.#fail(claim, 'payload_unavailable'); return true; }
     // Recheck after decrypting and any database wait, before handing a link to the transport.
@@ -145,7 +146,7 @@ export class EmailWorker {
     return true;
   }
 
-  async #live(row: MessageRow, message: AccountEmail | {email: string}): Promise<boolean> {
+  async #live(row: MessageRow, message: AccountEmail | AccountNotification): Promise<boolean> {
     if (row.kind === 'password_changed') return true;
     if (row.kind === 'verification') {
       return !!(await this.#pool.query(`SELECT 1 FROM signup_requests WHERE token_hash = $1 AND email = $2

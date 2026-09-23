@@ -65,9 +65,9 @@ test('production adapter authenticates over verified TLS and sends all account m
       assert.equal(captured.secure, true); assert.deepEqual(captured.to, [content.email]); assert.equal(captured.from, base.from);
       assert.ok(!captured.raw.includes(base.password));
     }
-    assert.ok(readable(smtp.data[0]!.raw).includes(`https://cloud.example.test/signup?token=${content.token}`));
+    assert.ok(readable(smtp.data[0]!.raw).includes(`https://cloud.example.test/signup#token=${content.token}`));
     for (const captured of smtp.data.slice(0, 2)) assert.ok(captured.raw.includes(receipt.messageId));
-    assert.ok(readable(smtp.data[2]!.raw).includes(`https://cloud.example.test/reset-password?token=${content.token}`));
+    assert.ok(readable(smtp.data[2]!.raw).includes(`https://cloud.example.test/reset-password#token=${content.token}`));
     assert.ok(smtp.data[3]!.raw.includes('Your Waitron Cloud password changed'));
     assert.ok(!smtp.data[3]!.raw.includes(content.token));
   } finally {
@@ -195,7 +195,7 @@ test('production CLI delivers queued signup through authenticated TLS and record
     assert.equal(record.transport, 'smtp'); assert.equal(record.message_id, `<${record.id}@example.test>`);
     assert.equal(record.payload, null); assert.equal(record.attempts, 2);
     assert.equal(smtp.data.length, 1); assert.ok(smtp.data[0]!.raw.includes(record.message_id));
-    const token = readable(smtp.data[0]!.raw).match(/signup\?token=([A-Za-z0-9_-]{43})/)?.[1];
+    const token = readable(smtp.data[0]!.raw).match(/signup#token=([A-Za-z0-9_-]{43})/)?.[1];
     assert.ok(token);
     const account = await signup.complete(token, {password: 'A long unique test password', organisationName: 'Venue', legalBusinessName: 'Venue SL', countryCode: 'ES'});
     assert.ok(account.accountId);

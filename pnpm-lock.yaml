@@ -15,6 +15,40 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
+  apps/portal:
+    dependencies:
+      '@waitron-io/ui-core':
+        specifier: 0.1.0
+        version: 0.1.0(lit@3.3.3)
+      lit:
+        specifier: 3.3.3
+        version: 3.3.3
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
+      '@waitron-cloud/account-http':
+        specifier: workspace:*
+        version: link:../../packages/account-http
+      '@waitron-cloud/identity':
+        specifier: workspace:*
+        version: link:../../packages/identity
+      '@waitron-cloud/registration':
+        specifier: workspace:*
+        version: link:../../packages/registration
+      axe-core:
+        specifier: 4.13.0
+        version: 4.13.0
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
+      playwright:
+        specifier: 1.63.0
+        version: 1.63.0
+
   packages/account-http:
     dependencies:
       '@hono/node-server':
@@ -397,6 +431,10 @@ packages:
     peerDependencies:
       lit: ^3.2.0
 
+  axe-core@4.13.0:
+    resolution: {integrity: sha512-UzGt8zg7Ny8djbYMhxl2zuEevVa7r2gJjYY5Lwr1xM7+XU2nd6CkIWFTVcCIbAP63vSz71NaVyyuSk9lHKcy0A==}
+    engines: {node: '>=4'}
+
   esbuild@0.28.2:
     resolution: {integrity: sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==}
     engines: {node: '>=18'}
@@ -684,6 +722,8 @@ snapshots:
   '@waitron-io/ui-core@0.1.0(lit@3.3.3)':
     dependencies:
       lit: 3.3.3
+
+  axe-core@4.13.0: {}
 
   esbuild@0.28.2:
     optionalDependencies:

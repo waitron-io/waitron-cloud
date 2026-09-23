@@ -3,7 +3,7 @@
 > **For agentic workers:** Use `superpowers:executing-plans` to implement this plan
 > inline, task by task. Use one Claude whole-branch review during finish-branch.
 
-Status: proposed for implementation review, 2026-09-23.
+Status: implemented, 2026-09-23. Local verification is recorded below.
 
 **Goal:** You can create a Cloud account, sign in and recover access in English or
 Spanish without a working venue server.
@@ -84,7 +84,7 @@ Use `request(email: string, locale: AccountLocale = 'en')` on both stores and
 Return types remain unchanged. Mailers and the outbox accept `AccountNotification` for
 password-change mail. `accountMail` retains its current return shape.
 
-- [ ] Add a failing mail-rendering test, then run
+- [x] Add a failing mail-rendering test, then run
   `pnpm --filter @waitron-cloud/registration exec node --test test/account-mail.test.ts`:
 
   ```ts
@@ -100,18 +100,18 @@ password-change mail. `accountMail` retains its current return shape.
   Cover all three message kinds in both languages, and omitted locale in English.
   A missing export/type is an initial failure; then observe the behavioral assertions
   fail on the old renderer before replacing it.
-- [ ] Extend strict body parsing with
+- [x] Extend strict body parsing with
   `readAccountBody(request: Request, required: readonly string[], optional: readonly string[] = [])`.
   Reject missing required fields, non-string present values and unknown fields.
   Allow only `locale` on signup request, reset request and reset completion, then
   validate `en`/`es` before invoking stores. Add HTTP tests for omitted, valid, invalid,
   null and unexpected locale fields; signup completion still rejects locale.
-- [ ] Trace all mail payload consumers with `rg 'AccountEmail|sendPasswordChanged|searchParams.get' packages`.
+- [x] Trace all mail payload consumers with `rg 'AccountEmail|sendPasswordChanged|searchParams.get' packages`.
   Add queue/store tests proving locale survives encryption and worker delivery, while
   old payloads without locale render English. Reject an explicit unsupported locale
   as an invalid payload; preserve existing key, token-hash and expiry checks.
   Extend delivery fixtures to pass optional locale while preserving old callers.
-- [ ] Implement locale propagation inside existing transactions, preserving cooldowns
+- [x] Implement locale propagation inside existing transactions, preserving cooldowns
   and single-use behavior. Build links and format expiry explicitly:
 
   ```ts
@@ -124,7 +124,7 @@ password-change mail. `accountMail` retains its current return shape.
   Use complete English/Spanish templates for subjects, expiry and notification text.
   Update mail tests that extract query tokens to read fragment tokens; retain the
   legacy query behavior as browser tests in task 3.
-- [ ] Run the mail test plus the changed store/queue/adapter tests through
+- [x] Run the mail test plus the changed store/queue/adapter tests through
   `node scripts/test-postgres.mjs --filter @waitron-cloud/registration test`, and
   the HTTP locale cases through the same runner with the account-http filter and
   `exec node --test --test-name-pattern=locale test/account-http.test.ts`.
@@ -143,22 +143,22 @@ with that return type to `startAccountServer` options. The CLI loads it only whe
 The map uses URL keys `/index.html`, `/app.js`, `/app.css`; only document routes can
 serve index content. Keep filesystem paths out of request resolution.
 
-- [ ] Add real HTTP tests: all six document paths (`/`, `/signup`, `/login`,
+- [x] Add real HTTP tests: all six document paths (`/`, `/signup`, `/login`,
   `/forgot-password`, `/reset-password`, `/account`) return HTML for GET and no body
   for HEAD; assets have explicit MIME types. Unknown paths, `/index.html`, encoded
   traversal, unknown assets and unsupported methods do not serve the shell.
   Query-bearing `/signup` and `/reset-password` permit old email links; other queries
   remain rejected. API query rejection remains unchanged.
-- [ ] Run
+- [x] Run
   `node scripts/test-postgres.mjs --filter @waitron-cloud/account-http exec node --test test/portal.test.ts`
   and confirm these routes fail before implementation.
-- [ ] Route non-API traffic with configured assets before the account admission gate;
+- [x] Route non-API traffic with configured assets before the account admission gate;
   apply the same validated host rules and security headers. Preserve the existing API
   path and API-only behavior. Return bounded 404/405 responses for static misses.
   Test malformed/foreign Host and eight blocked account operations alongside static
   GET/HEAD requests. Assert page/asset traffic leaves rate-counter rows unchanged,
   then prove the ninth account request remains rejected.
-- [ ] Add the Lit/esbuild package with pinned dependencies matching `ui-smoke`, its
+- [x] Add the Lit/esbuild package with pinned dependencies matching `ui-smoke`, its
   own browser tsconfig (`skipLibCheck: false`), and an external-script HTML entry.
   Build only `dist/index.html`, `dist/app.js`, `dist/app.css`, without source maps.
   The initial entry can render a shared card so static/CSP browser checks are real.
@@ -172,7 +172,7 @@ serve index content. Keep filesystem paths out of request resolution.
   Inline styles are allowed for Lit/shared-control styling; inline scripts remain
   prohibited. Add no-store, no-referrer and nosniff to documents and account responses.
   Preserve transport deadlines, header limits, maxConnections and shutdown behavior.
-- [ ] Add `portal:build` = `pnpm --filter @waitron-cloud/portal build` and document
+- [x] Add `portal:build` = `pnpm --filter @waitron-cloud/portal build` and document
   `pnpm portal:build` then
   `CLOUD_PORTAL_ASSETS_DIR=apps/portal/dist pnpm account:serve` in `.env.example`.
   Re-run focused server tests, browser rendering and typechecking. Commit with
@@ -209,7 +209,7 @@ export class PortalSession {
 }
 ```
 
-- [ ] Write pure link and locale tests before implementation. This link example must
+- [x] Write pure link and locale tests before implementation. This link example must
   fail with the old query-only behavior:
 
   ```ts
@@ -226,37 +226,37 @@ export class PortalSession {
   Clean secret-bearing URLs even when invalid. Use link language for that arrival,
   otherwise saved preference, then supported browser languages, then English.
   Storage access exceptions must not prevent boot or language changes.
-- [ ] Run pure tests with
+- [x] Run pure tests with
   `pnpm --filter @waitron-cloud/portal exec node --test test/links.test.ts test/locale.test.ts`.
   Implement capture before initial render or requests, retain secrets only in form
   memory and discard them when leaving that completion flow. Add complete keyed
   translation dictionaries with matching keys; switch language without resetting
   form inputs, token, request state or cooldown.
-- [ ] Write controlled request tests for session states and response ordering.
+- [x] Write controlled request tests for session states and response ordering.
   `accountRequest` uses same-origin credentials, JSON POSTs and the matching readable
   CSRF cookie only on activity/logout. It handles 204, fixed error codes and both
   Retry-After forms; it never retries writes or exposes raw error bodies.
   A malformed successful response is unavailable, not authenticated.
-- [ ] Implement `PortalSession`: passive initial/visible/protected-action reads,
+- [x] Implement `PortalSession`: passive initial/visible/protected-action reads,
   trusted keyboard/pointer activity on the authenticated screen at most once per
   minute, and expiry-triggered passive reads. Ignore synthetic/background activity.
   Coalesce overlapping checks; invalidate older responses on logout/new login.
   Distinguish 401 from 503/network failures; failed logout retains a retry action.
   Dispose listeners/timers. Test fake time and delayed replies without minute-long sleeps.
-- [ ] Add failing form/browser tests, then render shared controls for every route:
+- [x] Add failing form/browser tests, then render shared controls for every route:
   email request/resend/change-address, signup completion, login, reset request,
   reset completion and account/sign-out. Include ordinary links and history handling;
   `/` alone chooses account/login after resolution. Explicit `/login` and completion
   pages remain accessible with an existing session. Account requires a confirmed session.
   Submission checks must run on Enter as well as click. Include reveal, labels,
   autocomplete, error summary, field focus, busy state and live status.
-- [ ] Implement form state with a single pending operation and no automatic write
+- [x] Implement form state with a single pending operation and no automatic write
   retry. Start a minimum 60-second resend cooldown after accepted email requests;
   respect a longer Retry-After. Preserve values/language through pending responses.
   Lost completion responses offer login with the chosen password and deliberate retry;
   invalid/expired/used links offer login/new link. Lost login responses trigger one
   passive session check. Show success only from a confirmed response.
-- [ ] Verify `new TextEncoder().encode(password).byteLength <= 1024` and
+- [x] Verify `new TextEncoder().encode(password).byteLength <= 1024` and
   `[...password].length >= 15`, including astral characters and exact boundaries.
   Test legal-name limits, default/different organisation name and the `ES` payload.
   Run the portal unit/controlled browser tests and typecheck; commit with
@@ -277,36 +277,65 @@ through `MAILPIT_TEST_URL` filtered by each test's unique recipient. Do not dele
 tests' messages. Use the account-http fixture's schema lifecycle as the reference;
 close browser/server/pools and drop only this fixture's schema in `finally`.
 
-- [ ] Add browser tests before claiming integrated success. For both languages:
+- [x] Add browser tests before claiming integrated success. For both languages:
   request signup, drain mail, open the actual captured link, complete business setup,
   sign in, reload, interact, sign out, reset from email and reject the old session and
   old password. Prove existing/unknown email request screens look the same. Check
   password-changed mail language follows reset completion. Open a second account's
   completion link while signed in and assert the original session is not replaced.
-- [ ] Run
+- [x] Run
   `node scripts/test-postgres.mjs --filter @waitron-cloud/portal test`.
   The test script builds once then runs `node --test --test-timeout=120000 test/*.test.ts`.
   Require the real HTTP/worker/Mailpit flow, not mocked success responses. Assert tokens
   are absent from subsequent URLs/referrers/storage, and opening a link causes no
   completion POST. Legacy links may contain the token in their initial request only.
-- [ ] Use Playwright interception for delayed/double submissions, 429, 503, session
+- [x] Use Playwright interception for delayed/double submissions, 429, 503, session
   failure and logout failure. For lost completion replies, forward the real request
   to the server before aborting the browser response, then prove the transaction
   committed and no second POST happened automatically. Also test a stale session
   response arriving after logout, language switching while pending and expired links.
-- [ ] Check keyboard-only forms, Enter, focus/error announcements, native input names
+- [x] Check keyboard-only forms, Enter, focus/error announcements, native input names
   and autocomplete, phone width 375px, both themes and both languages. Add `axe-core`
   as a test dependency and run it on each screen/state; inspect screenshots for clipping
   and contrast. Fail on browser console/CSP errors. Retain the existing private-package
   smoke test. Verify HTTPS cookie attributes using the existing server test setup;
   loopback HTTP journeys alone are not evidence for production cookie behavior.
-- [ ] Ensure workspace typecheck/test includes the portal and CI installs the same
+- [x] Ensure workspace typecheck/test includes the portal and CI installs the same
   pinned Chromium revision. Keep GitHub package credentials scoped to installation.
   Document build/serve/rebuild, required env, Mailpit workflow and API locale additions.
   Mark completed plan steps and update backlog with the portal outcome and remaining
   live-provider/ingress/account-security work. Commit with
   `git commit -s -m "Verify real account portal journeys and document local use"`.
-- [ ] Run finish-branch: rebase, one Claude run-it review in an isolated candidate,
+- [x] Run finish-branch: rebase, one Claude run-it review in an isolated candidate,
   triage findings, focused fixes and normal push hook. Wait for current-head green CI,
   then land and clean up without another authorization request. Report the actual
   local/browser/CI evidence and any remaining deployment work.
+
+
+## Verification record
+
+- Registration suite: 107 passing tests, including locale through encrypted delivery.
+- Portal suite: 23 passing tests, including both real Mailpit journeys, lost completion
+  replies, session races, cooldowns and accessibility across both themes/languages.
+- Focused account HTTP and portal tests: 17 passing; transport/server tests: 10 passing
+  in the earlier server verification run. Workspace typechecking passes.
+- Phone screenshots inspected at 375px in English/light and Spanish/dark.
+- CI already installs the same pinned Playwright browser for the package smoke test;
+  workspace test discovery includes the portal, so no second install step is needed.
+- The normal finish/land workflow supplies the final review and current-head CI record.
+
+
+## Branch review
+
+The Claude run-it review took 609 seconds. Follow-up tests reproduced per-request
+asset copies and unsupported inherited locale names. Static responses now stream
+shared bytes; the 150 slow-client experiment delivered every 4 MB response with
+36 MB of array-buffer memory, compared with 663 MB in the review. A regression checks
+held responses and real slow clients. Renderer validation now uses the same explicit
+language guard as the stores. Negative queue tests fail when either locale guard is
+removed.
+
+Exact document routes, query restrictions and legacy-link compatibility retain the
+approved behavior. Public URL usability and eventual legacy-link retirement are
+tracked in the backlog. The reviewer did not execute the browser session/history
+checks; the driver's passing browser suite supplies those receipts.

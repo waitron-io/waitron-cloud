@@ -2,7 +2,8 @@
 
 Use this package to create a Cloud account, sign in and recover a password independently
 of a venue server. The JSON API wraps the existing PostgreSQL identity and registration
-stores. Browser screens, venue pairing and public deployment are separate work.
+stores. The optional Lit portal uses the same origin. Venue pairing and public
+deployment remain separate work.
 
 ## Run locally
 
@@ -42,9 +43,22 @@ pnpm mail:worker
 ```
 
 Open [Mailpit](http://localhost:8125) to read messages. Use `pnpm mail:status` to inspect
-queue counts. Email links target `/signup` and `/reset-password`, which are future
-screens. For now, copy their token into the completion request's JSON body; opening
-the link does not complete signup or reset a password.
+queue counts. To open email links in the portal, run `pnpm portal:build`, set
+`CLOUD_PORTAL_ASSETS_DIR=apps/portal/dist` and restart `pnpm account:serve`. The server
+loads exactly `index.html`, `app.js` and `app.css` at startup. Missing configured
+assets prevent startup; omitting the setting retains the API-only server.
+
+The portal serves `/`, `/signup`, `/login`, `/forgot-password`, `/reset-password`
+and `/account`. Unknown paths return 404. Static GET/HEAD requests retain host checks
+and connection limits but do not consume database counters or the eight account
+operation slots. Rebuild and restart after frontend changes.
+
+New email links carry their token and language in the URL fragment. The portal
+removes them before rendering and sends a token only in the completion POST body.
+Opening a link never completes signup or resets a password automatically. Previously
+issued query-token links still work on the two completion pages; their initial HTTP
+request contains the token, so do not log query strings at an ingress. Reloading a
+scrubbed completion page requires reopening the email or requesting another link.
 
 ## Make an account request
 
@@ -63,9 +77,12 @@ The response is `202` with `{"status":"accepted"}`. Account existence and the
 per-address email cooldown do not change this result. Delivery happens in the worker.
 
 All paths below have the `/api/account` prefix. Examples use placeholders for emailed
-tokens and generated IDs. Each body must contain exactly the listed string fields;
-activity and logout take `{}`. Query parameters are rejected, so tokens belong only
-in completion bodies.
+tokens and generated IDs. Each body requires the listed string fields; activity
+and logout take `{}`. Signup request, reset request and reset completion also accept
+an optional `"locale":"en"` or `"locale":"es"`. Omission means English. Request
+locale selects the link email; reset-completion locale selects the password-change
+notification. Other fields and unsupported languages are rejected. API query
+parameters remain rejected, so tokens belong only in completion bodies.
 
 | Request | JSON body | Successful response |
 | --- | --- | --- |
@@ -126,7 +143,7 @@ PostgreSQL counters apply across all API instances and survive restarts:
 
 | Scope | Allowance |
 | --- | --- |
-| All routes, per client IP | 120 per minute |
+| API routes, per client IP | 120 per minute |
 | Login, per IP / normalised email | 10 per minute / 30 per 15 minutes |
 | Each signup/reset email-request route, per IP | 10 per 15 minutes |
 | Each signup/reset completion route, per IP and token | 10 per 15 minutes |
@@ -168,8 +185,7 @@ The CLI has an eleven-second hard shutdown deadline if database work still preve
 exit. A client disconnect does not prove a transaction rolled back: recover a lost
 response through the normal signup/reset login or retry rules.
 
-Before public use, complete browser screens and their browser tests, live provider
-and sender verification, delivery-event handling, compromised-password screening,
+Before public use, complete live provider and sender verification, delivery-event handling, compromised-password screening,
 MFA policy, ingress bot controls, production secrets, retention rules and deployment
 load/timing checks. The [backlog](../../docs/backlog.md) tracks these separately from
 Waitron pairing and shared UI extraction, which are now unblocked by SQLite.
@@ -184,5 +200,8 @@ pnpm test
 
 These commands use disposable PostgreSQL and Mailpit containers. Tests complete the
 account journey through captured email, exercise shared counters across connections,
-and send real slow, oversized and interrupted HTTP requests. They inspect cookie
-attributes and send Cookie headers explicitly; they do not test browser cookie policy.
+and send real slow, oversized and interrupted HTTP requests. API tests inspect HTTPS
+cookie attributes and use explicit Cookie headers. The portal suite adds real browser
+cookie/session journeys over loopback HTTP, phone layouts, both themes and accessibility.
+Production TLS ingress and browser cookie behavior at the deployed HTTPS origin still
+need deployment verification.

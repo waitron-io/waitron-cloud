@@ -43,14 +43,14 @@ test('signup and recovery travel through SMTP and can be read in the local inbox
   assert.ok(!output.includes(email));
   const verification = await captured('Verify your Waitron Cloud email');
   assert.equal(verification.To[0]?.Address, email);
-  const signupLink = verification.Text.match(/http:\/\/localhost:3000\/signup\?token=([A-Za-z0-9_-]{43})/);
+  const signupLink = verification.Text.match(/http:\/\/localhost:3000\/signup#token=([A-Za-z0-9_-]{43})/);
   assert.ok(signupLink);
   await signup.complete(signupLink[1]!, { password: 'original café password', organisationName: 'Café Sol', legalBusinessName: 'Café Sol SL', countryCode: 'ES' });
   const session = await transaction(pool, client => login(client, { email, password: 'original café password' }));
   await recovery.request(email);
   await worker.runOnce();
   const reset = await captured('Reset your Waitron Cloud password');
-  const resetLink = reset.Text.match(/http:\/\/localhost:3000\/reset-password\?token=([A-Za-z0-9_-]{43})/);
+  const resetLink = reset.Text.match(/http:\/\/localhost:3000\/reset-password#token=([A-Za-z0-9_-]{43})/);
   assert.ok(resetLink);
   await recovery.complete(resetLink[1]!, 'replacement café password');
   await worker.runOnce();

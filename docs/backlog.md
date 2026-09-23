@@ -7,7 +7,9 @@ Cloud password recovery and an encrypted PostgreSQL email queue are implemented
 internally, with a retry worker, authenticated TLS SMTP delivery and Mailpit for local
 email capture. The account HTTP API now provides signup, login, session activity,
 logout and recovery with shared request limits, Origin/CSRF checks and bounded
-network handling. Live provider/sender configuration and account screens remain open.
+network handling. The bilingual account portal now covers signup, sign-in, sign-out
+and password recovery, served by that API with real browser and Mailpit tests.
+Live provider/sender configuration and public deployment remain open.
 No public cloud service is deployed. This file owns cloud product and platform work;
 Waitron's backlog owns the on-prem application and its side of the integration.
 
@@ -42,7 +44,7 @@ sessions atomically. The same transaction queues encrypted emails for a worker t
 retries failures and resumes after crashes. Local Mailpit tests cover SMTP delivery
 and a separate worker process. Authenticated TLS SMTP now covers production transport,
 bounded cancellation, retry classification and accepted-message receipts. Next: configure
-and prove live provider delivery, build account/recovery screens, and validate production
+and prove live provider delivery and validate production
 ingress and deployment controls before exposure. The account HTTP adapter is implemented.
 The owner confirmed the SQLite storage switch landed on 2026-09-23. Waitron-side
 work can resume. Build the local administrator adapter and matching-code exchange, including bound proof
@@ -63,10 +65,12 @@ tested against PostgreSQL, Mailpit and real sockets. Shared account controls are
 implemented in [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519).
 Cloud now pins the private shared UI release and verifies it in Chromium.
 The [account portal design](superpowers/specs/2026-09-23-account-portal-design.md)
-is approved. It covers English/Spanish signup, login and recovery, simple business
+is implemented with English/Spanish signup, login and recovery, simple business
 setup, same-origin serving and real browser/email tests. The
-[implementation plan](superpowers/plans/2026-09-23-account-portal.md) is ready for review;
-next, confirm the plan and build the portal inline. Pairing
+[implementation plan](superpowers/plans/2026-09-23-account-portal.md) records the delivery.
+Email links use fragments; legacy query links remain accepted. Browser tests cover
+committed writes with lost replies, session expiry, retry delays and account isolation.
+Next, configure live mail delivery and the deployment/account-security controls below. Pairing
 remains a separate exchange requiring both Cloud and local administrator proof.
 
 ## Initial focus
@@ -154,8 +158,7 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   from Waitron `0a93f4d3557b669661ac8f589aad866e2cd9653f`. Cloud pins it in its
   manifest and lockfile; a Chromium fixture checks the installed controls and themes,
   and declaration checking uses `skipLibCheck: false`. Local installs use GitHub CLI
-  authentication; CI uses its package-read token. Next, build signup, verification,
-  login and recovery screens against the existing account API. Read the first weekly mutation scores
+  authentication; CI uses its package-read token. The portal now uses these controls for signup, login and recovery. Read the first weekly mutation scores
   after the split in Waitron; the extraction verifies the wiring and coverage, not the
   new full mutation scores.
 - **Identity and organisations.** Password helpers and management-session behaviours
@@ -172,13 +175,20 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   failures receive the same accepted result. Notifications follow commit and cannot
   undo a successful reset. Recovery requires verified email and an existing password;
   define recovery for legacy unverified and passwordless accounts separately.
-  Configure live email delivery and implement public signup/recovery screens, MFA/passkeys
+  Configure live email delivery and implement MFA/passkeys
   and the platform role catalogue before public use. Shared login/request limits, secure
   cookies and Origin/CSRF checks are implemented in the account API. Validate ingress
   bot controls, trusted proxy settings and browser behaviour before deployment. Define
   session, signup-request and password-reset-request retention and cleanup, including
   reset records for unknown addresses, and measure them against the
   expected deployment size. Add a compromised-password check before public signup.
+  Portal follow-ups before public use: decide whether to accept tracking queries and
+  trailing-slash/case aliases, and provide useful error pages for rejected URLs.
+  The current exact routes and query restrictions follow the approved portal plan.
+  Set the retirement point for legacy query-token links after every deployed sender
+  generates fragments and all remaining query tokens have expired; retain compatibility
+  until then. Check whether direct development-mailer callers need rendering errors
+  converted to rejected promises; the worker already contains synchronous failures.
   The PostgreSQL email queue now saves signup/reset messages and password-change
   notifications with their state changes. It encrypts recipients and tokens, retries
   at most eight times, expires links, fences late worker acknowledgements, and purges

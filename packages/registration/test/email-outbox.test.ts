@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createCipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { execFileSync } from 'node:child_process';
 import { after, before, beforeEach, test } from 'node:test';
@@ -163,7 +163,7 @@ test('stores enqueue without delivery; queue insertion failure rolls back reques
   } finally { await pool.query('ALTER TABLE email_outbox DROP CONSTRAINT simulate_failure'); }
   await recovery.complete(reset.token, 'replacement café password');
   assert.equal(delivered.length, 2);
-  await worker.runOnce(); assert.deepEqual(delivered[2], {email});
+  await worker.runOnce(); assert.deepEqual(delivered[2], {email, locale: 'en'});
   await assert.rejects(transaction(pool, client => resolveSession(client, session.token)), {code: 'session_unavailable'});
   await clean();
   await pool.query("ALTER TABLE email_outbox ADD CONSTRAINT simulate_failure CHECK (kind = 'password_changed')");
@@ -204,7 +204,7 @@ test('delayed recovery skips links invalidated by a reset, email change or suspe
   assert.equal(await worker.runOnce(), true);
   assert.equal((await pool.query("SELECT status FROM email_outbox WHERE kind = 'password_reset' AND attempts = 1 ORDER BY created_at DESC LIMIT 1")).rows[0].status, 'cancelled');
   assert.equal(delivered.length, 2);
-  await worker.runOnce(); assert.deepEqual(delivered[2], {email});
+  await worker.runOnce(); assert.deepEqual(delivered[2], {email, locale: 'en'});
   for (const change of ["UPDATE cloud_credentials SET email = 'changed@example.test'", 'UPDATE cloud_credentials SET email_verified_at = NULL', 'UPDATE cloud_accounts SET disabled_at = clock_timestamp()']) {
     await pool.query('UPDATE cloud_credentials SET email = $1, email_verified_at = clock_timestamp()', [email]);
     await pool.query('UPDATE cloud_accounts SET disabled_at = NULL WHERE id = $1', [account.accountId]);
@@ -392,5 +392,45 @@ test('an accepted send with malformed receipt metadata finishes without retrying
     assert.equal(record.status, 'sent'); assert.equal(sends, 1);
     assert.equal(record.transport, null); assert.equal(record.message_id, null);
     assert.equal(record.payload, null); assert.equal(record.failures, 0);
+  }
+});
+
+test('locale travels through signup, recovery and password-change encrypted delivery', async () => {
+  const signup = new SignupStore(pool, outbox);
+  await signup.request('spanish@example.test', 'es');
+  await worker.runOnce();
+  assert.equal((delivered[0] as AccountEmail).locale, 'es');
+  await signup.complete((delivered[0] as AccountEmail).token, {
+    password: 'Original long password', organisationName: 'Sol', legalBusinessName: 'Sol SL', countryCode: 'ES',
+  });
+  const recovery = new PasswordRecoveryStore(pool, outbox);
+  await recovery.request('spanish@example.test', 'es');
+  await worker.runOnce();
+  assert.equal((delivered[1] as AccountEmail).locale, 'es');
+  await recovery.complete((delivered[1] as AccountEmail).token, 'Replacement long password', 'en');
+  await worker.runOnce();
+  assert.deepEqual(delivered[2], {email: 'spanish@example.test', locale: 'en'});
+});
+
+test('enqueue rejects unsupported locale values without recording a message', async () => {
+  for (const locale of ['fr','toString',null]) {
+    await assert.rejects(transaction(pool, client => outbox.enqueue(client,'password_changed',
+      {email:'owner@example.test',locale} as never)), /Invalid queued email/);
+  }
+  assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'0');
+});
+test('open and worker reject authenticated encrypted payloads with an invalid locale', async () => {
+  await transaction(pool,client=>outbox.enqueue(client,'password_changed',{email:'owner@example.test'}));
+  const record=await row();
+  assert.deepEqual(outbox.open(record),{email:'owner@example.test'},'old payloads still decrypt');
+  for(const locale of ['fr','toString',null]) {
+    const nonce=randomBytes(12);const cipher=createCipheriv('aes-256-gcm',Buffer.from(keys.first,'hex'),nonce);
+    cipher.setAAD(Buffer.from(JSON.stringify([record.id,record.kind,record.key_id])));
+    const encrypted=Buffer.concat([cipher.update(JSON.stringify({email:'owner@example.test',locale}),'utf8'),cipher.final()]);
+    const payload=Buffer.concat([nonce,cipher.getAuthTag(),encrypted]);
+    assert.throws(()=>outbox.open({...record,payload}),/Queued email payload unavailable/);
+    await pool.query('UPDATE email_outbox SET payload=$1,available_at=clock_timestamp() WHERE id=$2',[payload,record.id]);
+    assert.equal(await worker.runOnce(),true);
+    assert.equal((await row()).last_error,'payload_unavailable');assert.equal(delivered.length,0);
   }
 });
