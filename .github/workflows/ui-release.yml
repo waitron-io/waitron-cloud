@@ -1,0 +1,67 @@
+name: Shared UI release
+on:
+  pull_request:
+    paths:
+      - 'scripts/release/**'
+      - '.github/workflows/ui-release.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ui-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Read pinned source
+        id: source
+        run: node -e 'const fs = require("node:fs"); const s = JSON.parse(fs.readFileSync("scripts/release/ui-source.json")); if (!/^[a-f0-9]{40}$/.test(s.commit)) throw Error("Unpinned source"); fs.appendFileSync(process.env.GITHUB_OUTPUT, `commit=${s.commit}\n`);'
+      - uses: actions/checkout@v5
+        with:
+          repository: clintongormley/waitron
+          ref: ${{ steps.source.outputs.commit }}
+          path: .release-source
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: .release-source/pnpm-lock.yaml
+      - run: node --test scripts/release/*.test.mjs
+      - run: pnpm --dir .release-source install --frozen-lockfile
+      - run: pnpm --dir .release-source --filter @waitron/ui-core exec playwright install --with-deps chromium
+      - run: pnpm --dir .release-source --filter @waitron/ui-core test:package
+      - run: node scripts/release/prepare-ui.mjs .release-source ui-release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-package
+          path: ui-release/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+  publish:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui-package
+          path: ui-release
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: npm publish ui-release/*.tgz --registry=https://npm.pkg.github.com --access=restricted --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
