@@ -18,3 +18,24 @@ test('account requests validate success bodies and honor both Retry-After forms'
   const unavailable = await accountRequest('/session');
   assert.ok(!unavailable.ok && unavailable.retryAfterMs > 58_000);
 });
+test('pairing reads validate named businesses and writes carry CSRF and bound views',async t=>{
+  const org='12345678-1234-4234-8234-123456789abc',business='22345678-1234-4234-8234-123456789abc';
+  const view={requestId:org,localVenueId:business,environment:'test',expiresAt:new Date().toISOString(),state:'awaiting_cloud'};
+  const priorLocation=Object.getOwnPropertyDescriptor(globalThis,'location'),priorDocument=Object.getOwnPropertyDescriptor(globalThis,'document');
+  Object.defineProperty(globalThis,'location',{configurable:true,value:{protocol:'https:'}});
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{cookie:'__Host-cloud_csrf=browser-proof'}});
+  t.after(()=>{for(const [key,prior] of [['location',priorLocation],['document',priorDocument]] as const) {if(prior)Object.defineProperty(globalThis,key,prior);else Reflect.deleteProperty(globalThis,key);}});
+  let response:unknown={businesses:[{organisationId:org,legalBusinessId:business,organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'}]};
+  let options:RequestInit|undefined;
+  t.mock.method(globalThis,'fetch',async(_url:unknown,init?:RequestInit)=>{options=init;return Response.json(response);});
+  assert.equal((await accountRequest('/pairing/businesses')).ok,true);
+  response={businesses:[{organisationId:org,legalBusinessId:business,organisationName:'',legalBusinessName:'Sol SL',countryCode:'ES'}]};
+  assert.equal((await accountRequest('/pairing/businesses')).ok,false);
+  response=view;assert.equal((await accountRequest('/pairing/inspect',{requestId:org,code:'12345678'})).ok,true);
+  assert.equal((options?.headers as Record<string,string>)['X-CSRF-Token'],'browser-proof');
+  for(const bad of [{...view,state:'other'},{...view,localVenueId:'x'},{...view,state:'awaiting_local'},{...view,environment:'preproduction'},{...view,expiresAt:'not-a-date'}]){
+    response=bad;assert.equal((await accountRequest('/pairing/approve',{})).ok,false);
+  }
+  response={...view,state:'awaiting_local',organisationId:org,legalBusinessId:business,organisationName:'Café Sol',legalBusinessName:'Sol SL'};
+  assert.equal((await accountRequest('/pairing/approve',{})).ok,true);
+});

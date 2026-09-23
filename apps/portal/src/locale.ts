@@ -8,6 +8,18 @@ export function chooseLocale(saved: string | null, languages: readonly string[])
   return 'en';
 }
 const en = {
+  connect:'Connect your venue', pairCode:'Code shown in Waitron', pairCodeError:'Enter the eight-digit code shown in Waitron.',
+  pairIntro:'Enter the code from Cloud services in your Waitron dashboard.', pairInspect:'Check code',
+  pairBusiness:'Legal business', pairChoice:'Choose a business for this venue.', pairApprove:'Approve this venue',
+  pairConfirm:'Check that this is the venue you want to connect.', pairVenue:'Venue identifier', pairTest:'Test installation', pairProduction:'Production installation',
+  pairApproved:'Approved in Cloud. Return to Waitron, check the selected business and confirm the connection there.',
+  pairComplete:'This venue is connected. Return to Waitron to manage its services.',
+  pairMissing:'Open Cloud services in your Waitron dashboard and use its Open Cloud link.',
+  pairUnavailable:'This request is unavailable. Check the code, or start again from Cloud services in Waitron.',
+  pairPermission:'You cannot approve this request with this account and business. Check your account or start again from Waitron.',
+  pairSession:'Your session has ended. Sign in again to continue.', pairUncertain:'We could not confirm the approval. Try again to check or recover it, then return to Waitron.',
+  pairNoBusinesses:'This account has no businesses that you can connect venues to.', pairLoading:'Loading your businesses…',
+
   language:'Language', login:'Sign in', signup:'Create an account', completeSignup:'Complete your account',
   forgot:'Forgot your password?', reset:'Choose a new password', account:'Your account',
   email:'Email', password:'Password', newPassword:'New password', legalName:'Legal business name',
@@ -35,6 +47,18 @@ const en = {
 };
 export type Copy = typeof en;
 const es: Copy = {
+  connect:'Conecta tu local', pairCode:'Código que aparece en Waitron', pairCodeError:'Introduce el código de ocho dígitos que aparece en Waitron.',
+  pairIntro:'Introduce el código de Servicios Cloud en tu panel de Waitron.', pairInspect:'Comprobar código',
+  pairBusiness:'Negocio legal', pairChoice:'Elige un negocio para este local.', pairApprove:'Aprobar este local',
+  pairConfirm:'Comprueba que este es el local que quieres conectar.', pairVenue:'Identificador del local', pairTest:'Instalación de prueba', pairProduction:'Instalación de producción',
+  pairApproved:'Aprobado en Cloud. Vuelve a Waitron, comprueba el negocio elegido y confirma allí la conexión.',
+  pairComplete:'Este local está conectado. Vuelve a Waitron para gestionar sus servicios.',
+  pairMissing:'Abre Servicios Cloud en tu panel de Waitron y utiliza su enlace Abrir Cloud.',
+  pairUnavailable:'Esta solicitud no está disponible. Comprueba el código o empieza de nuevo desde Servicios Cloud en Waitron.',
+  pairPermission:'No puedes aprobar esta solicitud con esta cuenta y este negocio. Comprueba tu cuenta o empieza de nuevo desde Waitron.',
+  pairSession:'Tu sesión ha terminado. Inicia sesión de nuevo para continuar.', pairUncertain:'No hemos podido confirmar la aprobación. Vuelve a intentarlo para comprobarla o recuperarla y vuelve a Waitron.',
+  pairNoBusinesses:'Esta cuenta no tiene negocios para los que puedas conectar locales.', pairLoading:'Cargando tus negocios…',
+
   language:'Idioma', login:'Inicia sesión', signup:'Crea una cuenta', completeSignup:'Completa tu cuenta',
   forgot:'¿Has olvidado tu contraseña?', reset:'Elige una nueva contraseña', account:'Tu cuenta',
   email:'Correo electrónico', password:'Contraseña', newPassword:'Nueva contraseña', legalName:'Nombre legal del negocio',

@@ -19,3 +19,12 @@ test('rejects duplicates, conflicts, malformed and wrong-route tokens after scru
   }
   assert.deepEqual(captureLink(new URL('https://cloud.example/reset-password'), () => {}), {invalid: false});
 });
+test('captures only a single fragment request on the connection route, always scrubbing', () => {
+  const id='12345678-1234-4234-8234-123456789abc';let clean='';
+  assert.deepEqual(captureLink(new URL(`https://cloud.example/connect#request=${id}`),v=>{clean=v;}),{invalid:false,requestId:id});
+  assert.equal(clean,'/connect');
+  for(const path of [`/connect?request=${id}`,`/login#request=${id}`,`/connect#request=${id}&request=${id}`,`/connect?request=${id}#request=${id}`,'/connect#request=bad',`/connect#request=${id}&token=${token}`]) {
+    const result=captureLink(new URL(`https://cloud.example${path}`),v=>{clean=v;});
+    assert.equal(result.invalid,true,path);assert.equal(result.requestId,undefined,path);assert.ok(!clean.includes(id));
+  }
+});
