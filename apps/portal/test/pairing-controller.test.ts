@@ -55,3 +55,11 @@ test('multiple businesses require an explicit choice from the permitted list',as
   controller.code='12345678';await controller.inspect();await controller.approve();assert.equal(approvals.length,0);assert.equal(controller.error,'pairChoice');
   controller.selected=second.legalBusinessId;await controller.approve();assert.equal(approvals.at(-1)?.organisationId,second.organisationId);
 });
+for(const mismatch of [
+  {organisationId:view.localVenueId}, {legalBusinessId:view.localVenueId},
+  {localVenueId:business.legalBusinessId}, {state:'awaiting_cloud'},
+])test(`approval rejects changed binding ${JSON.stringify(mismatch)} and retains the choice for retry`,async()=>{
+  const controller=new PairingController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>({ok:true,value:(path.endsWith('businesses')?{businesses:[business]}:path.endsWith('inspect')?view:{...view,...business,state:'awaiting_local',...mismatch}) as T}));
+  controller.open(requestId);controller.account('owner');await controller.load();controller.code='12345678';await controller.inspect();await controller.approve();
+  assert.equal(controller.error,'unavailable');assert.equal(controller.view?.state,'awaiting_cloud');assert.equal(controller.view?.localVenueId,view.localVenueId);assert.equal(controller.selected,business.legalBusinessId);
+});

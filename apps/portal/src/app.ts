@@ -174,8 +174,9 @@ export class PortalApp {
     }
     this.draw(); if (this.error) this.#focusErrors(); else this.focusHeading();
   }
+  get logoutWaiting() { return Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)); }
   async logout() {
-    if (this.pending || this.waiting || this.pairing.pending) return;
+    if (this.pending || this.logoutWaiting || this.pairing.pending) return;
     this.pending = true; this.error = undefined; this.draw();
     const route = this.#route;
     const success = await this.session.logout();

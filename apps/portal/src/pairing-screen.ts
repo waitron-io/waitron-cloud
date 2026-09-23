@@ -5,8 +5,8 @@ export function pairingScreen(app:PortalApp){
   if(!p.requestId||app.link.invalid)return html`<p>${c.pairMissing}</p>`;
   if(app.session.state.kind!=='authenticated')return html`<p role="status">${app.session.state.kind==='unavailable'?c.sessionUnavailable:c.checking}</p>
     <wt-button .disabled=${!!app.waiting} @click=${()=>{void app.session.check();}}>${c.retry}</wt-button>`;
-  const logout=html`<wt-button .disabled=${p.pending||app.pending} @click=${()=>{void app.logout();}}>${c.signout}</wt-button>`;
-  if(!p.loaded)return html`<p role="status">${p.pending?c.pairLoading:c.sessionUnavailable}</p>
+  const logout=html`<wt-button .disabled=${p.pending||app.pending||!!app.logoutWaiting} @click=${()=>{void app.logout();}}>${c.signout}</wt-button>`;
+  if(!p.loaded)return html`${p.pending?html`<p role="status">${c.pairLoading}</p>`:nothing}
     <wt-button .disabled=${p.pending||!!p.waiting} @click=${()=>{void p.load();}}>${c.retry}</wt-button>${logout}`;
   if(!p.businesses.length)return html`<p>${c.pairNoBusinesses}</p>${logout}`;
   if(p.view&&p.view.state!=='awaiting_cloud')return html`<p role="status">${p.view.state==='complete'?c.pairComplete:c.pairApproved}</p>

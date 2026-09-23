@@ -1,0 +1,17 @@
+{
+  "claims": {
+    "origin": "https://cloud.example.test",
+    "action": "start",
+    "requestId": "12345678-1234-4234-8234-123456789abc",
+    "publicKey": "MCowBQYDK2VwAyEAiojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
+    "localVenueId": "22345678-1234-4234-8234-123456789abc",
+    "environment": "test",
+    "code": "12345678",
+    "organisationId": "",
+    "legalBusinessId": "",
+    "issuedAt": 1800000000000
+  },
+  "privateKey": "MC4CAQAwBQYDK2VwBCIEIAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
+  "payload": "WyJ3YWl0cm9uLWNsb3VkLXBhaXItdjEiLCJodHRwczovL2Nsb3VkLmV4YW1wbGUudGVzdCIsInN0YXJ0IiwiMTIzNDU2NzgtMTIzNC00MjM0LTgyMzQtMTIzNDU2Nzg5YWJjIiwiTUNvd0JRWURLMlZ3QXlFQWlvamozWFFKOFpYOVV0c3RQTHBkY3NwbkNiOGRsQkliODNTSUFiUVBiMXciLCIyMjM0NTY3OC0xMjM0LTQyMzQtODIzNC0xMjM0NTY3ODlhYmMiLCJ0ZXN0IiwiMTIzNDU2NzgiLCIiLCIiLDE4MDAwMDAwMDAwMDBd",
+  "signature": "zArZqYhW_N1H24KjA-ysPOBTgxPEuJRmolq1IFDSejqA9VYxTasvW4NK4CFo90XVFfYQI3Ulp4_42tdRqTu8BQ"
+}

@@ -54,10 +54,10 @@ try{
     await cloud.getByText(server.localVenueId,{exact:true}).waitFor();await cloud.getByRole('button',{name:'Approve this venue',exact:true}).click();await cloud.getByText('Approved in Cloud.',{exact:false}).waitFor();
     await page.getByRole('button',{name:'Check connection',exact:true}).click();await page.getByText('Two Cafés SL',{exact:true}).waitFor();
     if(index===0){await stop(server);server=await launch(root);await page.reload();await page.getByRole('button',{name:'Connect this venue',exact:true}).waitFor();}
-    let completions=0;
-    if(index===1)await page.route('**/management-api/cloud/complete',async route=>{completions++;const result=await route.fetch();assert.equal(result.status(),200);await route.abort('failed');});
+    let completions=0,completionStatus;
+    if(index===1)await page.route('**/management-api/cloud/complete',async route=>{completions++;const result=await route.fetch();completionStatus=result.status();await route.abort('failed');});
     await page.getByRole('button',{name:'Connect this venue',exact:true}).click();
-    if(index===1){await page.getByText('This browser could not connect to Waitron.',{exact:false}).waitFor();assert.equal(completions,1);await page.getByRole('button',{name:'Check connection',exact:true}).click();}
+    if(index===1){await page.getByText('This browser could not connect to Waitron.',{exact:false}).waitFor();assert.equal(completions,1);assert.equal(completionStatus,200);await page.getByRole('button',{name:'Check connection',exact:true}).click();}
     await page.getByText('Connected',{exact:true}).waitFor();const result=await (await context.request.get(`${server.origin}/management-api/cloud/status`)).json();
     registrations.push(result.registration);assert.equal(result.code,'');await cloud.close();
   }
