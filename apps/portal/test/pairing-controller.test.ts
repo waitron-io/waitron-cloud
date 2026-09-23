@@ -34,3 +34,24 @@ test('rate limits prevent writes, invalid code is local, and a mismatched reply 
   controller.code='12345678';await controller.inspect();assert.equal(controller.error,'limited');await controller.inspect();assert.equal(calls,1);
   controller.retryAt=0;limited=false;await controller.inspect();assert.equal(controller.error,'unavailable');assert.equal(controller.view,undefined);
 });
+test('changing accounts while approval waits discards the old approval',async()=>{
+  let finish!:(value:ApiResult<unknown>)=>void;
+  const controller=new PairingController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{
+    if(path.endsWith('approve'))return new Promise(resolve=>{finish=resolve as typeof finish;});
+    return {ok:true,value:(path.endsWith('businesses')?{businesses:[business]}:view) as T};
+  });
+  controller.open(requestId);controller.account('first');await controller.load();controller.code='12345678';await controller.inspect();
+  const approval=controller.approve();controller.account('second');finish({ok:true,value:{...view,...business,state:'awaiting_local'}});await approval;
+  assert.equal(controller.view,undefined);assert.equal(controller.code,'');assert.deepEqual(controller.businesses,[]);
+});
+test('multiple businesses require an explicit choice from the permitted list',async()=>{
+  const second={...business,organisationId:'42345678-1234-4234-8234-123456789abc',legalBusinessId:'52345678-1234-4234-8234-123456789abc',organisationName:'Other group',legalBusinessName:'Other SL'};
+  const approvals:Record<string,string>[]=[];
+  const controller=new PairingController(()=>{},async<T>(path:string,body?:Record<string,string>):Promise<ApiResult<T>>=>{
+    if(path.endsWith('approve'))approvals.push(body!);
+    return {ok:true,value:(path.endsWith('businesses')?{businesses:[business,second]}:path.endsWith('inspect')?view:{...view,...second,state:'awaiting_local'}) as T};
+  });
+  controller.open(requestId);controller.account('owner');await controller.load();assert.equal(controller.selected,'');
+  controller.code='12345678';await controller.inspect();await controller.approve();assert.equal(approvals.length,0);assert.equal(controller.error,'pairChoice');
+  controller.selected=second.legalBusinessId;await controller.approve();assert.equal(approvals.at(-1)?.organisationId,second.organisationId);
+});
