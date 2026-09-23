@@ -6,8 +6,9 @@ completion without creating duplicate venues or installations.
 
 ## Trust boundary
 
-You must verify identities and approvals before calling this package. There is no
-HTTP endpoint, browser login flow, local proof verifier or machine credential issuer here. An installation
+You must verify identities and approvals before calling this package. The low-level RegistrationStore methods remain internal. PairingStore adds the
+Cloud half of a signed matching-code exchange; its HTTP adapter lives in account-http.
+The real Waitron administrator check and renewable machine credentials are separate work. An installation
 key identifier, account ID or local receipt ID is a reference, never a credential.
 Do not expose these methods directly as public endpoints.
 
@@ -20,8 +21,8 @@ account's current registration permission in PostgreSQL when approving and compl
 The [identity package](../identity/README.md) now supplies password sessions and
 explicit platform permission checks, adapted from `pre-sqlite-migration`. The
 [account API](../account-http/README.md) implements signup, login and recovery routes.
-Pairing endpoints, additional authentication factors and the platform role catalogue
-remain to be implemented.
+The pairing endpoints are implemented for local integration. Additional authentication
+factors and the platform role catalogue remain open.
 
 ## Cloud account signup
 
@@ -119,7 +120,7 @@ are separate work.
 ## State and completion
 
 `start(binding)` records the binding after an organisation and legal business have
-been selected. The earlier browser journey that selects them is still to be built.
+been selected. PairingStore records the earlier Cloud approval; the confirmation screens follow separately.
 The binding contains an operation UUID, installation key identifier, local venue UUID,
 environment, organisation UUID and legal-business UUID. UUIDs use lowercase canonical
 text. Key identifiers and environments must already be canonical; this package does
@@ -188,3 +189,20 @@ hashes; add another migration instead of editing a file that has been applied.
 The library does not migrate on import. Registration assumes existing accounts and
 organisations; call `SignupStore` explicitly to create them through email proof.
 Deployment credentials and database privileges remain to be designed before public use.
+
+## Signed pairing
+
+Use `verifyPairingProof(payload, signature, origin, action)` before calling the machine
+methods of `PairingStore`. It accepts the canonical version 1 Ed25519 format in the
+[pairing design](../../docs/superpowers/specs/2026-09-23-venue-pairing-design.md).
+The HTTP adapter applies host, origin, body, session and persistent rate checks.
+A signed machine request alone is not local administrator proof: the real Waitron
+adapter must guard start and completion with its local administrator session.
+The matching code plus local confirmation joins that session to the Cloud approval.
+
+PairingStore saves the selected account and business and wraps RegistrationStore in
+one transaction at completion. RegistrationStore may borrow that transaction's client;
+its caller then owns commit, rollback and release. Failed-code increments commit before
+the refusal is returned. Neither code nor timestamp retries extend the pairing expiry.
+Tests cover separate workers and processes, contention expiry, permission loss, revoked
+results, and upgrade from the seven-migration schema with an existing installation.

@@ -30,13 +30,14 @@ session's CSRF token and recheck its organisation permission in the same transac
 that records approval. No caller-supplied account ID can override that identity.
 The account HTTP layer enforces its allowed Origin, secure cookies and shared request
 limits. This identity package does not expose HTTP endpoints itself; the pairing HTTP
-exchange remains separate work.
+exchange now lives in account-http, using the same sessions.
 
 The owner approved matching-code confirmation for first pairing: show a short code
 inside signed-in local Waitron and confirm the same code in Cloud. The code must be
 bound to the installation, venue and selected organisation, with expiry and attempt
-limits. It is not a machine credential. The detailed proof and code formats, local
-adapter and browser journey still need implementation.
+limits. It is not a machine credential. The [pairing contract](superpowers/specs/2026-09-23-venue-pairing-design.md)
+now specifies the proof/code formats and its Cloud half is implemented. The local
+adapter and browser journey follow next.
 
 Local approval still requires the real Waitron administrator flow and that
 first-contact exchange. A signed installation challenge proves possession

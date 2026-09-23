@@ -5,9 +5,11 @@ in the [integration contract](waitron-integration-contract.md#agreed-connection-
 Step 1 is implemented in the [internal registration package](../packages/registration/README.md),
 with PostgreSQL tests for approvals, retries, concurrency, expiry and process restart.
 The [identity slice](cloud-identity-implementation.md) now implements password sessions
-and session-backed Cloud approval. Local administrator proof, the matching-code
-pairing flow and the browser/end-to-end portions of steps 2 and 3 remain to be built.
-There is no public registration service yet.
+and session-backed Cloud approval. The Cloud half of matching-code pairing is now implemented with signed installation
+requests and session-backed choice of business. Local administrator checks and the
+browser/end-to-end portions of steps 2 and 3 remain to be built. Public deployment
+awaits that real two-installation proof. See the
+[pairing contract](superpowers/specs/2026-09-23-venue-pairing-design.md).
 
 Waitron's SQLite storage switch landed on 2026-09-23, so local pairing work can
 resume against its current interfaces. The [Cloud signup backend](cloud-signup-implementation.md)

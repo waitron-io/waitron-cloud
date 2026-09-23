@@ -47,16 +47,19 @@ bounded cancellation, retry classification and accepted-message receipts. Next: 
 and prove live provider delivery and validate production
 ingress and deployment controls before exposure. The account HTTP adapter is implemented.
 The owner confirmed the SQLite storage switch landed on 2026-09-23. Waitron-side
-work can resume. Build the local administrator adapter and matching-code exchange, including bound proof
-and first-contact trust, before exposing public registration endpoints. Recheck the
+work can resume. The Cloud matching-code API now verifies signed installation requests and stores bound
+Cloud approvals. Its [wire contract](superpowers/specs/2026-09-23-venue-pairing-design.md)
+uses local confirmation of the chosen business. Next, build the real Waitron administrator
+adapter and both confirmation screens, then prove the two-installation journey before
+public exposure. Recheck the
 new SQLite capture/restore interfaces before integrating backups; do not build a new
 PostgreSQL backup adapter for Waitron. The full two-venue milestone remains unproved.
 The [registration plan](registration-implementation-plan.md) now sequences persistence,
 identity reuse, the bound approval exchange and a two-installation connection proof.
 The normal connection journey and PostgreSQL for Cloud management data are agreed.
 The internal package uses one management database and tests concurrent completion
-and restart against PostgreSQL. Proof encoding and initial trust remain to be settled before exposing
-public endpoints. Country partitioning, database availability and per-cell storage
+and restart against PostgreSQL. Proof encoding and user-mediated first contact are specified and implemented on the
+Cloud side. The Waitron administrator checks remain a public-exposure gate. Country partitioning, database availability and per-cell storage
 remain deployment work; existing services must tolerate a management outage within
 the credential and revocation rules still to be defined.
 
@@ -251,16 +254,22 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   venue, subscription and addresses; test interrupted activation and route changes.
   Registration persistence now records bound approvals and results with transactional
   completion, expiry, retries, permission rechecks and separate service states. Real
-  PostgreSQL tests cover concurrent workers and process restart. Next, implement the
-  actual local proof verifier, browser adapter and credential lifecycle; IDs alone
-  are not authentication. The owner approved matching-code confirmation between
-  signed-in local Waitron and Cloud. Define code/proof formats, expiry, attempt limits
-  and canonical request binding; implement the Waitron-side administrator check and
+  PostgreSQL tests cover concurrent workers and process restart. The Cloud pairing verifier and HTTP exchange now bind Ed25519 installation proof,
+  matching code and session-backed approval, with durable guess limits and retries.
+  Next, implement the real local administrator check, browser adapters and credential
+  lifecycle; IDs alone are not authentication. The owner approved matching-code confirmation between
+  signed-in local Waitron and Cloud. The [pairing contract](superpowers/specs/2026-09-23-venue-pairing-design.md) fixes
+  proof format, expiry, attempt limits and binding. Implement the Waitron-side check and
   prove two real installations cannot exchange or replay their approvals. Replace the initial one-installation-per-venue constraint with an
   explicit history model when building replacement. Validate local-venue identifier
   provenance and handling of cloned identities in the approval flow. When replacement
   gains a UI, define the permitted diagnostics for an already-linked or revoked
   installation; this slice rejects a different installation as a registration conflict.
+  Before public exposure, add pairing-request retention/cleanup and approval audit
+  records, and measure denial-of-service behavior for known request IDs. Completed
+  pairing rows reference accounts; define their cleanup before account deletion. The
+  short code has an unkeyed digest, so review database-disclosure protection before
+  launch and retain explicit local business confirmation.
   Terminated database connections and lost replies have regression tests; actual
   database failover and recovery under deployment credentials still need proof.
 - **Provisioning and placement.** Use Kubernetes for orchestration when needed;

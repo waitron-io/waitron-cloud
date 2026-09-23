@@ -1,3 +1,5 @@
+import {pairingResponse} from './pairing.ts';
+import {PairingError,RegistrationError} from '@waitron-cloud/registration';
 import { securityHeaders } from './portal.ts';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -27,6 +29,8 @@ function publicError(error: unknown): AccountHttpError {
     if (error.code === 'csrf_invalid' || error.code === 'permission_denied') return new AccountHttpError(403, 'forbidden');
     return new AccountHttpError(401, 'unauthenticated');
   }
+  if (error instanceof PairingError) return new AccountHttpError(error.code === 'invalid_proof' ? 401 : error.code === 'permission_denied' ? 403 : 400, error.code);
+  if (error instanceof RegistrationError) return new AccountHttpError(error.code === 'permission_denied' ? 403 : 400, error.code);
   if (error instanceof SignupError || error instanceof PasswordRecoveryError) {
     return new AccountHttpError(400, ['verification_unavailable', 'reset_unavailable'].includes(error.code) ? 'link_unavailable' : 'invalid_input');
   }
@@ -55,6 +59,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if (url.search) throw new AccountHttpError(400, 'invalid_input');
     const ip = clientAddress(c.env?.incoming?.socket.remoteAddress ?? '', c.req.header('x-forwarded-for'), config.trustedProxyIps);
     await consume([{scope: 'all-ip', subject: ip, limit: 120, windowSeconds: 60}]);
+    if(c.req.path.startsWith('/api/pairing/')||c.req.path.startsWith('/api/account/pairing/')) return pairingResponse(c,{pool,origin:config.portalOrigin,ip,consume});
     const path = c.req.path.startsWith('/api/account/') ? c.req.path.slice('/api/account'.length) : '';
     const fields = paths[path];
     if (path !== '/session' && !fields) throw new AccountHttpError(404, 'not_found');

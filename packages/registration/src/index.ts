@@ -101,12 +101,17 @@ function isUniqueViolation(error: unknown, constraints: readonly string[]): bool
  */
 export class RegistrationStore {
   readonly #pool: Pool;
-  constructor(pool: Pool) { this.#pool = pool; }
+  readonly #client: PoolClient | undefined;
+  /** A supplied client must already be inside the caller's transaction. */
+  constructor(pool: Pool, client?: PoolClient) { this.#pool = pool; this.#client = client; }
+  #transaction<T>(action: (client: PoolClient) => Promise<T>): Promise<T> {
+    return this.#client ? action(this.#client) : transaction(this.#pool, action);
+  }
 
   async start(input: ConnectionBinding): Promise<void> {
     const binding = { ...input };
     validate(binding);
-    await transaction(this.#pool, async (client) => {
+    await this.#transaction(async (client) => {
       const prior = await lockRequest(client, binding);
       if (prior) {
         if (!prior.result) await requireUnexpired(client, binding);
@@ -127,7 +132,7 @@ export class RegistrationStore {
   async #request<T>(input: ConnectionBinding, action: (client: PoolClient, row: RequestRow, binding: ConnectionBinding) => Promise<T>): Promise<T> {
     const binding = { ...input };
     validate(binding);
-    return transaction(this.#pool, async (client) => {
+    return this.#transaction(async (client) => {
       const row = await lockRequest(client, binding);
       if (!row) throw new RegistrationError('request_not_found');
       return action(client, row, binding);
@@ -226,7 +231,7 @@ export class RegistrationStore {
 
   async configuration(installationKey: string): Promise<Registration & { services: ServiceState[] }> {
     requireText(installationKey, 256);
-    const { rows } = await this.#pool.query(`SELECT i.id AS "installationId", v.id AS "venueId",
+    const { rows } = await (this.#client ?? this.#pool).query(`SELECT i.id AS "installationId", v.id AS "venueId",
       v.organisation_id AS "organisationId", v.legal_business_id AS "legalBusinessId",
       jsonb_agg(jsonb_build_object('service', s.service, 'state', s.state) ORDER BY s.service) AS services
       FROM installations i JOIN venues v ON v.id = i.venue_id
@@ -242,3 +247,5 @@ export { transaction } from './transaction.ts';
 export { normaliseEmail } from './account-input.ts';
 
 export type { AccountLocale, AccountNotification } from './account-input.ts';
+export {PairingStore,type PairingView} from './pairing.ts';
+export {PairingError,verifyPairingProof,pairingPayload,type PairingClaims} from './pairing-proof.ts';
