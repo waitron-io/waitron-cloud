@@ -1,6 +1,6 @@
 # Waitron Cloud backlog
 
-Updated 2026-09-22. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-09-23. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
@@ -41,8 +41,8 @@ retries failures and resumes after crashes. Local Mailpit tests cover SMTP deliv
 and a separate worker process. Authenticated TLS SMTP now covers production transport,
 bounded cancellation, retry classification and accepted-message receipts. Next: configure
 and prove live provider delivery, and implement the Cloud web adapter, including public-request protections and account/recovery screens, before exposure.
-Waitron-side work is paused until its SQLite switch finishes. Resume the local
-administrator adapter and matching-code exchange after that, including bound proof
+The owner confirmed the SQLite storage switch landed on 2026-09-23. Waitron-side
+work can resume. Build the local administrator adapter and matching-code exchange, including bound proof
 and first-contact trust, before exposing public registration endpoints. Recheck the
 new SQLite capture/restore interfaces before integrating backups; do not build a new
 PostgreSQL backup adapter for Waitron. The full two-venue milestone remains unproved.
@@ -54,6 +54,9 @@ and restart against PostgreSQL. Proof encoding and initial trust remain to be se
 public endpoints. Country partitioning, database availability and per-cell storage
 remain deployment work; existing services must tolerate a management outage within
 the credential and revocation rules still to be defined.
+
+The next account slice is the [Cloud HTTP API design](account-http-design.md),
+covering browser sessions, signup/recovery routes and shared request limits.
 
 ## Initial focus
 
@@ -132,8 +135,8 @@ the credential and revocation rules still to be defined.
   `@waitron/ui` as a versioned dependency for both repositories before building Cloud
   screens. Audit the `@waitron/shared` dependency and venue-specific exports, define
   package ownership/build/distribution and preserve browser/accessibility tests.
-  No shared UI package has been extracted or published yet. Wait for the SQLite switch
-  before changing Waitron; backend work in this repository can continue independently.
+  No shared UI package has been extracted or published yet. The SQLite storage switch
+  has landed, so the extraction can now be scoped against current Waitron.
 - **Identity and organisations.** Password helpers and management-session behaviours
   have been adapted with a pinned source map, PostgreSQL tests, hashed session/CSRF
   tokens, passive polling and separate platform permission checks. Session-backed
@@ -188,8 +191,8 @@ the credential and revocation rules still to be defined.
   database and module dependencies, and establish how security fixes reach both codebases.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
   services, usage accounting, trials, failed payment and cancellation.
-- **Venue and node registration.** Resume the agreed signup from Waitron after its
-  SQLite switch. The Cloud account backend creates a new customer's organisation
+- **Venue and node registration.** Implement the agreed signup from Waitron now that its
+  SQLite storage switch has landed. The Cloud account backend creates a new customer's organisation
   and first legal business; connect it to the Waitron journey using confirmed details.
   Require Cloud approval from someone permitted to add venues and local administrator
   approval before linking. Start with one owner providing both approvals in a single

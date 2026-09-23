@@ -1,8 +1,8 @@
 # Cloud account signup
 
-You can create a Cloud account while Waitron's SQLite switch is still in progress.
-This slice builds the backend independently. Waitron pairing and shared UI extraction
-wait until changes in the Waitron repository can resume.
+You can create a Cloud account independently of a venue. This slice implements the
+backend. Waitron's SQLite storage switch landed on 2026-09-23, so pairing and shared
+UI extraction can now proceed against its current interfaces.
 
 ## Journey and boundary
 
