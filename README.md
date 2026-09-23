@@ -13,7 +13,7 @@ service configuration and recovery to the existing interfaces and the current SQ
 
 ## Development
 
-Use Node.js 24 or later and pnpm 9.15.0 to work in this repository. Install
+Use Node.js 24 or later and pnpm 9.15.0 to work in this repository. Follow
 the [GitHub package authentication setup](docs/shared-ui-release.md#install-locally)
 first, then install dependencies and the test browser with:
 
