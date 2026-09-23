@@ -141,7 +141,10 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   screens. Audit the `@waitron/shared` dependency and venue-specific exports, define
   package ownership/build/distribution and preserve browser/accessibility tests.
   No shared UI package has been extracted or published yet. The SQLite storage switch
-  has landed, so the extraction can now be scoped against current Waitron.
+  has landed. The [proposed extraction boundary](superpowers/specs/2026-09-23-shared-ui-extraction-design.md)
+  starts with account-form controls, preserves Waitron imports and requires a standalone
+  packed-package browser test. Repository ownership and the written design await review;
+  implementation and private registry activation remain separate next steps.
 - **Identity and organisations.** Password helpers and management-session behaviours
   have been adapted with a pinned source map, PostgreSQL tests, hashed session/CSRF
   tokens, passive polling and separate platform permission checks. Session-backed
