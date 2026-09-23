@@ -41,12 +41,12 @@ type MachineClaims = {origin:string; action:MachineAction; installationId:string
 // encodeMachine, verifyMachine, issueLease and verifyLease own canonical wire formats.
 ```
 
-- [ ] Write failing tests for the literal wire vectors and every field's binding,
+- [x] Write failing behavior tests and pin literal wire vectors and every field's binding,
   lease expiry, wrong audience/issuer/algorithm, noncanonical encodings, unknown
   fields and body bounds. Run only `node --test .../installation-proof.test.ts`.
-- [ ] Implement the two canonical arrays from the spec using Ed25519 and strict
+- [x] Implement the two canonical arrays from the spec using Ed25519 and strict
   base64url/UUID/schema checks; require finite integer dates and bounded strings.
-- [ ] Prove removing a binding/expiry check fails its test. Commit with sign-off.
+- [x] Prove removing a binding/expiry check fails its test. Commit with sign-off.
 
 ## 2. Durable Cloud operations and HTTP boundary
 
@@ -60,22 +60,22 @@ Interfaces: `InstallationStore(pool, issuer)` provides
 `configure(installationId, expectedRevision, services)` for trusted provisioning.
 No HTTP route exposes that internal configuration writer.
 
-- [ ] Seed two real registered installations. Assert missing/wrong proof cannot
+- [x] Seed two real registered installations. Assert missing/wrong proof cannot
   fetch either configuration and a copied lease cannot be used by the other key.
-- [ ] Add lease/operation/configuration/observation/revocation persistence. Use the
+- [x] Add lease/operation/configuration/observation/revocation persistence. Use the
   installation row lock for every grant or mutation; account/session/membership locks
   precede it for owner actions. Use wall time after lock waits.
-- [ ] Test separate pools renewing/revoking concurrently, committed results after
+- [x] Test separate pools renewing/revoking concurrently, committed results after
   restart, same operation/different body conflicts, expired retries and revoked
   pairing completion. Keep the existing registration assertions.
-- [ ] Test three services remain unconfigured until trusted configuration changes;
+- [x] Test three services remain unconfigured until trusted configuration changes;
   report revisions cannot advance or roll back desired state; stale health is Unknown.
-- [ ] Mount bounded POST `/api/installations/{renew,configuration,report,revoke}` and
+- [x] Mount bounded POST `/api/installations/{renew,configuration,report,revoke}` and
   session-protected account listing/revoke paths. Apply IP/installation/account limits,
   reject browser Origin on machine routes, require CSRF/Origin for account mutations.
-- [ ] Test real sockets, cookies, forgery, oversized bodies, disabled owner/membership,
+- [x] Test real sockets, cookies, forgery, oversized bodies, disabled owner/membership,
   foreign installation and expiry during contention. Update startup migration guard.
-- [ ] Commit with sign-off.
+- [x] Commit with sign-off.
 
 ## 3. Waitron client, worker and local management surface
 
@@ -83,17 +83,17 @@ Files in Waitron: `cloud-client.ts` and a focused `cloud-installation.ts` helper
 `cloud-api.ts`, `cloud-worker.ts`, boot/config/errors, server tests and fixture.
 Keep existing pairing tests through any extraction of node-state helpers.
 
-- [ ] Extend the fixed vector test to the new signed request/lease formats.
-- [ ] With a real loopback Cloud service, assert renewal intent is saved before
+- [x] Extend the fixed vector test to the new signed request/lease formats.
+- [x] With a real loopback Cloud service, assert renewal intent is saved before
   sending, lost results retry the same operation, and cross-installation/configuration
   mismatches never overwrite state. Observe each failure before implementation.
-- [ ] Add refresh/report/revoke operations with durable pending intent and the existing
+- [x] Add refresh/report/revoke operations with durable pending intent and the existing
   local file gate. Bound network work and preserve the last good state on outages.
-- [ ] Add a worker that checks once per minute, renews with ten minutes left and
+- [x] Add a worker that checks once per minute, renews with ten minutes left and
   cancels on shutdown. Fake only scheduling; exercise real client exchanges in tests.
-- [ ] Expose cached status through GET and explicit refresh/revoke through the live
+- [x] Expose cached status through GET and explicit refresh/revoke through the live
   manager gate. Validate exact request fields and recheck authority before revocation.
-- [ ] Run focused server/boot tests and types. Commit with sign-off.
+- [x] Run focused server/boot tests and types. Commit with sign-off.
 
 ## 4. Self-service screens and local integration
 
@@ -101,14 +101,14 @@ Files: Cloud portal account/installation controller and screens, locale/API test
 Waitron Cloud services screen, client DTOs, locale/error catalogue and browser tests;
 Cloud `scripts/test-waitron-pairing.mjs`, both guides/backlogs.
 
-- [ ] Write failing English/Spanish browser journeys showing lease/contact information
+- [x] Write failing English/Spanish browser journeys showing lease/contact information
   and each independent service state. Test stale/unavailable/revoked distinctions.
-- [ ] Add explicit Stop Cloud access confirmation with consequences; require owner in
+- [x] Add explicit Stop Cloud access confirmation with consequences; require owner in
   Cloud and local manager in Waitron. Keep private keys and lease signatures out of DTOs.
-- [ ] Test double-click, lost reply, account change/detached view and phone accessibility.
-- [ ] Extend the real two-server runner: scoped configuration, renewal/lost reply/restart,
+- [x] Test double-click, lost reply, account change/detached view and phone accessibility.
+- [x] Extend the real two-server runner: scoped configuration, renewal/lost reply/restart,
   independent observations, revocation, rejected subsequent renewal and unaffected other venue.
-- [ ] Update current implementation docs and stale pairing-next-step text. Commit.
+- [x] Update current implementation docs and stale pairing-next-step text. Commit.
 
 ## 5. Finish and land
 

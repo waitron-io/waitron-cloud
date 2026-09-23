@@ -21,3 +21,11 @@ CREATE TABLE installation_observations (
   PRIMARY KEY (installation_id, service),
   FOREIGN KEY (installation_id, service) REFERENCES installation_services(installation_id, service)
 );
+CREATE TABLE installation_revocations (
+  installation_id uuid PRIMARY KEY REFERENCES installations(id),
+  actor_kind text NOT NULL CHECK (actor_kind IN ('account','installation')),
+  actor_id uuid NOT NULL,
+  reason text NOT NULL CHECK (reason='user_requested'),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  result jsonb NOT NULL
+);

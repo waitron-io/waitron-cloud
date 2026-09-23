@@ -471,7 +471,10 @@ Keep account management separate from traffic handling. The management layer han
 signup, subscriptions, provisioning and movement. Confirmed requirement: a portal
 outage must not immediately interrupt established remote connections or backups.
 Running services need enough local configuration and authority to continue; credential
-expiry, authentication and revocation during a management outage remain to be defined.
+expiry, authentication and revocation during a management outage need service-specific
+enforcement. The [installation lifecycle](superpowers/specs/2026-09-24-installation-lifecycle-design.md)
+now defines and implements one-hour control leases and revocation. Gateway and storage
+authority are the next adapter work; control leases do not authorise those services.
 On-prem trading must retain its existing independence from cloud add-ons. A venue
 whose primary is hosted in the cloud has a different availability dependency.
 

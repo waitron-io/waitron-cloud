@@ -1,3 +1,4 @@
+import {InstallationController} from './installation-controller.ts';
 import { PairingController } from './pairing-controller.ts';
 import { render } from 'lit';
 import { accountRequest } from './api.ts';
@@ -23,6 +24,7 @@ export class PortalApp {
   cooldownOperation = '';
   session: PortalSession;
   pairing: PairingController;
+  installations: InstallationController;
   #route = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
   constructor(root: HTMLElement) {
@@ -31,13 +33,14 @@ export class PortalApp {
     let saved: string | null = null;
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
     this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
+    this.installations = new InstallationController(() => this.draw());
     this.pairing = new PairingController(() => this.draw());
     this.pairing.open(this.link.requestId);
     this.session = this.#session();
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (['/account','/connect'].includes(this.path)) void this.session.activity(event); });
     document.addEventListener('pointerdown', event => { if (['/account','/connect'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -46,6 +49,8 @@ export class PortalApp {
   #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
+    this.installations.account(state.kind === 'authenticated' ? state.accountId : undefined);
+    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.installations.loaded) void this.installations.load();
     this.pairing.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (this.path === '/connect' && state.kind === 'authenticated' && !this.pairing.loaded) void this.pairing.load();
     if (this.path === '/' && state.kind === 'authenticated') this.navigate('/account');
@@ -62,7 +67,7 @@ export class PortalApp {
   }
   get waiting() {
     if (this.path === '/connect') return Math.max(this.pairing.waiting, Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)));
-    const deadline = ['/', '/account'].includes(this.path) ? this.session.retryAt : this.cooldownOperation === this.operation ? this.cooldownUntil : 0;
+    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt) : this.cooldownOperation === this.operation ? this.cooldownUntil : 0;
     return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
   }
   draw() {
@@ -127,6 +132,7 @@ export class PortalApp {
     if (this.pairing.error) this.#focusErrors(); else this.focusHeading();
   }
   async submit() {
+    if (['/','/account'].includes(this.path)) return;
     if (this.path === '/connect') { await this.submitPairing(); return; }
     if (this.pending || this.waiting) return;
     this.readFields(); this.errors = {}; this.error = undefined;
@@ -176,7 +182,7 @@ export class PortalApp {
   }
   get logoutWaiting() { return Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)); }
   async logout() {
-    if (this.pending || this.logoutWaiting || this.pairing.pending) return;
+    if (this.pending || this.logoutWaiting || this.pairing.pending || this.installations.pending) return;
     this.pending = true; this.error = undefined; this.draw();
     const route = this.#route;
     const success = await this.session.logout();

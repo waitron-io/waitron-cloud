@@ -1,6 +1,6 @@
 # Waitron Cloud backlog
 
-Updated 2026-09-23. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-09-24. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
@@ -51,8 +51,13 @@ work can resume. The Cloud matching-code API now verifies signed installation re
 Cloud approvals. Its [wire contract](superpowers/specs/2026-09-23-venue-pairing-design.md)
 uses local confirmation of the chosen business. Both confirmation screens and the
 Waitron manager adapter now pass the [local two-installation proof](local-pairing.md),
-including restart and lost-completion recovery. Next, build installation credential
-renewal, status and revocation before enabling services or public exposure. Recheck the
+including restart and lost-completion recovery. Installation credential renewal,
+configuration, observations and revocation now work through key-bound one-hour leases.
+The account and Waitron screens show English/Spanish status and explicit stop-access
+confirmation. PostgreSQL and real two-server tests cover renewal/revocation races,
+lost replies, worker restart and venue isolation. Next, build the local remote-access
+adapter, then managed SQLite backups and replacement recovery. Services remain
+unconfigured; synthetic observations in the runner do not prove a tunnel or backup. Recheck the
 new SQLite capture/restore interfaces before integrating backups; do not build a new
 PostgreSQL backup adapter for Waitron. The full two-venue milestone remains unproved.
 The [registration plan](registration-implementation-plan.md) now sequences persistence,
@@ -61,9 +66,9 @@ The normal connection journey and PostgreSQL for Cloud management data are agree
 The internal package uses one management database and tests concurrent completion
 and restart against PostgreSQL. Proof encoding and user-mediated first contact are specified and implemented on the
 Cloud side. The Waitron adapter checks live manager permission and serving-primary status before
-completion. Public deployment remains gated by the credential and ingress work below. Country partitioning, database availability and per-cell storage
+completion. Public deployment remains gated by the service-adapter and ingress work below. Country partitioning, database availability and per-cell storage
 remain deployment work; existing services must tolerate a management outage within
-the credential and revocation rules still to be defined.
+the scoped credential and revocation rules defined in the installation lifecycle spec.
 
 The [Cloud account HTTP API](../packages/account-http/README.md) is implemented and
 tested against PostgreSQL, Mailpit and real sockets. Shared account controls are
@@ -259,7 +264,10 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   PostgreSQL tests cover concurrent workers and process restart. The Cloud pairing verifier and HTTP exchange now bind Ed25519 installation proof,
   matching code and session-backed approval, with durable guess limits and retries.
   The Waitron adapter and both browser screens now connect two real SQLite installations
-  in the local integration runner. Next, implement the credential lifecycle; IDs alone
+  in the local integration runner. Renewable signed control leases and key proofs now
+  authenticate machine operations; owner or local-manager revocation records its actor,
+  reason and result. Desired revisions and stale health remain separate. Next, enforce
+  separately scoped gateway/storage authority and implement replacement; IDs alone
   are not authentication. The owner approved matching-code confirmation between
   signed-in local Waitron and Cloud. The [pairing contract](superpowers/specs/2026-09-23-venue-pairing-design.md) fixes
   proof format, expiry, attempt limits and binding. Local tests refuse swapped installation
@@ -268,7 +276,10 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   provenance and handling of cloned identities in the approval flow. When replacement
   gains a UI, define the permitted diagnostics for an already-linked or revoked
   installation; this slice rejects a different installation as a registration conflict.
-  Before public exposure, add pairing-request retention/cleanup and approval audit
+  Before public exposure, define retention and cleanup for installation operation
+  results and revocation audits, coordinate issuer rotation/trust rollout, and measure
+  per-IP limits for venues sharing NAT. Current operation results are retained without
+  automatic deletion. Add pairing-request retention/cleanup and approval audit
   records, and measure denial-of-service behavior for known request IDs. Completed
   pairing rows reference accounts; define their cleanup before account deletion. The
   short code has an unkeyed digest, so review database-disclosure protection before

@@ -3,7 +3,8 @@
 Use this package to create a Cloud account, sign in and recover a password independently
 of a venue server. The JSON API wraps the existing PostgreSQL identity and registration
 stores. The optional Lit portal uses the same origin. The pairing API supports the local integration described below. Public deployment
-awaits the real Waitron administrator adapter and deployment checks.
+awaits ingress, service-adapter and deployment checks. The real Waitron administrator
+adapter is included in the local integration proof.
 
 ## Run locally
 
@@ -33,7 +34,7 @@ pnpm account:serve
 ```
 
 If you export `DATABASE_URL` in your shell, `pnpm db:migrate` applies the same migrations.
-The server refuses startup without migrations `007_account_http.sql` and `008_pairing.sql`; it never applies
+The server refuses startup without migrations `007_account_http.sql`, `008_pairing.sql` and `009_installation_lifecycle.sql`; it never applies
 migrations itself. Its default listener is `127.0.0.1:3000`.
 
 In another terminal, from the same directory:
@@ -49,7 +50,7 @@ loads exactly `index.html`, `app.js` and `app.css` at startup. Missing configure
 assets prevent startup; omitting the setting retains the API-only server.
 
 The portal serves `/`, `/signup`, `/login`, `/forgot-password`, `/reset-password`
-and `/account`. Unknown paths return 404. Static GET/HEAD requests retain host checks
+and `/account`, plus `/connect` for pairing. Unknown paths return 404. Static GET/HEAD requests retain host checks
 and connection limits but do not consume database counters or the eight account
 operation slots. Rebuild and restart after frontend changes.
 
@@ -210,9 +211,9 @@ need deployment verification.
 
 The [version 1 pairing contract](../../docs/superpowers/specs/2026-09-23-venue-pairing-design.md)
 binds an installation key, local venue, environment and chosen Cloud business.
-Use this for local integration testing until the Waitron administrator adapter is
-implemented and tested. Cloud verifies signatures and Cloud permission; the adapter
-must check a real local administrator before starting and before signing completion.
+Use this for local integration testing. Cloud verifies signatures and Cloud permission;
+the implemented Waitron adapter checks a real local administrator before starting and
+before signing completion.
 
 Machine POSTs use `/api/pairing/start`, `/api/pairing/status` and
 `/api/pairing/complete`. Send only `payload` and `signature`, encoded as base64url,
@@ -258,3 +259,44 @@ registration conflicts return 400 with fixed codes. Database failures return 503
 None of these replies echoes request bodies. Keep request bodies, codes and signatures
 out of ingress logs. This slice issues no renewable machine credentials; those follow
 in the installation lifecycle task.
+
+## Installation access and status
+
+Pairing registers the installation. To enable its control API, set
+`CLOUD_INSTALLATION_ISSUER_KEY` to an Ed25519 private key in PKCS8 DER, encoded as
+unpadded base64url. Generate a separate key and keep it in your ignored configuration:
+
+```sh
+node --input-type=module -e 'import {generateKeyPairSync} from "node:crypto"; console.log(generateKeyPairSync("ed25519").privateKey.export({type:"pkcs8",format:"der"}).toString("base64url"))'
+```
+
+Keep this key across API restarts and use the same key on every API instance. Omitting
+it leaves pairing available but makes installation routes return 503. Rotation needs
+a coordinated trust-key rollout; this implementation accepts only the current issuer.
+Do not replace the key casually: outstanding leases would stop being accepted.
+
+Machine POSTs to `/api/installations/renew`, `/configuration`, `/report` and `/revoke`
+carry the signed envelope defined in the
+[installation contract](../../docs/superpowers/specs/2026-09-24-installation-lifecycle-design.md).
+They have no browser Origin or session cookie requirement. Cloud checks the stored
+installation key before charging its allowance: 30 requests per minute per installation,
+60 per IP, within the shared 120-per-IP API allowance. A one-hour lease also binds
+configuration and report requests to the venue, environment and control audience.
+Renewal and revocation use the installation key directly, so an expired lease does
+not prevent either operation. Revocation refuses subsequent renewals.
+
+From the account portal, you can inspect your organisation's installations. The
+account API provides GET `/api/account/installations` and POST
+`/api/account/installations/revoke` with `{"installationId":"<uuid>"}`. Both require
+a live customer membership; the POST additionally requires ownership, the exact
+Origin and CSRF token. Platform permissions alone do not grant access. Account routes
+allow 30 requests per minute per account and return status without installation keys,
+lease signatures or adapter configuration. Revocation records the actor, time, reason
+and result while keeping the venue and service records.
+
+The three service states begin unconfigured. Internal provisioning can advance a
+configuration revision. Installation reports cannot configure services, and a report
+for an old revision is refused. Health becomes unknown after five minutes without a
+fresh observation. A healthy report is not proof of a restorable backup. The local
+integration runner exercises the protocol with synthetic observations; the next service
+adapters must supply actual measurements and separately scoped authority.

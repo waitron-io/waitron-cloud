@@ -65,6 +65,7 @@ test('owner revocation serializes with renewal, persists and preserves the other
   const revoke=other.revokeWithSession(session.token,session.csrfToken,a.installationId);await waitForLock();
   const pending=assert.rejects(store.execute('renew',request()),/revoked/);
   await blocker.query('COMMIT');blocker.release();await revoke;await pending;
+  const audit=(await db.pool.query('SELECT * FROM installation_revocations WHERE installation_id=$1',[a.installationId])).rows[0];assert.equal(audit.actor_kind,'account');assert.equal(audit.actor_id,owner.accountId);assert.equal(audit.reason,'user_requested');assert.ok(audit.result.revokedAt);
   await assert.rejects(store.execute('renew',proof),/revoked/);await assert.rejects(config(a),/revoked/);
   assert.equal((await db.pool.query('SELECT count(*) FROM venues')).rows[0].count,'2');
   assert.equal((await db.pool.query('SELECT count(*) FROM installation_services')).rows[0].count,'6');
@@ -74,7 +75,8 @@ test('owner revocation serializes with renewal, persists and preserves the other
 });
 test('machine revoke recovers its committed reply but cannot revive a revoked key',async()=>{
   const proof=request(a,'revoke');const one=await store.execute('revoke',proof);assert.ok(one.revokedAt);
-  assert.deepEqual(await other.execute('revoke',proof),one);await assert.rejects(other.execute('renew',request()),/revoked/);
+  assert.deepEqual(await other.execute('revoke',proof),one);
+  const audit=(await db.pool.query('SELECT * FROM installation_revocations')).rows[0];assert.equal(audit.actor_kind,'installation');assert.equal(audit.actor_id,a.installationId);assert.deepEqual(audit.result,one);await assert.rejects(other.execute('renew',request()),/revoked/);
   await assert.rejects(store.configure(a.installationId,0,[]),/revoked/);
 });
 test('account access uses customer membership and ownership, CSRF and current sessions',async()=>{

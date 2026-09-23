@@ -1,10 +1,11 @@
+import {generateKeyPairSync} from 'node:crypto';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
 import { chromium, type Browser } from 'playwright';
 import { database } from '../../../packages/account-http/test/fixtures.ts';
 import { startAccountServer } from '@waitron-cloud/account-http';
 import { loadPortalAssets } from '../../../packages/account-http/src/portal.ts';
-import { EmailWorker, createLocalAccountMailer } from '@waitron-cloud/registration';
+import { EmailWorker, createLocalAccountMailer, createLeaseIssuer } from '@waitron-cloud/registration';
 export async function startPortalFixture() {
   const db = await database();
   const reserved = createServer();
@@ -15,14 +16,24 @@ export async function startPortalFixture() {
   let running: Awaited<ReturnType<typeof startAccountServer>> | undefined;
   let browser: Browser | undefined;
   try {
-    running = await startAccountServer({pool: db.pool, outbox: db.outbox, port: address.port,
+    const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
+    running = await startAccountServer({leaseIssuer:issuer,pool: db.pool, outbox: db.outbox, port: address.port,
       config: {portalOrigin: origin, production: false, rateKey: db.rateKey, trustedProxyIps: []},
       portalAssets: await loadPortalAssets(new URL('../dist', import.meta.url).pathname)});
     browser = await chromium.launch({headless: true});
     const worker = new EmailWorker(db.pool, db.outbox, createLocalAccountMailer({
       port: Number(process.env.MAILPIT_TEST_SMTP_PORT), portalOrigin: origin,
     }));
-    return {origin, browser, db,
+    return {origin, browser, db, issuer,
+      loseMachineReply(action: string) {
+        const server=running!.server;
+        const hook: Parameters<typeof server.prependListener>[1] = (request, response) => {
+          if(request.url!==`/api/installations/${action}`)return;
+          server.removeListener('request',hook);
+          response.end=()=>{request.socket.destroy();return response;};
+        };
+        server.prependListener('request',hook);
+      },
       async drainMail() { while (await worker.runOnce()) {} },
       async close() { await browser?.close(); await running?.close(); await db.close(); },
     };

@@ -80,6 +80,7 @@ export class InstallationStore {
       if(action==='renew'||action==='revoke'){if(c.lease!=='')fail('invalid_proof');}
       else {
         let lease:unknown;try{lease=JSON.parse(c.lease);}catch{return fail('invalid_proof');}
+        if(JSON.stringify(lease)!==c.lease)fail('invalid_proof');
         const claims=verifyLease(lease,new Map([[this.#issuer.keyId,this.#issuer.publicKey]]),this.#origin,now);
         if(claims.installationId!==row.id||claims.venueId!==row.venue_id||claims.environment!==row.environment||claims.publicKey!==row.public_key)fail('invalid_proof');
       }
@@ -100,6 +101,8 @@ export class InstallationStore {
       if(action==='revoke')await client.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[row.id]);
       await client.query('UPDATE installations SET last_contact_at=clock_timestamp() WHERE id=$1',[row.id]);
       const result=await view(client,row.id);if(lease)result.lease=lease;
+      verifyMachine(envelope,row.public_key,this.#origin,action);
+      if(action==='revoke')await client.query("INSERT INTO installation_revocations(installation_id,actor_kind,actor_id,reason,result) VALUES($1,'installation',$1,'user_requested',$2) ON CONFLICT DO NOTHING",[row.id,result]);
       await client.query('INSERT INTO installation_operations(installation_id,operation_id,digest,result) VALUES($1,$2,$3,$4)',[row.id,c.operationId,digest,result]);
       return result;
     });
@@ -137,7 +140,9 @@ export class InstallationStore {
       if(!permission.rowCount)fail('permission_denied');await lock(client,id);
       await resolveSession(client,token,{csrfToken});
       await client.query('UPDATE installations SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE id=$1',[id]);
-      const result=await view(client,id);for(const s of result.services)s.configuration={};return result;
+      const result=await view(client,id);for(const s of result.services)s.configuration={};
+      await resolveSession(client,token,{csrfToken,touch:false});
+      await client.query("INSERT INTO installation_revocations(installation_id,actor_kind,actor_id,reason,result) VALUES($1,'account',$2,'user_requested',$3) ON CONFLICT DO NOTHING",[id,session.accountId,result]);return result;
     });
   }
 }
