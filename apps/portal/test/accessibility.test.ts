@@ -18,7 +18,7 @@ for(const locale of ['en','es'] as const) for(const colorScheme of ['light','dar
         assert.deepEqual(violations,[],route);
         assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),route);
         assert.equal(await page.locator('html').getAttribute('lang'),locale);
-        if(route.startsWith('/signup#')) await page.screenshot({path:`/tmp/cloud-portal-${locale}-${colorScheme}.png`,fullPage:true});
+        if(route.startsWith('/signup#')) await page.screenshot({path:new URL(`../dist/preview-${locale}-${colorScheme}.png`,import.meta.url).pathname,fullPage:true});
       }
       await page.goto(`${f.origin}/login`);await page.getByRole('button',{name:translations[locale].login,exact:true}).click();
       await page.locator('input[name=email][aria-invalid=true]').waitFor();
