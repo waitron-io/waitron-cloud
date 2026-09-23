@@ -1,8 +1,8 @@
 # Shared UI extraction
 
-Status: proposed design, 2026-09-23. The owner approved proceeding with shared UI
-extraction before Cloud account screens. The package boundary below is ready for
-review; keeping its source in Waitron is the recommended repository choice.
+Status: approved design, 2026-09-23. The owner approved the package boundary below
+and keeping its source in Waitron. The [implementation plan](../plans/2026-09-23-shared-ui-extraction.md)
+sets out the extraction and verification before Cloud account screens.
 
 ## Outcome
 
