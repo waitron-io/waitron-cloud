@@ -209,7 +209,7 @@ export class PortalSession {
 }
 ```
 
-- [ ] Write pure link and locale tests before implementation. This link example must
+- [x] Write pure link and locale tests before implementation. This link example must
   fail with the old query-only behavior:
 
   ```ts
@@ -226,37 +226,37 @@ export class PortalSession {
   Clean secret-bearing URLs even when invalid. Use link language for that arrival,
   otherwise saved preference, then supported browser languages, then English.
   Storage access exceptions must not prevent boot or language changes.
-- [ ] Run pure tests with
+- [x] Run pure tests with
   `pnpm --filter @waitron-cloud/portal exec node --test test/links.test.ts test/locale.test.ts`.
   Implement capture before initial render or requests, retain secrets only in form
   memory and discard them when leaving that completion flow. Add complete keyed
   translation dictionaries with matching keys; switch language without resetting
   form inputs, token, request state or cooldown.
-- [ ] Write controlled request tests for session states and response ordering.
+- [x] Write controlled request tests for session states and response ordering.
   `accountRequest` uses same-origin credentials, JSON POSTs and the matching readable
   CSRF cookie only on activity/logout. It handles 204, fixed error codes and both
   Retry-After forms; it never retries writes or exposes raw error bodies.
   A malformed successful response is unavailable, not authenticated.
-- [ ] Implement `PortalSession`: passive initial/visible/protected-action reads,
+- [x] Implement `PortalSession`: passive initial/visible/protected-action reads,
   trusted keyboard/pointer activity on the authenticated screen at most once per
   minute, and expiry-triggered passive reads. Ignore synthetic/background activity.
   Coalesce overlapping checks; invalidate older responses on logout/new login.
   Distinguish 401 from 503/network failures; failed logout retains a retry action.
   Dispose listeners/timers. Test fake time and delayed replies without minute-long sleeps.
-- [ ] Add failing form/browser tests, then render shared controls for every route:
+- [x] Add failing form/browser tests, then render shared controls for every route:
   email request/resend/change-address, signup completion, login, reset request,
   reset completion and account/sign-out. Include ordinary links and history handling;
   `/` alone chooses account/login after resolution. Explicit `/login` and completion
   pages remain accessible with an existing session. Account requires a confirmed session.
   Submission checks must run on Enter as well as click. Include reveal, labels,
   autocomplete, error summary, field focus, busy state and live status.
-- [ ] Implement form state with a single pending operation and no automatic write
+- [x] Implement form state with a single pending operation and no automatic write
   retry. Start a minimum 60-second resend cooldown after accepted email requests;
   respect a longer Retry-After. Preserve values/language through pending responses.
   Lost completion responses offer login with the chosen password and deliberate retry;
   invalid/expired/used links offer login/new link. Lost login responses trigger one
   passive session check. Show success only from a confirmed response.
-- [ ] Verify `new TextEncoder().encode(password).byteLength <= 1024` and
+- [x] Verify `new TextEncoder().encode(password).byteLength <= 1024` and
   `[...password].length >= 15`, including astral characters and exact boundaries.
   Test legal-name limits, default/different organisation name and the `ES` payload.
   Run the portal unit/controlled browser tests and typecheck; commit with

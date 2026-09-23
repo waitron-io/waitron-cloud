@@ -7,7 +7,7 @@ test('the real build renders shared controls under the account server CSP', asyn
     const page = await fixture.browser.newPage();
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+    page.on('console', msg => { if (msg.type() === 'error' && !(msg.location().url.endsWith('/api/account/session') && msg.text().includes('401'))) errors.push(msg.text()); });
     await page.goto(`${fixture.origin}/login`);
     await page.locator('wt-card').waitFor();
     assert.ok(await page.locator('h1').isVisible());
