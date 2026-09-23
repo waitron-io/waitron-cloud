@@ -242,3 +242,15 @@ test('IP-blocked login requests cannot spend another account’s address allowan
   assert.equal(signedIn.status, 200);
   assert.deepEqual(await signedIn.json(), {accountId: owner.accountId});
 });
+
+test('locale is optional and strictly validated only on email-producing routes', async () => {
+  for (const path of ['/signup/request', '/password-reset/request']) {
+    for (const locale of [null, 1, 'fr']) assert.equal((await request(path, {email: 'owner@example.test', locale})).status, 400);
+    assert.equal((await request(path, {email: 'owner@example.test', locale: 'es', extra: ''})).status, 400);
+    assert.equal((await request(path, {email: 'owner@example.test', locale: 'es'})).status, 202);
+  }
+  assert.equal((await request('/signup/complete', {token: 'a'.repeat(43), ...details, locale: 'en'})).status, 400);
+  assert.equal((await request('/password-reset/complete', {token: 'a'.repeat(43), password, locale: 'fr'})).status, 400);
+  const row = (await db.pool.query("SELECT * FROM email_outbox WHERE kind = 'verification'")).rows[0];
+  assert.equal((db.outbox.open(row) as {locale?: string}).locale, 'es');
+});

@@ -240,3 +240,5 @@ export class RegistrationStore {
 
 export { transaction } from './transaction.ts';
 export { normaliseEmail } from './account-input.ts';
+
+export type { AccountLocale, AccountNotification } from './account-input.ts';

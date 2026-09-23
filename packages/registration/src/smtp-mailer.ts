@@ -3,7 +3,7 @@ import { isIP } from 'node:net';
 import { connect, type TLSSocket } from 'node:tls';
 import nodemailer from 'nodemailer';
 import { EmailDeliveryError, type EmailDeliveryContext, type EmailDeliveryReceipt } from './email-delivery.ts';
-import { normaliseEmail, type AccountEmail } from './account-input.ts';
+import { normaliseEmail, type AccountEmail, type AccountNotification } from './account-input.ts';
 import { accountMail, type AccountMailKind } from './account-mail.ts';
 
 export interface SmtpAccountMailConfig {
@@ -32,7 +32,7 @@ export function createSmtpAccountMailer(config: SmtpAccountMailConfig, trust: {c
   const {host, user, password, from} = config;
   const ca = Buffer.isBuffer(trust.ca) ? Buffer.from(trust.ca) : trust.ca;
   const domain = from.split('@')[1]!;
-  const send = async (kind: AccountMailKind, message: AccountEmail | {email: string}, context?: EmailDeliveryContext): Promise<EmailDeliveryReceipt> => {
+  const send = async (kind: AccountMailKind, message: AccountEmail | AccountNotification, context?: EmailDeliveryContext): Promise<EmailDeliveryReceipt> => {
     if (!message || typeof message.email !== 'string' || normaliseEmail(message.email) !== message.email
       || (kind !== 'password_changed' && (!('token' in message) || !/^[A-Za-z0-9_-]{43}$/.test(message.token) || !Number.isFinite(Date.parse(message.expiresAt))))) throw new EmailDeliveryError('delivery_rejected');
     const deliveryId = context?.deliveryId ?? randomUUID();
@@ -80,7 +80,7 @@ export function createSmtpAccountMailer(config: SmtpAccountMailConfig, trust: {c
   return {
     sendVerification: (message: AccountEmail, context?: EmailDeliveryContext) => send('verification', message, context),
     sendPasswordReset: (message: AccountEmail, context?: EmailDeliveryContext) => send('password_reset', message, context),
-    sendPasswordChanged: (message: {email: string}, context?: EmailDeliveryContext) => send('password_changed', message, context),
+    sendPasswordChanged: (message: AccountNotification, context?: EmailDeliveryContext) => send('password_changed', message, context),
   };
 }
 

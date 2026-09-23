@@ -1,3 +1,4 @@
+import type { AccountLocale } from '../../src/account-input.ts';
 import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { EmailOutbox, EmailWorker } from '../../src/email-outbox.ts';
@@ -11,7 +12,7 @@ export function signupAndDeliver(pool: Pool, mailer: SignupMailer) {
   const store = new SignupStore(pool, testOutbox);
   const worker = new EmailWorker(pool, testOutbox, {sendPasswordReset: unused, sendPasswordChanged: unused, ...mailer});
   return {
-    async request(email: string) { const result = await store.request(email); while (await worker.runOnce()) {} return result; },
+    async request(email: string, locale?: AccountLocale) { const result = await store.request(email, locale); while (await worker.runOnce()) {} return result; },
     complete: store.complete.bind(store),
   };
 }
@@ -19,7 +20,7 @@ export function recoveryAndDeliver(pool: Pool, mailer: PasswordRecoveryMailer) {
   const store = new PasswordRecoveryStore(pool, testOutbox);
   const worker = new EmailWorker(pool, testOutbox, {sendVerification: unused, ...mailer});
   return {
-    async request(email: string) { const result = await store.request(email); while (await worker.runOnce()) {} return result; },
-    async complete(token: string, password: string) { const result = await store.complete(token, password); while (await worker.runOnce()) {} return result; },
+    async request(email: string, locale?: AccountLocale) { const result = await store.request(email, locale); while (await worker.runOnce()) {} return result; },
+    async complete(token: string, password: string, locale?: AccountLocale) { const result = await store.complete(token, password, locale); while (await worker.runOnce()) {} return result; },
   };
 }

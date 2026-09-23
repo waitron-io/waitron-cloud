@@ -4,7 +4,7 @@ import { hashSecret } from '@waitron-cloud/identity';
 import type { EmailDeliveryContext, EmailDeliveryReceipt } from './email-delivery.ts';
 import type { EmailOutbox } from './email-outbox.ts';
 import { transaction } from './transaction.ts';
-import { normaliseEmail, validNewPassword, type AccountEmail } from './account-input.ts';
+import { normaliseEmail, validNewPassword, validLocale, type AccountLocale, type AccountEmail } from './account-input.ts';
 
 export type SignupEmail = AccountEmail;
 export interface SignupMailer { sendVerification(message: SignupEmail, context?: EmailDeliveryContext): Promise<void | EmailDeliveryReceipt>; }
@@ -19,9 +19,9 @@ export class SignupStore {
   readonly #outbox: EmailOutbox;
   constructor(pool: Pool, outbox: EmailOutbox) { this.#pool = pool; this.#outbox = outbox; }
 
-  async request(input: string): Promise<{status: 'accepted'}> {
+  async request(input: string, locale: AccountLocale = 'en'): Promise<{status: 'accepted'}> {
     const email = normaliseEmail(input);
-    if (!email) throw new SignupError('signup_invalid');
+    if (!email || !validLocale(locale)) throw new SignupError('signup_invalid');
     await transaction(this.#pool, async client => {
       // Serialise requests for an address across workers; hash collisions only share a cooldown lock.
       await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema() || ':signup'), hashtext($1))", [email]);
@@ -33,7 +33,7 @@ export class SignupStore {
       const expiresAt = new Date(now.getTime() + 30 * 60_000).toISOString();
       await client.query('INSERT INTO signup_requests (token_hash, email, created_at, expires_at) VALUES ($1, $2, $3, $4)',
         [digest(token), email, now, expiresAt]);
-      await this.#outbox.enqueue(client, 'verification', { email, token, expiresAt });
+      await this.#outbox.enqueue(client, 'verification', { email, token, expiresAt, locale });
     });
     return { status: 'accepted' };
   }

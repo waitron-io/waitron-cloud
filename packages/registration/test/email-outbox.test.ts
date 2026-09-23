@@ -163,7 +163,7 @@ test('stores enqueue without delivery; queue insertion failure rolls back reques
   } finally { await pool.query('ALTER TABLE email_outbox DROP CONSTRAINT simulate_failure'); }
   await recovery.complete(reset.token, 'replacement café password');
   assert.equal(delivered.length, 2);
-  await worker.runOnce(); assert.deepEqual(delivered[2], {email});
+  await worker.runOnce(); assert.deepEqual(delivered[2], {email, locale: 'en'});
   await assert.rejects(transaction(pool, client => resolveSession(client, session.token)), {code: 'session_unavailable'});
   await clean();
   await pool.query("ALTER TABLE email_outbox ADD CONSTRAINT simulate_failure CHECK (kind = 'password_changed')");
@@ -204,7 +204,7 @@ test('delayed recovery skips links invalidated by a reset, email change or suspe
   assert.equal(await worker.runOnce(), true);
   assert.equal((await pool.query("SELECT status FROM email_outbox WHERE kind = 'password_reset' AND attempts = 1 ORDER BY created_at DESC LIMIT 1")).rows[0].status, 'cancelled');
   assert.equal(delivered.length, 2);
-  await worker.runOnce(); assert.deepEqual(delivered[2], {email});
+  await worker.runOnce(); assert.deepEqual(delivered[2], {email, locale: 'en'});
   for (const change of ["UPDATE cloud_credentials SET email = 'changed@example.test'", 'UPDATE cloud_credentials SET email_verified_at = NULL', 'UPDATE cloud_accounts SET disabled_at = clock_timestamp()']) {
     await pool.query('UPDATE cloud_credentials SET email = $1, email_verified_at = clock_timestamp()', [email]);
     await pool.query('UPDATE cloud_accounts SET disabled_at = NULL WHERE id = $1', [account.accountId]);
@@ -393,4 +393,21 @@ test('an accepted send with malformed receipt metadata finishes without retrying
     assert.equal(record.transport, null); assert.equal(record.message_id, null);
     assert.equal(record.payload, null); assert.equal(record.failures, 0);
   }
+});
+
+test('locale travels through signup, recovery and password-change encrypted delivery', async () => {
+  const signup = new SignupStore(pool, outbox);
+  await signup.request('spanish@example.test', 'es');
+  await worker.runOnce();
+  assert.equal((delivered[0] as AccountEmail).locale, 'es');
+  await signup.complete((delivered[0] as AccountEmail).token, {
+    password: 'Original long password', organisationName: 'Sol', legalBusinessName: 'Sol SL', countryCode: 'ES',
+  });
+  const recovery = new PasswordRecoveryStore(pool, outbox);
+  await recovery.request('spanish@example.test', 'es');
+  await worker.runOnce();
+  assert.equal((delivered[1] as AccountEmail).locale, 'es');
+  await recovery.complete((delivered[1] as AccountEmail).token, 'Replacement long password', 'en');
+  await worker.runOnce();
+  assert.deepEqual(delivered[2], {email: 'spanish@example.test', locale: 'en'});
 });

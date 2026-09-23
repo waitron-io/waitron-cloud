@@ -3,7 +3,7 @@
 > **For agentic workers:** Use `superpowers:executing-plans` to implement this plan
 > inline, task by task. Use one Claude whole-branch review during finish-branch.
 
-Status: proposed for implementation review, 2026-09-23.
+Status: approved by the owner, 2026-09-23; implementation in progress.
 
 **Goal:** You can create a Cloud account, sign in and recover access in English or
 Spanish without a working venue server.
@@ -84,7 +84,7 @@ Use `request(email: string, locale: AccountLocale = 'en')` on both stores and
 Return types remain unchanged. Mailers and the outbox accept `AccountNotification` for
 password-change mail. `accountMail` retains its current return shape.
 
-- [ ] Add a failing mail-rendering test, then run
+- [x] Add a failing mail-rendering test, then run
   `pnpm --filter @waitron-cloud/registration exec node --test test/account-mail.test.ts`:
 
   ```ts
@@ -100,18 +100,18 @@ password-change mail. `accountMail` retains its current return shape.
   Cover all three message kinds in both languages, and omitted locale in English.
   A missing export/type is an initial failure; then observe the behavioral assertions
   fail on the old renderer before replacing it.
-- [ ] Extend strict body parsing with
+- [x] Extend strict body parsing with
   `readAccountBody(request: Request, required: readonly string[], optional: readonly string[] = [])`.
   Reject missing required fields, non-string present values and unknown fields.
   Allow only `locale` on signup request, reset request and reset completion, then
   validate `en`/`es` before invoking stores. Add HTTP tests for omitted, valid, invalid,
   null and unexpected locale fields; signup completion still rejects locale.
-- [ ] Trace all mail payload consumers with `rg 'AccountEmail|sendPasswordChanged|searchParams.get' packages`.
+- [x] Trace all mail payload consumers with `rg 'AccountEmail|sendPasswordChanged|searchParams.get' packages`.
   Add queue/store tests proving locale survives encryption and worker delivery, while
   old payloads without locale render English. Reject an explicit unsupported locale
   as an invalid payload; preserve existing key, token-hash and expiry checks.
   Extend delivery fixtures to pass optional locale while preserving old callers.
-- [ ] Implement locale propagation inside existing transactions, preserving cooldowns
+- [x] Implement locale propagation inside existing transactions, preserving cooldowns
   and single-use behavior. Build links and format expiry explicitly:
 
   ```ts
@@ -124,7 +124,7 @@ password-change mail. `accountMail` retains its current return shape.
   Use complete English/Spanish templates for subjects, expiry and notification text.
   Update mail tests that extract query tokens to read fragment tokens; retain the
   legacy query behavior as browser tests in task 3.
-- [ ] Run the mail test plus the changed store/queue/adapter tests through
+- [x] Run the mail test plus the changed store/queue/adapter tests through
   `node scripts/test-postgres.mjs --filter @waitron-cloud/registration test`, and
   the HTTP locale cases through the same runner with the account-http filter and
   `exec node --test --test-name-pattern=locale test/account-http.test.ts`.

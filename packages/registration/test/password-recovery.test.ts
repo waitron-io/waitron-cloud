@@ -98,7 +98,7 @@ test('reset replaces the password, revokes every session and preserves membershi
   assert.equal((await signIn(newPassword)).accountId, accountId);
   assert.deepEqual((await pool.query('SELECT * FROM organisation_memberships')).rows, memberships);
   assert.deepEqual((await pool.query('SELECT * FROM platform_permissions')).rows, permissions);
-  assert.deepEqual(notices, [{ email }]);
+  assert.deepEqual(notices, [{ email, locale: 'en' }]);
   await expectCode(store.complete(token, newPassword), 'reset_unavailable');
 });
 
