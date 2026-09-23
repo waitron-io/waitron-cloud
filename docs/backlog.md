@@ -182,6 +182,13 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   session, signup-request and password-reset-request retention and cleanup, including
   reset records for unknown addresses, and measure them against the
   expected deployment size. Add a compromised-password check before public signup.
+  Portal follow-ups before public use: decide whether to accept tracking queries and
+  trailing-slash/case aliases, and provide useful error pages for rejected URLs.
+  The current exact routes and query restrictions follow the approved portal plan.
+  Set the retirement point for legacy query-token links after every deployed sender
+  generates fragments and all remaining query tokens have expired; retain compatibility
+  until then. Check whether direct development-mailer callers need rendering errors
+  converted to rejected promises; the worker already contains synchronous failures.
   The PostgreSQL email queue now saves signup/reset messages and password-change
   notifications with their state changes. It encrypts recipients and tokens, retries
   at most eight times, expires links, fences late worker acknowledgements, and purges

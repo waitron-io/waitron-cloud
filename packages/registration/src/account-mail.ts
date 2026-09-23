@@ -1,4 +1,4 @@
-import type { AccountEmail, AccountNotification } from './account-input.ts';
+import { validLocale, type AccountEmail, type AccountNotification } from './account-input.ts';
 export type AccountMailKind = 'verification' | 'password_reset' | 'password_changed';
 const copy = {
   en: {
@@ -15,9 +15,9 @@ const copy = {
   },
 };
 export function accountMail(origin: URL, kind: AccountMailKind, message: AccountEmail | AccountNotification): {subject: string; text: string} {
+  if (message.locale !== undefined && !validLocale(message.locale)) throw new Error('Invalid account email');
   const locale = message.locale ?? 'en';
   const text = copy[locale];
-  if (!text) throw new Error('Invalid account email');
   if (kind === 'password_changed') return {subject: text.password_changed, text: text.changed};
   if (!('token' in message)) throw new Error('Invalid account email');
   const link = new URL(kind === 'verification' ? '/signup' : '/reset-password', origin);

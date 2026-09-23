@@ -323,3 +323,19 @@ close browser/server/pools and drop only this fixture's schema in `finally`.
 - CI already installs the same pinned Playwright browser for the package smoke test;
   workspace test discovery includes the portal, so no second install step is needed.
 - The normal finish/land workflow supplies the final review and current-head CI record.
+
+
+## Branch review
+
+The Claude run-it review took 609 seconds. Follow-up tests reproduced per-request
+asset copies and unsupported inherited locale names. Static responses now stream
+shared bytes; the 150 slow-client experiment delivered every 4 MB response with
+36 MB of array-buffer memory, compared with 663 MB in the review. A regression checks
+held responses and real slow clients. Renderer validation now uses the same explicit
+language guard as the stores. Negative queue tests fail when either locale guard is
+removed.
+
+Exact document routes, query restrictions and legacy-link compatibility retain the
+approved behavior. Public URL usability and eventual legacy-link retirement are
+tracked in the backlog. The reviewer did not execute the browser session/history
+checks; the driver's passing browser suite supplies those receipts.

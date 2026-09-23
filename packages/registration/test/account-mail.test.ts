@@ -19,3 +19,9 @@ test('old queued payloads retain English', () => {
   assert.deepEqual(accountMail(new URL('https://cloud.example'), 'verification', message),
     accountMail(new URL('https://cloud.example'), 'verification', {...message, locale: 'en'}));
 });
+test('unsupported and inherited locale names are rejected before rendering any mail kind', () => {
+  for (const locale of ['fr','toString','valueOf','hasOwnProperty','constructor',null])
+    for (const kind of ['verification','password_reset','password_changed'] as const)
+      assert.throws(()=>accountMail(new URL('https://cloud.example'),kind,
+        {email:'owner@example.test',token,expiresAt:'2030-01-01T12:00:00Z',locale} as never),/Invalid account email/);
+});

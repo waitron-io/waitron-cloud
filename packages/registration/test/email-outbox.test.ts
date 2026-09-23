@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createCipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { execFileSync } from 'node:child_process';
 import { after, before, beforeEach, test } from 'node:test';
@@ -410,4 +410,27 @@ test('locale travels through signup, recovery and password-change encrypted deli
   await recovery.complete((delivered[1] as AccountEmail).token, 'Replacement long password', 'en');
   await worker.runOnce();
   assert.deepEqual(delivered[2], {email: 'spanish@example.test', locale: 'en'});
+});
+
+test('enqueue rejects unsupported locale values without recording a message', async () => {
+  for (const locale of ['fr','toString',null]) {
+    await assert.rejects(transaction(pool, client => outbox.enqueue(client,'password_changed',
+      {email:'owner@example.test',locale} as never)), /Invalid queued email/);
+  }
+  assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'0');
+});
+test('open and worker reject authenticated encrypted payloads with an invalid locale', async () => {
+  await transaction(pool,client=>outbox.enqueue(client,'password_changed',{email:'owner@example.test'}));
+  const record=await row();
+  assert.deepEqual(outbox.open(record),{email:'owner@example.test'},'old payloads still decrypt');
+  for(const locale of ['fr','toString',null]) {
+    const nonce=randomBytes(12);const cipher=createCipheriv('aes-256-gcm',Buffer.from(keys.first,'hex'),nonce);
+    cipher.setAAD(Buffer.from(JSON.stringify([record.id,record.kind,record.key_id])));
+    const encrypted=Buffer.concat([cipher.update(JSON.stringify({email:'owner@example.test',locale}),'utf8'),cipher.final()]);
+    const payload=Buffer.concat([nonce,cipher.getAuthTag(),encrypted]);
+    assert.throws(()=>outbox.open({...record,payload}),/Queued email payload unavailable/);
+    await pool.query('UPDATE email_outbox SET payload=$1,available_at=clock_timestamp() WHERE id=$2',[payload,record.id]);
+    assert.equal(await worker.runOnce(),true);
+    assert.equal((await row()).last_error,'payload_unavailable');assert.equal(delivered.length,0);
+  }
 });

@@ -23,7 +23,11 @@ export function portalResponse(request: Request, assets: PortalAssets): Response
   const key = documents.has(url.pathname) ? '/index.html' : ['/app.js', '/app.css'].includes(url.pathname) ? url.pathname : '';
   const asset = assets.get(key);
   if (!asset) return failure(404);
-  return new Response(request.method === 'HEAD' ? null : Buffer.from(asset.body), {headers: {
+  // Stream shared bytes to avoid materializing a separate body for each connection.
+  const body = request.method === 'HEAD' ? null : new ReadableStream<Uint8Array>({
+    start(controller) { controller.enqueue(asset.body); controller.close(); },
+  });
+  return new Response(body, {headers: {
     ...securityHeaders, 'Content-Type': asset.contentType, 'Content-Length': String(asset.body.byteLength),
   }});
 }
