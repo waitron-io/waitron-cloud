@@ -6,7 +6,7 @@ the combined migration entry point (`pnpm db:migrate`), including identity migra
 `002_identity.sql`. Do not call these functions outside the transaction boundary.
 
 `login` returns a fresh 32-byte session token and a separate CSRF token. Store the
-session token in a Secure, HttpOnly cookie in the future web adapter; never put it in
+session token in a Secure, HttpOnly cookie, as the [account API](../account-http/README.md) does; never put it in
 a URL or a log. The database stores SHA-256 hashes of both tokens. A database hash is
 not a credential accepted by the session resolver.
 
@@ -27,7 +27,8 @@ grant no customer organisation access. The exact platform role catalogue, MFA po
 and customer-approved support grants still need their own implementation.
 For operations that change state, pass `{ csrfToken }` as its fourth argument;
 an undefined or incorrect `csrfToken` value is rejected. Read-only checks can omit
-the options object. The future HTTP adapter must also check the request Origin.
+the options object. HTTP callers must also check the request Origin; the account API
+enforces this on every POST.
 
 Use `RegistrationStore.approveCloudWithSession(binding, token, csrfToken)` for Cloud
 approval. It derives the account from the session, checks the CSRF token and current
@@ -37,8 +38,9 @@ permission lock wait. The older account-ID method is only for trusted adapters.
 This package exposes no HTTP routes or signup UI. The registration package's
 [signup backend](../registration/README.md#cloud-account-signup) verifies email tokens
 before creating new customer credentials. Before public use, implement live email
-delivery, the web adapter's Origin checks, cookie handling, login/request throttling,
-the public recovery journey and the selected additional authentication factors.
+delivery, browser account/recovery screens and the selected additional authentication
+factors. The account API implements Origin checks, cookie handling and shared request
+limits; production ingress controls and timing/load checks remain required.
 The registration package's [recovery backend](../registration/README.md#password-recovery)
 resets verified password accounts and ends their sessions in one transaction.
 Define retention and cleanup for ended and expired sessions before deployment.

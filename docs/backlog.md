@@ -5,8 +5,10 @@ registration state, internal password sessions, session-backed Cloud approval an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
 internally, with a retry worker, authenticated TLS SMTP delivery and Mailpit for local
-email capture. Live provider/sender configuration remains open.
-No public cloud service is implemented. This file owns cloud product and platform work;
+email capture. The account HTTP API now provides signup, login, session activity,
+logout and recovery with shared request limits, Origin/CSRF checks and bounded
+network handling. Live provider/sender configuration and account screens remain open.
+No public cloud service is deployed. This file owns cloud product and platform work;
 Waitron's backlog owns the on-prem application and its side of the integration.
 
 Start with the [product discussion](product-and-platform.md). The
@@ -40,7 +42,8 @@ sessions atomically. The same transaction queues encrypted emails for a worker t
 retries failures and resumes after crashes. Local Mailpit tests cover SMTP delivery
 and a separate worker process. Authenticated TLS SMTP now covers production transport,
 bounded cancellation, retry classification and accepted-message receipts. Next: configure
-and prove live provider delivery, and implement the Cloud web adapter, including public-request protections and account/recovery screens, before exposure.
+and prove live provider delivery, build account/recovery screens, and validate production
+ingress and deployment controls before exposure. The account HTTP adapter is implemented.
 The owner confirmed the SQLite storage switch landed on 2026-09-23. Waitron-side
 work can resume. Build the local administrator adapter and matching-code exchange, including bound proof
 and first-contact trust, before exposing public registration endpoints. Recheck the
@@ -55,8 +58,10 @@ public endpoints. Country partitioning, database availability and per-cell stora
 remain deployment work; existing services must tolerate a management outage within
 the credential and revocation rules still to be defined.
 
-The next account slice is the [Cloud HTTP API design](account-http-design.md),
-covering browser sessions, signup/recovery routes and shared request limits.
+The [Cloud account HTTP API](../packages/account-http/README.md) is implemented and
+tested against PostgreSQL, Mailpit and real sockets. Next, scope shared UI extraction
+against current Waitron, then build Cloud account screens and browser tests. Pairing
+remains a separate exchange requiring both Cloud and local administrator proof.
 
 ## Initial focus
 
@@ -151,8 +156,10 @@ covering browser sessions, signup/recovery routes and shared request limits.
   failures receive the same accepted result. Notifications follow commit and cannot
   undo a successful reset. Recovery requires verified email and an existing password;
   define recovery for legacy unverified and passwordless accounts separately.
-  Configure live email delivery and implement public signup/recovery screens, MFA/passkeys, public login throttling,
-  Origin/cookie handling and the platform role catalogue before public use. Define
+  Configure live email delivery and implement public signup/recovery screens, MFA/passkeys
+  and the platform role catalogue before public use. Shared login/request limits, secure
+  cookies and Origin/CSRF checks are implemented in the account API. Validate ingress
+  bot controls, trusted proxy settings and browser behaviour before deployment. Define
   session, signup-request and password-reset-request retention and cleanup, including
   reset records for unknown addresses, and measure them against the
   expected deployment size. Add a compromised-password check before public signup.
@@ -175,9 +182,10 @@ covering browser sessions, signup/recovery routes and shared request limits.
   Provision separately held encryption keys and document rotation/restore before
   production; the code accepts an active key plus retained older keys. A send timeout
   or crash after provider acceptance may duplicate an email. Define retention/cleanup
-  for terminal delivery metadata and security audit events. The public web adapter
-  must assess account/cooldown timing differences in database work; removing provider
-  latency alone does not establish uniform responses.
+  for terminal delivery metadata and security audit events. The HTTP adapter applies
+  a 300 ms response floor to login/email requests, but deployment timing and load
+  measurements must still assess account/cooldown differences under contention.
+  Its rate key must be shared across instances; rotation starts new allowances.
   Review the inherited password cost for deployment and apply the source map's
   security-fix process to both repositories. Further reuse should take code and
   behavioural tests from `pre-sqlite-migration`, pinned to

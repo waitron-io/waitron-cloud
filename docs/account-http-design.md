@@ -1,6 +1,6 @@
 # Cloud account HTTP API
 
-Status: approved design, 2026-09-23. The owner approved building browser access to
+Status: implemented, 2026-09-23. See the [run and API guide](../packages/account-http/README.md). The owner approved building browser access to
 signup, login and recovery, with request protection and PostgreSQL/Mailpit tests.
 The owner approved this written design on 2026-09-23. The
 [implementation plan](superpowers/plans/2026-09-23-account-http.md) sequences the work.

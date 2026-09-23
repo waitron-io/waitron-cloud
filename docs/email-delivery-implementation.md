@@ -40,9 +40,10 @@ Save password-change notifications with the password and session changes too.
    Provide local worker and status commands using explicit database/key configuration.
 4. Update API documentation and backlog, run focused checks, then finish the branch.
 
-The Cloud web adapter still needs abuse controls and an assessment of response timing;
-removing provider latency does not make database paths constant-time. Waitron files,
-Live provider provisioning and public routes remain outside this implementation.
+The Cloud account API now adds shared request limits and a response-time floor;
+production ingress controls and a deployment timing assessment remain required.
+Removing provider latency does not make database paths constant-time. Waitron files
+and live provider provisioning remain outside this implementation.
 
 ## Run the local worker
 
