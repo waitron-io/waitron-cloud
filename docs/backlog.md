@@ -59,8 +59,9 @@ remain deployment work; existing services must tolerate a management outage with
 the credential and revocation rules still to be defined.
 
 The [Cloud account HTTP API](../packages/account-http/README.md) is implemented and
-tested against PostgreSQL, Mailpit and real sockets. Next, extract the approved shared
-UI package from Waitron, then arrange private distribution and build Cloud account screens and browser tests. Pairing
+tested against PostgreSQL, Mailpit and real sockets. Shared account controls are
+implemented in [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519).
+Next, arrange private package distribution and build Cloud account screens and browser tests. Pairing
 remains a separate exchange requiring both Cloud and local administrator proof.
 
 ## Initial focus
@@ -136,18 +137,19 @@ remains a separate exchange requiring both Cloud and local administrator proof.
 
 ## Platform work to scope
 
-- **Shared UI.** Reuse the general controls and styling from Waitron's existing
-  `@waitron/ui` as a versioned dependency for both repositories before building Cloud
-  screens. Audit the `@waitron/shared` dependency and venue-specific exports, define
-  package ownership/build/distribution and preserve browser/accessibility tests.
-  No shared UI package has been extracted or published yet. The SQLite storage switch
-  has landed. The [approved extraction boundary](superpowers/specs/2026-09-23-shared-ui-extraction-design.md)
-  starts with account-form controls, preserves Waitron imports and requires a standalone
-  packed-package browser test. The owner approved keeping `@waitron/ui-core` in Waitron.
-  The [implementation plan](superpowers/plans/2026-09-23-shared-ui-extraction.md) covers
-  extraction, package verification and CI. Review the written plan, then implement it
-  inline in a managed Waitron worktree. Private registry activation and Cloud screens
-  follow separately; no extraction or publication is complete yet.
+- **Shared UI.** [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519)
+  implements `@waitron/ui-core` in Waitron with seven account controls, theme tokens
+  and common helpers. Existing `@waitron/ui` imports re-export the same implementation;
+  venue controls and brand delivery remain in Waitron. The runtime package depends on
+  Lit rather than `@waitron/shared`. A built tarball installs outside the workspace and
+  passes declaration, Chromium form, theme and accessibility checks. Both UI packages
+  retain coverage and weekly mutation gates. The [approved design](superpowers/specs/2026-09-23-shared-ui-extraction-design.md)
+  and [execution plan](superpowers/plans/2026-09-23-shared-ui-extraction.md) record the boundary.
+  Next, select and configure private distribution, publish a version and pin it in
+  Cloud's manifest and lockfile before building account screens. No package has been
+  published and Cloud does not depend on it yet. Read the first weekly mutation scores
+  after the split in Waitron; the extraction verifies the wiring and coverage, not the
+  new full mutation scores.
 - **Identity and organisations.** Password helpers and management-session behaviours
   have been adapted with a pinned source map, PostgreSQL tests, hashed session/CSRF
   tokens, passive polling and separate platform permission checks. Session-backed
