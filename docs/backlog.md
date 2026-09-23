@@ -63,9 +63,10 @@ tested against PostgreSQL, Mailpit and real sockets. Shared account controls are
 implemented in [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519).
 Cloud now pins the private shared UI release and verifies it in Chromium.
 The [account portal design](superpowers/specs/2026-09-23-account-portal-design.md)
-is proposed for review. It covers English/Spanish signup, login and recovery, simple
-business setup, same-origin serving and real browser/email tests. Next, approve the
-design and implementation plan, then build the portal. Pairing
+is approved. It covers English/Spanish signup, login and recovery, simple business
+setup, same-origin serving and real browser/email tests. The
+[implementation plan](superpowers/plans/2026-09-23-account-portal.md) is ready for review;
+next, confirm the plan and build the portal inline. Pairing
 remains a separate exchange requiring both Cloud and local administrator proof.
 
 ## Initial focus

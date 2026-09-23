@@ -1,8 +1,8 @@
 # Cloud account portal
 
-Status: proposed for review, 2026-09-23. The owner approved building the account
-screens and selected English and Spanish, with browser-language selection and a
-language switch. Implementation follows approval of this design and its plan.
+Status: approved by the owner, 2026-09-23. English and Spanish, browser-language
+selection and a language switch are agreed. The
+[implementation plan](../plans/2026-09-23-account-portal.md) is ready for review.
 
 ## Outcome
 
