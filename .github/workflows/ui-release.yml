@@ -38,6 +38,8 @@ jobs:
       - run: pnpm --dir .release-source --filter @waitron/ui-core exec playwright install --with-deps chromium
       - run: pnpm --dir .release-source --filter @waitron/ui-core test:package
       - run: node scripts/release/prepare-ui.mjs .release-source ui-release
+      - name: Check publication without uploading
+        run: npm publish ./ui-release/*.tgz --dry-run --registry=https://npm.pkg.github.com --access=restricted --ignore-scripts
       - uses: actions/upload-artifact@v4
         with:
           name: ui-package
@@ -62,6 +64,6 @@ jobs:
           node-version: '24'
           registry-url: https://npm.pkg.github.com
           scope: '@waitron-io'
-      - run: npm publish ui-release/*.tgz --registry=https://npm.pkg.github.com --access=restricted --ignore-scripts
+      - run: npm publish ./ui-release/*.tgz --registry=https://npm.pkg.github.com --access=restricted --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
