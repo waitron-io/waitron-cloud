@@ -19,7 +19,7 @@ export class PortalApp {
   reveal = false;
   pending = false;
   cooldownUntil = 0;
-  cooldownPath = '';
+  cooldownOperation = '';
   session: PortalSession;
   #route = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
@@ -48,8 +48,14 @@ export class PortalApp {
   }
   get copy() { return translations[this.locale]; }
   get completion() { return (this.path === '/signup' && !!this.link.token) || this.path === '/reset-password'; }
+  get operation() {
+    if (this.path === '/signup') return this.link.token ? '/signup/complete' : '/signup/request';
+    if (this.path === '/forgot-password') return '/password-reset/request';
+    if (this.path === '/reset-password') return '/password-reset/complete';
+    return this.path;
+  }
   get waiting() {
-    const deadline = ['/', '/account'].includes(this.path) ? this.session.retryAt : this.cooldownPath === this.path ? this.cooldownUntil : 0;
+    const deadline = ['/', '/account'].includes(this.path) ? this.session.retryAt : this.cooldownOperation === this.operation ? this.cooldownUntil : 0;
     return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
   }
   draw() {
@@ -111,7 +117,7 @@ export class PortalApp {
     const passwordNeeded = this.path === '/login' || this.completion;
     if (emailNeeded && (!f.email || f.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email))) this.errors.email = 'emailError';
     if (passwordNeeded && (new TextEncoder().encode(f.password).length > 1024 || (this.completion ? [...f.password].length < 15 : !f.password)))
-      this.errors.password = this.completion ? 'passwordHelp' : 'requiredPassword';
+      this.errors.password = new TextEncoder().encode(f.password).length > 1024 ? 'passwordLong' : this.completion ? 'passwordHelp' : 'requiredPassword';
     if (this.path === '/signup' && this.link.token) {
       const validName = (value: string) => value.length <= 200 && value.trim() && !/[\u0000-\u001f\u007f]/.test(value);
       if (!validName(f.legalBusinessName)) this.errors.legalBusinessName = 'nameError';
@@ -134,10 +140,10 @@ export class PortalApp {
     this.pending = false;
     if (result.ok) {
       if (path === '/login') { this.session.dispose(); this.session = this.#session(); this.navigate('/account'); return; }
-      if (path.endsWith('/request')) { this.requested = true; this.cooldownPath = this.path; this.cooldownUntil = Date.now() + 60_000; }
+      if (path.endsWith('/request')) { this.requested = true; this.cooldownOperation = this.operation; this.cooldownUntil = Date.now() + 60_000; }
       else { this.notice = path === '/signup/complete' ? 'signupReady' : 'resetReady'; this.link = {invalid: false}; this.fields.password = ''; }
     } else {
-      this.cooldownPath = this.path; this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + result.retryAfterMs);
+      this.cooldownOperation = this.operation; this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + result.retryAfterMs);
       if (path === '/login' && (result.status === 0 || result.status === 503)) {
         this.session.dispose(); this.session = this.#session(); await this.session.check();
         if (route !== this.#route) return;

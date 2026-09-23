@@ -4,7 +4,7 @@ Waitron Cloud is a commercial, closed-source product that provides cloud service
 for venues running Waitron, including remote access, backups, recovery, hosted
 instances, bookings and reporting.
 
-Registration, account identity, email delivery and the account HTTP API are implemented;
+Registration, account identity, email delivery and a bilingual account portal are implemented;
 no Cloud service is deployed. Start with the [product and platform discussion](docs/product-and-platform.md),
 then the [cloud backlog](docs/backlog.md). The [documentation ownership map](docs/documentation-ownership.md)
 records the material moved from Waitron and the shared designs that remain there.
@@ -39,8 +39,40 @@ provides internal password sessions used for Cloud approval. The
 the first organisation and legal business. The [account HTTP API](packages/account-http/README.md)
 exposes signup, sessions and
 recovery with shared request limits. Run it with `pnpm account:serve` after configuring
-the database, keys and origin and applying migrations. Live provider setup, browser
-screens, venue pairing and service provisioning remain to be implemented.
+the database, keys and origin and applying migrations. Live provider setup, venue
+pairing and service provisioning remain to be implemented.
+
+## Run the account portal
+
+You can create an account, sign in and recover a password without a venue server.
+The portal uses English or Spanish from your browser preferences; its language
+switch saves your choice. Signup normally needs just your legal business name.
+
+Follow the [local account-server setup](packages/account-http/README.md#run-locally)
+for PostgreSQL, migrations, keys and Mailpit. Then build and serve the screens:
+
+```sh
+pnpm portal:build
+CLOUD_PORTAL_ASSETS_DIR=apps/portal/dist pnpm account:serve
+```
+
+In another terminal, run `pnpm mail:worker`. Open
+[Waitron Cloud](http://localhost:3000/signup), submit your email and open its link
+from [Mailpit](http://localhost:8125). The account server serves the screens and API
+on the same origin, so no development proxy is needed. Rebuild and restart it after
+changing frontend files; it loads the build at startup. Without
+`CLOUD_PORTAL_ASSETS_DIR`, the server keeps its API-only behavior.
+
+Run the portal browser and state tests with:
+
+```sh
+node scripts/test-postgres.mjs --filter @waitron-cloud/portal test
+```
+
+This starts disposable PostgreSQL and Mailpit instances. Tests cover real email
+links, signup, sessions, recovery, lost replies, both languages and accessibility.
+The portal is local development software; live delivery and deployment controls
+remain in the [backlog](docs/backlog.md).
 
 ## Local email inbox
 
@@ -53,7 +85,7 @@ pnpm mail:demo
 
 Open [the Cloud inbox](http://localhost:8125). SMTP listens on `127.0.0.1:1125`,
 so it can run alongside Waitron's Mailpit. The demo sends three preview messages;
-their sample links do not create accounts, and account screens are not served yet.
+their sample links do not create accounts. Use the portal signup form for a working link.
 No external delivery or relay is configured. Stop the inbox with `pnpm mail:down`;
 this removes captured messages. Copy `.env.example` to `.env` to override local ports.
 

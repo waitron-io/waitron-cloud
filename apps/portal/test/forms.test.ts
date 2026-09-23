@@ -16,7 +16,7 @@ test('Spanish signup preserves values through switching language and validates b
     assert.equal(await page.getByLabel('New password').inputValue(), 'short');
     await page.getByRole('button', {name: 'Create account', exact: true}).click();
     assert.equal(await page.locator('input[name=password]').getAttribute('aria-invalid'),'true');
-    assert.ok(await page.locator('wt-form-error-summary').getByText('Use at least 15 characters and at most 1024 UTF-8 bytes.').isVisible());
+    assert.ok(await page.locator('wt-form-error-summary').getByText('Use at least 15 characters.').isVisible());
     const requests: Record<string, string>[] = [];
     await page.route('**/api/account/signup/complete', async route => {
       requests.push(route.request().postDataJSON());
@@ -40,6 +40,7 @@ test('password limits count Unicode and UTF-8 independently; optional organisati
     for (const password of ['🔑'.repeat(14),'é'.repeat(513)]) {
       await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:'Create account',exact:true}).click();
       assert.equal(await page.locator('input[name=password]').getAttribute('aria-invalid'),'true');assert.equal(bodies.length,0);
+      if (password.length === 513) assert.ok(await page.locator('wt-form-error-summary').getByText('This password is too long. Use fewer characters.').isVisible());
     }
     await page.getByLabel('Use a different organisation name').check();
     await page.locator('input[name=organisationName]').fill('Venue Group');

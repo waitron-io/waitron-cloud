@@ -71,6 +71,7 @@ test('portal traffic spends neither database limits nor the eight account slots'
     for (const path of ['/', '/app.js', '/app.css', '/missing'])
       assert.equal((await send(running.port, path).result).status, path === '/missing' ? 404 : 200);
     assert.deepEqual((await db.pool.query('SELECT * FROM account_rate_limits ORDER BY key')).rows, before);
-    assert.equal((await send(running.port, '/api/account/session').result).status, 503);
+    const busy = await send(running.port, '/api/account/session').result;
+    assert.equal(busy.status, 503); assert.match(String(busy.headers['content-security-policy']), /script-src 'self'/);
   } finally { pending.forEach(p => p.abort()); await running.close(); }
 });

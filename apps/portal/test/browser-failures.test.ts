@@ -72,3 +72,32 @@ test('session unavailability honors Retry-After and remains distinct from signed
     await Promise.all([page.waitForResponse('**/api/account/session'),page.getByRole('button',{name:'Try again',exact:true}).click()]);assert.equal(reads,2);
   } finally {await f.close();}
 });
+
+test('logout failures remain visible until a successful retry confirms sign-out',async()=>{
+  const f=await startPortalFixture();
+  try {
+    const page=await f.browser.newPage();page.setDefaultTimeout(3000);let attempts=0;
+    await page.route('**/api/account/session',route=>route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+600_000).toISOString()}}));
+    await page.route('**/api/account/session/activity',route=>route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+600_000).toISOString()}}));
+    await page.route('**/api/account/logout',route=>{attempts++;return route.fulfill(attempts===1?{status:503,json:{error:'temporarily_unavailable'}}:{status:204});});
+    await page.goto(`${f.origin}/account`);await page.getByText('You are signed in to Waitron Cloud.').waitFor();
+    await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.getByText('We could not sign you out. Try again.').waitFor();
+    assert.equal(await page.getByText('You have signed out.').count(),0);assert.equal(attempts,1);
+    await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.getByText('You have signed out.').waitFor();assert.equal(attempts,2);
+  } finally {await f.close();}
+});
+test('email requests have the same accepted screen and real invalid links offer recovery',async()=>{
+  const f=await startPortalFixture();
+  try {
+    const page=await f.browser.newPage();page.setDefaultTimeout(3000);
+    for(const path of ['/signup','/forgot-password']) {
+      await page.goto(f.origin+path);await page.getByLabel('Email').fill('unknown@example.test');
+      await page.locator('#submit').click();await page.getByRole('heading',{name:'Check your email'}).waitFor();
+      assert.ok(await page.getByText('If this address can receive a link, it will arrive shortly. Check your spam folder too.').isVisible());
+    }
+    await page.goto(`${f.origin}/reset-password#token=${'z'.repeat(43)}`);await page.locator('input[name=password]').fill('A long unused password');
+    await page.getByRole('button',{name:'Save new password',exact:true}).click();await page.getByText(/This link is unavailable/).waitFor();
+    assert.ok(await page.getByRole('link',{name:'Request a new link',exact:true}).isVisible());
+    await page.getByRole('link',{name:'Sign in',exact:true}).click();await page.goBack();await page.getByText('Reopen the link in your email, or request a new one.').waitFor();
+  } finally {await f.close();}
+});

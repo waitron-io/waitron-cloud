@@ -17,6 +17,12 @@ test('passive reads do not renew; real activity is throttled and late activity c
     await page.goto(`${f.origin}/account`);
     await page.getByText('You are signed in to Waitron Cloud.').waitFor();
     assert.equal(reads,1); assert.equal(activities,0);
+    await Promise.all([page.waitForResponse('**/api/account/session'),page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')))]);assert.equal(reads,2);
+    await page.evaluate(()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'x',bubbles:true})));
+    assert.equal(activities,0);
+    await page.evaluate(()=>Object.defineProperty(document,'visibilityState',{value:'hidden',configurable:true}));
+    await page.keyboard.press('Tab');assert.equal(activities,0);
+    await page.evaluate(()=>Reflect.deleteProperty(document,'visibilityState'));
     await page.clock.runFor(61_000); assert.equal(activities,0);
     await Promise.all([page.waitForRequest('**/session/activity'), page.keyboard.press('Tab')]);
     assert.equal(activities,1);

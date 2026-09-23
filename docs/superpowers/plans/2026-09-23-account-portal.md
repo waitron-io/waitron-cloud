@@ -3,7 +3,7 @@
 > **For agentic workers:** Use `superpowers:executing-plans` to implement this plan
 > inline, task by task. Use one Claude whole-branch review during finish-branch.
 
-Status: approved by the owner, 2026-09-23; implementation in progress.
+Status: implemented, 2026-09-23. Local verification is recorded below.
 
 **Goal:** You can create a Cloud account, sign in and recover access in English or
 Spanish without a working venue server.
@@ -277,36 +277,49 @@ through `MAILPIT_TEST_URL` filtered by each test's unique recipient. Do not dele
 tests' messages. Use the account-http fixture's schema lifecycle as the reference;
 close browser/server/pools and drop only this fixture's schema in `finally`.
 
-- [ ] Add browser tests before claiming integrated success. For both languages:
+- [x] Add browser tests before claiming integrated success. For both languages:
   request signup, drain mail, open the actual captured link, complete business setup,
   sign in, reload, interact, sign out, reset from email and reject the old session and
   old password. Prove existing/unknown email request screens look the same. Check
   password-changed mail language follows reset completion. Open a second account's
   completion link while signed in and assert the original session is not replaced.
-- [ ] Run
+- [x] Run
   `node scripts/test-postgres.mjs --filter @waitron-cloud/portal test`.
   The test script builds once then runs `node --test --test-timeout=120000 test/*.test.ts`.
   Require the real HTTP/worker/Mailpit flow, not mocked success responses. Assert tokens
   are absent from subsequent URLs/referrers/storage, and opening a link causes no
   completion POST. Legacy links may contain the token in their initial request only.
-- [ ] Use Playwright interception for delayed/double submissions, 429, 503, session
+- [x] Use Playwright interception for delayed/double submissions, 429, 503, session
   failure and logout failure. For lost completion replies, forward the real request
   to the server before aborting the browser response, then prove the transaction
   committed and no second POST happened automatically. Also test a stale session
   response arriving after logout, language switching while pending and expired links.
-- [ ] Check keyboard-only forms, Enter, focus/error announcements, native input names
+- [x] Check keyboard-only forms, Enter, focus/error announcements, native input names
   and autocomplete, phone width 375px, both themes and both languages. Add `axe-core`
   as a test dependency and run it on each screen/state; inspect screenshots for clipping
   and contrast. Fail on browser console/CSP errors. Retain the existing private-package
   smoke test. Verify HTTPS cookie attributes using the existing server test setup;
   loopback HTTP journeys alone are not evidence for production cookie behavior.
-- [ ] Ensure workspace typecheck/test includes the portal and CI installs the same
+- [x] Ensure workspace typecheck/test includes the portal and CI installs the same
   pinned Chromium revision. Keep GitHub package credentials scoped to installation.
   Document build/serve/rebuild, required env, Mailpit workflow and API locale additions.
   Mark completed plan steps and update backlog with the portal outcome and remaining
   live-provider/ingress/account-security work. Commit with
   `git commit -s -m "Verify real account portal journeys and document local use"`.
-- [ ] Run finish-branch: rebase, one Claude run-it review in an isolated candidate,
+- [x] Run finish-branch: rebase, one Claude run-it review in an isolated candidate,
   triage findings, focused fixes and normal push hook. Wait for current-head green CI,
   then land and clean up without another authorization request. Report the actual
   local/browser/CI evidence and any remaining deployment work.
+
+
+## Verification record
+
+- Registration suite: 107 passing tests, including locale through encrypted delivery.
+- Portal suite: 23 passing tests, including both real Mailpit journeys, lost completion
+  replies, session races, cooldowns and accessibility across both themes/languages.
+- Focused account HTTP and portal tests: 17 passing; transport/server tests: 10 passing
+  in the earlier server verification run. Workspace typechecking passes.
+- Phone screenshots inspected at 375px in English/light and Spanish/dark.
+- CI already installs the same pinned Playwright browser for the package smoke test;
+  workspace test discovery includes the portal, so no second install step is needed.
+- The normal finish/land workflow supplies the final review and current-head CI record.

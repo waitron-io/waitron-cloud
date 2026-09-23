@@ -7,7 +7,7 @@ import { portalResponse, securityHeaders, type PortalAssets } from './portal.ts'
 import { createAccountApp } from './app.ts';
 function unavailable() {
   return Response.json({error: 'temporarily_unavailable'}, {status: 503, headers: {
-    'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff', 'Retry-After': '1',
+    ...securityHeaders, 'Retry-After': '1',
   }});
 }
 export async function startAccountServer(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig; host?: string; port?: number; portalAssets?: PortalAssets}): Promise<{server: Server; close(): Promise<void>}> {
