@@ -237,3 +237,6 @@ export class RegistrationStore {
     return rows[0];
   }
 }
+
+export { transaction } from './transaction.ts';
+export { normaliseEmail } from './account-input.ts';

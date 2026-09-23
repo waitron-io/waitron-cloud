@@ -18,9 +18,10 @@ tokens. The account-ID approval method is reserved for trusted adapters. This pa
 account's current registration permission in PostgreSQL when approving and completing.
 
 The [identity package](../identity/README.md) now supplies password sessions and
-explicit platform permission checks, adapted from `pre-sqlite-migration`. The public
-web adapter, additional authentication factors and platform role
-catalogue remain to be implemented.
+explicit platform permission checks, adapted from `pre-sqlite-migration`. The
+[account API](../account-http/README.md) implements signup, login and recovery routes.
+Pairing endpoints, additional authentication factors and the platform role catalogue
+remain to be implemented.
 
 ## Cloud account signup
 
@@ -62,8 +63,8 @@ pnpm test
 
 They exercise signup, login, concurrent links, delivery failure and a fresh-process
 completion. Mailpit captures local SMTP delivery. The production SMTP adapter is
-tested against a local authenticated TLS server; a live provider and HTTP routes
-are not configured. The
+tested against a local authenticated TLS server. The account HTTP routes are implemented;
+a live provider is not configured. The
 [signup plan](../../docs/cloud-signup-implementation.md) records the public deployment
 gates. `email_verified_at` records proof for this flow; the older trusted provisioning
 path owns its verification policy. `is_owner` records the initial customer owner and
@@ -111,8 +112,9 @@ Emails are sent after commit. The queue encrypts recipients and tokens, retries 
 and discards expired or invalidated links. A notification queue failure rolls back the
 reset; a later delivery failure cannot undo it. Define production audit and cleanup
 for requests and delivery metadata before deployment. Password reset is not MFA
-recovery. HTTP protections and recovery screens are covered in the
-[implementation plan](../../docs/password-recovery-implementation.md).
+recovery. The account API implements HTTP protections; recovery screens and the
+[remaining deployment requirements](../../docs/password-recovery-implementation.md)
+are separate work.
 
 ## State and completion
 

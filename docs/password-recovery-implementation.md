@@ -28,9 +28,10 @@ completion reply is recovered by signing in with the new password. Queue a notif
 containing no password or token in the same transaction. Sending happens afterwards;
 a delivery failure cannot undo the reset. A queue failure rolls the reset back.
 
-This remains an internal API. Before exposing it, add HTTP protections, uniform public
-response timing, IP and token attempt limits, compromised-password
-checks, recovery screens and the selected extra authentication factors. Password recovery
+The [account HTTP API](../packages/account-http/README.md) now adds Origin/CSRF and
+cookie protection, IP/token limits and a response-time floor. Before public exposure,
+assess timing under deployment load and add compromised-password checks, recovery
+screens, ingress controls and the selected extra authentication factors. Password recovery
 does not recover MFA. The [email queue](email-delivery-implementation.md) encrypts
 the delivery copy of each token and retries pending messages after a restart. Define
 retention for request and delivery records, including unknown email addresses.
@@ -56,4 +57,5 @@ The preview uses sample tokens; working account screens are separate work.
 5. Update the backlog, run types and CI, then finish branch review.
 
 The design follows the [OWASP password recovery guidance](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html).
-Waitron-side work stays paused for its SQLite switch; no Waitron files change here.
+This recovery slice changes no Waitron files. Its SQLite storage switch landed on
+2026-09-23, so subsequent integration work can use the current Waitron interfaces.

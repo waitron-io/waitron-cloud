@@ -15,6 +15,31 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
+  packages/account-http:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^2.1.1
+        version: 2.1.1(hono@4.13.8)
+      '@waitron-cloud/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@waitron-cloud/registration':
+        specifier: workspace:*
+        version: link:../registration
+      hono:
+        specifier: ^4.13.8
+        version: 4.13.8
+      ipaddr.js:
+        specifier: ^2.5.0
+        version: 2.5.0
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
+
   packages/identity:
     devDependencies:
       '@types/pg':
@@ -47,6 +72,12 @@ importers:
         version: 3.19.13
 
 packages:
+
+  '@hono/node-server@2.1.1':
+    resolution: {integrity: sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      hono: ^4
 
   '@types/node@24.13.6':
     resolution: {integrity: sha512-SGrw/h3KPFshy3OE6ZL53LMBG5vGQQ8/gIpiqz/kRZhPJ7HgwCEs8LBuNtWLa8dvGZVpSF7+Bf+c11HUrCb/yg==}
@@ -180,6 +211,14 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  hono@4.13.8:
+    resolution: {integrity: sha512-/Gng7NfoykZl2pjukW5Z6+8Yxm3BPRf86GTbQnt0SbySkvax4fyL4H3HhY1cCpBGmiW9XDRFzRV+CXK2W8QudQ==}
+    engines: {node: '>=16.9.0'}
+
+  ipaddr.js@2.5.0:
+    resolution: {integrity: sha512-aq+t5NAc+cS6rZQQVWC2x98CPqGtKKTMDd4Gaodv0wShnItdKg/51djkGJ1hqH+Oy0ivDftCbSLCQob8zso01w==}
+    engines: {node: '>= 10'}
+
   ipv6-normalize@1.0.1:
     resolution: {integrity: sha512-Bm6H79i01DjgGTCWjUuCjJ6QDo1HB96PT/xCYuyJUP9WFbVDrLSbG4EZCvOCun2rNswZb0c3e4Jt/ws795esHA==}
 
@@ -263,6 +302,10 @@ packages:
 
 snapshots:
 
+  '@hono/node-server@2.1.1(hono@4.13.8)':
+    dependencies:
+      hono: 4.13.8
+
   '@types/node@24.13.6':
     dependencies:
       undici-types: 7.18.2
@@ -341,6 +384,10 @@ snapshots:
 
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
+
+  hono@4.13.8: {}
+
+  ipaddr.js@2.5.0: {}
 
   ipv6-normalize@1.0.1: {}
 

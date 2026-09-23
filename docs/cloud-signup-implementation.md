@@ -1,8 +1,8 @@
 # Cloud account signup
 
-You can create a Cloud account while Waitron's SQLite switch is still in progress.
-This slice builds the backend independently. Waitron pairing and shared UI extraction
-wait until changes in the Waitron repository can resume.
+You can create a Cloud account independently of a venue. This slice implements the
+backend. Waitron's SQLite storage switch landed on 2026-09-23, so pairing and shared
+UI extraction can now proceed against its current interfaces.
 
 ## Journey and boundary
 
@@ -13,7 +13,8 @@ wait until changes in the Waitron repository can resume.
    No account or password exists yet.
 2. Follow the email and submit your password, organisation name, legal-business name
    and two-letter country code. The token lasts 30 minutes and can complete signup
-   once. Reading a link must not consume it; completion belongs in a future POST route.
+   once. Reading a link does not consume it; submit it to the account API completion
+   POST route. The linked browser screen remains to be built.
 3. Create the verified account, organisation, legal business and owner membership in
    one transaction. The owner can register venues but receives no platform permission.
    Sign in through the existing password/session API after completion.
@@ -40,10 +41,11 @@ production email provider is not connected yet.
 
 Use the existing password hash format. New passwords require 15 characters and allow
 spaces and Unicode, up to 1024 UTF-8 bytes. Public deployment also needs a compromised
-password check, request/IP throttling, bot controls, secure cookies, Origin checks,
-recovery and the chosen additional authentication factors. The email adapter receives
+password check, ingress bot controls, browser screens and the chosen additional
+authentication factors. The [account HTTP API](../packages/account-http/README.md)
+implements request limits, secure cookies, Origin/CSRF checks and recovery. The email adapter receives
 a bearer secret: do not return it to the requesting browser or put it in logs. The
-future link must use a configured trusted HTTPS origin and avoid referrer leakage.
+link must use a configured trusted HTTPS origin and avoid referrer leakage.
 
 ## Implementation and checks
 
@@ -56,11 +58,11 @@ future link must use a configured trusted HTTPS origin and avoid referrer leakag
 4. Prove concurrent links create one account and one organisation. Keep the existing
    identity and registration regressions, run types and CI, and complete branch review.
 
-This is an internal API. The existing trusted account-provisioning path remains
+The backend now has an account HTTP adapter. The existing trusted account-provisioning path remains
 responsible for its own email-ownership checks; it is not a public signup endpoint.
 No Waitron files, browser screens, SES resources or production emails change here.
 
 The token and password rules follow the applicable guidance in the
 [OWASP authentication](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)
 and [single-use email token](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html)
-checklists. Full public HTTP protections remain a separate integration gate.
+checklists. Public ingress, browser behaviour and deployment checks remain separate gates.

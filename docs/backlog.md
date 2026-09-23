@@ -1,12 +1,14 @@
 # Waitron Cloud backlog
 
-Updated 2026-09-22. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-09-23. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
 internally, with a retry worker, authenticated TLS SMTP delivery and Mailpit for local
-email capture. Live provider/sender configuration remains open.
-No public cloud service is implemented. This file owns cloud product and platform work;
+email capture. The account HTTP API now provides signup, login, session activity,
+logout and recovery with shared request limits, Origin/CSRF checks and bounded
+network handling. Live provider/sender configuration and account screens remain open.
+No public cloud service is deployed. This file owns cloud product and platform work;
 Waitron's backlog owns the on-prem application and its side of the integration.
 
 Start with the [product discussion](product-and-platform.md). The
@@ -40,9 +42,10 @@ sessions atomically. The same transaction queues encrypted emails for a worker t
 retries failures and resumes after crashes. Local Mailpit tests cover SMTP delivery
 and a separate worker process. Authenticated TLS SMTP now covers production transport,
 bounded cancellation, retry classification and accepted-message receipts. Next: configure
-and prove live provider delivery, and implement the Cloud web adapter, including public-request protections and account/recovery screens, before exposure.
-Waitron-side work is paused until its SQLite switch finishes. Resume the local
-administrator adapter and matching-code exchange after that, including bound proof
+and prove live provider delivery, build account/recovery screens, and validate production
+ingress and deployment controls before exposure. The account HTTP adapter is implemented.
+The owner confirmed the SQLite storage switch landed on 2026-09-23. Waitron-side
+work can resume. Build the local administrator adapter and matching-code exchange, including bound proof
 and first-contact trust, before exposing public registration endpoints. Recheck the
 new SQLite capture/restore interfaces before integrating backups; do not build a new
 PostgreSQL backup adapter for Waitron. The full two-venue milestone remains unproved.
@@ -54,6 +57,11 @@ and restart against PostgreSQL. Proof encoding and initial trust remain to be se
 public endpoints. Country partitioning, database availability and per-cell storage
 remain deployment work; existing services must tolerate a management outage within
 the credential and revocation rules still to be defined.
+
+The [Cloud account HTTP API](../packages/account-http/README.md) is implemented and
+tested against PostgreSQL, Mailpit and real sockets. Next, scope shared UI extraction
+against current Waitron, then build Cloud account screens and browser tests. Pairing
+remains a separate exchange requiring both Cloud and local administrator proof.
 
 ## Initial focus
 
@@ -132,8 +140,8 @@ the credential and revocation rules still to be defined.
   `@waitron/ui` as a versioned dependency for both repositories before building Cloud
   screens. Audit the `@waitron/shared` dependency and venue-specific exports, define
   package ownership/build/distribution and preserve browser/accessibility tests.
-  No shared UI package has been extracted or published yet. Wait for the SQLite switch
-  before changing Waitron; backend work in this repository can continue independently.
+  No shared UI package has been extracted or published yet. The SQLite storage switch
+  has landed, so the extraction can now be scoped against current Waitron.
 - **Identity and organisations.** Password helpers and management-session behaviours
   have been adapted with a pinned source map, PostgreSQL tests, hashed session/CSRF
   tokens, passive polling and separate platform permission checks. Session-backed
@@ -148,8 +156,10 @@ the credential and revocation rules still to be defined.
   failures receive the same accepted result. Notifications follow commit and cannot
   undo a successful reset. Recovery requires verified email and an existing password;
   define recovery for legacy unverified and passwordless accounts separately.
-  Configure live email delivery and implement public signup/recovery screens, MFA/passkeys, public login throttling,
-  Origin/cookie handling and the platform role catalogue before public use. Define
+  Configure live email delivery and implement public signup/recovery screens, MFA/passkeys
+  and the platform role catalogue before public use. Shared login/request limits, secure
+  cookies and Origin/CSRF checks are implemented in the account API. Validate ingress
+  bot controls, trusted proxy settings and browser behaviour before deployment. Define
   session, signup-request and password-reset-request retention and cleanup, including
   reset records for unknown addresses, and measure them against the
   expected deployment size. Add a compromised-password check before public signup.
@@ -172,9 +182,17 @@ the credential and revocation rules still to be defined.
   Provision separately held encryption keys and document rotation/restore before
   production; the code accepts an active key plus retained older keys. A send timeout
   or crash after provider acceptance may duplicate an email. Define retention/cleanup
-  for terminal delivery metadata and security audit events. The public web adapter
-  must assess account/cooldown timing differences in database work; removing provider
-  latency alone does not establish uniform responses.
+  for terminal delivery metadata and security audit events. The HTTP adapter applies
+  a 300 ms response floor to login/email requests, but deployment timing and load
+  measurements must still assess account/cooldown differences under contention.
+  Its rate key must be shared across instances; rotation starts new allowances.
+  Login now checks its IP allowance before charging the email allowance, so an
+  already-blocked IP cannot spend another person's address allowance. Admitted
+  attempts across IPs can still exhaust an address allowance; assess targeted
+  lockout mitigation with the public ingress policy before launch.
+  Test follow-up: add independent HTTP assertions for the 1024-byte password limit
+  and early declared Content-Length refusal. The underlying guards work; current
+  tests independently prove the streamed-body bound but not these early checks.
   Review the inherited password cost for deployment and apply the source map's
   security-fix process to both repositories. Further reuse should take code and
   behavioural tests from `pre-sqlite-migration`, pinned to
@@ -188,8 +206,8 @@ the credential and revocation rules still to be defined.
   database and module dependencies, and establish how security fixes reach both codebases.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
   services, usage accounting, trials, failed payment and cancellation.
-- **Venue and node registration.** Resume the agreed signup from Waitron after its
-  SQLite switch. The Cloud account backend creates a new customer's organisation
+- **Venue and node registration.** Implement the agreed signup from Waitron now that its
+  SQLite storage switch has landed. The Cloud account backend creates a new customer's organisation
   and first legal business; connect it to the Waitron journey using confirmed details.
   Require Cloud approval from someone permitted to add venues and local administrator
   approval before linking. Start with one owner providing both approvals in a single
