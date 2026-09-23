@@ -16,7 +16,8 @@
     "mail:down": "docker compose down",
     "mail:demo": "node --env-file-if-exists=.env packages/registration/src/mail-demo.ts",
     "mail:worker": "node --env-file-if-exists=.env packages/registration/src/email-worker-cli.ts",
-    "mail:status": "node --env-file-if-exists=.env packages/registration/src/email-worker-cli.ts --status"
+    "mail:status": "node --env-file-if-exists=.env packages/registration/src/email-worker-cli.ts --status",
+    "account:serve": "node --env-file-if-exists=.env packages/account-http/src/server-cli.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
