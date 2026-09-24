@@ -21,6 +21,8 @@ import {
 import { login } from "../packages/identity/src/index.ts";
 import { BackupKeyVault } from "../packages/backups/src/keys.ts";
 import { BackupObjects, receipt } from "../packages/backups/src/storage.ts";
+import { BackupWorker } from '../packages/backups/src/worker.ts';
+import { createWaitronVerifier } from '../packages/backups/src/waitron-verifier.ts';
 import { BackupCatalogue } from "../packages/backups/src/catalogue.ts";
 import {
   BackupRecovery,
@@ -296,31 +298,24 @@ try {
       },
     );
     let result;
-    await catalogue.verify(
-      point.id,
-      "waitron-local-" +
-        execFileSync("git", ["rev-parse", "HEAD"], {
-          cwd: waitron,
-          encoding: "utf8",
-        }).trim(),
-      async (archive, keys, p) => {
-        const target = await root();
-        await writeFile(join(target, "input.backup.enc"), archive, {
-          mode: 0o600,
-        });
-        result = await worker(target, "restore", {
-          recoveryKey: keys.recoveryKey,
-          sourceNodeId: p.sourceNodeId,
-          modules: p.modules,
-          expectedVenue: captured.venueName,
-        });
-        assert(result.networkDenied);
-        assert(result.integrityOk);
-        assert(result.hooks.includes("fiscal-verifactu"));
-        assert.equal(result.cloudCredentialPresent, false);
-        assert.equal(result.staffKeyPresent, false);
-      },
-    );
+    const restore = await createWaitronVerifier(waitron);
+    const queue = new BackupWorker(f.db.pool, catalogue, async (...args) => {
+      result = await restore(...args);
+      assert(result.networkDenied);
+      assert(result.integrityOk);
+      assert(result.hooks.includes("fiscal-verifactu"));
+      assert.equal(result.cloudCredentialPresent, false);
+      assert.equal(result.staffKeyPresent, false);
+    });
+    await queue.schedule();
+    for(let attempt=0;attempt<10&&!result;attempt++)assert(await queue.runOnce());
+    assert(result, 'Persistent worker must restore the real snapshot');
+    const saved = await f.db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id]);
+    assert.equal(saved.rows[0].verification,'verified');
+    // Keep the independent fixture's venue-content assertion as well as queue verification.
+    const target = await root();
+    await writeFile(join(target,'input.backup.enc'),bytes,{mode:0o600});
+    await worker(target,'restore',{recoveryKey:reservation.keys.recoveryKey,sourceNodeId:point.sourceNodeId,modules:point.modules,expectedVenue:captured.venueName});
     snapshots.push({ venue, reservation, point, captured, bytes, result });
   }
   record(

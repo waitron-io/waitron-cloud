@@ -1,3 +1,5 @@
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {test,before,after,beforeEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
@@ -83,4 +85,13 @@ test('retention resumes after delete failure and preserves the verified fallback
  const old=await snapshot(70),fallback=await snapshot(60);await catalogue.verify(fallback.id,'fixture',async()=>{});await only('retention');
  failDelete=true;assert.equal(await worker.runOnce(),true);assert.equal((await db.pool.query('SELECT deleting FROM backup_points WHERE id=$1',[old.id])).rows[0].deleting,true);
  failDelete=false;await db.pool.query("UPDATE backup_jobs SET available_at=clock_timestamp() WHERE kind='retention'");assert.equal(await worker.runOnce(),true);assert(!objects.has(old.objectKey));assert(objects.has(fallback.objectKey));
+});
+
+test('the CLI reports and retries durable failures without storage or verifier credentials',async()=>{
+ await snapshot();await only('verify');await db.pool.query("UPDATE backup_jobs SET status='failed',attempts=8 WHERE kind='verify'");
+ const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+db.schema);
+ const run=async(mode:string)=>JSON.parse((await promisify(execFile)(process.execPath,['packages/backups/src/worker-cli.ts',mode],{cwd:new URL('../../../',import.meta.url),env:{PATH:process.env.PATH,DATABASE_URL:url.href}})).stdout);
+ assert.equal((await run('--status')).counts.failed,1);
+ assert.equal((await run('--retry-failed')).retried,1);
+ assert.equal((await run('--status')).counts.failed,0);
 });

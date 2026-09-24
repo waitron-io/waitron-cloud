@@ -12,3 +12,10 @@ test('verifier process bounds time, output and cancellation without echoing chil
  const stop=new AbortController();const pending=runNodeVerifier(['-e','setInterval(()=>{},1000)'],{input:{},signal:stop.signal});stop.abort();await assert.rejects(pending,/backup.verifier_cancelled/);
  await assert.rejects(runNodeVerifier(['-e',"console.log('invalid JSON')"],{input:{}}),/backup.verifier_output/);
 });
+
+test('a successful verifier cannot leave its background child running',async()=>{
+ const code="const {spawn}=require('node:child_process');const c=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});c.unref();console.log(JSON.stringify({pid:c.pid}));";
+ const result=await runNodeVerifier(['-e',code],{input:{}}) as {pid:number};
+ try{await new Promise(r=>setTimeout(r,100));assert.throws(()=>process.kill(result.pid,0));}
+ finally{try{process.kill(result.pid,'SIGKILL');}catch{/* Already reaped. */}}
+});

@@ -6,8 +6,8 @@ It creates no AWS resources and requires no live customer credentials.
 
 ## Run the proof
 
-Install both repositories with their frozen pnpm lockfiles. You need Node 24 or
-newer, Docker, OpenSSL and network access for the pinned test binaries. Point to a
+Install both repositories with their frozen pnpm lockfiles. Use Node 26 with network permission support for the restore verifier (tested with
+26.7.0), Docker, OpenSSL and network access for the pinned test binaries. Point to a
 Waitron checkout that includes `apps/server/scripts/cloud-backup-fixture.ts`, export
 that path as `WAITRON_CHECKOUT`, and build its dashboard before starting the servers:
 
@@ -64,7 +64,8 @@ release evidence. Timings measure the local fixture, not a production recovery t
 ## Internal API and retained data
 
 `@waitron-cloud/backups` is an internal local-integration package. Provisioning refuses
-production venues. It has no public HTTP routes or customer backup screens yet.
+production venues. Owners can browse its snapshot catalogue in the account portal; capture and recovery
+remain internal integration APIs.
 The caller supplies a persistent 32-byte master key outside PostgreSQL; key versions
 are encrypted and authenticated against their venue and version. Losing this master
 key loses access to those backups. Rotation retains old versions; deletion is absent.
@@ -99,10 +100,59 @@ retirement of the old credentials and explicit Waitron activation. Recording a
 `planned` mode or an owner's confirmation does not establish those conditions.
 
 Next, add the installation-authenticated capture/renewal adapter, scheduled capture
-and verification workers, customer selection/status/recovery screens, and interrupted
-operation recovery. Bound catalogue pagination and verification resource use; clean up
-unused incoming uploads and expired capture requests. Define cancellation/deletion,
+and customer recovery screens. The local worker now schedules verification, retention
+and abandoned-upload cleanup; the customer catalogue is paginated. Define cancellation/deletion,
 operator master-key backup and rotation, and production verifier isolation. Run the
 same provider tests against AWS Spain before any deployment; this local result does
 not establish AWS or Google behavior. Continuous backup during gateway replacement
 and a complete continuous replacement remain unproved.
+
+## Run background maintenance locally
+
+Apply migrations through `012_backup_jobs.sql`. Configure `DATABASE_URL`, a persistent
+64-hex-character `CLOUD_BACKUP_MASTER_KEY`, and `WAITRON_CHECKOUT` pointing to your
+installed Waitron checkout. Storage uses `CLOUD_BACKUP_ENDPOINT` (verified HTTPS),
+`CLOUD_BACKUP_REGION`, `CLOUD_BACKUP_ACCESS_KEY` and `CLOUD_BACKUP_SECRET_KEY`.
+Set `CLOUD_BACKUP_SESSION_TOKEN` when needed and `CLOUD_BACKUP_CA_FILE` for a private
+local CA. The worker refuses catalogue endpoints or regions that differ from these
+operator settings before sending storage credentials.
+
+```sh
+pnpm backup:worker --once
+pnpm backup:worker
+pnpm backup:status
+pnpm backup:worker --retry-failed
+```
+
+Status and manual retry require only database access. Retry resets at most 100 failed
+jobs per command. Continuous mode processes one job at a time; `--once` schedules
+bounded work and attempts one job. The queue reports pending, running, failed and
+completed counts, due work (including expired leases), attempts across runs and the
+oldest due time. Inspect `backup_jobs.last_error` for fixed diagnostic codes.
+
+Only configured test venues are eligible. Verification runs immediately for new
+snapshots and weekly after success; retention and upload cleanup run every minute.
+Failures retry after 30 seconds, doubling up to 15 minutes, for eight attempts.
+A random claim and 120-second lease fence database mutations so a late verifier cannot
+replace a newer result. Crashes leave work reclaimable after lease expiry. Deletes
+can repeat after interrupted work; retained snapshot protection still applies.
+
+Unpublished capture requests expire after 24 hours. Cleanup waits a further 16 minutes
+for issued upload authority to expire, records a tombstone, then deletes incoming and
+orphan snapshot objects. Published points keep their snapshot; only incoming data is
+removed. Tombstones prevent capture-ID reuse, while exact committed publish retries
+remain valid. Future authenticated grant issuers must enforce that same capture deadline.
+
+Each verification imports Waitron's actual validation and restore hooks in a separate
+process, checks archive identity and capture time, and restores SQLite into a fresh
+private temporary directory. Keys travel through stdin, application secrets are not
+inherited, Node networking is denied and writes are limited to that directory. The
+child has a 512 MiB heap setting, a 30-second deadline and bounded output. Cancellation
+kills its process group; temporary restore files are removed afterward. The worker
+refuses runtimes without Node network permission support. Status and queue tests also
+run on the project's ordinary Node runtime.
+
+These are trusted local-code controls. Native allocations, addons and child-process
+capabilities mean the heap setting is not a total memory limit or a hostile-code
+sandbox. Production needs container network/filesystem isolation and total CPU, memory
+and disk limits before this verifier can handle customer archives.

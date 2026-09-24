@@ -16,7 +16,7 @@ export async function runNodeVerifier(args:string[],options:{input:unknown;timeo
   child.on('error',()=>fail('backup.verifier_failed'));child.stdin.on('error',()=>fail('backup.verifier_failed'));
   // Wait for process close after killing it; callers may then remove the private restore directory.
   child.on('close',code=>{
-   closed=true;clearTimeout(timer);options.signal?.removeEventListener('abort',abort);
+   kill();closed=true;clearTimeout(timer);options.signal?.removeEventListener('abort',abort);
    if(failure||code!==0){reject(Error(failure??'backup.verifier_failed'));return;}
    try{resolve(JSON.parse(output));}catch{reject(Error('backup.verifier_output'));}
   });
