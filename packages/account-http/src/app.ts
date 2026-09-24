@@ -1,3 +1,4 @@
+import {alertPreferencesResponse} from './alerts.ts';
 import {backupResponse} from './backups.ts';
 import {installationResponse} from './installations.ts';
 import {InstallationError,type LeaseIssuer} from '@waitron-cloud/registration';
@@ -63,6 +64,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if (url.search) throw new AccountHttpError(400, 'invalid_input');
     const ip = clientAddress(c.env?.incoming?.socket.remoteAddress ?? '', c.req.header('x-forwarded-for'), config.trustedProxyIps);
     await consume([{scope: 'all-ip', subject: ip, limit: 120, windowSeconds: 60}]);
+    if(c.req.path==='/api/account/alerts')return alertPreferencesResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path.startsWith('/api/account/backups/'))return backupResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path.startsWith('/api/installations/')||c.req.path==='/api/account/installations'||c.req.path.startsWith('/api/account/installations/')) return installationResponse(c,{pool,issuer:options.leaseIssuer,origin:config.portalOrigin,ip,consume});
     if(c.req.path.startsWith('/api/pairing/')||c.req.path.startsWith('/api/account/pairing/')) return pairingResponse(c,{pool,origin:config.portalOrigin,ip,consume});

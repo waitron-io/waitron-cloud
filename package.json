@@ -21,7 +21,9 @@
     "test:ui": "pnpm --filter @waitron-cloud/ui-smoke test",
     "portal:build": "pnpm --filter @waitron-cloud/portal build",
     "backup:worker": "node --env-file-if-exists=.env packages/backups/src/worker-cli.ts",
-    "backup:status": "node --env-file-if-exists=.env packages/backups/src/worker-cli.ts --status"
+    "backup:status": "node --env-file-if-exists=.env packages/backups/src/worker-cli.ts --status",
+    "monitor:worker": "node --env-file-if-exists=.env packages/registration/src/monitor-cli.ts",
+    "monitor:status": "node --env-file-if-exists=.env packages/registration/src/monitor-cli.ts --status"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

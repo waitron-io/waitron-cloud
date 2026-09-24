@@ -10,7 +10,7 @@ const unused = async () => {};
 // Existing account behavior tests explicitly drain real queued delivery before checking their captures.
 export function signupAndDeliver(pool: Pool, mailer: SignupMailer) {
   const store = new SignupStore(pool, testOutbox);
-  const worker = new EmailWorker(pool, testOutbox, {sendPasswordReset: unused, sendPasswordChanged: unused, ...mailer});
+  const worker = new EmailWorker(pool, testOutbox, {sendServiceAlert: unused, sendPasswordReset: unused, sendPasswordChanged: unused, ...mailer});
   return {
     async request(email: string, locale?: AccountLocale) { const result = await store.request(email, locale); while (await worker.runOnce()) {} return result; },
     complete: store.complete.bind(store),
@@ -18,7 +18,7 @@ export function signupAndDeliver(pool: Pool, mailer: SignupMailer) {
 }
 export function recoveryAndDeliver(pool: Pool, mailer: PasswordRecoveryMailer) {
   const store = new PasswordRecoveryStore(pool, testOutbox);
-  const worker = new EmailWorker(pool, testOutbox, {sendVerification: unused, ...mailer});
+  const worker = new EmailWorker(pool, testOutbox, {sendServiceAlert: unused, sendVerification: unused, ...mailer});
   return {
     async request(email: string, locale?: AccountLocale) { const result = await store.request(email, locale); while (await worker.runOnce()) {} return result; },
     async complete(token: string, password: string, locale?: AccountLocale) { const result = await store.complete(token, password, locale); while (await worker.runOnce()) {} return result; },

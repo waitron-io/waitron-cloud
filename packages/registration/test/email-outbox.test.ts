@@ -20,7 +20,7 @@ const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL, options
 const keys = { first: randomBytes(32).toString('hex'), second: randomBytes(32).toString('hex') };
 const outbox = new EmailOutbox({activeKeyId: 'first', keys});
 const delivered: (AccountEmail | {email: string})[] = [];
-const mailer = { async sendVerification(message: AccountEmail) { delivered.push(message); },
+const mailer = {async sendServiceAlert() {throw new Error('Unexpected service alert');}, async sendVerification(message: AccountEmail) { delivered.push(message); },
   async sendPasswordReset(message: AccountEmail) { delivered.push(message); },
   async sendPasswordChanged(message: {email: string}) { delivered.push(message); } };
 const worker = new EmailWorker(pool, outbox, mailer);

@@ -26,3 +26,6 @@ button:disabled { cursor: default; opacity: .6; }
 .installation dd { margin-inline-start: 0; overflow-wrap: anywhere; }
 
 .snapshot-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-block: 1rem; }
+
+.alert-choice { display: flex; align-items: flex-start; gap: .75rem; margin-block: 1rem; }
+.alert-choice input { flex: none; width: auto; margin-top: .25rem; }

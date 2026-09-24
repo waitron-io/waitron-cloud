@@ -1,3 +1,4 @@
+import {validServiceAlert,type ServiceAlert,type ServiceAlertMailer} from './service-alert.ts';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { SignupMailer } from './signup.ts';
@@ -6,7 +7,7 @@ import { normaliseEmail, validLocale, type AccountEmail, type AccountNotificatio
 import { EmailDeliveryError, type EmailDeliveryFailure, type EmailDeliveryReceipt } from './email-delivery.ts';
 import { transaction } from './transaction.ts';
 
-export type EmailKind = 'verification' | 'password_reset' | 'password_changed';
+export type EmailKind = 'verification' | 'password_reset' | 'password_changed' | 'service_alert';
 type Status = 'pending' | 'processing' | 'sent' | 'expired' | 'cancelled' | 'failed';
 type Failure = EmailDeliveryFailure | 'payload_unavailable' | 'attempts_exhausted';
 interface MessageRow {
@@ -36,12 +37,16 @@ export class EmailOutbox {
     this.#active = config.activeKeyId;
   }
 
-  async enqueue(client: PoolClient, kind: EmailKind, message: AccountEmail | AccountNotification): Promise<void> {
-    if (!['verification', 'password_reset', 'password_changed'].includes(kind) || normaliseEmail(message.email) !== message.email || (message.locale !== undefined && !validLocale(message.locale))) throw new Error('Invalid queued email');
+  async enqueue(client: PoolClient, kind: EmailKind, message: AccountEmail | AccountNotification | ServiceAlert): Promise<string> {
+    if (!['verification', 'password_reset', 'password_changed', 'service_alert'].includes(kind) || normaliseEmail(message.email) !== message.email || (message.locale !== undefined && !validLocale(message.locale))) throw new Error('Invalid queued email');
     let tokenHash: string | null = null;
     let expiresAt: Date;
-    let content: AccountEmail | AccountNotification = {email: message.email};
-    if (kind === 'password_changed') {
+    let content: AccountEmail | AccountNotification | ServiceAlert = {email: message.email};
+    if (kind === 'service_alert') {
+      if(!validServiceAlert(message))throw new Error('Invalid queued email');
+      expiresAt=(await client.query("SELECT clock_timestamp()+interval '1 day' AS expiry")).rows[0].expiry;
+      content={email:message.email,incidentId:message.incidentId,revision:message.revision,venueId:message.venueId,issue:message.issue,state:message.state};
+    } else if (kind === 'password_changed') {
       expiresAt = (await client.query("SELECT clock_timestamp() + interval '7 days' AS expiry")).rows[0].expiry;
     } else {
       if (!('token' in message) || !/^[A-Za-z0-9_-]{43}$/.test(message.token) || !Number.isFinite(Date.parse(message.expiresAt))) throw new Error('Invalid queued email');
@@ -58,10 +63,11 @@ export class EmailOutbox {
     const payload = Buffer.concat([nonce, cipher.getAuthTag(), encrypted]);
     await client.query(`INSERT INTO email_outbox (id, kind, token_hash, key_id, payload, expires_at)
       VALUES ($1,$2,$3,$4,$5,$6)`, [id, kind, tokenHash, this.#active, payload, expiresAt]);
+    return id;
   }
 
   /** Only the delivery worker should recover plaintext; it must never log this return value. */
-  open(row: MessageRow): AccountEmail | AccountNotification {
+  open(row: MessageRow): AccountEmail | AccountNotification | ServiceAlert {
     try {
       const key = this.#keys.get(row.key_id);
       if (!key || row.payload.length < 29) throw new Error();
@@ -70,7 +76,8 @@ export class EmailOutbox {
       decipher.setAuthTag(row.payload.subarray(12, 28));
       const message = JSON.parse(Buffer.concat([decipher.update(row.payload.subarray(28)), decipher.final()]).toString('utf8'));
       if (!message || typeof message.email !== 'string' || normaliseEmail(message.email) !== message.email || (message.locale !== undefined && !validLocale(message.locale))) throw new Error();
-      if (row.kind !== 'password_changed' && (typeof message.token !== 'string' || digest(message.token) !== row.token_hash
+      if (row.kind === 'service_alert' && !validServiceAlert(message))throw new Error();
+      if (row.kind !== 'password_changed' && row.kind !== 'service_alert' && (typeof message.token !== 'string' || digest(message.token) !== row.token_hash
         || Date.parse(message.expiresAt) !== row.expires_at.getTime())) throw new Error();
       return message;
     } catch { throw new Error('Queued email payload unavailable'); }
@@ -80,9 +87,9 @@ export class EmailOutbox {
 export class EmailWorker {
   readonly #pool: Pool;
   readonly #outbox: EmailOutbox;
-  readonly #mailer: SignupMailer & PasswordRecoveryMailer;
+  readonly #mailer: SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer;
   readonly #timeout: number;
-  constructor(pool: Pool, outbox: EmailOutbox, mailer: SignupMailer & PasswordRecoveryMailer, options: {sendTimeoutMs?: number} = {}) {
+  constructor(pool: Pool, outbox: EmailOutbox, mailer: SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer, options: {sendTimeoutMs?: number} = {}) {
     this.#pool = pool; this.#outbox = outbox; this.#mailer = mailer;
     this.#timeout = options.sendTimeoutMs ?? 20_000;
     if (!Number.isInteger(this.#timeout) || this.#timeout < 1 || this.#timeout > 30_000) throw new Error('Invalid email worker timeout');
@@ -109,7 +116,7 @@ export class EmailWorker {
     });
     if (claim === undefined) return false;
     if (claim === null) return true;
-    let message: AccountEmail | AccountNotification;
+    let message: AccountEmail | AccountNotification | ServiceAlert;
     try { message = this.#outbox.open(claim); }
     catch { await this.#fail(claim, 'payload_unavailable'); return true; }
     // Recheck after decrypting and any database wait, before handing a link to the transport.
@@ -119,12 +126,14 @@ export class EmailWorker {
       WHERE id = $1 AND claim_id = $2 AND status = 'processing' AND lease_until > clock_timestamp()`, [claim.id, claim.claim_id]);
     if (!ready.rowCount) return true;
     if (!ready.rows[0].live) { await this.#finish(claim, 'expired'); return true; }
+    // A queue wait can outlast an ownership change; recheck alert authority and claim together at handoff.
+    if(claim.kind==='service_alert'&&!await this.#live(claim,message)){await this.#finish(claim,'cancelled');return true;}
     let timer: ReturnType<typeof setTimeout> | undefined;
     const controller = new AbortController();
     const context = {deliveryId: claim.id, signal: controller.signal};
     let receipt: void | EmailDeliveryReceipt;
     try {
-      const send = () => claim.kind === 'verification' ? this.#mailer.sendVerification(message as AccountEmail, context)
+      const send = () => claim.kind === 'service_alert' ? this.#sendAlert(message as ServiceAlert,context) : claim.kind === 'verification' ? this.#mailer.sendVerification(message as AccountEmail, context)
         : claim.kind === 'password_reset' ? this.#mailer.sendPasswordReset(message as AccountEmail, context)
         : this.#mailer.sendPasswordChanged(message, context);
       // A timeout cannot retract a message already accepted by a provider. Retried sends may duplicate it.
@@ -146,7 +155,28 @@ export class EmailWorker {
     return true;
   }
 
-  async #live(row: MessageRow, message: AccountEmail | AccountNotification): Promise<boolean> {
+  async #sendAlert(message:ServiceAlert,context:{deliveryId:string;signal:AbortSignal}){
+    if(!this.#mailer.sendServiceAlert)throw new EmailDeliveryError('delivery_configuration');
+    return this.#mailer.sendServiceAlert(message,context);
+  }
+
+  async #live(row: MessageRow, message: AccountEmail | AccountNotification | ServiceAlert): Promise<boolean> {
+    if(row.kind==='service_alert'){
+      if(!validServiceAlert(message))return false;
+      const live=(await this.#pool.query(`SELECT p.locale FROM service_alert_deliveries d JOIN email_outbox e ON e.id=d.outbox_id JOIN venue_incidents i ON i.id=d.incident_id
+        JOIN venues v ON v.id=i.venue_id JOIN installations n ON n.venue_id=v.id
+        JOIN organisation_memberships m ON m.organisation_id=v.organisation_id AND m.account_id=d.account_id
+        JOIN cloud_accounts a ON a.id=d.account_id JOIN cloud_credentials c ON c.account_id=a.id
+        JOIN account_alert_preferences p ON p.account_id=a.id
+        WHERE d.outbox_id=$1 AND e.claim_id=$8 AND e.status='processing' AND e.lease_until>clock_timestamp() AND e.expires_at>clock_timestamp() AND i.id=$2 AND i.revision=$3 AND d.revision=i.revision AND i.venue_id=$4 AND i.kind=$5 AND i.status=$6 AND d.state=i.status
+          AND m.is_owner AND a.disabled_at IS NULL AND c.email_verified_at IS NOT NULL AND c.email=$7 AND p.enabled
+          AND v.environment='test' AND n.revoked_at IS NULL
+          AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured'
+            AND (i.kind='disconnected' OR s.service='retained_snapshots'))`,
+        [row.id,message.incidentId,message.revision,message.venueId,message.issue,message.state,message.email,row.claim_id])).rows[0];
+      if(!live)return false;
+      message.locale=live.locale;return true;
+    }
     if (row.kind === 'password_changed') return true;
     if (row.kind === 'verification') {
       return !!(await this.#pool.query(`SELECT 1 FROM signup_requests WHERE token_hash = $1 AND email = $2

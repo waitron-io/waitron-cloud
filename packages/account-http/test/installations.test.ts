@@ -86,3 +86,14 @@ test('overview normalises legacy names and falls back to identifiers for unnamed
  assert.equal(item.overview.organisationName,item.organisationId);assert.equal(item.overview.businessName,item.legalBusinessId);assert.equal(item.canRevoke,false);
  assert.equal((await browser('/revoke',{installationId:id})).status,403);
 });
+test('overview exposes current monitoring evidence only to current organisation members',async()=>{
+ const venueId=(await db.pool.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0].venue_id;
+ await db.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[id]);
+ await db.pool.query('INSERT INTO venue_monitors(venue_id,checked_at) VALUES($1,clock_timestamp())',[venueId]);
+ await db.pool.query("INSERT INTO venue_incidents(venue_id,kind,status,revision) VALUES($1,'disconnected','open',1)",[venueId]);
+ let item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.enabled,true);assert.equal(item.monitoring.fresh,true);assert.deepEqual(item.monitoring.incidents.map((v:{kind:string})=>v.kind),['disconnected']);
+ assert.deepEqual(Object.keys(item.monitoring.incidents[0]).sort(),['changedAt','kind','openedAt']);
+ await db.pool.query("UPDATE venue_monitors SET checked_at=clock_timestamp()-interval '5 minutes 1 second'");item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.fresh,false);assert.equal(item.monitoring.incidents.length,1);
+ await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp()');item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.enabled,false);assert.deepEqual(item.monitoring.incidents,[]);
+ await db.pool.query('DELETE FROM organisation_memberships');assert.deepEqual((await(await browser('')).json()).installations,[]);
+});

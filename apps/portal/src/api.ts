@@ -5,6 +5,7 @@ export type ApiResult<T> = {ok: true; value: T} | {ok: false; status: number; co
 function validResult(path: string, value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const data = value as Record<string, unknown>;
+  if(path==='/alerts')return typeof data.enabled==='boolean'&&typeof data.locale==='string'&&['en','es'].includes(data.locale);
   if(path==='/backups/list')return validBackupPage(value);
   if (path === '/pairing/businesses') return validBusinesses(data.businesses);
   if (path === '/pairing/inspect' || path === '/pairing/approve') return validPairingView(data);
@@ -20,7 +21,7 @@ function validResult(path: string, value: unknown): boolean {
 export async function accountRequest<T>(path: string, body?: Record<string, string>): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
-  if (path === '/backups/list' || path === '/session/activity' || path === '/logout' || path === '/installations/revoke' || (path.startsWith('/pairing/') && body)) {
+  if ((path === '/alerts' && body) || path === '/backups/list' || path === '/session/activity' || path === '/logout' || path === '/installations/revoke' || (path.startsWith('/pairing/') && body)) {
     const name = location.protocol === 'https:' ? '__Host-cloud_csrf' : 'cloud_csrf';
     const values = document.cookie.split(';').map(v => v.trim()).filter(v => v.startsWith(`${name}=`));
     headers['X-CSRF-Token'] = values.length === 1 ? values[0]!.slice(name.length + 1) : '';

@@ -8,6 +8,24 @@ export function chooseLocale(saved: string | null, languages: readonly string[])
   return 'en';
 }
 const en = {
+  serviceAlerts:"Service alerts",
+  alertsHelp:"Choose email alerts for venues you own. New incidents and their recovery use this preference. You can change it at any time.",
+  alertsReceive:"Receive service alerts by email",
+  alertsLanguage:"Email language",
+  alertsSave:"Save alert preferences",
+  alertsSaved:"Alert preferences saved.",
+  alertsLoad:"Load alert preferences",
+  alertsUncertain:"We could not confirm your preference change. Retry to save your choice.",
+  monitoring:"Monitoring",
+  monitorOff:"Monitoring is not enabled for this installation.",
+  monitorUnknown:"Monitoring status is unknown. Refresh later to check for new observations.",
+  monitorNoAlerts:"No current alerts in the latest check.",
+  monitorChecked:"Last monitoring check",
+  monitorSince:"Alert started",
+  monitorDisconnected:"Cloud has not heard from this venue for at least 15 minutes. Check its internet connection and Waitron server.",
+  monitorSnapshotStale:"There is no verified snapshot from the last 48 hours. Check the server’s backups.",
+  monitorVerificationFailed:"The latest snapshot failed its restore check. Keep older verified copies; Cloud retries automatically.",
+
   viewSnapshots:'View snapshots', snapshotHistory:'Snapshot history', chooseSnapshot:'Choose a snapshot', noSnapshots:'No snapshots have been stored for this venue.',
   snapshotPurpose:'Continuous backups normally provide the newest recovery point. Snapshots are point-in-time archives and a fallback if continuous data is lost.', recoveryUnavailable:'Guided server recovery is not available here yet.',
   snapshotPending:'Awaiting verification', snapshotVerified:'Verified', snapshotFailed:'Verification failed', snapshotCaptured:'Captured', snapshotCheck:'Verification', snapshotRetention:'Retention', snapshotExpiry:'Ordinary retention ends', snapshotIdentifier:'Snapshot identifier',
@@ -64,6 +82,24 @@ const en = {
 };
 export type Copy = typeof en;
 const es: Copy = {
+  serviceAlerts:"Alertas de servicio",
+  alertsHelp:"Elige las alertas por correo de los locales que administras como propietario. Esta preferencia se aplica a las nuevas incidencias y a su recuperación. Puedes cambiarla cuando quieras.",
+  alertsReceive:"Recibir alertas de servicio por correo",
+  alertsLanguage:"Idioma del correo",
+  alertsSave:"Guardar preferencias de alertas",
+  alertsSaved:"Preferencias de alertas guardadas.",
+  alertsLoad:"Cargar preferencias de alertas",
+  alertsUncertain:"No hemos podido confirmar el cambio. Vuelve a intentar guardar tu elección.",
+  monitoring:"Supervisión",
+  monitorOff:"La supervisión no está activada para esta instalación.",
+  monitorUnknown:"El estado de la supervisión es desconocido. Actualiza más tarde para ver nuevas comprobaciones.",
+  monitorNoAlerts:"No hay alertas en la última comprobación.",
+  monitorChecked:"Última comprobación",
+  monitorSince:"Inicio de la alerta",
+  monitorDisconnected:"Cloud no recibe contacto de este local desde hace al menos 15 minutos. Comprueba su conexión a internet y el servidor Waitron.",
+  monitorSnapshotStale:"No hay una instantánea verificada de las últimas 48 horas. Comprueba las copias de seguridad del servidor.",
+  monitorVerificationFailed:"La comprobación de restauración de la última instantánea ha fallado. Conserva las copias anteriores verificadas; Cloud vuelve a intentarlo automáticamente.",
+
   viewSnapshots:'Ver instantáneas', snapshotHistory:'Historial de instantáneas', chooseSnapshot:'Elige una instantánea', noSnapshots:'No se han guardado instantáneas de este local.',
   snapshotPurpose:'Las copias continuas suelen ofrecer el punto de recuperación más reciente. Las instantáneas son archivos de un momento concreto y una alternativa si se pierden los datos continuos.', recoveryUnavailable:'La recuperación guiada del servidor todavía no está disponible aquí.',
   snapshotPending:'Pendiente de verificación', snapshotVerified:'Verificada', snapshotFailed:'Verificación fallida', snapshotCaptured:'Fecha de captura', snapshotCheck:'Verificación', snapshotRetention:'Conservación', snapshotExpiry:'Fin de la conservación ordinaria', snapshotIdentifier:'Identificador de la instantánea',

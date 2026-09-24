@@ -27,7 +27,7 @@ try {
   const outbox = new EmailOutbox({activeKeyId: process.env.CLOUD_EMAIL_ACTIVE_KEY_ID, keys: JSON.parse(process.env.CLOUD_EMAIL_KEYS)});
   pool = new Pool({connectionString: process.env.DATABASE_URL, max: 10, connectionTimeoutMillis: 5000, statement_timeout: 10000});
   pool.on('error', () => {console.error('Account server database connection failed'); process.exitCode = 1; stop();});
-  if ((await pool.query("SELECT name FROM schema_migrations WHERE name IN ('007_account_http.sql','008_pairing.sql','009_installation_lifecycle.sql','010_remote_access.sql','011_managed_backups.sql','012_backup_jobs.sql')")).rowCount !== 6) throw new Error();
+  if ((await pool.query("SELECT name FROM schema_migrations WHERE name IN ('007_account_http.sql','008_pairing.sql','009_installation_lifecycle.sql','010_remote_access.sql','011_managed_backups.sql','012_backup_jobs.sql','013_service_monitoring.sql')")).rowCount !== 7) throw new Error();
   if (!stopRequested) {
     const portalAssets = process.env.CLOUD_PORTAL_ASSETS_DIR ? await loadPortalAssets(process.env.CLOUD_PORTAL_ASSETS_DIR) : undefined;
     const leaseIssuer=process.env.CLOUD_INSTALLATION_ISSUER_KEY ? createLeaseIssuer(process.env.CLOUD_INSTALLATION_ISSUER_KEY) : undefined;

@@ -13,7 +13,9 @@ The account venue overview groups one organisation at a time, shows business con
 connection/service state and separate latest/verified snapshot capture times. Verified
 snapshots older than 48 hours are labelled out of date. Owners can browse paginated snapshot history, verification and retention details, including
 protected copies. The local durable worker now verifies real Waitron restores, retries failures and
-cleans expired snapshots and abandoned captures. Incident notifications are next.
+cleans expired snapshots and abandoned captures. The local monitor now persists contact
+and snapshot incidents, shows stale checks as unknown, and queues opt-in bilingual
+alerts with permission rechecks.
 Live provider/sender configuration and public deployment remain open.
 No public cloud service is deployed. This file owns cloud product and platform work;
 Waitron's backlog owns the on-prem application and its side of the integration.
@@ -317,7 +319,15 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   Give exceptional failures useful diagnostics for investigation under the support policy.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
-  Define alerts, affected-customer views and rollout pause criteria.
+  The [local monitor](local-monitoring.md) now records missing contact, stale snapshots
+  and failed verification for configured test installations. The portal shows incident
+  evidence and stale monitoring; owners can opt in to English/Spanish email alerts.
+  Durable transition records prevent repeated scans from enqueueing duplicates, with
+  live ownership/preference checks before delivery and recovery notices for prior
+  recipients. Queued notices use the current email language. Locked installations and
+  failed observations defer their next check while other venues continue. SMTP uncertain-acceptance duplicates remain possible. Next: external
+  functional probes, incident/delivery-history retention, deployment-scale scheduling
+  and recipient fan-out measurements, escalation/quiet periods and rollout pause criteria.
 - **Usage metering.** Attribute lookups/API calls, reports, storage, transfers,
   messages and compute to customers and services. Show consumption and allowances,
   track provider costs and define limits. Any billing records need durable capture,
