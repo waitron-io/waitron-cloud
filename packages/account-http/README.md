@@ -34,7 +34,7 @@ pnpm account:serve
 ```
 
 If you export `DATABASE_URL` in your shell, `pnpm db:migrate` applies the same migrations.
-The server refuses startup without migrations `007_account_http.sql` through `012_backup_jobs.sql`; it never applies
+The server refuses startup without migrations `007_account_http.sql` through `013_service_monitoring.sql`; it never applies
 migrations itself. Its default listener is `127.0.0.1:3000`.
 
 In another terminal, from the same directory:
@@ -332,3 +332,12 @@ Continuous backups normally provide the newest recovery point; snapshots are arc
 and a fallback. The screen selects the latest currently verified snapshot when it is
 on the page, but does not start recovery. Guided server replacement still requires the
 remaining Waitron activation contract and is not enabled here.
+
+## Service alert preferences
+
+`GET /api/account/alerts` returns your current `{enabled, locale}` preference (disabled
+and English by default). `POST` accepts exactly `{enabled: "on" | "off", locale: "en" |
+"es"}` with the current session, exact Origin and CSRF proof. Both share a 30-request
+per-account, per-minute allowance and do not renew passive sessions. Venue overview
+responses include bounded monitoring evidence for your current organisation memberships.
+See [local monitoring](../../docs/local-monitoring.md) for thresholds and delivery rules.

@@ -50,7 +50,7 @@ test('cleanup is bounded and never removes live windows; migration reruns are ha
   assert.equal(await limiter.prune(), 1000); assert.equal(await limiter.prune(), 5); assert.equal(await limiter.prune(), 0);
   assert.equal((await db.pool.query('SELECT count(*) FROM account_rate_limits')).rows[0].count, '1');
   await migrate(db.pool);
-  assert.equal((await db.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '12');
+  assert.equal((await db.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '13');
 });
 test('database failure cannot grant allowance', async () => {
   const closed = new Pool({connectionString: process.env.TEST_DATABASE_URL}); await closed.end();

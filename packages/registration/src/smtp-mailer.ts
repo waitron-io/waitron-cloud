@@ -1,3 +1,4 @@
+import type {ServiceAlert} from './service-alert.ts';
 import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
 import { connect, type TLSSocket } from 'node:tls';
@@ -32,9 +33,9 @@ export function createSmtpAccountMailer(config: SmtpAccountMailConfig, trust: {c
   const {host, user, password, from} = config;
   const ca = Buffer.isBuffer(trust.ca) ? Buffer.from(trust.ca) : trust.ca;
   const domain = from.split('@')[1]!;
-  const send = async (kind: AccountMailKind, message: AccountEmail | AccountNotification, context?: EmailDeliveryContext): Promise<EmailDeliveryReceipt> => {
+  const send = async (kind: AccountMailKind, message: AccountEmail | AccountNotification | ServiceAlert, context?: EmailDeliveryContext): Promise<EmailDeliveryReceipt> => {
     if (!message || typeof message.email !== 'string' || normaliseEmail(message.email) !== message.email
-      || (kind !== 'password_changed' && (!('token' in message) || !/^[A-Za-z0-9_-]{43}$/.test(message.token) || !Number.isFinite(Date.parse(message.expiresAt))))) throw new EmailDeliveryError('delivery_rejected');
+      || (kind !== 'password_changed' && kind !== 'service_alert' && (!('token' in message) || !/^[A-Za-z0-9_-]{43}$/.test(message.token) || !Number.isFinite(Date.parse(message.expiresAt))))) throw new EmailDeliveryError('delivery_rejected');
     const deliveryId = context?.deliveryId ?? randomUUID();
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(deliveryId)) throw new EmailDeliveryError('delivery_rejected');
     const signal = context?.signal;
@@ -81,6 +82,7 @@ export function createSmtpAccountMailer(config: SmtpAccountMailConfig, trust: {c
     sendVerification: (message: AccountEmail, context?: EmailDeliveryContext) => send('verification', message, context),
     sendPasswordReset: (message: AccountEmail, context?: EmailDeliveryContext) => send('password_reset', message, context),
     sendPasswordChanged: (message: AccountNotification, context?: EmailDeliveryContext) => send('password_changed', message, context),
+    sendServiceAlert: (message: ServiceAlert, context?: EmailDeliveryContext) => send('service_alert', message, context),
   };
 }
 

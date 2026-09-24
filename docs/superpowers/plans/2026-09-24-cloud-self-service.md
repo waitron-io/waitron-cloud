@@ -56,4 +56,11 @@ local CLI and actual Waitron verifier are implemented. Clean-head two-server pro
 passed on Cloud7149f5a/Waitronc37f596b. The 540-second isolated run-it review found an
 expired-lease backoff defect; its failing regression now passes with the other nine
 worker checks. Retry SQL is shared, and the proof waits for its target snapshot.
-Large-scale scheduler cadence remains a deployment measurement. Finish/CI/land follow.
+Large-scale scheduler cadence remains a deployment measurement. PR #40 landed on
+af5ed3f after green CI at1c510b8. The worktree and both branches are removed.
+
+Monitoring uses the service-monitoring spec and its embedded plan. The local monitor,
+encrypted service notices, preference API and bilingual portal controls are implemented.
+Focused PostgreSQL, controller, browser and Mailpit checks cover thresholds, stale
+checks, revocation and delivery permission. The final queue-wait ownership race has
+a reproduced failing regression and a transport-handoff recheck. Finish/CI/land follow.

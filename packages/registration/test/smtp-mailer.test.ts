@@ -60,7 +60,8 @@ test('production adapter authenticates over verified TLS and sends all account m
     await mailer.sendVerification(content, delivery);
     await mailer.sendPasswordReset(content, context());
     await mailer.sendPasswordChanged({email: content.email}, context());
-    assert.equal(smtp.data.length, 4);
+    await mailer.sendServiceAlert({email:content.email,incidentId:randomUUID(),venueId:randomUUID(),revision:1,issue:'disconnected',state:'open'},context());
+    assert.equal(smtp.data.length, 5);
     for (const captured of smtp.data) {
       assert.equal(captured.secure, true); assert.deepEqual(captured.to, [content.email]); assert.equal(captured.from, base.from);
       assert.ok(!captured.raw.includes(base.password));
@@ -70,6 +71,8 @@ test('production adapter authenticates over verified TLS and sends all account m
     assert.ok(readable(smtp.data[2]!.raw).includes(`https://cloud.example.test/reset-password#token=${content.token}`));
     assert.ok(smtp.data[3]!.raw.includes('Your Waitron Cloud password changed'));
     assert.ok(!smtp.data[3]!.raw.includes(content.token));
+    assert.ok(readable(smtp.data[4]!.raw).includes('https://cloud.example.test/account'));
+    assert.ok(!smtp.data[4]!.raw.includes(content.token));
   } finally {
     if (oldEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = oldEnv;
     await smtp.close();

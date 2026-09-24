@@ -1,3 +1,4 @@
+import type {ServiceAlert,ServiceAlertMailer} from './service-alert.ts';
 import type { SignupMailer } from './signup.ts';
 import type { PasswordRecoveryMailer } from './password-recovery.ts';
 import { accountMail, type AccountMailKind } from './account-mail.ts';
@@ -5,7 +6,7 @@ import type { AccountEmail, AccountNotification } from './account-input.ts';
 import nodemailer from 'nodemailer';
 
 /** Development capture only; the SMTP host is fixed to loopback and has no production configuration. */
-export function createLocalAccountMailer(options: {port?: number; portalOrigin?: string} = {}): SignupMailer & PasswordRecoveryMailer {
+export function createLocalAccountMailer(options: {port?: number; portalOrigin?: string} = {}): SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer {
   const port = options.port ?? 1125;
   let origin: URL;
   try { origin = new URL(options.portalOrigin ?? 'http://localhost:3000'); }
@@ -23,7 +24,7 @@ export function createLocalAccountMailer(options: {port?: number; portalOrigin?:
     // SMTP errors can contain recipients or secrets; expose only a fixed diagnostic.
     catch { throw new Error('Local email delivery failed'); }
   };
-  const action = (kind: AccountMailKind, message: AccountEmail | AccountNotification) => {
+  const action = (kind: AccountMailKind, message: AccountEmail | AccountNotification | ServiceAlert) => {
     const rendered = accountMail(origin, kind, message);
     return send(message.email, rendered.subject, rendered.text);
   };
@@ -31,5 +32,6 @@ export function createLocalAccountMailer(options: {port?: number; portalOrigin?:
     sendVerification: message => action('verification', message),
     sendPasswordReset: message => action('password_reset', message),
     sendPasswordChanged: message => action('password_changed', message),
+    sendServiceAlert: message => action('service_alert', message),
   };
 }
