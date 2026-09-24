@@ -16,7 +16,7 @@ are omitted. Default recovery selection is the latest currently verified snapsho
 not the newest upload. Empty/unprovisioned venues return an empty list.
 
 Retention dates use the same PostgreSQL expressions as cleanup: 30 days or 12 calendar
-months. Read protection with the same historical verification rule as cleanup, and
+months, using shared UTC calendar arithmetic independent of connection time zones. Read protection with the same historical verification rule as cleanup, and
 mark active unexpired recovery operations. No additional deletion or recovery action
 is enabled. Explain that continuous backup is normally the newest recovery source;
 these snapshots are archival/fallback points and guided replacement is still pending.

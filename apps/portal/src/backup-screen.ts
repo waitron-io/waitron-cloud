@@ -12,7 +12,7 @@ export function backupScreen(app:PortalApp,venueId:string){
   ${b.pending?html`<p role="status">${c.wait}</p>`:nothing}
   ${b.waiting?html`<p role="status">${c.snapshotRetry}</p>`:nothing}
   ${b.page&&!b.page.points.length?html`<p>${c.noSnapshots}</p>`:nothing}
-  ${b.page?.points.length?html`<div class="business-choice"><label for="snapshot-choice">${c.chooseSnapshot}</label><select id="snapshot-choice" .value=${b.selected??''} ?disabled=${disabled} @change=${(e:Event)=>b.select((e.target as HTMLSelectElement).value)}>${b.page.points.map(p=>html`<option value=${p.id}>${date(p.capturedAt)} · ${states[p.verification]} · ${p.id.slice(0,8)}</option>`)}</select></div>`:nothing}
+  ${b.page?.points.length?html`<div class="business-choice"><label for="snapshot-choice">${c.chooseSnapshot}</label><select id="snapshot-choice" ?disabled=${disabled} @change=${(e:Event)=>b.select((e.target as HTMLSelectElement).value)}>${b.page.points.map(p=>html`<option value=${p.id} .selected=${p.id===b.selected}>${date(p.capturedAt)} · ${states[p.verification]} · ${p.id.slice(0,8)}</option>`)}</select></div>`:nothing}
   ${selected?html`<dl><dt>${c.snapshotCaptured}</dt><dd><time datetime=${selected.capturedAt}>${date(selected.capturedAt)}</time></dd><dt>${c.snapshotCheck}</dt><dd>${states[selected.verification]}</dd>
     <dt>${c.snapshotRetention}</dt><dd>${selected.retention==='daily'?c.snapshotDaily:c.snapshotMonthly}</dd><dt>${c.snapshotExpiry}</dt><dd><time datetime=${selected.expiresAt}>${date(selected.expiresAt)}</time></dd>
     <dt>${c.snapshotIdentifier}</dt><dd>${selected.id}</dd></dl>

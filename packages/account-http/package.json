@@ -13,7 +13,10 @@
     "@hono/node-server": "^2.1.1",
     "hono": "^4.13.8",
     "ipaddr.js": "^2.5.0",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "@waitron-cloud/backups": "workspace:*"
   },
-  "devDependencies": { "@types/pg": "^8.23.1" }
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
+  }
 }

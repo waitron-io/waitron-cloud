@@ -1,3 +1,4 @@
+import {retentionExpirySql} from '@waitron-cloud/backups/retention';
 import type {Context} from 'hono';
 import type {Pool} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
@@ -30,12 +31,13 @@ export async function backupResponse(c:Context,options:{pool:Pool;origin:string;
  await consume([{scope:'backup-account',subject:identity.accountId,limit:30,windowSeconds:60}]);
  return c.json(await transaction(pool,async client=>{
   const session=await resolveSession(client,token,{csrfToken,touch:false});
+  // Hold ownership through the metadata read so a concurrent revocation cannot pass unnoticed.
   const permission=await client.query(`SELECT m.account_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id WHERE v.id=$1 AND m.account_id=$2 AND m.is_owner FOR SHARE OF m`,[venueId,session.accountId]);
   if(!permission.rowCount)throw new AccountHttpError(403,'forbidden');
   // Tombstoned points retain their ordering key, so a cleanup between pages cannot skip history.
   if(after&&!(await client.query('SELECT 1 FROM backup_points WHERE id=$1 AND venue_id=$2',[after,venueId])).rowCount)throw new AccountHttpError(400,'invalid_input');
   const result=await client.query(`SELECT p.id,p.captured_at,p.verification,p.retention,
-   p.captured_at+CASE p.retention WHEN 'daily' THEN interval '30 days' ELSE interval '12 months' END AS expires_at,
+   ${retentionExpirySql} AS expires_at,
    CASE WHEN EXISTS(SELECT 1 FROM backup_recoveries r WHERE r.point_id=p.id AND r.status<>'closed' AND r.expires_at>clock_timestamp()) THEN 'recovery'
     WHEN p.id=(SELECT q.id FROM backup_points q WHERE q.venue_id=$1 AND q.kind='snapshot' AND NOT q.deleting AND q.deleted_at IS NULL ORDER BY EXISTS(SELECT 1 FROM backup_verifications v WHERE v.point_id=q.id AND v.outcome='verified') DESC,q.captured_at DESC,q.id DESC LIMIT 1) THEN 'fallback' ELSE NULL END AS protection
    FROM backup_points p WHERE p.venue_id=$1 AND p.kind='snapshot' AND NOT p.deleting AND p.deleted_at IS NULL

@@ -15,5 +15,8 @@
   },
   "devDependencies": {
     "@types/pg": "^8.23.1"
+  },
+  "exports": {
+    "./retention": "./src/retention.ts"
   }
 }

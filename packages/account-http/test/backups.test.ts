@@ -1,3 +1,6 @@
+import {Pool} from 'pg';
+import {BackupCatalogue} from '../../backups/src/catalogue.ts';
+import {BackupKeyVault} from '../../backups/src/keys.ts';
 import type {HttpBindings} from '@hono/node-server';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
@@ -48,6 +51,7 @@ test('bounded cursor pages preserve equal timestamp ordering and never return an
  await db.pool.query('UPDATE backup_points SET deleting=true,deleted_at=clock_timestamp() WHERE id=$1',[page.points.at(-1).id]);
  const second=await (await request({venueId:venues[0]!.venueId,cursor:page.nextCursor})).json();assert.equal(second.points.length,2);assert.equal(second.nextCursor,null);
  assert.deepEqual([...page.points,...second.points].map(p=>p.id),ids.sort().reverse());assert(!JSON.stringify(page).includes(foreign));
+ const forged=Buffer.from(JSON.stringify([venues[0]!.venueId,foreign])).toString('base64url');assert.equal((await request({venueId:venues[0]!.venueId,cursor:forged})).status,400);
  assert.equal((await request({venueId:venues[1]!.venueId,cursor:page.nextCursor})).status,400);
  assert.equal((await request({venueId:venues[0]!.venueId,cursor:'broken'})).status,400);
  assert.deepEqual(Object.keys(page.points[0]).sort(),['id','capturedAt','verification','retention','expiresAt','protection'].sort());
@@ -78,4 +82,19 @@ test('catalogue limits persist across API processes',async()=>{
   app=createAccountApp({pool:db.secondPool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});
  }
  const limited=await request({venueId:venues[0]!.venueId});assert.equal(limited.status,429);assert(Number(limited.headers.get('retry-after'))>0);
+});
+
+test('published retention dates match cleanup across database time zones and daylight-saving changes',async()=>{
+ const anchor=await point(undefined,'2020-01-01T12:00:00.000Z','verified');
+ await db.pool.query("INSERT INTO backup_verifications(id,point_id,digest,verifier,outcome) VALUES($1,$2,$3,'fixture','verified')",[randomUUID(),anchor,'a'.repeat(64)]);
+ const madrid=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${db.schema} -c timezone=Europe/Madrid`});
+ const cleanup=new BackupCatalogue(madrid,new BackupKeyVault(Buffer.alloc(32)),()=>({async read(){throw Error('not used');},async put(){throw Error('not used');},async remove(){}}));
+ try{
+  for(const [retention,date] of [['daily','2026-03-01T12:00:00.000Z'],['monthly','2026-03-29T00:30:00.000Z']]){
+   const id=await point(undefined,date,'pending',retention),response=await request({venueId:venues[0]!.venueId});assert.equal(response.status,200);
+   const shown=(await response.json()).points.find(p=>p.id===id).expiresAt;
+   assert.equal(await cleanup.cleanupOne(venues[0]!.venueId,new Date(Date.parse(shown)-1)),null,retention+' must not delete before the displayed expiry');
+   assert.equal(await cleanup.cleanupOne(venues[0]!.venueId,new Date(shown)),id);
+  }
+ }finally{await madrid.end();}
 });
