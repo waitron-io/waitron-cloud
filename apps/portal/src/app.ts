@@ -1,3 +1,4 @@
+import {BackupController} from './backup-controller.ts';
 import {InstallationController} from './installation-controller.ts';
 import { PairingController } from './pairing-controller.ts';
 import { render } from 'lit';
@@ -25,6 +26,7 @@ export class PortalApp {
   session: PortalSession;
   pairing: PairingController;
   installations: InstallationController;
+  backups: BackupController;
   #route = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
   constructor(root: HTMLElement) {
@@ -33,14 +35,18 @@ export class PortalApp {
     let saved: string | null = null;
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
     this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
-    this.installations = new InstallationController(() => this.draw());
+    this.backups = new BackupController(() => this.draw());
+    this.installations = new InstallationController(() => {
+      if(this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke))this.backups.close();
+      this.draw();
+    });
     this.pairing = new PairingController(() => this.draw());
     this.pairing.open(this.link.requestId);
     this.session = this.#session();
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (['/account','/connect'].includes(this.path)) void this.session.activity(event); });
     document.addEventListener('pointerdown', event => { if (['/account','/connect'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -49,6 +55,7 @@ export class PortalApp {
   #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
+    this.backups.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.installations.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.installations.loaded) void this.installations.load();
     this.pairing.account(state.kind === 'authenticated' ? state.accountId : undefined);
@@ -67,7 +74,7 @@ export class PortalApp {
   }
   get waiting() {
     if (this.path === '/connect') return Math.max(this.pairing.waiting, Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)));
-    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt) : this.cooldownOperation === this.operation ? this.cooldownUntil : 0;
+    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt) : this.cooldownOperation === this.operation ? this.cooldownUntil : 0;
     return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
   }
   draw() {

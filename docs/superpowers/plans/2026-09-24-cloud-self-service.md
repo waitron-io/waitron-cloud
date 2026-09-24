@@ -43,5 +43,8 @@ connection/service state; this branch adds business context and actual snapshot 
 Overview implementation: focused API/controller checks and both bilingual phone-width
 browser journeys pass; existing stop-access, lost-reply and stale-observation assertions
 remain. The organisation selector uses an explicit accessible label. The isolated run-it review found no blocker. Follow-up regression checks cover metadata
-after revocation, deleted snapshots, name fallback and legacy/Unicode names. CI is the
-remaining branch gate.
+after revocation, deleted snapshots, name fallback and legacy/Unicode names. PR #38 landed after green CI on abf4750; main ee9404e. Both branches and the
+worktree are removed. Task 2 uses the backup-catalogue design/spec and its embedded plan.
+
+Catalogue: owner-scoped pagination, public metadata, retention protection and bilingual
+selection are implemented. PostgreSQL/controller and browser checks pass; review follows.

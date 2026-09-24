@@ -54,6 +54,9 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.1
         version: 2.1.1(hono@4.13.8)
+      '@waitron-cloud/backups':
+        specifier: workspace:*
+        version: link:../backups
       '@waitron-cloud/identity':
         specifier: workspace:*
         version: link:../identity

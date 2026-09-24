@@ -1,3 +1,4 @@
+import {retentionExpirySql} from './retention.ts';
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { transaction } from "@waitron-cloud/registration";
@@ -396,7 +397,7 @@ export class BackupCatalogue {
       const result = await client.query(
         `SELECT p.id,p.object_key FROM backup_points p WHERE p.venue_id=$1 AND p.deleted_at IS NULL
     AND NOT EXISTS(SELECT 1 FROM backup_recoveries r WHERE r.point_id=p.id AND r.status<>'closed')
-    AND (p.deleting OR ((p.retention='daily' AND p.captured_at+interval '30 days'<=$2 OR p.retention='monthly' AND p.captured_at+interval '12 months'<=$2)
+    AND (p.deleting OR ((${retentionExpirySql})<=$2
      AND p.id IS DISTINCT FROM (SELECT q.id FROM backup_points q WHERE q.venue_id=$1 AND q.kind='snapshot' AND NOT q.deleting AND q.deleted_at IS NULL ORDER BY EXISTS(SELECT 1 FROM backup_verifications v WHERE v.point_id=q.id AND v.outcome='verified') DESC,q.captured_at DESC,q.id DESC LIMIT 1)))
     ORDER BY p.deleting DESC,p.captured_at,p.id LIMIT 1`,
         [venueId, now],
