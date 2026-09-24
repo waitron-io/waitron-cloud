@@ -10,9 +10,10 @@ Install both repositories with their frozen pnpm lockfiles. Use Node 26 with net
 26.7.0), Docker, OpenSSL and network access for the pinned test binaries. Point to a
 Waitron checkout that includes both `apps/server/scripts/cloud-backup-fixture.ts` and
 `apps/server/scripts/cloud-capture-client-fixture.ts`. Export that path as
-`WAITRON_CHECKOUT`, and build its dashboard before starting the servers:
+`WAITRON_CHECKOUT`, and build both portals before starting the servers:
 
 ```sh
+pnpm portal:build
 pnpm --dir "$WAITRON_CHECKOUT" --filter @waitron/dashboard build
 node scripts/test-backup-storage.mjs
 WAITRON_CHECKOUT=/absolute/path/to/waitron \
@@ -51,6 +52,10 @@ without modifying your system trust settings. This needs Docker Desktop's
   archive. A captured `backup.env` is discarded when restoring this managed test
   replacement, so it cannot resume an old destination. Customer-managed archive
   restore behavior is unchanged.
+- After stopping the source servers, a disposable process runs Waitron's production
+  snapshot worker, exits after upload and resumes from the same encrypted file in a
+  fresh process. No new archive is created; the published monthly snapshot restores
+  independently, and another restart before the next due time stays idle.
 - Litestream 0.5.17 restores a committed change from each real venue database through
   encrypted, scoped storage. The runner removes both stream prefixes and checks that
   continuous restore now fails. An independently retained snapshot still restores.

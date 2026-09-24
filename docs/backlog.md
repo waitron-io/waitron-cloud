@@ -71,7 +71,7 @@ now provides encrypted scoped storage, protected key versions, an immutable snap
 restore verification, retention and owner-bound recovery operations. Two real Waitron
 snapshots restore independently of deleted Litestream data, including after key rotation.
 These are local APIs and test fixtures. The customer snapshot catalogue is implemented;
-installation-authenticated capture delivery and upload-credential renewal are implemented locally; capture scheduling and complete replacement activation remain open. The pairing runner still uses synthetic observations; only the
+installation-authenticated capture delivery, upload-credential renewal and scheduled snapshots with durable local retries are implemented locally; complete replacement activation remains open. The pairing runner still uses synthetic observations; only the
 separate remote runner proves a tunnel. Waitron owns the remaining SQLite slice-2 sealed-state row, stream supervisor and
 cold-restore contract. Recheck those interfaces before wiring complete continuous recovery. The full two-venue milestone remains unproved.
 The [registration plan](registration-implementation-plan.md) now sequences persistence,
@@ -374,10 +374,14 @@ mobile notifications separately.
   24 hours; cleanup waits another 16 minutes and keeps tombstones. PostgreSQL tests cover
   concurrent workers, lease takeover and restart; the two-server proof uses this queue.
   The [authenticated capture adapter](authenticated-captures.md) now uses bound installation proofs,
-  scoped upload grants and authority checks after storage waits. The local uploader
-  buffers up to 512 MiB with a 30-second total deadline; scheduled real-venue uploads need
-  a measured transfer budget, bounded retries/streaming and deliberate-cancellation handling. Waitron supplies the signed client
-  and conditional upload, with exact publication retries. Next: scheduled capture and durable local archive spooling,
+  scoped upload grants and authority checks after storage waits. Waitron now schedules daily
+  captures, assigns monthly retention to the first successful capture of each venue-local
+  month and persists one encrypted archive for exact retries across restart. The file
+  uploader streams with a 14-minute/credential-expiry deadline and bounded retry backoff;
+  deliberate shutdown is not an outage. The local proof crashes after upload and restores
+  the resumed snapshot without recapture. Archive assembly still uses an in-memory format with a
+  512 MiB archive limit. Next: measure production uplink budgets and spool disk use, stream archive
+  assembly, and implement
   customer recovery screens, streaming object I/O beyond the current 512 MiB bound,
   tombstone/job-history retention, master-key operations and production verifier isolation.
   Measure scheduling sweeps at the intended deployment scale and tune their cadence
@@ -385,8 +389,9 @@ mobile notifications separately.
   Retention, restore checks, export, deletion and access review;
   define what survives subscription termination and for how long.
   The catalogue implements the starting snapshot policy: daily for 30 days, monthly for 12 months
-  and longer paid retention for selected snapshots. Define snapshot timing, monthly
-  selection and missed-snapshot handling; validate storage costs before pricing.
+  and longer paid retention for selected snapshots. Daily timing follows the venue business-day cutover with stable jitter; the first successful
+  capture per local month gets monthly retention, and missed runs make one current copy.
+  Validate storage costs before pricing.
   Validate the inherited continuous-backup retention baseline. Protect the last verified snapshot from automatic
   expiry while the backup subscription is active. Specify verification before a newer
   snapshot takes its place; test failed new snapshots and interrupted cleanup. Explicit

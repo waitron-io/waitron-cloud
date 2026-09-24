@@ -320,6 +320,26 @@ try {
     "both encrypted snapshots restored by Waitron with integrity/schema checks, module hooks and network permission denied",
   );
   for (const item of snapshots) await stop(item.venue.server);
+  for (const item of snapshots) {
+    // The fixture owns the stopped venue exclusively, then exits before publication.
+    await assert.rejects(captureClient(item.venue.root, 'schedule', {ca:s3.ca,crashAfterUpload:true}), /Waitron capture client failed/);
+    const pending = JSON.parse(await readFile(join(item.venue.root,'cloud-snapshots/state.json'),'utf8')).pending;
+    assert(pending?.metadata);
+    const bytes = await readFile(join(item.venue.root,'cloud-snapshots/archive.enc'));
+    assert.deepEqual(receipt(bytes),{digest:pending.metadata.digest,size:pending.metadata.size});
+    const grant = await captureClient(item.venue.root,'reserve',{id:pending.id});
+    const resumed = await captureClient(item.venue.root,'schedule',{ca:s3.ca});
+    assert.equal(resumed.created,0,'Restart must reuse the persisted ciphertext');
+    assert.equal(resumed.point.id,pending.id);
+    assert.equal(resumed.point.digest,pending.metadata.digest);
+    assert.equal(resumed.point.retention,'monthly');
+    const idle = await captureClient(item.venue.root,'schedule',{ca:s3.ca});
+    assert.equal(idle.created,0,'Restart before the next due time must not make another copy');
+    const target = await root();
+    await writeFile(join(target,'input.backup.enc'),bytes,{mode:0o600});
+    await worker(target,'restore',{recoveryKey:grant.recoveryKey,sourceNodeId:resumed.point.sourceNodeId,modules:resumed.point.modules,expectedVenue:item.captured.venueName});
+  }
+  record('scheduled production archives survive a process crash after upload, resume byte-for-byte without recapture and restore independently');
   const streams = [];
   for (const snapshot of snapshots)
     streams.push(

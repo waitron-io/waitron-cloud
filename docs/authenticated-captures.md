@@ -41,8 +41,8 @@ Keep the same UUID, bytes and metadata when retrying. Reserve renews temporary
 credentials against the original key version, even after key rotation. A repeated
 upload can receive an object-exists response; publication checks its actual digest
 and size. Changed metadata conflicts. Exact publication retries return the saved point,
-including after the capture's ordinary deadline. Scheduling and durable local archive
-spooling are the next Waitron task; these methods do not run backups automatically.
+including after the capture's ordinary deadline. Waitron now runs scheduled delivery
+for a configured test installation on its serving primary.
 
 Captures expire after 24 hours. New storage credentials last at most 15 minutes. Stopping
 Cloud access or disabling the service prevents new grants and publication, but already
@@ -67,3 +67,33 @@ Run the two-server proof in [local backups](local-backups.md) to exercise actual
 Waitron signatures, scoped object upload retries, publication retries, rotation and
 restore. PostgreSQL tests separately cover revocation during provider waits and lease
 expiry while an installation lock or object write blocks.
+
+## Scheduled delivery and restart
+
+Waitron takes a first snapshot when the service is configured, then runs daily after
+its venue business-day cutover using the existing stable scheduling offset. The first
+successful capture in a venue-local calendar month gets monthly retention. Restart
+keeps the saved next due time; a missed run creates one current snapshot.
+
+The server stores one pending encrypted archive and its capture ID/metadata under
+`cloud-snapshots` in its state directory. It does not save temporary upload credentials
+or the Cloud recovery key. A retry first asks Cloud to confirm publication, then renews
+credentials if upload is still needed. A lost successful publication reply can therefore
+be recovered after the upload deadline. After 24 hours, an unpublished capture gets one
+last publication attempt before Waitron discards it and makes a current copy.
+
+The file uploader streams from disk and verifies the saved size and digest before
+sending. Each attempt is bounded by 14 minutes or credential expiry minus five seconds,
+whichever is earlier. Failed attempts back off from one minute to at most 15 minutes;
+shutdown cancellation does not record an outage. Local operator-key backups keep their
+own schedule and destinations. Disabling the Cloud service pauses its pending delivery;
+revocation or a changed installation binding discards the pending archive.
+
+Archive assembly still uses the existing in-memory format and the 512 MiB bound.
+Temporary plaintext database copies are kept in a private staging directory, removed
+after capture and cleaned on the next eligible worker tick after a crash. Allow space
+for staging as well as the encrypted archive. Production uplink sizing and archive
+format streaming remain follow-ups. The local proof checks process restart and restore;
+the HTTPS test checks an acknowledgement delayed beyond 30 seconds, not a production
+throughput guarantee. Malformed local metadata fails visibly instead of resetting the
+schedule silently.
