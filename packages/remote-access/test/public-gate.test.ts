@@ -1,0 +1,57 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {createServer,request} from 'node:http';
+import {createServer as httpsServer} from 'node:https';
+import {execFileSync} from 'node:child_process';
+import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {randomBytes,createHash} from 'node:crypto';
+import {createPublicGate} from '../src/public-gate.ts';
+const host='sol.example.test';
+async function fixture(){
+ let now=Date.now(),available=true;
+ const root=await mkdtemp(join(tmpdir(),'cloud-gate-pki-'));
+ execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=staff.sol.example.test','-addext','subjectAltName=DNS:staff.sol.example.test','-keyout',join(root,'key.pem'),'-out',join(root,'cert.pem')],{stdio:'ignore'});
+ const key=await readFile(join(root,'key.pem')),certificate=await readFile(join(root,'cert.pem'));await rm(root,{recursive:true});
+ let upstream=0;let headers:Record<string,unknown>={};
+ const venue=httpsServer({key,cert:certificate},(req,res)=>{upstream++;headers=req.headers;if(!available){res.statusCode=503;res.end();return;}res.setHeader('Set-Cookie','staff=private');res.end('available');});await new Promise<void>(r=>venue.listen(0,'127.0.0.1',r));const address=venue.address();assert.ok(address&&typeof address!=='string');
+ const gate=createPublicGate({key:randomBytes(32),now:()=>now,difficulty:8,ca:certificate,routes:()=>[{publicHostname:host,staffHostname:'staff.sol.example.test',address:'127.0.0.1',port:address.port}]});
+ const server=createServer(gate.handle);await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const bound=server.address();assert.ok(bound&&typeof bound!=='string');
+ const send=(path='/public/availability',extra:Record<string,string>={},method='GET',body?:string)=>new Promise<Response>((resolve,reject)=>{
+  const req=request({host:'127.0.0.1',port:bound.port,path,method,headers:{host,'x-waitron-client-ip':'192.0.2.2','x-waitron-sni':host,...extra}},res=>{const chunks:Buffer[]=[];res.on('data',chunk=>chunks.push(chunk));res.on('end',()=>{const headers=new Headers();for(const [key,value]of Object.entries(res.headers)){if(Array.isArray(value))for(const v of value)headers.append(key,v);else if(value)headers.set(key,value);}resolve(new Response(res.statusCode===204?null:Buffer.concat(chunks),{status:res.statusCode!,headers}));});});req.on('error',reject);req.end(body);
+ });
+ return {send,gate,advance:(ms:number)=>{now+=ms;},unavailable:()=>{available=false;},count:()=>upstream,headers:()=>headers,async close(){server.closeAllConnections();venue.closeAllConnections();await Promise.all([new Promise<void>(r=>server.close(()=>r())),new Promise<void>(r=>venue.close(()=>r()))]);}};
+}
+function solve(challenge:string,bits:number){for(let n=0;;n++){const hash=createHash('sha256').update(`${challenge}:${n}`).digest();if(hash.readUInt32BE(0)<2**(32-bits))return n;}}
+test('public challenge gates actual HTTPS forwarding and strips staff credentials and cookies',async()=>{
+ const f=await fixture();try{
+  assert.equal((await f.send('/management-api/session')).status,404);assert.equal((await f.send('/public/availability',{},'POST')).status,405);
+  assert.equal((await f.send('/public/availability',{'x-waitron-sni':'other.example.test'})).status,421);
+  const blocked=await f.send();assert.equal(blocked.status,403);assert.equal(f.count(),0);
+  const challenge=await (await f.send('/_cloud/challenge')).json() as {challenge:string;difficulty:number};
+  const answer=await f.send('/_cloud/solve',{'content-type':'application/json'},'POST',JSON.stringify({challenge:challenge.challenge,nonce:solve(challenge.challenge,challenge.difficulty)}));assert.equal(answer.status,204);
+  const cookie=answer.headers.get('set-cookie')!.split(';')[0]!;assert.match(answer.headers.get('set-cookie')!,/Secure/);assert.match(answer.headers.get('set-cookie')!,/HttpOnly/);
+  const good=await f.send('/public/availability',{cookie:cookie+'; management_session=stolen',authorization:'Bearer staff-secret','x-forwarded-host':'staff.sol.example.test'});
+  assert.equal(good.status,200);assert.equal(await good.text(),'available');assert.equal(good.headers.get('set-cookie'),null);assert.equal(f.count(),1);
+  assert.equal(f.headers().cookie,undefined);assert.equal(f.headers().authorization,undefined);assert.equal(f.headers()['x-forwarded-host'],undefined);
+  assert.equal((await f.send('/public/availability',{cookie:cookie+'x'})).status,403);
+  assert.equal((await f.send('/public/availability',{cookie,'x-waitron-client-ip':'192.0.2.3'})).status,403);assert.equal(f.count(),1);
+ }finally{await f.close();}
+});
+
+test('malformed Host ports are refused before issuing challenges',async()=>{
+ const f=await fixture();try{for(const value of [host+':junk',host+':443:80',host+':0',host+':65536'])assert.equal((await f.send('/_cloud/challenge',{host:value})).status,421,value);assert.equal(f.count(),0);}finally{await f.close();}
+});
+test('expired proof and access, request quotas and unavailable venues stay bounded',async()=>{
+ const f=await fixture();try{
+  const challenge=await (await f.send('/_cloud/challenge')).json() as {challenge:string;difficulty:number};const body=JSON.stringify({challenge:challenge.challenge,nonce:solve(challenge.challenge,challenge.difficulty)});
+  const answer=await f.send('/_cloud/solve',{},'POST',body);assert.equal(answer.status,204);const cookie=answer.headers.get('set-cookie')!.split(';')[0]!;
+  f.unavailable();assert.equal((await f.send('/public/availability',{cookie})).status,503);assert.equal(f.gate.stats().active,0);
+  f.advance(120001);assert.equal((await f.send('/_cloud/solve',{},'POST',body)).status,403);
+  f.advance(180000);assert.equal((await f.send('/public/availability',{cookie})).status,403);assert.equal(f.count(),1);
+  assert.equal((await f.send('/_cloud/solve',{},'POST','{')).status,400);
+  assert.equal((await f.send('/_cloud/solve',{},'POST',JSON.stringify({challenge:'forged',nonce:0}))).status,403);
+  f.advance(60001);for(let i=0;i<120;i++)assert.equal((await f.send('/_cloud/challenge')).status,200);assert.equal((await f.send('/_cloud/challenge')).status,429);assert.equal(f.count(),1);assert.equal(f.gate.stats().buckets,1);
+ }finally{await f.close();}
+});

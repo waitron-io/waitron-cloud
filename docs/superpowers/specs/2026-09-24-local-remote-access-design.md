@@ -22,8 +22,9 @@ and provider portability depend on an external account. Linux peers are the init
 runtime; the test network lives entirely in Docker, without changing the host network.
 
 Cloud owns the commercial gateway/provisioning code. Waitron owns certificate keys,
-CSR creation, installing its certificate, applying its local tunnel configuration and
-reporting probe results. Control leases never grant gateway or storage access.
+CSR creation, installing its certificate and reporting probe results. The local runner
+uses a Linux peer bridge to the real Waitron server; an appliance tunnel installer
+is a later deployment task. Control leases never grant gateway or storage access.
 
 ## Placement and authority
 
@@ -43,7 +44,9 @@ must not extend expiry or accept an older manifest. Every export gets a durable 
 cell sequence, including unchanged-route renewals, so replay cannot extend expiry. Local LAN HTTPS is independent.
 
 Staff connections have global/per-source/per-venue connection ceilings and a five-second
-ClientHello deadline. Public connections route to a separate HTTPS handler. Unknown SNI
+ClientHello deadline. Public connections route to a separate HAProxy HTTPS frontend, which passes requests
+to a loopback-only application gate. A PROXY-protocol hop preserves the client address;
+HAProxy overwrites the client-address and SNI headers before the trusted loopback hop. Unknown SNI
 is refused. Do not publish ECH configuration; encrypted ClientHello with an unrecognised
 outer name is refused, because passthrough cannot inspect its inner hostname. Venue peers can address only the gateway /32; gateway forwarding between
 peers is denied even if a malicious peer changes its routes. No general venue LAN
@@ -53,7 +56,7 @@ routes or SSH capability is granted.
 
 Assign staff/public names under a configured operator-owned suffix; never infer ownership
 of a customer-supplied hostname. Return CNAME instructions for a custom name and its
-_acme-challenge delegation; activate only after authoritative DNS proves the exact
+_acme-challenge delegation; activate only after DNS resolution proves the exact
 expected target. Reject duplicate, wildcard, IP, mixed-case/noncanonical and unrelated
 CSR names. The venue generates a private key and CSR; only the CSR goes to Cloud.
 Cloud requests a DNS-01 certificate for exactly the assigned/verified staff name and
@@ -62,8 +65,8 @@ returns only the chain. Public certificate keys remain Cloud-owned.
 Use an ACME client with Let's Encrypt-compatible endpoints. Local tests use Pebble with
 real DNS-01 validation and a test root passed explicitly to the client. Never disable
 certificate verification or enable always-valid challenges. Test certificate replacement
-with a new serial and fresh connections. Renew with 30 days left (or a proportional
-short-lived test schedule); atomically replace certificate files, retaining the last
+with a new serial and fresh connections. Run the operator certificate command daily; it renews with 30 days left (or in the
+last third of a shorter certificate lifetime); atomically replace certificate files, retaining the last
 valid certificate on failure. Load new TLS context without restarting trading.
 
 The local test DNS resolver answers the staff name with the venue-side address and
