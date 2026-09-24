@@ -16,5 +16,5 @@ export function validInstallation(value:unknown):value is AccountInstallation {
 function validOverview(value:unknown):boolean{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;const v=value as Record<string,unknown>;
  const date=(s:unknown)=>s===null||(typeof s==='string'&&Number.isFinite(Date.parse(s)));
- return ['organisationName','businessName'].every(k=>typeof v[k]==='string'&&v[k].length>0&&v[k].length<=200)&&(v.countryCode===null||(typeof v.countryCode==='string'&&/^[A-Z]{2}$/.test(v.countryCode)))&&date(v.latestSnapshotAt)&&date(v.verifiedSnapshotAt);
+ return ['organisationName','businessName'].every(k=>typeof v[k]==='string'&&v[k].length>0&&[...v[k]].length<=200)&&(v.countryCode===null||(typeof v.countryCode==='string'&&/^[A-Z]{2}$/.test(v.countryCode)))&&date(v.latestSnapshotAt)&&date(v.verifiedSnapshotAt);
 }

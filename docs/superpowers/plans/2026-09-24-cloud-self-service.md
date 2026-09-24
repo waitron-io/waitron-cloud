@@ -42,4 +42,6 @@ connection/service state; this branch adds business context and actual snapshot 
 
 Overview implementation: focused API/controller checks and both bilingual phone-width
 browser journeys pass; existing stop-access, lost-reply and stale-observation assertions
-remain. The organisation selector uses an explicit accessible label. Review/CI follow.
+remain. The organisation selector uses an explicit accessible label. The isolated run-it review found no blocker. Follow-up regression checks cover metadata
+after revocation, deleted snapshots, name fallback and legacy/Unicode names. CI is the
+remaining branch gate.

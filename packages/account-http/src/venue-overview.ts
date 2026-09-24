@@ -12,7 +12,7 @@ export async function venueOverview(pool:Pool,token:string,installations:Install
    FROM venues v JOIN organisations o ON o.id=v.organisation_id JOIN legal_businesses b ON b.id=v.legal_business_id
    WHERE v.id=ANY($1::uuid[]) AND v.organisation_id=ANY($2::uuid[])`,[installations.map(i=>i.venueId),memberships.rows.map(m=>m.organisation_id)]);
   const result=installations.flatMap(i=>{const row=rows.rows.find(r=>r.id===i.venueId&&r.organisation_id===i.organisationId);if(!row)return [];
-   return [{...i,canRevoke:memberships.rows.find(m=>m.organisation_id===i.organisationId).is_owner,overview:{organisationName:row.organisation_name??i.organisationId,businessName:row.business_name??i.legalBusinessId,countryCode:row.country_code,latestSnapshotAt:row.latest_snapshot_at?.toISOString()??null,verifiedSnapshotAt:row.verified_snapshot_at?.toISOString()??null}}];});
+   return [{...i,canRevoke:memberships.rows.find(m=>m.organisation_id===i.organisationId).is_owner,overview:{organisationName:row.organisation_name?.trim()??i.organisationId,businessName:row.business_name?.trim()??i.legalBusinessId,countryCode:row.country_code,latestSnapshotAt:row.latest_snapshot_at?.toISOString()??null,verifiedSnapshotAt:row.verified_snapshot_at?.toISOString()??null}}];});
   await resolveSession(client,token,{touch:false});return result;
  });
 }

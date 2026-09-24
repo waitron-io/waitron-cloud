@@ -60,16 +60,29 @@ test('venue overview includes public business context and verified snapshot time
  const objects=new Map<string,Buffer>(),vault=new BackupKeyVault(randomBytes(32));
  const backups=new BackupCatalogue(db.pool,vault,()=>({async read(k){return objects.get(k)!;},async put(k,b){objects.set(k,Buffer.from(b));return receipt(b);},async remove(k){objects.delete(k);}}));
  await backups.provision(id,{endpoint:'https://storage.test',bucket:'venue-snapshots',region:'local'});
- const dates=[3,2,1].map(days=>new Date(Date.now()-days*86400000).toISOString());let secret='';
- for(let n=0;n<3;n++){
+ const dates=[4,3,2,1].map(days=>new Date(Date.now()-days*86400000).toISOString());let secret='';
+ for(let n=0;n<4;n++){
   const capture=await backups.reserveCapture(id,randomUUID()),bytes=Buffer.from('archive '+n);secret=capture.keys.recoveryKey;objects.set(capture.incomingKey,bytes);
   const point=await backups.publish(id,capture.id,{...receipt(bytes),capturedAt:dates[n]!,retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}});
   if(n===0)await backups.verify(point.id,'test-worker',async()=>{});
   if(n===1)await assert.rejects(backups.verify(point.id,'test-worker',async()=>{throw Error('bad archive');}));
   if(n===2)await db.pool.query('UPDATE backup_points SET deleting=true WHERE id=$1',[point.id]);
+  if(n===3)await db.pool.query('UPDATE backup_points SET deleted_at=clock_timestamp() WHERE id=$1',[point.id]);
  }
  const response=await browser('');assert.equal(response.status,200);const json=await response.json();
  assert.deepEqual(json.installations[0].overview,{organisationName:'Sol',businessName:'Sol SL',countryCode:'ES',latestSnapshotAt:dates[1],verifiedSnapshotAt:dates[0]});
  assert(!JSON.stringify(json).includes(secret));assert(!JSON.stringify(json).includes('snapshots/'));
  await db.pool.query('DELETE FROM organisation_memberships');assert.deepEqual(await venueOverview(db.pool,/__Host-cloud_session=([^;]+)/.exec(cookie)![1]!,json.installations),[]);assert.deepEqual(await (await browser('')).json(),{installations:[]});
+});
+
+test('overview normalises legacy names and falls back to identifiers for unnamed businesses',async()=>{
+ await db.pool.query('UPDATE organisations SET name=$1',[' '+ 'x'.repeat(200)+' ']);
+ await db.pool.query('UPDATE legal_businesses SET name=$1',[' Sol SL ']);
+ let response=await browser('');assert.equal(response.status,200);let item=(await response.json()).installations[0];
+ assert.equal(item.overview.organisationName,'x'.repeat(200));assert.equal(item.overview.businessName,'Sol SL');
+ await db.pool.query('UPDATE organisations SET name=NULL');await db.pool.query('UPDATE legal_businesses SET name=NULL');
+ await db.pool.query('UPDATE organisation_memberships SET is_owner=false');
+ response=await browser('');assert.equal(response.status,200);item=(await response.json()).installations[0];
+ assert.equal(item.overview.organisationName,item.organisationId);assert.equal(item.overview.businessName,item.legalBusinessId);assert.equal(item.canRevoke,false);
+ assert.equal((await browser('/revoke',{installationId:id})).status,403);
 });

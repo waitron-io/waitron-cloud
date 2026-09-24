@@ -9,7 +9,7 @@ export class InstallationController {
  account(id:string|undefined){if(id!==this.#account){this.#account=id;this.#generation++;this.installations=[];this.selectedOrganisation=undefined;this.confirming=undefined;this.pending=false;this.loaded=false;this.error=undefined;}}
  get organisations(){return [...new Map(this.installations.map(i=>[i.organisationId,{id:i.organisationId,name:i.overview?.organisationName??i.organisationId}])).values()].sort((a,b)=>a.name.localeCompare(b.name)||a.id.localeCompare(b.id));}
  get visible(){return this.installations.filter(i=>i.organisationId===this.selectedOrganisation).sort((a,b)=>(a.overview?.businessName??a.legalBusinessId).localeCompare(b.overview?.businessName??b.legalBusinessId)||a.venueId.localeCompare(b.venueId));}
- selectOrganisation(id:string){if(this.pending||!this.organisations.some(o=>o.id===id))return;this.selectedOrganisation=id;this.confirming=undefined;this.error=undefined;this.#changed();}
+ selectOrganisation(id:string){if(this.pending||!this.organisations.some(o=>o.id===id))return;this.selectedOrganisation=id;this.confirming=undefined;this.#changed();}
  get waiting(){return Math.max(0,Math.ceil((this.retryAt-Date.now())/1000));}
  choose(id?:string){if(this.pending)return;this.confirming=this.installations.some(i=>i.installationId===id&&i.canRevoke&&!i.revokedAt)?id:undefined;this.error=undefined;this.#changed();}
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>,write=false){this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?'forbidden':write?'stopUncertain':'unavailable';}

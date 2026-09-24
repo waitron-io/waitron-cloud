@@ -1,3 +1,4 @@
+import {validInstallation} from '../src/installation-types.ts';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {InstallationController} from '../src/installation-controller.ts';
@@ -27,7 +28,12 @@ test('one organisation is visible at a time and account changes clear selection'
  const c=new InstallationController(()=>{},async<T>()=>({ok:true,value:{installations:items} as T}));c.account('owner');await c.load();
  assert.equal(c.organisations.length,2);assert.equal(c.visible.length,1);
  c.selectOrganisation(otherId);assert.equal(c.visible[0]?.organisationId,otherId);
- c.choose(otherId);c.selectOrganisation(id);assert.equal(c.confirming,undefined);
+ c.choose(otherId);c.error='unavailable';c.selectOrganisation(id);assert.equal(c.confirming,undefined);assert.equal(c.error,'unavailable');
  c.selectOrganisation('unknown');assert.equal(c.visible[0]?.organisationId,id);
  c.account(undefined);assert.deepEqual(c.visible,[]);assert.equal(c.selectedOrganisation,undefined);
+});
+
+test('overview accepts database character limits for Unicode names',()=>{
+ const item={...view,services:['remote_access','continuous_backup','retained_snapshots'].map(service=>({service,state:'unconfigured',health:'unknown',observedAt:null})),overview:{organisationName:'☀️'.repeat(100),businessName:'🌞'.repeat(200),countryCode:'ES',latestSnapshotAt:null,verifiedSnapshotAt:null}};
+ assert.equal(validInstallation(item),true);item.overview.businessName+='x';assert.equal(validInstallation(item),false);
 });

@@ -41,6 +41,7 @@ for(const locale of ['en','es'] as const)test(`${locale} installation status and
   let revokes=0;await page.route('**/installations/revoke',async route=>{revokes++;const response=await route.fetch();if(revokes===1)await route.abort('failed');else await route.fulfill({response});});
   await page.getByRole('button',{name:confirm,exact:true}).click();await page.getByText(locale==='en'?'We could not confirm whether access stopped. Retry or refresh the status.':'No hemos podido confirmar si se detuvo el acceso. Reinténtalo o actualiza el estado.').waitFor();
   await page.getByRole('button',{name:confirm,exact:true}).click();await page.getByText(stopped,{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:stop,exact:true}).count(),0);
+  await page.getByRole('heading',{name:/Sol SL/}).waitFor();assert.equal(await page.locator('time[datetime="'+capturedAt+'"]').count(),2);
   await page.reload();await page.getByText(stopped,{exact:true}).waitFor();assert.equal((await f.db.pool.query('SELECT count(*) FROM venues')).rows[0].count,'2');
  }finally{await f.close();}
 });
