@@ -36,7 +36,8 @@ times. It checks real staff logins, cross-venue cookie rejection, an actual brow
 Worker solving the bot challenge, zero upstream calls for rejected public traffic,
 peer isolation after malicious route expansion, live certificate renewal, removal of
 an established revoked connection, cache expiry across restart and corrupt-cache
-startup refusal. A fresh DNS client then reaches trusted LAN HTTPS without valid
+startup refusal. `node scripts/test-gateway-cache-loss.mjs` separately proves refusal
+when a previously initialized gateway loses its accepted cache. A fresh DNS client then reaches trusted LAN HTTPS without valid
 gateway authority. Normal exit removes every owned container and temporary state.
 
 The test root is trusted explicitly by its test clients. It never installs a system
@@ -78,7 +79,10 @@ An export file contains `cellId`, `signingKeyFile` (Ed25519 PEM), `output` and o
 `watch: true`. Watch mode exports every thirty seconds. The gateway reads the output
 every second and accepts only increasing, signed sequences for its own cell. Exports
 expire ten minutes after signing. Failed export keeps the previous file, whose original
-expiry still applies. Keep the signing key outside the gateway; mount only its public key.
+expiry still applies. Preserve the whole state directory during replacement, including its initialization
+marker and accepted configuration. Missing or corrupt established state needs operator
+recovery; do not delete the marker to make an old export acceptable.
+Keep the signing key outside the gateway; mount only its public key.
 
 The local image runs `src/gateway-cli.ts` with `NET_ADMIN` inside its isolated network
 namespace. Mount `/input` read-only and `/state` writable. Input holds `manifest.json`,
