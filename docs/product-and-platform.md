@@ -649,3 +649,12 @@ of a venue already connected to an organisation remain implementation decisions.
 
 Use the [backlog](backlog.md) to track these decisions and the implementation slices
 for the initial remote access and backup services.
+
+## Local remote-access implementation
+
+The [local remote-access proof](local-remote-access.md) now exercises two real Waitron
+servers behind one replaceable WireGuard/HAProxy cell. It implements the agreed staff
+TLS passthrough and public challenge boundary, venue-owned certificate keys, ACME
+renewal, LAN DNS override, route isolation and expiry/revocation. Operator commands
+provision placements and export signed configuration. Customer setup, public deployment
+and managed backup/replacement integration remain separate milestones.

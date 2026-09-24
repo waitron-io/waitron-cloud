@@ -1,0 +1,21 @@
+import {readFile,writeFile} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+import {createServer,connect,type Socket} from 'node:net';
+import {isAddress,isPeerKey} from './manifest.ts';
+const config=JSON.parse(await readFile('/input/peer.json','utf8')) as {address:string;privateKey:string;gatewayPublicKey:string;gatewayEndpoint:string;upstreamHost:string;upstreamPort:number};
+if(!isAddress(config.address)||!isPeerKey(config.privateKey)||!isPeerKey(config.gatewayPublicKey)||!/^\d+\.\d+\.\d+\.\d+:51820$/.test(config.gatewayEndpoint)||!['host.docker.internal','127.0.0.1'].includes(config.upstreamHost)||!Number.isInteger(config.upstreamPort)||config.upstreamPort<1||config.upstreamPort>65535)throw new Error('Invalid local peer configuration');
+const gateway=config.address.split('.').slice(0,3).join('.')+'.1';
+const run=(command:string,args:string[])=>execFileSync(command,args,{stdio:'pipe',timeout:5000});
+run('ip',['link','add','wg-cloud','type','wireguard']);run('ip',['address','add',config.address+'/32','dev','wg-cloud']);
+await writeFile('/tmp/wg.conf',`[Interface]\nPrivateKey = ${config.privateKey}\n\n[Peer]\nPublicKey = ${config.gatewayPublicKey}\nEndpoint = ${config.gatewayEndpoint}\nAllowedIPs = ${gateway}/32\nPersistentKeepalive = 25\n`,{mode:0o600});
+run('wg',['setconf','wg-cloud','/tmp/wg.conf']);run('ip',['link','set','wg-cloud','up']);run('ip',['route','add',gateway+'/32','dev','wg-cloud']);
+run('iptables',['-A','INPUT','-i','wg-cloud','-s',gateway+'/32','-p','tcp','--dport','443','-j','ACCEPT']);run('iptables',['-A','INPUT','-i','wg-cloud','-j','DROP']);run('iptables',['-P','FORWARD','DROP']);
+const sockets=new Set<Socket>();
+const server=createServer(socket=>{
+ const upstream=connect(config.upstreamPort,config.upstreamHost);sockets.add(socket);sockets.add(upstream);
+ const close=()=>{socket.destroy();upstream.destroy();sockets.delete(socket);sockets.delete(upstream);};socket.on('error',close);upstream.on('error',close);socket.on('close',close);upstream.on('close',close);
+ socket.pipe(upstream);upstream.pipe(socket);
+});
+await new Promise<void>(resolve=>server.listen(443,config.address,resolve));
+for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{for(const socket of sockets)socket.destroy();server.close();});
+console.log('peer.ready');

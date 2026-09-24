@@ -1,0 +1,62 @@
+import {createHmac,randomBytes,timingSafeEqual,createHash} from 'node:crypto';
+import {isIP} from 'node:net';
+import {request} from 'node:https';
+import type {IncomingMessage,ServerResponse} from 'node:http';
+interface Route {publicHostname:string;staffHostname:string;address:string;port:number}
+interface Options {key:Buffer;ca?:string|Buffer;routes:()=>Route[];difficulty?:number;now?:()=>number}
+const worker=`onmessage=async({data})=>{const encoder=new TextEncoder();for(let nonce=0;nonce<1000000000;nonce++){const hash=new DataView(await crypto.subtle.digest('SHA-256',encoder.encode(data.challenge+':'+nonce)));if(hash.getUint32(0)<2**(32-data.difficulty)){postMessage({challenge:data.challenge,nonce});return;}}};`;
+const script=`(async()=>{try{const challenge=await(await fetch('/_cloud/challenge')).json();const worker=new Worker('/_cloud/worker.js');worker.onmessage=async({data})=>{worker.terminate();const reply=await fetch('/_cloud/solve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(!reply.ok)throw Error();location.replace('/public/availability');};worker.postMessage(challenge);}catch{document.querySelector('p').textContent='Please reload to try again. / Vuelve a cargar para intentarlo de nuevo.';}})();`;
+/** Bind this handler to loopback only, behind HAProxy's overwritten client-IP/SNI headers. */
+export function createPublicGate(options:Options){
+ if(options.key.length!==32)throw new Error('invalid_gate_key');
+ const difficulty=options.difficulty??16;if(!Number.isInteger(difficulty)||difficulty<8||difficulty>22)throw new Error('invalid_difficulty');
+ const now=options.now??Date.now,buckets=new Map<string,{count:number;until:number}>();let active=0;
+ const counters={challenged:0,rejected:0,forwarded:0,unavailable:0};
+ function token(purpose:string,host:string,ip:string,lifetime:number){const payload=Buffer.from(JSON.stringify([purpose,host,ip,now()+lifetime,randomBytes(16).toString('base64url')])).toString('base64url');return payload+'.'+createHmac('sha256',options.key).update(payload).digest('base64url');}
+ function valid(value:string,purpose:string,host:string,ip:string){
+  try{if(value.length>1024)return false;const parts=value.split('.');if(parts.length!==2)return false;const [payload,signature]=parts as [string,string];const expected=createHmac('sha256',options.key).update(payload).digest();const received=Buffer.from(signature,'base64url');if(received.length!==32||received.toString('base64url')!==signature||!timingSafeEqual(received,expected))return false;
+   const bytes=Buffer.from(payload,'base64url');if(bytes.toString('base64url')!==payload)return false;const claims=JSON.parse(bytes.toString());return Array.isArray(claims)&&claims.length===5&&claims[0]===purpose&&claims[1]===host&&claims[2]===ip&&Number.isSafeInteger(claims[3])&&claims[3]>now();
+  }catch{return false;}
+ }
+ async function handle(req:IncomingMessage,res:ServerResponse){
+  const reply=(status:number,body='',type='text/plain; charset=utf-8')=>{res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"});res.end(body);};
+  try{
+   const ip=req.headers['x-waitron-client-ip'],sni=req.headers['x-waitron-sni'],host=req.headers.host?.split(':')[0];
+   if(typeof ip!=='string'||!isIP(ip)||typeof sni!=='string'||host!==sni||![sni,sni+':443'].includes(req.headers.host??'')){counters.rejected++;reply(421);return;}
+   const route=options.routes().find(r=>r.publicHostname===host);if(!route){counters.rejected++;reply(421);return;}
+   for(const [key,b]of buckets)if(b.until<=now())buckets.delete(key);
+   let bucket=buckets.get(ip);if(!bucket){if(buckets.size>=4096){counters.rejected++;reply(429);return;}bucket={count:0,until:now()+60000};buckets.set(ip,bucket);}
+   if(++bucket.count>120){counters.rejected++;reply(429);return;}
+   if(req.headers.upgrade||Number(req.headers['content-length']??0)>2048){counters.rejected++;reply(413);return;}
+   const path=req.url;
+   if(!['/public/availability','/_cloud/challenge','/_cloud/solve','/_cloud/challenge.js','/_cloud/worker.js'].includes(path??'')){counters.rejected++;reply(404);return;}
+   if(req.method!==(path==='/_cloud/solve'?'POST':'GET')){counters.rejected++;reply(405);return;}
+   if(path==='/_cloud/challenge.js'){reply(200,script,'application/javascript');return;}
+   if(path==='/_cloud/worker.js'){reply(200,worker,'application/javascript');return;}
+   if(path==='/_cloud/challenge'){reply(200,JSON.stringify({challenge:token('challenge',host!,ip,120000),difficulty}),'application/json');return;}
+   if(path==='/_cloud/solve'){
+    let body='';for await(const chunk of req){body+=chunk.toString();if(Buffer.byteLength(body)>2048){counters.rejected++;reply(413);return;}}
+    let value;try{value=JSON.parse(body);}catch{reply(400);return;}
+    if(!value||Object.keys(value).sort().join(',')!=='challenge,nonce'||typeof value.challenge!=='string'||!Number.isSafeInteger(value.nonce)||value.nonce<0||value.nonce>=1000000000
+     ||!valid(value.challenge,'challenge',host!,ip)||createHash('sha256').update(`${value.challenge}:${value.nonce}`).digest().readUInt32BE(0)>=2**(32-difficulty)){counters.rejected++;reply(403);return;}
+    res.setHeader('Set-Cookie',`__Host-waitron-public=${token('access',host!,ip,300000)}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=300`);reply(204);return;
+   }
+   const cookies=(req.headers.cookie??'').split(';').map(s=>s.trim()).filter(s=>s.startsWith('__Host-waitron-public='));
+   if(cookies.length!==1||!valid(cookies[0]!.slice('__Host-waitron-public='.length),'access',host!,ip)){
+    counters.challenged++;reply(403,'<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Checking your browser</title><body><h1>Checking your browser / Comprobando tu navegador</h1><p>Please wait a moment. / Espera un momento.</p><script src="/_cloud/challenge.js" defer></script></body></html>','text/html; charset=utf-8');return;
+   }
+   if(active>=64){counters.rejected++;reply(429);return;}active++;counters.forwarded++;
+   try{
+    const result=await new Promise<{status:number;body:Buffer}>((resolve,reject)=>{
+     const upstream=request({host:route.address,port:route.port,servername:route.staffHostname,ca:options.ca,method:'GET',path:'/public/availability',headers:{host:route.staffHostname,accept:'application/json'},timeout:5000,agent:false},response=>{
+      const chunks:Buffer[]=[];let size=0;response.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>65536){upstream.destroy(new Error('response_limit'));return;}chunks.push(chunk);});response.on('error',reject);response.on('end',()=>resolve({status:response.statusCode??502,body:Buffer.concat(chunks)}));
+     });upstream.on('timeout',()=>upstream.destroy(new Error('upstream_timeout')));upstream.on('error',reject);
+     const cancel=()=>{if(!res.writableEnded)upstream.destroy(new Error('client_closed'));};res.once('close',cancel);upstream.once('close',()=>res.off('close',cancel));upstream.end();
+    });
+    if(result.status!==200)throw new Error('unavailable');reply(200,result.body.toString(),'application/json');
+   }catch{counters.unavailable++;reply(503,'The venue is temporarily unavailable. / El local no está disponible temporalmente.');}
+   finally{active--;}
+  }catch{if(!res.headersSent)reply(400);else res.destroy();}
+ }
+ return {handle:(req:IncomingMessage,res:ServerResponse)=>{void handle(req,res);},stats:()=>({...counters,active,buckets:buckets.size})};
+}

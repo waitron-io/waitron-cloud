@@ -104,3 +104,10 @@ For an approved production relay, select `CLOUD_MAIL_TRANSPORT=smtp` and configu
 TLS, authentication and your sender using the [production email guide](docs/production-email-implementation.md).
 Spain is the preferred email-processing location. The adapter is implemented and tested
 against a local TLS server; no live provider account or sender is configured.
+
+## Local remote access
+
+Run two real Waitron servers through a shared gateway using the
+[local remote-access guide](docs/local-remote-access.md). It covers staff TLS passthrough,
+public bot controls, real certificate issuance, LAN DNS, revocation and gateway replacement.
+The commands use disposable local services; no AWS deployment is created.

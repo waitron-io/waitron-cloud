@@ -55,9 +55,13 @@ including restart and lost-completion recovery. Installation credential renewal,
 configuration, observations and revocation now work through key-bound one-hour leases.
 The account and Waitron screens show English/Spanish status and explicit stop-access
 confirmation. PostgreSQL and real two-server tests cover renewal/revocation races,
-lost replies, worker restart and venue isolation. Next, build the local remote-access
-adapter, then managed SQLite backups and replacement recovery. Services remain
-unconfigured; synthetic observations in the runner do not prove a tunnel or backup. Recheck the
+lost replies, worker restart and venue isolation. The [local remote-access proof](local-remote-access.md)
+now uses real WireGuard/HAProxy, two Waitron servers, ACME DNS validation, browser bot
+challenges, local DNS, gateway replacement, revocation and expiring route authority.
+Operator placement, signed export and certificate commands are implemented. Customer
+remote setup and production deployment remain open. Next: managed SQLite backups and
+replacement recovery. The pairing runner still uses synthetic observations; only the
+separate remote runner proves a tunnel. Recheck the
 new SQLite capture/restore interfaces before integrating backups; do not build a new
 PostgreSQL backup adapter for Waitron. The full two-venue milestone remains unproved.
 The [registration plan](registration-implementation-plan.md) now sequences persistence,
@@ -341,7 +345,7 @@ remains a separate exchange requiring both Cloud and local administrator proof.
 
 | Service | Design work still needed |
 | --- | --- |
-| Remote access (initial) | Public HTTPS terminates in Cloud for bot inspection; staff uses a separate hostname with TLS passthrough and network controls. Share a gateway within each cell, with separate venue tunnels and credentials. Define and test route/session isolation, traffic limits and legitimate automated-client handling. Provide assigned/custom domains and automated certificates; implement the preferred local DNS overrides with router-specific setup and offline/recovery tests. Decide the bootstrap role of waitron.local. Temporary unavailability while the venue is offline and short interruptions during cell replacement are accepted; define and test the cell recovery-time target. |
+| Remote access (initial) | The local two-venue adapter and operator commands are implemented; see [the executable proof](local-remote-access.md). Customer setup, live DNS/provider integration and deployment remain open. Public HTTPS terminates in Cloud for bot inspection; staff uses a separate hostname with TLS passthrough and network controls. Share a gateway within each cell, with separate venue tunnels and credentials. Define and test route/session isolation, traffic limits and legitimate automated-client handling. Provide assigned/custom domains and automated certificates; implement the preferred local DNS overrides with router-specific setup and offline/recovery tests. Decide the bootstrap role of waitron.local. Temporary unavailability while the venue is offline and short interruptions during cell replacement are accepted; define and test the cell recovery-time target. |
 | Backups (initial) | Implement self-service restore onto a replacement server, normally using the latest recoverable Litestream backup. Provision scoped storage access, show recovery-point time and backup health, alert on interruption, define retention and test restore against each provider selected for launch. Coordinate safe replacement activation with Waitron. |
 | SQLite snapshots (initial backup service) | Retain daily snapshots for 30 days and monthly snapshots for 12 months, with longer paid retention for selected snapshots. Each must remain restorable if continuous backup data disappears. Protect the last verified snapshot from automatic expiry while subscribed; verify a newer copy before replacing it and show stale backup health. Define schedule details, consistency, extended-retention terms and prices, and independent storage/deletion controls. Provide explicit snapshot selection and prove restoration with continuous backup data absent. |
 | Failover to cloud | Allocate a replacement instance, coordinate promotion with Waitron, connect devices, stream the new primary and support return to the venue. |

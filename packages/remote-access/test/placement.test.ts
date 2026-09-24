@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import {randomUUID,randomBytes,generateKeyPairSync} from 'node:crypto';
+import {before,after,test} from 'node:test';
+import {SignupStore,RegistrationStore} from '@waitron-cloud/registration';
+import {database} from '../../account-http/test/fixtures.ts';
+import {crypto} from 'acme-client';
+import {RemoteAccessStore} from '../src/placement.ts';
+const publicKey=()=>randomBytes(32).toString('base64');
+let db:Awaited<ReturnType<typeof database>>,store:RemoteAccessStore;
+before(async()=>{db=await database();store=new RemoteAccessStore(db.pool);});
+after(async()=>db?.close());
+test('two venues share one cell with distinct stable routes, independent configuration and revocation',async()=>{
+ const signup=new SignupStore(db.pool,db.outbox);await signup.request('remote@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert.ok('token' in mail);
+ const owner=await signup.complete(mail.token,{password:'a long enough test password',organisationName:'Cafés',legalBusinessName:'Cafés SL',countryCode:'ES'});
+ const registration=new RegistrationStore(db.pool);const installations=[];
+ for(let n=0;n<3;n++){
+  const key=generateKeyPairSync('ed25519'),input={operationId:randomUUID(),installationKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+  await registration.start(input);await registration.approveCloud(input,owner.accountId);await registration.approveLocal(input,randomUUID());installations.push(await registration.complete(input));
+ }
+ const cell={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'local.example.test',subnet:7,publicKey:publicKey(),endpoint:'gateway.example.test:51820'};
+ await store.createCell(cell);const a=installations[0]!,b=installations[1]!,keyA=publicKey(),keyB=publicKey();
+ const [one,two]=await Promise.all([store.provision(a.installationId,cell.id,keyA,443),store.provision(b.installationId,cell.id,keyB,443)]);
+ assert.notEqual(one.address,two.address);assert.notEqual(one.staffHostname,two.staffHostname);assert.equal(one.cellId,two.cellId);
+ assert.deepEqual(await new RemoteAccessStore(db.secondPool).provision(a.installationId,cell.id,keyA,443),one);
+ await assert.rejects(store.provision(b.installationId,cell.id,keyA,443),/placement_conflict/);
+ const first=await store.manifest(cell.id),second=await store.manifest(cell.id);assert.ok(second.sequence>first.sequence);assert.equal(first.routes.length,2);
+ const setup=await db.pool.query("SELECT state,configuration FROM installation_services WHERE installation_id=$1 AND service='remote_access'",[a.installationId]);assert.equal(setup.rows[0].state,'provisioning');assert.equal(setup.rows[0].configuration.staffHostname,one.staffHostname);
+ await assert.rejects(store.setHostname(b.installationId,'staff',`staff-v-${installations[2]!.venueId}.${cell.suffix}`,1,async name=>[name.startsWith('_acme')?'_acme-challenge.'+two.staffHostname:two.staffHostname]),/hostname_conflict/);
+ const custom='staff.cafe.example',dns=await store.hostnameInstructions(a.installationId,'staff',custom);
+ assert.equal(dns[0]!.value,one.staffHostname);
+ await assert.rejects(store.setHostname(a.installationId,'staff',custom,1,async()=>['wrong.example.test']),/dns_not_verified/);
+ await assert.rejects(store.setHostname(a.installationId,'staff',custom,0,async name=>[dns.find(r=>r.name===name)!.value]),/revision_conflict/);
+ const changed=await store.setHostname(a.installationId,'staff',custom,1,async name=>[dns.find(r=>r.name===name)!.value]);assert.equal(changed.staffHostname,custom);
+ const [,csr]=await crypto.createCsr({commonName:custom,altNames:[custom]});
+ assert.deepEqual(await store.authorizeCertificate(a.installationId,'staff',csr.toString()),{hostname:custom,dnsName:'_acme-challenge.'+one.staffHostname});
+ await assert.rejects(store.authorizeCertificate(b.installationId,'staff',csr.toString()),/invalid_csr/);
+ await assert.rejects(store.setHostname(b.installationId,'staff',custom,1,async name=>[name.startsWith('_acme')?'_acme-challenge.'+two.staffHostname:two.staffHostname]),/hostname_conflict/);
+ await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[a.installationId]);
+ const revoked=await store.manifest(cell.id);assert.deepEqual(revoked.routes.map(r=>r.installationId),[b.installationId]);
+ await assert.rejects(store.provision(a.installationId,cell.id,keyA,443),/revoked/);
+ await assert.rejects(store.authorizeCertificate(a.installationId,'staff',csr.toString()),/revoked/);
+});
