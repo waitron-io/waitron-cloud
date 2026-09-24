@@ -16,6 +16,8 @@ try{
  const now=Date.now();await writeFile(join(input,'manifest.json'),JSON.stringify(signManifest({version:1,audience:'waitron-cloud-gateway',cellId:cell,sequence:5,issuedAt:now,expiresAt:now+600000,routes:[]},key.privateKey)));
  const start=()=>{docker('run','-d','--name',name,'--cap-add','NET_ADMIN','-v',input+':/input:ro','-v',state+':/state','-e','GATEWAY_CELL_ID='+cell,'waitron-cloud-local-remote:dev');running=true;};
  start();await waitFor(async()=>JSON.parse(await readFile(join(state,'status.json'),'utf8')).sequence===5);
+ const priorPid=docker('exec',name,'pidof','haproxy');docker('exec',name,'pkill','-9','haproxy');
+ await waitFor(()=>{const pid=docker('exec',name,'pidof','haproxy');return pid&&pid!==priorPid;},3000);assert.equal(JSON.parse(await readFile(join(state,'status.json'),'utf8')).ready,true);console.log('PASS: dead HAProxy child restarted from unexpired authority');
  docker('rm','-f',name);running=false;await rm(join(state,'accepted.json'));start();
  await waitFor(()=>docker('inspect','--format','{{.State.Running}}',name)==='false',3000);
  assert.notEqual(docker('inspect','--format','{{.State.ExitCode}}',name),'0');console.log('PASS: lost accepted cache after initial start refuses restart');

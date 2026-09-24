@@ -21,3 +21,13 @@ test('a persistence or apply failure removes authority instead of leaving stale 
  const authority=new GatewayAuthority(key.publicKey,cellId,{persist:async()=>{throw Error('disk full');},apply:async()=>{throw Error('must not apply');},close:async()=>{close++;}});
  await assert.rejects(authority.accept(signManifest({version:1,audience:'waitron-cloud-gateway',cellId,sequence:1,issuedAt:now,expiresAt:now+1000,routes:[]},key.privateKey)),/disk full/);assert.equal(close,1);assert.equal(authority.routes.length,0);
 });
+test('an identical failed apply can retry without extending authority or admitting a same-sequence replacement',async()=>{
+ const key=generateKeyPairSync('ed25519'),now=Date.now(),cellId=randomUUID();let time=now,fail=true,closed=0,saves=0;
+ const value:GatewayManifest={version:1,audience:'waitron-cloud-gateway',cellId,sequence:7,issuedAt:now,expiresAt:now+1000,routes:[]};
+ const authority=new GatewayAuthority(key.publicKey,cellId,{persist:async()=>{saves++;},apply:async()=>{if(fail)throw Error('apply failed');},close:async()=>{closed++;}},()=>time),envelope=signManifest(value,key.privateKey);
+ await assert.rejects(authority.accept(envelope),/apply failed/);assert.equal(closed,1);assert.equal(authority.sequence,7);
+ await assert.rejects(authority.accept(signManifest({...value,expiresAt:now+2000},key.privateKey)),/invalid_manifest/);
+ fail=false;await authority.accept(envelope);assert.equal(saves,1);assert.equal(authority.hasAuthority,true);
+ await assert.rejects(authority.accept(envelope),/invalid_manifest/);
+ time=now+1000;await authority.tick();assert.equal(authority.hasAuthority,false);
+});

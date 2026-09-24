@@ -13,7 +13,7 @@ test('two venues share one cell with distinct stable routes, independent configu
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('remote@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert.ok('token' in mail);
  const owner=await signup.complete(mail.token,{password:'a long enough test password',organisationName:'Cafés',legalBusinessName:'Cafés SL',countryCode:'ES'});
  const registration=new RegistrationStore(db.pool);const installations=[];
- for(let n=0;n<2;n++){
+ for(let n=0;n<3;n++){
   const key=generateKeyPairSync('ed25519'),input={operationId:randomUUID(),installationKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
   await registration.start(input);await registration.approveCloud(input,owner.accountId);await registration.approveLocal(input,randomUUID());installations.push(await registration.complete(input));
  }
@@ -25,6 +25,7 @@ test('two venues share one cell with distinct stable routes, independent configu
  await assert.rejects(store.provision(b.installationId,cell.id,keyA,443),/placement_conflict/);
  const first=await store.manifest(cell.id),second=await store.manifest(cell.id);assert.ok(second.sequence>first.sequence);assert.equal(first.routes.length,2);
  const setup=await db.pool.query("SELECT state,configuration FROM installation_services WHERE installation_id=$1 AND service='remote_access'",[a.installationId]);assert.equal(setup.rows[0].state,'provisioning');assert.equal(setup.rows[0].configuration.staffHostname,one.staffHostname);
+ await assert.rejects(store.setHostname(b.installationId,'staff',`staff-v-${installations[2]!.venueId}.${cell.suffix}`,1,async name=>[name.startsWith('_acme')?'_acme-challenge.'+two.staffHostname:two.staffHostname]),/hostname_conflict/);
  const custom='staff.cafe.example',dns=await store.hostnameInstructions(a.installationId,'staff',custom);
  assert.equal(dns[0]!.value,one.staffHostname);
  await assert.rejects(store.setHostname(a.installationId,'staff',custom,1,async()=>['wrong.example.test']),/dns_not_verified/);

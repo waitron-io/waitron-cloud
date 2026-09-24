@@ -53,7 +53,11 @@ export class RemoteAccessStore {
  async setHostname(id:string,kind:'staff'|'public',custom:string,expectedRevision:number,resolve:typeof resolveCname=resolveCname):Promise<Placement>{
   const assigned=await this.#assigned(id,kind);
   if(!isHostname(custom)||!Number.isSafeInteger(expectedRevision)||expectedRevision<0)fail('invalid_hostname');
-  if(custom!==assigned)await verifyDelegation(custom,assigned,resolve);
+  // The complete operator namespace is reserved, including names for venues not provisioned yet.
+  if(custom!==assigned){
+   if((await this.#pool.query("SELECT id FROM remote_cells WHERE $1=suffix OR right($1,length(suffix)+1)='.'||suffix",[custom])).rowCount)fail('hostname_conflict');
+   await verifyDelegation(custom,assigned,resolve);
+  }
   try{return await transaction(this.#pool,async client=>{
    const row=(await client.query('SELECT * FROM installations WHERE id=$1 FOR UPDATE',[id])).rows[0];
    if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');if(row.configuration_revision!==expectedRevision)fail('revision_conflict');

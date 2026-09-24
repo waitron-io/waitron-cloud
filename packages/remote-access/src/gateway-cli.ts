@@ -22,14 +22,15 @@ run('ip',['address','replace',`10.77.${subnet}.1/24`,'dev','wg-cloud']);run('ip'
 run('iptables',['-P','FORWARD','DROP']);
 await atomic('wireguard.conf',`[Interface]\nPrivateKey = ${wgKey}\nListenPort = 51820\n`);run('wg',['syncconf','wg-cloud',join(root,'wireguard.conf')]);
 const children=new Set<ChildProcess>();let current:ChildProcess|undefined,lastRoutes='';
+const alive=()=>current?.exitCode===null&&current?.signalCode===null;
 async function stop(){for(const child of children)child.kill('SIGTERM');current=undefined;lastRoutes='';await atomic('wireguard.conf',`[Interface]\nPrivateKey = ${wgKey}\nListenPort = 51820\n`);run('wg',['syncconf','wg-cloud',join(root,'wireguard.conf')]);}
 async function apply(routes:GatewayRoute[]){
- const fingerprint=JSON.stringify(routes);if(fingerprint===lastRoutes&&current?.exitCode===null)return;
+ const fingerprint=JSON.stringify(routes);if(fingerprint===lastRoutes&&alive())return;
  await atomic('wireguard.conf',`[Interface]\nPrivateKey = ${wgKey}\nListenPort = 51820\n\n${renderWireGuard(routes)}`);
  run('wg',['syncconf','wg-cloud',join(root,'wireguard.conf')]);
  await atomic('haproxy.cfg',renderHaproxy(routes,{port:443,publicTlsPort:8444,gatePort:8080,certificateDirectory:'/input/public-certs'}));
  run('haproxy',['-c','-f',join(root,'haproxy.cfg')]);
- const args=['-db','-f',join(root,'haproxy.cfg'),...(current?.pid?['-sf',String(current.pid)]:[])];
+ const args=['-db','-f',join(root,'haproxy.cfg'),...(alive()&&current?.pid?['-sf',String(current.pid)]:[])];
  const child=spawn('haproxy',args,{stdio:['ignore','ignore','pipe']});children.add(child);child.stderr?.on('data',()=>{});child.once('exit',()=>children.delete(child));
  await new Promise<void>((resolve,reject)=>{child.once('error',reject);const timer=setTimeout(resolve,200);child.once('exit',()=>{clearTimeout(timer);reject(new Error('gateway_start_failed'));});});
  current=child;lastRoutes=fingerprint;
@@ -46,6 +47,10 @@ try{while(!stopping){
  await authority.tick();
  try{const text=await readFile(input,'utf8');if(text!==lastInput){await authority.accept(JSON.parse(text));lastInput=text;}}
  catch(error){if(error instanceof Error&&error.message!=='invalid_manifest')console.error('gateway.refresh_unavailable');}
- await atomic('status.json',JSON.stringify({sequence:authority.sequence,routes:authority.routes.length,...gate.stats()}));
+ if(authority.hasAuthority&&!alive()){
+  try{await apply(authority.routes);}catch{await stop();console.error('gateway.restart_unavailable');}
+ }
+ const ready=authority.hasAuthority&&alive();
+ await atomic('status.json',JSON.stringify({sequence:authority.sequence,ready,routes:ready?authority.routes.length:0,...gate.stats()}));
  await delay(1000);
 }}finally{await stop();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
