@@ -30,7 +30,7 @@ test('matching code creates exactly one owner-bound grant; target metadata conta
  assert.equal(pending.state,'awaiting_owner');assert.deepEqual(await f.requests.machine('start',t.proof('start')),pending);
  assert.equal((await f.requests.inspect(t.id,t.code,f.session.token,f.session.csrfToken)).state,'awaiting_owner');
  const input={pointId:f.point.id,oldServerUnavailable:true,acceptDataLoss:true};
- const approved=await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,input);
+ const [approved,concurrent]=await Promise.all([f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,input),new RecoveryRequests(db.secondPool,f.vault,origin).approve(t.id,t.code,f.session.token,f.session.csrfToken,input)]);assert.deepEqual(approved,concurrent);
  assert.equal(approved.state,'approved');assert.equal(approved.operationId,t.id);
  assert.deepEqual(await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,input),approved);
  assert.equal((await f.requests.machine('status',t.proof('status'))).operationId,t.id);

@@ -8,8 +8,9 @@ It creates no AWS resources and requires no live customer credentials.
 
 Install both repositories with their frozen pnpm lockfiles. Use Node 26 with network permission support for the restore verifier (tested with
 26.7.0), Docker, OpenSSL and network access for the pinned test binaries. Point to a
-Waitron checkout that includes both `apps/server/scripts/cloud-backup-fixture.ts` and
-`apps/server/scripts/cloud-capture-client-fixture.ts`. Export that path as
+Waitron checkout that includes `apps/server/scripts/cloud-backup-fixture.ts`,
+`apps/server/scripts/cloud-capture-client-fixture.ts` and
+`apps/server/scripts/cloud-recovery-client-fixture.ts`. Export that path as
 `WAITRON_CHECKOUT`, and build both portals before starting the servers:
 
 ```sh
@@ -43,8 +44,9 @@ without modifying your system trust settings. This needs Docker Desktop's
   refuses changed roles, expired identities and expired storage credentials.
 - The provider requires the correct SSE-C key for stream objects. Snapshots use
   Waitron's encrypted archive format and independent immutable retained objects.
-- Each real Waitron snapshot passes its compatibility checks, SQLite integrity check,
-  migrations and module restore hooks, including the fiscal module. The fixture
+- The independent verifier passes each real Waitron snapshot through compatibility
+  checks, SQLite integrity checks, migrations and module restore hooks, including
+  the fiscal module. That fixture
   never starts the restored server or its workers. It checks that ordinary Node
   network connections are denied; this is a test guard, not a hardened sandbox for
   hostile code (the TypeScript loader requires worker, child-process and addon access).
@@ -62,6 +64,13 @@ without modifying your system trust settings. This needs Docker Desktop's
 - An owner can recover an older-key snapshot after rotation with both original servers
   stopped. A wrong recovery key leaves the replacement database absent. No recovery
   grant activates trading, changes routing, retires an installation or re-enrols a node.
+
+- The guided path uses owner HTTP approval and the production Waitron replacement
+  client in fresh processes. It resumes the same request after restart, reconciles
+  a lost approval reply, downloads the bound object, stages it and runs the actual
+  cold-restore entry point. Venue contents, source identity and module hooks are
+  checked. Cloud stays pending through staging and changes only after the local
+  restore has succeeded and the replacement sends its completion report.
 
 The JSON receipt records exact repository heads, dirty flags, checks and stream
 restore timings. A dirty receipt is useful during development; use clean heads for

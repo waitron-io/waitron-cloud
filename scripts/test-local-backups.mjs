@@ -52,6 +52,12 @@ async function captureClient(dir,command,input){
  const timer=setTimeout(()=>child.kill('SIGKILL'),45000);
  try{const code=await new Promise(r=>child.once('exit',r));assert.equal(code,0,'Waitron capture client failed: '+error);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
 }
+async function recoveryClient(dir,command,input={}){
+ const child=spawn(process.execPath,['--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-recovery-client-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,CLOUD_TEST_ROOT:dir},stdio:['pipe','pipe','pipe']});
+ let output='',error='';child.stdout.on('data',v=>output+=v);child.stderr.on('data',v=>error=(error+v).slice(-16000));child.stdin.end(JSON.stringify({command,origin:f.origin,storageCaBase64:Buffer.from(s3.ca).toString('base64'),...input}));
+ const timer=setTimeout(()=>child.kill('SIGKILL'),45000);
+ try{const code=await new Promise(r=>child.once('exit',r));assert.equal(code,0,'Waitron recovery client failed: '+error);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
+}
 const record = (value) => {
   checks.push(value);
   console.log("PASS:", value);
@@ -434,6 +440,44 @@ try {
   record(
     "owner recovery restored an older-key snapshot after rotation with original servers stopped and no continuous data present",
   );
+  const guided = await root();
+  const request = await recoveryClient(guided, 'start');
+  assert.equal(request.state, 'awaiting_owner');
+  const retry = await recoveryClient(guided, 'start');
+  assert.equal(retry.requestId, request.requestId);
+  assert.equal(retry.code, request.code);
+  assert.equal(retry.openCloudUrl, f.origin + '/recover#request=' + request.requestId);
+  assert(!retry.openCloudUrl.includes(request.code));
+  const ownerPost = async (action, extra={}) => {
+    const response = await fetch(f.origin + '/api/account/recovery/' + action, {
+      method:'POST', headers:{origin:f.origin,'content-type':'application/json',cookie:'cloud_session='+session.token,'x-csrf-token':session.csrfToken},
+      body:JSON.stringify({requestId:request.requestId,code:request.code,...extra}),
+    });
+    assert.equal(response.status,200,'Owner recovery request failed');
+    const value=await response.json();
+    assert(!JSON.stringify(value).includes(item.reservation.recoveryKey));
+    return value;
+  };
+  const choice={pointId:item.point.id,oldServerUnavailable:'true',acceptDataLoss:'true'};
+  // Discard a successful reply, then resume through a read and an exact approval retry.
+  await ownerPost('approve',choice);
+  const approval=await ownerPost('inspect');
+  assert.equal(approval.operation.pointId,item.point.id);
+  assert.deepEqual(await ownerPost('approve',choice),approval);
+  const approved=await recoveryClient(guided,'status');
+  assert.equal(approved.point.id,item.point.id);
+  assert.equal((await f.db.pool.query('SELECT count(*) FROM backup_recoveries WHERE id=$1',[request.requestId])).rows[0].count,'1');
+  await recoveryClient(guided,'stage',{expectedPointId:item.point.id});
+  assert.equal((await recovery.status(session.token,request.requestId)).status,'pending','Staging must not report completed restore');
+  const completed=await recoveryClient(guided,'restore',{expectedPointId:item.point.id,expectedVenue:item.captured.venueName,expectedSourceNodeId:item.point.sourceNodeId,expectedModules:item.point.modules});
+  assert.equal(completed.restored,true);
+  assert.equal((await recovery.status(session.token,request.requestId)).status,'pending','Only a subsequent report acknowledges the completed local restore');
+  await recoveryClient(guided,'report');
+  assert.equal((await recovery.status(session.token,request.requestId)).status,'restored');
+  assert.equal((await f.db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'2');
+  assert.equal((await f.db.pool.query('SELECT count(*) FROM installations WHERE revoked_at IS NOT NULL')).rows[0].count,'0');
+  await ownerPost('close');
+  record('guided owner HTTP approval survives lost replies; fresh Waitron processes download, validate, stage and cold-restore the bound snapshot without copying keys or inheriting destinations');
   const bad = await root();
   await writeFile(join(bad, "input.backup.enc"), item.bytes, { mode: 0o600 });
   await assert.rejects(
