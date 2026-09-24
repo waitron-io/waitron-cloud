@@ -68,6 +68,7 @@ export class InstallationStore {
     if(!row)fail('invalid_proof');return verifyMachine(envelope,row.public_key,this.#origin,action);
   }
   async execute(action:MachineAction,envelope:unknown):Promise<InstallationView> {
+    if(!['renew','configuration','report','revoke'].includes(action))fail('invalid_proof');
     const routing=readMachineClaims(envelope);
     return transaction(this.#pool,async client=>{
       const row=await lock(client,routing.installationId),now=Date.now();

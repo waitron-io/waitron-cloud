@@ -384,3 +384,10 @@ test("test-only storage refuses verification and retention after a venue becomes
     /backup.local_integration_only/,
   );
 });
+for(const change of ['expire','remove'] as const)test('publication final check refuses capture '+change+' in the same transaction',async()=>{
+ const reservation=await store.reserveCapture(a.installationId,randomUUID()),bytes=Buffer.from('archive');objects.set('venue-a/'+reservation.incomingKey,bytes);let checks=0;
+ await assert.rejects(store.publish(a.installationId,reservation.id,{...receipt(bytes),capturedAt:new Date().toISOString(),retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}},async client=>{
+  if(++checks===2)await client.query(change==='expire'?'UPDATE backup_captures SET expired_at=clock_timestamp() WHERE id=$1':'DELETE FROM backup_captures WHERE id=$1',[reservation.id]);
+ }),change==='expire'?/^Error: backup.capture_expired$/:/^Error: backup.unavailable$/);
+ assert.equal((await db.pool.query('SELECT count(*) FROM backup_points')).rows[0].count,'0');
+});

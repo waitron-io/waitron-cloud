@@ -8,8 +8,9 @@ It creates no AWS resources and requires no live customer credentials.
 
 Install both repositories with their frozen pnpm lockfiles. Use Node 26 with network permission support for the restore verifier (tested with
 26.7.0), Docker, OpenSSL and network access for the pinned test binaries. Point to a
-Waitron checkout that includes `apps/server/scripts/cloud-backup-fixture.ts`, export
-that path as `WAITRON_CHECKOUT`, and build its dashboard before starting the servers:
+Waitron checkout that includes both `apps/server/scripts/cloud-backup-fixture.ts` and
+`apps/server/scripts/cloud-capture-client-fixture.ts`. Export that path as
+`WAITRON_CHECKOUT`, and build its dashboard before starting the servers:
 
 ```sh
 pnpm --dir "$WAITRON_CHECKOUT" --filter @waitron/dashboard build
@@ -64,8 +65,8 @@ release evidence. Timings measure the local fixture, not a production recovery t
 ## Internal API and retained data
 
 `@waitron-cloud/backups` is an internal local-integration package. Provisioning refuses
-production venues. Owners can browse its snapshot catalogue in the account portal; capture and recovery
-remain internal integration APIs.
+production venues. Owners can browse its snapshot catalogue in the account portal; capture uses the [authenticated installation adapter](authenticated-captures.md); recovery
+remains an internal integration API.
 The caller supplies a persistent 32-byte master key outside PostgreSQL; key versions
 are encrypted and authenticated against their venue and version. Losing this master
 key loses access to those backups. Rotation retains old versions; deletion is absent.
@@ -99,8 +100,8 @@ replacement still needs final-write/quiescence evidence, fresh installation enro
 retirement of the old credentials and explicit Waitron activation. Recording a
 `planned` mode or an owner's confirmation does not establish those conditions.
 
-Next, add the installation-authenticated capture/renewal adapter, scheduled capture
-and customer recovery screens. The local worker now schedules verification, retention
+The installation-authenticated capture/renewal adapter and Waitron client are implemented.
+Next, add scheduled capture with durable local archive spooling and customer recovery screens. The local worker now schedules verification, retention
 and abandoned-upload cleanup; the customer catalogue is paginated. Define cancellation/deletion,
 operator master-key backup and rotation, and production verifier isolation. Run the
 same provider tests against AWS Spain before any deployment; this local result does

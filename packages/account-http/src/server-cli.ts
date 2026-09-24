@@ -1,9 +1,11 @@
+import {captureRuntime} from '@waitron-cloud/backups/capture-config';
 import { Pool } from 'pg';
 import { EmailOutbox, createLeaseIssuer } from '@waitron-cloud/registration';
 import { accountHttpConfig } from './config.ts';
 import { AccountRateLimiter } from './rate-limit.ts';
 import { loadPortalAssets } from './portal.ts';
 import { startAccountServer } from './server.ts';
+let captures:ReturnType<typeof captureRuntime>;
 let pool: Pool | undefined;
 let running: Awaited<ReturnType<typeof startAccountServer>> | undefined;
 let cleanup: ReturnType<typeof setInterval> | undefined;
@@ -31,7 +33,8 @@ try {
   if (!stopRequested) {
     const portalAssets = process.env.CLOUD_PORTAL_ASSETS_DIR ? await loadPortalAssets(process.env.CLOUD_PORTAL_ASSETS_DIR) : undefined;
     const leaseIssuer=process.env.CLOUD_INSTALLATION_ISSUER_KEY ? createLeaseIssuer(process.env.CLOUD_INSTALLATION_ISSUER_KEY) : undefined;
-    running = await startAccountServer({pool, outbox, config, portalAssets, leaseIssuer, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    captures=captureRuntime(process.env);
+    running = await startAccountServer({captures:captures?.options,pool, outbox, config, portalAssets, leaseIssuer, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
     console.log(JSON.stringify({status: 'listening', port: address.port}));
@@ -44,11 +47,13 @@ try {
     }, 60000); cleanup.unref();
     await stopped;
   }
-} catch {
-  console.error('Account server failed; check database, migrations and configuration'); process.exitCode = 1;
+} catch(error) {
+  console.error(error instanceof Error&&error.message==='backup.installation_issuer_required'
+    ?'Account server requires CLOUD_INSTALLATION_ISSUER_KEY when backup capture is configured'
+    :'Account server failed; check database, migrations and configuration'); process.exitCode = 1;
 } finally {
   stop();
-  try {await running?.close(); await pool?.end();} catch {process.exitCode = 1;}
+  try {await running?.close(); captures?.close(); await pool?.end();} catch {process.exitCode = 1;}
   clearInterval(cleanup); clearTimeout(hardDeadline);
   process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop);
 }

@@ -71,7 +71,7 @@ now provides encrypted scoped storage, protected key versions, an immutable snap
 restore verification, retention and owner-bound recovery operations. Two real Waitron
 snapshots restore independently of deleted Litestream data, including after key rotation.
 These are local APIs and test fixtures. The customer snapshot catalogue is implemented;
-authenticated capture delivery, capture scheduling and complete replacement activation remain open. The pairing runner still uses synthetic observations; only the
+installation-authenticated capture delivery and upload-credential renewal are implemented locally; capture scheduling and complete replacement activation remain open. The pairing runner still uses synthetic observations; only the
 separate remote runner proves a tunnel. Waitron owns the remaining SQLite slice-2 sealed-state row, stream supervisor and
 cold-restore contract. Recheck those interfaces before wiring complete continuous recovery. The full two-venue milestone remains unproved.
 The [registration plan](registration-implementation-plan.md) now sequences persistence,
@@ -342,7 +342,11 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   cleanup with durable claims, lease fences and bounded retries. Captures expire after
   24 hours; cleanup waits another 16 minutes and keeps tombstones. PostgreSQL tests cover
   concurrent workers, lease takeover and restart; the two-server proof uses this queue.
-  Next: authenticated installation capture/credential renewal, scheduled capture,
+  The [authenticated capture adapter](authenticated-captures.md) now uses bound installation proofs,
+  scoped upload grants and authority checks after storage waits. The local uploader
+  buffers up to 512 MiB with a 30-second total deadline; scheduled real-venue uploads need
+  a measured transfer budget, bounded retries/streaming and deliberate-cancellation handling. Waitron supplies the signed client
+  and conditional upload, with exact publication retries. Next: scheduled capture and durable local archive spooling,
   customer recovery screens, streaming object I/O beyond the current 512 MiB bound,
   tombstone/job-history retention, master-key operations and production verifier isolation.
   Measure scheduling sweeps at the intended deployment scale and tune their cadence

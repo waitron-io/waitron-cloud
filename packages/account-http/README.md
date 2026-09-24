@@ -341,3 +341,9 @@ and English by default). `POST` accepts exactly `{enabled: "on" | "off", locale:
 per-account, per-minute allowance and do not renew passive sessions. Venue overview
 responses include bounded monitoring evidence for your current organisation memberships.
 See [local monitoring](../../docs/local-monitoring.md) for thresholds and delivery rules.
+
+## Installation snapshot delivery
+
+The optional [authenticated capture adapter](../../docs/authenticated-captures.md) adds
+`backup-reserve` and `backup-publish` machine endpoints. Configure its storage authority
+explicitly; customer browser sessions cannot obtain upload grants.

@@ -158,3 +158,8 @@ test('connection resets during parser rejection do not crash the CLI or leak dia
     const outcome = await running.stop(); assert.equal(outcome.code, 0); assert.equal(outcome.stderr, '');
   } finally {if (running.child.exitCode === null) await running.stop();}
 });
+test('CLI identifies the missing installation issuer without logging backup secrets',async()=>{
+ const {generateKeyPairSync,randomBytes}=await import('node:crypto');
+ const outcome=await cli({CLOUD_INSTALLATION_ISSUER_KEY:'',CLOUD_BACKUP_MASTER_KEY:randomBytes(32).toString('hex'),CLOUD_BACKUP_ENDPOINT:'https://store.test',CLOUD_BACKUP_REGION:'local',CLOUD_BACKUP_ACCESS_KEY:'operator-secret',CLOUD_BACKUP_SECRET_KEY:'private-secret',CLOUD_BACKUP_AUTHORITY:JSON.stringify({issuer:'https://issuer.test',audience:'backup',keyId:'test',privateKey:generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({type:'pkcs8',format:'pem'}).toString(),roles:{capture:'capture',stream:'stream',restore:'restore'}})}).exited;
+ assert.equal(outcome.code,1);assert.equal(outcome.stdout,'');assert.equal(outcome.stderr,'Account server requires CLOUD_INSTALLATION_ISSUER_KEY when backup capture is configured\n');
+});

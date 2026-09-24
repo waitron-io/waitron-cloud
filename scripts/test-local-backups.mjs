@@ -16,6 +16,7 @@ import { startPortalFixture } from "../apps/portal/test/fixtures.ts";
 import {
   SignupStore,
   PairingStore,
+  InstallationStore,
   transaction,
 } from "../packages/registration/src/index.ts";
 import { login } from "../packages/identity/src/index.ts";
@@ -39,6 +40,18 @@ const roots = [],
   objectClients = [],
   checks = [];
 let f, s3;
+const vault = new BackupKeyVault(randomBytes(32));
+const clients = new Map();
+const objects = (l) => {
+ if (!clients.has(l.bucket)) {const client=new BackupObjects(l,s3.admin,s3.ca);clients.set(l.bucket,client);objectClients.push(client);}
+ return clients.get(l.bucket);
+};
+async function captureClient(dir,command,input){
+ const child=spawn(process.execPath,['--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-capture-client-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,CLOUD_TEST_ROOT:dir},stdio:['pipe','pipe','pipe']});
+ let output='',error='';child.stdout.on('data',v=>output+=v);child.stderr.on('data',v=>error=(error+v).slice(-16000));child.stdin.end(JSON.stringify({command,...input}));
+ const timer=setTimeout(()=>child.kill('SIGKILL'),45000);
+ try{const code=await new Promise(r=>child.once('exit',r));assert.equal(code,0,'Waitron capture client failed: '+error);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
+}
 const record = (value) => {
   checks.push(value);
   console.log("PASS:", value);
@@ -131,8 +144,8 @@ async function worker(dir, command, input) {
   }
 }
 try {
-  f = await startPortalFixture();
   s3 = await startBackupStorage();
+  f = await startPortalFixture({vault,objects,grant:(location,scope)=>s3.authority.grant(location,scope,s3.ca)});
   const signup = new SignupStore(f.db.pool, f.db.outbox),
     email = "backups-" + randomUUID() + "@example.test",
     password = "Cloud backup integration password";
@@ -149,16 +162,6 @@ try {
     session = await transaction(f.db.pool, (c) =>
       login(c, { email, password }),
     );
-  const vault = new BackupKeyVault(randomBytes(32));
-  const clients = new Map();
-  const objects = (l) => {
-    if (!clients.has(l.bucket)) {
-      const client = new BackupObjects(l, s3.admin, s3.ca);
-      clients.set(l.bucket, client);
-      objectClients.push(client);
-    }
-    return clients.get(l.bucket);
-  };
   const catalogue = new BackupCatalogue(f.db.pool, vault, objects),
     recovery = new BackupRecovery(f.db.pool, vault, f.origin),
     venues = [];
@@ -256,12 +259,13 @@ try {
       "WAITRON_BACKUP_DIR=/old-backup-target\n",
       { mode: 0o600 },
     );
-    const reservation = await catalogue.reserveCapture(
-      venue.registration.installationId,
-      randomUUID(),
-    );
+    const captureId=randomUUID();
+    const reservation=await captureClient(venue.root,'reserve',{id:captureId});
+    assert.equal(reservation.installationId,venue.registration.installationId);
+    const internal=await catalogue.reserveCapture(venue.registration.installationId,captureId);
+    assert.equal(reservation.recoveryKey,internal.keys.recoveryKey);
     const captured = await worker(venue.root, "capture", {
-      recoveryKey: reservation.keys.recoveryKey,
+      recoveryKey: reservation.recoveryKey,
     });
     assert(captured.networkDenied);
     assert(captured.entries.includes("secrets/backup.env"));
@@ -271,32 +275,20 @@ try {
       ),
     );
     const bytes = await readFile(join(venue.root, "captured.backup.enc"));
-    const grant = await s3.authority.grant(
-      venue.location,
-      {
-        kind: "capture",
-        bucket: venue.location.bucket,
-        scope: reservation.incomingKey,
-      },
-      s3.ca,
-    );
-    const upload = new BackupObjects(venue.location, grant.credentials, s3.ca);
-    try {
-      await upload.put(reservation.incomingKey, bytes);
-    } finally {
-      upload.close();
-    }
-    const point = await catalogue.publish(
-      venue.registration.installationId,
-      reservation.id,
-      {
-        ...receipt(bytes),
-        capturedAt: captured.manifest.createdAt,
-        retention: "daily",
-        sourceNodeId: captured.sourceNodeId,
-        modules: captured.manifest.modules,
-      },
-    );
+    await captureClient(venue.root,'upload',{grant:reservation,ca:s3.ca});
+    // Lost upload replies repeat the write without needing read permission.
+    await captureClient(venue.root,'upload',{grant:reservation,ca:s3.ca});
+    const metadata={...receipt(bytes),capturedAt:captured.manifest.createdAt,retention:'daily',sourceNodeId:captured.sourceNodeId,modules:captured.manifest.modules};
+    const changed=Buffer.from(bytes);changed[changed.length-1]^=1;
+    await writeFile(join(venue.root,'captured.backup.enc'),changed,{mode:0o600});
+    try{
+      await captureClient(venue.root,'upload',{grant:reservation,ca:s3.ca});
+      assert.equal(receipt(await objects(venue.location).read(reservation.incomingKey)).digest,metadata.digest);
+      await assert.rejects(captureClient(venue.root,'publish',{id:reservation.id,metadata:{...metadata,...receipt(changed)}}));
+      assert.equal((await f.db.pool.query('SELECT count(*) FROM backup_points WHERE id=$1',[reservation.id])).rows[0].count,'0');
+    }finally{await writeFile(join(venue.root,'captured.backup.enc'),bytes,{mode:0o600});}
+    const point=await captureClient(venue.root,'publish',{id:reservation.id,metadata});
+    assert.deepEqual(await captureClient(venue.root,'publish',{id:reservation.id,metadata}),point);
     let result;
     const restore = await createWaitronVerifier(waitron);
     const queue = new BackupWorker(f.db.pool, catalogue, async (...args) => {
@@ -321,8 +313,8 @@ try {
     // Keep the independent fixture's venue-content assertion as well as queue verification.
     const target = await root();
     await writeFile(join(target,'input.backup.enc'),bytes,{mode:0o600});
-    await worker(target,'restore',{recoveryKey:reservation.keys.recoveryKey,sourceNodeId:point.sourceNodeId,modules:point.modules,expectedVenue:captured.venueName});
-    snapshots.push({ venue, reservation, point, captured, bytes, result });
+    await worker(target,'restore',{recoveryKey:reservation.recoveryKey,sourceNodeId:point.sourceNodeId,modules:point.modules,expectedVenue:captured.venueName});
+    snapshots.push({ venue, reservation, point, captured, bytes, result,streamKey:internal.keys.streamKey });
   }
   record(
     "both encrypted snapshots restored by Waitron with integrity/schema checks, module hooks and network permission denied",
@@ -336,7 +328,7 @@ try {
         source: join(snapshot.venue.root, "venue", "venue.db"),
         storage: s3,
         location: snapshot.venue.location,
-        key: snapshot.reservation.keys.streamKey,
+        key: snapshot.streamKey,
       }),
     );
   record(
@@ -344,6 +336,9 @@ try {
   );
   const item = snapshots[0];
   await catalogue.rotate(item.venue.registration.installationId);
+  const renewed=await captureClient(item.venue.root,'reserve',{id:item.reservation.id});
+  assert.equal(renewed.recoveryKey,item.reservation.recoveryKey);
+  record('Waitron signed HTTP capture, scoped upload retries, changed-byte publication refusal, publication retries and credential renewal after key rotation');
   const targetKey = generateKeyPairSync("ed25519"),
     operationId = randomUUID();
   await recovery.start(session.token, session.csrfToken, {
@@ -370,7 +365,7 @@ try {
     };
   };
   const access = await recovery.target(operationId, "read", proof("read"));
-  assert.equal(access.keys.recoveryKey, item.reservation.keys.recoveryKey);
+  assert.equal(access.keys.recoveryKey, item.reservation.recoveryKey);
   const grant = await s3.authority.grant(
       access.location,
       {
@@ -433,6 +428,9 @@ try {
   record(
     "wrong recovery key leaves the replacement database absent; Cloud grants did not activate or re-enrol it",
   );
+  await new InstallationStore(f.db.pool,f.issuer,f.origin).revokeWithSession(session.token,session.csrfToken,item.venue.registration.installationId);
+  await assert.rejects(captureClient(item.venue.root,'reserve',{id:item.reservation.id}));
+  record('Cloud owner revocation refuses subsequent Waitron upload-credential renewal');
   const result = {
     cloudHead: execFileSync("git", ["rev-parse", "HEAD"], {
       encoding: "utf8",
@@ -453,7 +451,7 @@ try {
       }).trim() !== "",
     checks,
     continuousServerRestore:
-      "blocked on Waitron sealed-state and cold-restore implementation",
+      "not exercised; replacement activation is outside this capture proof",
     activation: "not performed",
   };
   if (process.env.BACKUP_RECEIPT)

@@ -1,3 +1,5 @@
+import {BackupCaptures,type CaptureOptions} from '@waitron-cloud/backups/captures';
+import {captureResponse} from './captures.ts';
 import {alertPreferencesResponse} from './alerts.ts';
 import {backupResponse} from './backups.ts';
 import {installationResponse} from './installations.ts';
@@ -41,10 +43,12 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;leaseIssuer?:LeaseIssuer}) {
+export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;leaseIssuer?:LeaseIssuer;captures?:CaptureOptions}) {
   const config = validateConfig(options.config);
+  if(options.captures&&!options.leaseIssuer)throw Error('backup.installation_issuer_required');
   const {pool, outbox} = options;
   const origin = new URL(config.portalOrigin); const secure = origin.protocol === 'https:';
+  const captures=options.captures&&options.leaseIssuer?new BackupCaptures(pool,options.leaseIssuer,config.portalOrigin,options.captures):undefined;
   const limiter = new AccountRateLimiter(pool, config.rateKey);
   const signup = new SignupStore(pool, outbox); const recovery = new PasswordRecoveryStore(pool, outbox);
   const app = new Hono<{Bindings: HttpBindings}>();
@@ -64,6 +68,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if (url.search) throw new AccountHttpError(400, 'invalid_input');
     const ip = clientAddress(c.env?.incoming?.socket.remoteAddress ?? '', c.req.header('x-forwarded-for'), config.trustedProxyIps);
     await consume([{scope: 'all-ip', subject: ip, limit: 120, windowSeconds: 60}]);
+    if(['/api/installations/backup-reserve','/api/installations/backup-publish'].includes(c.req.path))return captureResponse(c,{captures,ip,consume});
     if(c.req.path==='/api/account/alerts')return alertPreferencesResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path.startsWith('/api/account/backups/'))return backupResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path.startsWith('/api/installations/')||c.req.path==='/api/account/installations'||c.req.path.startsWith('/api/account/installations/')) return installationResponse(c,{pool,issuer:options.leaseIssuer,origin:config.portalOrigin,ip,consume});
