@@ -6,8 +6,8 @@ export function backupScreen(app:PortalApp,venueId:string){
  const selected=b.page?.points.find(p=>p.id===b.selected),disabled=b.pending||!!b.waiting;
  const states={pending:c.snapshotPending,verified:c.snapshotVerified,failed:c.snapshotFailed};
  const date=(s:string)=>new Date(s).toLocaleString(app.locale);
- return html`<section aria-label=${c.snapshotHistory}><h4>${c.snapshotHistory}</h4>
-  <p>${c.snapshotPurpose}</p><p>${c.recoveryUnavailable}</p>
+ return html`<section aria-label=${c.snapshotHistory}>${app.path==='/recover'?html`<h2>${c.snapshotHistory}</h2>`:html`<h4>${c.snapshotHistory}</h4>`}
+  <p>${c.snapshotPurpose}</p>${app.path==='/recover'?nothing:html`<p>${c.recoveryUnavailable}</p>`}
   ${b.error?html`<p role="alert">${c[b.error]}</p>`:nothing}
   ${b.pending?html`<p role="status">${c.wait}</p>`:nothing}
   ${b.waiting?html`<p role="status">${c.snapshotRetry}</p>`:nothing}
@@ -20,6 +20,6 @@ export function backupScreen(app:PortalApp,venueId:string){
   <p class="help">${c.snapshotRetentionHelp}</p>
   <div class="snapshot-actions"><wt-button .disabled=${disabled} @click=${()=>{void b.load();}}>${c.latestSnapshots}</wt-button>
    ${b.page?.nextCursor?html`<wt-button .disabled=${disabled} @click=${()=>{void b.load(true);}}>${c.olderSnapshots}</wt-button>`:nothing}
-   <wt-button @click=${()=>{b.close();app.draw();}}>${c.closeSnapshots}</wt-button></div>
+   <wt-button @click=${()=>{b.close();app.recovery.choose(undefined,undefined);app.draw();}}>${c.closeSnapshots}</wt-button></div>
  </section>`;
 }

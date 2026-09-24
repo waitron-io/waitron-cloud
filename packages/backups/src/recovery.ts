@@ -14,7 +14,7 @@ import {
   pointKeys,
   uuid,
 } from "./catalogue.ts";
-interface RecoveryInput {
+export interface RecoveryInput {
   id: string;
   pointId: string;
   mode: "planned" | "failure";
@@ -22,14 +22,14 @@ interface RecoveryInput {
   oldServerUnavailable: boolean;
   acceptDataLoss: boolean;
 }
-interface Proof {
+export interface Proof {
   payload: string;
   signature: string;
 }
 export function recoveryPayload(
   origin: string,
   id: string,
-  action: "read" | "restored",
+  action: "info" | "read" | "restored",
   digest: string,
   issuedAt: number,
 ) {
@@ -44,7 +44,7 @@ export function recoveryPayload(
     ]),
   );
 }
-function decode(value: string, max: number) {
+export function decode(value: string, max: number) {
   if (
     typeof value !== "string" ||
     !value.length ||
@@ -56,7 +56,7 @@ function decode(value: string, max: number) {
   if (bytes.toString("base64url") !== value) backupFail("invalid_proof");
   return bytes;
 }
-function publicKey(value: string) {
+export function publicKey(value: string) {
   try {
     const bytes = decode(value, 128),
       key = createPublicKey({ key: bytes, type: "spki", format: "der" });
@@ -73,7 +73,7 @@ function publicKey(value: string) {
 function validateProof(
   origin: string,
   id: string,
-  action: "read" | "restored",
+  action: "info" | "read" | "restored",
   digest: string,
   key: string,
   proof: Proof,
@@ -123,10 +123,15 @@ export class BackupRecovery {
   readonly #pool: Pool;
   readonly #vault: BackupKeyVault;
   readonly #origin: string;
-  constructor(pool: Pool, vault: BackupKeyVault, origin: string) {
+  readonly #client?: PoolClient;
+  constructor(pool: Pool, vault: BackupKeyVault, origin: string, client?: PoolClient) {
     this.#pool = pool;
     this.#vault = vault;
     this.#origin = origin;
+    this.#client = client;
+  }
+  #transaction<T>(action:(client:PoolClient)=>Promise<T>):Promise<T>{
+    return this.#client ? action(this.#client) : transaction(this.#pool,action);
   }
   async start(token: string, csrfToken: string, input: RecoveryInput) {
     if (
@@ -138,7 +143,7 @@ export class BackupRecovery {
     publicKey(input.targetPublicKey);
     if (input.oldServerUnavailable !== true || input.acceptDataLoss !== true)
       backupFail("confirmation_required");
-    return transaction(this.#pool, async (client) => {
+    return this.#transaction(async (client) => {
       const session = await resolveSession(client, token, {
           csrfToken,
           touch: false,
@@ -208,10 +213,12 @@ export class BackupRecovery {
       throw error;
     });
   }
-  async target(id: string, action: "read" | "restored", proof: Proof) {
-    if (!uuid(id) || !["read", "restored"].includes(action))
+  async target(id:string, action:"info", proof:Proof):Promise<{point:import("./catalogue.ts").BackupPoint;operationExpiresAt:string}>;
+  async target(id:string, action:"read"|"restored", proof:Proof):Promise<{point:import("./catalogue.ts").BackupPoint;location:import("./storage.ts").StorageLocation;keys:import("./keys.ts").BackupKeys;operationExpiresAt:string}>;
+  async target(id: string, action: "info" | "read" | "restored", proof: Proof) {
+    if (!uuid(id) || !["info", "read", "restored"].includes(action))
       backupFail("invalid_proof");
-    return transaction(this.#pool, async (client) => {
+    return this.#transaction(async (client) => {
       const first = await operation(client, id);
       await permission(client, first.account_id, first.venue_id);
       const l = await lockVenue(client, first.venue_id),
@@ -229,11 +236,12 @@ export class BackupRecovery {
         this.#origin,
         id,
         action,
-        p.digest,
+        action === "info" ? "" : p.digest,
         row.target_public_key,
         proof,
       );
       if (p.verification !== "verified") backupFail("unverified");
+      if (action === "info") return {point:p,operationExpiresAt:row.expires_at.toISOString() as string};
       if (action === "restored")
         await client.query(
           "UPDATE backup_recoveries SET status='restored' WHERE id=$1",
@@ -245,6 +253,7 @@ export class BackupRecovery {
         p.venueId,
         p.keyVersion,
       );
+      if (row.expires_at.getTime() <= Date.now()) backupFail("unavailable");
       validateProof(
         this.#origin,
         id,
@@ -263,7 +272,7 @@ export class BackupRecovery {
   }
   async catalogue(token: string, venueId: string) {
     if (!uuid(venueId)) backupFail("unavailable");
-    return transaction(this.#pool, async (client) => {
+    return this.#transaction(async (client) => {
       const session = await resolveSession(client, token, { touch: false });
       await permission(client, session.accountId, venueId);
       await lockVenue(client, venueId);
@@ -281,7 +290,7 @@ export class BackupRecovery {
   }
   async status(token: string, id: string) {
     if (!uuid(id)) backupFail("unavailable");
-    return transaction(this.#pool, async (client) => {
+    return this.#transaction(async (client) => {
       const session = await resolveSession(client, token, { touch: false }),
         row = await operation(client, id);
       await permission(client, session.accountId, row.venue_id);
@@ -291,7 +300,7 @@ export class BackupRecovery {
   }
   async close(token: string, csrfToken: string, id: string) {
     if (!uuid(id)) backupFail("unavailable");
-    return transaction(this.#pool, async (client) => {
+    return this.#transaction(async (client) => {
       const session = await resolveSession(client, token, {
           csrfToken,
           touch: false,

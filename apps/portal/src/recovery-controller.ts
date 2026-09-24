@@ -1,0 +1,33 @@
+import {accountRequest} from './api.ts';
+import type {Copy} from './locale.ts';
+import type {RecoveryView} from './recovery-types.ts';
+export class RecoveryController {
+ requestId:string|undefined;code='';view:RecoveryView|undefined;venueId:string|undefined;pointId:string|undefined;
+ stopped=false;acceptLoss=false;uncertain=false;pending=false;retryAt=0;error:keyof Copy|undefined;
+ #account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
+ constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
+ #clear(){this.#generation++;this.code='';this.view=undefined;this.venueId=undefined;this.pointId=undefined;this.stopped=false;this.acceptLoss=false;this.uncertain=false;this.pending=false;this.error=undefined;}
+ open(id:string|undefined){if(id!==this.requestId){this.#clear();this.requestId=id;}}
+ account(id:string|undefined){if(id!==this.#account){this.#clear();this.#account=id;}}
+ choose(venueId:string|undefined,pointId:string|undefined){if(venueId!==this.venueId||pointId!==this.pointId){this.venueId=venueId;this.pointId=pointId;this.stopped=false;this.acceptLoss=false;}}
+ get waiting(){return Math.max(0,Math.ceil((this.retryAt-Date.now())/1000));}
+ inspect(){return this.#exchange('inspect');}
+ approve(){return this.#exchange('approve');}
+ close(){return this.#exchange('close');}
+ async #exchange(action:'inspect'|'approve'|'close'){
+  if(!this.#account||!this.requestId||this.pending||this.waiting)return;
+  if(!/^\d{8}$/.test(this.code)){this.error='pairCodeError';this.#changed();return;}
+  if(action==='approve'&&(this.uncertain||this.view?.state!=='awaiting_owner'||!this.venueId||!this.pointId||!this.stopped||!this.acceptLoss||Date.parse(this.view.expiresAt)<=Date.now()))return;
+  if(action==='close'&&!this.view?.operation)return;
+  const body:Record<string,string>={requestId:this.requestId,code:this.code};if(action==='approve')Object.assign(body,{pointId:this.pointId,oldServerUnavailable:'true',acceptDataLoss:'true'});
+  const generation=this.#generation,point=this.pointId,venue=this.venueId;this.pending=true;this.error=undefined;this.#changed();
+  const result=await this.#request<RecoveryView>('/recovery/'+action,body);if(generation!==this.#generation)return;this.pending=false;
+  if(result.ok&&result.value.requestId===this.requestId&&(action!=='approve'||(result.value.operation?.pointId===point&&result.value.operation?.venueId===venue))){this.view=result.value;this.uncertain=false;}
+  else{
+   if(!result.ok){this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?'forbidden':result.status===410?'recoveryExpired':'unavailable';if(result.status===401||result.status===403){this.view=undefined;this.choose(undefined,undefined);}}
+   else this.error='unavailable';
+   if(action!=='inspect'){this.uncertain=true;this.error='recoveryUncertain';this.#changed();await this.inspect();}
+  }
+  this.#changed();
+ }
+}

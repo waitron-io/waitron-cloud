@@ -60,3 +60,27 @@ Extend the local backup proof to follow owner HTTP approval and the actual Waitr
 client, download using scoped storage, then run Waitron's real restore validation/hooks with
 sources stopped. Verify venue contents, excluded Cloud keys, wrong-key refusal and no
 Cloud enrolment/routing mutation. Finish and land both repositories autonomously.
+
+## Implemented wire contract
+
+Machine POST routes under `/api/recovery/` reject browser Origin headers and accept
+canonical base64url payload/signature pairs. `start` and `status` sign the JSON array
+`["waitron-cloud-recovery-request-v1", origin, requestId, action, publicKey, code, issuedAt]`.
+The timestamp is milliseconds and must be within sixty seconds; the UUID, fresh
+Ed25519 SPKI key and eight-digit code remain bound across retries. The response contains
+`requestId`, `state` (`awaiting_owner` or `approved`), `expiresAt` and nullable `operationId`.
+
+`info`, `read` and `restored` also send `id` and sign
+`["waitron-cloud-recovery-v1", origin, id, action, digest, issuedAt]`.
+For `info`, the digest is empty; its response contains approved point metadata and
+`operationExpiresAt`, without keys or a storage location. `read` binds the approved
+digest and returns that point, its location, archive `recoveryKey`, operation expiry,
+and temporary single-object credentials with their expiry. `restored` returns only a
+status acknowledgement. Waitron may call it only after the actual cold restore succeeds.
+
+Owner POST routes `/api/account/recovery/{inspect,approve,close}` require the exact
+portal Origin, live session cookie and CSRF header. All accept string `requestId` and
+`code`; approval also requires `pointId`, `oldServerUnavailable:"true"` and
+`acceptDataLoss:"true"`. Only unapproved requests use the five-attempt code lockout,
+so later typing errors cannot prevent the authenticated approving owner from closing
+access. Global IP, machine IP and account limits apply independently.

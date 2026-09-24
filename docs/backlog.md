@@ -72,7 +72,8 @@ production deployment remain open. The [local backup proof](local-backups.md)
 now provides encrypted scoped storage, protected key versions, an immutable snapshot catalogue,
 restore verification, retention and owner-bound recovery operations. Two real Waitron
 snapshots restore independently of deleted Litestream data, including after key rotation.
-These are local APIs and test fixtures. The customer snapshot catalogue is implemented;
+These remain local integrations. The customer snapshot catalogue and matching-code
+recovery approval screens are implemented for verified test snapshots;
 installation-authenticated capture delivery, upload-credential renewal and scheduled snapshots with durable local retries are implemented locally; complete replacement activation remains open. The pairing runner still uses synthetic observations; only the
 separate remote runner proves a tunnel. Waitron owns the remaining SQLite slice-2 sealed-state row, stream supervisor and
 cold-restore contract. Recheck those interfaces before wiring complete continuous recovery. The full two-venue milestone remains unproved.
@@ -115,7 +116,10 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   and bookings. Temporary unavailability is acceptable when the venue server or its
   internet connection is down. Define route permissions and the unavailable-page
   experience; cloud copies and offline booking acceptance are future capabilities.
-- Provide self-service recovery onto a replacement server without routine staff assistance.
+- Complete self-service recovery onto a replacement server without routine staff assistance.
+  The local verified-snapshot path now has a matching-code owner approval flow and
+  scoped download authority. Production activation and complete continuous recovery
+  remain separate work.
   Use Cloud-managed recovery keys by default for the stream and managed snapshots:
   an authorised owner must not need the original server or a separately saved backup
   key. Preserve the existing owner-held key model for customer-managed archives.

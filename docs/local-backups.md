@@ -70,8 +70,9 @@ release evidence. Timings measure the local fixture, not a production recovery t
 ## Internal API and retained data
 
 `@waitron-cloud/backups` is an internal local-integration package. Provisioning refuses
-production venues. Owners can browse its snapshot catalogue in the account portal; capture uses the [authenticated installation adapter](authenticated-captures.md); recovery
-remains an internal integration API.
+production venues. Owners can browse its snapshot catalogue and authorise a replacement
+through the account portal. Capture uses the [authenticated installation adapter](authenticated-captures.md).
+The guided recovery path below remains limited to local test venues.
 The caller supplies a persistent 32-byte master key outside PostgreSQL; key versions
 are encrypted and authenticated against their venue and version. Losing this master
 key loses access to those backups. Rotation retains old versions; deletion is absent.
@@ -95,6 +96,40 @@ cancellation and explicit deletion policy are not implemented. Object reads/writ
 are bounded to 512 MiB in memory; production-sized archives need streaming I/O and
 bounded worker concurrency. Callers own and close their object clients.
 
+## Recover a test venue without copying keys
+
+Start with **Restore from Waitron Cloud** on the replacement server's setup screen.
+Open its Cloud link, sign in as an owner and enter the eight-digit code shown on the
+replacement. The link identifies the request; it deliberately excludes the code.
+Choose your organisation and venue, then a verified snapshot. The latest verified
+snapshot is selected initially. Check its capture time before accepting the loss of
+later changes. Confirm that the old server and any surviving server with newer data
+are stopped or permanently unavailable.
+
+After you authorise that snapshot, return to the replacement. Refresh its status,
+check the approved capture time, then confirm the local restore. The server downloads
+one encrypted object, verifies its size and digest, and passes it through Waitron's
+existing archive validation and restart process. Neither browser receives a recovery
+key or storage credentials. The account page's authorised status means download
+permission; it does not mean that restore has completed or trading is enabled.
+
+An unapproved request lasts fifteen minutes and permits five incorrect codes. An
+approved operation lasts one hour and stays bound to its original snapshot and
+replacement key. If an approval reply is lost, the page checks the saved request
+instead of creating another operation. If you reload the page, reopen the link from
+the replacement and enter its code again.
+
+You can close snapshot access from the account page. Closing it, losing owner access,
+or disabling the account stops new downloads. Storage credentials already issued
+can remain valid for up to fifteen minutes, and data already downloaded cannot be
+recalled. A replacement rechecks its approval after download before staging the restore.
+
+The [recovery contract](superpowers/specs/2026-09-24-customer-recovery-design.md)
+describes the signed machine requests. Cloud approval never fences the old server,
+changes routing or enrols the replacement. Complete the replacement's local checks
+before trading. Continuous complete-server recovery and planned handover still depend
+on the Waitron contract described below.
+
 ## Still required for the complete milestone
 
 Waitron's SQLite slice-2 sealed state, stream supervisor and cold-restore activation
@@ -107,7 +142,8 @@ retirement of the old credentials and explicit Waitron activation. Recording a
 
 The installation-authenticated capture/renewal adapter and Waitron client are implemented.
 Scheduled capture with durable local archive spooling is implemented for test installations.
-Next, add customer recovery screens. The local worker now schedules verification, retention
+Customer recovery now has a matching-code account flow for verified test snapshots.
+The local worker schedules verification, retention
 and abandoned-upload cleanup; the customer catalogue is paginated. Define cancellation/deletion,
 operator master-key backup and rotation, and production verifier isolation. Run the
 same provider tests against AWS Spain before any deployment; this local result does

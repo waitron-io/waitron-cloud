@@ -1,3 +1,4 @@
+import {validRecoveryView} from './recovery-types.ts';
 import {validRemoteView,validRemoteDns} from './remote-types.ts';
 import {validBackupPage} from './backup-types.ts';
 import {validInstallation} from './installation-types.ts';
@@ -6,6 +7,7 @@ export type ApiResult<T> = {ok: true; value: T} | {ok: false; status: number; co
 function validResult(path: string, value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const data = value as Record<string, unknown>;
+  if(path.startsWith('/recovery/'))return validRecoveryView(value);
   if(path==='/remote-access/status'||path==='/remote-access/apply')return validRemoteView(value);
   if(path==='/remote-access/dns')return validRemoteDns(value);
   if(path==='/alerts')return typeof data.enabled==='boolean'&&typeof data.locale==='string'&&['en','es'].includes(data.locale);
@@ -24,7 +26,7 @@ function validResult(path: string, value: unknown): boolean {
 export async function accountRequest<T>(path: string, body?: Record<string, string>): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
-  if (path.startsWith('/remote-access/') || (path === '/alerts' && body) || path === '/backups/list' || path === '/session/activity' || path === '/logout' || path === '/installations/revoke' || (path.startsWith('/pairing/') && body)) {
+  if (path.startsWith('/recovery/') || path.startsWith('/remote-access/') || (path === '/alerts' && body) || path === '/backups/list' || path === '/session/activity' || path === '/logout' || path === '/installations/revoke' || (path.startsWith('/pairing/') && body)) {
     const name = location.protocol === 'https:' ? '__Host-cloud_csrf' : 'cloud_csrf';
     const values = document.cookie.split(';').map(v => v.trim()).filter(v => v.startsWith(`${name}=`));
     headers['X-CSRF-Token'] = values.length === 1 ? values[0]!.slice(name.length + 1) : '';
