@@ -73,7 +73,9 @@ now provides encrypted scoped storage, protected key versions, an immutable snap
 restore verification, retention and owner-bound recovery operations. Two real Waitron
 snapshots restore independently of deleted Litestream data, including after key rotation.
 These remain local integrations. The customer snapshot catalogue and matching-code
-recovery approval screens are implemented for verified test snapshots;
+recovery approval screens are implemented for verified test snapshots. The replacement
+setup downloads and validates the selected archive, stages it and runs Waitron cold restore
+without copying keys or inheriting the old backup destination;
 installation-authenticated capture delivery, upload-credential renewal and scheduled snapshots with durable local retries are implemented locally; complete replacement activation remains open. The pairing runner still uses synthetic observations; only the
 separate remote runner proves a tunnel. Waitron owns the remaining SQLite slice-2 sealed-state row, stream supervisor and
 cold-restore contract. Recheck those interfaces before wiring complete continuous recovery. The full two-venue milestone remains unproved.
@@ -389,16 +391,14 @@ mobile notifications separately.
   512 MiB archive limit. Confirmed uploads retry publication without resending; loss of an
   acknowledged storage object waits until capture expiry before recapture. Next: measure
   production uplink budgets, spool disk use and shutdown latency during local database/encryption
-  work, stream archive
-  assembly, and implement
-  customer recovery screens, streaming object I/O beyond the current 512 MiB bound,
+  work, stream archive assembly and object I/O beyond the current 512 MiB bound,
   tombstone/job-history retention, master-key operations and production verifier isolation.
   Measure scheduling sweeps at the intended deployment scale and tune their cadence
   separately from job polling; the local concurrency proof covers only small fixtures. Complete continuous server recovery and activation depend on Waitron slice 2.
   Retention, restore checks, export, deletion and access review;
   define what survives subscription termination and for how long.
-  The catalogue implements the starting snapshot policy: daily for 30 days, monthly for 12 months
-  and longer paid retention for selected snapshots. Daily timing follows the venue business-day cutover with stable jitter; the first successful
+  The catalogue implements daily retention for 30 days and monthly retention for 12 months.
+  Longer paid retention for selected snapshots remains to be implemented. Daily timing follows the venue business-day cutover with stable jitter; the first successful
   capture per local month gets monthly retention, and missed runs make one current copy.
   Validate storage costs before pricing.
   Validate the inherited continuous-backup retention baseline. Protect the last verified snapshot from automatic
@@ -417,8 +417,12 @@ mobile notifications separately.
   for stream and archive restores. Keep the on-prem-archive-to-cloud vault re-encryption
   follow-up explicit; it is not proved by an ordinary backup download.
   Real snapshots now exclude source Cloud credentials and staff TLS keys; the managed
-  replacement fixture discards old backup settings. Promote that test-only reconciliation
-  into Waitron's actual replacement contract before customer use. Restore verification is
+  recovery path discards old backup settings through a persisted managed-restore marker.
+  The local proof now exercises the actual cold-restore entry point, including its module hooks.
+  Before production, define recovery-request/result retention, account-deletion handling and
+  audit exports. Measure request-ID denial of service and review code-hash disclosure risks.
+  Keep completion reports separate from activation, and test deployment-scale transfer
+  interruption, expiry and cancellation against the selected provider. Restore verification is
   separate from upload freshness; production workers still need enforceable resource and
   network isolation, without activating a primary or contacting fiscal/payment services. Define the external-key format extension
   rather than assuming it exists in the inspected manifest v1.
@@ -428,8 +432,8 @@ mobile notifications separately.
 | Service | Design work still needed |
 | --- | --- |
 | Remote access (initial) | The local two-venue adapter and operator commands are implemented; see [the executable proof](local-remote-access.md). Customer setup screens now expose assigned names, revision-bound custom DNS changes and readiness. Live DNS/provider integration, automatic appliance/certificate setup and deployment remain open. Public HTTPS terminates in Cloud for bot inspection; staff uses a separate hostname with TLS passthrough and network controls. Share a gateway within each cell, with separate venue tunnels and credentials. Define and test route/session isolation, traffic limits and legitimate automated-client handling. Provide assigned/custom domains and automated certificates; implement the preferred local DNS overrides with router-specific setup and offline/recovery tests. Decide the bootstrap role of waitron.local. Temporary unavailability while the venue is offline and short interruptions during cell replacement are accepted; define and test the cell recovery-time target. |
-| Backups (initial) | Implement self-service restore onto a replacement server, normally using the latest recoverable Litestream backup. Provision scoped storage access, show recovery-point time and backup health, alert on interruption, define retention and test restore against each provider selected for launch. Coordinate safe replacement activation with Waitron. |
-| SQLite snapshots (initial backup service) | Retain daily snapshots for 30 days and monthly snapshots for 12 months, with longer paid retention for selected snapshots. Each must remain restorable if continuous backup data disappears. Protect the last verified snapshot from automatic expiry while subscribed; verify a newer copy before replacing it and show stale backup health. Define schedule details, consistency, extended-retention terms and prices, and independent storage/deletion controls. Provide explicit snapshot selection and prove restoration with continuous backup data absent. |
+| Backups (initial) | Guided verified-snapshot recovery is implemented for local test venues. Complete production replacement and continuous server recovery, normally using the latest recoverable Litestream backup. Provision scoped storage access, show recovery-point time and backup health, alert on interruption, define retention and test restore against each provider selected for launch. Coordinate safe replacement activation with Waitron. |
+| SQLite snapshots (initial backup service) | Retain daily snapshots for 30 days and monthly snapshots for 12 months, with longer paid retention for selected snapshots. Each must remain restorable if continuous backup data disappears. Protect the last verified snapshot from automatic expiry while subscribed; verify a newer copy before replacing it and show stale backup health. Define schedule details, consistency, extended-retention terms and prices, and independent storage/deletion controls. Explicit verified-snapshot selection and restoration with continuous data absent are proved locally; run the same flow against the selected production provider. |
 | Failover to cloud | Allocate a replacement instance, coordinate promotion with Waitron, connect devices, stream the new primary and support return to the venue. |
 | Hosted Waitron | Provision isolated operational instances, local print connectivity, upgrades, capacity and cloud-only recovery. |
 | Bookings and public pages | Initial remote access may be unavailable while the venue is offline. Future independent cloud hosting needs rules for accepting reservations and synchronising them with the venue; include menus, ordering and payment-page candidates. |
