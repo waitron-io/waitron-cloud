@@ -246,11 +246,12 @@ export class BackupCatalogue {
       return version;
     });
   }
-  async reserveCapture(installationId: string, id: string) {
+  async reserveCapture(installationId: string, id: string, fence?: MutationFence) {
     if (!uuid(id)) backupFail("conflict");
     return transaction(this.#pool, async (client) => {
       const install = await active(client, installationId),
         l = await lockVenue(client, install.venue_id);
+      await fence?.(client);
       await client.query(
         "INSERT INTO backup_captures(id,venue_id,installation_id,key_version) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO NOTHING",
         [id, install.venue_id, installationId, l.active_key_version],
@@ -264,18 +265,15 @@ export class BackupCatalogue {
       )
         backupFail("conflict");
       if(row.expired)backupFail("capture_expired");
+      const keys=await pointKeys(client,this.#vault,install.venue_id,row.key_version);
+      await fence?.(client);
       return {
         id,
         venueId: install.venue_id as string,
         keyVersion: row.key_version as number,
         location: location(l),
         incomingKey: "incoming/" + id,
-        keys: await pointKeys(
-          client,
-          this.#vault,
-          install.venue_id,
-          row.key_version,
-        ),
+        keys,
       };
     });
   }
@@ -283,6 +281,7 @@ export class BackupCatalogue {
     installationId: string,
     id: string,
     m: PointMetadata,
+    fence?: MutationFence,
   ): Promise<BackupPoint> {
     if (!uuid(id)) backupFail("unavailable");
     validateMetadata(m);
@@ -296,6 +295,7 @@ export class BackupCatalogue {
           )
         ).rows[0];
       if (!capture) backupFail("unavailable");
+      await fence?.(client);
       const prior = await point(client, id);
       if (prior) {
         if (!sameMetadata(prior, m)) backupFail("conflict");
@@ -309,6 +309,8 @@ export class BackupCatalogue {
         backupFail("object_mismatch");
       const objectKey = "snapshots/" + id;
       await objects.put(objectKey, bytes);
+      await fence?.(client);
+      if((await client.query("SELECT created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1",[id])).rows[0].expired)backupFail("capture_expired");
       await client.query(
         `INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules) VALUES($1,$2,$3,$4,'snapshot',$5,$6,$7,$8,$9,$10,$11)`,
         [

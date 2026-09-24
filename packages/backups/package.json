@@ -17,6 +17,8 @@
     "@types/pg": "^8.23.1"
   },
   "exports": {
-    "./retention": "./src/retention.ts"
+    "./retention": "./src/retention.ts",
+    "./captures": "./src/captures.ts",
+    "./capture-config": "./src/capture-config.ts"
   }
 }
