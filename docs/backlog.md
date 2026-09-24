@@ -9,6 +9,10 @@ email capture. The account HTTP API now provides signup, login, session activity
 logout and recovery with shared request limits, Origin/CSRF checks and bounded
 network handling. The bilingual account portal now covers signup, sign-in, sign-out
 and password recovery, served by that API with real browser and Mailpit tests.
+The account venue overview groups one organisation at a time, shows business context,
+connection/service state and separate latest/verified snapshot capture times. Verified
+snapshots older than 48 hours are labelled out of date. Snapshot history, background
+verification/cleanup and incident notifications are the next self-service slices.
 Live provider/sender configuration and public deployment remain open.
 No public cloud service is deployed. This file owns cloud product and platform work;
 Waitron's backlog owns the on-prem application and its side of the integration.
