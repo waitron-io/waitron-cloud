@@ -152,6 +152,37 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   Detailed international administration, separate-approver workflows and ownership
   transfers can wait until needed. Each venue belongs to one organisation at a time.
 
+## Free services for open-source Waitron
+
+Provide address lookup and transactional email delivery to open-source Waitron users
+with a Cloud login, without requiring a paid subscription. Keep setup self-service.
+These services should make ordinary account and address tasks easier even when a
+venue does not subscribe to remote access or backups.
+
+- **Address lookup.** Offer free geographic address lookup and completion to help
+  fill out addresses correctly. Choose the provider and confirm country coverage,
+  address quality, licensing and caching rules. Keep manual entry and correction
+  available when a lookup is unavailable or returns the wrong address.
+- **Transactional email.** Offer managed SMTP delivery for password resets and other
+  account administration emails from on-prem Waitron. Scope the relay to these
+  messages, authenticate requests and handle delivery failures and abuse. The existing
+  Cloud email transport is a starting point; serving connected Waitron installations
+  still needs implementation.
+- **Mobile notifications (candidate).** Consider a free allowance for mobile phone
+  notifications. Choose the delivery channel and validate its costs before committing
+  to inclusion; push notifications and SMS need separate cost estimates.
+- **Per-user allowances.** Meter each service against the Cloud user account, enforce
+  limits and show usage and remaining allowance. Define the allowance sizes, reset
+  periods and behaviour at the limit, including password-reset delivery. Settle how
+  venue-generated requests count against an account and prevent multiple installations
+  from bypassing its allowance. Keep provider credentials in Cloud.
+
+Low operating cost is an assumption to validate against provider pricing and expected
+usage. Estimate costs and abuse exposure before setting allowances, and apply the
+existing Spain-first residency preference when selecting providers. Next: scope the
+address provider and Waitron integration, then the authenticated email relay; evaluate
+mobile notifications separately.
+
 ## Decisions in progress
 
 | Decision | Next step |
@@ -161,7 +192,7 @@ remains a separate exchange requiring both Cloud and local administrator proof.
 | Residency | Spain is the first deployment country. Define the country policy for operational data, backups, archives, analytics, identities, logs and messages; verify AWS service locations and actual obligations before making customer promises. |
 | Cells | Venues are independently placed, with a shared gateway per cell and stable customer-facing addresses on movement. Short remote-access interruptions during cell replacement are accepted. Define group size, availability-zone layout, recovery-time target and tested replacement. Specify shared dependencies, movement and staged rollout; keep backups and portal recovery independent of gateway machines. |
 | Provider support | AWS is the first provider, deploying in Spain. Select and verify the required region and services. Keep Google Cloud as a future target and define the evidence needed to support it. Decide separately whether cross-provider failover is wanted. |
-| Product packages | Remote access and backups are the initial services. Define their release scope, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
+| Product packages | Remote access and backups are the initial paid services. Address lookup and transactional account email are planned free services for open-source Waitron with a Cloud login and per-user limits; mobile notifications remain a candidate. Define their release scope, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
 | Usage policy | Define lookup and other usage units, customer visibility, allowances and excess-use behaviour. Decide which measurements affect pricing and how retries, failed calls, cached results and batches count. |
 | Waitron boundary | Signup inside Waitron, distinct Cloud and local staff logins, explicit identity linking and an independent Cloud portal are agreed. Venue linking requires Cloud permission to add venues and local administrator approval; one person or different people may provide them. Define the approval exchange, ownership proof, already-linked venue handling, configuration, credentials, status and version compatibility. |
 | Server lifecycle | One guided replacement flow covers planned upgrades and server failure, preserving venue, subscription and customer-facing addresses. Use fresh installation credentials, verify restored data before trading, retire old credentials and follow Waitron's activation rules. Specify final-backup handover, concurrent requests, interrupted replacement and a returning old server. Define connection and standalone revocation, including the latter's effects on subscriptions, retained backups and reconnection. |
@@ -391,7 +422,8 @@ remains a separate exchange requiring both Cloud and local administrator proof.
 | Invoice archive | Define the archived objects and access grants, including owner-approved AEAT/advisor access, retention, download and customer exit. Have hosting/archive questions reviewed for the launch country. |
 | Analytics and reports | Choose ingestion, supported source versions, country and cell placement, search/aggregation engine, scheduled reports and group reporting. Elasticsearch is a candidate. |
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |
-| Messaging | Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
+| Address lookup (free) | Implement geographic address lookup and completion for open-source Waitron with a Cloud login and per-user limits; see [free services](#free-services-for-open-source-waitron). Validate provider coverage, address quality and costs. |
+| Messaging | Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
 | Automated upgrades | Treat cloud services, cloud-hosted Waitron and on-prem installations separately; choose rollout groups, compatibility, maintenance windows, pause and recovery behaviour. |
 | Monitoring | External venue health and backup/filing/device signals, functional cloud-service checks, performance, customer alerts and incidents. Platform usage metering also tracks consumption, limits and costs. |
 
