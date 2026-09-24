@@ -10,7 +10,8 @@ remain separate work.
 A bounded scheduler creates up to 100 missing monitor rows. Each run claims one due
 venue using a row lock and SKIP LOCKED, observes its current installation and configured
 services, and commits the result, incident transition and email queue records together.
-Check each venue once a minute. No network calls happen under this transaction.
+Check each venue once a minute. Skip locked installations and retry failed observations
+after 30 seconds, preserving their last-check time and continuing with other venues. No network calls happen under this transaction.
 A check older than five minutes is unknown in the portal, even if its last result was
 healthy. The worker CLI reports due venues, active incidents and oldest check.
 
@@ -31,7 +32,8 @@ Do not describe a successful snapshot as full continuous-server recovery.
 ## Email preference and delivery
 
 One account preference enables service emails for venues the account currently owns,
-with English or Spanish selected in the portal. Default off. Permission removal,
+with English or Spanish selected in the portal. Use the current language at transport
+handoff; changing language does not cancel a pending notice. Default off. Permission removal,
 disabled accounts, unverified/changed email, opt-out and superseded incident revisions
 cancel queued notices when rechecked before transport dispatch. Emails contain fixed
 issue descriptions, the venue ID and a link to the signed-in account portal, with no

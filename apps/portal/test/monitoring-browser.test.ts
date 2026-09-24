@@ -21,8 +21,10 @@ for(const locale of ['en','es'] as const)test(`${locale} owner manages service a
   const issue=locale==='en'?'Cloud has not heard from this venue for at least 15 minutes. Check its internet connection and Waitron server.':'Cloud no recibe contacto de este local desde hace al menos 15 minutos. Comprueba su conexión a internet y el servidor Waitron.';
   await page.getByText(issue,{exact:true}).waitFor();
   await f.db.pool.query("UPDATE venue_monitors SET checked_at=clock_timestamp()-interval '6 minutes'");await page.getByRole('button',{name:c.refreshStatus,exact:true}).click();await page.getByText(locale==='en'?'Monitoring status is unknown. Refresh later to check for new observations.':'El estado de la supervisión es desconocido. Actualiza más tarde para ver nuevas comprobaciones.',{exact:true}).waitFor();
+  assert(await page.getByText(issue,{exact:true}).isVisible());
   const observe=async(seconds:number)=>{await f.db.pool.query("UPDATE installations SET last_contact_at=clock_timestamp()-$1*interval '1 second'",[seconds]);await f.db.pool.query('UPDATE venue_monitors SET next_check_at=clock_timestamp()');await monitor.runOnce();};
-  await observe(0);await observe(901);await f.drainMail();
+  const emailLanguage=async(value:string)=>{await page.getByLabel(language,{exact:true}).selectOption(value);await page.getByRole('button',{name:save,exact:true}).click();await page.getByText(saved,{exact:true}).waitFor();};
+  await observe(0);await emailLanguage(locale==='en'?'es':'en');await observe(901);await emailLanguage(locale);await f.drainMail();
   const opening=await mailFor(email,locale==='en'?'Waitron Cloud: a venue needs attention':'Waitron Cloud: un local necesita atención');assert(opening.includes(v.venueId));assert(opening.includes(f.origin+'/account'));assert(opening.includes(issue));assert(!opening.includes('token='));
   await observe(0);await f.drainMail();const recovery=await mailFor(email,locale==='en'?'Waitron Cloud: venue check recovered':'Waitron Cloud: comprobación recuperada');assert(recovery.includes(v.venueId));
   await page.getByRole('button',{name:c.refreshStatus,exact:true}).click();await page.getByText(locale==='en'?'No current alerts in the latest check.':'No hay alertas en la última comprobación.',{exact:true}).waitFor();assert.equal(await page.getByText(issue,{exact:true}).count(),0);

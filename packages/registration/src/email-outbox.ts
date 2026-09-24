@@ -87,9 +87,9 @@ export class EmailOutbox {
 export class EmailWorker {
   readonly #pool: Pool;
   readonly #outbox: EmailOutbox;
-  readonly #mailer: SignupMailer & PasswordRecoveryMailer & Partial<ServiceAlertMailer>;
+  readonly #mailer: SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer;
   readonly #timeout: number;
-  constructor(pool: Pool, outbox: EmailOutbox, mailer: SignupMailer & PasswordRecoveryMailer & Partial<ServiceAlertMailer>, options: {sendTimeoutMs?: number} = {}) {
+  constructor(pool: Pool, outbox: EmailOutbox, mailer: SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer, options: {sendTimeoutMs?: number} = {}) {
     this.#pool = pool; this.#outbox = outbox; this.#mailer = mailer;
     this.#timeout = options.sendTimeoutMs ?? 20_000;
     if (!Number.isInteger(this.#timeout) || this.#timeout < 1 || this.#timeout > 30_000) throw new Error('Invalid email worker timeout');
@@ -163,17 +163,19 @@ export class EmailWorker {
   async #live(row: MessageRow, message: AccountEmail | AccountNotification | ServiceAlert): Promise<boolean> {
     if(row.kind==='service_alert'){
       if(!validServiceAlert(message))return false;
-      return !!(await this.#pool.query(`SELECT 1 FROM service_alert_deliveries d JOIN email_outbox e ON e.id=d.outbox_id JOIN venue_incidents i ON i.id=d.incident_id
+      const live=(await this.#pool.query(`SELECT p.locale FROM service_alert_deliveries d JOIN email_outbox e ON e.id=d.outbox_id JOIN venue_incidents i ON i.id=d.incident_id
         JOIN venues v ON v.id=i.venue_id JOIN installations n ON n.venue_id=v.id
         JOIN organisation_memberships m ON m.organisation_id=v.organisation_id AND m.account_id=d.account_id
         JOIN cloud_accounts a ON a.id=d.account_id JOIN cloud_credentials c ON c.account_id=a.id
         JOIN account_alert_preferences p ON p.account_id=a.id
-        WHERE d.outbox_id=$1 AND e.claim_id=$9 AND e.status='processing' AND e.lease_until>clock_timestamp() AND e.expires_at>clock_timestamp() AND i.id=$2 AND i.revision=$3 AND d.revision=i.revision AND i.venue_id=$4 AND i.kind=$5 AND i.status=$6 AND d.state=i.status
-          AND m.is_owner AND a.disabled_at IS NULL AND c.email_verified_at IS NOT NULL AND c.email=$7 AND p.enabled AND p.locale=$8
+        WHERE d.outbox_id=$1 AND e.claim_id=$8 AND e.status='processing' AND e.lease_until>clock_timestamp() AND e.expires_at>clock_timestamp() AND i.id=$2 AND i.revision=$3 AND d.revision=i.revision AND i.venue_id=$4 AND i.kind=$5 AND i.status=$6 AND d.state=i.status
+          AND m.is_owner AND a.disabled_at IS NULL AND c.email_verified_at IS NOT NULL AND c.email=$7 AND p.enabled
           AND v.environment='test' AND n.revoked_at IS NULL
           AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured'
             AND (i.kind='disconnected' OR s.service='retained_snapshots'))`,
-        [row.id,message.incidentId,message.revision,message.venueId,message.issue,message.state,message.email,message.locale??'en',row.claim_id])).rowCount;
+        [row.id,message.incidentId,message.revision,message.venueId,message.issue,message.state,message.email,row.claim_id])).rows[0];
+      if(!live)return false;
+      message.locale=live.locale;return true;
     }
     if (row.kind === 'password_changed') return true;
     if (row.kind === 'verification') {

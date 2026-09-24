@@ -14,11 +14,16 @@ export class MonitorWorker {
    ORDER BY i.venue_id LIMIT 100 ON CONFLICT DO NOTHING`);return result.rowCount??0;
  }
  async runOnce(){
-  return transaction(this.#pool,async client=>{
+  let retryVenue:string|undefined;
+  try{return await transaction(this.#pool,async client=>{
    const monitor=(await client.query('SELECT * FROM venue_monitors WHERE next_check_at<=clock_timestamp() ORDER BY next_check_at,venue_id LIMIT 1 FOR UPDATE SKIP LOCKED')).rows[0];
-   if(!monitor)return false;
+   if(!monitor)return false;retryVenue=monitor.venue_id;
    // Lifecycle configuration and revocation take this installation lock before changing services.
-   const installation=(await client.query(`SELECT i.*,v.environment FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.venue_id=$1 FOR SHARE OF i`,[monitor.venue_id])).rows[0];
+   const installation=(await client.query(`SELECT i.*,v.environment FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.venue_id=$1 FOR SHARE OF i SKIP LOCKED`,[monitor.venue_id])).rows[0];
+   if(!installation){
+    await client.query("UPDATE venue_monitors SET next_check_at=clock_timestamp()+interval '30 seconds' WHERE venue_id=$1",[monitor.venue_id]);
+    return true;
+   }
    const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
    const services=(await client.query("SELECT service FROM installation_services WHERE installation_id=$1 AND state<>'unconfigured'",[installation?.id])).rows.map(r=>r.service);
    const active=installation&&installation.environment==='test'&&!installation.revoked_at&&services.length>0;
@@ -35,7 +40,11 @@ export class MonitorWorker {
    await this.#transition(client,monitor.venue_id,'verification_failed',!!snapshots,!!failureSince&&old(failureSince,300),now);
    await client.query(`UPDATE venue_monitors SET checked_at=$2,next_check_at=$2::timestamptz+interval '1 minute',contact_since=$3,snapshot_since=$4,failure_point_id=$5,failure_since=$6 WHERE venue_id=$1`,[monitor.venue_id,now,contactSince,snapshotSince,failurePoint,failureSince]);
    return true;
-  });
+  });}catch(error){
+   // A rolled-back venue retries later so another due venue can still be observed.
+   if(retryVenue)try{await this.#pool.query("UPDATE venue_monitors SET next_check_at=clock_timestamp()+interval '30 seconds' WHERE venue_id=$1 AND next_check_at<=clock_timestamp()",[retryVenue]);}catch{/* Database recovery leaves the original due row available. */}
+   throw error;
+  }
  }
  async #transition(client:PoolClient,venueId:string,kind:IncidentKind,enabled:boolean,bad:boolean,now:Date){
   const previous=(await client.query('SELECT * FROM venue_incidents WHERE venue_id=$1 AND kind=$2',[venueId,kind])).rows[0];

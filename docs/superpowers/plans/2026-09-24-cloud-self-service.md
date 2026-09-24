@@ -63,4 +63,8 @@ Monitoring uses the service-monitoring spec and its embedded plan. The local mon
 encrypted service notices, preference API and bilingual portal controls are implemented.
 Focused PostgreSQL, controller, browser and Mailpit checks cover thresholds, stale
 checks, revocation and delivery permission. The final queue-wait ownership race has
-a reproduced failing regression and a transport-handoff recheck. Finish/CI/land follow.
+a reproduced failing regression and a transport-handoff recheck. The 434-second
+review led to current-language delivery, retries for failed observations and skipping
+locked installations. Regression tests prove other venues continue and a preference
+write rolls back if its session expires while waiting. The four implementation tasks
+are complete; deployment work remains in the backlog.

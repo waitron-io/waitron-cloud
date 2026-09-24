@@ -39,3 +39,14 @@ test('preference reads and writes share a bounded account allowance',async()=>{
  for(let n=0;n<30;n++)assert.equal((await request()).status,200);
  const limited=await request({enabled:'on',locale:'en'});assert.equal(limited.status,429);assert(limited.headers.get('retry-after'));
 });
+test('session expiry while a preference write waits rolls the change back',async()=>{
+ assert.equal((await request({enabled:'off',locale:'en'})).status,200);
+ const block=await db.secondPool.connect();await block.query('BEGIN');await block.query('SELECT account_id FROM account_alert_preferences FOR UPDATE');
+ await db.pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '1 second'");
+ const pending=request({enabled:'on',locale:'es'});let waiting=false;
+ try{
+  for(let n=0;n<100;n++){if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'INSERT INTO account_alert_preferences%'",[db.schema])).rowCount){waiting=true;break;}await new Promise(r=>setTimeout(r,10));}
+  await new Promise(r=>setTimeout(r,1100));
+ }finally{await block.query('COMMIT');block.release();}
+ assert(waiting);assert.equal((await pending).status,401);assert.deepEqual((await db.pool.query('SELECT enabled,locale FROM account_alert_preferences')).rows,[{enabled:false,locale:'en'}]);
+});

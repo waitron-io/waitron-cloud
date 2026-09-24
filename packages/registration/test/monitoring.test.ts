@@ -1,4 +1,4 @@
-import {execFile} from 'node:child_process';
+import {execFile,spawn} from 'node:child_process';
 import {promisify} from 'node:util';
 import assert from 'node:assert/strict';
 import {test,before,after,beforeEach} from 'node:test';
@@ -49,7 +49,7 @@ test('an undelivered opening is cancelled on recovery without sending a recovery
  await monitor.schedule();await contact(901);await monitor.runOnce();await contact(0);await monitor.runOnce();await deliver();
  assert.equal(sent.length,0);assert.equal((await alerts()).length,1);assert.equal((await alerts())[0].status,'cancelled');
 });
-for(const change of ['owner','preference','disabled','email','verified','revoked','service'])test('queued alert rechecks '+change+' before delivery',async()=>{
+for(const change of ['owner','preference','disabled','email','verified','revoked','service'])test('queued alert cancels after an earlier '+change+' change',async()=>{
  await monitor.schedule();await contact(901);await monitor.runOnce();
  const changes={
   owner:"UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1",
@@ -114,7 +114,8 @@ test('incident creation rolls back if mail enqueue fails, then resumes exactly o
  await db.pool.query("ALTER TABLE email_outbox ADD CONSTRAINT fixture_reject_alert CHECK(kind<>'service_alert')");
  try{await assert.rejects(monitor.runOnce(),/check constraint/);assert.equal((await db.pool.query('SELECT count(*) FROM venue_incidents')).rows[0].count,'0');assert.equal((await db.pool.query('SELECT checked_at FROM venue_monitors')).rows[0].checked_at,null);}
  finally{await db.pool.query('ALTER TABLE email_outbox DROP CONSTRAINT fixture_reject_alert');}
- const other=new MonitorWorker(db.secondPool,db.outbox);await Promise.all([monitor.runOnce(),other.runOnce()]);assert.equal((await alerts()).length,1);
+ assert.equal((await db.pool.query('SELECT next_check_at>clock_timestamp() AS delayed FROM venue_monitors')).rows[0].delayed,true);
+ await due();const other=new MonitorWorker(db.secondPool,db.outbox);await Promise.all([monitor.runOnce(),other.runOnce()]);assert.equal((await alerts()).length,1);
 });
 test('opting in during an incident waits for future transitions and delivery retries do not queue duplicates',async()=>{
  await db.pool.query('UPDATE account_alert_preferences SET enabled=false');await monitor.schedule();await contact(901);await monitor.runOnce();assert.equal((await alerts()).length,0);
@@ -149,4 +150,35 @@ test('a new owner receives no recovery for an opening sent to a former owner',as
  await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)',[next.accountId,owner.organisationId]);
  await db.pool.query("INSERT INTO account_alert_preferences(account_id,enabled,locale) VALUES($1,true,'es')",[next.accountId]);
  await contact(0);await monitor.runOnce();await deliver();assert.equal(sent.length,1);assert.equal((await alerts()).length,1);
+});
+test('changing email language preserves the queued alert and renders the current preference',async()=>{
+ await monitor.schedule();await contact(901);await monitor.runOnce();await db.pool.query("UPDATE account_alert_preferences SET locale='es'");await deliver();
+ assert.equal(sent.length,1);assert.equal((sent[0] as {locale:string}).locale,'es');assert.equal((await alerts())[0].status,'sent');
+});
+test('continuous monitoring skips locked installations and survives a failed observation',async()=>{
+ const r=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+ await r.start(binding);await r.approveCloud(binding,owner.accountId);await r.approveLocal(binding,randomUUID());const other=await r.complete(binding);
+ await db.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[other.installationId]);
+ await monitor.schedule();await contact(901);await db.pool.query("UPDATE venue_monitors SET next_check_at=clock_timestamp()-interval '1 day' WHERE venue_id=$1",[venue.venueId]);
+ const lock=await db.secondPool.connect();await lock.query('BEGIN');await lock.query('SELECT id FROM installations WHERE id=$1 FOR UPDATE',[venue.installationId]);
+ const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+db.schema);
+ const child=spawn(process.execPath,['packages/registration/src/monitor-cli.ts'],{cwd:new URL('../../../',import.meta.url),env:{PATH:process.env.PATH,DATABASE_URL:url.href,CLOUD_EMAIL_KEYS:JSON.stringify(db.keys),CLOUD_EMAIL_ACTIVE_KEY_ID:'test'},stdio:['ignore','ignore','pipe']});
+ let errors='';child.stderr.on('data',v=>{errors+=String(v);});const exited=new Promise<number|null>(resolve=>child.once('exit',resolve));
+ const observed=async()=>{for(let n=0;n<100;n++){if((await db.pool.query('SELECT checked_at FROM venue_monitors WHERE venue_id=$1',[other.venueId])).rows[0].checked_at)return true;if(child.exitCode!==null)return false;await new Promise(r=>setTimeout(r,50));}return false;};
+ let unlocked=false;
+ try{
+  assert(await observed(),'A locked installation must not block another venue');assert.equal(child.exitCode,null);
+  await lock.query('COMMIT');unlocked=true;
+  await db.pool.query("ALTER TABLE email_outbox ADD CONSTRAINT fixture_fail_alert CHECK(kind<>'service_alert')");
+  await db.pool.query("UPDATE venue_monitors SET checked_at=NULL,next_check_at=clock_timestamp() WHERE venue_id=$1",[other.venueId]);
+  await db.pool.query("UPDATE venue_monitors SET next_check_at=clock_timestamp()-interval '1 day' WHERE venue_id=$1",[venue.venueId]);
+  for(let n=0;n<100&&!errors.includes('retrying');n++){if(child.exitCode!==null)break;await new Promise(r=>setTimeout(r,50));}
+  assert(errors.includes('retrying'),'A failed observation must enter retry backoff');assert.equal(child.exitCode,null);
+  await db.pool.query("UPDATE venue_monitors SET checked_at=NULL,next_check_at=clock_timestamp() WHERE venue_id=$1",[other.venueId]);assert(await observed());
+  assert.equal((await db.pool.query('SELECT checked_at FROM venue_monitors WHERE venue_id=$1',[venue.venueId])).rows[0].checked_at,null);
+  assert.equal((await db.pool.query('SELECT count(*) FROM venue_incidents')).rows[0].count,'0');
+ }finally{
+  if(!unlocked)await lock.query('ROLLBACK');lock.release();child.kill('SIGTERM');const timer=setTimeout(()=>child.kill('SIGKILL'),3000);try{await exited;}finally{clearTimeout(timer);}
+  await db.pool.query('ALTER TABLE email_outbox DROP CONSTRAINT IF EXISTS fixture_fail_alert');
+ }
 });

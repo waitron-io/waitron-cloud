@@ -46,7 +46,9 @@ pnpm monitor:status
 A scheduling sweep adds at most 100 missing venues. Each transaction processes one due
 venue and saves its observation, incident transition and queued messages together.
 Concurrent monitors skip rows already being processed. If enqueueing fails, the whole
-observation rolls back for retry. `--once` schedules and processes at most one venue.
+observation rolls back and retries after 30 seconds. Locked installations are skipped
+for the same interval, without marking their check fresh. A failing venue does not
+stop the continuous process or hold up other due venues. `--once` schedules and processes at most one venue.
 The continuous command polls when idle and stops claiming new work on shutdown.
 
 Status needs only database access. It reports venue and due counts, unknown checks,
@@ -68,9 +70,11 @@ to current owners whose opening message was recorded as sent. New owners and peo
 opting in mid-incident can see the current status in the portal and receive future alerts.
 
 Before handing an alert to the transport, the email worker rechecks its delivery claim,
-current ownership, account status, verified email address, preference and language,
+current ownership, account status, verified email address, preference,
 service configuration, revocation and incident revision. An obsolete message is cancelled.
-Messages expire after 24 hours and use the existing bounded email retries. They contain
+Language is refreshed from your current preference at sending time, so changing it
+does not discard a queued alert. Run the monitor and mail worker from the same updated
+checkout. Messages expire after 24 hours and use the existing bounded email retries. They contain
 a venue identifier, a fixed explanation and an account link, with no backup keys, object
 paths or archive content.
 

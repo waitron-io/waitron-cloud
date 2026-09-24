@@ -324,7 +324,8 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   evidence and stale monitoring; owners can opt in to English/Spanish email alerts.
   Durable transition records prevent repeated scans from enqueueing duplicates, with
   live ownership/preference checks before delivery and recovery notices for prior
-  recipients. SMTP uncertain-acceptance duplicates remain possible. Next: external
+  recipients. Queued notices use the current email language. Locked installations and
+  failed observations defer their next check while other venues continue. SMTP uncertain-acceptance duplicates remain possible. Next: external
   functional probes, incident/delivery-history retention, deployment-scale scheduling
   and recipient fan-out measurements, escalation/quiet periods and rollout pause criteria.
 - **Usage metering.** Attribute lookups/API calls, reports, storage, transfers,

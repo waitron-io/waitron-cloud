@@ -9,15 +9,22 @@ try{
  const args=process.argv.slice(2),mode=args[0];
  if(args.length>1||(mode&&!['--once','--status'].includes(mode))||!process.env.DATABASE_URL)throw Error();
  pool=new Pool({connectionString:process.env.DATABASE_URL,max:2,connectionTimeoutMillis:5000,statement_timeout:10000});
- pool.on('error',()=>{console.error('Monitor database connection failed');process.exitCode=1;stop.abort();});
+ pool.on('error',()=>{console.error('Monitor database connection failed; retrying');});
+ await pool.query('SELECT checked_at,next_check_at FROM venue_monitors LIMIT 0');
  if(mode==='--status')console.log(JSON.stringify(await monitorStatus(pool)));
  else{
   if(!process.env.CLOUD_EMAIL_KEYS||!process.env.CLOUD_EMAIL_ACTIVE_KEY_ID)throw Error();
   const outbox=new EmailOutbox({activeKeyId:process.env.CLOUD_EMAIL_ACTIVE_KEY_ID,keys:JSON.parse(process.env.CLOUD_EMAIL_KEYS)});
   const worker=new MonitorWorker(pool,outbox);
   while(!stop.signal.aborted){
-   await worker.schedule();const ran=await worker.runOnce();
-   if(mode==='--once'){console.log(JSON.stringify(await worker.status()));break;}
+   let ran=false;
+   try{
+    await worker.schedule();ran=await worker.runOnce();
+    if(mode==='--once'){console.log(JSON.stringify(await worker.status()));break;}
+   }catch(error){
+    if(mode==='--once')throw error;
+    console.error('Monitor observation failed; retrying');
+   }
    if(!ran)try{await delay(1000,undefined,{signal:stop.signal});}catch{if(!stop.signal.aborted)throw Error();}
   }
  }
