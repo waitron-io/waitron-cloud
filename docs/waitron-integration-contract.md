@@ -13,6 +13,23 @@ capture/restore interfaces before wiring backup operations to Waitron. The older
 PostgreSQL source below remains a reference for historical contracts. Registration,
 permissions and service configuration can proceed against the current SQLite application.
 
+## Local implementation update — 2026-09-24
+
+Pairing, lifecycle and the shared remote gateway now have executable local proofs.
+The [managed-backup proof](local-backups.md) adds actual Waitron SQLite archives,
+protected key versions, scoped encrypted storage, immutable publication, verified
+restore records, retention and owner-bound snapshot recovery. The catalogue exposes
+snapshot capture times internally; customer backup routes/screens are still open.
+
+The proof excludes actual source Cloud credentials/staff TLS keys and drops captured
+backup destination settings on the disposable replacement. It invokes Waitron's
+validation, SQLite restore/migration and module hooks without starting workers.
+Litestream storage restores are a separate database proof. Complete continuous server
+restore still depends on Waitron's sealed-state and cold-restore implementation.
+Replacement enrolment, old-server retirement and activation remain unimplemented;
+Cloud's recovery grant is not permission to trade. The historical source map below
+remains useful for ownership but does not describe the current SQLite runtime.
+
 ## What already exists
 
 The source baseline is Waitron commit `4ce2db502173d87d14d2e1aad5dc92b19be38363`.

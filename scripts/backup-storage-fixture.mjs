@@ -1,0 +1,350 @@
+import { createServer as httpsServer, Agent } from "node:https";
+import { createServer as netServer } from "node:net";
+import { createRequire } from "node:module";
+import { spawn, execFileSync } from "node:child_process";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  writeFile,
+  rm,
+  open,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
+import { StorageAuthority } from "../packages/backups/src/storage.ts";
+const require = createRequire(
+  new URL("../packages/backups/package.json", import.meta.url),
+);
+const { S3Client, CreateBucketCommand } = require("@aws-sdk/client-s3");
+const {
+  STSClient,
+  AssumeRoleWithWebIdentityCommand,
+} = require("@aws-sdk/client-sts");
+const pins = {
+  "darwin-arm64": [
+    "darwin_arm64.tar.gz",
+    "3ad466db33e83d0b103f90a06997feeb1cc42fd536e6cbdcdded975778f64fda",
+  ],
+  "linux-arm64": [
+    "linux_arm64.tar.gz",
+    "ba5c9def9ff98f78becdf309a50a9f906922f6383a7c4c772d01ede3cc012e16",
+  ],
+  "linux-x64": [
+    "linux_amd64.tar.gz",
+    "31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d",
+  ],
+};
+async function freePort() {
+  const s = netServer();
+  await new Promise((r) => s.listen(0, "127.0.0.1", r));
+  const port = s.address().port;
+  await new Promise((r) => s.close(r));
+  return port;
+}
+async function binary(root) {
+  const pin = pins[process.platform + "-" + process.arch];
+  if (!pin) throw Error("Unsupported SeaweedFS test platform");
+  const cache = join(tmpdir(), "waitron-cloud-test-binaries");
+  await mkdir(cache, { recursive: true });
+  const archive = join(cache, "seaweed-4.47-" + pin[0]);
+  let bytes;
+  try {
+    bytes = await readFile(archive);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    const response = await fetch(
+      "https://github.com/seaweedfs/seaweedfs/releases/download/4.47/" + pin[0],
+    );
+    if (!response.ok) throw Error("SeaweedFS download failed");
+    bytes = Buffer.from(await response.arrayBuffer());
+  }
+  if (createHash("sha256").update(bytes).digest("hex") !== pin[1])
+    throw Error("SeaweedFS archive digest mismatch");
+  await writeFile(archive, bytes);
+  execFileSync("tar", ["-xzf", archive, "-C", root]);
+  return join(root, "weed");
+}
+export async function startBackupStorage() {
+  const root = await mkdtemp(join(tmpdir(), "cloud-backup-storage-"));
+  let oidc, child, log, adminClient;
+  async function stop() {
+    adminClient?.destroy();
+    if (child && child.exitCode === null && child.signalCode === null) {
+      child.kill("SIGTERM");
+      await Promise.race([
+        new Promise((r) => child.once("exit", r)),
+        new Promise((r) => setTimeout(r, 5000)),
+      ]);
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill("SIGKILL");
+        await new Promise((r) => child.once("exit", r));
+      }
+    }
+    if (oidc) await new Promise((r) => oidc.close(r));
+    await log?.close();
+    await rm(root, { recursive: true, force: true });
+  }
+  try {
+    const bin = await binary(root);
+    execFileSync(
+      "openssl",
+      [
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-keyout",
+        join(root, "key.pem"),
+        "-out",
+        join(root, "cert.pem"),
+        "-days",
+        "1",
+        "-subj",
+        "/CN=127.0.0.1",
+        "-addext",
+        "subjectAltName=IP:127.0.0.1,DNS:host.docker.internal",
+      ],
+      { stdio: "ignore" },
+    );
+    const ca = await readFile(join(root, "cert.pem"), "utf8"),
+      tlsKey = await readFile(join(root, "key.pem"));
+    const oidcPort = await freePort(),
+      issuer = "https://127.0.0.1:" + oidcPort,
+      keys = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const roles = Object.fromEntries(
+      ["capture", "stream", "restore"].map((k) => [
+        k,
+        "arn:aws:iam::role/cloud-" + k,
+      ]),
+    );
+    const authority = new StorageAuthority({
+      issuer,
+      audience: "cloud-storage",
+      keyId: "local-test",
+      privateKey: keys.privateKey,
+      roles,
+    });
+    oidc = httpsServer({ key: tlsKey, cert: ca }, (req, res) => {
+      res.setHeader("Content-Type", "application/json");
+      res.end(
+        JSON.stringify(
+          req.url === "/jwks"
+            ? authority.jwks()
+            : {
+                issuer,
+                jwks_uri: issuer + "/jwks",
+                id_token_signing_alg_values_supported: ["RS256"],
+                subject_types_supported: ["public"],
+                response_types_supported: ["id_token"],
+              },
+        ),
+      );
+    });
+    await new Promise((r) => oidc.listen(oidcPort, "127.0.0.1", r));
+    const resource = "arn:aws:s3:::${jwt:bucket}/${jwt:scope}";
+    const policies = ["capture", "stream", "restore"].map((kind) => ({
+      name: kind,
+      document: {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Action:
+              kind === "capture"
+                ? ["s3:PutObject"]
+                : kind === "restore"
+                  ? ["s3:GetObject"]
+                  : ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+            Resource: [resource + (kind === "stream" ? "*" : "")],
+          },
+          ...(kind === "stream"
+            ? [
+                {
+                  Effect: "Allow",
+                  Action: ["s3:ListBucket"],
+                  Resource: ["arn:aws:s3:::${jwt:bucket}"],
+                  Condition: { StringLike: { "s3:prefix": "${jwt:scope}*" } },
+                },
+              ]
+            : []),
+        ],
+      },
+    }));
+    await writeFile(
+      join(root, "sts.json"),
+      JSON.stringify({
+        sts: {
+          tokenDuration: "15m",
+          maxSessionLength: "15m",
+          issuer: "cloud-local-sts",
+          signingKey: randomBytes(32).toString("base64"),
+        },
+        providers: [
+          {
+            name: "cloud",
+            type: "oidc",
+            enabled: true,
+            config: {
+              issuer,
+              clientId: "cloud-storage",
+              jwksUri: issuer + "/jwks",
+              tlsCaCert: join(root, "cert.pem"),
+              roleMapping: {
+                rules: Object.entries(roles).map(([kind, role]) => ({
+                  claim: "kind",
+                  value: kind,
+                  role,
+                })),
+              },
+            },
+          },
+        ],
+        policies,
+        roles: Object.entries(roles).map(([kind, roleArn]) => ({
+          roleName: "cloud-" + kind,
+          roleArn,
+          attachedPolicies: [kind],
+          trustPolicy: {
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Principal: { Federated: "*" },
+                Action: ["sts:AssumeRoleWithWebIdentity"],
+                Condition: {
+                  StringEquals: { "oidc:iss": issuer, "oidc:kind": kind },
+                },
+              },
+            ],
+          },
+        })),
+      }),
+      { mode: 0o600 },
+    );
+    const admin = {
+      accessKeyId: "local-" + randomBytes(8).toString("hex"),
+      secretAccessKey: randomBytes(32).toString("base64url"),
+    };
+    await writeFile(
+      join(root, "iam.json"),
+      JSON.stringify({
+        identities: [
+          {
+            name: "admin",
+            credentials: [
+              {
+                accessKey: admin.accessKeyId,
+                secretKey: admin.secretAccessKey,
+              },
+            ],
+            actions: ["Admin", "Read", "Write", "List", "Tagging"],
+          },
+        ],
+      }),
+      { mode: 0o600 },
+    );
+    const ports = [];
+    for (let i = 0; i < 7; i++) ports.push(await freePort());
+    const [s3, master, masterGrpc, volume, volumeGrpc, filer, filerGrpc] =
+      ports;
+    const endpoint = "https://127.0.0.1:" + s3;
+    await mkdir(join(root, "data"));
+    log = await open(join(root, "store.log"), "w");
+    const args = [
+      "mini",
+      "-dir=" + join(root, "data"),
+      "-ip=127.0.0.1",
+      "-ip.bind=127.0.0.1",
+      "-s3.port=" + s3,
+      "-s3.cert.file=" + join(root, "cert.pem"),
+      "-s3.key.file=" + join(root, "key.pem"),
+      "-s3.config=" + join(root, "iam.json"),
+      "-s3.iam.config=" + join(root, "sts.json"),
+      "-master.port=" + master,
+      "-master.port.grpc=" + masterGrpc,
+      "-volume.port=" + volume,
+      "-volume.port.grpc=" + volumeGrpc,
+      "-filer.port=" + filer,
+      "-filer.port.grpc=" + filerGrpc,
+      "-admin.ui=false",
+      "-webdav=false",
+      "-s3.port.iceberg=0",
+      "-s3.port.lance=0",
+    ];
+    child = spawn(bin, args, {
+      env: { PATH: process.env.PATH, HOME: root, TMPDIR: root },
+      stdio: ["ignore", log.fd, log.fd],
+    });
+    const agent = () => new Agent({ ca });
+    adminClient = new S3Client({
+      endpoint,
+      region: "local",
+      credentials: admin,
+      forcePathStyle: true,
+      maxAttempts: 1,
+      requestHandler: { httpsAgent: agent() },
+    });
+    let ready = false;
+    for (let n = 0; n < 120; n++) {
+      try {
+        await adminClient.send(
+          new CreateBucketCommand({ Bucket: "readiness-probe" }),
+          { abortSignal: AbortSignal.timeout(1000) },
+        );
+        ready = true;
+        break;
+      } catch (error) {
+        if (child.exitCode !== null)
+          throw Error(
+            "SeaweedFS exited: " +
+              (await readFile(join(root, "store.log"), "utf8")),
+          );
+        if (n === 119) throw error;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+    }
+    if (!ready) throw Error("SeaweedFS not ready");
+    async function assume(scope, role, now) {
+      const client = new STSClient({
+        endpoint,
+        region: "local",
+        requestHandler: { httpsAgent: agent() },
+        maxAttempts: 1,
+      });
+      try {
+        return await client.send(
+          new AssumeRoleWithWebIdentityCommand({
+            RoleArn: roles[role],
+            RoleSessionName: "negative-control",
+            WebIdentityToken: authority.token(scope, now),
+            DurationSeconds: 900,
+          }),
+          { abortSignal: AbortSignal.timeout(5000) },
+        );
+      } finally {
+        client.destroy();
+      }
+    }
+    return {
+      root,
+      endpoint,
+      ca,
+      admin,
+      authority,
+      agent,
+      stop,
+      async bucket(name) {
+        await adminClient.send(new CreateBucketCommand({ Bucket: name }));
+        return { endpoint, bucket: name, region: "local" };
+      },
+      assumeOtherRole: (scope, role) => assume(scope, role, Date.now()),
+      assumeExpired: (scope) => assume(scope, scope.kind, Date.now() - 120000),
+    };
+  } catch (error) {
+    await stop();
+    throw error;
+  }
+}

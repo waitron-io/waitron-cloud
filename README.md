@@ -111,3 +111,10 @@ Run two real Waitron servers through a shared gateway using the
 [local remote-access guide](docs/local-remote-access.md). It covers staff TLS passthrough,
 public bot controls, real certificate issuance, LAN DNS, revocation and gateway replacement.
 The commands use disposable local services; no AWS deployment is created.
+
+## Local managed backups
+
+Run encrypted storage and two real Waitron snapshot restores with the
+[local backup guide](docs/local-backups.md). It covers key rotation, retention,
+scoped credentials and recovery after stream loss. Complete continuous server
+replacement still depends on Waitron's SQLite slice-2 recovery implementation.
