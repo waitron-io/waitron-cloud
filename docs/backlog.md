@@ -334,7 +334,9 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   concurrent workers, lease takeover and restart; the two-server proof uses this queue.
   Next: authenticated installation capture/credential renewal, scheduled capture,
   customer recovery screens, streaming object I/O beyond the current 512 MiB bound,
-  tombstone/job-history retention, master-key operations and production verifier isolation. Complete continuous server recovery and activation depend on Waitron slice 2.
+  tombstone/job-history retention, master-key operations and production verifier isolation.
+  Measure scheduling sweeps at the intended deployment scale and tune their cadence
+  separately from job polling; the local concurrency proof covers only small fixtures. Complete continuous server recovery and activation depend on Waitron slice 2.
   Retention, restore checks, export, deletion and access review;
   define what survives subscription termination and for how long.
   The catalogue implements the starting snapshot policy: daily for 30 days, monthly for 12 months

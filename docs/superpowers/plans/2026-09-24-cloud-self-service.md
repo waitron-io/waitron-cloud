@@ -50,3 +50,10 @@ Catalogue: owner-scoped pagination, public metadata, retention protection and bi
 selection are implemented. PR #39 landed on b5e34d3 after review fixes and green CI
 on55cf1dd. The picker and UTC retention boundary fixes have regression tests. Both
 branches and its worktree are removed. Task3 uses the backup-workers spec/embedded plan.
+
+Backup workers: migration012, durable claims/fences/retries, capture expiry/cleanup,
+local CLI and actual Waitron verifier are implemented. Clean-head two-server proof
+passed on Cloud7149f5a/Waitronc37f596b. The 540-second isolated run-it review found an
+expired-lease backoff defect; its failing regression now passes with the other nine
+worker checks. Retry SQL is shared, and the proof waits for its target snapshot.
+Large-scale scheduler cadence remains a deployment measurement. Finish/CI/land follow.

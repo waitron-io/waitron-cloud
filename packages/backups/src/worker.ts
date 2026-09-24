@@ -45,9 +45,10 @@ export class BackupWorker {
    await this.#finish(job);
   }catch(error){
    const code=error instanceof Error&&error.message==='backup.verification_failed'?'verification_failed':error instanceof Error&&error.message==='backup.key_unavailable'?'key_unavailable':'operation_failed';
+   // A late failure still backs off unless another worker has replaced this claim.
    await this.#pool.query(`UPDATE backup_jobs SET failures=failures+1,last_error=$3,status=CASE WHEN attempts>=8 THEN 'failed' ELSE 'pending' END,
     available_at=clock_timestamp()+LEAST(900,30*power(2,attempts-1))*interval '1 second',claim_id=NULL,lease_until=NULL
-    WHERE id=$1 AND claim_id=$2 AND status='running' AND lease_until>clock_timestamp()`,[job.id,job.claim_id,code]);
+    WHERE id=$1 AND claim_id=$2 AND status='running'`,[job.id,job.claim_id,code]);
   }
   return true;
  }
@@ -58,13 +59,13 @@ export class BackupWorker {
   if(!live.rowCount)throw Error('backup.claim_expired');
  }
  async #finish(job:Job,retired=false){
-  await this.#pool.query(`UPDATE backup_jobs SET status=$3,attempts=0,last_error=NULL,claim_id=NULL,lease_until=NULL,last_success_at=clock_timestamp(),
-   available_at=clock_timestamp()+$4*interval '1 second' WHERE id=$1 AND claim_id=$2 AND status='running' AND lease_until>clock_timestamp()`,[job.id,job.claim_id,retired?'completed':'pending',job.kind==='verify'?604800:60]);
+  await transaction(this.#pool,async client=>{
+   await this.#fence(client,job);
+   await client.query(`UPDATE backup_jobs SET status=$3,attempts=0,last_error=NULL,claim_id=NULL,lease_until=NULL,last_success_at=clock_timestamp(),
+    available_at=clock_timestamp()+$4*interval '1 second' WHERE id=$1 AND claim_id=$2`,[job.id,job.claim_id,retired?'completed':'pending',job.kind==='verify'?604800:60]);
+  });
  }
- async retryFailed(){
-  const result=await this.#pool.query(`WITH selected AS(SELECT id FROM backup_jobs WHERE status='failed' ORDER BY available_at,id LIMIT 100 FOR UPDATE SKIP LOCKED)
-   UPDATE backup_jobs SET status='pending',attempts=0,last_error=NULL,available_at=clock_timestamp() WHERE id IN(SELECT id FROM selected)`);return result.rowCount??0;
- }
+ async retryFailed(){return retryFailedBackupJobs(this.#pool);}
  async status(){return backupWorkerStatus(this.#pool);}
 }
 export async function backupWorkerStatus(pool:Pool){
@@ -74,4 +75,9 @@ export async function backupWorkerStatus(pool:Pool){
   COALESCE(sum(runs),0)::float8 AS runs,COALESCE(sum(failures),0)::float8 AS failures,
   min(CASE WHEN status='running' THEN lease_until ELSE available_at END) FILTER(WHERE(status='pending' AND available_at<=clock_timestamp()) OR(status='running' AND lease_until<=clock_timestamp())) AS oldest_due_at FROM backup_jobs`)).rows[0];
  return {counts,due:metrics.due,runs:metrics.runs,failures:metrics.failures,oldestDueAt:metrics.oldest_due_at?.toISOString()??null};
+}
+
+export async function retryFailedBackupJobs(pool:Pool){
+ const result=await pool.query(`WITH selected AS(SELECT id FROM backup_jobs WHERE status='failed' ORDER BY available_at,id LIMIT 100 FOR UPDATE SKIP LOCKED)
+  UPDATE backup_jobs SET status='pending',attempts=0,last_error=NULL,available_at=clock_timestamp() WHERE id IN(SELECT id FROM selected)`);return result.rowCount??0;
 }

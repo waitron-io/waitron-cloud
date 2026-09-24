@@ -300,15 +300,21 @@ try {
     let result;
     const restore = await createWaitronVerifier(waitron);
     const queue = new BackupWorker(f.db.pool, catalogue, async (...args) => {
-      result = await restore(...args);
-      assert(result.networkDenied);
-      assert(result.integrityOk);
-      assert(result.hooks.includes("fiscal-verifactu"));
-      assert.equal(result.cloudCredentialPresent, false);
-      assert.equal(result.staffKeyPresent, false);
+      const checked = await restore(...args);
+      assert(checked.networkDenied);
+      assert(checked.integrityOk);
+      assert(checked.hooks.includes("fiscal-verifactu"));
+      assert.equal(checked.cloudCredentialPresent, false);
+      assert.equal(checked.staffKeyPresent, false);
+      if(args[2].id===point.id)result=checked;
     });
     await queue.schedule();
-    for(let attempt=0;attempt<10&&!result;attempt++)assert(await queue.runOnce());
+    const deadline=Date.now()+60000;
+    while(!result&&Date.now()<deadline){
+      if(!await queue.runOnce())await delay(50);
+      const targetJob=(await f.db.pool.query("SELECT last_error FROM backup_jobs WHERE kind='verify' AND target_id=$1",[point.id])).rows[0];
+      assert.equal(targetJob?.last_error,null,'Snapshot worker failed during the local proof');
+    }
     assert(result, 'Persistent worker must restore the real snapshot');
     const saved = await f.db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id]);
     assert.equal(saved.rows[0].verification,'verified');

@@ -95,3 +95,11 @@ test('the CLI reports and retries durable failures without storage or verifier c
  assert.equal((await run('--retry-failed')).retried,1);
  assert.equal((await run('--status')).counts.failed,0);
 });
+test('an expired verification records failure and backoff when its claim has not been replaced',async()=>{
+ const point=await snapshot();await only('verify');restore=async()=>{await db.secondPool.query("UPDATE backup_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE kind='verify'");};
+ assert.equal(await worker.runOnce(),true);
+ const job=(await db.pool.query("SELECT *,available_at>clock_timestamp() AS delayed FROM backup_jobs WHERE kind='verify'")).rows[0];
+ assert.equal(job.status,'pending');assert.equal(Number(job.failures),1);assert.equal(job.last_error,'operation_failed');assert.equal(job.delayed,true);
+ assert.equal(await worker.runOnce(),false);
+ assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'pending');
+});

@@ -3,7 +3,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {Pool} from 'pg';
 import {BackupCatalogue} from './catalogue.ts';
 import {BackupKeyVault} from './keys.ts';
-import {BackupWorker,backupWorkerStatus} from './worker.ts';
+import {BackupWorker,backupWorkerStatus,retryFailedBackupJobs} from './worker.ts';
 import {workerObjects} from './worker-config.ts';
 import {createWaitronVerifier} from './waitron-verifier.ts';
 let pool:Pool|undefined,storage:ReturnType<typeof workerObjects>|undefined;
@@ -17,9 +17,7 @@ try{
  await pool.query('SELECT claim_id,lease_until FROM backup_jobs LIMIT 0');
  if(mode==='--status')console.log(JSON.stringify(await backupWorkerStatus(pool)));
  else if(mode==='--retry-failed'){
-  const result=await pool.query(`WITH selected AS(SELECT id FROM backup_jobs WHERE status='failed' ORDER BY available_at,id LIMIT 100 FOR UPDATE SKIP LOCKED)
-   UPDATE backup_jobs SET status='pending',attempts=0,last_error=NULL,available_at=clock_timestamp() WHERE id IN(SELECT id FROM selected)`);
-  console.log(JSON.stringify({retried:result.rowCount}));
+  console.log(JSON.stringify({retried:await retryFailedBackupJobs(pool)}));
  }else{
   const master=process.env.CLOUD_BACKUP_MASTER_KEY??'';if(!/^[a-fA-F0-9]{64}$/.test(master))throw Error();
   const restore=await createWaitronVerifier(process.env.WAITRON_CHECKOUT??'');
