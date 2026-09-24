@@ -11,8 +11,8 @@ network handling. The bilingual account portal now covers signup, sign-in, sign-
 and password recovery, served by that API with real browser and Mailpit tests.
 The account venue overview groups one organisation at a time, shows business context,
 connection/service state and separate latest/verified snapshot capture times. Verified
-snapshots older than 48 hours are labelled out of date. Snapshot history, background
-verification/cleanup and incident notifications are the next self-service slices.
+snapshots older than 48 hours are labelled out of date. Owners can browse paginated snapshot history, verification and retention details, including
+protected copies. Background verification/cleanup and incident notifications are next.
 Live provider/sender configuration and public deployment remain open.
 No public cloud service is deployed. This file owns cloud product and platform work;
 Waitron's backlog owns the on-prem application and its side of the integration.
@@ -67,8 +67,8 @@ remote setup and production deployment remain open. The [local backup proof](loc
 now provides encrypted scoped storage, protected key versions, an immutable snapshot catalogue,
 restore verification, retention and owner-bound recovery operations. Two real Waitron
 snapshots restore independently of deleted Litestream data, including after key rotation.
-These are internal local APIs and test fixtures; customer backup screens, authenticated
-capture delivery, scheduling and complete replacement activation remain open. The pairing runner still uses synthetic observations; only the
+These are local APIs and test fixtures. The customer snapshot catalogue is implemented;
+authenticated capture delivery, scheduling and complete replacement activation remain open. The pairing runner still uses synthetic observations; only the
 separate remote runner proves a tunnel. Waitron owns the remaining SQLite slice-2 sealed-state row, stream supervisor and
 cold-restore contract. Recheck those interfaces before wiring complete continuous recovery. The full two-venue milestone remains unproved.
 The [registration plan](registration-implementation-plan.md) now sequences persistence,
@@ -328,7 +328,7 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   Versioned managed keys and bound owner recovery are implemented for local test venues;
   [the real snapshot proof](local-backups.md) runs Waitron validation and restore hooks.
   Next: authenticated installation capture/credential renewal, scheduled capture and
-  verification, customer recovery/status screens, paginated catalogue reads, streaming
+  verification, customer recovery screens, streaming
   object I/O beyond the current 512 MiB bound, unused incoming-upload/request cleanup,
   master-key operations and production verifier
   isolation. Complete continuous server recovery and activation depend on Waitron slice 2.

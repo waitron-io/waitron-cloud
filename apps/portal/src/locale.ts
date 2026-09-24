@@ -8,6 +8,12 @@ export function chooseLocale(saved: string | null, languages: readonly string[])
   return 'en';
 }
 const en = {
+  viewSnapshots:'View snapshots', snapshotHistory:'Snapshot history', chooseSnapshot:'Choose a snapshot', noSnapshots:'No snapshots have been stored for this venue.',
+  snapshotPurpose:'Continuous backups normally provide the newest recovery point. Snapshots are point-in-time archives and a fallback if continuous data is lost.', recoveryUnavailable:'Guided server recovery is not available here yet.',
+  snapshotPending:'Awaiting verification', snapshotVerified:'Verified', snapshotFailed:'Verification failed', snapshotCaptured:'Captured', snapshotCheck:'Verification', snapshotRetention:'Retention', snapshotExpiry:'Ordinary retention ends', snapshotIdentifier:'Snapshot identifier',
+  snapshotDaily:'Daily · 30 days', snapshotMonthly:'Monthly · 12 months', snapshotRecoveryHold:'Kept while a recovery is active.', snapshotFallback:'Retained as the fallback snapshot.',
+  snapshotRetentionHelp:'The last snapshot that passed verification is protected from automatic expiry. Until one passes, the newest snapshot is kept. Retention dates are not guaranteed deletion times.',
+  latestSnapshots:'Latest snapshots', olderSnapshots:'Older snapshots', closeSnapshots:'Close snapshots', snapshotRetry:'Wait for the retry delay to end, then refresh the list.',
   chooseOrganisation:'Organisation', latestSnapshot:'Latest snapshot', verifiedSnapshot:'Latest verified snapshot', noSnapshot:'No snapshot yet', noVerifiedSnapshot:'No verified snapshot yet', snapshotOld:'This verified snapshot is more than two days old. Check backup status in Waitron.',
   installations:'Your venues', noInstallations:'No venues are connected yet. Start in Cloud services in your Waitron dashboard.',
   refreshStatus:'Refresh status', lastContact:'Last contact', accessExpires:'Cloud access expires', neverContacted:'Not yet contacted',
@@ -58,6 +64,12 @@ const en = {
 };
 export type Copy = typeof en;
 const es: Copy = {
+  viewSnapshots:'Ver instantáneas', snapshotHistory:'Historial de instantáneas', chooseSnapshot:'Elige una instantánea', noSnapshots:'No se han guardado instantáneas de este local.',
+  snapshotPurpose:'Las copias continuas suelen ofrecer el punto de recuperación más reciente. Las instantáneas son archivos de un momento concreto y una alternativa si se pierden los datos continuos.', recoveryUnavailable:'La recuperación guiada del servidor todavía no está disponible aquí.',
+  snapshotPending:'Pendiente de verificación', snapshotVerified:'Verificada', snapshotFailed:'Verificación fallida', snapshotCaptured:'Fecha de captura', snapshotCheck:'Verificación', snapshotRetention:'Conservación', snapshotExpiry:'Fin de la conservación ordinaria', snapshotIdentifier:'Identificador de la instantánea',
+  snapshotDaily:'Diaria · 30 días', snapshotMonthly:'Mensual · 12 meses', snapshotRecoveryHold:'Se conserva mientras hay una recuperación activa.', snapshotFallback:'Se conserva como instantánea de reserva.',
+  snapshotRetentionHelp:'La última instantánea que superó la verificación está protegida frente al borrado automático. Hasta que una la supere, se conserva la más reciente. Las fechas de conservación no garantizan cuándo se borrarán.',
+  latestSnapshots:'Últimas instantáneas', olderSnapshots:'Instantáneas anteriores', closeSnapshots:'Cerrar instantáneas', snapshotRetry:'Espera a que termine el plazo de reintento y actualiza la lista.',
   chooseOrganisation:'Organización', latestSnapshot:'Última instantánea', verifiedSnapshot:'Última instantánea verificada', noSnapshot:'Todavía no hay instantáneas', noVerifiedSnapshot:'Todavía no hay una instantánea verificada', snapshotOld:'Esta instantánea verificada tiene más de dos días. Comprueba el estado de las copias en Waitron.',
   installations:'Tus locales', noInstallations:'Todavía no hay locales conectados. Empieza en Servicios Cloud en tu panel de Waitron.',
   refreshStatus:'Actualizar estado', lastContact:'Último contacto', accessExpires:'El acceso a Cloud caduca', neverContacted:'Sin contacto todavía',

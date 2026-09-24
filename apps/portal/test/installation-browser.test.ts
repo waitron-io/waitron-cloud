@@ -29,6 +29,8 @@ for(const locale of ['en','es'] as const)test(`${locale} installation status and
   await f.db.pool.query('INSERT INTO backup_captures(id,venue_id,installation_id,key_version) VALUES($1,$2,$3,1)',[pointId,installed.venueId,installed.installationId]);
   await f.db.pool.query("INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules,verification) VALUES($1,$2,$3,1,'snapshot',$4,$5,1,$6,'daily',$7,'{}','verified')",[pointId,installed.venueId,installed.installationId,'snapshots/'+pointId,'0'.repeat(64),capturedAt,randomUUID()]);
 
+  await page.getByRole('button',{name:c.viewSnapshots,exact:true}).click();await page.getByLabel(c.chooseSnapshot,{exact:true}).waitFor();
+  await choose.selectOption(org2);assert.equal(await page.getByLabel(c.chooseSnapshot,{exact:true}).count(),0);await choose.selectOption(owner.organisationId);assert.equal(await page.getByLabel(c.chooseSnapshot,{exact:true}).count(),0);
   await f.db.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[installed.installationId]);
   await f.db.pool.query("INSERT INTO installation_observations(installation_id,service,revision,health,observed_at) VALUES($1,'remote_access',0,'healthy',clock_timestamp()-interval '299 seconds')",[installed.installationId]);
   await page.getByRole('button',{name:locale==='en'?'Refresh status':'Actualizar estado',exact:true}).click();
