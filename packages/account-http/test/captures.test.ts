@@ -92,3 +92,11 @@ test('publish refuses wrong bytes and another installation; missing runtime stay
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_points')).rows[0].count,'0');
  app=createAccountApp({pool:db.pool,outbox:db.outbox,config:config(),leaseIssuer:issuer});assert.equal((await request('backup-reserve',proof('backup-reserve'))).status,503);
 });
+test('configured captures require an issuer at app creation',()=>{
+ assert.throws(()=>createAccountApp({pool:db.pool,outbox:db.outbox,config:config(),captures:captureOptions}),/^Error: backup.installation_issuer_required$/);
+});
+test('direct lifecycle execution refuses capture actions before operation history is written',async()=>{
+ const store=new InstallationStore(db.pool,issuer,origin),before=(await db.pool.query('SELECT count(*) FROM installation_operations')).rows[0].count;
+ for(const action of ['backup-reserve','backup-publish'] as const)await assert.rejects(store.execute(action,proof(action)),/^Error: invalid_proof$/);
+ assert.equal((await db.pool.query('SELECT count(*) FROM installation_operations')).rows[0].count,before);
+});

@@ -343,7 +343,9 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   24 hours; cleanup waits another 16 minutes and keeps tombstones. PostgreSQL tests cover
   concurrent workers, lease takeover and restart; the two-server proof uses this queue.
   The [authenticated capture adapter](authenticated-captures.md) now uses bound installation proofs,
-  scoped upload grants and authority checks after storage waits. Waitron supplies the signed client
+  scoped upload grants and authority checks after storage waits. The local uploader
+  buffers up to 512 MiB with a 30-second total deadline; scheduled real-venue uploads need
+  a measured transfer budget, bounded retries/streaming and deliberate-cancellation handling. Waitron supplies the signed client
   and conditional upload, with exact publication retries. Next: scheduled capture and durable local archive spooling,
   customer recovery screens, streaming object I/O beyond the current 512 MiB bound,
   tombstone/job-history retention, master-key operations and production verifier isolation.

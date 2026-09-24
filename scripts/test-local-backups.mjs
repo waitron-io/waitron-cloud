@@ -279,6 +279,14 @@ try {
     // Lost upload replies repeat the write without needing read permission.
     await captureClient(venue.root,'upload',{grant:reservation,ca:s3.ca});
     const metadata={...receipt(bytes),capturedAt:captured.manifest.createdAt,retention:'daily',sourceNodeId:captured.sourceNodeId,modules:captured.manifest.modules};
+    const changed=Buffer.from(bytes);changed[changed.length-1]^=1;
+    await writeFile(join(venue.root,'captured.backup.enc'),changed,{mode:0o600});
+    try{
+      await captureClient(venue.root,'upload',{grant:reservation,ca:s3.ca});
+      assert.equal(receipt(await objects(venue.location).read(reservation.incomingKey)).digest,metadata.digest);
+      await assert.rejects(captureClient(venue.root,'publish',{id:reservation.id,metadata:{...metadata,...receipt(changed)}}));
+      assert.equal((await f.db.pool.query('SELECT count(*) FROM backup_points WHERE id=$1',[reservation.id])).rows[0].count,'0');
+    }finally{await writeFile(join(venue.root,'captured.backup.enc'),bytes,{mode:0o600});}
     const point=await captureClient(venue.root,'publish',{id:reservation.id,metadata});
     assert.deepEqual(await captureClient(venue.root,'publish',{id:reservation.id,metadata}),point);
     let result;
@@ -330,7 +338,7 @@ try {
   await catalogue.rotate(item.venue.registration.installationId);
   const renewed=await captureClient(item.venue.root,'reserve',{id:item.reservation.id});
   assert.equal(renewed.recoveryKey,item.reservation.recoveryKey);
-  record('Waitron signed HTTP capture, scoped upload retries, publication retries and credential renewal after key rotation');
+  record('Waitron signed HTTP capture, scoped upload retries, changed-byte publication refusal, publication retries and credential renewal after key rotation');
   const targetKey = generateKeyPairSync("ed25519"),
     operationId = randomUUID();
   await recovery.start(session.token, session.csrfToken, {

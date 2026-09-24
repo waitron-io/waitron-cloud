@@ -60,7 +60,8 @@ Both endpoints share existing installation/IP allowances and return no-store res
 Invalid proof returns 401, revoked/disabled/non-test authority 403, changed capture or
 object metadata 409, expired capture 410, shared rate limits 429 and temporary
 storage/configuration errors 503. Envelope/body syntax follows the existing 400/413
-limits. Upload grants and recovery keys are not saved in operation-result history.
+limits. Capture operations do not write installation operation-history rows. The capture and
+point records supply retry identity; neither stores upload grants or plaintext recovery keys.
 
 Run the two-server proof in [local backups](local-backups.md) to exercise actual
 Waitron signatures, scoped object upload retries, publication retries, rotation and

@@ -310,7 +310,9 @@ export class BackupCatalogue {
       const objectKey = "snapshots/" + id;
       await objects.put(objectKey, bytes);
       await fence?.(client);
-      if((await client.query("SELECT created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1",[id])).rows[0].expired)backupFail("capture_expired");
+      const finalCapture=(await client.query("SELECT expired_at IS NOT NULL OR created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1",[id])).rows[0];
+      if(!finalCapture)backupFail("unavailable");
+      if(finalCapture.expired)backupFail("capture_expired");
       await client.query(
         `INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules) VALUES($1,$2,$3,$4,'snapshot',$5,$6,$7,$8,$9,$10,$11)`,
         [
