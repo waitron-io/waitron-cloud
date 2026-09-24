@@ -9,6 +9,7 @@ import {
   type ObjectReceipt,
   type StorageLocation,
 } from "./storage.ts";
+export type MutationFence = (client:PoolClient)=>Promise<void>;
 export interface ObjectStore {
   read(key: string): Promise<Buffer>;
   put(key: string, bytes: Uint8Array): Promise<ObjectReceipt>;
@@ -255,13 +256,14 @@ export class BackupCatalogue {
         [id, install.venue_id, installationId, l.active_key_version],
       );
       const row = (
-        await client.query("SELECT * FROM backup_captures WHERE id=$1", [id])
+        await client.query("SELECT *,expired_at IS NOT NULL OR created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1", [id])
       ).rows[0];
       if (
         row.installation_id !== installationId ||
         row.venue_id !== install.venue_id
       )
         backupFail("conflict");
+      if(row.expired)backupFail("capture_expired");
       return {
         id,
         venueId: install.venue_id as string,
@@ -289,7 +291,7 @@ export class BackupCatalogue {
         l = await lockVenue(client, install.venue_id),
         capture = (
           await client.query(
-            "SELECT * FROM backup_captures WHERE id=$1 AND installation_id=$2",
+            "SELECT *,expired_at IS NOT NULL OR created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1 AND installation_id=$2",
             [id, installationId],
           )
         ).rows[0];
@@ -299,6 +301,7 @@ export class BackupCatalogue {
         if (!sameMetadata(prior, m)) backupFail("conflict");
         return { point: prior, location: location(l) };
       }
+      if(capture.expired)backupFail("capture_expired");
       const objects = this.#objects(location(l)),
         bytes = await objects.read("incoming/" + id),
         actual = receipt(bytes);
@@ -335,6 +338,7 @@ export class BackupCatalogue {
       keys: BackupKeys,
       point: BackupPoint,
     ) => Promise<void>,
+    fence?: MutationFence,
   ): Promise<void> {
     if (!uuid(id) || !verifier || verifier.length > 200)
       backupFail("unavailable");
@@ -344,6 +348,7 @@ export class BackupCatalogue {
       const l = await lockVenue(client, first.venueId),
         p = (await point(client, id))!;
       if (p.deleting || p.deletedAt) backupFail("unavailable");
+      await fence?.(client);
       const keys = await pointKeys(
         client,
         this.#vault,
@@ -369,6 +374,7 @@ export class BackupCatalogue {
     }
     await transaction(this.#pool, async (client) => {
       await lockVenue(client, prepared.point.venueId);
+      await fence?.(client);
       const current = await point(client, id);
       if (
         !current ||
@@ -388,11 +394,12 @@ export class BackupCatalogue {
     });
     if (outcome !== "verified") backupFail("verification_failed");
   }
-  async cleanupOne(venueId: string, now = new Date()): Promise<string | null> {
+  async cleanupOne(venueId: string, now = new Date(), fence?: MutationFence): Promise<string | null> {
     if (!uuid(venueId) || !Number.isFinite(now.getTime()))
       backupFail("unavailable");
     const selected = await transaction(this.#pool, async (client) => {
       const l = await lockVenue(client, venueId);
+      await fence?.(client);
       await expireRecoveries(client, venueId);
       const result = await client.query(
         `SELECT p.id,p.object_key FROM backup_points p WHERE p.venue_id=$1 AND p.deleted_at IS NULL
@@ -417,6 +424,7 @@ export class BackupCatalogue {
     await this.#objects(selected.location).remove(selected.key);
     await transaction(this.#pool, async (client) => {
       await lockVenue(client, venueId);
+      await fence?.(client);
       await client.query(
         "UPDATE backup_points SET deleted_at=COALESCE(deleted_at,clock_timestamp()) WHERE id=$1 AND deleting",
         [selected.id],
@@ -424,4 +432,27 @@ export class BackupCatalogue {
     });
     return selected.id;
   }
+  async cleanupCapture(venueId:string,fence?:MutationFence):Promise<string|null>{
+    if(!uuid(venueId))backupFail('unavailable');
+    const selected=await transaction(this.#pool,async client=>{
+      const l=await lockVenue(client,venueId);await fence?.(client);
+      const row=(await client.query(`SELECT c.id,EXISTS(SELECT 1 FROM backup_points p WHERE p.id=c.id) AS published
+        FROM backup_captures c WHERE c.venue_id=$1 AND c.cleaned_at IS NULL
+        AND(c.expired_at IS NOT NULL OR c.created_at+interval '24 hours 16 minutes'<=clock_timestamp())
+        ORDER BY c.created_at,c.id LIMIT 1`,[venueId])).rows[0];
+      if(!row)return null;
+      // Tombstones block new publication before either object is removed; UUIDs cannot be reused.
+      await client.query('UPDATE backup_captures SET expired_at=COALESCE(expired_at,clock_timestamp()) WHERE id=$1',[row.id]);
+      return {id:row.id as string,published:row.published as boolean,location:location(l)};
+    });
+    if(!selected)return null;
+    const objects=this.#objects(selected.location);await objects.remove('incoming/'+selected.id);
+    if(!selected.published)await objects.remove('snapshots/'+selected.id);
+    await transaction(this.#pool,async client=>{
+      await lockVenue(client,venueId);await fence?.(client);
+      await client.query('UPDATE backup_captures SET cleaned_at=COALESCE(cleaned_at,clock_timestamp()) WHERE id=$1 AND expired_at IS NOT NULL',[selected.id]);
+    });
+    return selected.id;
+  }
+
 }

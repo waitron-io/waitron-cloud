@@ -47,4 +47,6 @@ after revocation, deleted snapshots, name fallback and legacy/Unicode names. PR 
 worktree are removed. Task 2 uses the backup-catalogue design/spec and its embedded plan.
 
 Catalogue: owner-scoped pagination, public metadata, retention protection and bilingual
-selection are implemented. PostgreSQL/controller and browser checks pass; review follows.
+selection are implemented. PR #39 landed on b5e34d3 after review fixes and green CI
+on55cf1dd. The picker and UTC retention boundary fixes have regression tests. Both
+branches and its worktree are removed. Task3 uses the backup-workers spec/embedded plan.
