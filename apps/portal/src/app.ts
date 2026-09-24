@@ -1,3 +1,4 @@
+import {RecoveryController} from './recovery-controller.ts';
 import {RemoteController} from './remote-controller.ts';
 import {AlertController} from './alert-controller.ts';
 import {BackupController} from './backup-controller.ts';
@@ -29,6 +30,7 @@ export class PortalApp {
   pairing: PairingController;
   installations: InstallationController;
   backups: BackupController;
+  recovery: RecoveryController;
   remote: RemoteController;
   alerts: AlertController;
   #route = 0;
@@ -41,19 +43,21 @@ export class PortalApp {
     this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
     this.alerts = new AlertController(() => this.draw());
     this.remote = new RemoteController(() => this.draw());
-    this.backups = new BackupController(() => this.draw());
+    this.recovery = new RecoveryController(() => this.draw());
+    this.recovery.open(this.link.recoveryId);
+    this.backups = new BackupController(() => {const selected=this.backups.page?.points.find(p=>p.id===this.backups.selected&&p.verification==='verified');this.recovery.choose(this.backups.venueId,selected?.id);this.draw();});
     this.installations = new InstallationController(() => {
       if(this.remote.installationId&&!this.installations.visible.some(i=>i.installationId===this.remote.installationId&&i.canRevoke&&!i.revokedAt))this.remote.close();
-      if(this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke))this.backups.close();
+      if(this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke)){this.backups.close();this.recovery.choose(undefined,undefined);}
       this.draw();
     });
     this.pairing = new PairingController(() => this.draw());
     this.pairing.open(this.link.requestId);
     this.session = this.#session();
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
-    document.addEventListener('keydown', event => { if (['/account','/connect'].includes(this.path)) void this.session.activity(event); });
-    document.addEventListener('pointerdown', event => { if (['/account','/connect'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.remote.account(undefined); this.alerts.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    document.addEventListener('keydown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); });
+    document.addEventListener('pointerdown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); });
+    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.remote.account(undefined); this.alerts.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -62,16 +66,17 @@ export class PortalApp {
   #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
+    this.recovery.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.alerts.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.alerts.loaded) void this.alerts.load();
     this.remote.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.backups.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.installations.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.installations.loaded) void this.installations.load();
+    if (['/account','/','/recover'].includes(this.path) && state.kind === 'authenticated' && !this.installations.loaded) void this.installations.load();
     this.pairing.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (this.path === '/connect' && state.kind === 'authenticated' && !this.pairing.loaded) void this.pairing.load();
     if (this.path === '/' && state.kind === 'authenticated') this.navigate('/account');
-    else if ((['/', '/account', '/connect'].includes(this.path)) && state.kind === 'anonymous') this.navigate('/login');
+    else if ((['/', '/account', '/connect', '/recover'].includes(this.path)) && state.kind === 'anonymous') this.navigate('/login');
     else this.draw();
   }
   get copy() { return translations[this.locale]; }
@@ -83,6 +88,7 @@ export class PortalApp {
     return this.path;
   }
   get waiting() {
+    if (this.path === '/recover') return Math.max(this.recovery.waiting,this.backups.waiting,this.installations.waiting,Math.max(0,Math.ceil((this.session.retryAt-Date.now())/1000)));
     if (this.path === '/connect') return Math.max(this.pairing.waiting, Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)));
     const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt,this.alerts.retryAt,this.remote.retryAt) : this.cooldownOperation === this.operation ? this.cooldownUntil : 0;
     return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
@@ -92,10 +98,11 @@ export class PortalApp {
     const title = this.title(); document.title = `${title} · Waitron Cloud`;
     render(screen(this), this.root);
     clearTimeout(this.#timer);
-    if (this.waiting || (this.path === '/account' && this.session.state.kind === 'authenticated')) this.#timer = setTimeout(() => this.draw(), 1000);
+    if (this.waiting || (['/account','/recover'].includes(this.path) && this.session.state.kind === 'authenticated')) this.#timer = setTimeout(() => this.draw(), 1000);
   }
   title(): string {
     const c = this.copy;
+    if (this.path === '/recover') return c.recoveryTitle;
     if (this.path === '/connect') return c.connect;
     if (this.notice) return c[this.notice === 'signupReady' ? 'completeSignup' : this.notice === 'resetReady' ? 'reset' : 'login'];
     if (this.requested) return c.checkEmail;
@@ -109,6 +116,7 @@ export class PortalApp {
     this.#route++; this.path = path;
     if (push) history.pushState(null, '', path);
     this.link = this.#capture();
+    if (this.link.recoveryId || this.link.invalid) this.recovery.open(this.link.recoveryId);
     if (this.link.requestId || this.link.invalid) this.pairing.open(this.link.requestId);
     this.locale = this.link.locale ?? this.locale;
     this.fields = {email: '', password: '', legalBusinessName: '', organisationName: ''};
@@ -116,13 +124,14 @@ export class PortalApp {
     this.pending = false; this.reveal = false; this.differentOrg = false;
     // Keep the cooldown across navigation so returning cannot bypass a Retry-After.
     this.draw(); this.focusHeading();
-    if (['/account','/','/connect'].includes(path)) void this.session.check();
+    if (['/account','/','/connect','/recover'].includes(path)) void this.session.check();
   }
   follow(event: MouseEvent, path: string) {
     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault(); this.navigate(path);
   }
   readFields() {
+    const recoveryCode=this.root.querySelector('wt-input[name="recoveryCode"]')?.shadowRoot?.querySelector('input')?.value;if(recoveryCode!==undefined)this.recovery.code=recoveryCode;
     const code = this.root.querySelector('wt-input[name="pairingCode"]')?.shadowRoot?.querySelector('input')?.value;
     if (code !== undefined) this.pairing.code = code;
     for (const key of Object.keys(this.fields) as (keyof Fields)[]) {
@@ -149,6 +158,7 @@ export class PortalApp {
     if (this.pairing.error) this.#focusErrors(); else this.focusHeading();
   }
   async submit() {
+    if(this.path==='/recover'){this.readFields();await this.recovery.inspect();return;}
     if (['/','/account'].includes(this.path)) return;
     if (this.path === '/connect') { await this.submitPairing(); return; }
     if (this.pending || this.waiting) return;
@@ -180,7 +190,7 @@ export class PortalApp {
     if (route !== this.#route) return;
     this.pending = false;
     if (result.ok) {
-      if (path === '/login') { this.session.dispose(); this.session = this.#session(); this.navigate(this.pairing.requestId ? '/connect' : '/account'); return; }
+      if (path === '/login') { this.session.dispose(); this.session = this.#session(); this.navigate(this.recovery.requestId ? '/recover' : this.pairing.requestId ? '/connect' : '/account'); return; }
       if (path.endsWith('/request')) { this.requested = true; this.cooldownOperation = this.operation; this.cooldownUntil = Date.now() + 60_000; }
       else { this.notice = path === '/signup/complete' ? 'signupReady' : 'resetReady'; this.link = {invalid: false}; this.fields.password = ''; }
     } else {
@@ -188,7 +198,7 @@ export class PortalApp {
       if (path === '/login' && (result.status === 0 || result.status === 503)) {
         this.session.dispose(); this.session = this.#session(); await this.session.check();
         if (route !== this.#route) return;
-        if (priorSession.kind === 'anonymous' && this.session.state.kind === 'authenticated') { this.navigate(this.pairing.requestId ? '/connect' : '/account'); return; }
+        if (priorSession.kind === 'anonymous' && this.session.state.kind === 'authenticated') { this.navigate(this.recovery.requestId ? '/recover' : this.pairing.requestId ? '/connect' : '/account'); return; }
       }
       this.error = result.code === 'link_unavailable' ? 'linkUnavailable'
         : result.code === 'credentials_invalid' ? 'credentials'
@@ -199,7 +209,7 @@ export class PortalApp {
   }
   get logoutWaiting() { return Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)); }
   async logout() {
-    if (this.pending || this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending) return;
+    if (this.pending || this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending) return;
     this.pending = true; this.error = undefined; this.draw();
     const route = this.#route;
     const success = await this.session.logout();

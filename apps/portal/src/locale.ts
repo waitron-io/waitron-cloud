@@ -8,6 +8,26 @@ export function chooseLocale(saved: string | null, languages: readonly string[])
   return 'en';
 }
 const en = {
+  recoveryTitle:"Restore a Cloud snapshot",
+  recoveryIntro:"Enter the matching code shown on your replacement server. Choose a verified snapshot, then return to that server to restore it.",
+  recoveryLocal:"This local trial supports test venues only. Complete server recovery from continuous backups and planned handover are not available yet.",
+  recoveryMissing:"Open the recovery link from your replacement server’s setup screen.",
+  recoveryExpires:"Authorisation deadline:",
+  recoveryExpired:"This request has expired or is unavailable. Check the matching code or start a new request on the replacement server.",
+  recoveryApproved:"Snapshot access is authorised. Return to the replacement server to download and restore it. This does not mean the server is restored or ready to trade.",
+  recoveryClosed:"Snapshot access is closed.",
+  recoveryRestored:"The replacement reported that the data was restored. Complete its local setup and checks before trading.",
+  recoveryCancelHelp:"Closing access prevents new downloads. Credentials already issued can remain valid for up to 15 minutes; downloaded data cannot be recalled.",
+  recoveryCancel:"Close snapshot access",
+  recoveryOrganisation:"Organisation",
+  recoveryVenue:"Venue to recover",
+  recoveryChooseVenue:"Choose a venue",
+  recoveryLoss:"Changes after this time will be lost:",
+  recoveryStopped:"The old server and every surviving server with newer data are stopped or permanently unavailable.",
+  recoveryAcceptLoss:"I accept losing changes after the snapshot time shown above.",
+  recoveryApprove:"Authorise this snapshot",
+  recoveryUncertain:"The result is uncertain. Check the request status before trying another approval.",
+
   remoteSetup:"Set up remote access",
   remoteSetupTitle:"Remote access setup",
   remoteReady:"Recent checks confirm remote access is working.",
@@ -63,7 +83,7 @@ const en = {
   monitorVerificationFailed:"The latest snapshot failed its restore check. Keep older verified copies; Cloud retries automatically.",
 
   viewSnapshots:'View snapshots', snapshotHistory:'Snapshot history', chooseSnapshot:'Choose a snapshot', noSnapshots:'No snapshots have been stored for this venue.',
-  snapshotPurpose:'Continuous backups normally provide the newest recovery point. Snapshots are point-in-time archives and a fallback if continuous data is lost.', recoveryUnavailable:'Guided server recovery is not available here yet.',
+  snapshotPurpose:'Continuous backups normally provide the newest recovery point. Snapshots are point-in-time archives and a fallback if continuous data is lost.', recoveryUnavailable:'To restore a snapshot, open the Cloud recovery link from the replacement server’s setup screen.',
   snapshotPending:'Awaiting verification', snapshotVerified:'Verified', snapshotFailed:'Verification failed', snapshotCaptured:'Captured', snapshotCheck:'Verification', snapshotRetention:'Retention', snapshotExpiry:'Ordinary retention ends', snapshotIdentifier:'Snapshot identifier',
   snapshotDaily:'Daily · 30 days', snapshotMonthly:'Monthly · 12 months', snapshotRecoveryHold:'Protected by an active recovery. Fallback retention can also apply.', snapshotFallback:'Retained as the fallback snapshot.',
   snapshotRetentionHelp:'The last snapshot that passed verification is protected from automatic expiry. Until one passes, the newest snapshot is kept. Retention dates are not guaranteed deletion times.',
@@ -118,6 +138,26 @@ const en = {
 };
 export type Copy = typeof en;
 const es: Copy = {
+  recoveryTitle:"Restaurar una instantánea de Cloud",
+  recoveryIntro:"Introduce el código que aparece en el servidor de sustitución. Elige una instantánea verificada y vuelve a ese servidor para restaurarla.",
+  recoveryLocal:"Esta prueba local solo admite locales de prueba. La recuperación completa desde copias continuas y el traspaso planificado aún no están disponibles.",
+  recoveryMissing:"Abre el enlace de recuperación desde la pantalla de configuración del servidor de sustitución.",
+  recoveryExpires:"Fecha límite de autorización:",
+  recoveryExpired:"Esta solicitud ha caducado o no está disponible. Comprueba el código o inicia otra solicitud en el servidor de sustitución.",
+  recoveryApproved:"El acceso a la instantánea está autorizado. Vuelve al servidor de sustitución para descargarla y restaurarla. Esto no significa que el servidor esté restaurado ni listo para operar.",
+  recoveryClosed:"El acceso a la instantánea está cerrado.",
+  recoveryRestored:"El servidor de sustitución ha informado de que los datos se han restaurado. Completa su configuración y comprobaciones locales antes de operar.",
+  recoveryCancelHelp:"Cerrar el acceso impide nuevas descargas. Las credenciales ya emitidas pueden seguir vigentes hasta 15 minutos; los datos descargados no se pueden recuperar.",
+  recoveryCancel:"Cerrar acceso a la instantánea",
+  recoveryOrganisation:"Organización",
+  recoveryVenue:"Local que quieres recuperar",
+  recoveryChooseVenue:"Elige un local",
+  recoveryLoss:"Se perderán los cambios posteriores a esta fecha:",
+  recoveryStopped:"El servidor anterior y todos los servidores que tengan datos más recientes están detenidos o no volverán a estar disponibles.",
+  recoveryAcceptLoss:"Acepto perder los cambios posteriores a la fecha de la instantánea indicada arriba.",
+  recoveryApprove:"Autorizar esta instantánea",
+  recoveryUncertain:"No se ha podido confirmar el resultado. Comprueba el estado de la solicitud antes de intentar otra autorización.",
+
   remoteSetup:"Configurar acceso remoto",
   remoteSetupTitle:"Configuración de acceso remoto",
   remoteReady:"Las comprobaciones recientes confirman que el acceso remoto funciona.",
@@ -173,7 +213,7 @@ const es: Copy = {
   monitorVerificationFailed:"La comprobación de restauración de la última instantánea ha fallado. Conserva las copias anteriores verificadas; Cloud vuelve a intentarlo automáticamente.",
 
   viewSnapshots:'Ver instantáneas', snapshotHistory:'Historial de instantáneas', chooseSnapshot:'Elige una instantánea', noSnapshots:'No se han guardado instantáneas de este local.',
-  snapshotPurpose:'Las copias continuas suelen ofrecer el punto de recuperación más reciente. Las instantáneas son archivos de un momento concreto y una alternativa si se pierden los datos continuos.', recoveryUnavailable:'La recuperación guiada del servidor todavía no está disponible aquí.',
+  snapshotPurpose:'Las copias continuas suelen ofrecer el punto de recuperación más reciente. Las instantáneas son archivos de un momento concreto y una alternativa si se pierden los datos continuos.', recoveryUnavailable:'Para restaurar una instantánea, abre el enlace de recuperación de Cloud desde la configuración del servidor de sustitución.',
   snapshotPending:'Pendiente de verificación', snapshotVerified:'Verificada', snapshotFailed:'Verificación fallida', snapshotCaptured:'Fecha de captura', snapshotCheck:'Verificación', snapshotRetention:'Conservación', snapshotExpiry:'Fin de la conservación ordinaria', snapshotIdentifier:'Identificador de la instantánea',
   snapshotDaily:'Diaria · 30 días', snapshotMonthly:'Mensual · 12 meses', snapshotRecoveryHold:'Protegida por una recuperación activa. También puede conservarse como reserva.', snapshotFallback:'Se conserva como instantánea de reserva.',
   snapshotRetentionHelp:'La última instantánea que superó la verificación está protegida frente al borrado automático. Hasta que una la supere, se conserva la más reciente. Las fechas de conservación no garantizan cuándo se borrarán.',

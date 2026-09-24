@@ -19,6 +19,8 @@
   "exports": {
     "./retention": "./src/retention.ts",
     "./captures": "./src/captures.ts",
-    "./capture-config": "./src/capture-config.ts"
+    "./capture-config": "./src/capture-config.ts",
+    "./recovery": "./src/recovery.ts",
+    "./recovery-request": "./src/recovery-request.ts"
   }
 }

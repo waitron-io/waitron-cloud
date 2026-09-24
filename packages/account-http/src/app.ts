@@ -1,3 +1,4 @@
+import {recoveryResponse} from './recovery.ts';
 import {remoteAccessResponse,type RemoteResolver} from './remote-access.ts';
 import {BackupCaptures,type CaptureOptions} from '@waitron-cloud/backups/captures';
 import {captureResponse} from './captures.ts';
@@ -69,6 +70,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if (url.search) throw new AccountHttpError(400, 'invalid_input');
     const ip = clientAddress(c.env?.incoming?.socket.remoteAddress ?? '', c.req.header('x-forwarded-for'), config.trustedProxyIps);
     await consume([{scope: 'all-ip', subject: ip, limit: 120, windowSeconds: 60}]);
+    if(c.req.path.startsWith('/api/recovery/')||c.req.path.startsWith('/api/account/recovery/'))return recoveryResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures,consume});
     if(['/api/installations/backup-reserve','/api/installations/backup-publish'].includes(c.req.path))return captureResponse(c,{captures,ip,consume});
     if(c.req.path.startsWith('/api/account/remote-access/'))return remoteAccessResponse(c,{pool,origin:config.portalOrigin,consume,resolve:options.remoteResolve});
     if(c.req.path==='/api/account/alerts')return alertPreferencesResponse(c,{pool,origin:config.portalOrigin,consume});

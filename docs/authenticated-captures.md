@@ -7,7 +7,7 @@ or mark an upload as verified.
 
 ## Enable the local adapter
 
-Apply the existing migrations through 013. Configure the account server's usual
+Apply all current migrations, including 015. Configure the account server's usual
 email, rate-limit and installation-issuer settings, plus the backup worker's
 `CLOUD_BACKUP_MASTER_KEY`, `CLOUD_BACKUP_ENDPOINT`, `CLOUD_BACKUP_REGION`,
 `CLOUD_BACKUP_ACCESS_KEY`, `CLOUD_BACKUP_SECRET_KEY` and optional

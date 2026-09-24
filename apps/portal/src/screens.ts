@@ -1,3 +1,4 @@
+import {recoveryScreen} from './recovery-screen.ts';
 import {installationScreen} from './installation-screen.ts';
 import { pairingScreen } from './pairing-screen.ts';
 import { html, nothing } from 'lit';
@@ -25,7 +26,8 @@ export function screen(app: PortalApp) {
     .loading=${app.pending} @click=${fn}>${app.pending ? c.wait : label}</wt-button></wt-form-actions>`;
   const retryLink = app.path === '/signup' ? '/signup' : '/forgot-password';
   let content;
-  if (app.path === '/connect') content = pairingScreen(app);
+  if (app.path === '/recover') content = recoveryScreen(app);
+  else if (app.path === '/connect') content = pairingScreen(app);
   else if (app.notice && app.notice !== 'signedOut') content = html`<p role="status">${c[app.notice]}</p>${link('/login', c.login)}`;
   else if (app.path === '/' || app.path === '/account') {
     content = app.session.state.kind === 'authenticated'

@@ -14,7 +14,7 @@ export async function loadPortalAssets(directory: string): Promise<PortalAssets>
   }
   return assets;
 }
-const documents = new Set(['/', '/signup', '/login', '/forgot-password', '/reset-password', '/account', '/connect']);
+const documents = new Set(['/', '/signup', '/login', '/forgot-password', '/reset-password', '/account', '/connect', '/recover']);
 export function portalResponse(request: Request, assets: PortalAssets): Response {
   const url = new URL(request.url);
   const failure = (status: number) => new Response(null, {status, headers: securityHeaders});

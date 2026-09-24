@@ -8,8 +8,9 @@ It creates no AWS resources and requires no live customer credentials.
 
 Install both repositories with their frozen pnpm lockfiles. Use Node 26 with network permission support for the restore verifier (tested with
 26.7.0), Docker, OpenSSL and network access for the pinned test binaries. Point to a
-Waitron checkout that includes both `apps/server/scripts/cloud-backup-fixture.ts` and
-`apps/server/scripts/cloud-capture-client-fixture.ts`. Export that path as
+Waitron checkout that includes `apps/server/scripts/cloud-backup-fixture.ts`,
+`apps/server/scripts/cloud-capture-client-fixture.ts` and
+`apps/server/scripts/cloud-recovery-client-fixture.ts`. Export that path as
 `WAITRON_CHECKOUT`, and build both portals before starting the servers:
 
 ```sh
@@ -43,8 +44,9 @@ without modifying your system trust settings. This needs Docker Desktop's
   refuses changed roles, expired identities and expired storage credentials.
 - The provider requires the correct SSE-C key for stream objects. Snapshots use
   Waitron's encrypted archive format and independent immutable retained objects.
-- Each real Waitron snapshot passes its compatibility checks, SQLite integrity check,
-  migrations and module restore hooks, including the fiscal module. The fixture
+- The independent verifier passes each real Waitron snapshot through compatibility
+  checks, SQLite integrity checks, migrations and module restore hooks, including
+  the fiscal module. That fixture
   never starts the restored server or its workers. It checks that ordinary Node
   network connections are denied; this is a test guard, not a hardened sandbox for
   hostile code (the TypeScript loader requires worker, child-process and addon access).
@@ -63,6 +65,13 @@ without modifying your system trust settings. This needs Docker Desktop's
   stopped. A wrong recovery key leaves the replacement database absent. No recovery
   grant activates trading, changes routing, retires an installation or re-enrols a node.
 
+- The guided path uses owner HTTP approval and the production Waitron replacement
+  client in fresh processes. It resumes the same request after restart, reconciles
+  a lost approval reply, downloads the bound object, stages it and runs the actual
+  cold-restore entry point. Venue contents, source identity and module hooks are
+  checked. Cloud stays pending through staging and changes only after the local
+  restore has succeeded and the replacement sends its completion report.
+
 The JSON receipt records exact repository heads, dirty flags, checks and stream
 restore timings. A dirty receipt is useful during development; use clean heads for
 release evidence. Timings measure the local fixture, not a production recovery target.
@@ -70,8 +79,9 @@ release evidence. Timings measure the local fixture, not a production recovery t
 ## Internal API and retained data
 
 `@waitron-cloud/backups` is an internal local-integration package. Provisioning refuses
-production venues. Owners can browse its snapshot catalogue in the account portal; capture uses the [authenticated installation adapter](authenticated-captures.md); recovery
-remains an internal integration API.
+production venues. Owners can browse its snapshot catalogue and authorise a replacement
+through the account portal. Capture uses the [authenticated installation adapter](authenticated-captures.md).
+The guided recovery path below remains limited to local test venues.
 The caller supplies a persistent 32-byte master key outside PostgreSQL; key versions
 are encrypted and authenticated against their venue and version. Losing this master
 key loses access to those backups. Rotation retains old versions; deletion is absent.
@@ -95,6 +105,40 @@ cancellation and explicit deletion policy are not implemented. Object reads/writ
 are bounded to 512 MiB in memory; production-sized archives need streaming I/O and
 bounded worker concurrency. Callers own and close their object clients.
 
+## Recover a test venue without copying keys
+
+Start with **Restore from Waitron Cloud** on the replacement server's setup screen.
+Open its Cloud link, sign in as an owner and enter the eight-digit code shown on the
+replacement. The link identifies the request; it deliberately excludes the code.
+Choose your organisation and venue, then a verified snapshot. The latest verified
+snapshot is selected initially. Check its capture time before accepting the loss of
+later changes. Confirm that the old server and any surviving server with newer data
+are stopped or permanently unavailable.
+
+After you authorise that snapshot, return to the replacement. Refresh its status,
+check the approved capture time, then confirm the local restore. The server downloads
+one encrypted object, verifies its size and digest, and passes it through Waitron's
+existing archive validation and restart process. Neither browser receives a recovery
+key or storage credentials. The account page's authorised status means download
+permission; it does not mean that restore has completed or trading is enabled.
+
+An unapproved request lasts fifteen minutes and permits five incorrect codes. An
+approved operation lasts one hour and stays bound to its original snapshot and
+replacement key. If an approval reply is lost, the page checks the saved request
+instead of creating another operation. If you reload the page, reopen the link from
+the replacement and enter its code again.
+
+You can close snapshot access from the account page. Closing it, losing owner access,
+or disabling the account stops new downloads. Storage credentials already issued
+can remain valid for up to fifteen minutes, and data already downloaded cannot be
+recalled. A replacement rechecks its approval after download before staging the restore.
+
+The [recovery contract](superpowers/specs/2026-09-24-customer-recovery-design.md)
+describes the signed machine requests. Cloud approval never fences the old server,
+changes routing or enrols the replacement. Complete the replacement's local checks
+before trading. Continuous complete-server recovery and planned handover still depend
+on the Waitron contract described below.
+
 ## Still required for the complete milestone
 
 Waitron's SQLite slice-2 sealed state, stream supervisor and cold-restore activation
@@ -107,7 +151,8 @@ retirement of the old credentials and explicit Waitron activation. Recording a
 
 The installation-authenticated capture/renewal adapter and Waitron client are implemented.
 Scheduled capture with durable local archive spooling is implemented for test installations.
-Next, add customer recovery screens. The local worker now schedules verification, retention
+Customer recovery now has a matching-code account flow for verified test snapshots.
+The local worker schedules verification, retention
 and abandoned-upload cleanup; the customer catalogue is paginated. Define cancellation/deletion,
 operator master-key backup and rotation, and production verifier isolation. Run the
 same provider tests against AWS Spain before any deployment; this local result does

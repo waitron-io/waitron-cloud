@@ -28,3 +28,9 @@ test('captures only a single fragment request on the connection route, always sc
     assert.equal(result.invalid,true,path);assert.equal(result.requestId,undefined,path);assert.ok(!clean.includes(id));
   }
 });
+
+test('recovery fragments stay separate from venue pairing and reject query or duplicate requests',()=>{
+ const id='12345678-1234-4234-8234-123456789abc';let clean='';
+ assert.deepEqual(captureLink(new URL(`https://cloud.example/recover#request=${id}`),v=>{clean=v;}),{invalid:false,recoveryId:id});assert.equal(clean,'/recover');
+ for(const path of [`/recover?request=${id}`,`/recover#request=${id}&request=${id}`,`/recover#request=${id}&token=${token}`]){const result=captureLink(new URL('https://cloud.example'+path),v=>{clean=v;});assert(result.invalid);assert.equal(result.recoveryId,undefined);assert(!clean.includes(id));}
+});
