@@ -1,3 +1,4 @@
+import {AlertController} from './alert-controller.ts';
 import {BackupController} from './backup-controller.ts';
 import {InstallationController} from './installation-controller.ts';
 import { PairingController } from './pairing-controller.ts';
@@ -27,6 +28,7 @@ export class PortalApp {
   pairing: PairingController;
   installations: InstallationController;
   backups: BackupController;
+  alerts: AlertController;
   #route = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
   constructor(root: HTMLElement) {
@@ -35,6 +37,7 @@ export class PortalApp {
     let saved: string | null = null;
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
     this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
+    this.alerts = new AlertController(() => this.draw());
     this.backups = new BackupController(() => this.draw());
     this.installations = new InstallationController(() => {
       if(this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke))this.backups.close();
@@ -46,7 +49,7 @@ export class PortalApp {
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (['/account','/connect'].includes(this.path)) void this.session.activity(event); });
     document.addEventListener('pointerdown', event => { if (['/account','/connect'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.alerts.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -55,6 +58,8 @@ export class PortalApp {
   #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
+    this.alerts.account(state.kind === 'authenticated' ? state.accountId : undefined);
+    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.alerts.loaded) void this.alerts.load();
     this.backups.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.installations.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.installations.loaded) void this.installations.load();
@@ -74,7 +79,7 @@ export class PortalApp {
   }
   get waiting() {
     if (this.path === '/connect') return Math.max(this.pairing.waiting, Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)));
-    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt) : this.cooldownOperation === this.operation ? this.cooldownUntil : 0;
+    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt,this.alerts.retryAt) : this.cooldownOperation === this.operation ? this.cooldownUntil : 0;
     return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
   }
   draw() {
