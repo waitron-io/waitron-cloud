@@ -6,12 +6,14 @@ test('passive reads do not renew; real activity is throttled and late activity c
   try {
     const page = await f.browser.newPage(); page.setDefaultTimeout(3000);
     await page.clock.install({time: new Date('2030-01-01T12:00:00Z')});
+    let entered!:()=>void; const activityEntered=new Promise<void>(resolve=>{entered=resolve;});
     let reads=0, activities=0; let release: (() => void) | undefined;
     await page.route('**/api/account/**', async route => {
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith('/installations')) { await route.fulfill({json:{installations:[]}}); return; }
       if (path.endsWith('/logout')) { await route.fulfill({status:204}); return; }
-      if (path.endsWith('/activity')) { activities++; await new Promise<void>(resolve => {release=resolve;}); }
+      // Request events precede handler work; delay the mock to exercise that gap.
+      if (path.endsWith('/activity')) { await new Promise(resolve=>setTimeout(resolve,50)); activities++; await new Promise<void>(resolve => {release=resolve;entered();}); }
       else reads++;
       await route.fulfill({json:{accountId:'owner',expiresAt:'2030-01-01T12:30:00Z'}});
     });
@@ -25,7 +27,7 @@ test('passive reads do not renew; real activity is throttled and late activity c
     await page.keyboard.press('Tab');assert.equal(activities,0);
     await page.evaluate(()=>Reflect.deleteProperty(document,'visibilityState'));
     await page.clock.runFor(61_000); assert.equal(activities,0);
-    await Promise.all([page.waitForRequest('**/session/activity'), page.keyboard.press('Tab')]);
+    await Promise.all([activityEntered, page.keyboard.press('Tab')]);
     assert.equal(activities,1);
     await page.keyboard.press('Tab'); assert.equal(activities,1);
     await page.getByRole('button',{name:'Sign out',exact:true}).click();
