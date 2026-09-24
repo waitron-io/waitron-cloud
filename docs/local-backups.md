@@ -106,7 +106,8 @@ retirement of the old credentials and explicit Waitron activation. Recording a
 `planned` mode or an owner's confirmation does not establish those conditions.
 
 The installation-authenticated capture/renewal adapter and Waitron client are implemented.
-Next, add scheduled capture with durable local archive spooling and customer recovery screens. The local worker now schedules verification, retention
+Scheduled capture with durable local archive spooling is implemented for test installations.
+Next, add customer recovery screens. The local worker now schedules verification, retention
 and abandoned-upload cleanup; the customer catalogue is paginated. Define cancellation/deletion,
 operator master-key backup and rotation, and production verifier isolation. Run the
 same provider tests against AWS Spain before any deployment; this local result does

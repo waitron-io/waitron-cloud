@@ -15,5 +15,9 @@
   "devDependencies": {
     "@types/node-forge": "1.3.14",
     "@types/pg": "^8.23.1"
+  },
+  "exports": {
+    "./placement": "./src/placement.ts",
+    "./manifest": "./src/manifest.ts"
   }
 }

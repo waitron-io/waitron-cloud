@@ -50,7 +50,7 @@ export class RemoteAccessStore {
   if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');return `${kind==='staff'?'staff-':''}v-${row.venue_id}.${row.suffix}`;
  }
  async hostnameInstructions(id:string,kind:'staff'|'public',custom:string){return dnsInstructions(custom,await this.#assigned(id,kind));}
- async setHostname(id:string,kind:'staff'|'public',custom:string,expectedRevision:number,resolve:typeof resolveCname=resolveCname):Promise<Placement>{
+ async setHostname(id:string,kind:'staff'|'public',custom:string,expectedRevision:number,resolve:typeof resolveCname=resolveCname,authorize?:(client:PoolClient)=>Promise<string>):Promise<Placement>{
   const assigned=await this.#assigned(id,kind);
   if(!isHostname(custom)||!Number.isSafeInteger(expectedRevision)||expectedRevision<0)fail('invalid_hostname');
   // The complete operator namespace is reserved, including names for venues not provisioned yet.
@@ -59,6 +59,7 @@ export class RemoteAccessStore {
    await verifyDelegation(custom,assigned,resolve);
   }
   try{return await transaction(this.#pool,async client=>{
+   const actor=await authorize?.(client);
    const row=(await client.query('SELECT * FROM installations WHERE id=$1 FOR UPDATE',[id])).rows[0];
    if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');if(row.configuration_revision!==expectedRevision)fail('revision_conflict');
    // Assigned names are reserved even when a venue elects to use a custom name.
@@ -67,7 +68,10 @@ export class RemoteAccessStore {
    await client.query('UPDATE remote_hostnames SET hostname=$3 WHERE venue_id=$1 AND kind=$2',[row.venue_id,kind,custom]);
    const result=(await placement(client,id))!;
    await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='remote_access'",[id,{version:1,...result}]);
-   await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[id]);return result;
+   await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[id]);
+   // Customer changes record the authenticated actor; operator calls have no customer session.
+   if(authorize){await authorize(client);await client.query('INSERT INTO remote_hostname_changes(installation_id,account_id,kind,hostname,configuration_revision) VALUES($1,$2,$3,$4,$5)',[id,actor,kind,custom,expectedRevision+1]);}
+   return result;
   });}catch(error){if(error&&typeof error==='object'&&'code' in error&&error.code==='23505')return fail('hostname_conflict');throw error;}
  }
  async authorizeCertificate(id:string,kind:'staff'|'public',csr:string){

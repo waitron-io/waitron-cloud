@@ -7,7 +7,7 @@ import { database } from '../../../packages/account-http/test/fixtures.ts';
 import { startAccountServer } from '@waitron-cloud/account-http';
 import { loadPortalAssets } from '../../../packages/account-http/src/portal.ts';
 import { EmailWorker, createLocalAccountMailer, createLeaseIssuer } from '@waitron-cloud/registration';
-export async function startPortalFixture(captures?:CaptureOptions) {
+export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?:(name:string)=>Promise<string[]>) {
   const db = await database();
   const reserved = createServer();
   await new Promise<void>(resolve => reserved.listen(0, '127.0.0.1', resolve));
@@ -18,7 +18,7 @@ export async function startPortalFixture(captures?:CaptureOptions) {
   let browser: Browser | undefined;
   try {
     const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
-    running = await startAccountServer({captures,leaseIssuer:issuer,pool: db.pool, outbox: db.outbox, port: address.port,
+    running = await startAccountServer({captures,remoteResolve,leaseIssuer:issuer,pool: db.pool, outbox: db.outbox, port: address.port,
       config: {portalOrigin: origin, production: false, rateKey: db.rateKey, trustedProxyIps: []},
       portalAssets: await loadPortalAssets(new URL('../dist', import.meta.url).pathname)});
     browser = await chromium.launch({headless: true});
