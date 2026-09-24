@@ -7,7 +7,8 @@ Execute inline under standing autonomous authority. Design: customer remote-acce
    to `/api/account/remote-access/status` must fail before the route exists. Cover the
    authority and DNS-wait races named in the design.
 2. Add public status/instructions/apply handlers in `packages/account-http/src/remote-access.ts`.
-   Extend `RemoteAccessStore.setHostname` with a transaction-local authorization callback;
+   Extend `RemoteAccessStore.setHostname` with a transaction-local authorization callback
+   before the installation lock and an actor audit record;
    preserve existing callers and add a package export/dependency. Wire a bounded DNS resolver
    into the account app as an internal test seam. Verify focused HTTP and placement tests.
 3. Add `remote-controller.ts`, `remote-types.ts`, `remote-screen.ts` and focused failing

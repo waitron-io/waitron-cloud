@@ -56,6 +56,41 @@ It issues and renews a certificate against Pebble and verifies refusal when the 
 challenge record is absent. Pebble images are pinned by digest in
 `scripts/remote-fixtures.mjs`; challenge validation is never bypassed.
 
+## Set up your venue in the account portal
+
+Open **Your venues**, then **Set up remote access** for your venue. You must be an
+organisation owner. Start with the assigned staff and public addresses; they avoid
+changing your own domain. If no gateway has been assigned, the screen says so instead
+of offering an address that cannot work.
+
+To use a name such as `staff.your-cafe.es`, choose the address to change, enter the name
+and select **Review DNS settings**. Create both displayed CNAME records at your domain
+provider. The first directs traffic to your venue; the second delegates certificate
+validation. Keep both records while you use the name. Use a subdomain because many DNS
+providers cannot put a CNAME at the domain root.
+
+Select **Check DNS and use this name** when both records are present. A failed check
+leaves your current name unchanged. DNS can take time to propagate, so check the records
+and retry. **Use assigned name** lets you review a switch back without custom records.
+A concurrent configuration change requires refreshing and reviewing again. If the save
+reply is lost, the portal reads the current settings instead of resending the change.
+
+Changing a name returns the service to setup pending and can interrupt access until its
+certificate and venue settings are updated. The local operator commands below still
+perform gateway assignment and certificate issuance/installation. This screen does not
+activate a live subscription or install a tunnel on a customer appliance. Once fresh
+service observations confirm the selected configuration, the addresses become links.
+That confirmation expires with the observation or connection lease, even on an open page.
+
+Expand **Use the staff address on your local network** for DNS and offline-test guidance.
+Cloud cannot configure your router or prove that a device uses its local DNS resolver.
+The staff hostname must match the installed certificate and the local override.
+
+The account API exposes only names, configuration revision and service status. It checks
+current ownership again after DNS verification and records the account, selected name
+and revision with the change. Customer requests cannot choose a gateway cell, tunnel key,
+private network address or certificate provider.
+
 ## Keep a local gateway configured
 
 The operator CLI takes trusted local JSON files and `DATABASE_URL`. Run migrations
@@ -169,5 +204,5 @@ A dead HAProxy child restarts from still-valid authority; it cannot restart afte
 Gateway replacement and certificate reload may interrupt remote connections. The local
 target is recovery within sixty seconds, not a production availability promise. LAN
 access remains independent. Production DNS, provider credentials, appliance installation,
-customer setup UI, external monitoring and deployment hardening still need their own
+automatic customer appliance setup, external monitoring and deployment hardening still need their own
 implementation and validation before customers can subscribe.

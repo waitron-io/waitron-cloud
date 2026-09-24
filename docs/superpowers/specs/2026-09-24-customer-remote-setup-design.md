@@ -34,7 +34,9 @@ Preserve account, session, membership, then installation lock order used by revo
 requires refreshing; never silently overwrite another change. Never hold DB locks while
 waiting for DNS. Bound DNS waits and do not make HTTP calls to a supplied hostname.
 
-Return only display names, revision and service status. No tunnel configuration or keys.
+Record the actor, selected name and configuration revision with each customer change.
+Return only display names, revision and service status. Readiness expires with the earliest
+observation or lease deadline, including on an already-open page. No tunnel configuration or keys.
 Delayed browser replies must not survive account/venue changes. Treat a lost mutation
 response as uncertain and refresh status before offering another change.
 

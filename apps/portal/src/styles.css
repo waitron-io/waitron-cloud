@@ -29,3 +29,7 @@ button:disabled { cursor: default; opacity: .6; }
 
 .alert-choice { display: flex; align-items: flex-start; gap: .75rem; margin-block: 1rem; }
 .alert-choice input { flex: none; width: auto; margin-top: .25rem; }
+
+.remote-setup { overflow-wrap: anywhere; margin-block: 1rem; }
+.remote-setup details { margin-block: 1rem; }
+.remote-setup summary { cursor: pointer; }

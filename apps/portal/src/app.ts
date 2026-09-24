@@ -1,3 +1,4 @@
+import {RemoteController} from './remote-controller.ts';
 import {AlertController} from './alert-controller.ts';
 import {BackupController} from './backup-controller.ts';
 import {InstallationController} from './installation-controller.ts';
@@ -28,6 +29,7 @@ export class PortalApp {
   pairing: PairingController;
   installations: InstallationController;
   backups: BackupController;
+  remote: RemoteController;
   alerts: AlertController;
   #route = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
@@ -38,8 +40,10 @@ export class PortalApp {
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
     this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
     this.alerts = new AlertController(() => this.draw());
+    this.remote = new RemoteController(() => this.draw());
     this.backups = new BackupController(() => this.draw());
     this.installations = new InstallationController(() => {
+      if(this.remote.installationId&&!this.installations.visible.some(i=>i.installationId===this.remote.installationId&&i.canRevoke&&!i.revokedAt))this.remote.close();
       if(this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke))this.backups.close();
       this.draw();
     });
@@ -49,7 +53,7 @@ export class PortalApp {
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (['/account','/connect'].includes(this.path)) void this.session.activity(event); });
     document.addEventListener('pointerdown', event => { if (['/account','/connect'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.alerts.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.remote.account(undefined); this.alerts.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -60,6 +64,7 @@ export class PortalApp {
   #sessionChanged(state: SessionState) {
     this.alerts.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.alerts.loaded) void this.alerts.load();
+    this.remote.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.backups.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.installations.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.installations.loaded) void this.installations.load();
@@ -79,7 +84,7 @@ export class PortalApp {
   }
   get waiting() {
     if (this.path === '/connect') return Math.max(this.pairing.waiting, Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)));
-    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt,this.alerts.retryAt) : this.cooldownOperation === this.operation ? this.cooldownUntil : 0;
+    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt,this.alerts.retryAt,this.remote.retryAt) : this.cooldownOperation === this.operation ? this.cooldownUntil : 0;
     return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
   }
   draw() {
@@ -194,7 +199,7 @@ export class PortalApp {
   }
   get logoutWaiting() { return Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)); }
   async logout() {
-    if (this.pending || this.logoutWaiting || this.pairing.pending || this.installations.pending) return;
+    if (this.pending || this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending) return;
     this.pending = true; this.error = undefined; this.draw();
     const route = this.#route;
     const success = await this.session.logout();
