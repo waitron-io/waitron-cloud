@@ -59,11 +59,14 @@ lost replies, worker restart and venue isolation. The [local remote-access proof
 now uses real WireGuard/HAProxy, two Waitron servers, ACME DNS validation, browser bot
 challenges, local DNS, gateway replacement, revocation and expiring route authority.
 Operator placement, signed export and certificate commands are implemented. Customer
-remote setup and production deployment remain open. Next: managed SQLite backups and
-replacement recovery. The pairing runner still uses synthetic observations; only the
-separate remote runner proves a tunnel. Recheck the
-new SQLite capture/restore interfaces before integrating backups; do not build a new
-PostgreSQL backup adapter for Waitron. The full two-venue milestone remains unproved.
+remote setup and production deployment remain open. The [local backup proof](local-backups.md)
+now provides encrypted scoped storage, protected key versions, an immutable snapshot catalogue,
+restore verification, retention and owner-bound recovery operations. Two real Waitron
+snapshots restore independently of deleted Litestream data, including after key rotation.
+These are internal local APIs and test fixtures; customer backup screens, authenticated
+capture delivery, scheduling and complete replacement activation remain open. The pairing runner still uses synthetic observations; only the
+separate remote runner proves a tunnel. Waitron owns the remaining SQLite slice-2 sealed-state row, stream supervisor and
+cold-restore contract. Recheck those interfaces before wiring complete continuous recovery. The full two-venue milestone remains unproved.
 The [registration plan](registration-implementation-plan.md) now sequences persistence,
 identity reuse, the bound approval exchange and a two-installation connection proof.
 The normal connection journey and PostgreSQL for Cloud management data are agreed.
@@ -314,9 +317,20 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   messages and compute to customers and services. Show consumption and allowances,
   track provider costs and define limits. Any billing records need durable capture,
   duplicate handling, reconciliation and a metering-outage policy.
-- **Data lifecycle.** Retention, restore checks, export, deletion and access review;
+- **Data lifecycle.** The internal managed-backup catalogue now protects the latest
+  successfully verified snapshot (or newest snapshot when none has verified) and active
+  recoveries, with automatic operation expiry, resumable deletion and
+  30-day daily/12-month monthly expiry. PostgreSQL tests cover failures and races.
+  Versioned managed keys and bound owner recovery are implemented for local test venues;
+  [the real snapshot proof](local-backups.md) runs Waitron validation and restore hooks.
+  Next: authenticated installation capture/credential renewal, scheduled capture and
+  verification, customer recovery/status screens, paginated catalogue reads, streaming
+  object I/O beyond the current 512 MiB bound, unused incoming-upload/request cleanup,
+  master-key operations and production verifier
+  isolation. Complete continuous server recovery and activation depend on Waitron slice 2.
+  Retention, restore checks, export, deletion and access review;
   define what survives subscription termination and for how long.
-  Implement the starting snapshot policy: daily for 30 days, monthly for 12 months
+  The catalogue implements the starting snapshot policy: daily for 30 days, monthly for 12 months
   and longer paid retention for selected snapshots. Define snapshot timing, monthly
   selection and missed-snapshot handling; validate storage costs before pricing.
   Validate the inherited continuous-backup retention baseline. Protect the last verified snapshot from automatic
@@ -324,7 +338,7 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   snapshot takes its place; test failed new snapshots and interrupted cleanup. Explicit
   deletion and cancellation policies remain open.
   Carry forward the existing topology's proposed hourly stream snapshots and 30-day
-  stream retention as a baseline to validate. Implement Cloud-managed recovery-key
+  stream retention as a baseline to validate. Productionise the implemented internal Cloud-managed recovery-key
   custody and authorised delivery, respecting the existing external vault-key design.
   Implement the integration contract's mapped backup contents, manifests, module
   restore hooks and per-secret handling after checking the incoming SQLite interfaces.
@@ -334,11 +348,11 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   Cloud registration credentials must respect Waitron's different node-identity rules
   for stream and archive restores. Keep the on-prem-archive-to-cloud vault re-encryption
   follow-up explicit; it is not proved by an ordinary backup download.
-  The inspected archive format includes TLS private keys and backup settings, so
-  reconcile capture with venue-only staff TLS key custody and fresh Cloud installation
-  credentials before using it for managed Cloud backups. Implement restore verification
-  separately from file-upload freshness; keep verifier runs from activating a primary
-  or contacting fiscal/payment services. Define the external-key format extension
+  Real snapshots now exclude source Cloud credentials and staff TLS keys; the managed
+  replacement fixture discards old backup settings. Promote that test-only reconciliation
+  into Waitron's actual replacement contract before customer use. Restore verification is
+  separate from upload freshness; production workers still need enforceable resource and
+  network isolation, without activating a primary or contacting fiscal/payment services. Define the external-key format extension
   rather than assuming it exists in the inspected manifest v1.
 
 ## Initial services and future candidates
