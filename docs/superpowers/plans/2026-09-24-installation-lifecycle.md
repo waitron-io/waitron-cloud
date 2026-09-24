@@ -114,14 +114,17 @@ Cloud `scripts/test-waitron-pairing.mjs`, both guides/backlogs.
 
 - [x] Rebase each branch initially, run one bounded Claude run-it review in an independent
   disposable clone, triage with reproductions and fix accepted findings test-first.
-- [ ] Push through normal hooks and verify every required current-head CI result.
+- [x] Push through normal hooks and verify every required current-head CI result.
   Use the normal protected merge path: automatic approval review rejected `--admin`
   in task 2, so rebase if GitHub requires an up-to-date branch.
-- [ ] Merge both PRs, refresh both main checkouts, clean registered worktrees and local/
+- [x] Merge both PRs, refresh both main checkouts, clean registered worktrees and local/
   remote branches, verify backlog state and preserve review/validation receipts.
-- [ ] Continue directly to programme task 4: local remote access.
+- [x] Continue directly to programme task 4: local remote access.
 
 Review receipts: Cloud 550s and Waitron 455s, retained under `/tmp/cloud-lifecycle-review.k9wz0i3d`
 and `/tmp/waitron-lifecycle-review.rg2t00_s`. Waitron PR544 landed as `59fbb0907`.
 Cloud CI exposed a broad session-test stub counting installation reads; the stub now
 responds separately to installations while preserving the session assertions.
+
+Completed: Cloud PR35 (`b9f601f`), Waitron PR544 (`59fbb0907`). Current-head CI passed,
+both main checkouts refreshed, both worktrees and local/remote branches removed.
