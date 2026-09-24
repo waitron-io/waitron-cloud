@@ -39,3 +39,7 @@
 2026-09-24: first worktree created; overview design grounded in existing installation UI,
 registration lifecycle, backup catalogue and account API. Existing UI already shows
 connection/service state; this branch adds business context and actual snapshot freshness.
+
+Overview implementation: focused API/controller checks and both bilingual phone-width
+browser journeys pass; existing stop-access, lost-reply and stale-observation assertions
+remain. The organisation selector uses an explicit accessible label. Review/CI follow.

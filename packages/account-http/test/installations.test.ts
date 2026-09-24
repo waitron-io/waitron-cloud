@@ -1,6 +1,10 @@
+import {venueOverview} from '../src/venue-overview.ts';
+import {BackupCatalogue} from '../../backups/src/catalogue.ts';
+import {BackupKeyVault} from '../../backups/src/keys.ts';
+import {receipt} from '../../backups/src/storage.ts';
 import assert from 'node:assert/strict';
 import {request as httpRequest} from 'node:http';
-import {generateKeyPairSync,randomUUID,sign} from 'node:crypto';
+import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
 import type {HttpBindings} from '@hono/node-server';
 import {SignupStore,RegistrationStore,createLeaseIssuer,encodeMachine,type MachineAction,type SignedEnvelope} from '@waitron-cloud/registration';
@@ -50,4 +54,22 @@ test('real socket renewal survives server restart and revocation rejects subsequ
   const req=httpRequest({host:'127.0.0.1',port:(running.server.address() as {port:number}).port,path:'/api/installations/'+action,method:'POST',headers:{host:'cloud.example.test','content-type':'application/json'}},res=>{let text='';res.on('data',c=>{text+=c;});res.on('end',()=>resolve(new Response(text,{status:res.statusCode!})));res.on('error',reject);});req.on('error',reject);req.end(JSON.stringify(body));
  });
  try{const renewal=proof('renew'),first=await send('renew',renewal);assert.equal(first.status,200);const result=await first.json();await running.close();running=await start();assert.deepEqual(await (await send('renew',renewal)).json(),result);assert.equal((await send('revoke',proof('revoke'))).status,200);assert.equal((await send('renew',proof('renew'))).status,403);}finally{await running.close();}
+});
+
+test('venue overview includes public business context and verified snapshot time without credentials',async()=>{
+ const objects=new Map<string,Buffer>(),vault=new BackupKeyVault(randomBytes(32));
+ const backups=new BackupCatalogue(db.pool,vault,()=>({async read(k){return objects.get(k)!;},async put(k,b){objects.set(k,Buffer.from(b));return receipt(b);},async remove(k){objects.delete(k);}}));
+ await backups.provision(id,{endpoint:'https://storage.test',bucket:'venue-snapshots',region:'local'});
+ const dates=[3,2,1].map(days=>new Date(Date.now()-days*86400000).toISOString());let secret='';
+ for(let n=0;n<3;n++){
+  const capture=await backups.reserveCapture(id,randomUUID()),bytes=Buffer.from('archive '+n);secret=capture.keys.recoveryKey;objects.set(capture.incomingKey,bytes);
+  const point=await backups.publish(id,capture.id,{...receipt(bytes),capturedAt:dates[n]!,retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}});
+  if(n===0)await backups.verify(point.id,'test-worker',async()=>{});
+  if(n===1)await assert.rejects(backups.verify(point.id,'test-worker',async()=>{throw Error('bad archive');}));
+  if(n===2)await db.pool.query('UPDATE backup_points SET deleting=true WHERE id=$1',[point.id]);
+ }
+ const response=await browser('');assert.equal(response.status,200);const json=await response.json();
+ assert.deepEqual(json.installations[0].overview,{organisationName:'Sol',businessName:'Sol SL',countryCode:'ES',latestSnapshotAt:dates[1],verifiedSnapshotAt:dates[0]});
+ assert(!JSON.stringify(json).includes(secret));assert(!JSON.stringify(json).includes('snapshots/'));
+ await db.pool.query('DELETE FROM organisation_memberships');assert.deepEqual(await venueOverview(db.pool,/__Host-cloud_session=([^;]+)/.exec(cookie)![1]!,json.installations),[]);assert.deepEqual(await (await browser('')).json(),{installations:[]});
 });

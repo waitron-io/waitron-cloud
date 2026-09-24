@@ -20,3 +20,14 @@ test('foreign replies and rate limits do not replace the selected installation o
  c.account('owner');c.installations=[view];c.choose(id);await c.revoke();assert.equal(c.error,'unavailable');assert.equal(c.installations[0]?.revokedAt,null);
  limited=true;await c.revoke();assert.equal(c.error,'limited');await c.revoke();assert.equal(calls,2);c.installations=[{...view,canRevoke:false}];c.choose(id);assert.equal(c.confirming,undefined);
 });
+
+test('one organisation is visible at a time and account changes clear selection',async()=>{
+ const otherId='22345678-1234-4234-8234-123456789abc';
+ const items=[{...view,overview:{organisationName:'Sol',businessName:'Sol SL',countryCode:'ES',latestSnapshotAt:null,verifiedSnapshotAt:null}},{...view,installationId:otherId,venueId:otherId,organisationId:otherId,overview:{organisationName:'Luna',businessName:'Luna SL',countryCode:'ES',latestSnapshotAt:null,verifiedSnapshotAt:null}}];
+ const c=new InstallationController(()=>{},async<T>()=>({ok:true,value:{installations:items} as T}));c.account('owner');await c.load();
+ assert.equal(c.organisations.length,2);assert.equal(c.visible.length,1);
+ c.selectOrganisation(otherId);assert.equal(c.visible[0]?.organisationId,otherId);
+ c.choose(otherId);c.selectOrganisation(id);assert.equal(c.confirming,undefined);
+ c.selectOrganisation('unknown');assert.equal(c.visible[0]?.organisationId,id);
+ c.account(undefined);assert.deepEqual(c.visible,[]);assert.equal(c.selectedOrganisation,undefined);
+});

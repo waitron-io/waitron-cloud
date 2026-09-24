@@ -1,3 +1,4 @@
+import {venueOverview} from './venue-overview.ts';
 import type {Context} from 'hono';
 import type {Pool} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
@@ -25,6 +26,6 @@ export async function installationResponse(c:Context,options:{pool:Pool;issuer?:
  const token=readSessionCookie(c,new URL(origin).protocol==='https:')??'',csrf=c.req.header('x-csrf-token')??'';
  const session=await transaction(pool,client=>resolveSession(client,token,{touch:false,...(action===''?{}:{csrfToken:csrf})}));
  await consume([{scope:'installation-account',subject:session.accountId,limit:30,windowSeconds:60}]);
- if(action==='')return c.json({installations:await store.listWithSession(token)});
+ if(action==='')return c.json({installations:await venueOverview(pool,token,await store.listWithSession(token))});
  const body=await readAccountBody(c.req.raw,['installationId']);return c.json(await store.revokeWithSession(token,csrf,body.installationId!));
 }

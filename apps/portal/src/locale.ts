@@ -8,6 +8,7 @@ export function chooseLocale(saved: string | null, languages: readonly string[])
   return 'en';
 }
 const en = {
+  chooseOrganisation:'Organisation', latestSnapshot:'Latest snapshot', verifiedSnapshot:'Latest verified snapshot', noSnapshot:'No snapshot yet', noVerifiedSnapshot:'No verified snapshot yet', snapshotOld:'This verified snapshot is more than two days old. Check backup status in Waitron.',
   installations:'Your venues', noInstallations:'No venues are connected yet. Start in Cloud services in your Waitron dashboard.',
   refreshStatus:'Refresh status', lastContact:'Last contact', accessExpires:'Cloud access expires', neverContacted:'Not yet contacted',
   accessStopped:'Cloud access stopped', accessActive:'Cloud access active', accessPending:'Waiting for the server', accessStale:'Server status is out of date',
@@ -57,6 +58,7 @@ const en = {
 };
 export type Copy = typeof en;
 const es: Copy = {
+  chooseOrganisation:'Organización', latestSnapshot:'Última instantánea', verifiedSnapshot:'Última instantánea verificada', noSnapshot:'Todavía no hay instantáneas', noVerifiedSnapshot:'Todavía no hay una instantánea verificada', snapshotOld:'Esta instantánea verificada tiene más de dos días. Comprueba el estado de las copias en Waitron.',
   installations:'Tus locales', noInstallations:'Todavía no hay locales conectados. Empieza en Servicios Cloud en tu panel de Waitron.',
   refreshStatus:'Actualizar estado', lastContact:'Último contacto', accessExpires:'El acceso a Cloud caduca', neverContacted:'Sin contacto todavía',
   accessStopped:'Acceso a Cloud detenido', accessActive:'Acceso a Cloud activo', accessPending:'Esperando al servidor', accessStale:'El estado del servidor no está actualizado',
