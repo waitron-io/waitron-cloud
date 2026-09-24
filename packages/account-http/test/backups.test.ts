@@ -35,7 +35,7 @@ async function point(venue=venues[0]!,capturedAt='2026-01-31T12:00:00.000Z',veri
 }
 test('catalogue uses live owner authority and exact browser proof without renewing the session',async()=>{
  const body={venueId:venues[0]!.venueId};
- for(const headers of [{cookie:''},{origin:'https://wrong.test'},{'x-csrf-token':'wrong'}])assert.ok([401,403].includes((await request(body,headers)).status));
+ for(const headers of [{cookie:''},{origin:'https://wrong.test'},{'x-csrf-token':'wrong'}] as Record<string,string>[])assert.ok([401,403].includes((await request(body,headers)).status));
  assert.equal((await request(body,{},undefined,'GET')).status,405);
  assert.equal((await request({...body,extra:'x'})).status,400);assert.equal((await request({venueId:'bad'})).status,400);
  assert.equal((await request({venueId:randomUUID()})).status,403);
@@ -65,9 +65,9 @@ test('retention protection is distinct from current verification and active reco
  for(const state of ['deleting','deleted_at']){const id=await point();await db.pool.query(`UPDATE backup_points SET ${state}=${state==='deleting'?'true':'clock_timestamp()'} WHERE id=$1`,[id]);}
  const continuous=await point();await db.pool.query("UPDATE backup_points SET kind='continuous' WHERE id=$1",[continuous]);
  const r=await request({venueId:venues[0]!.venueId});assert.equal(r.status,200);const page=await r.json();assert.equal(page.points.length,3);assert.equal(page.defaultPointId,latest);assert.equal(page.continuousRecoveryAvailable,false);
- assert.equal(page.points.find(p=>p.id===old).protection,'fallback');assert.equal(page.points.find(p=>p.id===old).verification,'failed');assert.equal(page.points.find(p=>p.id===recovering).protection,'recovery');assert.equal(page.points.find(p=>p.id===latest).expiresAt,'2027-01-31T12:00:00.000Z');
+ assert.equal(page.points.find((p:{id:string})=>p.id===old).protection,'fallback');assert.equal(page.points.find((p:{id:string})=>p.id===old).verification,'failed');assert.equal(page.points.find((p:{id:string})=>p.id===recovering).protection,'recovery');assert.equal(page.points.find((p:{id:string})=>p.id===latest).expiresAt,'2027-01-31T12:00:00.000Z');
  await db.pool.query("UPDATE backup_recoveries SET expires_at=clock_timestamp()-interval '1 second'");
- assert.equal((await (await request({venueId:venues[0]!.venueId})).json()).points.find(p=>p.id===recovering).protection,null);
+ assert.equal((await (await request({venueId:venues[0]!.venueId})).json()).points.find((p:{id:string})=>p.id===recovering).protection,null);
 });
 
 test('another organisation is refused even with a valid session and a known venue identifier',async()=>{
@@ -92,7 +92,7 @@ test('published retention dates match cleanup across database time zones and day
  try{
   for(const [retention,date] of [['daily','2026-03-01T12:00:00.000Z'],['monthly','2026-03-29T00:30:00.000Z']]){
    const id=await point(undefined,date,'pending',retention),response=await request({venueId:venues[0]!.venueId});assert.equal(response.status,200);
-   const shown=(await response.json()).points.find(p=>p.id===id).expiresAt;
+   const shown=(await response.json()).points.find((p:{id:string})=>p.id===id).expiresAt;
    assert.equal(await cleanup.cleanupOne(venues[0]!.venueId,new Date(Date.parse(shown)-1)),null,retention+' must not delete before the displayed expiry');
    assert.equal(await cleanup.cleanupOne(venues[0]!.venueId,new Date(shown)),id);
   }
