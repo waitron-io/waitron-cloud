@@ -40,12 +40,29 @@ export function backupFail(code: string): never {
 export async function lockVenue(client: PoolClient, id: string) {
   const row = (
     await client.query(
-      "SELECT * FROM backup_locations WHERE venue_id=$1 FOR UPDATE",
+      "SELECT l.*,v.environment FROM backup_locations l JOIN venues v ON v.id=l.venue_id WHERE l.venue_id=$1 FOR UPDATE OF l",
       [id],
     )
   ).rows[0];
   if (!row) backupFail("unavailable");
+  if (row.environment !== "test") backupFail("local_integration_only");
   return row;
+}
+export async function expireRecoveries(client: PoolClient, venueId: string) {
+  await client.query(
+    "UPDATE backup_recoveries SET status='closed' WHERE venue_id=$1 AND status<>'closed' AND expires_at<=clock_timestamp()",
+    [venueId],
+  );
+}
+export function uniqueViolation(error: unknown, constraint: string) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "23505" &&
+    "constraint" in error &&
+    error.constraint === constraint
+  );
 }
 export function location(row: {
   endpoint: string;
@@ -67,24 +84,41 @@ async function active(client: PoolClient, id: string) {
   if (row.environment !== "test") backupFail("local_integration_only");
   return row;
 }
+const pointColumns = `id,venue_id AS "venueId",installation_id AS "installationId",key_version AS "keyVersion",kind,object_key AS "objectKey",digest,size,captured_at AS "capturedAt",retention,source_node_id AS "sourceNodeId",modules,verification,deleting,deleted_at AS "deletedAt"`;
+type StoredPoint = Omit<BackupPoint, "size" | "capturedAt" | "deletedAt"> & {
+  size: string | number;
+  capturedAt: Date;
+  deletedAt: Date | null;
+};
+function decodedPoint(row: StoredPoint): BackupPoint {
+  return {
+    ...row,
+    size: Number(row.size),
+    capturedAt: row.capturedAt.toISOString(),
+    deletedAt: row.deletedAt?.toISOString() ?? null,
+  };
+}
 export async function point(
   client: PoolClient,
   id: string,
 ): Promise<BackupPoint | undefined> {
   const row = (
     await client.query(
-      `SELECT id,venue_id AS "venueId",installation_id AS "installationId",key_version AS "keyVersion",kind,object_key AS "objectKey",digest,size,captured_at AS "capturedAt",retention,source_node_id AS "sourceNodeId",modules,verification,deleting,deleted_at AS "deletedAt" FROM backup_points WHERE id=$1`,
+      `SELECT ${pointColumns} FROM backup_points WHERE id=$1`,
       [id],
     )
   ).rows[0];
-  return row
-    ? {
-        ...row,
-        size: Number(row.size),
-        capturedAt: row.capturedAt.toISOString(),
-        deletedAt: row.deletedAt?.toISOString() ?? null,
-      }
-    : undefined;
+  return row ? decodedPoint(row) : undefined;
+}
+export async function venuePoints(
+  client: PoolClient,
+  id: string,
+): Promise<BackupPoint[]> {
+  const rows = await client.query(
+    `SELECT ${pointColumns} FROM backup_points WHERE venue_id=$1 AND deleted_at IS NULL AND NOT deleting ORDER BY captured_at DESC,id DESC`,
+    [id],
+  );
+  return rows.rows.map(decodedPoint);
 }
 export async function pointKeys(
   client: PoolClient,
@@ -184,6 +218,10 @@ export class BackupCatalogue {
         "UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1",
         [installationId],
       );
+    }).catch((error) => {
+      if (uniqueViolation(error, "backup_locations_endpoint_bucket_key"))
+        backupFail("conflict");
+      throw error;
     });
   }
   async rotate(installationId: string) {
@@ -245,7 +283,7 @@ export class BackupCatalogue {
   ): Promise<BackupPoint> {
     if (!uuid(id)) backupFail("unavailable");
     validateMetadata(m);
-    return transaction(this.#pool, async (client) => {
+    const published = await transaction(this.#pool, async (client) => {
       const install = await active(client, installationId),
         l = await lockVenue(client, install.venue_id),
         capture = (
@@ -258,7 +296,7 @@ export class BackupCatalogue {
       const prior = await point(client, id);
       if (prior) {
         if (!sameMetadata(prior, m)) backupFail("conflict");
-        return prior;
+        return { point: prior, location: location(l) };
       }
       const objects = this.#objects(location(l)),
         bytes = await objects.read("incoming/" + id),
@@ -283,8 +321,10 @@ export class BackupCatalogue {
           m.modules,
         ],
       );
-      return (await point(client, id))!;
+      return { point: (await point(client, id))!, location: location(l) };
     });
+    await this.#objects(published.location).remove("incoming/" + id);
+    return published.point;
   }
   async verify(
     id: string,
@@ -297,48 +337,67 @@ export class BackupCatalogue {
   ): Promise<void> {
     if (!uuid(id) || !verifier || verifier.length > 200)
       backupFail("unavailable");
-    const success = await transaction(this.#pool, async (client) => {
+    const prepared = await transaction(this.#pool, async (client) => {
       const first = await point(client, id);
       if (!first) backupFail("unavailable");
       const l = await lockVenue(client, first.venueId),
         p = (await point(client, id))!;
       if (p.deleting || p.deletedAt) backupFail("unavailable");
-      let outcome: "verified" | "failed" = "verified";
-      try {
-        const bytes = await this.#objects(location(l)).read(p.objectKey),
-          actual = receipt(bytes);
-        if (actual.digest !== p.digest || actual.size !== p.size)
-          backupFail("object_mismatch");
-        await restore(
-          bytes,
-          await pointKeys(client, this.#vault, p.venueId, p.keyVersion),
-          p,
-        );
-      } catch {
-        outcome = "failed";
-      }
+      const keys = await pointKeys(
+        client,
+        this.#vault,
+        p.venueId,
+        p.keyVersion,
+      );
+      return { point: p, location: location(l), keys };
+    });
+    let outcome: "verified" | "failed" = "verified";
+    try {
+      const bytes = await this.#objects(prepared.location).read(
+          prepared.point.objectKey,
+        ),
+        actual = receipt(bytes);
+      if (
+        actual.digest !== prepared.point.digest ||
+        actual.size !== prepared.point.size
+      )
+        backupFail("object_mismatch");
+      await restore(bytes, prepared.keys, prepared.point);
+    } catch {
+      outcome = "failed";
+    }
+    await transaction(this.#pool, async (client) => {
+      await lockVenue(client, prepared.point.venueId);
+      const current = await point(client, id);
+      if (
+        !current ||
+        current.deleting ||
+        current.deletedAt ||
+        !sameMetadata(current, prepared.point)
+      )
+        backupFail("unavailable");
       await client.query(
         "INSERT INTO backup_verifications(id,point_id,digest,verifier,outcome) VALUES($1,$2,$3,$4,$5)",
-        [randomUUID(), id, p.digest, verifier, outcome],
+        [randomUUID(), id, current.digest, verifier, outcome],
       );
       await client.query(
         "UPDATE backup_points SET verification=$2 WHERE id=$1",
         [id, outcome],
       );
-      return outcome === "verified";
     });
-    if (!success) backupFail("verification_failed");
+    if (outcome !== "verified") backupFail("verification_failed");
   }
   async cleanupOne(venueId: string, now = new Date()): Promise<string | null> {
     if (!uuid(venueId) || !Number.isFinite(now.getTime()))
       backupFail("unavailable");
     const selected = await transaction(this.#pool, async (client) => {
       const l = await lockVenue(client, venueId);
+      await expireRecoveries(client, venueId);
       const result = await client.query(
         `SELECT p.id,p.object_key FROM backup_points p WHERE p.venue_id=$1 AND p.deleted_at IS NULL
     AND NOT EXISTS(SELECT 1 FROM backup_recoveries r WHERE r.point_id=p.id AND r.status<>'closed')
     AND (p.deleting OR ((p.retention='daily' AND p.captured_at+interval '30 days'<=$2 OR p.retention='monthly' AND p.captured_at+interval '12 months'<=$2)
-     AND p.id IS DISTINCT FROM (SELECT q.id FROM backup_points q WHERE q.venue_id=$1 AND q.kind='snapshot' AND NOT q.deleting AND q.deleted_at IS NULL AND EXISTS(SELECT 1 FROM backup_verifications v WHERE v.point_id=q.id AND v.outcome='verified') ORDER BY q.captured_at DESC,q.id DESC LIMIT 1)))
+     AND p.id IS DISTINCT FROM (SELECT q.id FROM backup_points q WHERE q.venue_id=$1 AND q.kind='snapshot' AND NOT q.deleting AND q.deleted_at IS NULL ORDER BY EXISTS(SELECT 1 FROM backup_verifications v WHERE v.point_id=q.id AND v.outcome='verified') DESC,q.captured_at DESC,q.id DESC LIMIT 1)))
     ORDER BY p.deleting DESC,p.captured_at,p.id LIMIT 1`,
         [venueId, now],
       );

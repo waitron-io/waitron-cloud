@@ -84,9 +84,11 @@ Files: Cloud `scripts/test-local-backups.mjs`, Waitron-owned fixture/capture int
 
 ## Execution status
 
-2026-09-24: focused backup tests pass (9), provider isolation and actual 15-minute
+2026-09-24: focused backup tests pass (15), provider isolation and actual 15-minute
 credential expiry pass. The real two-venue proof passes snapshot validation/restore,
 Litestream committed writes, deleted-stream refusal and older-key snapshot recovery.
 Full continuous server restore remains blocked: Waitron main `95f02e0bc` still lists
 slice-2 sealed state, stream supervision and cold restore as pending. No activation
-or customer backup screens are claimed. Review and landing are next.
+or customer backup screens are claimed. The isolated Claude review took 505 seconds; its accepted findings now have passing
+regressions. Waitron fixture PR #552 is merged. Cloud current-head CI and landing
+are the remaining branch gates.

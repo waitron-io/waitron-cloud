@@ -172,7 +172,7 @@ test("publication verifies bytes, is immutable and starts unverified", async () 
     "1",
   );
 });
-test("only successful actual restore verification protects a point; altered storage fails verification", async () => {
+test("successful restore verification protects a point; altered storage fails verification", async () => {
   const old = await capture(a, 50);
   let observed = false;
   await store.verify(
@@ -245,4 +245,142 @@ test("cleanup is resumable, serialised and keeps the last verified snapshot and 
   assert(objects.has("venue-a/" + protectedPoint.point.objectKey));
   assert(objects.has("venue-a/" + monthly.point.objectKey));
   assert.equal(await store.cleanupOne(a.venueId), null);
+});
+
+test("verification releases the venue while restoring and refuses a point deleted during the restore", async () => {
+  const item = await capture(a, 50);
+  await capture(a, 40);
+  let entered!: () => void, release!: () => void;
+  const begun = new Promise<void>((r) => (entered = r)),
+    gate = new Promise<void>((r) => (release = r));
+  const verification = store.verify(item.point.id, "slow-worker", async () => {
+    entered();
+    await gate;
+  });
+  const result = verification.then(
+    () => null,
+    (e) => e,
+  );
+  await begun;
+  try {
+    const capture = other.reserveCapture(a.installationId, randomUUID());
+    assert.equal(
+      await Promise.race([
+        capture.then(() => true),
+        new Promise((r) => setTimeout(() => r(false), 1000)),
+      ]),
+      true,
+      "restore must not hold the venue lock",
+    );
+    assert.equal(await other.cleanupOne(a.venueId), item.point.id);
+  } finally {
+    release();
+    await result;
+  }
+  assert.match(String(await result), /backup.unavailable/);
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT count(*) FROM backup_verifications WHERE point_id=$1",
+        [item.point.id],
+      )
+    ).rows[0].count,
+    "0",
+  );
+});
+
+test("key-vault failure does not change archive verification status", async () => {
+  const item = await capture();
+  const wrong = new BackupCatalogue(
+    db.pool,
+    new BackupKeyVault(randomBytes(32)),
+    storage,
+  );
+  await assert.rejects(
+    wrong.verify(item.point.id, "wrong-master", async () =>
+      assert.fail("restore must not run"),
+    ),
+    /backup.key_unavailable/,
+  );
+  assert.equal(
+    (
+      await db.pool.query(
+        "SELECT verification FROM backup_points WHERE id=$1",
+        [item.point.id],
+      )
+    ).rows[0].verification,
+    "pending",
+  );
+  assert.equal(
+    (await db.pool.query("SELECT count(*) FROM backup_verifications")).rows[0]
+      .count,
+    "0",
+  );
+});
+
+test("retention preserves the newest unverified snapshot when no verification has succeeded", async () => {
+  const old = await capture(a, 60),
+    latest = await capture(a, 50);
+  assert.equal(await store.cleanupOne(a.venueId), old.point.id);
+  assert.equal(await store.cleanupOne(a.venueId), null);
+  assert(objects.has("venue-a/" + latest.point.objectKey));
+});
+
+test("publication removes incoming data and retries interrupted removal after commit", async () => {
+  const item = await capture();
+  assert.equal(objects.has("venue-a/" + item.reservation.incomingKey), false);
+  const pending = await store.reserveCapture(a.installationId, randomUUID());
+  objects.set("venue-a/" + pending.incomingKey, item.bytes);
+  failDelete = true;
+  await assert.rejects(
+    store.publish(a.installationId, pending.id, item.metadata),
+    /store offline/,
+  );
+  assert.equal(
+    (
+      await db.pool.query("SELECT count(*) FROM backup_points WHERE id=$1", [
+        pending.id,
+      ])
+    ).rows[0].count,
+    "1",
+  );
+  failDelete = false;
+  assert.equal(
+    (await store.publish(a.installationId, pending.id, item.metadata)).id,
+    pending.id,
+  );
+  assert.equal(objects.has("venue-a/" + pending.incomingKey), false);
+});
+
+test("provisioning translates an occupied storage location to a stable conflict", async () => {
+  await db.pool.query("DELETE FROM backup_key_versions WHERE venue_id=$1", [
+    b.venueId,
+  ]);
+  await db.pool.query("DELETE FROM backup_locations WHERE venue_id=$1", [
+    b.venueId,
+  ]);
+  await assert.rejects(
+    store.provision(b.installationId, {
+      endpoint: "https://store.test",
+      bucket: "venue-a",
+      region: "local",
+    }),
+    /^Error: backup.conflict$/,
+  );
+});
+
+test("test-only storage refuses verification and retention after a venue becomes production", async () => {
+  const item = await capture();
+  await db.pool.query(
+    "UPDATE venues SET environment='production' WHERE id=$1",
+    [a.venueId],
+  );
+  await assert.rejects(
+    store.verify(item.point.id, "worker", async () => {}),
+    /backup.local_integration_only/,
+  );
+  await assert.rejects(
+    store.cleanupOne(a.venueId),
+    /backup.local_integration_only/,
+  );
 });

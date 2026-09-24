@@ -40,7 +40,7 @@ CREATE TABLE backup_verifications (
 CREATE TABLE backup_recoveries (
  id uuid PRIMARY KEY, venue_id uuid NOT NULL REFERENCES backup_locations(venue_id),
  point_id uuid NOT NULL REFERENCES backup_points(id), account_id uuid NOT NULL REFERENCES cloud_accounts(id),
- target_public_key text NOT NULL, mode text NOT NULL CHECK(mode IN ('planned','failure')),
+ target_public_key text NOT NULL UNIQUE, mode text NOT NULL CHECK(mode IN ('planned','failure')),
  status text NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','restored','closed')),
  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  expires_at timestamptz NOT NULL DEFAULT clock_timestamp()+interval '1 hour'

@@ -318,14 +318,15 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   track provider costs and define limits. Any billing records need durable capture,
   duplicate handling, reconciliation and a metering-outage policy.
 - **Data lifecycle.** The internal managed-backup catalogue now protects the latest
-  successfully verified snapshot and active recoveries, with resumable deletion and
+  successfully verified snapshot (or newest snapshot when none has verified) and active
+  recoveries, with automatic operation expiry, resumable deletion and
   30-day daily/12-month monthly expiry. PostgreSQL tests cover failures and races.
   Versioned managed keys and bound owner recovery are implemented for local test venues;
   [the real snapshot proof](local-backups.md) runs Waitron validation and restore hooks.
   Next: authenticated installation capture/credential renewal, scheduled capture and
   verification, customer recovery/status screens, paginated catalogue reads, streaming
   object I/O beyond the current 512 MiB bound, unused incoming-upload/request cleanup,
-  owner recovery-operation expiry cleanup, master-key operations and production verifier
+  master-key operations and production verifier
   isolation. Complete continuous server recovery and activation depend on Waitron slice 2.
   Retention, restore checks, export, deletion and access review;
   define what survives subscription termination and for how long.

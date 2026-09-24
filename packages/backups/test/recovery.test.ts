@@ -151,6 +151,46 @@ test("owner-authorised replacement is durable, target-bound and does not activat
     }),
     /backup.recovery_active/,
   );
+  const secondBinding = {
+    ...binding,
+    operationId: randomUUID(),
+    installationKey: keyPair().publicKey,
+    localVenueId: randomUUID(),
+  };
+  await reg.start(secondBinding);
+  await reg.approveCloud(secondBinding, owner.accountId);
+  await reg.approveLocal(secondBinding, randomUUID());
+  const second = await reg.complete(secondBinding);
+  await catalogue.provision(second.installationId, {
+    endpoint: "https://store.test",
+    bucket: "second-venue",
+    region: "local",
+  });
+  const secondCapture = await catalogue.reserveCapture(
+    second.installationId,
+    randomUUID(),
+  );
+  objects.set(secondCapture.incomingKey, bytes);
+  const secondPoint = await catalogue.publish(
+    second.installationId,
+    secondCapture.id,
+    {
+      ...receipt(bytes),
+      capturedAt: new Date().toISOString(),
+      retention: "daily",
+      sourceNodeId: randomUUID(),
+      modules: { core: 1 },
+    },
+  );
+  await catalogue.verify(secondPoint.id, "worker", async () => {});
+  await assert.rejects(
+    other.start(owner.token, owner.csrfToken, {
+      ...input,
+      id: randomUUID(),
+      pointId: secondPoint.id,
+    }),
+    /backup.target_not_fresh/,
+  );
   const proof = (
     action: "read" | "restored",
     key = target.key,
@@ -221,7 +261,7 @@ test("owner-authorised replacement is durable, target-bound and does not activat
   );
   assert.equal(
     (await db.pool.query("SELECT count(*) FROM installations")).rows[0].count,
-    "1",
+    "2",
   );
   assert.equal(
     (await db.pool.query("SELECT revoked_at FROM installations")).rows[0]
@@ -248,7 +288,21 @@ test("owner-authorised replacement is durable, target-bound and does not activat
     /backup.unavailable/,
   );
   assert.equal(await catalogue.cleanupOne(installed.venueId), point.id);
-  const expiredInput = { ...input, id: randomUUID(), pointId: newer.id };
+  await assert.rejects(
+    recovery.start(owner.token, owner.csrfToken, {
+      ...input,
+      id: randomUUID(),
+      pointId: newer.id,
+    }),
+    /backup.target_not_fresh/,
+  );
+  const expiredKey = keyPair();
+  const expiredInput = {
+    ...input,
+    id: randomUUID(),
+    pointId: newer.id,
+    targetPublicKey: expiredKey.publicKey,
+  };
   await recovery.start(owner.token, owner.csrfToken, expiredInput);
   await db.pool.query(
     "UPDATE backup_recoveries SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
@@ -264,10 +318,105 @@ test("owner-authorised replacement is durable, target-bound and does not activat
   await assert.rejects(
     recovery.target(expiredInput.id, "read", {
       payload: expBytes.toString("base64url"),
-      signature: sign(null, expBytes, target.key.privateKey).toString(
+      signature: sign(null, expBytes, expiredKey.key.privateKey).toString(
         "base64url",
       ),
     }),
     /backup.unavailable/,
+  );
+  await db.pool.query(
+    "UPDATE cloud_accounts SET disabled_at=clock_timestamp() WHERE id=$1",
+    [owner.accountId],
+  );
+  await assert.rejects(
+    recovery.target(expiredInput.id, "read", {
+      payload: expBytes.toString("base64url"),
+      signature: sign(null, expBytes, expiredKey.key.privateKey).toString(
+        "base64url",
+      ),
+    }),
+    /backup.permission_denied/,
+  );
+  await catalogue.cleanupOne(installed.venueId);
+  assert.equal(
+    (
+      await db.pool.query("SELECT status FROM backup_recoveries WHERE id=$1", [
+        expiredInput.id,
+      ])
+    ).rows[0].status,
+    "closed",
+  );
+  await db.pool.query(
+    "UPDATE cloud_accounts SET disabled_at=NULL WHERE id=$1",
+    [owner.accountId],
+  );
+  const resumed = {
+    ...expiredInput,
+    id: randomUUID(),
+    targetPublicKey: keyPair().publicKey,
+  };
+  await recovery.start(owner.token, owner.csrfToken, resumed);
+  await db.pool.query(
+    "UPDATE backup_recoveries SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+    [resumed.id],
+  );
+  await recovery.start(owner.token, owner.csrfToken, {
+    ...resumed,
+    id: randomUUID(),
+    targetPublicKey: keyPair().publicKey,
+  });
+  const current = (
+    await db.pool.query(
+      "SELECT id FROM backup_recoveries WHERE venue_id=$1 AND status<>'closed'",
+      [installed.venueId],
+    )
+  ).rows[0].id;
+  await db.pool.query(
+    "UPDATE venues SET environment='production' WHERE id=$1",
+    [installed.venueId],
+  );
+  await assert.rejects(
+    recovery.catalogue(owner.token, installed.venueId),
+    /backup.local_integration_only/,
+  );
+  await assert.rejects(
+    recovery.target(current, "read", { payload: "x", signature: "x" }),
+    /backup.local_integration_only/,
+  );
+  await assert.rejects(
+    recovery.start(owner.token, owner.csrfToken, {
+      ...resumed,
+      id: randomUUID(),
+      targetPublicKey: keyPair().publicKey,
+    }),
+    /backup.local_integration_only/,
+  );
+  await db.pool.query("UPDATE venues SET environment='test' WHERE id=$1", [
+    installed.venueId,
+  ]);
+  await recovery.close(owner.token, owner.csrfToken, current);
+  const shared = keyPair().publicKey;
+  const race = await Promise.allSettled([
+    recovery.start(owner.token, owner.csrfToken, {
+      ...input,
+      id: randomUUID(),
+      pointId: newer.id,
+      targetPublicKey: shared,
+    }),
+    other.start(owner.token, owner.csrfToken, {
+      ...input,
+      id: randomUUID(),
+      pointId: secondPoint.id,
+      targetPublicKey: shared,
+    }),
+  ]);
+  assert.equal(race.filter((r) => r.status === "fulfilled").length, 1);
+  assert.equal(
+    race.filter(
+      (r) =>
+        r.status === "rejected" &&
+        String(r.reason) === "Error: backup.target_not_fresh",
+    ).length,
+    1,
   );
 });

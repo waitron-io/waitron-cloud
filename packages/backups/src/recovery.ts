@@ -5,6 +5,9 @@ import { transaction } from "@waitron-cloud/registration";
 import { BackupKeyVault } from "./keys.ts";
 import {
   backupFail,
+  expireRecoveries,
+  uniqueViolation,
+  venuePoints,
   lockVenue,
   location,
   point,
@@ -144,6 +147,7 @@ export class BackupRecovery {
       if (!first) backupFail("unavailable");
       await permission(client, session.accountId, first.venueId);
       await lockVenue(client, first.venueId);
+      await expireRecoveries(client, first.venueId);
       const p = (await point(client, input.pointId))!;
       if (p.deleting || p.deletedAt) backupFail("unavailable");
       if (p.verification !== "verified") backupFail("unverified");
@@ -176,7 +180,7 @@ export class BackupRecovery {
       if (
         (
           await client.query(
-            "SELECT 1 FROM installations WHERE public_key=$1",
+            "SELECT 1 FROM installations WHERE public_key=$1 UNION ALL SELECT 1 FROM backup_recoveries WHERE target_public_key=$1",
             [input.targetPublicKey],
           )
         ).rowCount
@@ -198,6 +202,10 @@ export class BackupRecovery {
       ).rows[0];
       await resolveSession(client, token, { csrfToken, touch: false });
       return view(row);
+    }).catch((error) => {
+      if (uniqueViolation(error, "backup_recoveries_target_public_key_key"))
+        backupFail("target_not_fresh");
+      throw error;
     });
   }
   async target(id: string, action: "read" | "restored", proof: Proof) {
@@ -259,12 +267,7 @@ export class BackupRecovery {
       const session = await resolveSession(client, token, { touch: false });
       await permission(client, session.accountId, venueId);
       await lockVenue(client, venueId);
-      const ids = await client.query(
-        "SELECT id FROM backup_points WHERE venue_id=$1 AND deleted_at IS NULL AND NOT deleting ORDER BY captured_at DESC,id DESC",
-        [venueId],
-      );
-      const points = [];
-      for (const row of ids.rows) points.push((await point(client, row.id))!);
+      const points = await venuePoints(client, venueId);
       await resolveSession(client, token, { touch: false });
       return {
         points,

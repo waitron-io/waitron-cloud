@@ -98,3 +98,14 @@ replacement activation have passed through Waitron's own implementation.
 - [SeaweedFS SSE-C](https://github.com/seaweedfs/seaweedfs/wiki/Server-Side-Encryption-SSE-C).
 - [Litestream configuration](https://litestream.io/reference/config/).
 - Waitron slice-2 spec and plan, existing `backup-sweep.ts`, `restore.ts` and `state-secrets.ts`.
+
+## Review refinements
+
+Verification releases database locks before downloading/restoring, then rechecks the
+point before recording its result. A missing master key is an operational error, not
+an archive verification failure. Retention keeps the newest snapshot as a fallback
+when none has ever verified, without advertising it as verified. Publication removes
+its incoming object after commit and retries that removal on replay. Recovery start
+and cleanup close expired operations without needing the original owner to sign in.
+Each replacement public key is unique across all recovery operations, including closed
+ones. All storage/recovery key paths refuse a venue changed out of test mode.

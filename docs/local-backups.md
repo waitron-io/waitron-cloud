@@ -71,13 +71,17 @@ The catalogue separates upload completion from a trusted worker's verified resto
 of the exact digest. Owner-authorised catalogue reads return capture times and a
 currently verified snapshot default; continuous recovery remains unavailable. Status
 contains no secret key values. Recovery targets prove possession of a fresh bound
-Ed25519 key. Owner removal, account disabling, closure and expiry stop new access;
+Ed25519 key that has never been used by another recovery operation. Owner removal, account disabling, closure and expiry stop new access;
 already-issued storage credentials remain usable until their 15-minute expiry.
 
 Daily points expire after 30 days, monthly points after 12 calendar months. Cleanup
 protects active recovery references and the latest successfully verified snapshot,
-even if a later recheck fails. It retries interrupted object deletion. An expired
-recovery operation still protects its point until an owner closes it. Subscription
+even if a later recheck fails. If no snapshot has verified yet, it preserves the newest
+snapshot without calling it verified. It retries interrupted object deletion and removes
+the incoming copy after publication; a failed removal is retried by publication. Recovery
+start and cleanup close expired operations, including those whose owner is disabled.
+Verification releases the venue lock during the restore and rechecks the point before
+recording the result. A master-key error leaves archive verification status unchanged. Subscription
 cancellation and explicit deletion policy are not implemented. Object reads/writes
 are bounded to 512 MiB in memory; production-sized archives need streaming I/O and
 bounded worker concurrency. Callers own and close their object clients.
