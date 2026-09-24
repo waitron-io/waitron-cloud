@@ -12,7 +12,7 @@ let db:Awaited<ReturnType<typeof database>>,app:ReturnType<typeof createAccountA
 let owner:{accountId:string;organisationId:string;legalBusinessId:string},venue:{venueId:string;installationId:string},assigned:string;
 let resolve:(name:string)=>Promise<string[]>;
 const options=()=>({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},remoteResolve:(name:string)=>resolve(name)});
-const request=(action:string,extra:Record<string,string>={},headers:Record<string,string>={})=>app.request(origin+'/api/account/remote-access/'+action,{method:'POST',headers:{origin,cookie,'content-type':'application/json','x-csrf-token':csrf,...headers},body:JSON.stringify({installationId:venue.installationId,...extra})},bindings);
+const request=async(action:string,extra:Record<string,string>={},headers:Record<string,string>={})=>app.request(origin+'/api/account/remote-access/'+action,{method:'POST',headers:{origin,cookie,'content-type':'application/json','x-csrf-token':csrf,...headers},body:JSON.stringify({installationId:venue.installationId,...extra})},bindings);
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
  await db.pool.query('TRUNCATE account_rate_limits,signup_requests,email_outbox,organisations,cloud_accounts,remote_cells CASCADE');
@@ -92,4 +92,38 @@ test('a known installation in another organisation is refused before DNS queries
   assert.equal((await request(action,{installationId:foreign.installationId,...extra} as Record<string,string>)).status,403);
  }
  assert.equal(lookups,0);
+});
+async function untilLock(fragment:string){
+ const end=Date.now()+2000;while(Date.now()<end){const waiting=await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE $2",[db.schema,'%'+fragment+'%']);if(waiting.rowCount)return;await new Promise(r=>setTimeout(r,10));}assert.fail('request did not reach the expected lock');
+}
+test('ownership read waits for an in-flight membership revocation before committing',async()=>{
+ const blocker=await db.secondPool.connect();let response:Promise<Response>|undefined;
+ try{
+  await blocker.query('BEGIN');await blocker.query('UPDATE organisation_memberships SET is_owner=false');
+  let settled=false;response=request('apply',{kind:'staff',hostname:'race.cafe.example',expectedRevision:'1'});void response.then(()=>{settled=true;});
+  await new Promise(r=>setTimeout(r,100));assert.equal(settled,false,'owner check must wait for the membership writer');
+  await blocker.query('COMMIT');assert.equal((await response).status,403);
+  assert.equal((await db.pool.query("SELECT hostname FROM remote_hostnames WHERE kind='staff'")).rows[0].hostname,assigned);
+  assert.equal((await db.pool.query('SELECT count(*) FROM remote_hostname_changes')).rows[0].count,'0');
+ }finally{await blocker.query('ROLLBACK');blocker.release();await response;}
+});
+for(const action of ['apply','status'])test(`session expiry while ${action} waits for installation lock is refused before commit`,async()=>{
+ const blocker=await db.secondPool.connect();let response:Promise<Response>|undefined;
+ try{
+  await blocker.query('BEGIN');await blocker.query('SELECT id FROM installations WHERE id=$1 FOR UPDATE',[venue.installationId]);
+  await db.pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '1 second'");
+  response=request(action,action==='apply'?{kind:'staff',hostname:'late.cafe.example',expectedRevision:'1'}:{});
+  await untilLock(action==='apply'?'SELECT * FROM installations WHERE id':'SELECT configuration_revision,revoked_at');
+  await new Promise(r=>setTimeout(r,1100));await blocker.query('COMMIT');assert.equal((await response).status,401);
+  assert.equal((await db.pool.query("SELECT hostname FROM remote_hostnames WHERE kind='staff'")).rows[0].hostname,assigned);
+  assert.equal((await db.pool.query('SELECT count(*) FROM remote_hostname_changes')).rows[0].count,'0');
+ }finally{await blocker.query('ROLLBACK');blocker.release();await response;}
+});
+test('DNS instructions recheck ownership after a blocked metadata lookup',async()=>{
+ const blocker=await db.secondPool.connect();let response:Promise<Response>|undefined;
+ try{
+  await blocker.query('BEGIN');await blocker.query('LOCK remote_cells IN ACCESS EXCLUSIVE MODE');
+  response=request('dns',{kind:'staff',hostname:'staff.cafe.example'});await untilLock('SELECT p.venue_id,c.suffix,i.revoked_at');
+  await db.pool.query('UPDATE organisation_memberships SET is_owner=false');await blocker.query('COMMIT');assert.equal((await response).status,403);
+ }finally{await blocker.query('ROLLBACK');blocker.release();await response;}
 });

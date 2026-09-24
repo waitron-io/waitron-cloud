@@ -69,6 +69,7 @@ export class RemoteAccessStore {
    const result=(await placement(client,id))!;
    await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='remote_access'",[id,{version:1,...result}]);
    await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[id]);
+   // Customer changes record the authenticated actor; operator calls have no customer session.
    if(authorize){await authorize(client);await client.query('INSERT INTO remote_hostname_changes(installation_id,account_id,kind,hostname,configuration_revision) VALUES($1,$2,$3,$4,$5)',[id,actor,kind,custom,expectedRevision+1]);}
    return result;
   });}catch(error){if(error&&typeof error==='object'&&'code' in error&&error.code==='23505')return fail('hostname_conflict');throw error;}

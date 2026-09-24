@@ -25,5 +25,15 @@ for(const locale of ['en','es'] as const)test(`${locale} owner changes remote DN
   await confirm.click();await section.getByText(locale==='en'?'Name saved. Access remains pending until the certificate and venue settings are ready.':'Nombre guardado. El acceso sigue pendiente hasta que el certificado y la configuración del local estén listos.',{exact:true}).waitFor();
   assert.equal((await f.db.pool.query('SELECT count(*) FROM remote_hostname_changes')).rows[0].count,'2');
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false');await section.getByRole('button',{name:c.refreshStatus,exact:true}).click();await section.getByRole('alert').waitFor();assert.equal(await input.count(),0);
+  await f.db.pool.query('UPDATE organisation_memberships SET is_owner=true');await section.getByRole('button',{name:c.refreshStatus,exact:true}).click();await input.waitFor();
+  await f.db.pool.query("UPDATE installations SET lease_expires_at=clock_timestamp()+interval '2 seconds' WHERE id=$1",[v.installationId]);
+  await f.db.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[v.installationId]);
+  await f.db.pool.query("INSERT INTO installation_observations(installation_id,service,revision,health,observed_at) SELECT id,'remote_access',configuration_revision,'healthy',clock_timestamp() FROM installations WHERE id=$1",[v.installationId]);
+  await section.getByRole('button',{name:c.refreshStatus,exact:true}).click();await section.getByRole('link',{name:assigned,exact:true}).waitFor();
+  await page.waitForFunction(()=>document.querySelectorAll('.remote-setup a').length===0);await section.getByText(c.remotePending,{exact:true}).waitFor();
+  await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false');await page.getByRole('button',{name:c.refreshStatus,exact:true}).last().click();await section.waitFor({state:'detached'});
+  await f.db.pool.query('UPDATE organisation_memberships SET is_owner=true');await page.getByRole('button',{name:c.refreshStatus,exact:true}).last().click();
+  await page.getByRole('button',{name:c.remoteSetup,exact:true}).waitFor();assert.equal(await section.count(),0);
+
  }finally{await f.close();}
 });

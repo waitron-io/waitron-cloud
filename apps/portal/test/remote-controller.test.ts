@@ -36,3 +36,6 @@ test('remote readiness expires with its lease even when the observation is still
  assert(validRemoteView(ready));assert.equal(remoteReady(ready,now),true);assert.equal(remoteReady(ready,now+1001),false);
  assert.equal(remoteReady({...ready,revoked:true},now),false);assert.equal(remoteReady({...ready,service:{...ready.service,state:'provisioning'}},now),false);
 });
+test('a placement removed while editing reports the missing gateway',async()=>{
+ const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>path.endsWith('/status')?{ok:true,value:view as T}:{ok:false,status:409,code:'remote_not_placed',retryAfterMs:0});c.account('owner');await c.open(id);c.edit(dns.hostname);await c.preview();assert.equal(c.error,'remoteNotPlaced');
+});
