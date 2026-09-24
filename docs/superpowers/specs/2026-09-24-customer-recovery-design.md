@@ -83,4 +83,6 @@ portal Origin, live session cookie and CSRF header. All accept string `requestId
 `code`; approval also requires `pointId`, `oldServerUnavailable:"true"` and
 `acceptDataLoss:"true"`. Only unapproved requests use the five-attempt code lockout,
 so later typing errors cannot prevent the authenticated approving owner from closing
-access. Global IP, machine IP and account limits apply independently.
+access. Global IP, machine IP, proven-key and account limits apply independently. Unapproved
+request and operation expiry use the database clock; signature freshness uses the
+signed timestamp. Only snapshot records can be approved or downloaded.

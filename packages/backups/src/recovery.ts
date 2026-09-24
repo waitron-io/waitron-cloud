@@ -108,6 +108,9 @@ async function operation(client: PoolClient, id: string) {
   if (!row) backupFail("unavailable");
   return row;
 }
+async function operationCurrent(client:PoolClient,id:string):Promise<boolean>{
+  return (await client.query("SELECT expires_at>clock_timestamp() AS valid FROM backup_recoveries WHERE id=$1",[id])).rows[0]?.valid === true;
+}
 function view(row: Record<string, unknown>) {
   return {
     id: row.id,
@@ -154,7 +157,7 @@ export class BackupRecovery {
       await lockVenue(client, first.venueId);
       await expireRecoveries(client, first.venueId);
       const p = (await point(client, input.pointId))!;
-      if (p.deleting || p.deletedAt) backupFail("unavailable");
+      if (p.kind !== "snapshot" || p.deleting || p.deletedAt) backupFail("unavailable");
       if (p.verification !== "verified") backupFail("unverified");
       const prior = (
         await client.query("SELECT * FROM backup_recoveries WHERE id=$1", [
@@ -213,6 +216,15 @@ export class BackupRecovery {
       throw error;
     });
   }
+  async authenticate(id:string,action:"info"|"read"|"restored",proof:Proof){
+    if(!uuid(id)||!["info","read","restored"].includes(action))backupFail("invalid_proof");
+    return this.#transaction(async client=>{
+      const row=await operation(client,id),p=await point(client,row.point_id);
+      if(!p)backupFail("unavailable");
+      validateProof(this.#origin,id,action,action==="info"?"":p.digest,row.target_public_key,proof);
+      return {publicKey:row.target_public_key as string};
+    });
+  }
   async target(id:string, action:"info", proof:Proof):Promise<{point:import("./catalogue.ts").BackupPoint;operationExpiresAt:string}>;
   async target(id:string, action:"read"|"restored", proof:Proof):Promise<{point:import("./catalogue.ts").BackupPoint;location:import("./storage.ts").StorageLocation;keys:import("./keys.ts").BackupKeys;operationExpiresAt:string}>;
   async target(id: string, action: "info" | "read" | "restored", proof: Proof) {
@@ -226,8 +238,9 @@ export class BackupRecovery {
         p = await point(client, row.point_id);
       if (
         row.status === "closed" ||
-        row.expires_at.getTime() <= Date.now() ||
+        !(await operationCurrent(client,id)) ||
         !p ||
+        p.kind !== "snapshot" ||
         p.deleting ||
         p.deletedAt
       )
@@ -253,7 +266,7 @@ export class BackupRecovery {
         p.venueId,
         p.keyVersion,
       );
-      if (row.expires_at.getTime() <= Date.now()) backupFail("unavailable");
+      if (!(await operationCurrent(client,id))) backupFail("unavailable");
       validateProof(
         this.#origin,
         id,

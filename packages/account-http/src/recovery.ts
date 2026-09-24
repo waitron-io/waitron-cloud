@@ -2,7 +2,7 @@ import type {Context} from 'hono';
 import type {Pool} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
 import {transaction} from '@waitron-cloud/registration';
-import {RecoveryRequests} from '@waitron-cloud/backups/recovery-request';
+import {RecoveryRequests,verifyRecoveryRequest} from '@waitron-cloud/backups/recovery-request';
 import {BackupRecovery} from '@waitron-cloud/backups/recovery';
 import type {CaptureOptions} from '@waitron-cloud/backups/captures';
 import {readSessionCookie} from './cookies.ts';
@@ -31,10 +31,16 @@ export async function recoveryResponse(c:Context,options:{pool:Pool;origin:strin
    }
    return c.json(view);
   }
-  await consume([{scope:'recovery-ip',subject:options.ip,limit:30,windowSeconds:60}]);
+  await consume([{scope:action==='start'?'recovery-start-ip':'recovery-ip',subject:options.ip,limit:action==='start'?10:30,windowSeconds:action==='start'?900:60}]);
   const body=await readAccountBody(c.req.raw,action==='start'||action==='status'?['payload','signature']:['id','payload','signature']);
   const proof={payload:body.payload!,signature:body.signature!};
-  if(action==='start'||action==='status')return c.json(await requests.machine(action,proof));
+  if(action==='start'||action==='status'){
+   const identity=verifyRecoveryRequest(origin,action,proof);
+   await consume([{scope:action==='start'?'recovery-start-key':'recovery-key',subject:identity.publicKey,limit:action==='start'?10:30,windowSeconds:action==='start'?900:60}]);
+   return c.json(await requests.machine(action,proof));
+  }
+  const identity=await recovery.authenticate(body.id!,action as 'info'|'read'|'restored',proof);
+  await consume([{scope:'recovery-key',subject:identity.publicKey,limit:30,windowSeconds:60}]);
   if(action==='info')return c.json(await recovery.target(body.id!,'info',proof));
   if(action==='restored'){await recovery.target(body.id!,'restored',proof);return c.json({status:'restored'});}
   const first=await recovery.target(body.id!,'read',proof);

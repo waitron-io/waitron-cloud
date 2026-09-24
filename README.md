@@ -39,8 +39,8 @@ provides internal password sessions used for Cloud approval. The
 the first organisation and legal business. The [account HTTP API](packages/account-http/README.md)
 exposes signup, sessions and
 recovery with shared request limits. Run it with `pnpm account:serve` after configuring
-the database, keys and origin and applying migrations. Live provider setup, venue
-pairing and service provisioning remain to be implemented.
+the database, keys and origin and applying migrations. Local venue pairing and
+service adapters are implemented; live provider setup and deployment remain open.
 
 ## Run the account portal
 
@@ -116,7 +116,8 @@ The commands use disposable local services; no AWS deployment is created.
 
 Run encrypted storage and two real Waitron snapshot restores with the
 [local backup guide](docs/local-backups.md). It covers key rotation, retention,
-scoped credentials and recovery after stream loss. Complete continuous server
+scoped credentials and guided snapshot recovery through the replacement setup and
+Cloud account, including recovery after stream loss. Complete continuous server
 replacement still depends on Waitron's SQLite slice-2 recovery implementation.
 
 For configured test venues, [local monitoring](docs/local-monitoring.md) records contact

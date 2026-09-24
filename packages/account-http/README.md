@@ -34,7 +34,7 @@ pnpm account:serve
 ```
 
 If you export `DATABASE_URL` in your shell, `pnpm db:migrate` applies the same migrations.
-The server refuses startup without migrations `007_account_http.sql` through `013_service_monitoring.sql`; it never applies
+The server refuses startup without migrations `007_account_http.sql` through `015_backup_recovery_requests.sql`; it never applies
 migrations itself. Its default listener is `127.0.0.1:3000`.
 
 In another terminal, from the same directory:
@@ -50,7 +50,7 @@ loads exactly `index.html`, `app.js` and `app.css` at startup. Missing configure
 assets prevent startup; omitting the setting retains the API-only server.
 
 The portal serves `/`, `/signup`, `/login`, `/forgot-password`, `/reset-password`
-and `/account`, plus `/connect` for pairing. Unknown paths return 404. Static GET/HEAD requests retain host checks
+and `/account`, plus `/connect` for pairing and `/recover` for snapshot recovery. Unknown paths return 404. Static GET/HEAD requests retain host checks
 and connection limits but do not consume database counters or the eight account
 operation slots. Rebuild and restart after frontend changes.
 
@@ -330,8 +330,11 @@ when deletion occurs. There is no customer deletion action in this screen.
 
 Continuous backups normally provide the newest recovery point; snapshots are archives
 and a fallback. The screen selects the latest currently verified snapshot when it is
-on the page, but does not start recovery. Guided server replacement still requires the
-remaining Waitron activation contract and is not enabled here.
+on the page. To start guided snapshot recovery, open the `/recover` link from the
+replacement server and enter its matching code. The local test flow authorises a
+verified snapshot and lets Waitron download, validate and stage its existing cold
+restore. Complete continuous server replacement and production activation still
+require the remaining Waitron contract.
 
 ## Service alert preferences
 
@@ -347,3 +350,23 @@ See [local monitoring](../../docs/local-monitoring.md) for thresholds and delive
 The optional [authenticated capture adapter](../../docs/authenticated-captures.md) adds
 `backup-reserve` and `backup-publish` machine endpoints. Configure its storage authority
 explicitly; customer browser sessions cannot obtain upload grants.
+
+## Guided snapshot recovery
+
+The configured capture adapter also supplies temporary recovery read authority. Owner
+POST routes under `/api/account/recovery/` require the same live session, exact Origin
+and CSRF proof as other account changes. `inspect` and `close` accept `requestId` and
+`code`; `approve` also accepts `pointId`, `oldServerUnavailable:"true"` and
+`acceptDataLoss:"true"`. The browser receives status and snapshot identifiers only.
+
+Replacement POST routes under `/api/recovery/` require signed fresh-key proof and reject
+browser Origin headers. `start` and `status` carry matching request proof; `info`, `read`
+and `restored` carry operation proof. New requests allow ten calls per fifteen minutes
+per IP and proven key. Other machine calls share thirty per minute per IP and proven
+key; owner calls allow thirty per minute per account. The global IP allowance also applies.
+Execution rechecks authority after any provider wait. Expiry uses the database clock.
+
+See the [wire contract](../../docs/superpowers/specs/2026-09-24-customer-recovery-design.md)
+and [local walkthrough](../../docs/local-backups.md#recover-a-test-venue-without-copying-keys).
+These endpoints refuse production venues and continuous records. Recovery reports do
+not enrol a replacement, change routing or establish permission to trade.

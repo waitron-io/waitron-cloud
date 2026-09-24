@@ -24,3 +24,7 @@ test('a pending approval expires in the open page and permission failure drops i
  const c=new RecoveryController(()=>{},async<T>():Promise<ApiResult<T>>=>({ok:false,status:403,code:'forbidden',retryAfterMs:0}));c.open(id);c.account('a');c.code='12345678';c.view={...pending,expiresAt:new Date(Date.now()-1).toISOString()} as typeof c.view;c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;await c.approve();assert.equal(c.error,undefined);
  await c.inspect();assert.equal(c.view,undefined);assert.equal(c.stopped,false);assert.equal(c.acceptLoss,false);
 });
+for(const field of ['pointId','venueId'] as const)test(`a successful approval reply naming a different ${field} is rejected and reconciled`,async()=>{
+ let reads=0;const calls:string[]=[];const c=new RecoveryController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{calls.push(path);if(path.endsWith('/approve'))return {ok:true,value:{...approved,operation:{...approved.operation,[field]:id}} as T};if(reads++===0)return {ok:true,value:pending as T};return {ok:false,status:0,code:'network_error',retryAfterMs:0};});
+ c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;await c.approve();assert.equal(c.view?.state,'awaiting_owner');assert(c.uncertain);assert.deepEqual(calls,['/recovery/inspect','/recovery/approve','/recovery/inspect']);
+});

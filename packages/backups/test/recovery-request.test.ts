@@ -54,8 +54,8 @@ test('proof namespace, matching attempts, expiry and fresh-key bindings fail clo
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_recoveries WHERE id=$1',[fresh.id])).rows[0].count,'0');
 });
 test('HTTP gives the proven target one-object read authority, never browser keys; cancellation and owner loss during provider wait refuse the grant',async()=>{
- const f=await fixture(),t=target(),scopes:unknown[]=[];let revoke:()=>Promise<void>=async()=>{};
- const app=createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},leaseIssuer:createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')),captures:{vault:f.vault,objects:()=>({async read(k){return f.objects.get(k)!;},async put(k,b){f.objects.set(k,Buffer.from(b));return receipt(b);},async remove(k){f.objects.delete(k);}}),async grant(_location,scope){scopes.push(scope);await revoke();return {credentials:{accessKeyId:'access',secretAccessKey:'secret',sessionToken:'temporary'},expiresAt:new Date(Date.now()+900000).toISOString()};}}});
+ const f=await fixture(),t=target(),scopes:unknown[]=[];let lifetime=900000;let revoke:()=>Promise<void>=async()=>{};
+ const app=createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},leaseIssuer:createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')),captures:{vault:f.vault,objects:()=>({async read(k){return f.objects.get(k)!;},async put(k,b){f.objects.set(k,Buffer.from(b));return receipt(b);},async remove(k){f.objects.delete(k);}}),async grant(_location,scope){scopes.push(scope);await revoke();return {credentials:{accessKeyId:'access',secretAccessKey:'secret',sessionToken:'temporary'},expiresAt:new Date(Date.now()+lifetime).toISOString()};}}});
  const bindings={incoming:{socket:{remoteAddress:'192.0.2.1'}}};
  const post=(path:string,body:unknown,owner=false,extra:Record<string,string>={})=>app.request(origin+path,{method:'POST',headers:{'content-type':'application/json',...(owner?{origin,cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken}:{}),...extra},body:JSON.stringify(body)},bindings);
  const browser=(action:string,body:Record<string,string>={})=>post('/api/account/recovery/'+action,{requestId:t.id,code:t.code,...body},true);
@@ -68,6 +68,7 @@ test('HTTP gives the proven target one-object read authority, never browser keys
  const info=await post('/api/recovery/info',{id:t.id,...t.recovery('info')});assert.equal(info.status,200);assert(!JSON.stringify(await info.json()).includes('keys'));
  const read=()=>post('/api/recovery/read',{id:t.id,...t.recovery('read',f.point.digest)});
  const access=await read();assert.equal(access.status,200);const grant=await access.json();assert.equal(grant.recoveryKey,f.capture.keys.recoveryKey);assert(!JSON.stringify(grant).includes(f.capture.keys.streamKey));assert.deepEqual(scopes,[{kind:'restore',bucket:f.capture.location.bucket,scope:f.point.objectKey}]);
+ lifetime=-1;const malformed=await read();assert.equal(malformed.status,503);assert.deepEqual(await malformed.json(),{error:'temporarily_unavailable'});lifetime=900000;
  revoke=async()=>{await db.secondPool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[f.owner.accountId]);};assert.equal((await read()).status,403);
  await db.pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1',[f.owner.accountId]);
  revoke=()=>f.recovery.close(f.session.token,f.session.csrfToken,t.id);assert.equal((await read()).status,410);
@@ -101,4 +102,33 @@ test('a recovery expiring during key lookup cannot disclose an archive key',asyn
   let waiting=false;const until=Date.now()+1500;while(Date.now()<until){if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT sealed FROM backup_key_versions%'",[db.schema])).rowCount){waiting=true;break;}await new Promise(r=>setTimeout(r,10));}assert(waiting);
   await new Promise(r=>setTimeout(r,1100));await blocker.query('COMMIT');await rejected;
  }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
+});
+test('guided recovery rejects continuous points even when verified',async()=>{
+ const f=await fixture(),t=target();await f.requests.machine('start',t.proof('start'));
+ await db.pool.query("UPDATE backup_points SET kind='continuous' WHERE id=$1",[f.point.id]);
+ await assert.rejects(f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,{pointId:f.point.id,oldServerUnavailable:true,acceptDataLoss:true}),/unavailable/);
+ assert.equal((await db.pool.query('SELECT count(*) FROM backup_recoveries WHERE id=$1',[t.id])).rows[0].count,'0');
+});
+test('target metadata and download access refuse a continuous record',async()=>{
+ const f=await fixture(),t=target();await f.requests.machine('start',t.proof('start'));await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,{pointId:f.point.id,oldServerUnavailable:true,acceptDataLoss:true});
+ await db.pool.query("UPDATE backup_points SET kind='continuous' WHERE id=$1",[f.point.id]);
+ await assert.rejects(f.recovery.target(t.id,'info',t.recovery('info')),/unavailable/);
+ await assert.rejects(f.recovery.target(t.id,'read',t.recovery('read',f.point.digest)),/unavailable/);
+});
+test('request expiry follows the database clock when the application clock runs behind',async(context)=>{
+ const f=await fixture(),t=target();await f.requests.machine('start',t.proof('start'));await db.pool.query("UPDATE backup_recovery_requests SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",[t.id]);
+ const now=Date.now();context.mock.method(Date,'now',()=>now-300000);await assert.rejects(f.requests.machine('status',t.proof('status')),/unavailable/);
+});
+test('operation expiry follows the database clock when the application clock runs behind',async(context)=>{
+ const f=await fixture(),t=target();await f.requests.machine('start',t.proof('start'));await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,{pointId:f.point.id,oldServerUnavailable:true,acceptDataLoss:true});await db.pool.query("UPDATE backup_recoveries SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",[t.id]);
+ const now=Date.now();context.mock.method(Date,'now',()=>now-300000);await assert.rejects(f.recovery.target(t.id,'read',t.recovery('read',f.point.digest)),/unavailable/);
+});
+test('machine limits follow the proven key across IPs and bound new requests per IP',async()=>{
+ const f=await fixture(),t=target();await f.requests.machine('start',t.proof('start'));
+ const app=createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},leaseIssuer:createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')),captures:{vault:f.vault,objects:()=>({async read(){throw Error();},async put(){throw Error();},async remove(){throw Error();}}),async grant(){throw Error();}}});
+ const post=(action:string,proof:unknown,ip:string)=>app.request(origin+'/api/recovery/'+action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(proof)},{incoming:{socket:{remoteAddress:ip}}});
+ for(let n=0;n<30;n++)assert.equal((await post('status',t.proof('status'),'198.51.100.'+(n+1))).status,200);
+ assert.equal((await post('status',t.proof('status'),'198.51.100.100')).status,429);
+ for(let n=0;n<10;n++){const next=target();assert.equal((await post('start',next.proof('start'),'203.0.113.89')).status,200);}
+ const next=target();assert.equal((await post('start',next.proof('start'),'203.0.113.89')).status,429);
 });
