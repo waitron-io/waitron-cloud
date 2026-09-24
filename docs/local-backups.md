@@ -8,9 +8,11 @@ It creates no AWS resources and requires no live customer credentials.
 
 Install both repositories with their frozen pnpm lockfiles. You need Node 24 or
 newer, Docker, OpenSSL and network access for the pinned test binaries. Point to a
-Waitron checkout that includes `apps/server/scripts/cloud-backup-fixture.ts`:
+Waitron checkout that includes `apps/server/scripts/cloud-backup-fixture.ts`, export
+that path as `WAITRON_CHECKOUT`, and build its dashboard before starting the servers:
 
 ```sh
+pnpm --dir "$WAITRON_CHECKOUT" --filter @waitron/dashboard build
 node scripts/test-backup-storage.mjs
 WAITRON_CHECKOUT=/absolute/path/to/waitron \
   BACKUP_RECEIPT=/tmp/cloud-backup-receipt.json \
