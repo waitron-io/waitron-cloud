@@ -19,7 +19,9 @@
     "mail:status": "node --env-file-if-exists=.env packages/registration/src/email-worker-cli.ts --status",
     "account:serve": "node --env-file-if-exists=.env packages/account-http/src/server-cli.ts",
     "test:ui": "pnpm --filter @waitron-cloud/ui-smoke test",
-    "portal:build": "pnpm --filter @waitron-cloud/portal build"
+    "portal:build": "pnpm --filter @waitron-cloud/portal build",
+    "backup:worker": "node --env-file-if-exists=.env packages/backups/src/worker-cli.ts",
+    "backup:status": "node --env-file-if-exists=.env packages/backups/src/worker-cli.ts --status"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

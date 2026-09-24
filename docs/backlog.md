@@ -12,7 +12,8 @@ and password recovery, served by that API with real browser and Mailpit tests.
 The account venue overview groups one organisation at a time, shows business context,
 connection/service state and separate latest/verified snapshot capture times. Verified
 snapshots older than 48 hours are labelled out of date. Owners can browse paginated snapshot history, verification and retention details, including
-protected copies. Background verification/cleanup and incident notifications are next.
+protected copies. The local durable worker now verifies real Waitron restores, retries failures and
+cleans expired snapshots and abandoned captures. Incident notifications are next.
 Live provider/sender configuration and public deployment remain open.
 No public cloud service is deployed. This file owns cloud product and platform work;
 Waitron's backlog owns the on-prem application and its side of the integration.
@@ -68,7 +69,7 @@ now provides encrypted scoped storage, protected key versions, an immutable snap
 restore verification, retention and owner-bound recovery operations. Two real Waitron
 snapshots restore independently of deleted Litestream data, including after key rotation.
 These are local APIs and test fixtures. The customer snapshot catalogue is implemented;
-authenticated capture delivery, scheduling and complete replacement activation remain open. The pairing runner still uses synthetic observations; only the
+authenticated capture delivery, capture scheduling and complete replacement activation remain open. The pairing runner still uses synthetic observations; only the
 separate remote runner proves a tunnel. Waitron owns the remaining SQLite slice-2 sealed-state row, stream supervisor and
 cold-restore contract. Recheck those interfaces before wiring complete continuous recovery. The full two-venue milestone remains unproved.
 The [registration plan](registration-implementation-plan.md) now sequences persistence,
@@ -327,11 +328,15 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   30-day daily/12-month monthly expiry. PostgreSQL tests cover failures and races.
   Versioned managed keys and bound owner recovery are implemented for local test venues;
   [the real snapshot proof](local-backups.md) runs Waitron validation and restore hooks.
-  Next: authenticated installation capture/credential renewal, scheduled capture and
-  verification, customer recovery screens, streaming
-  object I/O beyond the current 512 MiB bound, unused incoming-upload/request cleanup,
-  master-key operations and production verifier
-  isolation. Complete continuous server recovery and activation depend on Waitron slice 2.
+  The local worker now schedules real restore verification, retention and abandoned-upload
+  cleanup with durable claims, lease fences and bounded retries. Captures expire after
+  24 hours; cleanup waits another 16 minutes and keeps tombstones. PostgreSQL tests cover
+  concurrent workers, lease takeover and restart; the two-server proof uses this queue.
+  Next: authenticated installation capture/credential renewal, scheduled capture,
+  customer recovery screens, streaming object I/O beyond the current 512 MiB bound,
+  tombstone/job-history retention, master-key operations and production verifier isolation.
+  Measure scheduling sweeps at the intended deployment scale and tune their cadence
+  separately from job polling; the local concurrency proof covers only small fixtures. Complete continuous server recovery and activation depend on Waitron slice 2.
   Retention, restore checks, export, deletion and access review;
   define what survives subscription termination and for how long.
   The catalogue implements the starting snapshot policy: daily for 30 days, monthly for 12 months

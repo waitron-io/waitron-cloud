@@ -34,7 +34,7 @@ pnpm account:serve
 ```
 
 If you export `DATABASE_URL` in your shell, `pnpm db:migrate` applies the same migrations.
-The server refuses startup without migrations `007_account_http.sql`, `008_pairing.sql` and `009_installation_lifecycle.sql`; it never applies
+The server refuses startup without migrations `007_account_http.sql` through `012_backup_jobs.sql`; it never applies
 migrations itself. Its default listener is `127.0.0.1:3000`.
 
 In another terminal, from the same directory:
