@@ -24,7 +24,9 @@ flushed writes. Persist the capture UUID before reservation, and persist ciphert
 metadata before uploading. Never persist the recovery key or temporary credentials.
 Resume the same bytes, capture UUID and metadata after a restart. Attempt publication
 first for a completed local archive: a lost successful response can then finish even after
-upload authority expires. Renew upload authority only if publication has not succeeded.
+upload authority expires. Persist acknowledged uploads so publication failures do not resend the archive. Renew
+upload authority only when delivery was not acknowledged. If storage loses an acknowledged
+object, retry publication until the 24-hour limit, then capture a current copy.
 Check the stored key version and installation binding before retrying an upload.
 
 A capture that exceeds its 24-hour lifetime gets one final publication attempt before it
@@ -32,7 +34,10 @@ is discarded and a fresh snapshot is scheduled. Revocation or an installation ch
 clears the pending archive; disabled service pauses delivery. One worker owns the spool;
 serialise its ticks. A malformed state file fails visibly and is not silently overwritten.
 Retry transient failures with a bounded backoff, without creating extra archives. Aborted
-shutdown work is not reported as a failed backup.
+shutdown work is not reported as a failed backup. Waiting capture requests can be cancelled
+without cancelling the request ahead of them. Shutdown waits for the current local database
+copy or encryption step; cancellation is checked between these steps. Remove abandoned
+temporary files without following symlinks; retain malformed committed state for diagnosis.
 
 Stream the encrypted file to storage, with a bounded transfer time within credential
 expiry and no SDK retries on an already-consumed stream. Keep the current 512 MiB

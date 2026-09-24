@@ -380,7 +380,10 @@ mobile notifications separately.
   uploader streams with a 14-minute/credential-expiry deadline and bounded retry backoff;
   deliberate shutdown is not an outage. The local proof crashes after upload and restores
   the resumed snapshot without recapture. Archive assembly still uses an in-memory format with a
-  512 MiB archive limit. Next: measure production uplink budgets and spool disk use, stream archive
+  512 MiB archive limit. Confirmed uploads retry publication without resending; loss of an
+  acknowledged storage object waits until capture expiry before recapture. Next: measure
+  production uplink budgets, spool disk use and shutdown latency during local database/encryption
+  work, stream archive
   assembly, and implement
   customer recovery screens, streaming object I/O beyond the current 512 MiB bound,
   tombstone/job-history retention, master-key operations and production verifier isolation.

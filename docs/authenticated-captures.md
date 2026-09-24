@@ -78,14 +78,18 @@ keeps the saved next due time; a missed run creates one current snapshot.
 The server stores one pending encrypted archive and its capture ID/metadata under
 `cloud-snapshots` in its state directory. It does not save temporary upload credentials
 or the Cloud recovery key. A retry first asks Cloud to confirm publication, then renews
-credentials if upload is still needed. A lost successful publication reply can therefore
+credentials if delivery was not acknowledged. Confirmed uploads are recorded so a
+publication outage does not resend the archive. If storage loses an acknowledged object,
+publication is retried until the 24-hour limit, then a current copy replaces it. A lost successful publication reply can therefore
 be recovered after the upload deadline. After 24 hours, an unpublished capture gets one
 last publication attempt before Waitron discards it and makes a current copy.
 
 The file uploader streams from disk and verifies the saved size and digest before
 sending. Each attempt is bounded by 14 minutes or credential expiry minus five seconds,
 whichever is earlier. Failed attempts back off from one minute to at most 15 minutes;
-shutdown cancellation does not record an outage. Local operator-key backups keep their
+shutdown cancellation does not record an outage. Queued capture requests are cancellable;
+shutdown waits for any current local database copy or encryption step before closing the
+database. Local operator-key backups keep their
 own schedule and destinations. Disabling the Cloud service pauses its pending delivery;
 revocation or a changed installation binding discards the pending archive.
 
