@@ -96,7 +96,9 @@ for the state module but does not discharge the real approval-exchange proof.
 - A revoked installation cannot get new credentials or another venue's configuration.
 - Failed remote-access or backup setup remains visible after registration succeeds.
 
-The exact proof format, credential lifetime and public endpoint limits must be settled
-and tested during implementation. Gate public deployment on the real two-installation
-proof. The [broader contract](waitron-integration-contract.md) owns later backup and
+The [pairing proof](superpowers/specs/2026-09-23-venue-pairing-design.md) and
+[installation lifecycle](superpowers/specs/2026-09-24-installation-lifecycle-design.md)
+now implement the wire formats, one-hour control leases and request limits. The
+[local two-installation proof](local-pairing.md) covers real accounts, servers and
+restart recovery. Public deployment still requires service-adapter and ingress proof. The [broader contract](waitron-integration-contract.md) owns later backup and
 replacement checks; re-read the incoming SQLite interfaces when that work lands.

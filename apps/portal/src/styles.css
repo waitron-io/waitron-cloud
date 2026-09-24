@@ -21,3 +21,6 @@ button:disabled { cursor: default; opacity: .6; }
 .venue-id { overflow-wrap: anywhere; margin-inline-start: 0; }
 .business-choice { display: grid; gap: var(--wt-space-2); }
 .business-choice select { max-width: 100%; min-height: 2.75rem; }
+
+.installation { border-block-start: 1px solid var(--wt-color-border); margin-block: 1rem; padding-block: .75rem; }
+.installation dd { margin-inline-start: 0; overflow-wrap: anywhere; }

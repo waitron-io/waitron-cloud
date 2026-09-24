@@ -1,3 +1,5 @@
+import {installationResponse} from './installations.ts';
+import {InstallationError,type LeaseIssuer} from '@waitron-cloud/registration';
 import {pairingResponse} from './pairing.ts';
 import {PairingError,RegistrationError} from '@waitron-cloud/registration';
 import { securityHeaders } from './portal.ts';
@@ -29,6 +31,7 @@ function publicError(error: unknown): AccountHttpError {
     if (error.code === 'csrf_invalid' || error.code === 'permission_denied') return new AccountHttpError(403, 'forbidden');
     return new AccountHttpError(401, 'unauthenticated');
   }
+  if (error instanceof InstallationError) return new AccountHttpError(error.code==='invalid_proof'?401:error.code==='revoked'||error.code==='permission_denied'?403:error.code==='unavailable'?503:400,error.code);
   if (error instanceof PairingError) return new AccountHttpError(error.code === 'invalid_proof' ? 401 : error.code === 'permission_denied' ? 403 : 400, error.code);
   if (error instanceof RegistrationError) return new AccountHttpError(error.code === 'permission_denied' ? 403 : 400, error.code);
   if (error instanceof SignupError || error instanceof PasswordRecoveryError) {
@@ -36,7 +39,7 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig}) {
+export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;leaseIssuer?:LeaseIssuer}) {
   const config = validateConfig(options.config);
   const {pool, outbox} = options;
   const origin = new URL(config.portalOrigin); const secure = origin.protocol === 'https:';
@@ -59,6 +62,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if (url.search) throw new AccountHttpError(400, 'invalid_input');
     const ip = clientAddress(c.env?.incoming?.socket.remoteAddress ?? '', c.req.header('x-forwarded-for'), config.trustedProxyIps);
     await consume([{scope: 'all-ip', subject: ip, limit: 120, windowSeconds: 60}]);
+    if(c.req.path.startsWith('/api/installations/')||c.req.path==='/api/account/installations'||c.req.path.startsWith('/api/account/installations/')) return installationResponse(c,{pool,issuer:options.leaseIssuer,origin:config.portalOrigin,ip,consume});
     if(c.req.path.startsWith('/api/pairing/')||c.req.path.startsWith('/api/account/pairing/')) return pairingResponse(c,{pool,origin:config.portalOrigin,ip,consume});
     const path = c.req.path.startsWith('/api/account/') ? c.req.path.slice('/api/account'.length) : '';
     const fields = paths[path];

@@ -8,6 +8,16 @@ export function chooseLocale(saved: string | null, languages: readonly string[])
   return 'en';
 }
 const en = {
+  installations:'Your venues', noInstallations:'No venues are connected yet. Start in Cloud services in your Waitron dashboard.',
+  refreshStatus:'Refresh status', lastContact:'Last contact', accessExpires:'Cloud access expires', neverContacted:'Not yet contacted',
+  accessStopped:'Cloud access stopped', accessActive:'Cloud access active', accessPending:'Waiting for the server', accessStale:'Server status is out of date',
+  stopAccess:'Stop Cloud access', confirmStop:'Confirm stop', cancelStop:'Keep Cloud access',
+  stopHelp:'This permanently stops this server’s Cloud access, including remote access and new backups. Local trading continues. Your stored backups and subscriptions are kept; this does not cancel billing.',
+  stopUncertain:'We could not confirm whether access stopped. Retry or refresh the status.',
+  remoteAccess:'Remote access', continuousBackup:'Continuous backups', retainedSnapshots:'Snapshots',
+  serviceUnconfigured:'Not configured', serviceProvisioning:'Setting up', serviceReady:'Configured', serviceFailed:'Setup failed',
+  healthUnknown:'Health unknown', healthHealthy:'Working', healthDegraded:'Needs attention', healthFailed:'Not working',
+
   connect:'Connect your venue', pairCode:'Code shown in Waitron', pairCodeError:'Enter the eight-digit code shown in Waitron.',
   pairIntro:'Enter the code from Cloud services in your Waitron dashboard.', pairInspect:'Check code',
   pairBusiness:'Legal business', pairChoice:'Choose a business for this venue.', pairApprove:'Approve this venue',
@@ -47,6 +57,16 @@ const en = {
 };
 export type Copy = typeof en;
 const es: Copy = {
+  installations:'Tus locales', noInstallations:'Todavía no hay locales conectados. Empieza en Servicios Cloud en tu panel de Waitron.',
+  refreshStatus:'Actualizar estado', lastContact:'Último contacto', accessExpires:'El acceso a Cloud caduca', neverContacted:'Sin contacto todavía',
+  accessStopped:'Acceso a Cloud detenido', accessActive:'Acceso a Cloud activo', accessPending:'Esperando al servidor', accessStale:'El estado del servidor no está actualizado',
+  stopAccess:'Detener el acceso a Cloud', confirmStop:'Confirmar detención', cancelStop:'Mantener el acceso a Cloud',
+  stopHelp:'Esto detiene permanentemente el acceso de este servidor a Cloud, incluido el acceso remoto y las nuevas copias. La venta local continúa. Se conservan tus copias guardadas y suscripciones; no se cancela la facturación.',
+  stopUncertain:'No hemos podido confirmar si se detuvo el acceso. Reinténtalo o actualiza el estado.',
+  remoteAccess:'Acceso remoto', continuousBackup:'Copias continuas', retainedSnapshots:'Instantáneas',
+  serviceUnconfigured:'Sin configurar', serviceProvisioning:'Configurando', serviceReady:'Configurado', serviceFailed:'Error de configuración',
+  healthUnknown:'Estado desconocido', healthHealthy:'Funcionando', healthDegraded:'Necesita atención', healthFailed:'No funciona',
+
   connect:'Conecta tu local', pairCode:'Código que aparece en Waitron', pairCodeError:'Introduce el código de ocho dígitos que aparece en Waitron.',
   pairIntro:'Introduce el código de Servicios Cloud en tu panel de Waitron.', pairInspect:'Comprobar código',
   pairBusiness:'Negocio legal', pairChoice:'Elige un negocio para este local.', pairApprove:'Aprobar este local',
