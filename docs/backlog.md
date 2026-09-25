@@ -367,11 +367,13 @@ mobile notifications separately.
   recipients. Queued notices use the current email language. Locked installations and
   failed observations defer their next check while other venues continue. SMTP uncertain-acceptance duplicates remain possible. A separate bounded
   functional probe now derives current authorised placements, solves the real public
-  challenge, verifies staff TLS/hostname trust and emits revision-bound JSON evidence
-  with certificate validity while refusing private production targets. The local
-  two-venue gateway proof exercises both paths. Next: persist probe evidence with stale,
-  route-failure, certificate-expiry and recovery transitions; then add
-  incident/delivery-history retention, deployment-scale scheduling and recipient fan-out
+  challenge, verifies staff TLS/hostname trust and persists revision-bound evidence
+  with certificate validity while refusing private production targets. The monitor rejects
+  late results after hostname changes, replacement or revocation, treats stale evidence as
+  unknown, and records deduplicated route-failure, certificate-expiry and recovery
+  transitions independently from installation contact. The local two-venue gateway proof
+  exercises both paths. Next: show this evidence in the portal and add opt-in bilingual
+  alerts; then add incident/delivery-history retention, deployment-scale scheduling and recipient fan-out
   measurements, escalation/quiet periods and rollout pause criteria.
 - **Usage metering.** Attribute lookups/API calls, reports, storage, transfers,
   messages and compute to customers and services. Show consumption and allowances,

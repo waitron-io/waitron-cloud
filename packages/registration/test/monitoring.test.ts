@@ -1,5 +1,6 @@
 import {execFile,spawn} from 'node:child_process';
 import {promisify} from 'node:util';
+import {setTimeout as delay} from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import {test,before,after,beforeEach} from 'node:test';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
@@ -76,6 +77,27 @@ async function snapshot(verification:string,seconds=0){
  await db.pool.query("INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules,verification) VALUES($1,$2,$3,1,'snapshot',$1::uuid::text,$4,1,clock_timestamp()-$5*interval '1 second','daily',$6,'{}',$7)",[id,venue.venueId,venue.installationId,'a'.repeat(64),seconds,randomUUID(),verification]);return id;
 }
 async function kinds(){return(await db.pool.query("SELECT kind FROM venue_incidents WHERE status='open' ORDER BY kind")).rows.map(r=>r.kind);}
+async function remoteRoute(){
+ const cell=randomUUID();
+ await db.pool.query("INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint) VALUES($1,'ES','aws','test','monitor.example.test',55,'fixture-key','gateway.example.test:51820')",[cell]);
+ await db.pool.query("INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port) VALUES($1,$2,$3,'10.77.55.2','fixture-peer',443)",[venue.venueId,venue.installationId,cell]);
+ await db.pool.query("INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES('staff.monitor.example.test',$1,'staff'),('public.monitor.example.test',$1,'public')",[venue.venueId]);
+}
+async function remoteObservation(service:'public'|'staff',status:'healthy'|'failed',secondsOld=0,certificateDays=31){
+ const hostname=`${service}.monitor.example.test`,failure=status==='failed'?'timeout':null;
+ await db.pool.query(`INSERT INTO remote_probe_observations
+  (installation_id,venue_id,service,configuration_revision,hostname,status,checked_at,elapsed_ms,failure,certificate_not_before,certificate_not_after,certificate_fingerprint256,last_success_at,last_failure_at,last_failure)
+  VALUES($1,$2,$3,0,$4,$5,clock_timestamp()-$6*interval '1 second',12,$7,
+   CASE WHEN $5='healthy' THEN clock_timestamp()-interval '1 day' END,
+   CASE WHEN $5='healthy' THEN clock_timestamp()+$8*interval '1 day' END,
+   CASE WHEN $5='healthy' THEN 'AA:BB' END,
+   CASE WHEN $5='healthy' THEN clock_timestamp()-$6*interval '1 second' END,
+   CASE WHEN $5='failed' THEN clock_timestamp()-$6*interval '1 second' END,$7)
+  ON CONFLICT(installation_id,service) DO UPDATE SET status=excluded.status,checked_at=excluded.checked_at,failure=excluded.failure,
+   certificate_not_before=COALESCE(excluded.certificate_not_before,remote_probe_observations.certificate_not_before),
+   certificate_not_after=COALESCE(excluded.certificate_not_after,remote_probe_observations.certificate_not_after),
+   certificate_fingerprint256=COALESCE(excluded.certificate_fingerprint256,remote_probe_observations.certificate_fingerprint256)`,[venue.installationId,venue.venueId,service,hostname,status,secondsOld,failure,certificateDays]);
+}
 test('missing-snapshot grace and failed-verification grace use independent durable clocks',async()=>{
  await db.pool.query("UPDATE installation_services SET state='ready' WHERE service='retained_snapshots'");
  await monitor.schedule();await contact(0);await monitor.runOnce();assert.deepEqual(await kinds(),[]);
@@ -102,12 +124,55 @@ test('unconfigured and production installations are not scheduled; stale checks 
  await db.pool.query("UPDATE venue_monitors SET checked_at=clock_timestamp()-interval '5 minutes 1 second'");assert.equal((await monitor.status()).unknown,1);
 });
 
+test('remote evidence records unknown, failure, recovery, certificate expiry and revocation independently of contact',async()=>{
+ await remoteRoute();await monitor.schedule();await contact(0);await monitor.runOnce();
+ assert.deepEqual(await kinds(),['public_probe_stale','staff_probe_stale']);assert.equal((await alerts()).length,0);
+
+ await remoteObservation('public','failed');await remoteObservation('staff','healthy');await due();await monitor.runOnce();
+ assert.deepEqual(await kinds(),['public_route_failed']);assert.equal((await alerts()).length,0);
+ assert.equal((await db.pool.query('SELECT last_contact_at>clock_timestamp()-interval \'5 seconds\' AS fresh FROM installations WHERE id=$1',[venue.installationId])).rows[0].fresh,true);
+
+ await remoteObservation('public','healthy');await due();const restarted=new MonitorWorker(db.pool,db.outbox);await restarted.runOnce();assert.deepEqual(await kinds(),[]);
+ await db.pool.query("UPDATE remote_probe_observations SET checked_at=clock_timestamp()-interval '301 seconds'");await due();await restarted.runOnce();assert.deepEqual(await kinds(),['public_probe_stale','staff_probe_stale']);
+
+ await remoteObservation('public','healthy',0,-1);await remoteObservation('staff','healthy',0,29);await due();
+ const concurrent=new MonitorWorker(db.secondPool,db.outbox,{probeStaleSeconds:300,certificateWarningDays:30});
+ await db.pool.query(`CREATE TABLE remote_incident_gate(id integer PRIMARY KEY);INSERT INTO remote_incident_gate VALUES(1);
+  CREATE FUNCTION pause_remote_incident() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM id FROM remote_incident_gate WHERE id=1 FOR UPDATE;RETURN NEW;END $$;
+  CREATE TRIGGER pause_remote_incident BEFORE INSERT ON venue_incidents FOR EACH ROW EXECUTE FUNCTION pause_remote_incident()`);
+ const gate=await db.secondPool.connect();let released=false,first:Promise<boolean>|undefined;
+ try{
+  await gate.query('BEGIN');await gate.query('SELECT id FROM remote_incident_gate WHERE id=1 FOR UPDATE');first=restarted.runOnce();let blocked=false;
+  for(let n=0;n<100;n++){const waiting=await db.pool.query("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock' AND query LIKE 'INSERT INTO venue_incidents%'");if(Number(waiting.rows[0].count)){blocked=true;break;}await delay(10);}
+  assert.equal(blocked,true);assert.equal(await concurrent.runOnce(),false);await gate.query('COMMIT');released=true;assert.equal(await first,true);
+ }finally{
+  if(!released)await gate.query('ROLLBACK');gate.release();await first?.catch(()=>{});
+  await db.pool.query('DROP TRIGGER IF EXISTS pause_remote_incident ON venue_incidents;DROP FUNCTION IF EXISTS pause_remote_incident();DROP TABLE IF EXISTS remote_incident_gate');
+ }
+ assert.deepEqual(await kinds(),['public_certificate_expiring','staff_certificate_expiring']);
+ const revisions=await db.pool.query("SELECT kind,revision FROM venue_incidents WHERE kind LIKE '%certificate_expiring' ORDER BY kind");assert.deepEqual(revisions.rows.map(row=>[row.kind,row.revision]),[['public_certificate_expiring',1],['staff_certificate_expiring',1]]);
+ assert.throws(()=>new MonitorWorker(db.pool,db.outbox,{probeStaleSeconds:0}),/invalid_monitor_config/);
+
+ await remoteObservation('public','failed');await due();await restarted.runOnce();assert.deepEqual(await kinds(),['public_certificate_expiring','public_route_failed','staff_certificate_expiring']);
+ await remoteObservation('public','healthy',0,-1);await db.pool.query("UPDATE installation_services SET state='unconfigured' WHERE installation_id=$1 AND service='remote_access'",[venue.installationId]);await due();await restarted.runOnce();assert.deepEqual(await kinds(),[]);
+ await db.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[venue.installationId]);await due();await restarted.runOnce();assert.deepEqual(await kinds(),['public_certificate_expiring','staff_certificate_expiring']);
+ const hostnames=(await db.pool.query('DELETE FROM remote_hostnames WHERE venue_id=$1 RETURNING *',[venue.venueId])).rows,placement=(await db.pool.query('DELETE FROM remote_placements WHERE installation_id=$1 RETURNING *',[venue.installationId])).rows[0];await due();await restarted.runOnce();assert.deepEqual(await kinds(),[]);
+ await db.pool.query('INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)',[placement.venue_id,placement.installation_id,placement.cell_id,placement.address,placement.peer_public_key,placement.port,placement.created_at]);
+ for(const hostname of hostnames)await db.pool.query('INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES($1,$2,$3)',[hostname.hostname,hostname.venue_id,hostname.kind]);
+ await due();await restarted.runOnce();assert.deepEqual(await kinds(),['public_certificate_expiring','staff_certificate_expiring']);
+
+ await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[venue.installationId]);await due();await restarted.runOnce();
+ assert.deepEqual(await kinds(),[]);assert.equal((await db.pool.query("SELECT count(*) FROM venue_incidents WHERE kind LIKE 'public_%' OR kind LIKE 'staff_%'")).rows[0].count,'5');
+ assert.equal((await db.pool.query("SELECT count(*) FROM venue_incidents WHERE (kind LIKE 'public_%' OR kind LIKE 'staff_%') AND status<>'suppressed'")).rows[0].count,'0');
+});
+
 test('monitor CLI observes durable incidents and reports status without sending mail',async()=>{
  const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+db.schema);
  const run=async(mode:string)=>JSON.parse((await promisify(execFile)(process.execPath,['packages/registration/src/monitor-cli.ts',mode],{cwd:new URL('../../../',import.meta.url),env:{PATH:process.env.PATH,DATABASE_URL:url.href,...(mode==='--once'?{CLOUD_EMAIL_KEYS:JSON.stringify(db.keys),CLOUD_EMAIL_ACTIVE_KEY_ID:'test'}:{})}})).stdout);
  assert.equal((await run('--status')).venues,0);await contact(901);await run('--once');
  assert.equal((await run('--status')).incidents,1);assert.equal((await alerts()).length,1);assert.equal((await alerts())[0].status,'pending');
  assert.equal((await run('--once')).incidents,1);assert.equal((await alerts()).length,1);
+ await assert.rejects(promisify(execFile)(process.execPath,['packages/registration/src/monitor-cli.ts','--once'],{cwd:new URL('../../../',import.meta.url),env:{PATH:process.env.PATH,DATABASE_URL:url.href,CLOUD_EMAIL_KEYS:JSON.stringify(db.keys),CLOUD_EMAIL_ACTIVE_KEY_ID:'test',CLOUD_REMOTE_PROBE_STALE_SECONDS:'0'}}),error=>typeof error==='object'&&error!==null&&'stderr' in error&&String(error.stderr).includes('remote monitoring threshold configuration'));
 });
 test('incident creation rolls back if mail enqueue fails, then resumes exactly once',async()=>{
  await monitor.schedule();await contact(901);

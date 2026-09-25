@@ -93,6 +93,9 @@ test('overview exposes current monitoring evidence only to current organisation 
  await db.pool.query("INSERT INTO venue_incidents(venue_id,kind,status,revision) VALUES($1,'disconnected','open',1)",[venueId]);
  let item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.enabled,true);assert.equal(item.monitoring.fresh,true);assert.deepEqual(item.monitoring.incidents.map((v:{kind:string})=>v.kind),['disconnected']);
  assert.deepEqual(Object.keys(item.monitoring.incidents[0]).sort(),['changedAt','kind','openedAt']);
+ await db.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='retained_snapshots'",[id]);
+ await db.pool.query("INSERT INTO venue_incidents(venue_id,kind,status,revision) VALUES($1,'public_route_failed','open',1),($1,'staff_probe_stale','open',1),($1,'public_certificate_expiring','open',1)",[venueId]);
+ item=(await(await browser('')).json()).installations[0];assert.deepEqual(item.monitoring.incidents.map((v:{kind:string})=>v.kind),['disconnected']);
  await db.pool.query("UPDATE venue_monitors SET checked_at=clock_timestamp()-interval '5 minutes 1 second'");item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.fresh,false);assert.equal(item.monitoring.incidents.length,1);
  await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp()');item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.enabled,false);assert.deepEqual(item.monitoring.incidents,[]);
  await db.pool.query('DELETE FROM organisation_memberships');assert.deepEqual((await(await browser('')).json()).installations,[]);

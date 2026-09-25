@@ -12,7 +12,8 @@ export async function venueOverview(pool:Pool,token:string,installations:Install
    mon.checked_at,COALESCE(mon.checked_at>clock_timestamp()-interval '5 minutes',false) AS monitor_fresh,
    (v.environment='test' AND n.revoked_at IS NULL AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured')) AS monitor_enabled,
    COALESCE((SELECT jsonb_agg(jsonb_build_object('kind',x.kind,'openedAt',x.opened_at,'changedAt',x.changed_at) ORDER BY x.kind) FROM venue_incidents x WHERE x.venue_id=v.id AND x.status='open'
-    AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured' AND (x.kind='disconnected' OR s.service='retained_snapshots'))),'[]') AS incidents
+    AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured'
+     AND (x.kind='disconnected' OR (x.kind IN ('snapshot_stale','verification_failed') AND s.service='retained_snapshots')))),'[]') AS incidents
    FROM venues v JOIN organisations o ON o.id=v.organisation_id JOIN legal_businesses b ON b.id=v.legal_business_id JOIN installations n ON n.venue_id=v.id AND n.superseded_by IS NULL LEFT JOIN venue_monitors mon ON mon.venue_id=v.id
    WHERE v.id=ANY($1::uuid[]) AND v.organisation_id=ANY($2::uuid[])`,[installations.map(i=>i.venueId),memberships.rows.map(m=>m.organisation_id)]);
   const result=installations.flatMap(i=>{const row=rows.rows.find(r=>r.id===i.venueId&&r.organisation_id===i.organisationId);if(!row)return [];

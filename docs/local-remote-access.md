@@ -209,12 +209,13 @@ A dead HAProxy child restarts from still-valid authority; it cannot restart afte
 Gateway replacement and certificate reload may interrupt remote connections. The local
 target is recovery within sixty seconds, not a production availability promise. LAN
 access remains independent. Production DNS, provider credentials, appliance installation,
-automatic customer appliance setup, durable remote incidents and deployment hardening
+automatic customer appliance setup, customer-facing remote incident alerts and deployment hardening
 still need their own implementation and validation before customers can subscribe.
 
 Use `pnpm remote:probe --once` on a separate monitoring host once the configured names
 resolve publicly to this gateway. The continuous form repeats every minute. It reads
 authorised targets from PostgreSQL, uses system TLS trust and accepts no caller URL or
 private-address override. See [local monitoring](local-monitoring.md#probe-remote-access-from-outside-the-gateway)
-for its bounds and JSON-line result contract. The probe does not yet persist route
-failures, certificate expiry or recovery as incidents.
+for its bounds, durable evidence and JSON-line result contract. The monitor records route
+failure, stale-probe, certificate-expiry and recovery transitions. Portal presentation and
+opt-in customer alerts remain separate work.

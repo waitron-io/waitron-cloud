@@ -5,7 +5,7 @@ export type RemoteProbe=(target:RemoteProbeTarget,options:ProbeOptions)=>Promise
 export interface RemoteProbeRunOptions {
  concurrency?:number;
  signal?:AbortSignal;
- result:(value:RemoteProbeResult)=>void;
+ result:(value:RemoteProbeResult)=>unknown;
  error?:()=>void;
 }
 
@@ -15,7 +15,7 @@ export async function runRemoteProbes(targets:RemoteProbeTarget[],probe:RemotePr
  const worker=async()=>{
   while(!signal.aborted){const index=next++;if(index>=targets.length)return;let value:RemoteProbeResult;
    try{value=await probe(targets[index]!,{signal});}catch{if(!signal.aborted)options.error?.();continue;}
-   if(signal.aborted)return;options.result(value);
+   if(signal.aborted)return;await options.result(value);
   }
  };
  await Promise.all(Array.from({length:Math.min(concurrency,targets.length)},worker));

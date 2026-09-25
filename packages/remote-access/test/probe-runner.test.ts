@@ -26,3 +26,13 @@ test('runner emits no fresh success for probes which finish after shutdown',asyn
  const running=runRemoteProbes(targets.slice(0,2),async target=>{const n=targets.indexOf(target);started.push(n);await gates[n]!.promise;return result(target);},{signal:stop.signal,result:value=>emitted.push(value)});
  await until(()=>started.length===2);stop.abort();gates[0]!.resolve();gates[1]!.resolve();await running;assert.deepEqual(emitted,[]);
 });
+
+test('runner does not finish before asynchronous result persistence',async()=>{
+ const gate=deferred();let settled=false;
+ const running=runRemoteProbes(targets.slice(0,1),async target=>result(target),{result:async()=>{await gate.promise;}}).then(()=>{settled=true;});
+ await immediate();assert.equal(settled,false);gate.resolve();await running;assert.equal(settled,true);
+});
+
+test('runner surfaces asynchronous result persistence failure',async()=>{
+ await assert.rejects(runRemoteProbes(targets.slice(0,1),async target=>result(target),{result:async()=>{throw Error('storage unavailable');}}),/storage unavailable/);
+});

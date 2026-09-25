@@ -19,12 +19,20 @@ The local monitor checks configured services on test installations once a minute
 - **Failed verification:** the latest retained snapshot remains failed for five minutes.
   The grace resets when that snapshot changes or its verification stops failing. Keep
   older verified copies while the backup worker retries.
+- **Public and staff routes:** a separate host checks the public availability journey and
+  the staff TLS handshake. A fresh failed check opens a route incident even when the
+  installation still has current control contact. Missing results and results older than
+  five minutes are unknown, not healthy.
+- **Remote certificates:** a certificate from a fresh successful check opens an expiry
+  incident when it has 30 days or less remaining. The stored expiry date tells you whether
+  the certificate is approaching expiry or has already expired.
 
-These checks use received control contact and the retained snapshot catalogue. They do
-not establish public route availability, continuous-server recoverability or permission
-to trade. When checks stop for five minutes, the portal shows monitoring as unknown and
-keeps the last incident evidence visible. A fresh check with no alerts means those
-conditions are absent from the latest observation.
+The first three checks use received control contact and the retained snapshot catalogue.
+The route checks use only the external probe evidence. None of them establishes
+continuous-server recoverability or permission to trade. When the venue monitor stops
+for five minutes, the portal shows its existing contact and snapshot view as unknown and
+keeps the last incident evidence visible. Remote route evidence is durable operator data
+until the next portal change adds its customer-facing view.
 
 Stopping Cloud access or removing a service suppresses its incidents and queued notices.
 It does not send a recovery message. Missing data gets a fresh grace if you enable the
@@ -32,7 +40,7 @@ service again; known old contact or snapshot evidence retains its age.
 
 ## Run the monitor
 
-Apply migrations through `013_service_monitoring.sql`. Configure `DATABASE_URL` and the
+Apply migrations through `017_remote_probe_observations.sql`. Configure `DATABASE_URL` and the
 same `CLOUD_EMAIL_KEYS` and `CLOUD_EMAIL_ACTIVE_KEY_ID` used by the account email queue.
 The monitor encrypts notification payloads using those keys. It needs no backup master
 key, storage credentials or SMTP credentials.
@@ -51,6 +59,18 @@ for the same interval, without marking their check fresh. A failing venue does n
 stop the continuous process or hold up other due venues. `--once` schedules and processes at most one venue.
 The continuous command polls when idle and stops claiming new work on shutdown.
 
+The route freshness and certificate warning thresholds have conservative defaults. Change
+them only when your local schedule needs different bounds:
+
+```sh
+CLOUD_REMOTE_PROBE_STALE_SECONDS=300 \
+CLOUD_REMOTE_CERTIFICATE_WARNING_DAYS=30 \
+pnpm monitor:worker
+```
+
+Probe freshness accepts 1 to 86,400 seconds. The certificate warning accepts 1 to 3,650
+days. Invalid values stop the worker instead of silently changing incident behavior.
+
 Status needs only database access. It reports venue and due counts, unknown checks,
 open incidents and the oldest completed check. Use `pnpm mail:status` separately to
 inspect email delivery failures. An observed incident does not prove an email was sent.
@@ -65,8 +85,9 @@ pnpm remote:probe --once
 ```
 
 Without `--once`, the process repeats every 60 seconds until `SIGINT` or `SIGTERM`.
-It derives at most 100 targets from current, non-revoked placements and writes one
-complete JSON object per line. Each result carries the installation, venue and current
+It derives at most 100 targets from current, non-revoked placements. It stores each
+accepted result in PostgreSQL, then writes one complete JSON object per line. Each result
+carries the installation, venue and current
 configuration revision, separate public/staff checked times and elapsed milliseconds,
 and the verified certificate validity dates and SHA-256 fingerprint on success.
 
@@ -79,13 +100,22 @@ address, port or trust-disable option.
 
 At most four venues run concurrently. DNS answers, TLS/request time, total service time,
 response bytes and proof work are bounded. Shutdown aborts pending sockets and suppresses
-their results, so an interrupted check cannot print fresh success. Failures use fixed
+their results, so an interrupted check cannot store or print fresh success. Failures use fixed
 codes rather than raw addresses or network errors.
 
-These JSON lines are observations, not incidents. This command does not write monitoring
-history or send alerts. The next monitoring stage must persist them with their revision,
-reject late results after configuration/revocation, distinguish stale evidence from
-health, and create deduplicated failure/expiry/recovery transitions.
+The database keeps the current result, the last success and failure times, the last fixed
+failure code and the most recently verified certificate evidence. A newer result can
+replace an older one, but an equal or older result cannot move state backwards. The write
+also checks the current installation, placement, revision and both hostnames while holding
+the installation authority lock. A hostname change, replacement or revocation therefore
+rejects a late result from the old route. Evidence more than one minute ahead of database
+time is rejected so a bad clock cannot leave a stopped worker looking fresh.
+
+The monitor records deduplicated route, stale-probe and certificate-expiry incidents and
+their recoveries. It suppresses them when you remove the route or revoke the installation.
+These new incident kinds do not yet enter the customer email queue or appear in the portal;
+that presentation and opt-in delivery is the next monitoring change. Existing contact and
+snapshot alerts continue unchanged.
 
 For local delivery, start Mailpit and run the existing mail worker with local transport:
 
@@ -122,9 +152,10 @@ revocation, opt-in changes, permission changes during a queue wait and notificat
 Real browser tests cover both languages, saved preferences, stale monitoring, phone
 layout and accessibility. Mailpit captures incident and recovery messages in both languages.
 
-External remote-access probes now run locally and emit revision-bound structured evidence.
-Before deployment, persist that evidence with route/certificate incidents and recovery,
-then add operational alert routing, retention for incident/delivery history, and
+External remote-access probes now persist revision-bound evidence and the monitor records
+route, stale-probe, certificate-expiry and recovery transitions without confusing a live
+control connection for a working route. Before deployment, add customer-facing portal
+evidence and opt-in alerts, then add retention for incident/delivery history and
 scheduler/fan-out measurements at the intended scale.
 Define outage escalation and quiet-period policies with actual operating data. Live email
 provider setup, Spain processing requirements and delivery monitoring remain separate
