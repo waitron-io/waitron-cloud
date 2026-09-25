@@ -210,8 +210,8 @@ ECH is not configured: an unrecognized outer ClientHello name cannot route.
 
 A failed apply retries the exact persisted configuration without extending its expiry.
 A dead HAProxy child restarts from still-valid authority; it cannot restart after expiry.
-Gateway replacement and certificate reload may interrupt remote connections. In the
-2026-09-25 local proof, a mature unchanged WireGuard peer recovered after 111,051 ms: its
+Gateway replacement and certificate reload may interrupt remote connections. In repeated
+2026-09-25 local proofs, a mature unchanged WireGuard peer recovered after about 111 seconds: its
 old kernel session was not available in the replacement gateway, so it reconnected at the
 normal WireGuard rekey window. The runner allows up to three minutes to measure this case.
 The earlier sub-minute result covered freshly established peers and is not a production

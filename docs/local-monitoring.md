@@ -166,7 +166,8 @@ one venue peer while the other continues working, restores it, lets probe eviden
 stale, verifies rejection with the wrong trust root, stops and replaces the gateway, and uses
 the local ACME certificate dates with a proof-only warning threshold. Control contact remains
 fresh throughout the route failures. Mailpit captures every opening and recovery, while the
-database assertion rejects duplicate deliveries for the same incident revision and account.
+proof re-runs an unchanged monitor transition and confirms the complete Mailpit mailbox gains
+no duplicate opening.
 
 Build the portal and local gateway image as described in
 [the remote-access guide](local-remote-access.md#run-the-proof), then write and verify the
@@ -180,7 +181,7 @@ node scripts/verify-remote-monitoring-receipt.mjs \
   /tmp/cloud-remote-monitoring-receipt.json
 ```
 
-The receipt records elapsed time and open-incident count for the healthy baseline, isolated
+The receipt records elapsed time and open-incident count for the route-healthy baseline, isolated
 route outage and recovery, stale worker, invalid trust, gateway outage and recovery, and
 certificate warning phases. These are local measurements, not production availability or
 delivery guarantees.

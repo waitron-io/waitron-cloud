@@ -380,7 +380,7 @@ mobile notifications separately.
   proves recovery, stale/invalid-certificate handling, current control contact, portal and
   Mailpit evidence, cross-venue isolation and delivery deduplication, and emits a versioned
   timing receipt. A mature unchanged local WireGuard peer recovered from gateway replacement
-  in 111,051 ms at its normal rekey window; choose and prove a launch recovery target and any
+  after about 111 seconds at its normal rekey window; choose and prove a launch recovery target and any
   faster peer-side rekey strategy before making an availability promise. The portal now shows
   separate redacted public/staff evidence and certificate warnings in English and Spanish.
   Opted-in owners receive bilingual remote
