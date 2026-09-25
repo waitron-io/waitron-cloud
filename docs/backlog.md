@@ -243,8 +243,16 @@ mobile notifications separately.
   failures receive the same accepted result. Notifications follow commit and cannot
   undo a successful reset. Recovery requires verified email and an existing password;
   define recovery for legacy unverified and passwordless accounts separately.
-  Configure live email delivery and implement MFA/passkeys
-  and the platform role catalogue before public use. Shared login/request limits, secure
+  Optional passkeys now use discoverable, user-verified WebAuthn credentials. You can
+  add or remove one only from a live session with your current password and CSRF proof.
+  You can sign in with a passkey without entering an email address, while password login
+  and email recovery remain available. Durable five-minute ceremonies are single-use,
+  exact-origin and exact-RP checks are enforced, and a real Chromium virtual authenticator
+  proves enrolment, sign-in, replay rejection, account isolation and removal in English
+  and Spanish. D10 still needs richer account-security controls, including session
+  management and passkey last-use details. D11 still needs the retention and cleanup
+  decision for WebAuthn ceremony history. Configure live email delivery, implement MFA,
+  and define the platform role catalogue before public use. Shared login/request limits, secure
   cookies and Origin/CSRF checks are implemented in the account API. Validate ingress
   bot controls, trusted proxy settings and browser behaviour before deployment. Define
   session, signup-request and password-reset-request retention and cleanup, including

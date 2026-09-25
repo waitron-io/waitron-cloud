@@ -56,6 +56,8 @@ class FixtureAdapter implements PasskeyCeremonyAdapter {
   }
   async verifyRegistration(input: VerifyRegistrationResponseOpts): Promise<VerifiedRegistrationResponse> {
     if (this.registrationFailure) throw new Error('private verifier detail');
+    assert.equal(input.expectedOrigin, origin);
+    assert.equal(input.expectedRPID, 'cloud.example.test');
     return { verified: true, registrationInfo: {
       fmt: 'none', aaguid: '00000000-0000-0000-0000-000000000000',
       credential: { id: input.response.id, publicKey: new Uint8Array([1, 2, 3]), counter: 0, transports: input.response.response.transports },
@@ -69,6 +71,8 @@ class FixtureAdapter implements PasskeyCeremonyAdapter {
   }
   async verifyAuthentication(input: VerifyAuthenticationResponseOpts): Promise<VerifiedAuthenticationResponse> {
     if (this.authenticationFailure) throw new Error('private verifier detail');
+    assert.equal(input.expectedOrigin, origin);
+    assert.equal(input.expectedRPID, 'cloud.example.test');
     return { verified: true, authenticationInfo: {
       credentialID: input.response.id,
       newCounter: this.fixedCounter ?? input.credential.counter + 1,

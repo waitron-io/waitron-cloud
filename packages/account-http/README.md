@@ -110,12 +110,37 @@ returned ceremony ID to `POST /passkeys/authentication/verify`. A verified respo
 sets the same session and CSRF cookies as password login. The challenge lasts five
 minutes and the first completion attempt consumes it.
 
+Use the six requests in two pairs plus the account list:
+
+| Request | Authority | Result |
+| --- | --- | --- |
+| POST `/passkeys/authentication/options` | Exact `Origin` | Ceremony ID and browser request options |
+| POST `/passkeys/authentication/verify` | Exact `Origin` and authenticator response | Account ID plus session and CSRF cookies |
+| GET `/passkeys` | Live session | Account-scoped passkey row IDs and enrolment dates |
+| POST `/passkeys/registration/options` | Live session, CSRF and current password | Ceremony ID and browser creation options |
+| POST `/passkeys/registration/verify` | Same live session and CSRF | New passkey row ID and enrolment date |
+| POST `/passkeys/remove` | Live session, CSRF and current password | 204 after an account-scoped removal attempt |
+
+Configure `portalOrigin` to the one origin that serves both the portal and this API. The
+server uses that full value for the WebAuthn origin and its hostname for the relying-party
+ID. Do not configure an IP address as the relying-party ID. For local browser tests, use
+`http://localhost:<port>`; browsers treat `localhost` as a secure-context exception.
+
 An authenticated account can read `GET /passkeys`, begin enrolment with
 `POST /passkeys/registration/options {"password":"<current password>"}`, finish it at
 `POST /passkeys/registration/verify`, and remove an account-scoped row with
 `POST /passkeys/remove {"id":"<row uuid>","password":"<current password>"}`.
 These mutations require the current session's CSRF header. Password login and email
 recovery remain available, and password reset does not delete enrolled passkeys.
+
+The portal test drives the production bundle and server through Chromium's virtual
+authenticator. It creates a resident, user-verified credential, signs out, signs in with
+the discoverable credential, rejects a replay, proves another account cannot list or
+remove it, and removes it without affecting password sign-in. Run it with:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test --test-timeout=120000 test/passkey-browser.test.ts
+```
 
 Signup and reset completion issue no session: sign in afterwards. Reset ends all
 existing sessions. A token works once; if a completion response is lost, try signing
