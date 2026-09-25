@@ -3,15 +3,21 @@ import { createReadStream } from 'node:fs';
 
 export type PasswordScreeningResult = 'acceptable' | 'compromised';
 export interface PasswordScreeningProvider {
-  check(password: string): Promise<PasswordScreeningResult>;
+  check(password: string, signal?: AbortSignal): Promise<PasswordScreeningResult>;
 }
 
-export async function screenPassword(provider: PasswordScreeningProvider | undefined, password: string): Promise<PasswordScreeningResult | 'unavailable'> {
+export async function screenPassword(provider: PasswordScreeningProvider | undefined, password: string, timeoutMs = 1_000): Promise<PasswordScreeningResult | 'unavailable'> {
   if (!provider) return 'acceptable';
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const result = await provider.check(password);
+    const controller = new AbortController();
+    const timeout = new Promise<'unavailable'>(resolve => {
+      timer = setTimeout(() => { controller.abort(); resolve('unavailable'); }, timeoutMs);
+    });
+    const result = await Promise.race([provider.check(password, controller.signal), timeout]);
     return result === 'acceptable' || result === 'compromised' ? result : 'unavailable';
   } catch { return 'unavailable'; }
+  finally { if (timer) clearTimeout(timer); }
 }
 
 const invalidCorpus = () => new Error('Invalid compromised-password corpus');

@@ -44,7 +44,9 @@ records a declared country, not verified tax details or a hosting location.
 
 Pass an optional `PasswordScreeningProvider` as the third `SignupStore` constructor
 argument to enforce compromised-password screening. The provider receives only the
-already bounded candidate password and returns `acceptable` or `compromised`.
+already bounded candidate password, receives an abort signal, and returns `acceptable`
+or `compromised`. Screening fails closed after one second; providers must stop work when
+the signal is aborted.
 `LocalPasswordCorpus.load(path)` is the implemented provider: it compares a local
 lowercase SHA-256 corpus and performs no network request. A compromised result raises
 `password_compromised`; a provider failure or invalid result raises

@@ -23,10 +23,10 @@ Generate each key separately with `openssl rand -hex 32` and save it in your ign
 `.env`. Keep the email key across restarts so the worker can decrypt queued messages.
 The API and worker must use the same database and email key ring.
 
-Production also requires `CLOUD_COMPROMISED_PASSWORD_CORPUS` to name an absolute
+The packaged production server CLI requires `CLOUD_COMPROMISED_PASSWORD_CORPUS` to name an absolute
 path to a locally supplied password corpus. Put one lowercase SHA-256 digest on each
-line; blank lines and lines beginning with `#` are ignored. The server reads at most
-16 MiB during startup and refuses malformed, empty or
+line; blank lines and lines beginning with `#` are ignored. The server accepts a corpus
+of at most 16 MiB during startup and refuses malformed, empty or
 unreadable corpora. It keeps digests in process memory and never sends a password or
 digest to an external service. Development may omit the setting, but then screening
 is disabled; do not use that mode for public signup.

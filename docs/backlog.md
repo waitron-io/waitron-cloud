@@ -250,7 +250,8 @@ mobile notifications separately.
   session, signup-request and password-reset-request retention and cleanup, including
   reset records for unknown addresses, and measure them against the
   expected deployment size. Signup and password-reset completion now use an optional
-  bounded screening interface. Production startup requires an explicitly supplied local
+  screening interface with a one-second failure deadline. Packaged production-server
+  startup requires an explicitly supplied local
   SHA-256 corpus; compromised passwords are rejected in English and Spanish without
   consuming the link, and unavailable screening leaves credentials and sessions unchanged.
   No password or complete digest is sent externally. Choose, verify and operate the

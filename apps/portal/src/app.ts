@@ -210,9 +210,9 @@ export class PortalApp {
         : result.code === 'credentials_invalid' ? 'credentials'
         : result.status === 429 ? 'limited' : result.status === 403 ? 'forbidden'
         : result.status === 0 ? (path.endsWith('/complete') ? 'uncertain' : 'unavailable')
-        : result.status >= 500 ? 'unavailable' : 'invalid';
+        : result.status >= 500 ? (path.endsWith('/complete') && result.code !== 'temporarily_unavailable' ? 'uncertain' : 'unavailable') : 'invalid';
     }
-    this.draw(); if (this.error) this.#focusErrors(); else this.focusHeading();
+    this.draw(); if (this.error || Object.keys(this.errors).length) this.#focusErrors(); else this.focusHeading();
   }
   get logoutWaiting() { return Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)); }
   async logout() {
