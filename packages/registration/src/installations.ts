@@ -125,7 +125,7 @@ export class InstallationStore {
     return transaction(this.#pool,async client=>{
       const session=await resolveSession(client,token,{touch:false});
       const memberships=await client.query('SELECT organisation_id,is_owner FROM organisation_memberships WHERE account_id=$1 FOR SHARE',[session.accountId]);
-      const ids=await client.query(`SELECT i.id,v.organisation_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE v.organisation_id=ANY($1::uuid[]) ORDER BY i.id`,[memberships.rows.map(m=>m.organisation_id)]);
+      const ids=await client.query(`SELECT i.id,v.organisation_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE v.organisation_id=ANY($1::uuid[]) AND i.superseded_by IS NULL ORDER BY i.id`,[memberships.rows.map(m=>m.organisation_id)]);
       const result:InstallationView[]=[];
       for(const i of ids.rows){const v=await view(client,i.id);v.canRevoke=memberships.rows.find(m=>m.organisation_id===i.organisation_id).is_owner;
         // Provisioning values may contain adapter authority; account screens receive status only.

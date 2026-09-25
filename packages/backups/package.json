@@ -21,6 +21,7 @@
     "./captures": "./src/captures.ts",
     "./capture-config": "./src/capture-config.ts",
     "./recovery": "./src/recovery.ts",
-    "./recovery-request": "./src/recovery-request.ts"
+    "./recovery-request": "./src/recovery-request.ts",
+    "./replacement": "./src/replacement.ts"
   }
 }
