@@ -17,7 +17,7 @@ import type { HttpBindings } from '@hono/node-server';
 import type { Pool } from 'pg';
 import { setTimeout as delay } from 'node:timers/promises';
 import { endSession, IdentityError, login, resolveSession } from '@waitron-cloud/identity';
-import { EmailOutbox, PasswordRecoveryError, PasswordRecoveryStore, SignupError, SignupStore, normaliseEmail, transaction } from '@waitron-cloud/registration';
+import { EmailOutbox, PasswordRecoveryError, PasswordRecoveryStore, SignupError, SignupStore, normaliseEmail, transaction, type PasswordScreeningProvider } from '@waitron-cloud/registration';
 import { type AccountHttpConfig, validateConfig } from './config.ts';
 import { AccountRateLimiter, type RateRule } from './rate-limit.ts';
 import { clientAddress } from './client-address.ts';
@@ -43,11 +43,13 @@ function publicError(error: unknown): AccountHttpError {
   if (error instanceof PairingError) return new AccountHttpError(error.code === 'invalid_proof' ? 401 : error.code === 'permission_denied' ? 403 : 400, error.code);
   if (error instanceof RegistrationError) return new AccountHttpError(error.code === 'permission_denied' ? 403 : 400, error.code);
   if (error instanceof SignupError || error instanceof PasswordRecoveryError) {
+    if (error.code === 'password_compromised') return new AccountHttpError(400, 'password_compromised');
+    if (error.code === 'password_screening_unavailable') return new AccountHttpError(503, 'temporarily_unavailable', 1);
     return new AccountHttpError(400, ['verification_unavailable', 'reset_unavailable'].includes(error.code) ? 'link_unavailable' : 'invalid_input');
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;leaseIssuer?:LeaseIssuer;captures?:CaptureOptions;remoteResolve?:RemoteResolver}) {
+export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;leaseIssuer?:LeaseIssuer;captures?:CaptureOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider}) {
   const config = validateConfig(options.config);
   if(options.captures&&!options.leaseIssuer)throw Error('backup.installation_issuer_required');
   const {pool, outbox} = options;
@@ -55,7 +57,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
   const captures=options.captures&&options.leaseIssuer?new BackupCaptures(pool,options.leaseIssuer,config.portalOrigin,options.captures):undefined;
   const streams=options.captures?.managedStreams&&options.leaseIssuer?new ManagedStreamMachines(pool,options.leaseIssuer,config.portalOrigin,options.captures.vault,options.captures.managedStreams):undefined;
   const limiter = new AccountRateLimiter(pool, config.rateKey);
-  const signup = new SignupStore(pool, outbox); const recovery = new PasswordRecoveryStore(pool, outbox);
+  const signup = new SignupStore(pool, outbox, options.passwordScreening); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
   const app = new Hono<{Bindings: HttpBindings}>();
   app.onError((error, c) => {
     protect(c); const fault = publicError(error);

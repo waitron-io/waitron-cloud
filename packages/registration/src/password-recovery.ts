@@ -5,18 +5,20 @@ import type { EmailDeliveryContext, EmailDeliveryReceipt } from './email-deliver
 import type { EmailOutbox } from './email-outbox.ts';
 import { transaction } from './transaction.ts';
 import { normaliseEmail, validNewPassword, validLocale, type AccountLocale, type AccountEmail, type AccountNotification } from './account-input.ts';
+import { screenPassword, type PasswordScreeningProvider } from './compromised-passwords.ts';
 export interface PasswordRecoveryMailer {
   sendPasswordReset(message: AccountEmail, context?: EmailDeliveryContext): Promise<void | EmailDeliveryReceipt>;
   sendPasswordChanged(message: AccountNotification, context?: EmailDeliveryContext): Promise<void | EmailDeliveryReceipt>;
 }
 export class PasswordRecoveryError extends Error {
-  readonly code: 'recovery_invalid' | 'reset_unavailable';
+  readonly code: 'recovery_invalid' | 'reset_unavailable' | 'password_compromised' | 'password_screening_unavailable';
   constructor(code: PasswordRecoveryError['code']) { super(code); this.name = 'PasswordRecoveryError'; this.code = code; }
 }
 export class PasswordRecoveryStore {
   readonly #pool: Pool;
   readonly #outbox: EmailOutbox;
-  constructor(pool: Pool, outbox: EmailOutbox) { this.#pool = pool; this.#outbox = outbox; }
+  readonly #screening: PasswordScreeningProvider | undefined;
+  constructor(pool: Pool, outbox: EmailOutbox, screening?: PasswordScreeningProvider) { this.#pool = pool; this.#outbox = outbox; this.#screening = screening; }
 
   async request(input: string, locale: AccountLocale = 'en'): Promise<{status: 'accepted'}> {
     const email = normaliseEmail(input);
@@ -56,6 +58,9 @@ export class PasswordRecoveryStore {
       const candidate = (await client.query(`SELECT account_id FROM password_reset_requests
         WHERE token_hash = $1 AND account_id IS NOT NULL AND consumed_at IS NULL AND expires_at > clock_timestamp()`, [tokenHash])).rows[0];
       if (!candidate) throw new PasswordRecoveryError('reset_unavailable');
+      const screening = await screenPassword(this.#screening, password);
+      if (screening === 'compromised') throw new PasswordRecoveryError('password_compromised');
+      if (screening === 'unavailable') throw new PasswordRecoveryError('password_screening_unavailable');
       const passwordHash = await hashSecret(password);
       // The exclusive account lock serialises resets and waits for in-flight logins/resolvers.
       const account = await client.query('SELECT id FROM cloud_accounts WHERE id = $1 AND disabled_at IS NULL FOR UPDATE', [candidate.account_id]);

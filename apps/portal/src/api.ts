@@ -39,7 +39,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, stri
     if (response.ok && path === '/logout' && response.status === 204) return {ok: true, value: undefined as T};
     const value: unknown = await response.json().catch(() => null);
     if (response.ok && validResult(path, value)) return {ok: true, value: value as T};
-    const codes = ['dns_not_verified','hostname_conflict','revision_conflict','remote_not_placed','invalid_hostname','pairing_unavailable', 'permission_denied', 'binding_conflict', 'invalid_input', 'credentials_invalid', 'unauthenticated', 'forbidden', 'link_unavailable', 'rate_limited', 'temporarily_unavailable'];
+    const codes = ['dns_not_verified','hostname_conflict','revision_conflict','remote_not_placed','invalid_hostname','pairing_unavailable', 'permission_denied', 'binding_conflict', 'invalid_input', 'credentials_invalid', 'unauthenticated', 'forbidden', 'link_unavailable', 'password_compromised', 'rate_limited', 'temporarily_unavailable'];
     const code = value && typeof value === 'object' && 'error' in value && typeof value.error === 'string' && codes.includes(value.error)
       ? value.error : 'temporarily_unavailable';
     return {ok: false, status: response.ok ? 503 : response.status, code, retryAfterMs};

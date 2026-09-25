@@ -5,19 +5,21 @@ import type { EmailDeliveryContext, EmailDeliveryReceipt } from './email-deliver
 import type { EmailOutbox } from './email-outbox.ts';
 import { transaction } from './transaction.ts';
 import { normaliseEmail, validNewPassword, validLocale, type AccountLocale, type AccountEmail } from './account-input.ts';
+import { screenPassword, type PasswordScreeningProvider } from './compromised-passwords.ts';
 
 export type SignupEmail = AccountEmail;
 export interface SignupMailer { sendVerification(message: SignupEmail, context?: EmailDeliveryContext): Promise<void | EmailDeliveryReceipt>; }
 export interface SignupDetails { password: string; organisationName: string; legalBusinessName: string; countryCode: string; }
 export interface SignupResult { accountId: string; organisationId: string; legalBusinessId: string; }
 export class SignupError extends Error {
-  readonly code: 'signup_invalid' | 'verification_unavailable';
+  readonly code: 'signup_invalid' | 'verification_unavailable' | 'password_compromised' | 'password_screening_unavailable';
   constructor(code: SignupError['code']) { super(code); this.name = 'SignupError'; this.code = code; }
 }
 export class SignupStore {
   readonly #pool: Pool;
   readonly #outbox: EmailOutbox;
-  constructor(pool: Pool, outbox: EmailOutbox) { this.#pool = pool; this.#outbox = outbox; }
+  readonly #screening: PasswordScreeningProvider | undefined;
+  constructor(pool: Pool, outbox: EmailOutbox, screening?: PasswordScreeningProvider) { this.#pool = pool; this.#outbox = outbox; this.#screening = screening; }
 
   async request(input: string, locale: AccountLocale = 'en'): Promise<{status: 'accepted'}> {
     const email = normaliseEmail(input);
@@ -50,6 +52,9 @@ export class SignupStore {
       const candidate = await client.query(`SELECT 1 FROM signup_requests
         WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > clock_timestamp()`, [tokenHash]);
       if (!candidate.rowCount) throw new SignupError('verification_unavailable');
+      const screening = await screenPassword(this.#screening, input.password);
+      if (screening === 'compromised') throw new SignupError('password_compromised');
+      if (screening === 'unavailable') throw new SignupError('password_screening_unavailable');
       const passwordHash = await hashSecret(input.password);
       const request = (await client.query('SELECT email, expires_at, consumed_at FROM signup_requests WHERE token_hash = $1 FOR UPDATE', [tokenHash])).rows[0];
       // Exit early after a request-lock wait; the final consume check also covers later write waits.

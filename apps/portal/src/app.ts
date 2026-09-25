@@ -205,10 +205,12 @@ export class PortalApp {
         if (route !== this.#route) return;
         if (priorSession.kind === 'anonymous' && this.session.state.kind === 'authenticated') { this.navigate(this.recovery.requestId ? '/recover' : this.pairing.requestId ? '/connect' : '/account'); return; }
       }
-      this.error = result.code === 'link_unavailable' ? 'linkUnavailable'
+      if (result.code === 'password_compromised') this.errors.password = 'passwordCompromised';
+      else this.error = result.code === 'link_unavailable' ? 'linkUnavailable'
         : result.code === 'credentials_invalid' ? 'credentials'
         : result.status === 429 ? 'limited' : result.status === 403 ? 'forbidden'
-        : (result.status === 0 || result.status >= 500) ? (path.endsWith('/complete') ? 'uncertain' : 'unavailable') : 'invalid';
+        : result.status === 0 ? (path.endsWith('/complete') ? 'uncertain' : 'unavailable')
+        : result.status >= 500 ? 'unavailable' : 'invalid';
     }
     this.draw(); if (this.error) this.#focusErrors(); else this.focusHeading();
   }

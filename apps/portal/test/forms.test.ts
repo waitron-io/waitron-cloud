@@ -55,3 +55,44 @@ test('password limits count Unicode and UTF-8 independently; optional organisati
     assert.equal(bodies.at(-1)!.password,'short');
   } finally {await f.close();}
 });
+
+test('compromised password responses identify the password field in both languages', async () => {
+  const f=await startPortalFixture();
+  try {
+    for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark'] as const){
+      const page=await f.browser.newPage({locale,colorScheme,viewport:{width:390,height:812}});page.setDefaultTimeout(3000);
+      try {
+        const copy=locale==='en'?'This password is known to be compromised. Choose a different password.':'Esta contraseña está comprometida. Elige una contraseña diferente.';
+        await page.route('**/api/account/signup/complete',route=>route.fulfill({status:400,json:{error:'password_compromised'}}));
+        await page.goto(`${f.origin}/signup#token=${'a'.repeat(43)}&lang=${locale}`);
+        await page.getByLabel(locale==='en'?'Legal business name':'Nombre legal del negocio').fill('Café Sol');
+        await page.locator('input[name=password]').fill('a compromised café password');
+        await page.getByRole('button',{name:locale==='en'?'Create account':'Crear cuenta',exact:true}).click();
+        await page.locator('wt-form-error-summary').getByText(copy,{exact:true}).waitFor();
+        assert.equal(await page.locator('input[name=password]').getAttribute('aria-invalid'),'true');
+        assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+        await page.screenshot({path:new URL(`../dist/password-compromised-${locale}-${colorScheme}-phone.png`,import.meta.url).pathname,fullPage:true});
+        await page.setViewportSize({width:1280,height:900});
+        assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+        await page.screenshot({path:new URL(`../dist/password-compromised-${locale}-${colorScheme}-desktop.png`,import.meta.url).pathname,fullPage:true});
+      } finally {await page.close();}
+    }
+  } finally {await f.close();}
+});
+
+test('a confirmed screening outage tells both languages to retry instead of claiming an uncertain write', async () => {
+  const f=await startPortalFixture();
+  try {
+    for(const locale of ['en','es'] as const){
+      const page=await f.browser.newPage({locale});page.setDefaultTimeout(3000);
+      try {
+        await page.route('**/api/account/password-reset/complete',route=>route.fulfill({status:503,headers:{'Retry-After':'1'},json:{error:'temporarily_unavailable'}}));
+        await page.goto(`${f.origin}/reset-password#token=${'a'.repeat(43)}&lang=${locale}`);
+        await page.locator('input[name=password]').fill('an acceptable café password');
+        await page.getByRole('button',{name:locale==='en'?'Save new password':'Guardar nueva contraseña',exact:true}).click();
+        await page.getByText(locale==='en'?'This service is temporarily unavailable. Try again.':'El servicio no está disponible temporalmente. Vuelve a intentarlo.',{exact:true}).waitFor();
+        assert.equal(await page.getByText(locale==='en'?'We could not confirm the result. You can try signing in with the password you chose, or deliberately retry this form.':'No hemos podido confirmar el resultado. Puedes intentar iniciar sesión con la contraseña que has elegido o volver a enviar este formulario.',{exact:true}).count(),0);
+      } finally {await page.close();}
+    }
+  } finally {await f.close();}
+});

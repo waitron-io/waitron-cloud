@@ -1,4 +1,6 @@
 import { canonicalIp } from './client-address.ts';
+import { isAbsolute } from 'node:path';
+import { LocalPasswordCorpus, type PasswordScreeningProvider } from '@waitron-cloud/registration';
 export interface AccountHttpConfig { portalOrigin: string; production: boolean; rateKey: string; trustedProxyIps: readonly string[]; }
 export function validateConfig(config: AccountHttpConfig): Readonly<AccountHttpConfig> {
   try {
@@ -15,4 +17,17 @@ export function validateConfig(config: AccountHttpConfig): Readonly<AccountHttpC
 export function accountHttpConfig(env: NodeJS.ProcessEnv): AccountHttpConfig {
   return validateConfig({portalOrigin: env.CLOUD_PORTAL_ORIGIN ?? '', production: env.NODE_ENV === 'production',
     rateKey: env.CLOUD_HTTP_RATE_KEY ?? '', trustedProxyIps: env.CLOUD_HTTP_TRUSTED_PROXY_IPS ? env.CLOUD_HTTP_TRUSTED_PROXY_IPS.split(',').map(value => value.trim()) : []});
+}
+
+export function passwordCorpusPath(env: NodeJS.ProcessEnv): string | undefined {
+  const value = env.CLOUD_COMPROMISED_PASSWORD_CORPUS;
+  if (value === undefined && env.NODE_ENV !== 'production') return undefined;
+  if (typeof value !== 'string' || !value || value.trim() !== value || value.length > 4096
+    || value.includes('\0') || !isAbsolute(value)) throw new Error('Invalid compromised-password configuration');
+  return value;
+}
+
+export async function passwordScreeningFromEnv(env: NodeJS.ProcessEnv): Promise<PasswordScreeningProvider | undefined> {
+  const path = passwordCorpusPath(env);
+  return path ? LocalPasswordCorpus.load(path) : undefined;
 }

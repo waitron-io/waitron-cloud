@@ -42,6 +42,16 @@ transaction. New passwords require at least 15 Unicode characters and at most 10
 UTF-8 bytes. Names have a 200-character limit. Supply a two-letter country code; this
 records a declared country, not verified tax details or a hosting location.
 
+Pass an optional `PasswordScreeningProvider` as the third `SignupStore` constructor
+argument to enforce compromised-password screening. The provider receives only the
+already bounded candidate password and returns `acceptable` or `compromised`.
+`LocalPasswordCorpus.load(path)` is the implemented provider: it compares a local
+lowercase SHA-256 corpus and performs no network request. A compromised result raises
+`password_compromised`; a provider failure or invalid result raises
+`password_screening_unavailable`. Both happen before password hashing or token
+consumption, so the same link remains usable after the person chooses another password
+or the provider recovers.
+
 The token expires after 30 minutes and works once. Resending keeps earlier live links
 valid, but email uniqueness permits only one signup. A lost success reply is recovered
 by signing in with the chosen password through the existing identity API. Replaying
@@ -73,7 +83,8 @@ does not imply platform permission or introduce a full organisation role catalog
 
 ## Password recovery
 
-Use `PasswordRecoveryStore(pool, outbox)` with the same queue. The worker's mailer implements `sendPasswordReset`
+Use `PasswordRecoveryStore(pool, outbox)` with the same queue. Supply the same optional
+`PasswordScreeningProvider` as its third constructor argument. The worker's mailer implements `sendPasswordReset`
 with the same `{ email, token, expiresAt }` shape as signup and `sendPasswordChanged`
 with `{ email }`. `createLocalAccountMailer()` implements the worker's delivery interfaces and
 delivers to Cloud's loopback-only Mailpit. See the [local inbox commands](../../README.md#local-email-inbox).
@@ -97,10 +108,11 @@ background. Public response timing still needs assessment because database paths
 password, consuming the token, ending all that account's sessions and queuing a
 password-change notification in one transaction.
 It does not issue a session. Sign in normally afterwards, including after a lost reply.
-Passwords follow signup's policy. `recovery_invalid` identifies an invalid email or
+Passwords and screening follow signup's policy. `recovery_invalid` identifies an invalid email or
 new password; `reset_unavailable` covers malformed tokens, unknown, expired, consumed
 or invalidated links and accounts
 that are no longer eligible. Account email, verification and permissions do not change.
+Compromised or unavailable screening leaves the password, sessions and reset link unchanged.
 
 Reset links last 30 minutes. A password-hash fingerprint invalidates every earlier link
 after a password change, including resetting to the same password. Resending a request

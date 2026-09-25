@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
 import type { HttpBindings } from '@hono/node-server';
-import { EmailWorker, createLocalAccountMailer, SignupStore } from '@waitron-cloud/registration';
+import { EmailWorker, PasswordRecoveryStore, createLocalAccountMailer, SignupStore, type PasswordScreeningProvider } from '@waitron-cloud/registration';
 import { createAccountApp } from '../src/app.ts';
 import { database } from './fixtures.ts';
 let db: Awaited<ReturnType<typeof database>>;
@@ -140,6 +140,35 @@ test('HTTP signup accepts a 1024-byte password and rejects a longer password wit
   assert.deepEqual(await rejected.json(), {error: 'invalid_input'});
   assert.equal((await db.pool.query('SELECT count(*) FROM cloud_accounts')).rows[0].count, '1');
   assert.equal((await request('/signup/complete', {token: longToken, ...details})).status, 201);
+});
+test('HTTP password screening reports compromised input and retryable provider failure without consuming links', async () => {
+  let mode: 'compromised' | 'unavailable' | 'acceptable' = 'compromised';
+  const screening: PasswordScreeningProvider = {async check() {
+    if (mode === 'unavailable') throw new Error('private provider detail');
+    return mode;
+  }};
+  const screened = createAccountApp({pool: db.pool, outbox: db.outbox, config: config(), passwordScreening: screening});
+  const signup = new SignupStore(db.pool, db.outbox);
+  await signup.request('screened@example.test');
+  let queued = (await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0];
+  let content = db.outbox.open(queued); assert.ok('token' in content);
+  const compromised = await request('/signup/complete', {token: content.token, ...details}, {target: screened});
+  assert.equal(compromised.status, 400);
+  assert.deepEqual(await compromised.json(), {error: 'password_compromised'});
+  mode = 'acceptable';
+  assert.equal((await request('/signup/complete', {token: content.token, ...details}, {target: screened})).status, 201);
+
+  const recovery = new PasswordRecoveryStore(db.pool, db.outbox);
+  await recovery.request('screened@example.test');
+  queued = (await db.pool.query("SELECT * FROM email_outbox WHERE kind='password_reset' ORDER BY created_at DESC LIMIT 1")).rows[0];
+  content = db.outbox.open(queued); assert.ok('token' in content);
+  mode = 'unavailable';
+  const unavailable = await request('/password-reset/complete', {token: content.token, password: 'a replacement café password'}, {target: screened});
+  assert.equal(unavailable.status, 503);
+  assert.deepEqual(await unavailable.json(), {error: 'temporarily_unavailable'});
+  assert.equal(unavailable.headers.get('retry-after'), '1');
+  mode = 'acceptable';
+  assert.equal((await request('/password-reset/complete', {token: content.token, password: 'a replacement café password'}, {target: screened})).status, 200);
 });
 test('CSRF belongs to a live session; duplicate cookies cannot choose a different session', async () => {
   const owner = await account(); const first = cookies(await request('/login', {email: owner.email, password}));
