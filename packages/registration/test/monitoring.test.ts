@@ -12,7 +12,7 @@ let owner:{accountId:string;organisationId:string;legalBusinessId:string},venue:
 const sent:unknown[]=[];
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
- await db.pool.query('TRUNCATE signup_requests,email_outbox,organisations,cloud_accounts CASCADE');sent.length=0;
+ await db.pool.query('TRUNCATE signup_requests,email_outbox,organisations,cloud_accounts,remote_cells CASCADE');sent.length=0;
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('monitor@example.test');
  const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
  owner=await signup.complete(mail.token,{password:'A sufficiently long password',organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
@@ -125,6 +125,7 @@ test('unconfigured and production installations are not scheduled; stale checks 
 });
 
 test('remote evidence records unknown, failure, recovery, certificate expiry and revocation independently of contact',async()=>{
+ await db.pool.query('UPDATE account_alert_preferences SET enabled=false');
  await remoteRoute();await monitor.schedule();await contact(0);await monitor.runOnce();
  assert.deepEqual(await kinds(),['public_probe_stale','staff_probe_stale']);assert.equal((await alerts()).length,0);
 
@@ -164,6 +165,24 @@ test('remote evidence records unknown, failure, recovery, certificate expiry and
  await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[venue.installationId]);await due();await restarted.runOnce();
  assert.deepEqual(await kinds(),[]);assert.equal((await db.pool.query("SELECT count(*) FROM venue_incidents WHERE kind LIKE 'public_%' OR kind LIKE 'staff_%'")).rows[0].count,'5');
  assert.equal((await db.pool.query("SELECT count(*) FROM venue_incidents WHERE (kind LIKE 'public_%' OR kind LIKE 'staff_%') AND status<>'suppressed'")).rows[0].count,'0');
+});
+
+test('remote alerts deduplicate transitions and recheck opt-in, route and revocation before delivery',async()=>{
+ await remoteRoute();await remoteObservation('public','failed');await remoteObservation('staff','healthy');await monitor.schedule();await contact(0);await monitor.runOnce();
+ let rows=await alerts();assert.equal(rows.length,1);let opened=db.outbox.open(rows[0]);assert('issue' in opened);assert.equal(opened.issue,'public_route_failed');assert.equal(opened.state,'open');assert.equal(typeof opened.checkedAt,'string');
+ await due();await monitor.runOnce();assert.equal((await alerts()).length,1);await deliver();assert.equal(sent.length,1);
+ await remoteObservation('public','healthy');await due();await monitor.runOnce();await deliver();assert.equal(sent.length,2);assert.equal((sent[1] as {state:string}).state,'recovered');
+
+ await remoteObservation('public','failed');await due();await monitor.runOnce();await db.pool.query('UPDATE account_alert_preferences SET enabled=false');await deliver();
+ rows=await alerts();assert.equal(rows.length,3);assert.equal(rows[2].status,'cancelled');assert.equal(sent.length,2);
+ await db.pool.query('UPDATE account_alert_preferences SET enabled=true');await remoteObservation('public','healthy');await due();await monitor.runOnce();assert.equal((await alerts()).length,3);
+
+ await remoteObservation('public','failed');await due();await monitor.runOnce();const hostnames=(await db.pool.query('DELETE FROM remote_hostnames WHERE venue_id=$1 RETURNING *',[venue.venueId])).rows,placement=(await db.pool.query('DELETE FROM remote_placements WHERE installation_id=$1 RETURNING *',[venue.installationId])).rows[0];await deliver();
+ rows=await alerts();assert.equal(rows.length,4);assert.equal(rows[3].status,'cancelled');assert.equal(sent.length,2);
+ await db.pool.query('INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)',[placement.venue_id,placement.installation_id,placement.cell_id,placement.address,placement.peer_public_key,placement.port,placement.created_at]);
+ for(const hostname of hostnames)await db.pool.query('INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES($1,$2,$3)',[hostname.hostname,hostname.venue_id,hostname.kind]);
+ await remoteObservation('public','healthy');await due();await monitor.runOnce();await remoteObservation('public','failed');await due();await monitor.runOnce();await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[venue.installationId]);await deliver();
+ rows=await alerts();assert.equal(rows.length,5);assert.equal(rows[4].status,'cancelled');assert.equal(sent.length,2);
 });
 
 test('monitor CLI observes durable incidents and reports status without sending mail',async()=>{
