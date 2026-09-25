@@ -3,11 +3,13 @@ import assert from "node:assert/strict";
 import { request as httpsRequest } from "node:https";
 import { spawn, execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdtemp, readFile, writeFile, rm, realpath } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm, realpath, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   generateKeyPairSync,
+  createHash,
+  createPrivateKey,
   randomBytes,
   randomUUID,
   sign,
@@ -29,18 +31,28 @@ import { BackupCatalogue } from "../packages/backups/src/catalogue.ts";
 import {
   BackupRecovery,
   recoveryPayload,
+  streamRecoveryDigest,
 } from "../packages/backups/src/recovery.ts";
 import { startBackupStorage } from "./backup-storage-fixture.mjs";
-import { probeBackupStream } from "./backup-stream-probe.mjs";
+import { localLitestreamBinary } from "./backup-stream-probe.mjs";
+import { verifyManagedRecoveryReceipt } from "./verify-managed-recovery-receipt.mjs";
+import { DatabaseSync } from "node:sqlite";
 const checkout = process.env.WAITRON_CHECKOUT;
 assert(checkout, "Set WAITRON_CHECKOUT");
 const waitron = resolve(checkout),
   require = createRequire(join(waitron, "apps/server/package.json"));
+const {
+  S3Client,
+  GetObjectCommand,
+  PutObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectCommand,
+} = require("@aws-sdk/client-s3");
 const roots = [],
   children = [],
   objectClients = [],
   checks = [];
-let f, s3;
+let f, s3, litestreamDebug;
 const vault = new BackupKeyVault(randomBytes(32));
 const clients = new Map();
 const objects = (l) => {
@@ -68,7 +80,26 @@ async function root() {
   roots.push(dir);
   return dir;
 }
-async function launch(dir) {
+const shellSingle = (value) => `'${value.replaceAll("'", `'"'"'`)}'`;
+async function trustedLitestream(realBinary) {
+  const wrapper = join(s3.root, "trusted-litestream");
+  litestreamDebug = join(s3.root, "litestream.log");
+  const dockerImage =
+    "node@sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4";
+  const command =
+    process.platform === "darwin"
+      ? `case "$1" in\n  replicate|restore) sed -i.bak 's/127\\.0\\.0\\.1/host.docker.internal/g' "$3" ;;\nesac\nexec docker run --rm -v /var/folders:/var/folders -e WAITRON_STREAM_ACCESS_KEY_ID -e WAITRON_STREAM_SECRET_ACCESS_KEY -e SSL_CERT_FILE=${shellSingle(join(s3.root, "cert.pem"))} ${shellSingle(dockerImage)} ${shellSingle(realBinary)} "$@"`
+      : `exec env SSL_CERT_FILE=${shellSingle(join(s3.root, "cert.pem"))} ${shellSingle(realBinary)} "$@"`;
+  await writeFile(
+    wrapper,
+    `#!/bin/sh\nif [ "$1" = replicate ]; then\n  ${command} >>${shellSingle(litestreamDebug)} 2>&1\nfi\n${command}\n`,
+    { mode: 0o700 },
+  );
+  await chmod(wrapper, 0o700);
+  return wrapper;
+}
+async function launch(dir, extraEnv = {}) {
+  await rm(join(dir, "ready.json"), { force: true });
   const child = spawn(
     process.execPath,
     [
@@ -80,6 +111,7 @@ async function launch(dir) {
       cwd: join(waitron, "apps/server"),
       env: {
         ...process.env,
+        ...extraEnv,
         CLOUD_TEST_ROOT: dir,
         CLOUD_TEST_ORIGIN: f.origin,
         CLOUD_TEST_BACKUP_STATE: "1",
@@ -97,21 +129,166 @@ async function launch(dir) {
     try {
       return {
         ...running,
+        logs: () => output,
         ...JSON.parse(await readFile(join(dir, "ready.json"), "utf8")),
       };
     } catch (e) {
-      if (e.code !== "ENOENT") throw e;
+      if (e.code !== "ENOENT" && !(e instanceof SyntaxError)) throw e;
     }
     await delay(100);
   }
   throw Error("Waitron startup timeout");
 }
+function databaseHead(path) {
+  const db = new DatabaseSync(path, { readOnly: true });
+  try {
+    return createHash("sha256")
+      .update(
+        JSON.stringify({
+          locations: db.prepare("SELECT id,name FROM locations ORDER BY id").all(),
+          nodes: db
+            .prepare("SELECT id,location_id,public_key FROM nodes ORDER BY id")
+            .all(),
+        }),
+      )
+      .digest("hex");
+  } finally {
+    db.close();
+  }
+}
+async function machine(dir, action, body) {
+  const state = JSON.parse(
+      await readFile(join(dir, "cloud-connection.json"), "utf8"),
+    ),
+    pending = {
+      action,
+      operationId: randomUUID(),
+      lease: JSON.stringify(state.lifecycle.lease),
+      body: JSON.stringify(body),
+    },
+    bytes = Buffer.from(
+      JSON.stringify([
+        "waitron-cloud-machine-v1",
+        f.origin,
+        pending.action,
+        state.view.registration.installationId,
+        pending.operationId,
+        Date.now(),
+        pending.lease,
+        pending.body,
+      ]),
+    ),
+    signature = sign(
+      null,
+      bytes,
+      createPrivateKey({
+        key: Buffer.from(state.privateKey, "base64url"),
+        format: "der",
+        type: "pkcs8",
+      }),
+    ).toString("base64url");
+  const response = await fetch(`${f.origin}/api/installations/${action}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ payload: bytes.toString("base64url"), signature }),
+  });
+  if (!response.ok)
+    throw Object.assign(
+      Error(`managed stream ${action} failed: ${response.status} ${await response.text()}`),
+      { status: response.status },
+    );
+  return response.json();
+}
+async function denied(work) {
+  try {
+    await work();
+    return false;
+  } catch (error) {
+    return error?.$metadata?.httpStatusCode === 403;
+  }
+}
+async function prepareWaitronStreamIdentity(dir, nodeId, env) {
+  const child = spawn(
+    process.execPath,
+    [
+      "--import",
+      require.resolve("tsx"),
+      join(import.meta.dirname, "prepare-waitron-stream-fixture.mjs"),
+    ],
+    {
+      cwd: join(waitron, "apps/server"),
+      env: { ...process.env, WAITRON_CHECKOUT: waitron },
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
+  let output = "",
+    error = "";
+  child.stdout.on("data", (value) => (output += value));
+  child.stderr.on("data", (value) => (error = (error + value).slice(-16000)));
+  child.stdin.end(JSON.stringify({ root: dir, nodeId, env }));
+  const code = await new Promise((resolve) => child.once("exit", resolve));
+  assert.equal(code, 0, error);
+  assert.equal(JSON.parse(output.trim().split("\n").at(-1)).prepared, true);
+}
+async function restoreFromKit(target, kit, litestream, migrationsRoot, interrupt = false) {
+  const kitPath = join(target, "recovery-kit.txt");
+  await writeFile(kitPath, kit + "\n", { mode: 0o600 });
+  let bin = litestream;
+  if (interrupt) {
+    bin = join(target, "slow-litestream");
+    await writeFile(bin, "#!/bin/sh\nsleep 30\n", { mode: 0o700 });
+    await chmod(bin, 0o700);
+  }
+  const child = spawn(
+    process.execPath,
+    [
+      "--import",
+      require.resolve("tsx"),
+      join(waitron, "apps/server/src/bin-restore.ts"),
+      "restore",
+      "--from-bucket",
+      kitPath,
+      "--confirm-venue",
+      "73000001K",
+      "--confirm-old-box-gone",
+    ],
+    {
+      cwd: join(waitron, "apps/server"),
+      detached: interrupt,
+      env: {
+        ...process.env,
+        WAITRON_ENV: "preproduction",
+        WAITRON_STATE_DIR: join(target, "state"),
+        WAITRON_VENUE_DIR: join(target, "venue"),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_LITESTREAM_BIN: bin,
+        SSL_CERT_FILE: join(s3.root, "cert.pem"),
+        NODE_EXTRA_CA_CERTS: join(s3.root, "cert.pem"),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  let output = "";
+  for (const stream of [child.stdout, child.stderr])
+    stream.on("data", (chunk) => (output = (output + chunk).slice(-16000)));
+  if (interrupt) {
+    await delay(500);
+    try {
+      process.kill(-child.pid, "SIGTERM");
+    } catch {}
+  }
+  const code = await new Promise((resolve) =>
+    child.once("exit", (exit, signal) => resolve({ exit, signal })),
+  );
+  return { ...code, output };
+}
 async function stop(server) {
-  if (server.child.exitCode !== null) return;
+  if (server.child.exitCode !== null || server.child.signalCode !== null) return;
   server.child.kill("SIGTERM");
   const timer = setTimeout(() => server.child.kill("SIGKILL"), 5000);
   try {
-    assert.equal(await server.done, 0);
+    const code=await server.done;
+    assert(code===0||(code===null&&server.child.signalCode==='SIGTERM'));
   } finally {
     clearTimeout(timer);
   }
@@ -152,7 +329,9 @@ async function worker(dir, command, input) {
 }
 try {
   s3 = await startBackupStorage();
-  f = await startPortalFixture({vault,objects,grant:(location,scope)=>s3.authority.grant(location,scope,s3.ca)});
+  const litestreamPlatform=process.platform==='darwin'?`linux-${execFileSync('docker',['info','--format','{{.Architecture}}'],{encoding:'utf8'}).trim()==='aarch64'?'arm64':'x64'}`:undefined;
+  const litestream=await trustedLitestream(await localLitestreamBinary(s3.root,litestreamPlatform));
+  f = await startPortalFixture({vault,objects,grant:(location,scope)=>s3.authority.grant(location,scope,s3.ca),managedStreams:s3.managedStreams});
   const signup = new SignupStore(f.db.pool, f.db.outbox),
     email = "backups-" + randomUUID() + "@example.test",
     password = "Cloud backup integration password";
@@ -177,21 +356,20 @@ try {
       server = await launch(dir),
       ca = await readFile(join(dir, "tls", "ca.crt"));
     let cookie = "";
-    const post = (path, data = {}) =>
+    const local = (method,path, data) =>
       new Promise((done, fail) => {
-        const body = JSON.stringify(data),
+        const body = data===undefined?'':JSON.stringify(data),
           url = new URL(server.origin + path);
         const req = httpsRequest(
           url,
           {
             ca,
             agent: false,
-            method: "POST",
+            method,
             headers: {
               Origin: server.origin,
               Cookie: cookie,
-              "Content-Type": "application/json",
-              "Content-Length": Buffer.byteLength(body),
+              ...(data===undefined?{}:{"Content-Type":"application/json","Content-Length":Buffer.byteLength(body)}),
             },
           },
           (res) => {
@@ -217,6 +395,7 @@ try {
         );
         req.end(body);
       });
+    const post=(path,data={})=>local('POST',path,data),put=(path,data)=>local('PUT',path,data),get=(path)=>local('GET',path);
     await post("/management-api/session", {
       email: "owner@example.test",
       password: "Local integration password",
@@ -243,6 +422,8 @@ try {
       server,
       registration: paired.registration,
       location,
+      localVenueId:server.localVenueId,
+      post,put,get,
     });
   }
   record(
@@ -347,19 +528,377 @@ try {
     await worker(target,'restore',{recoveryKey:grant.recoveryKey,sourceNodeId:resumed.point.sourceNodeId,modules:resumed.point.modules,expectedVenue:item.captured.venueName});
   }
   record('scheduled production archives survive a process crash after upload, resume byte-for-byte without recapture and restore independently');
-  const streams = [];
-  for (const snapshot of snapshots)
-    streams.push(
-      await probeBackupStream({
-        root: snapshot.venue.root,
-        source: join(snapshot.venue.root, "venue", "venue.db"),
-        storage: s3,
-        location: snapshot.venue.location,
-        key: snapshot.streamKey,
+  const streamViews = [];
+  for (const [index, snapshot] of snapshots.entries()) {
+    const envPath = join(snapshot.venue.root, "fixture-env.json"),
+      saved = JSON.parse(await readFile(envPath, "utf8"));
+    await prepareWaitronStreamIdentity(
+      snapshot.venue.root,
+      snapshot.point.sourceNodeId,
+      saved,
+    );
+    saved.WAITRON_LITESTREAM_BIN = litestream;
+    await writeFile(envPath, JSON.stringify(saved), { mode: 0o600 });
+    await writeFile(
+      join(snapshot.venue.root, "backup.env"),
+      `WAITRON_BACKUP_RECOVERY_KEY=${randomBytes(32).toString("base64url")}\n`,
+      { mode: 0o600 },
+    );
+    snapshot.venue.server = await launch(snapshot.venue.root, {
+      SSL_CERT_FILE: join(s3.root, "cert.pem"),
+      NODE_EXTRA_CA_CERTS: join(s3.root, "cert.pem"),
+    });
+    await snapshot.venue.post("/management-api/session", {
+      email: "owner@example.test",
+      password: "Local integration password",
+    });
+    await delay(500);
+    const source = new DatabaseSync(join(snapshot.venue.root, "venue", "venue.db"), {
+        readOnly: true,
+      }),
+      signer = source
+        .prepare("SELECT public_key FROM nodes WHERE id=?")
+        .get(snapshot.point.sourceNodeId)?.public_key;
+    source.close();
+    assert(signer);
+    const cloudState = JSON.parse(
+        await readFile(join(snapshot.venue.root, "cloud-connection.json"), "utf8"),
+      ),
+      configured = await machine(snapshot.venue.root, "backup-stream-configure", {
+        revision: cloudState.lifecycle.view.revision,
+        localVenueId: snapshot.venue.localVenueId,
+        sourceNodeId: snapshot.point.sourceNodeId,
+        pointerSignerPublicKey: signer,
+      });
+    await writeFile(
+      join(snapshot.venue.root, "backup.env"),
+      `WAITRON_BACKUP_RECOVERY_KEY=${configured.recoveryKey}\n`,
+      { mode: 0o600 },
+    );
+    await snapshot.venue.put("/api/backup/stream", configured.bucket);
+
+    const attachedBy = Date.now() + 10_000;
+    while (Date.now() < attachedBy) {
+      const log = await readFile(litestreamDebug, "utf8").catch(() => "");
+      if (log.includes(`bucket=${configured.bucket.bucket}`)) break;
+      await delay(100);
+    }
+    const db = new DatabaseSync(join(snapshot.venue.root, "venue", "venue.db"));
+    try {
+      db.exec("PRAGMA busy_timeout=5000");
+      assert.equal(
+        db
+          .prepare("UPDATE locations SET name=?")
+          .run(`Cloud Test Venue stream ${index + 1}`).changes,
+        1,
+      );
+    } finally {
+      db.close();
+    }
+
+    let streamStatus;
+    const deadline = Date.now() + 60_000;
+    while (Date.now() < deadline) {
+      streamStatus = await snapshot.venue.get("/api/backup/stream");
+      if (
+        streamStatus.status?.state === "streaming" &&
+        streamStatus.status.lastConfirmedUploadAt
+      )
+        break;
+      await delay(1_000);
+    }
+    const streamLog = await readFile(litestreamDebug, "utf8").catch(
+        () => "(no Litestream output)",
+      ),
+      storeLog = await readFile(join(s3.root, "store.log"), "utf8").catch(
+        () => "(no store output)",
+      );
+    assert.equal(
+      streamStatus?.status?.state,
+      "streaming",
+      `${JSON.stringify(streamStatus)}\n${snapshot.venue.server.logs()}\n${streamLog}\n${storeLog.slice(-16_000)}`,
+    );
+
+    let observed;
+    for (let attempt = 0; attempt < 5 && !observed; attempt++) {
+      try {
+        observed = await machine(snapshot.venue.root, "backup-stream-observe", {});
+      } catch (error) {
+        if (![409, 503].includes(error.status)) throw error;
+      }
+      if (!observed) await delay(2_000);
+    }
+    assert(
+      observed?.recoverableAt,
+      `Managed stream observation timed out: ${JSON.stringify(streamStatus)}`,
+    );
+    const row = (
+        await f.db.pool.query(
+          "SELECT generation FROM backup_managed_streams WHERE venue_id=$1",
+          [snapshot.venue.registration.venueId],
+        )
+      ).rows[0],
+      pointerKey = `${configured.bucket.prefix}venues/${snapshot.venue.localVenueId}/current.json`,
+      pointer = JSON.parse(
+        (
+          await s3.managedStreams.read(
+            `managed:${snapshot.venue.registration.venueId}:reader`,
+            snapshot.venue.location,
+            pointerKey,
+          )
+        ).toString(),
+      );
+    assert.equal(pointer.body.generation, row.generation);
+    assert.equal(pointer.body.writtenAt, observed.recoverableAt);
+    streamViews.push({
+      snapshot,
+      configured,
+      observed,
+      pointer,
+      sourceHead: databaseHead(join(snapshot.venue.root, "venue", "venue.db")),
+    });
+  }
+
+  const first = streamViews[0],
+    writer = new S3Client({
+      endpoint: first.configured.bucket.endpoint,
+      region: first.configured.bucket.region,
+      credentials: {
+        accessKeyId: first.configured.bucket.accessKeyId,
+        secretAccessKey: first.configured.bucket.secretAccessKey,
+      },
+      forcePathStyle: true,
+      maxAttempts: 1,
+      requestHandler: { httpsAgent: s3.agent() },
+    }),
+    readerCredentials = await s3.managedStreams.reader({
+      reference: `managed:${first.snapshot.venue.registration.venueId}:reader`,
+      venueId: first.snapshot.venue.registration.venueId,
+      location: first.snapshot.venue.location,
+      prefix: first.configured.bucket.prefix,
+    }),
+    readerClient = new S3Client({
+      endpoint: first.configured.bucket.endpoint,
+      region: first.configured.bucket.region,
+      credentials: readerCredentials,
+      forcePathStyle: true,
+      maxAttempts: 1,
+      requestHandler: { httpsAgent: s3.agent() },
+    }),
+    other = streamViews[1],
+    otherKey = `${other.configured.bucket.prefix}venues/${other.snapshot.venue.localVenueId}/current.json`,
+    otherGeneration = other.pointer.body.generation;
+  const isolation = {
+    crossVenueReadDenied: await denied(() =>
+      writer.send(
+        new GetObjectCommand({
+          Bucket: other.snapshot.venue.location.bucket,
+          Key: otherKey,
+        }),
+      ),
+    ),
+    crossVenueWriteDenied: await denied(() =>
+      writer.send(
+        new PutObjectCommand({
+          Bucket: other.snapshot.venue.location.bucket,
+          Key: `${other.configured.bucket.prefix}crossed`,
+          Body: "forbidden",
+        }),
+      ),
+    ),
+    crossVenueListDenied: await denied(() =>
+      writer.send(
+        new ListObjectsV2Command({
+          Bucket: other.snapshot.venue.location.bucket,
+          Prefix: other.configured.bucket.prefix,
+        }),
+      ),
+    ),
+    readerWriteDenied: await denied(() =>
+      readerClient.send(
+        new PutObjectCommand({
+          Bucket: first.snapshot.venue.location.bucket,
+          Key: `${first.configured.bucket.prefix}reader-write`,
+          Body: "forbidden",
+        }),
+      ),
+    ),
+    otherVenueGenerationUnchanged: false,
+  };
+  writer.destroy();
+  readerClient.destroy();
+  const otherAfter = JSON.parse(
+    (
+      await s3.managedStreams.read(
+        `managed:${other.snapshot.venue.registration.venueId}:reader`,
+        other.snapshot.venue.location,
+        otherKey,
+      )
+    ).toString(),
+  );
+  isolation.otherVenueGenerationUnchanged =
+    otherAfter.body.generation === otherGeneration;
+  assert(Object.values(isolation).every(Boolean));
+  record(
+    "static SeaweedFS writer and reader identities stay inside one venue prefix; crossed reads, writes and listings are denied",
+  );
+
+  for (const entry of streamViews) await stop(entry.snapshot.venue.server);
+  const continuousEntry = streamViews[0],
+    continuousKey = generateKeyPairSync("ed25519"),
+    continuousId = randomUUID();
+  await recovery.start(session.token, session.csrfToken, {
+    id: continuousId,
+    source: "continuous",
+    venueId: continuousEntry.snapshot.venue.registration.venueId,
+    mode: "failure",
+    targetPublicKey: continuousKey.publicKey
+      .export({ format: "der", type: "spki" })
+      .toString("base64url"),
+    oldServerUnavailable: true,
+    acceptDataLoss: true,
+  });
+  const continuousDigest = streamRecoveryDigest(continuousEntry.pointer.body.generation),
+    continuousProof = (action) => {
+      const bytes = recoveryPayload(
+        f.origin,
+        continuousId,
+        action,
+        action === "info" ? "" : continuousDigest,
+        Date.now(),
+      );
+      return {
+        payload: bytes.toString("base64url"),
+        signature: sign(null, bytes, continuousKey.privateKey).toString("base64url"),
+      };
+    },
+    targetPost = async (action) => {
+      const response = await fetch(`${f.origin}/api/recovery/${action}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: continuousId, ...continuousProof(action) }),
+      });
+      assert.equal(response.status, 200, `${action}: ${await response.clone().text()}`);
+      return response.json();
+    },
+    info = await targetPost("info");
+  assert.equal(info.source.generation, undefined);
+  assert.equal(info.source.sourceDigest, continuousDigest);
+  const continuousAccess = await targetPost("read");
+  assert.match(continuousAccess.recoveryKit, /^WAITRON-RECOVERY-KIT-1:/);
+
+  const continuousTarget = await root(),
+    interrupted = await restoreFromKit(
+      continuousTarget,
+      continuousAccess.recoveryKit,
+      litestream,
+      join(continuousEntry.snapshot.venue.root, "migrations"),
+      true,
+    );
+  assert(interrupted.signal || interrupted.exit !== 0);
+  await assert.rejects(readFile(join(continuousTarget, "venue", "venue.db")));
+  const retried = await restoreFromKit(
+      continuousTarget,
+      continuousAccess.recoveryKit,
+      litestream,
+      join(continuousEntry.snapshot.venue.root, "migrations"),
+    ),
+    restoredHead = databaseHead(join(continuousTarget, "venue", "venue.db"));
+  assert.equal(retried.exit, 0, retried.output);
+  assert.equal(restoredHead, continuousEntry.sourceHead);
+  await recovery.target(continuousId, "restored", continuousProof("restored"));
+  await recovery.close(session.token, session.csrfToken, continuousId);
+  record(
+    "the latest Cloud-observed generation cold-restored through Waitron after an interrupted first attempt, with the exact source database head",
+  );
+
+  const fallbackEntry = streamViews[1],
+    admin = new S3Client({
+      endpoint: fallbackEntry.snapshot.venue.location.endpoint,
+      region: fallbackEntry.snapshot.venue.location.region,
+      credentials: s3.admin,
+      forcePathStyle: true,
+      maxAttempts: 1,
+      requestHandler: { httpsAgent: s3.agent() },
+    }),
+    listed = await admin.send(
+      new ListObjectsV2Command({
+        Bucket: fallbackEntry.snapshot.venue.location.bucket,
+        Prefix: fallbackEntry.configured.bucket.prefix,
       }),
     );
+  for (const object of listed.Contents ?? [])
+    if (object.Key)
+      await admin.send(
+        new DeleteObjectCommand({
+          Bucket: fallbackEntry.snapshot.venue.location.bucket,
+          Key: object.Key,
+        }),
+      );
+  admin.destroy();
+
+  const fallbackKey = generateKeyPairSync("ed25519"),
+    fallbackId = randomUUID();
+  await recovery.start(session.token, session.csrfToken, {
+    id: fallbackId,
+    source: "snapshot",
+    pointId: fallbackEntry.snapshot.point.id,
+    mode: "failure",
+    targetPublicKey: fallbackKey.publicKey
+      .export({ format: "der", type: "spki" })
+      .toString("base64url"),
+    oldServerUnavailable: true,
+    acceptDataLoss: true,
+  });
+  const fallbackProof = (action) => {
+      const bytes = recoveryPayload(
+        f.origin,
+        fallbackId,
+        action,
+        fallbackEntry.snapshot.point.digest,
+        Date.now(),
+      );
+      return {
+        payload: bytes.toString("base64url"),
+        signature: sign(null, bytes, fallbackKey.privateKey).toString("base64url"),
+      };
+    },
+    fallbackAccess = await recovery.target(fallbackId, "read", fallbackProof("read")),
+    fallbackGrant = await s3.authority.grant(
+      fallbackAccess.location,
+      {
+        kind: "restore",
+        bucket: fallbackAccess.location.bucket,
+        scope: fallbackAccess.point.objectKey,
+      },
+      s3.ca,
+    ),
+    fallbackReader = new BackupObjects(
+      fallbackAccess.location,
+      fallbackGrant.credentials,
+      s3.ca,
+    ),
+    fallbackTarget = await root();
+  try {
+    await writeFile(
+      join(fallbackTarget, "input.backup.enc"),
+      await fallbackReader.read(fallbackAccess.point.objectKey),
+      { mode: 0o600 },
+    );
+  } finally {
+    fallbackReader.close();
+  }
+  const fallbackRestored = await worker(fallbackTarget, "restore", {
+    recoveryKey: fallbackAccess.keys.recoveryKey,
+    sourceNodeId: fallbackAccess.point.sourceNodeId,
+    modules: fallbackAccess.point.modules,
+    expectedVenue: fallbackEntry.snapshot.captured.venueName,
+  });
+  assert(fallbackRestored.integrityOk);
+  await recovery.target(fallbackId, "restored", fallbackProof("restored"));
+  await recovery.close(session.token, session.csrfToken, fallbackId);
   record(
-    "Litestream restored committed writes from both actual Waitron databases using encrypted scoped storage; removed streams refused restore",
+    "deleting one venue continuous source leaves the other venue intact and its explicit verified-snapshot fallback restores independently",
   );
   const item = snapshots[0];
   const remote=new RemoteAccessStore(f.db.pool),cell=randomUUID();
@@ -528,28 +1067,32 @@ try {
   await assert.rejects(captureClient(guided,'reserve',{stateSubdir:'state',id:fresh.id}));
   record('Cloud owner revocation refuses subsequent Waitron upload-credential renewal');
   const result = {
+    version:1,
     cloudHead: execFileSync("git", ["rev-parse", "HEAD"], {
-      encoding: "utf8",
-    }).trim(),
-    waitronHead: execFileSync("git", ["rev-parse", "HEAD"], {
-      cwd: waitron,
       encoding: "utf8",
     }).trim(),
     cloudDirty:
       execFileSync("git", ["status", "--porcelain"], {
         encoding: "utf8",
       }).trim() !== "",
-    streams,
+    waitronHead: execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: waitron,
+      encoding: "utf8",
+    }).trim(),
     waitronDirty:
       execFileSync("git", ["status", "--porcelain"], {
         cwd: waitron,
         encoding: "utf8",
       }).trim() !== "",
-    checks,
-    continuousServerRestore:
-      "not exercised; replacement activation is outside this capture proof",
-    activation: "not performed",
+    phases:['provider-isolation','streams-observed','continuous-recovery','interrupted-retry','snapshot-fallback'],
+    venues:streamViews.map(entry=>({venueId:entry.snapshot.venue.registration.venueId,sourceHead:entry.sourceHead,observedGeneration:entry.pointer.body.generation,recoverableAt:entry.observed.recoverableAt,checkedAt:entry.observed.checkedAt})),
+    isolation,
+    continuous:{venueId:continuousEntry.snapshot.venue.registration.venueId,sourceHead:continuousEntry.sourceHead,restoredHead,approvedGeneration:continuousEntry.pointer.body.generation,restoredGeneration:continuousEntry.pointer.body.generation,recoverableAt:continuousEntry.observed.recoverableAt,pointerWrittenAt:continuousEntry.pointer.body.writtenAt,retry:{interrupted:true,cleanTarget:true,succeeded:true}},
+    snapshotFallback:{venueId:fallbackEntry.snapshot.venue.registration.venueId,pointId:fallbackEntry.snapshot.point.id,continuousDeleted:true,restoreSucceeded:true},
+    activation:'not-performed',
+    checks:['real-seaweedfs','real-waitron','no-production-resources'],
   };
+  verifyManagedRecoveryReceipt(result);
   if (process.env.BACKUP_RECEIPT)
     await writeFile(
       process.env.BACKUP_RECEIPT,

@@ -1,7 +1,8 @@
 # Prove managed backups locally
 
-Use this runner to pair two disposable Waitron servers, retain encrypted SQLite
-snapshots and restore them through Waitron's own validation and module hooks.
+Use this runner to pair two disposable Waitron servers, stream their live SQLite
+databases, retain encrypted snapshots and restore both sources through Waitron's own
+recovery code.
 It creates no AWS resources and requires no live customer credentials.
 
 ## Run the proof
@@ -40,7 +41,8 @@ without modifying your system trust settings. This needs Docker Desktop's
 
 - Capture credentials can write only their incoming object. They cannot read it,
   remove retained snapshots or cross a venue boundary. Restore credentials are read
-  only. Stream credentials are restricted to one generation prefix. The provider
+  only. Each static local stream writer and reader is restricted to one venue prefix.
+  Crossed reads, writes and listings fail, and a reader cannot write. The provider
   refuses changed roles, expired identities and expired storage credentials.
 - The provider requires the correct SSE-C key for stream objects. Snapshots use
   Waitron's encrypted archive format and independent immutable retained objects.
@@ -58,9 +60,14 @@ without modifying your system trust settings. This needs Docker Desktop's
   snapshot worker, exits after upload and resumes from the same encrypted file in a
   fresh process. No new archive is created; the published monthly snapshot restores
   independently, and another restart before the next due time stays idle.
-- Litestream 0.5.17 restores a committed change from each real venue database through
-  encrypted, scoped storage. The runner removes both stream prefixes and checks that
-  continuous restore now fails. An independently retained snapshot still restores.
+- Litestream 0.5.17 streams a committed change from each real venue database through
+  encrypted, scoped storage. Cloud reads and verifies each signed Waitron pointer, then
+  records its pointer time as the recoverable time. After both source servers stop, the
+  runner approves one exact generation and feeds its recovery kit to Waitron's
+  `restore --from-bucket` command. It interrupts the first attempt, checks that no target
+  database remains, retries, and compares a deterministic database head with the source.
+- The runner deletes the other venue's continuous prefix without changing its neighbour.
+  Explicit snapshot fallback then restores that venue through Waitron's archive worker.
 - An owner can recover an older-key snapshot after rotation with both original servers
   stopped. A wrong recovery key leaves the replacement database absent. No recovery
   grant activates trading, changes routing, retires an installation or re-enrols a node.
@@ -84,8 +91,8 @@ The replacement check exports the new gateway manifest; it does not install a
 WireGuard interface or staff HTTPS certificate on the appliance. Use the existing
 [operator remote-access procedure](local-remote-access.md) for that local setup.
 Cloud registration does not change Waitron's trading or fiscal activation rules.
-Production replacement, planned final-write handover and complete continuous recovery
-remain separate work.
+Production replacement and planned final-write handover remain separate work. The local
+proof restores continuous data but deliberately records `activation: not-performed`.
 
 The JSON receipt records exact repository heads, dirty flags, checks and stream
 restore timings. A dirty receipt is useful during development; use clean heads for
@@ -102,8 +109,9 @@ are encrypted and authenticated against their venue and version. Losing this mas
 key loses access to those backups. Rotation retains old versions; deletion is absent.
 
 The catalogue separates upload completion from a trusted worker's verified restore
-of the exact digest. Owner-authorised catalogue reads return capture times and a
-currently verified snapshot default; continuous recovery remains unavailable. Status
+of the exact digest. Owner-authorised catalogue reads return snapshot capture times and
+signed continuous recovery evidence. The portal recommends a fresh continuous source
+and keeps verified snapshots as an explicit fallback. Status
 contains no secret key values. Recovery targets prove possession of a fresh bound
 Ed25519 key that has never been used by another recovery operation. Owner removal, account disabling, closure and expiry stop new access;
 already-issued storage credentials remain usable until their 15-minute expiry.
@@ -125,25 +133,28 @@ bounded worker concurrency. Callers own and close their object clients.
 Start with **Restore from Waitron Cloud** on the replacement server's setup screen.
 Open its Cloud link, sign in as an owner and enter the eight-digit code shown on the
 replacement. The link identifies the request; it deliberately excludes the code.
-Choose your organisation and venue, then a verified snapshot. The latest verified
-snapshot is selected initially. Check its capture time before accepting the loss of
-later changes. Confirm that the old server and any surviving server with newer data
-are stopped or permanently unavailable.
+Choose your organisation and venue. A fresh continuous copy is selected initially
+because it normally loses fewer changes. You can instead choose a verified snapshot
+when you need an archive point or the continuous source is missing. Check the displayed
+recoverable or capture time before accepting the loss of later changes. Confirm that
+the old server and any surviving server with newer data are stopped or permanently
+unavailable.
 
-After you authorise that snapshot, return to the replacement. Refresh its status,
-check the approved capture time, then confirm the local restore. The server downloads
-one encrypted object, verifies its size and digest, and passes it through Waitron's
-existing archive validation and restart process. Neither browser receives a recovery
-key or storage credentials. The account page's authorised status means download
-permission; it does not mean that restore has completed or trading is enabled.
+After you authorise the source, return to the replacement. Refresh its status, check
+the approved recovery time, then confirm the local restore. A snapshot downloads one
+encrypted object and passes it through Waitron's archive validation. A continuous
+restore receives one frozen recovery kit and follows Waitron's signed live pointer.
+Neither browser receives a recovery key or storage credentials. The account page's
+authorised status means download permission. It does not mean that restore has
+completed or trading is enabled.
 
 An unapproved request lasts fifteen minutes and permits five incorrect codes. An
-approved operation lasts one hour and stays bound to its original snapshot and
-replacement key. If an approval reply is lost, the page checks the saved request
+approved operation lasts one hour and stays bound to its original snapshot or
+continuous generation and its replacement key. If an approval reply is lost, the page checks the saved request
 instead of creating another operation. If you reload the page, reopen the link from
 the replacement and enter its code again.
 
-You can close snapshot access from the account page. Closing it, losing owner access,
+You can close recovery access from the account page. Closing it, losing owner access,
 or disabling the account stops new downloads. Storage credentials already issued
 can remain valid for up to fifteen minutes, and data already downloaded cannot be
 recalled. A replacement rechecks its approval after download before staging the restore.
@@ -151,18 +162,17 @@ recalled. A replacement rechecks its approval after download before staging the 
 The [recovery contract](superpowers/specs/2026-09-24-customer-recovery-design.md)
 describes the signed machine requests. Cloud approval never fences the old server,
 changes routing or enrols the replacement. Complete the replacement's local checks
-before trading. Continuous complete-server recovery and planned handover still depend
-on the Waitron contract described below.
+before trading. Production activation and planned handover still depend on the Waitron
+contract described below.
 
 ## Still required for the complete milestone
 
-Waitron's SQLite slice-2 sealed state, stream supervisor and cold-restore activation
-contract remain prerequisites for a complete continuous **server** restore. Restoring
-SQLite alone does not recover all required files or prove permission to trade.
-Recheck those landed interfaces before wiring the production adapter. Planned
-replacement still needs final-write/quiescence evidence, fresh installation enrolment,
-retirement of the old credentials and explicit Waitron activation. Recording a
-`planned` mode or an owner's confirmation does not establish those conditions.
+The local runner now exercises Waitron's stream supervisor, signed pointer, sealed
+recovery kit and cold database restore. It does not activate the target or prove that a
+planned source stopped at a final write. Production replacement still needs
+final-write and quiescence evidence, fresh installation enrolment, retirement of the
+old credentials and explicit Waitron activation. Recording a `planned` mode or an
+owner's confirmation does not establish those conditions.
 
 The installation-authenticated capture/renewal adapter and Waitron client are implemented.
 Scheduled capture with durable local archive spooling is implemented for test installations.
@@ -170,13 +180,16 @@ Customer recovery now has a matching-code account flow for verified test snapsho
 The local worker schedules verification, retention
 and abandoned-upload cleanup; the customer catalogue is paginated. Define cancellation/deletion,
 operator master-key backup and rotation, and production verifier isolation. Run the
-same provider tests against AWS Spain before any deployment; this local result does
-not establish AWS or Google behavior. Continuous backup during gateway replacement
-and a complete continuous replacement remain unproved.
+same provider tests against the selected Spain-region store before any deployment;
+this local result does not establish AWS or Google behavior. Production still needs
+dynamic writer and reader credential delivery, rotation and revocation; verified
+provider prefix and conditional-write semantics; measured continuous retention;
+monitoring and scheduling; and the planned final-write handover. Continuous backup
+during gateway replacement and target activation remain unproved.
 
 ## Run background maintenance locally
 
-Apply migrations through `012_backup_jobs.sql`. Configure `DATABASE_URL`, a persistent
+Apply migrations through `018_managed_continuous_recovery.sql`. Configure `DATABASE_URL`, a persistent
 64-hex-character `CLOUD_BACKUP_MASTER_KEY`, and `WAITRON_CHECKOUT` pointing to your
 installed Waitron checkout. Storage uses `CLOUD_BACKUP_ENDPOINT` (verified HTTPS),
 `CLOUD_BACKUP_REGION`, `CLOUD_BACKUP_ACCESS_KEY` and `CLOUD_BACKUP_SECRET_KEY`.

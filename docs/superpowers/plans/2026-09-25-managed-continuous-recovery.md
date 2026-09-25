@@ -100,10 +100,10 @@
 - Consumes: Task 3 public catalogue and recovery views.
 - Produces: latest-continuous recommendation, explicit snapshot fallback and source-aware approved status.
 
-- [ ] Write failing controller/browser assertions for English and Spanish, continuous default, explicit snapshot fallback, checked/recoverable times, uncertain writes, stale reloads and secret/tenant exclusion.
-- [ ] Implement strict response validators and controller selection state. Approval sends either `source:continuous,venueId` or `source:snapshot,pointId`.
-- [ ] Render concise confirmations and status at desktop and 390px in light/dark themes. Preserve current replacement flow and accessibility roles.
-- [ ] Run focused portal controller/browser tests, build the portal and inspect screenshots. Commit the green unit with sign-off.
+- [x] Write failing controller/browser assertions for English and Spanish, continuous default, explicit snapshot fallback, checked/recoverable times, uncertain writes, stale reloads and secret/tenant exclusion.
+- [x] Implement strict response validators and controller selection state. Approval sends either `source:continuous,venueId` or `source:snapshot,pointId`.
+- [x] Render concise confirmations and status at desktop and 390px in light/dark themes. Preserve current replacement flow and accessibility roles.
+- [x] Run focused portal controller/browser tests, build the portal and inspect screenshots. Commit the green unit with sign-off.
 
 ### Task 5: Prove the real two-venue recovery loop and document limits
 
@@ -120,11 +120,11 @@
 - Consumes: Tasks 1 through 4 and Waitron main's existing stream settings, pointer, sealed-state and `restore --from-bucket` interfaces.
 - Produces: a schema-versioned machine-readable receipt and exact remaining production prerequisites.
 
-- [ ] Add static local provider identities restricted to one venue stream prefix for writer and reader roles. Prove cross-venue reads/writes/listing fail.
-- [ ] Extend the real proof to configure both Waitron streams, observe signed pointers, stop originals, recover one venue from the latest generation, interrupt/retry, and keep the other isolated. Delete one continuous source and prove verified-snapshot fallback.
-- [ ] Add a verifier that rejects missing phases, mismatched heads, invented/retrograde recovery times, cross-venue success, absent retry evidence or any activation claim. Run mutation controls against its critical guards.
-- [ ] Update user-facing local instructions, contract status and backlog with measured evidence and the exact production credential delivery/rotation, provider, retention, monitoring and planned-handover work.
-- [ ] Run affected package typechecks and focused suites. Commit with sign-off.
+- [x] Add static local provider identities restricted to one venue stream prefix for writer and reader roles. Prove cross-venue reads/writes/listing fail.
+- [x] Extend the real proof to configure both Waitron streams, observe signed pointers, stop originals, recover one venue from the latest generation, interrupt/retry, and keep the other isolated. Delete one continuous source and prove verified-snapshot fallback.
+- [x] Add a verifier that rejects missing phases, mismatched heads, invented/retrograde recovery times, cross-venue success, absent retry evidence or any activation claim. Run mutation controls against its critical guards.
+- [x] Update user-facing local instructions, contract status and backlog with measured evidence and the exact production credential delivery/rotation, provider, retention, monitoring and planned-handover work.
+- [x] Run affected package typechecks and focused suites. Commit with sign-off.
 
 ### Task 6: Finish, land and verify the merge
 

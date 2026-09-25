@@ -119,7 +119,7 @@ test('HTTP requires two proofs, matching owner code and explicit confirmation; r
  const post=(path:string,body:unknown,owner=false,headers:Record<string,string>={},ip='192.0.2.234')=>app.request(origin+path,{method:'POST',headers:{'content-type':'application/json',...(owner?{origin,cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken}:{}),...headers},body:JSON.stringify(body)},{incoming:{socket:{remoteAddress:ip}}});
  const owner=(action:string,extra:Record<string,string>={})=>post('/api/account/recovery/'+action,{requestId:f.t.id,code:f.t.code,...extra},true);
  assert.equal((await post('/api/replacement/prepare',f.envelope('prepare'),false,{origin})).status,403);
- assert.equal((await post('/api/replacement/prepare',f.envelope('prepare'))).status,200);
+ const prepared=await post('/api/replacement/prepare',f.envelope('prepare'));assert.equal(prepared.status,200);assert(!('source' in await prepared.json()));
  const inspected=await owner('inspect');assert.equal(inspected.status,200);assert.equal((await inspected.json()).replacement.state,'awaiting_owner');
  assert.equal((await owner('replace',{oldInstallationId:f.installed.installationId,oldServerUnavailable:'true',confirmReplacement:'false'})).status,400);
  const body={requestId:f.t.id,code:f.t.code,oldInstallationId:f.installed.installationId,oldServerUnavailable:'true',confirmReplacement:'true'};
