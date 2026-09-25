@@ -60,6 +60,7 @@ test('restored replacement preserves venue and history, retires old authority, a
  const states=(await db.pool.query('SELECT * FROM installation_services WHERE installation_id=$1',[result.registration.installationId])).rows;assert.equal(states.length,3);assert(states.every(s=>s.state!=='ready'));
  await db.pool.query("UPDATE backup_recoveries SET expires_at=clock_timestamp()-interval '1 day',status='closed' WHERE id=$1",[f.t.id]);
  assert.deepEqual(await f.store.machine('status',f.envelope('status')),result);
+ assert.deepEqual(await f.store.machine('prepare',f.envelope('prepare')),result);
  await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[result.registration.installationId]);
  await assert.rejects(f.store.machine('status',f.envelope('status')),/revoked/);
 });
