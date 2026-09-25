@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { after, before, beforeEach, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
 import { RegistrationStore, type ConnectionBinding } from '../src/index.ts';
 import { migrate } from '../src/migrate.ts';
+import { MonitorWorker } from '../src/monitoring.ts';
+import { EmailOutbox } from '../src/email-outbox.ts';
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('Use pnpm test, or supply TEST_DATABASE_URL for a disposable PostgreSQL database');
@@ -361,5 +363,59 @@ test('unexpected database uniqueness errors remain distinguishable from registra
     assert.equal(await count('installations'), 0);
   } finally {
     await pool.query('DROP TRIGGER inject_collision ON installation_services; DROP FUNCTION inject_collision()');
+  }
+});
+
+for (const differentKey of [false, true]) test(`pairing ${differentKey ? 'conflict' : 'retry'} allows a concurrent monitor incident to commit`, async () => {
+  const initial = await approved();
+  const installed = await store.complete(initial);
+  const request = await approved({ ...initial, operationId: randomUUID(),
+    ...(differentKey ? {installationKey: `key:${randomUUID()}`} : {}) });
+  await pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'", [installed.installationId]);
+  await pool.query("UPDATE installations SET last_contact_at=clock_timestamp()-interval '16 minutes' WHERE id=$1", [installed.installationId]);
+  const monitor = new MonitorWorker(pool, new EmailOutbox({activeKeyId:'test',keys:{test:randomBytes(32).toString('hex')}}));
+  await monitor.schedule();
+  // Pause the real worker before its incident foreign-key check, with its installation lock held.
+  await pool.query(`CREATE TABLE incident_gate (id integer PRIMARY KEY); INSERT INTO incident_gate VALUES(1);
+    CREATE FUNCTION pause_incident() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+      PERFORM id FROM incident_gate WHERE id=1 FOR UPDATE; RETURN NEW;
+    END $$;
+    CREATE TRIGGER pause_incident BEFORE INSERT ON venue_incidents FOR EACH ROW EXECUTE FUNCTION pause_incident()`);
+  const blocker = await pool.connect();
+  let scan: Promise<boolean> | undefined, completion: Promise<unknown> | undefined;
+  const waitForLock = async (application: string, query: string) => {
+    for (let n=0; n<100; n++) {
+      const result=await admin.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE $2", [application,query]);
+      if(result.rowCount)return;
+      await delay(20);
+    }
+    assert.fail(`operation did not reach expected lock: ${query}`);
+  };
+  try {
+    await blocker.query('BEGIN');
+    await blocker.query('SELECT id FROM incident_gate WHERE id=1 FOR UPDATE');
+    scan=monitor.runOnce(); void scan.catch(()=>{});
+    await waitForLock(`${schema}_first`, 'INSERT INTO venue_incidents%');
+    completion=other.complete(request); void completion.catch(()=>{});
+    await waitForLock(`${schema}_second`, 'SELECT * FROM installations WHERE venue_id%');
+    await blocker.query('COMMIT');
+    const [observed, paired]=await Promise.allSettled([scan,completion]);
+    assert.equal(observed.status,'fulfilled', observed.status==='rejected' ? String(observed.reason) : '');
+    assert.equal(observed.status==='fulfilled' && observed.value,true);
+    if(differentKey) {
+      assert.equal(paired.status,'rejected');
+      assert.equal(paired.status==='rejected' && paired.reason.code,'registration_conflict');
+    } else {
+      assert.equal(paired.status,'fulfilled', paired.status==='rejected' ? String(paired.reason) : '');
+      assert.deepEqual(paired.status==='fulfilled' && paired.value,installed);
+    }
+    const incidents=await pool.query('SELECT kind,status,revision FROM venue_incidents WHERE venue_id=$1',[installed.venueId]);
+    assert.deepEqual(incidents.rows,[{kind:'disconnected',status:'open',revision:1}]);
+    assert.equal(await count('installations'),1);
+    assert.equal((await store.configuration(initial.installationKey)).installationId,installed.installationId);
+  } finally {
+    await blocker.query('ROLLBACK');blocker.release();
+    await Promise.allSettled([scan,completion]);
+    await pool.query('DROP TRIGGER pause_incident ON venue_incidents; DROP FUNCTION pause_incident(); DROP TABLE incident_gate');
   }
 });

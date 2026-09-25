@@ -193,8 +193,9 @@ export class RegistrationStore {
         await client.query(`INSERT INTO venues (id, organisation_id, legal_business_id, local_venue_id, environment)
           VALUES ($1, $2, $3, $4, $5) ON CONFLICT (environment, local_venue_id) DO NOTHING`,
         [randomUUID(), binding.organisationId, binding.legalBusinessId, binding.localVenueId, binding.environment]);
+        // Serialize venue linking without blocking incident foreign-key checks while awaiting the installation.
         const { rows: venues } = await client.query(`SELECT * FROM venues
-          WHERE environment = $1 AND local_venue_id = $2 FOR UPDATE`, [binding.environment, binding.localVenueId]);
+          WHERE environment = $1 AND local_venue_id = $2 FOR NO KEY UPDATE`, [binding.environment, binding.localVenueId]);
         const venue = venues[0];
         if (!venue || venue.organisation_id !== binding.organisationId || venue.legal_business_id !== binding.legalBusinessId) {
           throw new RegistrationError('registration_conflict');
