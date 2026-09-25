@@ -42,10 +42,10 @@
 - Consumes: `BackupKeyVault`, `backup_locations`, current installation/service rows and a provider adapter that returns opaque writer/reader references plus credentials.
 - Produces: `ManagedStreams.configure(installationId, revision, input)`, `ManagedStreams.observe(installationId, revision)` and `ManagedStreams.recovery(venueId, frozenRevision)`.
 
-- [ ] Write PostgreSQL tests for exact configuration retry, cross-venue scope, malformed signer/source IDs, provider failure, signed observation, crossed signature, older evidence, concurrent workers and revocation/replacement during the provider wait. Run them and confirm the missing migration/module failures.
-- [ ] Add migration 018 with one stream row per venue, current source installation/revision, local venue/source node/signer, prefix, opaque credential references and nullable verified evidence. Extend `backup_recoveries` with a coherent snapshot-or-continuous source shape while preserving existing rows.
-- [ ] Implement strict pointer decoding and Ed25519 verification over Waitron's canonical pointer message. Implement configure/observe/recovery with installation and revision fences before and after external waits.
-- [ ] Run `node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test test/managed-streams.test.ts` and registration migration tests. Commit the green unit with sign-off.
+- [x] Write PostgreSQL tests for exact configuration retry, cross-venue scope, malformed signer/source IDs, provider failure, signed observation, crossed signature, older evidence, concurrent workers and revocation/replacement during the provider wait. Run them and confirm the missing migration/module failures.
+- [x] Add migration 018 with one stream row per venue, current source installation/revision, local venue/source node/signer, prefix, opaque credential references and nullable verified evidence. Extend `backup_recoveries` with a coherent snapshot-or-continuous source shape while preserving existing rows.
+- [x] Implement strict pointer decoding and Ed25519 verification over Waitron's canonical pointer message. Implement configure/observe/recovery with installation and revision fences before and after external waits.
+- [x] Run `node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test test/managed-streams.test.ts` and registration migration tests. Commit the green unit with sign-off.
 
 ### Task 2: Add authenticated machine configuration and observation
 

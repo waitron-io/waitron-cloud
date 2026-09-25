@@ -20,6 +20,7 @@
     "./retention": "./src/retention.ts",
     "./captures": "./src/captures.ts",
     "./capture-config": "./src/capture-config.ts",
+    "./managed-streams": "./src/managed-streams.ts",
     "./recovery": "./src/recovery.ts",
     "./recovery-request": "./src/recovery-request.ts",
     "./replacement": "./src/replacement.ts"
