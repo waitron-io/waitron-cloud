@@ -165,6 +165,14 @@ const en = {
   logoutFailed:'We could not sign you out. Try again.', loginLink:'Already have an account?', signupLink:'New to Waitron Cloud?',
   forbidden:'Your request could not be verified. Reload this page and try again.',
   signedOut:'You have signed out.',
+  passkeys:'Passkeys', passkeyIntro:'Use a passkey to sign in without typing your email or password. Your password and email recovery remain available.',
+  passkeySignIn:'Sign in with a passkey', passkeyAdd:'Add a passkey', passkeyRemove:'Remove passkey',
+  passkeyCurrentPassword:'Current password', passkeyCreated:'Added', passkeyNone:'You have not added a passkey yet.',
+  passkeyUnsupported:'Passkeys are unavailable in this browser. You can still sign in with your password.',
+  passkeyCancelled:'The passkey prompt was cancelled. Nothing changed.', passkeyAdded:'Your passkey was added.', passkeyRemoved:'Your passkey was removed.',
+  passkeyPasswordInvalid:'Your current password is incorrect.', passkeyUnavailable:'Passkeys are temporarily unavailable. Try again.',
+  passkeySignInUncertain:'We could not confirm the passkey sign-in. We will check your session before you retry.',
+  passkeyChangeUncertain:'We could not confirm the passkey change. Review the refreshed list before trying again.',
 };
 export type Copy = typeof en;
 const es: Copy = {
@@ -325,5 +333,13 @@ const es: Copy = {
   logoutFailed:'No hemos podido cerrar tu sesión. Vuelve a intentarlo.', loginLink:'¿Ya tienes una cuenta?', signupLink:'¿Es tu primera visita a Waitron Cloud?',
   forbidden:'No hemos podido verificar la solicitud. Recarga esta página y vuelve a intentarlo.',
   signedOut:'Has cerrado sesión.',
+  passkeys:'Llaves de acceso', passkeyIntro:'Usa una llave de acceso para iniciar sesión sin escribir tu correo ni tu contraseña. Tu contraseña y la recuperación por correo siguen disponibles.',
+  passkeySignIn:'Iniciar sesión con una llave de acceso', passkeyAdd:'Añadir una llave de acceso', passkeyRemove:'Eliminar llave de acceso',
+  passkeyCurrentPassword:'Contraseña actual', passkeyCreated:'Añadida', passkeyNone:'Todavía no has añadido ninguna llave de acceso.',
+  passkeyUnsupported:'Las llaves de acceso no están disponibles en este navegador. Puedes seguir iniciando sesión con tu contraseña.',
+  passkeyCancelled:'Has cancelado la solicitud de la llave de acceso. No ha cambiado nada.', passkeyAdded:'Tu llave de acceso se ha añadido.', passkeyRemoved:'Tu llave de acceso se ha eliminado.',
+  passkeyPasswordInvalid:'Tu contraseña actual no es correcta.', passkeyUnavailable:'Las llaves de acceso no están disponibles temporalmente. Vuelve a intentarlo.',
+  passkeySignInUncertain:'No hemos podido confirmar el inicio con la llave de acceso. Comprobaremos tu sesión antes de que vuelvas a intentarlo.',
+  passkeyChangeUncertain:'No hemos podido confirmar el cambio. Revisa la lista actualizada antes de volver a intentarlo.',
 };
 export const translations: Record<Locale, Copy> = {en, es};

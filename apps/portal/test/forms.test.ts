@@ -113,3 +113,18 @@ test('an unrecognised gateway failure leaves a completion result uncertain', asy
     } finally {await page.close();}
   } finally {await f.close();}
 });
+
+test('password sign-in remains available beside a separate passkey action in both languages', async () => {
+  const f=await startPortalFixture();
+  try {
+    for(const locale of ['en','es'] as const){
+      const page=await f.browser.newPage({locale});page.setDefaultTimeout(3000);
+      await page.goto(`${f.origin}/login#lang=${locale}`);
+      await page.getByLabel(locale==='en'?'Email':'Correo electrónico').waitFor();
+      await page.locator('input[name=password]').waitFor();
+      await page.getByRole('button',{name:locale==='en'?'Sign in':'Inicia sesión',exact:true}).waitFor();
+      await page.getByRole('button',{name:locale==='en'?'Sign in with a passkey':'Iniciar sesión con una llave de acceso',exact:true}).waitFor();
+      await page.close();
+    }
+  } finally {await f.close();}
+});
