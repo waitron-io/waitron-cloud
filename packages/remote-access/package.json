@@ -21,6 +21,7 @@
     "./placement": "./src/placement.ts",
     "./manifest": "./src/manifest.ts",
     "./probe-targets": "./src/probe-targets.ts",
+    "./probe-observations": "./src/probe-observations.ts",
     "./probe": "./src/probe.ts",
     "./probe-runner": "./src/probe-runner.ts"
   }
