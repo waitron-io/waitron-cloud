@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { accountMail } from '../src/account-mail.ts';
+import { createLocalAccountMailer } from '../src/local-mailer.ts';
 const token = 'a'.repeat(43);
 for (const locale of ['en', 'es'] as const) for (const kind of ['verification', 'password_reset', 'password_changed'] as const) {
   test(`${kind} renders ${locale} mail with private fragment links`, () => {
@@ -24,4 +25,14 @@ test('unsupported and inherited locale names are rejected before rendering any m
     for (const kind of ['verification','password_reset','password_changed'] as const)
       assert.throws(()=>accountMail(new URL('https://cloud.example'),kind,
         {email:'owner@example.test',token,expiresAt:'2030-01-01T12:00:00Z',locale} as never),/Invalid account email/);
+});
+test('direct local-mailer rendering failures are asynchronous promise rejections', async () => {
+  const mailer = createLocalAccountMailer();
+  let sending: ReturnType<typeof mailer.sendVerification> | undefined;
+  assert.doesNotThrow(() => {
+    sending = mailer.sendVerification({
+      email: 'owner@example.test', token, expiresAt: '2030-01-01T12:00:00Z', locale: 'fr',
+    } as never);
+  });
+  await assert.rejects(sending!, /Invalid account email/);
 });

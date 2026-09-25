@@ -253,8 +253,8 @@ mobile notifications separately.
   The current exact routes and query restrictions follow the approved portal plan.
   Set the retirement point for legacy query-token links after every deployed sender
   generates fragments and all remaining query tokens have expired; retain compatibility
-  until then. Check whether direct development-mailer callers need rendering errors
-  converted to rejected promises; the worker already contains synchronous failures.
+  until then. Direct development-mailer rendering failures now become rejected promises,
+  matching the mailer interface; a regression reproduces the former synchronous throw.
   The PostgreSQL email queue now saves signup/reset messages and password-change
   notifications with their state changes. It encrypts recipients and tokens, retries
   at most eight times, expires links, fences late worker acknowledgements, and purges
@@ -282,9 +282,12 @@ mobile notifications separately.
   already-blocked IP cannot spend another person's address allowance. Admitted
   attempts across IPs can still exhaust an address allowance; assess targeted
   lockout mitigation with the public ingress policy before launch.
-  Test follow-up: add independent HTTP assertions for the 1024-byte password limit
-  and early declared Content-Length refusal. The underlying guards work; current
-  tests independently prove the streamed-body bound but not these early checks.
+  HTTP tests now accept a password at exactly 1024 UTF-8 bytes, reject 1025 bytes
+  without consuming the signup token, and reject a declared body over 16 KiB before
+  an incomplete client finishes sending it. Deleting both independent password guards
+  breaks the boundary test; deleting only the HTTP guard remains masked by the store's
+  defence-in-depth check. Deleting the declared-length guard breaks its early-refusal test;
+  the separate streamed-body bound remains covered.
   Review the inherited password cost for deployment and apply the source map's
   security-fix process to both repositories. Further reuse should take code and
   behavioural tests from `pre-sqlite-migration`, pinned to
@@ -340,10 +343,11 @@ mobile notifications separately.
   inserts. PostgreSQL race tests run the real monitor worker while a new pairing
   request waits on its installation lock: matching keys retain the existing link,
   and different keys return a registration conflict while the incident commits.
-  Cloud test follow-up: the review removed the venue lock and these 63 tests still
-  passed. Probe concurrent operations sharing an installation key and add a
-  regression test if a failing case is reproduced; the proposed race on a new
-  venue remains unverified.
+  A real PostgreSQL probe of two approved operations sharing one key and a genuinely
+  new venue completed with one shared link, so the proposed race was not reproduced
+  and gained no speculative regression. The adjacent existing-but-unlinked venue path
+  did expose a coverage gap: a new test pauses the first installation insert, and
+  deleting the venue lock reproduces a `registration_conflict` in the second operation.
 - **Provisioning and placement.** Use Kubernetes for orchestration when needed;
   cluster provisioning and manifests are deferred until there is a service to deploy
   and a concrete operational need. Country/provider/cell registry, repeatable resource

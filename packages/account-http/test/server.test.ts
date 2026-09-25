@@ -43,6 +43,18 @@ test('real host bounds streamed bodies and recovers without queuing mail', async
     assert.equal(await queued(), 0); assert.equal((await send(running.port).result).status, 401);
   } finally {await running.close();}
 });
+test('a declared oversized body is refused before the client finishes sending it', async () => {
+  const running = await host();
+  const pending = send(running.port, '/signup/request', '{', {'content-length': '16385'}, false);
+  try {
+    const started = performance.now();
+    const response = await pending.result;
+    assert.equal(response.status, 413);
+    assert.ok(performance.now() - started < 2000, 'response waited for the incomplete request body');
+    assert.equal(await queued(), 0);
+    assert.equal((await send(running.port).result).status, 401);
+  } finally {pending.abort(); await running.close();}
+});
 test('stalled bodies expire, aborted clients release slots, and admission is bounded', async () => {
   const running = await host(); const pending: ReturnType<typeof send>[] = [];
   try {

@@ -24,9 +24,9 @@ export function createLocalAccountMailer(options: {port?: number; portalOrigin?:
     // SMTP errors can contain recipients or secrets; expose only a fixed diagnostic.
     catch { throw new Error('Local email delivery failed'); }
   };
-  const action = (kind: AccountMailKind, message: AccountEmail | AccountNotification | ServiceAlert) => {
+  const action = async (kind: AccountMailKind, message: AccountEmail | AccountNotification | ServiceAlert) => {
     const rendered = accountMail(origin, kind, message);
-    return send(message.email, rendered.subject, rendered.text);
+    await send(message.email, rendered.subject, rendered.text);
   };
   return {
     sendVerification: message => action('verification', message),
