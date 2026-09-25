@@ -5,6 +5,10 @@ import axe from 'axe-core';
 import {RegistrationStore,SignupStore,MonitorWorker} from '@waitron-cloud/registration';
 import {startPortalFixture,mailFor} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
+async function mailCount(email:string,subject:string){
+ const list=await(await fetch(`${process.env.MAILPIT_TEST_URL}/api/v1/messages`)).json() as {messages:{Subject:string;To:{Address:string}[]}[]};
+ return list.messages.filter(message=>message.Subject===subject&&message.To.some(to=>to.Address===email)).length;
+}
 for(const locale of ['en','es'] as const)test(`${locale} owner manages service alerts and sees current monitoring evidence`,async()=>{
  const f=await startPortalFixture();try{
   const email=`monitor-${randomUUID()}@example.test`,password='A long enough owner password',signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email);const mail=f.db.outbox.open((await f.db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
@@ -42,14 +46,23 @@ for(const locale of ['en','es'] as const)test(`${locale} owner manages service a
   await observeRemote('healthy');await f.db.pool.query('UPDATE venue_monitors SET next_check_at=clock_timestamp()');await monitor.runOnce();await page.getByRole('button',{name:c.refreshStatus,exact:true}).click();
   const publicHealthy=locale==='en'?'The public website passed its latest external check.':'El sitio público superó la última comprobación externa.';
   await page.getByText(publicHealthy,{exact:true}).waitFor();await page.getByText(staffHealthy,{exact:true}).waitFor();
+  const openingSubject=locale==='en'?'Waitron Cloud: a venue needs attention':'Waitron Cloud: un local necesita atención',recoverySubject=locale==='en'?'Waitron Cloud: venue check recovered':'Waitron Cloud: comprobación recuperada';
+  await observeRemote('failed');await f.db.pool.query('UPDATE venue_monitors SET next_check_at=clock_timestamp()');await monitor.runOnce();await f.drainMail();
+  const remoteOpening=await mailFor(email,openingSubject);assert(remoteOpening.includes(publicFailed));assert(remoteOpening.includes(locale==='en'?'Last external check':'Última comprobación externa'));for(const secret of ['timeout','AA:BB','public.monitor.example.test','10.77.55.2'])assert(!remoteOpening.includes(secret));
+  await observeRemote('healthy');await f.db.pool.query('UPDATE venue_monitors SET next_check_at=clock_timestamp()');await monitor.runOnce();await f.drainMail();
+  const remoteRecovery=await mailFor(email,recoverySubject);assert(remoteRecovery.includes(locale==='en'?'Public website':'Sitio público'));assert(remoteRecovery.includes(locale==='en'?'Last external check':'Última comprobación externa'));
+  const beforeOptOut=await mailCount(email,openingSubject);await observeRemote('failed');await f.db.pool.query('UPDATE venue_monitors SET next_check_at=clock_timestamp()');await monitor.runOnce();await checkbox.uncheck();await page.getByRole('button',{name:save,exact:true}).click();await page.getByText(saved,{exact:true}).waitFor();await f.drainMail();assert.equal(await mailCount(email,openingSubject),beforeOptOut);
+  await checkbox.check();await page.getByRole('button',{name:save,exact:true}).click();await page.getByText(saved,{exact:true}).waitFor();await observeRemote('healthy');await f.db.pool.query('UPDATE venue_monitors SET next_check_at=clock_timestamp()');await monitor.runOnce();
   await f.db.pool.query("UPDATE venue_monitors SET checked_at=clock_timestamp()-interval '6 minutes'");await page.getByRole('button',{name:c.refreshStatus,exact:true}).click();await page.getByText(locale==='en'?'Monitoring status is unknown. Refresh later to check for new observations.':'El estado de la supervisión es desconocido. Actualiza más tarde para ver nuevas comprobaciones.',{exact:true}).waitFor();
   assert(await page.getByText(issue,{exact:true}).isVisible());
   const observe=async(seconds:number)=>{await f.db.pool.query("UPDATE installations SET last_contact_at=clock_timestamp()-$1*interval '1 second'",[seconds]);await f.db.pool.query('UPDATE venue_monitors SET next_check_at=clock_timestamp()');await monitor.runOnce();};
   const emailLanguage=async(value:string)=>{await page.getByLabel(language,{exact:true}).selectOption(value);await page.getByRole('button',{name:save,exact:true}).click();await page.getByText(saved,{exact:true}).waitFor();};
   await observe(0);await emailLanguage(locale==='en'?'es':'en');await observe(901);await emailLanguage(locale);await f.drainMail();
-  const opening=await mailFor(email,locale==='en'?'Waitron Cloud: a venue needs attention':'Waitron Cloud: un local necesita atención');assert(opening.includes(v.venueId));assert(opening.includes(f.origin+'/account'));assert(opening.includes(issue));assert(!opening.includes('token='));
-  await observe(0);await f.drainMail();const recovery=await mailFor(email,locale==='en'?'Waitron Cloud: venue check recovered':'Waitron Cloud: comprobación recuperada');assert(recovery.includes(v.venueId));
+  const opening=await mailFor(email,openingSubject);assert(opening.includes(v.venueId));assert(opening.includes(f.origin+'/account'));assert(!opening.includes('token='));
+  await observe(0);await f.drainMail();const recovery=await mailFor(email,recoverySubject);assert(recovery.includes(v.venueId));
   await page.getByRole('button',{name:c.refreshStatus,exact:true}).click();await page.getByText(issue,{exact:true}).waitFor({state:'detached'});await page.getByText(certificateWarning,{exact:true}).waitFor();
-  await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await window.axe.run(document)).violations),[]);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:new URL(`../dist/monitoring-${locale}.png`,import.meta.url).pathname,fullPage:true});
+  await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await window.axe.run(document)).violations),[]);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:new URL(`../dist/monitoring-${locale}-phone.png`,import.meta.url).pathname,fullPage:true});
+  await page.setViewportSize({width:1280,height:900});assert.deepEqual(await page.evaluate(async()=>(await window.axe.run(document)).violations),[]);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:new URL(`../dist/monitoring-${locale}-desktop.png`,import.meta.url).pathname,fullPage:true});
+  const beforeRevocation=await mailCount(email,openingSubject);await observeRemote('failed');await f.db.pool.query('UPDATE venue_monitors SET next_check_at=clock_timestamp()');await monitor.runOnce();await f.db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[v.installationId]);await f.drainMail();assert.equal(await mailCount(email,openingSubject),beforeRevocation);
  }finally{await f.close();}
 });

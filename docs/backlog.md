@@ -13,9 +13,9 @@ The account venue overview groups one organisation at a time, shows business con
 connection/service state and separate latest/verified snapshot capture times. Verified
 snapshots older than 48 hours are labelled out of date. Owners can browse paginated snapshot history, verification and retention details, including
 protected copies. The local durable worker now verifies real Waitron restores, retries failures and
-cleans expired snapshots and abandoned captures. The local monitor now persists contact
-and snapshot incidents, shows stale checks as unknown, and queues opt-in bilingual
-alerts with permission rechecks.
+cleans expired snapshots and abandoned captures. The local monitor now persists contact,
+snapshot and remote-route incidents, shows stale checks as unknown, and queues opt-in
+bilingual alerts with permission and current-route rechecks.
 Live provider/sender configuration and public deployment remain open.
 No public cloud service is deployed. This file owns cloud product and platform work;
 Waitron's backlog owns the on-prem application and its side of the integration.
@@ -222,7 +222,11 @@ mobile notifications separately.
   and declaration checking uses `skipLibCheck: false`. Local installs use GitHub CLI
   authentication; CI uses its package-read token. The portal now uses these controls for signup, login and recovery. Read the first weekly mutation scores
   after the split in Waitron; the extraction verifies the wiring and coverage, not the
-  new full mutation scores.
+  new full mutation scores. On unchanged Cloud `main` at `2305f70`, the Chromium
+  accessibility check reports a 3.61:1 light-theme contrast ratio for the shared primary
+  button against the required 4.5:1. Dark theme passes. Fix and release the token in the
+  private `@waitron-io/ui-core` package, then repin Cloud; reproduce with
+  `node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test --test-timeout=120000 test/accessibility.test.ts`.
 - **Identity and organisations.** Password helpers and management-session behaviours
   have been adapted with a pinned source map, PostgreSQL tests, hashed session/CSRF
   tokens, passive polling and separate platform permission checks. Session-backed
@@ -372,9 +376,12 @@ mobile notifications separately.
   late results after hostname changes, replacement or revocation, treats stale evidence as
   unknown, and records deduplicated route-failure, certificate-expiry and recovery
   transitions independently from installation contact. The local two-venue gateway proof
-  exercises both paths. Next: show this evidence in the portal and add opt-in bilingual
-  alerts; then add incident/delivery-history retention, deployment-scale scheduling and recipient fan-out
-  measurements, escalation/quiet periods and rollout pause criteria.
+  exercises both paths. The portal now shows separate redacted public/staff evidence and
+  certificate warnings in English and Spanish. Opted-in owners receive bilingual remote
+  incident and recovery messages; delivery rechecks route authority, and opt-out or
+  revocation suppresses queued mail. Next: add incident/delivery-history retention,
+  deployment-scale scheduling and recipient fan-out measurements, escalation/quiet
+  periods and rollout pause criteria.
 - **Usage metering.** Attribute lookups/API calls, reports, storage, transfers,
   messages and compute to customers and services. Show consumption and allowances,
   track provider costs and define limits. Any billing records need durable capture,
