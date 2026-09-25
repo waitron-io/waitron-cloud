@@ -158,6 +158,15 @@ is one minute. Login and email-request responses wait at least 300 ms after body
 reading; this reduces simple timing differences but does not guarantee equal timing
 under contention. Deployment load and timing checks remain required.
 
+A bounded local contention run on an 18-core Apple M5 Pro admitted exactly 10 of 12
+same-IP logins and exactly 30 of 31 same-address logins across two API instances. The
+last request used the correct password and was still refused, which demonstrates the
+targeted lockout trade-off rather than a quota bypass. Across two isolated runs, eight
+concurrent password hashes took 23 to 52 ms each. Known and unknown failed-login
+responses took 314 to 327 ms and 315 to 326 ms respectively, so both stayed above
+the response floor. These are local measurements, not deployment capacity or timing
+promises.
+
 Rate identities are HMAC digests, a keyed hash of the scope and IP, email or token.
 Use one persistent `CLOUD_HTTP_RATE_KEY` across all instances. Changing it creates
 new allowances immediately; coordinate changes across instances and do not treat
@@ -196,6 +205,8 @@ Waitron pairing and shared UI extraction, which are now unblocked by SQLite.
 ```sh
 pnpm typecheck
 node scripts/test-postgres.mjs --filter @waitron-cloud/account-http test
+ABUSE_RECEIPT=/tmp/cloud-abuse-boundaries.json pnpm test:abuse
+node scripts/verify-cloud-abuse-receipt.mjs /tmp/cloud-abuse-boundaries.json
 pnpm test
 ```
 
@@ -206,6 +217,11 @@ cookie attributes and use explicit Cookie headers. The portal suite adds real br
 cookie/session journeys over loopback HTTP, phone layouts, both themes and accessibility.
 Production TLS ingress and browser cookie behavior at the deployed HTTPS origin still
 need deployment verification.
+
+The abuse run stays on disposable local services. It records the repository state,
+hardware, quota outcomes and timing ranges in JSON. The verifier rejects incomplete
+receipts and impossible relationships. Do not point this command at a public or
+customer service.
 
 ## Pair a venue
 
@@ -252,6 +268,14 @@ Unsigned start attempts also consume their IP allowance. Venues sharing an inter
 address share that limit; an untrusted forwarding proxy can collapse customers into
 one address. A one-second status poll uses half the overall per-IP minute allowance,
 so prefer explicit refresh or a slower interval.
+
+The local abuse experiment starts 12 distinct venues concurrently behind one address.
+Exactly 10 start and two receive 429, including when two API instances race. Five
+guesses using unrelated request UUIDs leave the real request's failure count at zero.
+Five concurrent wrong codes against a known UUID serialize to exactly five and close
+that request. This prevents unlimited code guesses but lets someone who learns a
+pending UUID deny that one pairing. Keep the UUID out of logs and choose ingress or
+request-reissue mitigation before changing the five-attempt rule.
 
 Invalid signatures return 401 `invalid_proof`; missing permission returns 403
 `permission_denied`. Unavailable requests, mismatched bindings, absent approval and
@@ -365,6 +389,13 @@ and `restored` carry operation proof. New requests allow ten calls per fifteen m
 per IP and proven key. Other machine calls share thirty per minute per IP and proven
 key; owner calls allow thirty per minute per account. The global IP allowance also applies.
 Execution rechecks authority after any provider wait. Expiry uses the database clock.
+
+Recovery has the same measured shared-address and known-ID trade-offs as pairing.
+Twelve concurrent fresh-key starts behind one address admit 10 and refuse two. Random
+UUID guesses do not spend a real request's code budget, while five concurrent wrong
+codes against its known UUID close it and refuse the subsequent correct code. Issue a
+fresh recovery request after that refusal; do not raise the guess allowance without a
+deployment threat assessment.
 
 See the [wire contract](../../docs/superpowers/specs/2026-09-24-customer-recovery-design.md)
 and [local walkthrough](../../docs/local-backups.md#recover-a-test-venue-without-copying-keys).

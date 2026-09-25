@@ -281,7 +281,15 @@ mobile notifications separately.
   Login now checks its IP allowance before charging the email allowance, so an
   already-blocked IP cannot spend another person's address allowance. Admitted
   attempts across IPs can still exhaust an address allowance; assess targeted
-  lockout mitigation with the public ingress policy before launch.
+  lockout mitigation with the public ingress policy before launch. A bounded local
+  two-instance contention run admitted exactly 10 of 12 same-IP logins and 30 of 31
+  same-address logins; the final correct-password attempt was refused. Across two
+  isolated runs, eight concurrent scrypt hashes took 23 to 52 ms each on an 18-core
+  Apple M5 Pro, while known and unknown failures remained above the 300 ms response floor.
+  The counters did not overshoot, and eight concurrent password-reset requests queued
+  one message under the shared cooldown. Keep these as local measurements, not
+  deployment promises. Targeted address-lockout mitigation still needs the ingress
+  policy rather than a blind quota change.
   HTTP tests now accept a password at exactly 1024 UTF-8 bytes, reject 1025 bytes
   without consuming the signup token, and reject a declared body over 16 KiB before
   an incomplete client finishes sending it. Deleting both independent password guards
@@ -348,6 +356,12 @@ mobile notifications separately.
   and gained no speculative regression. The adjacent existing-but-unlinked venue path
   did expose a coverage gap: a new test pauses the first installation insert, and
   deleting the venue lock reproduces a `registration_conflict` in the second operation.
+  A separate bounded abuse run admitted exactly 10 of 12 concurrent new pairings behind
+  one shared address across two API instances. Five guesses with unrelated UUIDs did not
+  spend the target request's failure budget; five concurrent wrong codes against its
+  known UUID serialized to five and closed it. That known-ID denial remains a deliberate
+  guess-limit trade-off. Keep request UUIDs out of logs and choose ingress or reissue
+  mitigation before changing the five-attempt rule.
 - **Provisioning and placement.** Use Kubernetes for orchestration when needed;
   cluster provisioning and manifests are deferred until there is a service to deploy
   and a concrete operational need. Country/provider/cell registry, repeatable resource
@@ -445,7 +459,12 @@ mobile notifications separately.
   recovery path discards old backup settings through a persisted managed-restore marker.
   The local proof now exercises the actual cold-restore entry point, including its module hooks.
   Before production, define recovery-request/result retention, account-deletion handling and
-  audit exports. Measure request-ID denial of service and review code-hash disclosure risks.
+  audit exports. A bounded two-instance run admitted exactly 10 of 12 concurrent fresh-key
+  recovery starts behind one address. Guesses using unrelated UUIDs left the target's
+  budget untouched; five concurrent wrong codes against a known UUID serialized to five,
+  closed the pending request and refused its later correct code. Treat that availability
+  cost as an ingress/request-reissue decision, not a reason to raise the guess allowance
+  blindly. Review code-hash disclosure risks.
   Keep completion reports separate from activation, and test deployment-scale transfer
   interruption, expiry and cancellation against the selected provider. Restore verification is
   separate from upload freshness; production workers still need enforceable resource and
