@@ -29,6 +29,7 @@ export interface ManagedStreamInput {
   sourceNodeId: string;
   pointerSignerPublicKey: string;
 }
+export type ManagedStreamFence = (client: PoolClient) => Promise<void>;
 
 export interface ManagedStreamConfiguration {
   venueId: string;
@@ -297,11 +298,13 @@ export class ManagedStreams {
     installationId: string,
     revision: number,
     input: ManagedStreamInput,
+    fence?: ManagedStreamFence,
   ): Promise<ManagedStreamConfiguration> {
     if (!Number.isSafeInteger(revision) || revision < 0) backupFail("invalid_stream_configuration");
     validInput(input);
     const initial = await transaction(this.#pool, async (client) => {
       const install = await lockedInstallation(client, installationId);
+      await fence?.(client);
       const existing = await streamRow(client, install.venue_id);
       if (existing && !sameInput(existing, revision, input)) backupFail("conflict");
       if (!existing && install.configuration_revision !== revision) backupFail("conflict");
@@ -316,6 +319,7 @@ export class ManagedStreams {
     validProvision(provision);
     return transaction(this.#pool, async (client) => {
       const install = await lockedInstallation(client, installationId);
+      await fence?.(client);
       let row = await streamRow(client, install.venue_id, true);
       if (row) {
         if (
@@ -368,10 +372,11 @@ export class ManagedStreams {
     });
   }
 
-  async observe(installationId: string, revision: number): Promise<ManagedStreamRecovery> {
+  async observe(installationId: string, revision: number, fence?: ManagedStreamFence): Promise<ManagedStreamRecovery> {
     if (!Number.isSafeInteger(revision) || revision < 0) backupFail("conflict");
     const initial = await transaction(this.#pool, async (client) => {
       const install = await lockedInstallation(client, installationId);
+      await fence?.(client);
       const row = await streamRow(client, install.venue_id);
       if (!row || row.installation_id !== installationId || row.configuration_revision !== revision)
         backupFail("conflict");
@@ -386,6 +391,7 @@ export class ManagedStreams {
     const observed = pointer(bytes, initial);
     return transaction(this.#pool, async (client) => {
       const install = await lockedInstallation(client, installationId);
+      await fence?.(client);
       const row = await streamRow(client, install.venue_id, true);
       if (
         !row ||

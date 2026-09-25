@@ -61,10 +61,10 @@
 - Consumes: Task 1 `ManagedStreams` and the existing machine proof/lease format.
 - Produces: POST `/api/installations/backup-stream-configure` and `/api/installations/backup-stream-observe`.
 
-- [ ] Write failing HTTP tests for exact signed requests, lease/revision mismatch, unknown fields, Origin refusal, changed retry, response redaction, provider waits and per-IP/per-installation rate limits.
-- [ ] Add the two machine actions to the proof allowlist and route. Validate only the documented configure body or `{}` observe body. Reuse the existing public installation errors and no-store response handling.
-- [ ] Extend capture runtime options with an optional managed-stream adapter. Absence returns the normal temporary-unavailable response; it never widens snapshot grants.
-- [ ] Run focused account HTTP, installation-proof and configuration tests. Commit the green unit with sign-off.
+- [x] Write failing HTTP tests for exact signed requests, lease/revision mismatch, unknown fields, Origin refusal, changed retry, response redaction, provider waits and per-IP/per-installation rate limits.
+- [x] Add the two machine actions to the proof allowlist and route. Validate only the documented configure body or `{}` observe body. Reuse the existing public installation errors and no-store response handling.
+- [x] Extend capture runtime options with an optional managed-stream adapter. Absence returns the normal temporary-unavailable response; it never widens snapshot grants.
+- [x] Run focused account HTTP, installation-proof and configuration tests. Commit the green unit with sign-off.
 
 ### Task 3: Select continuous recovery and deliver a frozen kit
 
