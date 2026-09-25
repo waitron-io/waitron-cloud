@@ -332,10 +332,14 @@ mobile notifications separately.
   launch and retain explicit local business confirmation.
   Terminated database connections and lost replies have regression tests; actual
   database failover and recovery under deployment credentials still need proof.
-  Before production, reproduce ordinary pairing racing a monitor incident insert for
-  an already registered venue; its venue lock may conflict with the incident foreign-key
-  check. Replacement has a tested compatible lock, but the ordinary-pairing case has
-  not been verified.
+  Pairing and replacement now use venue locks compatible with monitoring's incident
+  inserts. PostgreSQL race tests run the real monitor worker while a new pairing
+  request waits on its installation lock: matching keys retain the existing link,
+  and different keys return a registration conflict while the incident commits.
+  Cloud test follow-up: the review removed the venue lock and these 63 tests still
+  passed. Probe concurrent operations sharing an installation key and add a
+  regression test if a failing case is reproduced; the proposed race on a new
+  venue remains unverified.
 - **Provisioning and placement.** Use Kubernetes for orchestration when needed;
   cluster provisioning and manifests are deferred until there is a service to deploy
   and a concrete operational need. Country/provider/cell registry, repeatable resource
