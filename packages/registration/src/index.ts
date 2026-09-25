@@ -199,7 +199,7 @@ export class RegistrationStore {
         if (!venue || venue.organisation_id !== binding.organisationId || venue.legal_business_id !== binding.legalBusinessId) {
           throw new RegistrationError('registration_conflict');
         }
-        const { rows: installations } = await client.query('SELECT * FROM installations WHERE venue_id = $1 FOR UPDATE', [venue.id]);
+        const { rows: installations } = await client.query('SELECT * FROM installations WHERE venue_id = $1 AND superseded_by IS NULL FOR UPDATE', [venue.id]);
         let installation = installations[0];
         if (installation) {
           if (installation.public_key !== binding.installationKey) throw new RegistrationError('registration_conflict');
@@ -222,7 +222,7 @@ export class RegistrationStore {
         return result;
       });
     } catch (error) {
-      if (isUniqueViolation(error, ['installations_public_key_key', 'installations_venue_id_key'])) {
+      if (isUniqueViolation(error, ['installations_public_key_key', 'installations_current_venue_key'])) {
         throw new RegistrationError('registration_conflict');
       }
       throw error;

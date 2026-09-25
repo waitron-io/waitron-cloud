@@ -19,7 +19,7 @@ export class MonitorWorker {
    const monitor=(await client.query('SELECT * FROM venue_monitors WHERE next_check_at<=clock_timestamp() ORDER BY next_check_at,venue_id LIMIT 1 FOR UPDATE SKIP LOCKED')).rows[0];
    if(!monitor)return false;retryVenue=monitor.venue_id;
    // Lifecycle configuration and revocation take this installation lock before changing services.
-   const installation=(await client.query(`SELECT i.*,v.environment FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.venue_id=$1 FOR SHARE OF i SKIP LOCKED`,[monitor.venue_id])).rows[0];
+   const installation=(await client.query(`SELECT i.*,v.environment FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.venue_id=$1 AND i.superseded_by IS NULL FOR SHARE OF i SKIP LOCKED`,[monitor.venue_id])).rows[0];
    if(!installation){
     await client.query("UPDATE venue_monitors SET next_check_at=clock_timestamp()+interval '30 seconds' WHERE venue_id=$1",[monitor.venue_id]);
     return true;

@@ -1,6 +1,6 @@
 # Waitron Cloud backlog
 
-Updated 2026-09-24. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-09-25. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
@@ -76,9 +76,8 @@ These remain local integrations. The customer snapshot catalogue and matching-co
 recovery approval screens are implemented for verified test snapshots. The replacement
 setup downloads and validates the selected archive, stages it and runs Waitron cold restore
 without copying keys or inheriting the old backup destination;
-installation-authenticated capture delivery, upload-credential renewal and scheduled snapshots with durable local retries are implemented locally; complete replacement activation remains open. The pairing runner still uses synthetic observations; only the
-separate remote runner proves a tunnel. Waitron owns the remaining SQLite slice-2 sealed-state row, stream supervisor and
-cold-restore contract. Recheck those interfaces before wiring complete continuous recovery. The full two-venue milestone remains unproved.
+installation-authenticated capture delivery, upload-credential renewal and scheduled snapshots with durable local retries are implemented locally. Owner-confirmed replacement now imports fresh Cloud credentials, retains installation history and updates remote placement. Production replacement, planned final-write handover, automatic tunnel/certificate installation and activation remain open. The pairing runner still uses synthetic observations; only the
+separate remote runner proves a tunnel. Waitron now has sealed-state, stream supervision and cold-restore interfaces. Recheck their current contracts before wiring complete continuous recovery. The full two-venue milestone remains unproved.
 The [registration plan](registration-implementation-plan.md) now sequences persistence,
 identity reuse, the bound approval exchange and a two-installation connection proof.
 The normal connection journey and PostgreSQL for Cloud management data are agreed.
@@ -120,7 +119,7 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   experience; cloud copies and offline booking acceptance are future capabilities.
 - Complete self-service recovery onto a replacement server without routine staff assistance.
   The local verified-snapshot path now has a matching-code owner approval flow and
-  scoped download authority. Production activation and complete continuous recovery
+  scoped download authority, followed by separate owner-confirmed Cloud replacement with fresh installation and tunnel keys. Production activation and complete continuous recovery
   remain separate work.
   Use Cloud-managed recovery keys by default for the stream and managed snapshots:
   an authorised owner must not need the original server or a separately saved backup
@@ -319,16 +318,10 @@ mobile notifications separately.
   The Waitron adapter and both browser screens now connect two real SQLite installations
   in the local integration runner. Renewable signed control leases and key proofs now
   authenticate machine operations; owner or local-manager revocation records its actor,
-  reason and result. Desired revisions and stale health remain separate. Next, enforce
-  separately scoped gateway/storage authority and implement replacement; IDs alone
-  are not authentication. The owner approved matching-code confirmation between
+  reason and result. Desired revisions and stale health remain separate. Scoped storage/gateway adapters and owner-confirmed test-snapshot replacement are implemented locally; production rollout remains open. The owner approved matching-code confirmation between
   signed-in local Waitron and Cloud. The [pairing contract](superpowers/specs/2026-09-23-venue-pairing-design.md) fixes
   proof format, expiry, attempt limits and binding. Local tests refuse swapped installation
-  proofs and recheck manager permission and serving-primary status after network waits. Replace the initial one-installation-per-venue constraint with an
-  explicit history model when building replacement. Validate local-venue identifier
-  provenance and handling of cloned identities in the approval flow. When replacement
-  gains a UI, define the permitted diagnostics for an already-linked or revoked
-  installation; this slice rejects a different installation as a registration conflict.
+  proofs and recheck manager permission and serving-primary status after network waits. Installation history now retains superseded rows with one current installation per venue. Replacement binds the restored local venue and source node to the approved snapshot, uses fresh keys and has separate local-manager and Cloud-owner confirmation. Ordinary pairing refuses an unrelated installation, including a revoked current one. Expand diagnostics and planned-handover support before production rollout.
   Before public exposure, define retention and cleanup for installation operation
   results and revocation audits, coordinate issuer rotation/trust rollout, and measure
   per-IP limits for venues sharing NAT. Current operation results are retained without
@@ -339,6 +332,10 @@ mobile notifications separately.
   launch and retain explicit local business confirmation.
   Terminated database connections and lost replies have regression tests; actual
   database failover and recovery under deployment credentials still need proof.
+  Before production, reproduce ordinary pairing racing a monitor incident insert for
+  an already registered venue; its venue lock may conflict with the incident foreign-key
+  check. Replacement has a tested compatible lock, but the ordinary-pairing case has
+  not been verified.
 - **Provisioning and placement.** Use Kubernetes for orchestration when needed;
   cluster provisioning and manifests are deferred until there is a service to deploy
   and a concrete operational need. Country/provider/cell registry, repeatable resource
@@ -394,7 +391,7 @@ mobile notifications separately.
   work, stream archive assembly and object I/O beyond the current 512 MiB bound,
   tombstone/job-history retention, master-key operations and production verifier isolation.
   Measure scheduling sweeps at the intended deployment scale and tune their cadence
-  separately from job polling; the local concurrency proof covers only small fixtures. Complete continuous server recovery and activation depend on Waitron slice 2.
+  separately from job polling; the local concurrency proof covers only small fixtures. Complete continuous server recovery still needs integration with Waitron's current stream, sealed-state and cold-restore contracts.
   Retention, restore checks, export, deletion and access review;
   define what survives subscription termination and for how long.
   The catalogue implements daily retention for 30 days and monthly retention for 12 months.
@@ -432,7 +429,7 @@ mobile notifications separately.
 | Service | Design work still needed |
 | --- | --- |
 | Remote access (initial) | The local two-venue adapter and operator commands are implemented; see [the executable proof](local-remote-access.md). Customer setup screens now expose assigned names, revision-bound custom DNS changes and readiness. Live DNS/provider integration, automatic appliance/certificate setup and deployment remain open. Public HTTPS terminates in Cloud for bot inspection; staff uses a separate hostname with TLS passthrough and network controls. Share a gateway within each cell, with separate venue tunnels and credentials. Define and test route/session isolation, traffic limits and legitimate automated-client handling. Provide assigned/custom domains and automated certificates; implement the preferred local DNS overrides with router-specific setup and offline/recovery tests. Decide the bootstrap role of waitron.local. Temporary unavailability while the venue is offline and short interruptions during cell replacement are accepted; define and test the cell recovery-time target. |
-| Backups (initial) | Guided verified-snapshot recovery is implemented for local test venues. Complete production replacement and continuous server recovery, normally using the latest recoverable Litestream backup. Provision scoped storage access, show recovery-point time and backup health, alert on interruption, define retention and test restore against each provider selected for launch. Coordinate safe replacement activation with Waitron. |
+| Backups (initial) | Guided verified-snapshot recovery and owner-confirmed Cloud replacement are implemented for local test venues. Complete production replacement and continuous server recovery, normally using the latest recoverable Litestream backup. Provision scoped storage access, show recovery-point time and backup health, alert on interruption, define retention and test restore against each provider selected for launch. Coordinate safe replacement activation with Waitron. |
 | SQLite snapshots (initial backup service) | Retain daily snapshots for 30 days and monthly snapshots for 12 months, with longer paid retention for selected snapshots. Each must remain restorable if continuous backup data disappears. Protect the last verified snapshot from automatic expiry while subscribed; verify a newer copy before replacing it and show stale backup health. Define schedule details, consistency, extended-retention terms and prices, and independent storage/deletion controls. Explicit verified-snapshot selection and restoration with continuous data absent are proved locally; run the same flow against the selected production provider. |
 | Failover to cloud | Allocate a replacement instance, coordinate promotion with Waitron, connect devices, stream the new primary and support return to the venue. |
 | Hosted Waitron | Provision isolated operational instances, local print connectivity, upgrades, capacity and cloud-only recovery. |

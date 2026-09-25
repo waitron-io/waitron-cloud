@@ -10,7 +10,7 @@ Install both repositories with their frozen pnpm lockfiles. Use Node 26 with net
 26.7.0), Docker, OpenSSL and network access for the pinned test binaries. Point to a
 Waitron checkout that includes `apps/server/scripts/cloud-backup-fixture.ts`,
 `apps/server/scripts/cloud-capture-client-fixture.ts` and
-`apps/server/scripts/cloud-recovery-client-fixture.ts`. Export that path as
+`apps/server/scripts/cloud-recovery-client-fixture.ts` with replacement commands. Export that path as
 `WAITRON_CHECKOUT`, and build both portals before starting the servers:
 
 ```sh
@@ -71,6 +71,21 @@ without modifying your system trust settings. This needs Docker Desktop's
   cold-restore entry point. Venue contents, source identity and module hooks are
   checked. Cloud stays pending through staging and changes only after the local
   restore has succeeded and the replacement sends its completion report.
+
+- After the restored test server requests reconnection, the original Cloud owner
+  confirms the displayed old installation. Fresh client processes import one durable
+  registration, renew a lease and publish a snapshot that restores independently.
+  The venue, retained history, hostnames and tunnel address stay the same; installation
+  and tunnel keys change. The old installation cannot obtain new capture credentials,
+  and the other venue's route is unchanged. Closing the recovery download does not
+  undo a completed replacement.
+
+The replacement check exports the new gateway manifest; it does not install a
+WireGuard interface or staff HTTPS certificate on the appliance. Use the existing
+[operator remote-access procedure](local-remote-access.md) for that local setup.
+Cloud registration does not change Waitron's trading or fiscal activation rules.
+Production replacement, planned final-write handover and complete continuous recovery
+remain separate work.
 
 The JSON receipt records exact repository heads, dirty flags, checks and stream
 restore timings. A dirty receipt is useful during development; use clean heads for
@@ -208,3 +223,24 @@ These are trusted local-code controls. Native allocations, addons and child-proc
 capabilities mean the heap setting is not a total memory limit or a hostile-code
 sandbox. Production needs container network/filesystem isolation and total CPU, memory
 and disk limits before this verifier can handle customer archives.
+
+## Reconnect after a test snapshot restore
+
+After Waitron starts from the verified managed restore, sign in as a local manager
+and request Cloud reconnection from Cloud settings. Keep the original recovery
+request open in your Cloud account. Confirm that the displayed old installation has
+been taken out of service, then confirm replacement. Return to Waitron and check the
+result. If a reply is lost, check again; the same request imports the same registration.
+
+The proposal contains public installation and tunnel keys, the restored venue and
+source node identifiers, and the original recovery deadline. Both the restore key
+and the fresh installation key sign it. Owner confirmation replaces Cloud authority
+in one database transaction, rotates the key used for new snapshots and retains old
+keys for historical snapshots. Ordinary pairing still refuses a second current
+installation, including when the current installation has been revoked.
+
+Prepare/status use `/api/replacement/prepare` and `/api/replacement/status`. Owner
+confirmation uses `/api/account/recovery/replace`; the existing recovery inspect
+response includes the proposal and completed result. These routes remain limited
+to verified test snapshots. An expired or closed recovery cannot start a replacement,
+but an exact completed result remains retrievable while its installation is active.

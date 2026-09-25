@@ -1,3 +1,4 @@
+import {RemoteAccessStore} from '../packages/remote-access/src/placement.ts';
 import assert from "node:assert/strict";
 import { request as httpsRequest } from "node:https";
 import { spawn, execFileSync } from "node:child_process";
@@ -361,6 +362,10 @@ try {
     "Litestream restored committed writes from both actual Waitron databases using encrypted scoped storage; removed streams refused restore",
   );
   const item = snapshots[0];
+  const remote=new RemoteAccessStore(f.db.pool),cell=randomUUID();
+  await remote.createCell({id:cell,country:'ES',provider:'aws',environment:'test',suffix:'replacement.example.test',subnet:83,publicKey:randomBytes(32).toString('base64'),endpoint:'gateway.example.test:51820'});
+  const oldPlacement=await remote.provision(item.venue.registration.installationId,cell,randomBytes(32).toString('base64'));
+  const neighbour=await remote.provision(snapshots[1].venue.registration.installationId,cell,randomBytes(32).toString('base64'));
   await catalogue.rotate(item.venue.registration.installationId);
   const renewed=await captureClient(item.venue.root,'reserve',{id:item.reservation.id});
   assert.equal(renewed.recoveryKey,item.reservation.recoveryKey);
@@ -476,8 +481,34 @@ try {
   assert.equal((await recovery.status(session.token,request.requestId)).status,'restored');
   assert.equal((await f.db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'2');
   assert.equal((await f.db.pool.query('SELECT count(*) FROM installations WHERE revoked_at IS NOT NULL')).rows[0].count,'0');
-  await ownerPost('close');
   record('guided owner HTTP approval survives lost replies; fresh Waitron processes download, validate, stage and cold-restore the bound snapshot without copying keys or inheriting destinations');
+  const proposal=await recoveryClient(guided,'prepareReplacement',{expectedSourceNodeId:item.point.sourceNodeId});
+  assert.equal(proposal.state,'awaiting_owner');assert.equal(proposal.oldInstallationId,item.venue.registration.installationId);
+  assert.equal((await ownerPost('inspect')).replacement.publicKey,proposal.publicKey);
+  const confirmations={oldInstallationId:proposal.oldInstallationId,oldServerUnavailable:'true',confirmReplacement:'true'};
+  // Discard confirmation's reply and restart the real client before importing the durable result.
+  await ownerPost('replace',confirmations);
+  const connected=await recoveryClient(guided,'statusReplacement',{expectedSourceNodeId:item.point.sourceNodeId});
+  assert.equal(connected.state,'complete');assert.equal(connected.registration.venueId,item.venue.registration.venueId);assert.notEqual(connected.registration.installationId,item.venue.registration.installationId);
+  assert.deepEqual((await recoveryClient(guided,'statusReplacement',{expectedSourceNodeId:item.point.sourceNodeId})).registration,connected.registration);
+  assert.equal((await f.db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'3');
+  assert.equal((await f.db.pool.query('SELECT count(*) FROM installations WHERE superseded_by IS NULL')).rows[0].count,'2');
+  assert.equal((await f.db.pool.query('SELECT installation_id FROM backup_points WHERE id=$1',[item.point.id])).rows[0].installation_id,item.venue.registration.installationId);
+  const routes=(await remote.manifest(cell)).routes,newRoute=routes.find(r=>r.venueId===item.venue.registration.venueId);
+  assert.equal(newRoute.installationId,connected.registration.installationId);assert.equal(newRoute.peerPublicKey,proposal.peerPublicKey);
+  for(const name of ['staffHostname','publicHostname','address','port'])assert.equal(newRoute[name],oldPlacement[name]);
+  assert.equal(routes.find(r=>r.venueId===neighbour.venueId).peerPublicKey,neighbour.peerPublicKey);
+  assert(!JSON.stringify(routes).includes(oldPlacement.peerPublicKey));
+  await assert.rejects(captureClient(item.venue.root,'reserve',{id:item.reservation.id}));
+  const fresh=await captureClient(guided,'reserve',{stateSubdir:'state',id:randomUUID()});assert.equal(fresh.installationId,connected.registration.installationId);assert.notEqual(fresh.recoveryKey,item.reservation.recoveryKey);
+  const captured=await worker(guided,'capture',{stateSubdir:'state',recoveryKey:fresh.recoveryKey});
+  assert(!captured.entries.some(n=>n.includes('cloud-replacement')||n.includes('cloud-recovery')||n.includes('cloud-connection')));
+  const freshBytes=await readFile(join(guided,'captured.backup.enc'));await captureClient(guided,'upload',{stateSubdir:'state',grant:fresh,ca:s3.ca});
+  const freshPoint=await captureClient(guided,'publish',{stateSubdir:'state',id:fresh.id,metadata:{...receipt(freshBytes),capturedAt:captured.manifest.createdAt,retention:'daily',sourceNodeId:captured.sourceNodeId,modules:captured.manifest.modules}});
+  assert.equal(freshPoint.installationId,connected.registration.installationId);
+  const freshTarget=await root();await writeFile(join(freshTarget,'input.backup.enc'),freshBytes,{mode:0o600});await worker(freshTarget,'restore',{recoveryKey:fresh.recoveryKey,sourceNodeId:freshPoint.sourceNodeId,modules:freshPoint.modules,expectedVenue:captured.venueName});
+  await ownerPost('close');assert.equal((await recoveryClient(guided,'statusReplacement',{expectedSourceNodeId:item.point.sourceNodeId})).state,'complete');
+  record('owner-confirmed replacement survives lost replies and client restarts, preserves venue/history/remote routing, retires old authority and captures a restorable snapshot with fresh keys');
   const bad = await root();
   await writeFile(join(bad, "input.backup.enc"), item.bytes, { mode: 0o600 });
   await assert.rejects(
@@ -492,8 +523,9 @@ try {
   record(
     "wrong recovery key leaves the replacement database absent; Cloud grants did not activate or re-enrol it",
   );
-  await new InstallationStore(f.db.pool,f.issuer,f.origin).revokeWithSession(session.token,session.csrfToken,item.venue.registration.installationId);
+  await new InstallationStore(f.db.pool,f.issuer,f.origin).revokeWithSession(session.token,session.csrfToken,connected.registration.installationId);
   await assert.rejects(captureClient(item.venue.root,'reserve',{id:item.reservation.id}));
+  await assert.rejects(captureClient(guided,'reserve',{stateSubdir:'state',id:fresh.id}));
   record('Cloud owner revocation refuses subsequent Waitron upload-credential renewal');
   const result = {
     cloudHead: execFileSync("git", ["rev-parse", "HEAD"], {

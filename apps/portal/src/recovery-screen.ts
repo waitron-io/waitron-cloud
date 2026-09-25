@@ -5,7 +5,7 @@ export function recoveryScreen(app:PortalApp){
  const r=app.recovery,c=app.copy,installations=app.installations,b=app.backups;
  if(!r.requestId||app.link.invalid)return html`<p>${c.recoveryMissing}</p>`;
  if(app.session.state.kind!=='authenticated')return html`<p role="status">${c.checking}</p><wt-button .disabled=${!!app.waiting} @click=${()=>{void app.session.check();}}>${c.retry}</wt-button>`;
- const disabled=r.pending||!!app.waiting,op=r.view?.operation,expired=!!r.view&&Date.parse(op?.expiresAt??r.view.expiresAt)<=Date.now();
+ const disabled=r.pending||!!app.waiting,op=r.view?.operation,replacement=r.view?.replacement,complete=replacement?.state==='complete',expired=!!r.view&&!complete&&Date.parse(op?.expiresAt??r.view.expiresAt)<=Date.now();
  const venues=[...new Map(installations.visible.filter(i=>i.canRevoke&&i.environment==='test').map(i=>[i.venueId,i])).values()];
  const selected=b.page?.points.find(p=>p.id===b.selected);
  return html`<p>${c.recoveryIntro}</p><p>${c.recoveryLocal}</p>
@@ -14,9 +14,18 @@ export function recoveryScreen(app:PortalApp){
   <wt-button id="submit" .disabled=${disabled} @click=${()=>{app.readFields();void r.inspect();}}>${r.view?c.retry:c.pairInspect}</wt-button>
   ${r.view?html`<p>${c.recoveryExpires} <time datetime=${op?.expiresAt??r.view.expiresAt}>${new Date(op?.expiresAt??r.view.expiresAt).toLocaleString(app.locale)}</time></p>`:nothing}
   ${expired?html`<p role="status">${c.recoveryExpired}</p>`:nothing}
-  ${op?html`<p role="status">${op.status==='closed'?c.recoveryClosed:op.status==='restored'?c.recoveryRestored:c.recoveryApproved}</p>
+  ${op?html`${!complete?html`<p role="status">${op.status==='closed'?c.recoveryClosed:op.status==='restored'?c.recoveryRestored:c.recoveryApproved}</p>`:nothing}
     <dl><dt>${c.snapshotIdentifier}</dt><dd>${op.pointId}</dd><dt>${c.pairVenue}</dt><dd>${op.venueId}</dd></dl>
     ${op.status!=='closed'&&!expired?html`<p>${c.recoveryCancelHelp}</p><wt-button .disabled=${disabled} @click=${()=>{void r.close();}}>${c.recoveryCancel}</wt-button>`:nothing}`:nothing}
+  ${op&&!replacement&&op.status==='restored'&&!expired?html`<p role="status">${c.recoveryReplacementWaiting}</p>`:nothing}
+  ${replacement?html`<section aria-label=${c.recoveryReplacementTitle}>
+    <h2>${c.recoveryReplacementTitle}</h2>
+    <p role="status">${complete?c.recoveryReplacementComplete:replacement.state==='awaiting_owner'?c.recoveryReplacementReady:c.recoveryReplacementWaiting}</p>
+    <dl style="min-width:0;overflow-wrap:anywhere"><dt>${c.recoveryOrganisation}</dt><dd>${replacement.organisationName}</dd><dt>${c.recoveryBusiness}</dt><dd>${replacement.legalBusinessName}</dd><dt>${c.pairVenue}</dt><dd>${replacement.venueId}</dd><dt>${c.recoveryOldInstallation}</dt><dd>${replacement.oldInstallationId}</dd><dt>${complete?c.recoveryNewInstallation:c.recoveryNewPublicKey}</dt><dd>${complete?replacement.registration?.installationId:replacement.publicKey}</dd></dl>
+    ${complete?html`<p>${c.recoveryReplacementCheck}</p><p>${c.recoveryReplacementStopAccess}</p>`:!expired&&op?.status==='restored'&&replacement.state==='awaiting_owner'?html`
+      <label class="disclosure"><input type="checkbox" .checked=${r.confirmReplacement} ?disabled=${disabled||r.uncertain} @change=${(e:Event)=>{r.confirmReplacement=(e.target as HTMLInputElement).checked;app.draw();}}> ${c.recoveryReplacementConfirm}</label>
+      <wt-button variant="primary" .disabled=${disabled||r.uncertain||!r.confirmReplacement} @click=${()=>{void r.replace();}}>${c.recoveryReplacementApprove}</wt-button>`:nothing}
+   </section>`:nothing}
   ${r.view&&!op&&!expired?html`
     ${installations.error?html`<p role="alert">${c[installations.error]}</p>`:nothing}
     <wt-button .disabled=${disabled||installations.pending} @click=${()=>{void installations.load();}}>${c.refreshStatus}</wt-button>

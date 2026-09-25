@@ -4,9 +4,10 @@ import type {RecoveryView} from './recovery-types.ts';
 export class RecoveryController {
  requestId:string|undefined;code='';view:RecoveryView|undefined;venueId:string|undefined;pointId:string|undefined;
  stopped=false;acceptLoss=false;uncertain=false;pending=false;retryAt=0;error:keyof Copy|undefined;
+ #confirmedReplacement:string|undefined;
  #account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
- #clear(){this.#generation++;this.code='';this.view=undefined;this.venueId=undefined;this.pointId=undefined;this.stopped=false;this.acceptLoss=false;this.uncertain=false;this.pending=false;this.error=undefined;}
+ #clear(){this.#generation++;this.code='';this.view=undefined;this.venueId=undefined;this.pointId=undefined;this.stopped=false;this.acceptLoss=false;this.#confirmedReplacement=undefined;this.uncertain=false;this.pending=false;this.error=undefined;}
  open(id:string|undefined){if(id!==this.requestId){this.#clear();this.requestId=id;}}
  account(id:string|undefined){if(id!==this.#account){this.#clear();this.#account=id;}}
  choose(venueId:string|undefined,pointId:string|undefined){if(venueId!==this.venueId||pointId!==this.pointId){this.venueId=venueId;this.pointId=pointId;this.stopped=false;this.acceptLoss=false;}}
@@ -14,19 +15,26 @@ export class RecoveryController {
  inspect(){return this.#exchange('inspect');}
  approve(){return this.#exchange('approve');}
  close(){return this.#exchange('close');}
- async #exchange(action:'inspect'|'approve'|'close'){
+ get confirmReplacement(){return !!this.#confirmedReplacement&&this.#confirmedReplacement===this.#proposal();}
+ set confirmReplacement(value:boolean){this.#confirmedReplacement=value?this.#proposal():undefined;}
+ #proposal(){const r=this.view?.replacement;return r?.state==='awaiting_owner'?JSON.stringify(r):undefined;}
+ replace(){return this.#exchange('replace');}
+ async #exchange(action:'inspect'|'approve'|'close'|'replace'){
   if(!this.#account||!this.requestId||this.pending||this.waiting)return;
   if(!/^\d{8}$/.test(this.code)){this.error='pairCodeError';this.#changed();return;}
   if(action==='approve'&&(this.uncertain||this.view?.state!=='awaiting_owner'||!this.venueId||!this.pointId||!this.stopped||!this.acceptLoss||Date.parse(this.view.expiresAt)<=Date.now()))return;
   if(action==='close'&&!this.view?.operation)return;
+  const replacement=this.view?.replacement;
+  if(action==='replace'&&(this.uncertain||!this.confirmReplacement||!replacement||replacement.state!=='awaiting_owner'||this.view?.operation?.status!=='restored'||Date.parse(replacement.expiresAt)<=Date.now()||Date.parse(this.view.operation.expiresAt)<=Date.now()))return;
   const body:Record<string,string>={requestId:this.requestId,code:this.code};if(action==='approve')Object.assign(body,{pointId:this.pointId,oldServerUnavailable:'true',acceptDataLoss:'true'});
-  const generation=this.#generation,point=this.pointId,venue=this.venueId;this.pending=true;this.error=undefined;this.#changed();
+  if(action==='replace')Object.assign(body,{oldInstallationId:replacement!.oldInstallationId,oldServerUnavailable:'true',confirmReplacement:'true'});
+  const generation=this.#generation,point=this.pointId,venue=this.venueId,proposal=this.#proposal();this.pending=true;this.error=undefined;this.#changed();
   const result=await this.#request<RecoveryView>('/recovery/'+action,body);if(generation!==this.#generation)return;this.pending=false;
-  if(result.ok&&result.value.requestId===this.requestId&&(action!=='approve'||(result.value.operation?.pointId===point&&result.value.operation?.venueId===venue))){this.view=result.value;this.uncertain=false;}
+  if(result.ok&&result.value.requestId===this.requestId&&(action!=='approve'||(result.value.operation?.pointId===point&&result.value.operation?.venueId===venue))&&(action!=='replace'||(result.value.replacement?.state==='complete'&&replacement&&result.value.replacement.oldInstallationId===replacement.oldInstallationId&&result.value.replacement.publicKey===replacement.publicKey&&result.value.replacement.peerPublicKey===replacement.peerPublicKey&&result.value.replacement.localVenueId===replacement.localVenueId&&result.value.replacement.nodeId===replacement.nodeId))){this.view=result.value;if(this.#proposal()!==proposal)this.#confirmedReplacement=undefined;this.uncertain=false;}
   else{
-   if(!result.ok){this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?'forbidden':result.status===410?'recoveryExpired':'unavailable';if(result.status===401||result.status===403){this.view=undefined;this.choose(undefined,undefined);}}
+   if(!result.ok){this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?'forbidden':result.status===410?'recoveryExpired':'unavailable';if(result.status===401||result.status===403){this.view=undefined;this.#confirmedReplacement=undefined;this.choose(undefined,undefined);}}
    else this.error='unavailable';
-   if(action!=='inspect'){this.uncertain=true;this.error='recoveryUncertain';this.#changed();await this.inspect();}
+   if(action!=='inspect'){this.#confirmedReplacement=undefined;this.uncertain=true;this.error='recoveryUncertain';this.#changed();await this.inspect();}
   }
   this.#changed();
  }

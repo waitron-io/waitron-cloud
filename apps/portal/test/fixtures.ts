@@ -2,6 +2,7 @@ import type {CaptureOptions} from '../../../packages/backups/src/captures.ts';
 import {generateKeyPairSync} from 'node:crypto';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
+import type {IncomingMessage,ServerResponse} from 'node:http';
 import { chromium, type Browser } from 'playwright';
 import { database } from '../../../packages/account-http/test/fixtures.ts';
 import { startAccountServer } from '@waitron-cloud/account-http';
@@ -26,6 +27,21 @@ export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?
       port: Number(process.env.MAILPIT_TEST_SMTP_PORT), portalOrigin: origin,
     }));
     return {origin, browser, db, issuer,
+      loseRecoveryReply(action: 'approve' | 'replace') {
+        // Drop the socket after the handler commits, so reconciliation uses ordinary browser networking.
+        return new Promise<{status: number; body: string}>(resolve => {
+          const server=running!.server;
+          const hook = (request:IncomingMessage,response:ServerResponse) => {
+            if(request.url!==`/api/account/recovery/${action}`)return;
+            server.removeListener('request',hook);
+            response.end=(body?: unknown)=>{
+              resolve({status:response.statusCode,body:String(body??'')});
+              request.socket.destroy();return response;
+            };
+          };
+          server.prependListener('request',hook);
+        });
+      },
       loseMachineReply(action: string) {
         const server=running!.server;
         const hook: Parameters<typeof server.prependListener>[1] = (request, response) => {
