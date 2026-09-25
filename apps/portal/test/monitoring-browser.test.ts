@@ -42,7 +42,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner manages service a
   await observeRemote('failed',301);await f.db.pool.query('UPDATE venue_monitors SET next_check_at=clock_timestamp()');await monitor.runOnce();await page.getByRole('button',{name:c.refreshStatus,exact:true}).click();
   const publicUnknown=locale==='en'?'Public website monitoring is unknown because no recent external check is available.':'La supervisión del sitio público es desconocida porque no hay una comprobación externa reciente.';
   const staffUnknown=locale==='en'?'Staff access monitoring is unknown because no recent external check is available.':'La supervisión del acceso del personal es desconocida porque no hay una comprobación externa reciente.';
-  await page.getByText(publicUnknown,{exact:true}).waitFor();await page.getByText(staffUnknown,{exact:true}).waitFor();
+  await page.getByText(publicUnknown,{exact:true}).waitFor();await page.getByText(staffUnknown,{exact:true}).waitFor();await page.getByText(certificateWarning,{exact:true}).waitFor();
   await observeRemote('healthy');await f.db.pool.query('UPDATE venue_monitors SET next_check_at=clock_timestamp()');await monitor.runOnce();await page.getByRole('button',{name:c.refreshStatus,exact:true}).click();
   const publicHealthy=locale==='en'?'The public website passed its latest external check.':'El sitio público superó la última comprobación externa.';
   await page.getByText(publicHealthy,{exact:true}).waitFor();await page.getByText(staffHealthy,{exact:true}).waitFor();

@@ -19,7 +19,8 @@ export async function venueOverview(pool:Pool,token:string,installations:Install
     AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured'
      AND (x.kind='disconnected' OR (x.kind IN ('snapshot_stale','verification_failed') AND s.service='retained_snapshots')
       OR (x.kind IN ('public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale','public_certificate_expiring','staff_certificate_expiring') AND s.service='remote_access'
-       AND EXISTS(SELECT 1 FROM remote_placements p JOIN remote_hostnames h ON h.venue_id=p.venue_id WHERE p.installation_id=n.id AND p.venue_id=v.id AND h.kind IN ('public','staff')))))),'[]') AS incidents,
+       AND EXISTS(SELECT 1 FROM remote_placements p JOIN remote_hostnames h ON h.venue_id=p.venue_id WHERE p.installation_id=n.id AND p.venue_id=v.id
+        AND h.kind=CASE WHEN x.kind LIKE 'public_%' THEN 'public' ELSE 'staff' END))))),'[]') AS incidents,
    CASE WHEN n.revoked_at IS NULL AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.service='remote_access' AND s.state<>'unconfigured')
     AND EXISTS(SELECT 1 FROM remote_placements p WHERE p.installation_id=n.id AND p.venue_id=v.id)
    THEN jsonb_build_object(

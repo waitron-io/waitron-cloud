@@ -1,6 +1,6 @@
 import type {Pool,PoolClient} from 'pg';
 import type {EmailOutbox} from './email-outbox.ts';
-import {isNotifiableIncident,type IncidentKind} from './service-alert.ts';
+import type {IncidentKind} from './service-alert.ts';
 import {transaction} from './transaction.ts';
 export interface MonitorConfig {probeStaleSeconds?:number;certificateWarningDays?:number}
 export class MonitorWorker {
@@ -70,7 +70,6 @@ export class MonitorWorker {
    ON CONFLICT(venue_id,kind) DO UPDATE SET status=EXCLUDED.status,revision=venue_incidents.revision+1,
    opened_at=CASE WHEN EXCLUDED.status='open' THEN EXCLUDED.opened_at ELSE venue_incidents.opened_at END,changed_at=EXCLUDED.changed_at RETURNING *`,[venueId,kind,status,now])).rows[0];
   if(status==='suppressed'||(status==='recovered'&&previous?.status!=='open'))return;
-  if(!isNotifiableIncident(kind))throw new Error('incident_not_notifiable');
   const recipients=await client.query(`SELECT a.id,c.email,p.locale FROM cloud_accounts a JOIN cloud_credentials c ON c.account_id=a.id
    JOIN account_alert_preferences p ON p.account_id=a.id JOIN organisation_memberships m ON m.account_id=a.id JOIN venues v ON v.organisation_id=m.organisation_id
    WHERE v.id=$1 AND m.is_owner AND a.disabled_at IS NULL AND c.email_verified_at IS NOT NULL AND p.enabled

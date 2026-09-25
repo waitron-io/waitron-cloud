@@ -4,7 +4,7 @@ export interface AccountInstallation {
  installationId:string;venueId:string;organisationId:string;legalBusinessId:string;environment:string;revision:number;
  revokedAt:string|null;lastContactAt:string|null;leaseExpiresAt:string|null;canRevoke?:boolean;
  overview?:{organisationName:string;businessName:string;countryCode:string|null;latestSnapshotAt:string|null;verifiedSnapshotAt:string|null};
- monitoring?:{enabled:boolean;fresh:boolean;checkedAt:string|null;incidents:{kind:MonitoringIncidentKind;openedAt:string;changedAt:string}[];remoteChecks:{public:RemoteCheck|null;staff:RemoteCheck|null}|null};
+ monitoring?:{enabled:boolean;fresh:boolean;checkedAt:string|null;incidents:{kind:MonitoringIncidentKind;openedAt:string;changedAt:string}[];remoteChecks?:{public:RemoteCheck|null;staff:RemoteCheck|null}|null};
  services:{service:'continuous_backup'|'remote_access'|'retained_snapshots';state:'unconfigured'|'provisioning'|'ready'|'failed';health:'unknown'|'healthy'|'degraded'|'failed';failure:string|null;observedAt:string|null}[];
 }
 export function validInstallation(value:unknown):value is AccountInstallation {
@@ -31,5 +31,5 @@ function validMonitoring(value:unknown):boolean{
   return Object.keys(r).length===3&&['status','checkedAt','certificateNotAfter'].every(k=>k in r)&&['healthy','failed'].includes(String(r.status))&&date(r.checkedAt)&&(r.certificateNotAfter===null||date(r.certificateNotAfter));
  };
  return typeof v.enabled==='boolean'&&typeof v.fresh==='boolean'&&(v.checkedAt===null||date(v.checkedAt))&&Array.isArray(v.incidents)&&v.incidents.length<=9&&new Set(v.incidents.map(i=>i?.kind)).size===v.incidents.length&&v.incidents.every(i=>i&&kinds.includes(i.kind)&&date(i.openedAt)&&date(i.changedAt))
-  &&(checks===null||!!checks&&typeof checks==='object'&&!Array.isArray(checks)&&Object.keys(checks).length===2&&['public','staff'].every(k=>k in checks&&(checks as Record<string,unknown>)[k]===null||check((checks as Record<string,unknown>)[k])));
+  &&(checks===undefined||checks===null||!!checks&&typeof checks==='object'&&!Array.isArray(checks)&&Object.keys(checks).length===2&&['public','staff'].every(k=>k in checks&&((checks as Record<string,unknown>)[k]===null||check((checks as Record<string,unknown>)[k]))));
 }

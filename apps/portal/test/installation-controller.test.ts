@@ -44,6 +44,8 @@ test('remote monitoring accepts only redacted route evidence and known incidents
   {kind:'public_route_failed',openedAt:checkedAt,changedAt:checkedAt},{kind:'staff_probe_stale',openedAt:checkedAt,changedAt:checkedAt},{kind:'public_certificate_expiring',openedAt:checkedAt,changedAt:checkedAt},
  ],remoteChecks:{public:{status:'failed',checkedAt,certificateNotAfter},staff:{status:'healthy',checkedAt,certificateNotAfter:null}}}};
  assert.equal(validInstallation(item),true);
+ assert.equal(validInstallation({...item,monitoring:{...item.monitoring,remoteChecks:undefined}}),true);
+ assert.equal(validInstallation({...item,monitoring:{...item.monitoring,remoteChecks:{public:item.monitoring.remoteChecks.public}}}),false);
  for(const remoteChecks of [
   {...item.monitoring.remoteChecks,public:{...item.monitoring.remoteChecks.public,status:'degraded'}},
   {...item.monitoring.remoteChecks,public:{...item.monitoring.remoteChecks.public,checkedAt:'yesterday'}},

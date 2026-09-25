@@ -28,7 +28,7 @@ export function monitoringScreen(app:PortalApp,installation:AccountInstallation)
  return html`<section aria-label=${c.monitoring}><h4>${c.monitoring}</h4>
   ${!fresh?html`<p role="status">${c.monitorUnknown}</p>`:!m.incidents.length?html`<p>${c.monitorNoAlerts}</p>`:nothing}
   ${m.checkedAt?html`<p>${c.monitorChecked}: <time datetime=${m.checkedAt}>${new Date(m.checkedAt).toLocaleString(app.locale)}</time></p>`:nothing}
-  ${m.incidents.filter(i=>i.kind in copy).map(i=>html`<p>${copy[i.kind as keyof typeof copy]}</p><p>${c.monitorSince}: <time datetime=${i.openedAt}>${new Date(i.openedAt).toLocaleString(app.locale)}</time></p>`)}
+  ${m.incidents.filter(i=>Object.hasOwn(copy,i.kind)).map(i=>html`<p>${copy[i.kind as keyof typeof copy]}</p><p>${c.monitorSince}: <time datetime=${i.openedAt}>${new Date(i.openedAt).toLocaleString(app.locale)}</time></p>`)}
   ${m.remoteChecks?remote:nothing}
  </section>`;
 }

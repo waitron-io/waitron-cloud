@@ -107,7 +107,9 @@ test('overview exposes current monitoring evidence only to current organisation 
  assert.deepEqual(item.monitoring.remoteChecks,{public:{status:'failed',checkedAt:checked,certificateNotAfter:expires},staff:{status:'healthy',checkedAt:checked,certificateNotAfter:expires}});
  assert.deepEqual(Object.keys(item.monitoring.remoteChecks.public).sort(),['certificateNotAfter','checkedAt','status']);
  for(const secret of ['public.cell.example.test','staff.cell.example.test','AA:BB','CC:DD','timeout','10.77.7.2'])assert(!JSON.stringify(item.monitoring).includes(secret));
- await db.pool.query("UPDATE venue_monitors SET checked_at=clock_timestamp()-interval '5 minutes 1 second'");item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.fresh,false);assert.equal(item.monitoring.incidents.length,4);
+ await db.pool.query("DELETE FROM remote_hostnames WHERE venue_id=$1 AND kind='staff'",[venueId]);item=(await(await browser('')).json()).installations[0];
+ assert.deepEqual(item.monitoring.incidents.map((v:{kind:string})=>v.kind),['disconnected','public_certificate_expiring','public_route_failed']);assert.equal(item.monitoring.remoteChecks.staff,null);
+ await db.pool.query("UPDATE venue_monitors SET checked_at=clock_timestamp()-interval '5 minutes 1 second'");item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.fresh,false);assert.equal(item.monitoring.incidents.length,3);
  await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp()');item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.enabled,false);assert.deepEqual(item.monitoring.incidents,[]);assert.equal(item.monitoring.remoteChecks,null);
  await db.pool.query('DELETE FROM organisation_memberships');assert.deepEqual((await(await browser('')).json()).installations,[]);
 });

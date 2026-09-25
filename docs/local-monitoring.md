@@ -153,9 +153,9 @@ limitation.
 PostgreSQL tests cover clock boundaries, concurrent monitors, rollback, restart,
 revocation, opt-in changes, permission changes during a queue wait and notification retries.
 Real browser tests cover both languages, saved preferences, fresh, failed and stale remote
-checks, phone and desktop layouts, both themes, accessibility and venue isolation. Mailpit
-captures incident and recovery messages in both languages, and proves that opting out or
-revoking a route suppresses queued remote notices.
+checks, phone and desktop layouts, light and dark journeys, and accessibility. PostgreSQL
+API tests cover venue isolation. Mailpit captures incident and recovery messages in both
+languages, and proves that opting out or revoking a route suppresses queued remote notices.
 
 External remote-access probes now persist revision-bound evidence and the monitor records
 route, stale-probe, certificate-expiry and recovery transitions without confusing a live

@@ -164,7 +164,7 @@ export class EmailWorker {
     if(row.kind==='service_alert'){
       if(!validServiceAlert(message))return false;
       const live=(await this.#pool.query(`SELECT p.locale FROM service_alert_deliveries d JOIN email_outbox e ON e.id=d.outbox_id JOIN venue_incidents i ON i.id=d.incident_id
-        JOIN venues v ON v.id=i.venue_id JOIN installations n ON n.venue_id=v.id AND n.superseded_by IS NULL
+        JOIN venues v ON v.id=i.venue_id JOIN installations n ON n.venue_id=v.id
         JOIN organisation_memberships m ON m.organisation_id=v.organisation_id AND m.account_id=d.account_id
         JOIN cloud_accounts a ON a.id=d.account_id JOIN cloud_credentials c ON c.account_id=a.id
         JOIN account_alert_preferences p ON p.account_id=a.id

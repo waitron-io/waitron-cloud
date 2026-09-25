@@ -2,10 +2,8 @@ import type {AccountNotification} from './account-input.ts';
 import type {EmailDeliveryContext,EmailDeliveryReceipt} from './email-delivery.ts';
 const incidentKinds=['disconnected','snapshot_stale','verification_failed','public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale','public_certificate_expiring','staff_certificate_expiring'] as const;
 export type IncidentKind=typeof incidentKinds[number];
-export type NotifiableIncidentKind=IncidentKind;
-export function isNotifiableIncident(kind:IncidentKind):kind is NotifiableIncidentKind{return incidentKinds.includes(kind);}
 export interface ServiceAlert extends AccountNotification {
- incidentId:string;revision:number;venueId:string;issue:NotifiableIncidentKind;state:'open'|'recovered';
+ incidentId:string;revision:number;venueId:string;issue:IncidentKind;state:'open'|'recovered';
  checkedAt?:string;certificateNotAfter?:string;
 }
 export interface ServiceAlertMailer {sendServiceAlert(message:ServiceAlert,context?:EmailDeliveryContext):Promise<void|EmailDeliveryReceipt>;}

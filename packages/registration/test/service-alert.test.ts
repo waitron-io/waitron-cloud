@@ -26,7 +26,7 @@ for(const [issue,evidence] of remote)test(`${issue} payload and bilingual mail e
  for(const locale of ['en','es'] as const)for(const state of ['open','recovered'] as const){
   const mail=accountMail(new URL('https://cloud.example.test'),'service_alert',{...alert,locale,state});
   assert(mail.text.includes(locale==='en'?(issue.startsWith('public_')?'Public website':'Staff access'):(issue.startsWith('public_')?'Sitio público':'Acceso del personal')));
-  if('checkedAt' in evidence)assert(mail.text.includes('25'));if('certificateNotAfter' in evidence)assert(mail.text.includes(locale==='en'?'certificate expires':'certificado caduca'));
+  if('checkedAt' in evidence)assert(mail.text.includes(locale==='en'?'Sep 25, 2026, 12:00:00 PM UTC':'25 sept 2026, 12:00:00 UTC'));if('certificateNotAfter' in evidence)assert(mail.text.includes(locale==='en'?'certificate expires':'certificado caduca'));
   assert(!mail.text.includes('AA:BB'));assert(!mail.text.includes('timeout'));
  }
 });
