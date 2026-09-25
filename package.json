@@ -23,7 +23,8 @@
     "backup:worker": "node --env-file-if-exists=.env packages/backups/src/worker-cli.ts",
     "backup:status": "node --env-file-if-exists=.env packages/backups/src/worker-cli.ts --status",
     "monitor:worker": "node --env-file-if-exists=.env packages/registration/src/monitor-cli.ts",
-    "monitor:status": "node --env-file-if-exists=.env packages/registration/src/monitor-cli.ts --status"
+    "monitor:status": "node --env-file-if-exists=.env packages/registration/src/monitor-cli.ts --status",
+    "remote:probe": "node --env-file-if-exists=.env packages/remote-access/src/probe-cli.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

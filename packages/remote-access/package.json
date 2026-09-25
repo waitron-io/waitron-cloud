@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p ../../tsconfig.json",
-    "test": "node --test --test-timeout=30000 test/*.test.ts"
+    "test": "node --test --test-timeout=30000 test/*.test.ts",
+    "probe": "node src/probe-cli.ts"
   },
   "dependencies": {
     "@waitron-cloud/registration": "workspace:*",
@@ -19,6 +20,8 @@
   "exports": {
     "./placement": "./src/placement.ts",
     "./manifest": "./src/manifest.ts",
-    "./probe-targets": "./src/probe-targets.ts"
+    "./probe-targets": "./src/probe-targets.ts",
+    "./probe": "./src/probe.ts",
+    "./probe-runner": "./src/probe-runner.ts"
   }
 }
