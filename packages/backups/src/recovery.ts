@@ -131,13 +131,13 @@ interface StreamRow extends Record<string,unknown>{
  pointer_signer_public_key:string;object_prefix:string;reader_reference:string;generation:string|null;recoverable_at:Date|null;observed_at:Date|null;
  endpoint:string;bucket:string;region:string;current_revision:number;location_installation_id:string;revoked_at:Date|null;superseded_by:string|null;
 }
-async function currentStream(client:PoolClient,venueId:string,lock=false):Promise<StreamRow>{
+async function currentStream(client:PoolClient,venueId:string,lock=false,requireFresh=true):Promise<StreamRow>{
  const row=(await client.query<StreamRow>(`SELECT s.*,l.endpoint,l.bucket,l.region,l.installation_id AS location_installation_id,
   i.configuration_revision AS current_revision,i.revoked_at,i.superseded_by
   FROM backup_managed_streams s JOIN backup_locations l ON l.venue_id=s.venue_id JOIN installations i ON i.id=s.installation_id
   WHERE s.venue_id=$1${lock?' FOR UPDATE OF s':''}`,[venueId])).rows[0];
  if(!row||row.revoked_at||row.superseded_by||row.location_installation_id!==row.installation_id||row.current_revision!==row.configuration_revision
-  ||!row.generation||!row.recoverable_at||!row.observed_at||row.observed_at.getTime()<=Date.now()-300000)backupFail('unavailable');
+  ||!row.generation||!row.recoverable_at||!row.observed_at||(requireFresh&&row.observed_at.getTime()<=Date.now()-300000))backupFail('unavailable');
  return row;
 }
 export function streamRecoveryDigest(generation:string){return createHash('sha256').update(`waitron-cloud-stream-generation-v1\0${generation}`).digest('hex');}
@@ -272,7 +272,8 @@ export class BackupRecovery {
     return this.#transaction(async (client) => {
       const first = await operation(client, id);
       await permission(client, first.account_id, first.venue_id);
-      const l = await lockVenue(client, first.venue_id),row = await operation(client,id),continuous=row.source_kind==='continuous',p=continuous?undefined:await point(client,row.point_id),stream=continuous?await currentStream(client,row.venue_id,true):undefined;
+      // Approval outlives observation freshness; the comparison below still binds delivery to the exact frozen generation.
+      const l = await lockVenue(client, first.venue_id),row = await operation(client,id),continuous=row.source_kind==='continuous',p=continuous?undefined:await point(client,row.point_id),stream=continuous?await currentStream(client,row.venue_id,true,false):undefined;
       if (
         row.status === "closed" ||
         !(await operationCurrent(client,id)) ||

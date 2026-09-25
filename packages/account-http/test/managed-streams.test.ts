@@ -63,6 +63,13 @@ test("provider waits recheck revocation and a missing adapter remains unavailabl
  const refused=await request("backup-stream-configure",proof("backup-stream-configure",desired));assert.equal(refused.status,403);assert(!JSON.stringify(await refused.json()).includes("managed-writer-secret"));assert.equal((await db.pool.query("SELECT count(*) FROM backup_managed_streams")).rows[0].count,"0");
  await db.pool.query("UPDATE installations SET revoked_at=NULL WHERE id=$1",[installationId]);resetApp(false);assert.equal((await request("backup-stream-configure",proof("backup-stream-configure",desired))).status,503);
 });
+test("missing storage and malformed provider grants are temporary failures",async()=>{
+ const revision=Number((await db.pool.query("SELECT configuration_revision FROM installations WHERE id=$1",[installationId])).rows[0].configuration_revision),desired=configuration(revision);
+ provisions.set(venueId,{writerReference:"",readerReference:`reader:${venueId}`,writerCredentials:{accessKeyId:"writer",secretAccessKey:"secret"}});
+ assert.equal((await request("backup-stream-configure",proof("backup-stream-configure",desired))).status,503);
+ provisions.delete(venueId);await db.pool.query("DELETE FROM backup_key_versions WHERE venue_id=$1",[venueId]);await db.pool.query("DELETE FROM backup_locations WHERE venue_id=$1",[venueId]);
+ assert.equal((await request("backup-stream-configure",proof("backup-stream-configure",desired))).status,503);
+});
 test("a lease expiring during provider provisioning cannot commit or disclose credentials",async()=>{
  const revision=Number((await db.pool.query("SELECT configuration_revision FROM installations WHERE id=$1",[installationId])).rows[0].configuration_revision),desired=configuration(revision),values=JSON.parse(Buffer.from(lease.payload,"base64url").toString()),now=Date.now();
  const brief=issuer.issue({origin,leaseId:randomUUID(),installationId,venueId:values[5],environment:"test",publicKey:values[7],issuedAt:now,expiresAt:now+100});provisionHook=()=>new Promise(resolve=>setTimeout(resolve,150));

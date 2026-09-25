@@ -23,8 +23,10 @@ for(const [name,mutate] of [
  ['missing phase',r=>r.phases.pop()],
  ['mismatched database heads',r=>{r.continuous.restoredHead='c'.repeat(64);}],
  ['invented recovery time',r=>{r.continuous.recoverableAt='2026-09-25T21:00:02.000Z';}],
+ ['recovery time absent from the signed pointer',r=>{r.continuous.pointerWrittenAt='2026-09-25T21:00:02.000Z';}],
  ['retrograde observation',r=>{r.venues[0].checkedAt='2026-09-25T20:59:59.000Z';}],
  ['cross-venue access success',r=>{r.isolation.crossVenueReadDenied=false;}],
+ ['snapshot fallback from the continuous venue',r=>{r.snapshotFallback.venueId=venueA;}],
  ['absent retry evidence',r=>{r.continuous.retry.interrupted=false;}],
  ['activation claim',r=>{r.activation='performed';}],
 ] )test(`rejects ${name}`,()=>{const changed=receipt();mutate(changed);assert.throws(()=>verifyManagedRecoveryReceipt(changed));});
