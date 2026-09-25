@@ -249,7 +249,14 @@ mobile notifications separately.
   bot controls, trusted proxy settings and browser behaviour before deployment. Define
   session, signup-request and password-reset-request retention and cleanup, including
   reset records for unknown addresses, and measure them against the
-  expected deployment size. Add a compromised-password check before public signup.
+  expected deployment size. Signup and password-reset completion now use an optional
+  screening interface with a one-second failure deadline. Packaged production-server
+  startup requires an explicitly supplied local
+  SHA-256 corpus; compromised passwords are rejected in English and Spanish without
+  consuming the link, and unavailable screening leaves credentials and sessions unchanged.
+  No password or complete digest is sent externally. Choose, verify and operate the
+  production corpus update source; any external provider still requires a separate
+  processing-location and residency decision.
   Portal follow-ups before public use: decide whether to accept tracking queries and
   trailing-slash/case aliases, and provide useful error pages for rejected URLs.
   The current exact routes and query restrictions follow the approved portal plan.

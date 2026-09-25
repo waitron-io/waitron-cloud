@@ -170,6 +170,24 @@ test('invalid new passwords leave the reset usable', async () => {
   await signIn('🔑'.repeat(15));
 });
 
+test('compromised or unavailable screening leaves the reset link and current password usable', async () => {
+  let mode: 'compromised' | 'unavailable' | 'acceptable' = 'compromised';
+  const screened = recoveryAndDeliver(pool, mailer, {
+    async check() { if (mode === 'unavailable') throw new Error('private provider detail'); return mode; },
+  });
+  await screened.request(email);
+  const message = messages.at(-1)!;
+  await expectCode(screened.complete(message.token, newPassword), 'password_compromised');
+  await signIn();
+  mode = 'unavailable';
+  await expectCode(screened.complete(message.token, newPassword), 'password_screening_unavailable');
+  await signIn();
+  assert.equal((await pool.query('SELECT consumed_at FROM password_reset_requests WHERE token_hash = $1', [digest(message.token)])).rows[0].consumed_at, null);
+  mode = 'acceptable';
+  await screened.complete(message.token, newPassword);
+  await signIn(newPassword);
+});
+
 test('mail failures reveal no account status and notification failure cannot undo a reset', async () => {
   const broken = recoveryAndDeliver(pool, {
     async sendPasswordReset(message) { throw new Error(`secret ${message.token}`); },

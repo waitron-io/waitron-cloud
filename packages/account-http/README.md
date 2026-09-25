@@ -23,6 +23,14 @@ Generate each key separately with `openssl rand -hex 32` and save it in your ign
 `.env`. Keep the email key across restarts so the worker can decrypt queued messages.
 The API and worker must use the same database and email key ring.
 
+The packaged production server CLI requires `CLOUD_COMPROMISED_PASSWORD_CORPUS` to name an absolute
+path to a locally supplied password corpus. Put one lowercase SHA-256 digest on each
+line; blank lines and lines beginning with `#` are ignored. The server accepts a corpus
+of at most 16 MiB during startup and refuses malformed, empty or
+unreadable corpora. It keeps digests in process memory and never sends a password or
+digest to an external service. Development may omit the setting, but then screening
+is disabled; do not use that mode for public signup.
+
 From the repository root, install dependencies, apply migrations, start the inbox,
 then start the API:
 
@@ -126,13 +134,13 @@ All responses disable caching and referrer forwarding, and set `nosniff`. Errors
 
 | Status | Code | Meaning |
 | --- | --- | --- |
-| 400 | `invalid_input`, `link_unavailable` | Invalid shape, ambiguous cookies or unusable completion token |
+| 400 | `invalid_input`, `link_unavailable`, `password_compromised` | Invalid shape, ambiguous cookies, unusable completion token or a password present in the configured corpus |
 | 401 | `credentials_invalid`, `unauthenticated` | Login failed or no usable session |
 | 403 | `forbidden` | Wrong origin/host or missing/incorrect session CSRF proof |
 | 404 / 405 | `not_found` / `method_not_allowed` | Unknown path or wrong method |
 | 408 / 413 / 415 / 431 | `invalid_input` | Receive timeout, body too large, unsupported encoding/type or headers too large |
 | 429 | `rate_limited` | Shared request allowance exhausted; obey `Retry-After` |
-| 503 | `temporarily_unavailable` | Database failure, admission limit or shutdown; retry after the advertised delay |
+| 503 | `temporarily_unavailable` | Database or password-screening failure, admission limit or shutdown; retry after the advertised delay |
 
 Bodies are limited to 16 KiB, including streamed bodies, and headers to 8 KiB.
 Header/body receive deadlines are five seconds, checked by Node at one-second
@@ -195,7 +203,7 @@ The CLI has an eleven-second hard shutdown deadline if database work still preve
 exit. A client disconnect does not prove a transaction rolled back: recover a lost
 response through the normal signup/reset login or retry rules.
 
-Before public use, complete live provider and sender verification, delivery-event handling, compromised-password screening,
+Before public use, complete live provider and sender verification, delivery-event handling, corpus sourcing and update operations,
 MFA policy, ingress bot controls, production secrets, retention rules and deployment
 load/timing checks. The [backlog](../../docs/backlog.md) tracks these separately from
 Waitron pairing and shared UI extraction, which are now unblocked by SQLite.

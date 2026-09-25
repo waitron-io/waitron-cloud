@@ -178,6 +178,32 @@ test('invalid signup details do not consume the link or create partial records',
   await store.complete(message.token, { ...details, password: '🔑'.repeat(15), countryCode: 'es' });
 });
 
+test('compromised password refusal leaves the signup link usable for an acceptable password', async () => {
+  const screened = signupAndDeliver(pool, { async sendVerification(message) { messages.push(message); } }, {
+    async check(password) { return password === details.password ? 'compromised' : 'acceptable'; },
+  });
+  await screened.request(email);
+  const message = messages.at(-1)!;
+  await expectCode(screened.complete(message.token, details), 'password_compromised');
+  assert.equal(await count('cloud_accounts'), 0);
+  assert.equal((await pool.query('SELECT consumed_at FROM signup_requests')).rows[0].consumed_at, null);
+  await screened.complete(message.token, {...details, password: 'an acceptable café password'});
+});
+
+test('unavailable password screening leaves the signup link and database unchanged', async () => {
+  let available = false;
+  const screened = signupAndDeliver(pool, { async sendVerification(message) { messages.push(message); } }, {
+    async check() { if (!available) throw new Error('private provider detail'); return 'acceptable'; },
+  });
+  await screened.request(email);
+  const message = messages.at(-1)!;
+  await expectCode(screened.complete(message.token, details), 'password_screening_unavailable');
+  assert.equal(await count('cloud_accounts'), 0);
+  assert.equal((await pool.query('SELECT consumed_at FROM signup_requests')).rows[0].consumed_at, null);
+  available = true;
+  await screened.complete(message.token, details);
+});
+
 test('a database failure rolls back all signup records and leaves its link usable', async () => {
   const message = await request();
   await pool.query("ALTER TABLE organisations ADD CONSTRAINT simulate_failure CHECK (name <> 'Café Sol')");

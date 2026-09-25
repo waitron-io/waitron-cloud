@@ -9,6 +9,7 @@ export type { AccountEmail } from './account-input.ts';
 export { createSmtpAccountMailer, type SmtpAccountMailConfig } from './smtp-mailer.ts';
 export { EmailDeliveryError, type EmailDeliveryContext, type EmailDeliveryReceipt } from './email-delivery.ts';
 export { createLocalAccountMailer } from './local-mailer.ts';
+export { LocalPasswordCorpus, type PasswordScreeningProvider, type PasswordScreeningResult } from './compromised-passwords.ts';
 
 export interface ConnectionBinding {
   operationId: string;
