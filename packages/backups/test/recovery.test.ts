@@ -243,12 +243,13 @@ test("owner-authorised replacement is durable, target-bound and does not activat
   const listing = await recovery.catalogue(owner.token, installed.venueId);
   assert.equal(listing.points[0]?.capturedAt, point.capturedAt);
   assert.equal(listing.defaultPointId, point.id);
-  assert.equal(listing.continuousRecoveryAvailable, false);
+  assert.equal(listing.continuousRecovery, null);
   await assert.rejects(
     recovery.catalogue(stranger.token, installed.venueId),
     /backup.permission_denied/,
   );
   const access = await recovery.target(input.id, "read", proof("read"));
+  assert("point" in access);
   assert.equal(access.keys.recoveryKey, capture.keys.recoveryKey);
   assert.equal(access.point.id, point.id);
   const status = await recovery.status(owner.token, input.id);

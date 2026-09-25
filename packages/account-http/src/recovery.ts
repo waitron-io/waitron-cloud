@@ -24,9 +24,15 @@ export async function recoveryResponse(c:Context,options:{pool:Pool;origin:strin
    const token=readSessionCookie(c,new URL(origin).protocol==='https:')??'',csrf=c.req.header('x-csrf-token')??'';
    const session=await transaction(pool,client=>resolveSession(client,token,{csrfToken:csrf,touch:false}));
    await consume([{scope:'recovery-account',subject:session.accountId,limit:30,windowSeconds:60}]);
-   const body=await readAccountBody(c.req.raw,['requestId','code',...(action==='approve'?['pointId','oldServerUnavailable','acceptDataLoss']:action==='replace'?['oldInstallationId','oldServerUnavailable','confirmReplacement']:[])]),id=body.requestId!,code=body.code!;
+   const body=await readAccountBody(c.req.raw,['requestId','code',...(action==='approve'?['oldServerUnavailable','acceptDataLoss']:action==='replace'?['oldInstallationId','oldServerUnavailable','confirmReplacement']:[])],action==='approve'?['source','pointId','venueId']:[]),id=body.requestId!,code=body.code!;
    const withReplacement=async(view:Awaited<ReturnType<typeof requests.inspect>>)=>({...view,replacement:view.operationId?await replacements.inspect(view.operationId,token,csrf):null});
-   if(action==='approve')return c.json(await withReplacement(await requests.approve(id,code,token,csrf,{pointId:body.pointId!,oldServerUnavailable:body.oldServerUnavailable==='true',acceptDataLoss:body.acceptDataLoss==='true'})));
+   if(action==='approve'){
+    const confirmation={oldServerUnavailable:body.oldServerUnavailable==='true',acceptDataLoss:body.acceptDataLoss==='true'};
+    const selection=body.source==='continuous'&&body.venueId&&!body.pointId?{source:'continuous' as const,venueId:body.venueId,...confirmation}
+     :(body.source===undefined||body.source==='snapshot')&&body.pointId&&!body.venueId?{source:'snapshot' as const,pointId:body.pointId,...confirmation}:null;
+    if(!selection)throw new AccountHttpError(400,'invalid_input');
+    return c.json(await withReplacement(await requests.approve(id,code,token,csrf,selection)));
+   }
    const view=await requests.inspect(id,code,token,csrf);
    if(action==='replace'){
     if(!view.operationId)throw new AccountHttpError(409,'approval_required');
@@ -52,10 +58,19 @@ export async function recoveryResponse(c:Context,options:{pool:Pool;origin:strin
   if(action==='info')return c.json(await recovery.target(body.id!,'info',proof));
   if(action==='restored'){await recovery.target(body.id!,'restored',proof);return c.json({status:'restored'});}
   const first=await recovery.target(body.id!,'read',proof);
+  if('stream' in first){
+   const reader=captures.managedStreams?.reader;if(!reader)throw new AccountHttpError(503,'temporarily_unavailable');
+   const credentials=await reader({reference:first.stream.readerReference,venueId:first.stream.venueId,location:first.stream.location,prefix:first.stream.prefix});
+   const current=await recovery.target(body.id!,'read',proof);
+   if(!('stream' in current)||!credentials||Object.keys(credentials).sort().join(',')!=='accessKeyId,secretAccessKey'||!credentials.accessKeyId||!credentials.secretAccessKey)throw new AccountHttpError(503,'temporarily_unavailable');
+   const recoveryKit='WAITRON-RECOVERY-KIT-1:'+Buffer.from(JSON.stringify({version:1,venueId:current.stream.localVenueId,bucket:{...current.stream.location,prefix:current.stream.prefix,...credentials},recoveryKey:current.stream.recoveryKey,pointerSignerPublicKey:current.stream.pointerSignerPublicKey})).toString('base64url');
+   return c.json({source:current.source,recoveryKit,operationExpiresAt:current.operationExpiresAt});
+  }
   const grant=await captures.grant(first.location,{kind:'restore',bucket:first.location.bucket,scope:first.point.objectKey});
   // Owner cancellation can commit while the provider issues credentials. Recheck before disclosing keys.
   const current=await recovery.target(body.id!,'read',proof),expires=Date.parse(grant.expiresAt);
   if(!Number.isFinite(expires)||expires<=Date.now()||expires>Date.now()+901000||!grant.credentials.accessKeyId||!grant.credentials.secretAccessKey||!grant.credentials.sessionToken)throw new AccountHttpError(503,'temporarily_unavailable');
+  if(!('point' in current))throw new AccountHttpError(503,'temporarily_unavailable');
   return c.json({point:current.point,location:current.location,recoveryKey:current.keys.recoveryKey,operationExpiresAt:current.operationExpiresAt,...grant});
  }catch(error){
   const code=error instanceof Error?error.message:'';

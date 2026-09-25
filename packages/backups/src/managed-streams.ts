@@ -22,6 +22,7 @@ export interface ManagedStreamAuthority {
     location: StorageLocation,
     key: string,
   ): Promise<Buffer>;
+  reader?(input:{reference:string;venueId:string;location:StorageLocation;prefix:string}):Promise<Pick<StorageCredentials,"accessKeyId"|"secretAccessKey">>;
 }
 
 export interface ManagedStreamInput {

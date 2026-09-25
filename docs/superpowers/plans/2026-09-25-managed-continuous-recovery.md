@@ -79,11 +79,11 @@
 - Consumes: Task 1 verified evidence and provider reader credentials.
 - Produces: a source-discriminated recovery view and continuous `read` response containing one Waitron recovery-kit token.
 
-- [ ] Write failing tests that default approval to the displayed continuous source, retain explicit snapshot selection, freeze the generation/time/revision, reject stale or changed evidence, hide secrets from owner views and stop disclosure after close/revocation/provider wait.
-- [ ] Refactor `RecoveryInput` and stored views into discriminated snapshot/continuous sources. Preserve old snapshot callers and replacement behavior.
-- [ ] Branch target `info/read/restored` by frozen source. Keep snapshot grants unchanged. For continuous read, resolve reader credentials, build the exact `WAITRON-RECOVERY-KIT-1:` payload and recheck operation/permission/evidence before returning it.
-- [ ] Return nullable continuous public evidence from the owner catalogue without bucket, signer, generation or provider references.
-- [ ] Run focused backups and account HTTP tests. Commit the green unit with sign-off.
+- [x] Write failing tests that default approval to the displayed continuous source, retain explicit snapshot selection, freeze the generation/time/revision, reject stale or changed evidence, hide secrets from owner views and stop disclosure after close/revocation/provider wait.
+- [x] Refactor `RecoveryInput` and stored views into discriminated snapshot/continuous sources. Preserve old snapshot callers and replacement behavior.
+- [x] Branch target `info/read/restored` by frozen source. Keep snapshot grants unchanged. For continuous read, resolve reader credentials, build the exact `WAITRON-RECOVERY-KIT-1:` payload and recheck operation/permission/evidence before returning it.
+- [x] Return nullable continuous public evidence from the owner catalogue without bucket, signer, generation or provider references.
+- [x] Run focused backups and account HTTP tests. Commit the green unit with sign-off.
 
 ### Task 4: Add bilingual owner selection and status
 

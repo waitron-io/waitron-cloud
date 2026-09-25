@@ -1,0 +1,36 @@
+import assert from "node:assert/strict";
+import {generateKeyPairSync,randomBytes,randomUUID,sign} from "node:crypto";
+import {after,before,test} from "node:test";
+import {login} from "@waitron-cloud/identity";
+import {RegistrationStore,SignupStore,transaction} from "@waitron-cloud/registration";
+import {database} from "../../account-http/test/fixtures.ts";
+import {BackupCatalogue} from "../src/catalogue.ts";
+import {BackupKeyVault} from "../src/keys.ts";
+import {ManagedStreams,type ManagedStreamAuthority} from "../src/managed-streams.ts";
+import {BackupRecovery,recoveryPayload} from "../src/recovery.ts";
+import {RecoveryRequests,requestPayload} from "../src/recovery-request.ts";
+
+let db:Awaited<ReturnType<typeof database>>;
+before(async()=>{db=await database();});after(async()=>db?.close());
+const origin="https://cloud.test";
+function target(){const key=generateKeyPairSync("ed25519"),id=randomUUID(),code="12345678";return {id,code,publicKey:key.publicKey.export({type:"spki",format:"der"}).toString("base64url"),request(action:"start"|"status"){const bytes=requestPayload(origin,id,action,this.publicKey,code,Date.now());return {payload:bytes.toString("base64url"),signature:sign(null,bytes,key.privateKey).toString("base64url")};},proof(action:"info"|"read"|"restored",digest=""){const bytes=recoveryPayload(origin,id,action,digest,Date.now());return {payload:bytes.toString("base64url"),signature:sign(null,bytes,key.privateKey).toString("base64url")};}};}
+function pointer(localVenueId:string,nodeId:string,key:ReturnType<typeof generateKeyPairSync>["privateKey"],generation:string,writtenAt:string){const body={venueId:localVenueId,term:2,nodeId,generation,writtenAt},message=`{"pointer":{"generation":"${generation}","nodeId":"${nodeId}","term":2,"venueId":"${localVenueId}","writtenAt":"${writtenAt}"},"purpose":"waitron.stream.pointer.v1"}`;return Buffer.from(JSON.stringify({body,signature:sign(null,Buffer.from(message),key).toString("base64")}));}
+test("continuous approval freezes fresh verified evidence and target metadata contains no authority",async()=>{
+ await db.pool.query("TRUNCATE signup_requests,email_outbox,organisations,cloud_accounts CASCADE");
+ const email=`continuous-${randomUUID()}@example.test`,password="A long enough continuous password",signup=new SignupStore(db.pool,db.outbox);await signup.request(email);const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox")).rows[0]);assert("token" in mail);
+ const owner=await signup.complete(mail.token,{password,organisationName:"Continuous",legalBusinessName:"Continuous SL",countryCode:"ES"}),session=await transaction(db.pool,client=>login(client,{email,password})),registration=new RegistrationStore(db.pool),installationKey=generateKeyPairSync("ed25519"),localVenueId=randomUUID();
+ const binding={operationId:randomUUID(),installationKey:installationKey.publicKey.export({type:"spki",format:"der"}).toString("base64url"),localVenueId,environment:"test",organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId} as const;await registration.start(binding);await registration.approveCloud(binding,owner.accountId);await registration.approveLocal(binding,randomUUID());const installed=await registration.complete(binding);
+ const vault=new BackupKeyVault(randomBytes(32)),catalogue=new BackupCatalogue(db.pool,vault,()=>({async read(){throw Error("unused");},async put(){throw Error("unused");},async remove(){}}));await catalogue.provision(installed.installationId,{endpoint:"https://store.test",bucket:"continuous-test",region:"local"});
+ const signer=generateKeyPairSync("ed25519"),nodeId=randomUUID(),stored=new Map<string,Buffer>(),authority:ManagedStreamAuthority={async provision(){return {writerReference:"writer",readerReference:"reader",writerCredentials:{accessKeyId:"write",secretAccessKey:"secret"}};},async read(_reference,_location,key){const value=stored.get(key);if(!value)throw Error("missing");return value;}};
+ const streams=new ManagedStreams(db.pool,vault,authority),revision=Number((await db.pool.query("SELECT configuration_revision FROM installations WHERE id=$1",[installed.installationId])).rows[0].configuration_revision),configured=await streams.configure(installed.installationId,revision,{localVenueId,sourceNodeId:nodeId,pointerSignerPublicKey:signer.publicKey.export({type:"spki",format:"der"}).toString("base64")});
+ const writtenAt=new Date().toISOString(),generation=`gen-2-${nodeId}-${writtenAt.replace(/[-:.]/g,"").replace(/\d{3}Z$/,"Z")}`;stored.set(`${configured.bucket.prefix}venues/${localVenueId}/current.json`,pointer(localVenueId,nodeId,signer.privateKey,generation,writtenAt));await streams.observe(installed.installationId,configured.configurationRevision);
+ const recovery=new BackupRecovery(db.pool,vault,origin),requests=new RecoveryRequests(db.pool,vault,origin),stale=target();await db.pool.query("UPDATE backup_managed_streams SET observed_at=clock_timestamp()-interval '6 minutes' WHERE venue_id=$1",[installed.venueId]);assert.equal((await recovery.catalogue(session.token,installed.venueId)).continuousRecovery,null);await requests.machine("start",stale.request("start"));await assert.rejects(requests.approve(stale.id,stale.code,session.token,session.csrfToken,{source:"continuous",venueId:installed.venueId,oldServerUnavailable:true,acceptDataLoss:true}),/backup.unavailable/);await db.pool.query("UPDATE backup_managed_streams SET observed_at=clock_timestamp() WHERE venue_id=$1",[installed.venueId]);
+ const t=target();await requests.machine("start",t.request("start"));
+ const approved=await requests.approve(t.id,t.code,session.token,session.csrfToken,{source:"continuous",venueId:installed.venueId,oldServerUnavailable:true,acceptDataLoss:true});
+ assert.equal(approved.operation?.source.kind,"continuous");assert.equal(approved.operation?.source.recoverableAt,writtenAt);assert.equal(approved.operation?.pointId,null);assert(!JSON.stringify(approved).includes(generation));assert(!JSON.stringify(approved).includes("reader"));
+ const info=await recovery.target(t.id,"info",t.proof("info"));assert.equal(info.source.kind,"continuous");assert(info.source.kind==="continuous");assert.equal(info.source.recoverableAt,writtenAt);assert.match(info.source.sourceDigest,/^[0-9a-f]{64}$/);assert(!JSON.stringify(info).includes(generation));assert(!JSON.stringify(info).includes("secret"));
+ const access=await recovery.target(t.id,"read",t.proof("read",info.source.sourceDigest));assert('stream' in access);assert.equal(access.stream.localVenueId,localVenueId);assert.equal(access.stream.generation,generation);
+ await recovery.target(t.id,"restored",t.proof("restored",info.source.sourceDigest));assert.equal((await recovery.status(session.token,t.id)).status,"restored");
+ const frozen=await recovery.status(session.token,t.id);await db.pool.query("UPDATE backup_managed_streams SET generation=$2,recoverable_at=clock_timestamp(),observed_at=clock_timestamp() WHERE venue_id=$1",[installed.venueId,`gen-2-${nodeId}-20260925T235959Z`]);
+ assert.deepEqual(await recovery.status(session.token,t.id),frozen);await assert.rejects(recovery.target(t.id,"read",t.proof("read",info.source.sourceDigest)),/backup.unavailable/);
+});
