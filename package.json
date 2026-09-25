@@ -10,6 +10,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "node scripts/test-postgres.mjs",
     "test:registration": "pnpm --filter @waitron-cloud/registration test",
+    "test:abuse": "node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test --test-timeout=120000 test/abuse-receipt.test.ts test/abuse-boundaries.test.ts",
     "db:migrate": "pnpm --filter @waitron-cloud/registration db:migrate",
     "test:packages": "pnpm -r --workspace-concurrency=1 test",
     "mail:up": "docker compose up -d --wait mailpit",
