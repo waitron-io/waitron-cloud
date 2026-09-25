@@ -40,6 +40,11 @@ startup refusal. `node scripts/test-gateway-cache-loss.mjs` separately proves re
 when a previously initialized gateway loses its accepted cache. A fresh DNS client then reaches trusted LAN HTTPS without valid
 gateway authority. Normal exit removes every owned container and temporary state.
 
+The same proof runs Cloud's functional probe against both authorised placements through
+the actual gateway. It solves the public challenge and verifies staff TLS passthrough,
+records certificate validity/fingerprints and refuses unknown SNI. The machine-readable
+receipt includes the two structured probe results.
+
 The test root is trusted explicitly by its test clients. It never installs a system
 certificate authority, disables certificate verification or changes host DNS. The
 Waitron fixtures bind their temporary demo servers to all host interfaces so Docker
@@ -204,5 +209,12 @@ A dead HAProxy child restarts from still-valid authority; it cannot restart afte
 Gateway replacement and certificate reload may interrupt remote connections. The local
 target is recovery within sixty seconds, not a production availability promise. LAN
 access remains independent. Production DNS, provider credentials, appliance installation,
-automatic customer appliance setup, external monitoring and deployment hardening still need their own
-implementation and validation before customers can subscribe.
+automatic customer appliance setup, durable remote incidents and deployment hardening
+still need their own implementation and validation before customers can subscribe.
+
+Use `pnpm remote:probe --once` on a separate monitoring host once the configured names
+resolve publicly to this gateway. The continuous form repeats every minute. It reads
+authorised targets from PostgreSQL, uses system TLS trust and accepts no caller URL or
+private-address override. See [local monitoring](local-monitoring.md#probe-remote-access-from-outside-the-gateway)
+for its bounds and JSON-line result contract. The probe does not yet persist route
+failures, certificate expiry or recovery as incidents.

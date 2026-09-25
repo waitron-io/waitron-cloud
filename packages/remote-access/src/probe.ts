@@ -1,0 +1,128 @@
+import {X509Certificate,createHash} from 'node:crypto';
+import {lookup} from 'node:dns/promises';
+import {request} from 'node:https';
+import {BlockList,isIP} from 'node:net';
+import {connect as tlsConnect} from 'node:tls';
+import type {ConnectionOptions,TLSSocket} from 'node:tls';
+import {performance} from 'node:perf_hooks';
+import {setImmediate as immediate} from 'node:timers/promises';
+import type {RemoteProbeTarget} from './probe-targets.ts';
+
+export type ProbeFailure='dns'|'address_forbidden'|'timeout'|'tls'|'challenge'|'http'|'response_limit'|'cancelled';
+export interface ProbeCertificate {notBefore:string;notAfter:string;fingerprint256:string}
+export interface ProbeSuccess {status:'healthy';checkedAt:string;elapsedMs:number;certificate:ProbeCertificate}
+export interface ProbeFailureResult {status:'failed';checkedAt:string;elapsedMs:number;failure:ProbeFailure}
+export type ProbeServiceResult=ProbeSuccess|ProbeFailureResult;
+export interface RemoteProbeResult extends RemoteProbeTarget {version:1;checkedAt:string;public:ProbeServiceResult;staff:ProbeServiceResult}
+export interface ProbeConnection {address:string;family:4|6;port:number}
+export interface ProbeOptions {
+ signal?:AbortSignal;
+ ca?:ConnectionOptions['ca'];
+ connect?:(hostname:string)=>ProbeConnection|Promise<ProbeConnection>;
+}
+interface ScopedProbeOptions extends ProbeOptions {externalSignal?:AbortSignal;deadlineSignal?:AbortSignal}
+
+class ProbeError extends Error {readonly failure:ProbeFailure;constructor(failure:ProbeFailure){super(failure);this.failure=failure;}}
+const blocked=new BlockList();
+for(const [network,prefix] of [['0.0.0.0',8],['10.0.0.0',8],['100.64.0.0',10],['127.0.0.0',8],['169.254.0.0',16],['172.16.0.0',12],['192.0.0.0',24],['192.0.2.0',24],['192.88.99.0',24],['192.168.0.0',16],['198.18.0.0',15],['198.51.100.0',24],['203.0.113.0',24],['224.0.0.0',4],['240.0.0.0',4]] as const)blocked.addSubnet(network,prefix,'ipv4');
+for(const [network,prefix] of [['::',128],['::1',128],['::ffff:0:0',96],['64:ff9b::',96],['64:ff9b:1::',48],['100::',64],['2001::',23],['2001:db8::',32],['3fff::',20],['fc00::',7],['fe80::',10],['ff00::',8]] as const)blocked.addSubnet(network,prefix,'ipv6');
+
+export function isPublicProbeAddress(address:string,family:number):address is string {
+ return (family===4||family===6)&&isIP(address)===family&&!blocked.check(address,family===4?'ipv4':'ipv6');
+}
+function abortFailure(options:ScopedProbeOptions):ProbeFailure {return options.externalSignal?.aborted?'cancelled':'timeout';}
+async function abortable<T>(promise:Promise<T>,options:ScopedProbeOptions):Promise<T> {
+ const signal=options.signal;if(!signal)return promise;if(signal.aborted)throw new ProbeError(abortFailure(options));
+ return new Promise<T>((resolve,reject)=>{let settled=false;const done=(error?:unknown,value?:T)=>{if(settled)return;settled=true;signal.removeEventListener('abort',abort);if(error)reject(error);else resolve(value!);},abort=()=>done(new ProbeError(abortFailure(options)));signal.addEventListener('abort',abort,{once:true});promise.then(value=>done(undefined,value),done);});
+}
+async function connections(hostname:string,options:ScopedProbeOptions):Promise<ProbeConnection[]> {
+ if(options.signal?.aborted)throw new ProbeError(abortFailure(options));
+ if(options.connect)return [await options.connect(hostname)];
+ let answers;try{answers=await abortable(lookup(hostname,{all:true,verbatim:true}),options);}catch(error){if(error instanceof ProbeError)throw error;if(options.signal?.aborted)throw new ProbeError(abortFailure(options));throw new ProbeError('dns');}
+ const values=answers.slice(0,4),allowed=values.filter(v=>isPublicProbeAddress(v.address,v.family)).map(v=>({address:v.address,family:v.family as 4|6,port:443}));
+ if(!allowed.length)throw new ProbeError(values.length?'address_forbidden':'dns');return allowed;
+}
+function certificate(raw:Buffer):ProbeCertificate {
+ const value=new X509Certificate(raw);return {notBefore:new Date(value.validFrom).toISOString(),notAfter:new Date(value.validTo).toISOString(),fingerprint256:value.fingerprint256};
+}
+const elapsed=(started:number)=>Math.max(0,Math.round(performance.now()-started));
+function failed(started:number,failure:ProbeFailure):ProbeFailureResult{return {status:'failed',checkedAt:new Date().toISOString(),elapsedMs:elapsed(started),failure};}
+function classify(error:unknown,options:ScopedProbeOptions):ProbeFailure {
+ if(error instanceof ProbeError)return error.failure;if(options.signal?.aborted)return abortFailure(options);return 'tls';
+}
+async function staffOnce(hostname:string,connection:ProbeConnection,options:ScopedProbeOptions):Promise<ProbeCertificate> {
+ return new Promise((resolve,reject)=>{
+  let settled=false;const done=(error?:unknown,value?:ProbeCertificate)=>{if(settled)return;settled=true;clearTimeout(timer);options.signal?.removeEventListener('abort',abort);if(error)reject(error);else resolve(value!);};
+  const settings:ConnectionOptions={host:connection.address,port:connection.port,servername:hostname,ca:options.ca,rejectUnauthorized:true};
+  const socket=tlsConnect(settings,()=>{
+   try{const peer=socket.getPeerCertificate(true);if(!peer.raw)throw new ProbeError('tls');const evidence=certificate(peer.raw);socket.end();done(undefined,evidence);}catch(error){socket.destroy();done(error);}
+  });
+  const timer=setTimeout(()=>{socket.destroy();done(new ProbeError('timeout'));},5000);
+  const abort=()=>{socket.destroy();done(new ProbeError(abortFailure(options)));};
+  options.signal?.addEventListener('abort',abort,{once:true});socket.once('error',error=>done(error));
+ });
+}
+async function probeStaff(target:RemoteProbeTarget,options:ScopedProbeOptions):Promise<ProbeServiceResult> {
+ const started=performance.now();try{
+  const candidates=await connections(target.staffHostname,options);let last:unknown;
+  for(const connection of candidates){try{const evidence=await staffOnce(target.staffHostname,connection,options);return {status:'healthy',checkedAt:new Date().toISOString(),elapsedMs:elapsed(started),certificate:evidence};}catch(error){last=error;if(options.signal?.aborted)break;}}
+  return failed(started,classify(last,options));
+ }catch(error){return failed(started,classify(error,options));}
+}
+interface HttpsResult {status:number;headers:import('node:http').IncomingHttpHeaders;body:Buffer;certificate:ProbeCertificate}
+async function https(target:string,connection:ProbeConnection,path:string,method:'GET'|'POST',options:ScopedProbeOptions,body?:string,cookie?:string):Promise<HttpsResult> {
+ return new Promise((resolve,reject)=>{
+  let settled=false,req:ReturnType<typeof request>;
+  const done=(error?:unknown,value?:HttpsResult)=>{if(settled)return;settled=true;clearTimeout(timer);options.signal?.removeEventListener('abort',abort);if(error)reject(error);else resolve(value!);};
+  req=request({host:connection.address,port:connection.port,family:connection.family,servername:target,ca:options.ca,rejectUnauthorized:true,method,path,agent:false,headers:{host:target,accept:'application/json',...(body?{'content-type':'application/json','content-length':Buffer.byteLength(body)}:{}),...(cookie?{cookie}:{})}},response=>{
+   let size=0;const chunks:Buffer[]=[];let evidence:ProbeCertificate;
+   try{const peer=(response.socket as TLSSocket).getPeerCertificate(true);if(!peer.raw)throw new ProbeError('tls');evidence=certificate(peer.raw);}catch(error){response.destroy();done(error);return;}
+   response.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>65536){response.destroy(new ProbeError('response_limit'));return;}chunks.push(chunk);});
+   response.once('error',error=>done(error));response.once('end',()=>done(undefined,{status:response.statusCode??0,headers:response.headers,body:Buffer.concat(chunks),certificate:evidence}));
+  });
+  const timer=setTimeout(()=>req.destroy(new ProbeError('timeout')),5000),abort=()=>req.destroy(new ProbeError(abortFailure(options)));
+  options.signal?.addEventListener('abort',abort,{once:true});req.once('error',error=>done(error));req.end(body);
+ });
+}
+function contentType(result:HttpsResult,type:string){return result.headers['content-type']?.split(';',1)[0]?.trim().toLowerCase()===type;}
+async function solve(challenge:string,difficulty:number,options:ScopedProbeOptions){
+ const maximum=Math.min(1_000_000_000,2**difficulty*16);
+ for(let nonce=0;nonce<maximum;nonce++){
+  if(createHash('sha256').update(`${challenge}:${nonce}`).digest().readUInt32BE(0)<2**(32-difficulty))return nonce;
+  if((nonce&2047)===2047){if(options.signal?.aborted)throw new ProbeError(abortFailure(options));await immediate();}
+ }
+ throw new ProbeError('challenge');
+}
+function accessCookie(headers:import('node:http').IncomingHttpHeaders){
+ const values=headers['set-cookie'];if(!values||values.length!==1)throw new ProbeError('challenge');
+ const parts=values[0]!.split(';').map(value=>value.trim()),match=/^__Host-waitron-public=([A-Za-z0-9._~-]{1,1024})$/.exec(parts[0]??'');if(!match)throw new ProbeError('challenge');
+ const attributes=new Set(parts.slice(1).map(value=>value.toLowerCase()));if(!attributes.has('path=/')||!attributes.has('secure')||!attributes.has('httponly')||!attributes.has('samesite=strict'))throw new ProbeError('challenge');
+ return parts[0]!;
+}
+async function publicOnce(target:RemoteProbeTarget,connection:ProbeConnection,options:ScopedProbeOptions):Promise<ProbeCertificate> {
+ const blocked=await https(target.publicHostname,connection,'/public/availability','GET',options);
+ if(blocked.status!==403){throw new ProbeError('http');}
+ if(!contentType(blocked,'text/html')||!blocked.body.toString('utf8').includes('src="/_cloud/challenge.js"'))throw new ProbeError('challenge');
+ const reply=await https(target.publicHostname,connection,'/_cloud/challenge','GET',options);if(reply.status!==200||!contentType(reply,'application/json'))throw new ProbeError('challenge');
+ let value:unknown;try{value=JSON.parse(reply.body.toString('utf8'));}catch{throw new ProbeError('challenge');}
+ if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).sort().join(',')!=='challenge,difficulty')throw new ProbeError('challenge');
+ const challenge=(value as Record<string,unknown>).challenge,difficulty=(value as Record<string,unknown>).difficulty;
+ if(typeof challenge!=='string'||challenge.length<1||challenge.length>2048||!Number.isInteger(difficulty)||Number(difficulty)<8||Number(difficulty)>22)throw new ProbeError('challenge');
+ const nonce=await solve(challenge,Number(difficulty),options),answer=await https(target.publicHostname,connection,'/_cloud/solve','POST',options,JSON.stringify({challenge,nonce}));
+ if(answer.status!==204||answer.body.length)throw new ProbeError('challenge');const cookie=accessCookie(answer.headers);
+ const available=await https(target.publicHostname,connection,'/public/availability','GET',options,undefined,cookie);if(available.status!==200||!contentType(available,'application/json'))throw new ProbeError('http');
+ try{JSON.parse(available.body.toString('utf8'));}catch{throw new ProbeError('http');}return available.certificate;
+}
+async function probePublic(target:RemoteProbeTarget,options:ScopedProbeOptions):Promise<ProbeServiceResult> {
+ const started=performance.now();try{
+  const candidates=await connections(target.publicHostname,options);let last:unknown;
+  for(const connection of candidates){try{const evidence=await publicOnce(target,connection,options);return {status:'healthy',checkedAt:new Date().toISOString(),elapsedMs:elapsed(started),certificate:evidence};}catch(error){last=error;const failure=classify(error,options);if(!['tls','timeout'].includes(failure)||options.signal?.aborted)break;}}
+  return failed(started,classify(last,options));
+ }catch(error){return failed(started,classify(error,options));}
+}
+
+export async function probeTarget(target:RemoteProbeTarget,options:ProbeOptions={}):Promise<RemoteProbeResult> {
+ const deadline=AbortSignal.timeout(15000),signal=options.signal?AbortSignal.any([options.signal,deadline]):deadline,scoped:ScopedProbeOptions={...options,signal,externalSignal:options.signal,deadlineSignal:deadline};
+ const [publicResult,staff]=await Promise.all([probePublic(target,scoped),probeStaff(target,scoped)]);
+ return {version:1,...target,checkedAt:new Date().toISOString(),public:publicResult,staff};
+}

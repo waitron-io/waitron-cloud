@@ -55,6 +55,38 @@ Status needs only database access. It reports venue and due counts, unknown chec
 open incidents and the oldest completed check. Use `pnpm mail:status` separately to
 inspect email delivery failures. An observed incident does not prove an email was sent.
 
+## Probe remote access from outside the gateway
+
+Run the separate remote probe from a host which resolves each configured public and
+staff name to the real gateway:
+
+```sh
+pnpm remote:probe --once
+```
+
+Without `--once`, the process repeats every 60 seconds until `SIGINT` or `SIGTERM`.
+It derives at most 100 targets from current, non-revoked placements and writes one
+complete JSON object per line. Each result carries the installation, venue and current
+configuration revision, separate public/staff checked times and elapsed milliseconds,
+and the verified certificate validity dates and SHA-256 fingerprint on success.
+
+The public check receives and solves the normal bot challenge before requesting
+`/public/availability`; there is no unprotected health bypass. The staff check performs
+only a trusted hostname-verifying TLS handshake and sends no HTTP request or login.
+Production resolution refuses private, loopback, link-local and reserved addresses.
+Tests inject an exact mapping for their configured fixture names; the CLI has no URL,
+address, port or trust-disable option.
+
+At most four venues run concurrently. DNS answers, TLS/request time, total service time,
+response bytes and proof work are bounded. Shutdown aborts pending sockets and suppresses
+their results, so an interrupted check cannot print fresh success. Failures use fixed
+codes rather than raw addresses or network errors.
+
+These JSON lines are observations, not incidents. This command does not write monitoring
+history or send alerts. The next monitoring stage must persist them with their revision,
+reject late results after configuration/revocation, distinguish stale evidence from
+health, and create deduplicated failure/expiry/recovery transitions.
+
 For local delivery, start Mailpit and run the existing mail worker with local transport:
 
 ```sh
@@ -90,8 +122,10 @@ revocation, opt-in changes, permission changes during a queue wait and notificat
 Real browser tests cover both languages, saved preferences, stale monitoring, phone
 layout and accessibility. Mailpit captures incident and recovery messages in both languages.
 
-Before deployment, add external functional probes, operational alert routing, retention
-for incident/delivery history, and scheduler/fan-out measurements at the intended scale.
+External remote-access probes now run locally and emit revision-bound structured evidence.
+Before deployment, persist that evidence with route/certificate incidents and recovery,
+then add operational alert routing, retention for incident/delivery history, and
+scheduler/fan-out measurements at the intended scale.
 Define outage escalation and quiet-period policies with actual operating data. Live email
 provider setup, Spain processing requirements and delivery monitoring remain separate
 launch work. This local implementation creates no cloud resources and sends no live
