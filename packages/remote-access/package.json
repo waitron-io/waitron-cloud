@@ -18,6 +18,7 @@
   },
   "exports": {
     "./placement": "./src/placement.ts",
-    "./manifest": "./src/manifest.ts"
+    "./manifest": "./src/manifest.ts",
+    "./probe-targets": "./src/probe-targets.ts"
   }
 }
