@@ -9,7 +9,7 @@ import {join} from 'node:path';
 import type {Duplex} from 'node:stream';
 import {createServer as tlsServer} from 'node:tls';
 import {after,test} from 'node:test';
-import {probeTarget} from '../src/probe.ts';
+import {isPublicProbeAddress,probeTarget} from '../src/probe.ts';
 import type {RemoteProbeTarget} from '../src/probe-targets.ts';
 import {createPublicGate} from '../src/public-gate.ts';
 
@@ -42,6 +42,11 @@ test('address policy refuses loopback unless an exact configured fixture mapping
  }finally{await server.close();}
 });
 
+test('address policy refuses IPv6 documentation and NAT64 translations of non-public IPv4',()=>{
+ for(const address of ['2001:db8::1','3fff::1','64:ff9b::7f00:1'])assert.equal(isPublicProbeAddress(address,6),false,address);
+ assert.equal(isPublicProbeAddress('2606:4700:4700::1111',6),true);
+});
+
 test('staff TLS distinguishes hostname, trust, refused and timed-out connections without raw diagnostics',async()=>{
  const valid=await listenTls('staff.probe.example.test'),wrong=await listenTls('wrong.probe.example.test'),untrusted=await listenTls('staff.probe.example.test');
  const hangingSockets=new Set<import('node:net').Socket>(),hanging=netServer(socket=>{hangingSockets.add(socket);socket.once('close',()=>hangingSockets.delete(socket));});await new Promise<void>(resolve=>hanging.listen(0,'127.0.0.1',resolve));const hangingAddress=hanging.address();assert(hangingAddress&&typeof hangingAddress!=='string');
@@ -66,18 +71,18 @@ test('public probe completes the real challenge before reporting verified HTTPS 
  }finally{await Promise.all([ingress.close(),upstream.close()]);}
 });
 
-async function protocolFixture(mode:'false-page'|'difficulty'|'duplicate-cookie'|'redirect'|'non-json'|'oversized'){
+async function protocolFixture(mode:'false-page'|'difficulty'|'duplicate-cookie'|'wrong-cookie'|'insecure-cookie'|'redirect'|'non-json'|'oversized'){
  const material=await certificate('probe.example.test'),fixture=await listenHttps(material,(req,res)=>{
   if(req.url==='/public/availability'&&!req.headers.cookie){if(mode==='redirect'){res.statusCode=302;res.setHeader('location','https://elsewhere.example/');res.end();return;}res.statusCode=403;res.setHeader('content-type','text/html');res.end(mode==='false-page'?'<h1>Forbidden</h1>':'<script src="/_cloud/challenge.js"></script>');return;}
   if(req.url==='/_cloud/challenge'){res.setHeader('content-type','application/json');res.end(JSON.stringify({challenge:'fixture-challenge',difficulty:mode==='difficulty'?23:8}));return;}
-  if(req.url==='/_cloud/solve'){res.statusCode=204;const cookie='__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict';res.setHeader('set-cookie',mode==='duplicate-cookie'?[cookie,cookie]:cookie);res.end();return;}
+  if(req.url==='/_cloud/solve'){res.statusCode=204;const cookie=mode==='wrong-cookie'?'session=fixture; Path=/; Secure; HttpOnly; SameSite=Strict':mode==='insecure-cookie'?'__Host-waitron-public=fixture; Path=/; HttpOnly; SameSite=Strict':'__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict';res.setHeader('set-cookie',mode==='duplicate-cookie'?[cookie,cookie]:cookie);res.end();return;}
   if(req.url==='/public/availability'&&req.headers.cookie){res.statusCode=200;res.setHeader('content-type','application/json');res.end(mode==='non-json'?'not json':mode==='oversized'?JSON.stringify('x'.repeat(65537)):'{}');return;}
   res.statusCode=404;res.end();
  });return {...fixture,material};
 }
 
-test('public probe refuses false challenges, excessive work, duplicate cookies, redirects and invalid responses',async()=>{
- for(const [mode,failure] of [['false-page','challenge'],['difficulty','challenge'],['duplicate-cookie','challenge'],['redirect','http'],['non-json','http'],['oversized','response_limit']] as const){
+test('public probe refuses false challenges, excessive work, malformed cookies, redirects and invalid responses',async()=>{
+ for(const [mode,failure] of [['false-page','challenge'],['difficulty','challenge'],['duplicate-cookie','challenge'],['wrong-cookie','challenge'],['insecure-cookie','challenge'],['redirect','http'],['non-json','http'],['oversized','response_limit']] as const){
   const fixture=await protocolFixture(mode);try{const result=await probeTarget(target(),{ca:fixture.material.cert,connect:connect(fixture.port)});assert.equal(result.public.status,'failed',mode);if(result.public.status==='failed')assert.equal(result.public.failure,failure,mode);}finally{await fixture.close();}
  }
 });

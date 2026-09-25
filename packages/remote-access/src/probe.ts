@@ -25,9 +25,9 @@ interface ScopedProbeOptions extends ProbeOptions {externalSignal?:AbortSignal;d
 class ProbeError extends Error {readonly failure:ProbeFailure;constructor(failure:ProbeFailure){super(failure);this.failure=failure;}}
 const blocked=new BlockList();
 for(const [network,prefix] of [['0.0.0.0',8],['10.0.0.0',8],['100.64.0.0',10],['127.0.0.0',8],['169.254.0.0',16],['172.16.0.0',12],['192.0.0.0',24],['192.0.2.0',24],['192.88.99.0',24],['192.168.0.0',16],['198.18.0.0',15],['198.51.100.0',24],['203.0.113.0',24],['224.0.0.0',4],['240.0.0.0',4]] as const)blocked.addSubnet(network,prefix,'ipv4');
-for(const [network,prefix] of [['::',128],['::1',128],['::ffff:0:0',96],['64:ff9b:1::',48],['100::',64],['2001::',23],['fc00::',7],['fe80::',10],['ff00::',8]] as const)blocked.addSubnet(network,prefix,'ipv6');
+for(const [network,prefix] of [['::',128],['::1',128],['::ffff:0:0',96],['64:ff9b::',96],['64:ff9b:1::',48],['100::',64],['2001::',23],['2001:db8::',32],['3fff::',20],['fc00::',7],['fe80::',10],['ff00::',8]] as const)blocked.addSubnet(network,prefix,'ipv6');
 
-function publicAddress(address:string,family:number):address is string {
+export function isPublicProbeAddress(address:string,family:number):address is string {
  return (family===4||family===6)&&isIP(address)===family&&!blocked.check(address,family===4?'ipv4':'ipv6');
 }
 function abortFailure(options:ScopedProbeOptions):ProbeFailure {return options.externalSignal?.aborted?'cancelled':'timeout';}
@@ -39,7 +39,7 @@ async function connections(hostname:string,options:ScopedProbeOptions):Promise<P
  if(options.signal?.aborted)throw new ProbeError(abortFailure(options));
  if(options.connect)return [await options.connect(hostname)];
  let answers;try{answers=await abortable(lookup(hostname,{all:true,verbatim:true}),options);}catch(error){if(error instanceof ProbeError)throw error;if(options.signal?.aborted)throw new ProbeError(abortFailure(options));throw new ProbeError('dns');}
- const values=answers.slice(0,4),allowed=values.filter(v=>publicAddress(v.address,v.family)).map(v=>({address:v.address,family:v.family as 4|6,port:443}));
+ const values=answers.slice(0,4),allowed=values.filter(v=>isPublicProbeAddress(v.address,v.family)).map(v=>({address:v.address,family:v.family as 4|6,port:443}));
  if(!allowed.length)throw new ProbeError(values.length?'address_forbidden':'dns');return allowed;
 }
 function certificate(raw:Buffer):ProbeCertificate {
