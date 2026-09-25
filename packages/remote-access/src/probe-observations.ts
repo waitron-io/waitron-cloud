@@ -8,7 +8,7 @@ function validate(result:RemoteProbeResult){
  if(result.version!==1||!Number.isSafeInteger(result.revision)||result.revision<0)throw new Error('invalid_probe_result');
  date(result.checkedAt);
  for(const service of [result.public,result.staff]){
-  date(service.checkedAt);if(!Number.isInteger(service.elapsedMs)||service.elapsedMs<0||service.elapsedMs>15000)throw new Error('invalid_probe_result');
+  date(service.checkedAt);if(!Number.isInteger(service.elapsedMs)||service.elapsedMs<0||service.elapsedMs>2147483647)throw new Error('invalid_probe_result');
   if(service.status==='failed'){if(!failures.has(service.failure))throw new Error('invalid_probe_result');}
   else{date(service.certificate.notBefore);date(service.certificate.notAfter);if(!/^(?:[0-9A-F]{2}:)*[0-9A-F]{2}$/.test(service.certificate.fingerprint256))throw new Error('invalid_probe_result');}
  }
@@ -41,7 +41,7 @@ export class RemoteProbeObservationStore {
  constructor(pool:Pool){this.#pool=pool;}
  async record(result:RemoteProbeResult):Promise<boolean>{
   validate(result);
-  return transaction(this.#pool,async client=>{
+  try{return await transaction(this.#pool,async client=>{
    const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
    if([result.checkedAt,result.public.checkedAt,result.staff.checkedAt].some(value=>date(value).getTime()>now.getTime()+60000))throw new Error('invalid_probe_result');
    // Configuration, hostname changes and revocation take this installation lock exclusively.
@@ -53,6 +53,10 @@ export class RemoteProbeObservationStore {
    if(!current||Number(current.configuration_revision)!==result.revision||current.staff_hostname!==result.staffHostname||current.public_hostname!==result.publicHostname)return false;
    const [publicWritten,staffWritten]=await Promise.all([write(client,result,'public',result.public),write(client,result,'staff',result.staff)]);
    return publicWritten||staffWritten;
-  });
+  });}catch(error){
+   // A placement change can hold the installation lock past this worker's statement bound.
+   if(error&&typeof error==='object'&&'code' in error&&error.code==='57014')return false;
+   throw error;
+  }
  }
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
 import {after,before,test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
+import {Pool} from 'pg';
 import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
 import {database} from '../../account-http/test/fixtures.ts';
 import {RemoteProbeObservationStore} from '../src/probe-observations.ts';
@@ -42,9 +43,11 @@ test('probe evidence survives restart and rejects older, replaced and revoked ro
   ['public','failed',newer,first,newer,'timeout','2026-12-01T00:00:00.000Z'],['staff','failed',newer,first,newer,'timeout','2026-12-01T00:00:00.000Z']]);
  assert.equal(await store.record(result(target,older,'healthy')),false);
 
- const simultaneous=[result(target,'2026-09-25T10:00:03.000Z','healthy'),result(target,'2026-09-25T10:00:02.000Z','failed')];
+ const healthy=result(target,'2026-09-25T10:00:03.000Z','healthy');
+ const simultaneous=[{...healthy,public:{...healthy.public,elapsedMs:15001}},result(target,'2026-09-25T10:00:02.000Z','failed')];
  await Promise.all([store.record(simultaneous[0]!),new RemoteProbeObservationStore(db.secondPool).record(simultaneous[1]!)]);
  assert.deepEqual((await db.pool.query("SELECT DISTINCT status,checked_at FROM remote_probe_observations WHERE installation_id=$1",[target.installationId])).rows.map(row=>[row.status,row.checked_at.toISOString()]),[['healthy','2026-09-25T10:00:03.000Z']]);
+ assert.equal((await db.pool.query("SELECT elapsed_ms FROM remote_probe_observations WHERE installation_id=$1 AND service='public'",[target.installationId])).rows[0].elapsed_ms,15001);
 
  const future=new Date(Date.now()+10*60*1000).toISOString();
  await assert.rejects(store.record(result(target,future,'healthy')),/invalid_probe_result/);
@@ -54,6 +57,11 @@ test('probe evidence survives restart and rejects older, replaced and revoked ro
  const revisionTwo={...target,revision:2};assert.equal(await store.record(result(revisionTwo,'2026-09-25T10:00:04.000Z','failed')),true);
  await db.pool.query("UPDATE remote_hostnames SET hostname='new.evidence.example.test' WHERE venue_id=$1 AND kind='public'",[target.venueId]);
  assert.equal(await store.record(result(revisionTwo,'2026-09-25T10:00:05.000Z','healthy')),false);
+ const timeoutPool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${db.schema} -c statement_timeout=100`}),lock=await db.secondPool.connect();
+ try{
+  await lock.query('BEGIN');await lock.query('SELECT id FROM installations WHERE id=$1 FOR UPDATE',[target.installationId]);
+  assert.equal(await new RemoteProbeObservationStore(timeoutPool).record({...result(revisionTwo,'2026-09-25T10:00:05.500Z','healthy'),publicHostname:'new.evidence.example.test'}),false);
+ }finally{await lock.query('ROLLBACK');lock.release();await timeoutPool.end();}
  const blocker=await db.secondPool.connect();let committed=false;
  try{
   await blocker.query('BEGIN');await blocker.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[target.installationId]);

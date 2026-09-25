@@ -49,7 +49,7 @@ export class MonitorWorker {
     const observation=observations.find(row=>row.service===service),fresh=!!observation&&!old(observation.checked_at,this.#probeStaleSeconds)&&observation.checked_at.getTime()<=now.getTime()+60000;
     await this.#transition(client,monitor.venue_id,`${service}_route_failed`,!!remote&&fresh,!!remote&&fresh&&observation.status==='failed',now,false);
     await this.#transition(client,monitor.venue_id,`${service}_probe_stale`,!!remote,!!remote&&!fresh,now,false);
-    const certificate=!!remote&&fresh&&observation.status==='healthy'&&observation.certificate_not_after;
+    const certificate=!!remote&&observation?.certificate_not_after;
     const expiring=!!certificate&&certificate.getTime()<=now.getTime()+this.#certificateWarningDays*86400000;
     await this.#transition(client,monitor.venue_id,`${service}_certificate_expiring`,!!certificate,expiring,now,false);
    }

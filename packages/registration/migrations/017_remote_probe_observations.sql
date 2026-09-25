@@ -6,7 +6,7 @@ CREATE TABLE remote_probe_observations (
  hostname text NOT NULL,
  status text NOT NULL CHECK(status IN ('healthy','failed')),
  checked_at timestamptz NOT NULL,
- elapsed_ms integer NOT NULL CHECK(elapsed_ms>=0 AND elapsed_ms<=15000),
+ elapsed_ms integer NOT NULL CHECK(elapsed_ms>=0),
  failure text CHECK(failure IN ('dns','address_forbidden','timeout','tls','challenge','http','response_limit','cancelled')),
  certificate_not_before timestamptz,
  certificate_not_after timestamptz,
