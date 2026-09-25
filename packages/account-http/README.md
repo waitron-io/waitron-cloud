@@ -104,6 +104,19 @@ parameters remain rejected, so tokens belong only in completion bodies.
 | POST `/password-reset/request` | `{"email":"owner@example.test"}` | 202 `{"status":"accepted"}` |
 | POST `/password-reset/complete` | `{"token":"<emailed token>","password":"a different long password"}` | 200 `{"status":"completed"}` |
 
+Passkeys are optional and use the same account sessions. Start a discoverable sign-in
+with `POST /passkeys/authentication/options {}`, then send the browser result and
+returned ceremony ID to `POST /passkeys/authentication/verify`. A verified response
+sets the same session and CSRF cookies as password login. The challenge lasts five
+minutes and the first completion attempt consumes it.
+
+An authenticated account can read `GET /passkeys`, begin enrolment with
+`POST /passkeys/registration/options {"password":"<current password>"}`, finish it at
+`POST /passkeys/registration/verify`, and remove an account-scoped row with
+`POST /passkeys/remove {"id":"<row uuid>","password":"<current password>"}`.
+These mutations require the current session's CSRF header. Password login and email
+recovery remain available, and password reset does not delete enrolled passkeys.
+
 Signup and reset completion issue no session: sign in afterwards. Reset ends all
 existing sessions. A token works once; if a completion response is lost, try signing
 in with your chosen password. Retrying the token cannot create another account or
