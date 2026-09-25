@@ -123,6 +123,24 @@ test('strict request shape, authority and body bounds fail without exposing subm
   assert.equal((await request('/missing')).status, 404);
   assert.equal((await db.pool.query('SELECT count(*) FROM email_outbox')).rows[0].count, '0');
 });
+test('HTTP signup accepts a 1024-byte password and rejects a longer password without consuming its token', async () => {
+  const signup = new SignupStore(db.pool, db.outbox);
+  const issue = async (email: string) => {
+    await signup.request(email);
+    const queued = (await db.pool.query('SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT 1')).rows[0];
+    const content = db.outbox.open(queued); assert.ok('token' in content); return content.token;
+  };
+  const exactToken = await issue('exact-password@example.test');
+  const exact = await request('/signup/complete', {token: exactToken, ...details, password: 'é'.repeat(512)});
+  assert.equal(exact.status, 201);
+
+  const longToken = await issue('long-password@example.test');
+  const rejected = await request('/signup/complete', {token: longToken, ...details, password: `${'é'.repeat(512)}a`});
+  assert.equal(rejected.status, 400);
+  assert.deepEqual(await rejected.json(), {error: 'invalid_input'});
+  assert.equal((await db.pool.query('SELECT count(*) FROM cloud_accounts')).rows[0].count, '1');
+  assert.equal((await request('/signup/complete', {token: longToken, ...details})).status, 201);
+});
 test('CSRF belongs to a live session; duplicate cookies cannot choose a different session', async () => {
   const owner = await account(); const first = cookies(await request('/login', {email: owner.email, password}));
   const second = cookies(await request('/login', {email: owner.email, password}));

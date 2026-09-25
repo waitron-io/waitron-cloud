@@ -366,6 +366,51 @@ test('unexpected database uniqueness errors remain distinguishable from registra
   }
 });
 
+test('concurrent approved requests sharing a key link the same new venue once', async () => {
+  const localVenueId = randomUUID();
+  const installationKey = `key:${randomUUID()}`;
+  const venueId = randomUUID();
+  await pool.query(`INSERT INTO venues (id, organisation_id, legal_business_id, local_venue_id, environment)
+    VALUES ($1, $2, $3, $4, 'test')`, [venueId, organisationId, legalBusinessId, localVenueId]);
+  const first = await approved(binding({localVenueId, installationKey}));
+  const second = await approved({...first, operationId: randomUUID()});
+  const blocker = await pool.connect();
+  let firstCompletion: Promise<unknown> | undefined, secondCompletion: Promise<unknown> | undefined;
+  const waitForLock = async (application: string) => {
+    for (let n = 0; n < 100; n++) {
+      const result = await admin.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'", [application]);
+      if (result.rowCount) return;
+      await delay(20);
+    }
+    assert.fail(`operation did not reach a database lock: ${application}`);
+  };
+  try {
+    await pool.query(`CREATE TABLE installation_gate (id integer PRIMARY KEY); INSERT INTO installation_gate VALUES(1);
+      CREATE FUNCTION pause_installation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+        PERFORM id FROM installation_gate WHERE id=1 FOR UPDATE; RETURN NEW;
+      END $$;
+      CREATE TRIGGER pause_installation BEFORE INSERT ON installations FOR EACH ROW EXECUTE FUNCTION pause_installation()`);
+    await blocker.query('BEGIN');
+    await blocker.query('SELECT id FROM installation_gate WHERE id=1 FOR UPDATE');
+    firstCompletion = store.complete(first); void firstCompletion.catch(() => {});
+    await waitForLock(`${schema}_first`);
+    secondCompletion = other.complete(second); void secondCompletion.catch(() => {});
+    await waitForLock(`${schema}_second`);
+    await blocker.query('COMMIT');
+    const [firstResult, secondResult] = await Promise.all([firstCompletion, secondCompletion]);
+    assert.deepEqual(secondResult, firstResult);
+    assert.equal(await count('venues'), 1);
+    assert.equal(await count('installations'), 1);
+    const requests = await pool.query('SELECT result FROM connection_requests ORDER BY operation_id');
+    assert.deepEqual(requests.rows, [{result: firstResult}, {result: firstResult}]);
+  } finally {
+    await blocker.query('ROLLBACK');
+    blocker.release();
+    await Promise.allSettled([firstCompletion, secondCompletion]);
+    await pool.query('DROP TRIGGER IF EXISTS pause_installation ON installations; DROP FUNCTION IF EXISTS pause_installation(); DROP TABLE IF EXISTS installation_gate');
+  }
+});
+
 for (const differentKey of [false, true]) test(`pairing ${differentKey ? 'conflict' : 'retry'} allows a concurrent monitor incident to commit`, async () => {
   const initial = await approved();
   const installed = await store.complete(initial);
