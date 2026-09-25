@@ -376,8 +376,14 @@ mobile notifications separately.
   late results after hostname changes, replacement or revocation, treats stale evidence as
   unknown, and records deduplicated route-failure, certificate-expiry and recovery
   transitions independently from installation contact. The local two-venue gateway proof
-  exercises both paths. The portal now shows separate redacted public/staff evidence and
-  certificate warnings in English and Spanish. Opted-in owners receive bilingual remote
+  now persists real observations while breaking one venue route and the whole gateway,
+  proves recovery, stale/invalid-certificate handling, current control contact, portal and
+  Mailpit evidence, cross-venue isolation and delivery deduplication, and emits a versioned
+  timing receipt. A mature unchanged local WireGuard peer recovered from gateway replacement
+  in 111,051 ms at its normal rekey window; choose and prove a launch recovery target and any
+  faster peer-side rekey strategy before making an availability promise. The portal now shows
+  separate redacted public/staff evidence and certificate warnings in English and Spanish.
+  Opted-in owners receive bilingual remote
   incident and recovery messages; delivery rechecks route authority, and opt-out or
   revocation suppresses queued mail. Next: add incident/delivery-history retention,
   deployment-scale scheduling and recipient fan-out measurements, escalation/quiet
