@@ -1,6 +1,6 @@
 # Waitron Cloud backlog
 
-Updated 2026-09-24. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-09-25. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
@@ -119,7 +119,7 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   experience; cloud copies and offline booking acceptance are future capabilities.
 - Complete self-service recovery onto a replacement server without routine staff assistance.
   The local verified-snapshot path now has a matching-code owner approval flow and
-  scoped download authority. Production activation and complete continuous recovery
+  scoped download authority, followed by separate owner-confirmed Cloud replacement with fresh installation and tunnel keys. Production activation and complete continuous recovery
   remain separate work.
   Use Cloud-managed recovery keys by default for the stream and managed snapshots:
   an authorised owner must not need the original server or a separately saved backup
@@ -387,7 +387,7 @@ mobile notifications separately.
   work, stream archive assembly and object I/O beyond the current 512 MiB bound,
   tombstone/job-history retention, master-key operations and production verifier isolation.
   Measure scheduling sweeps at the intended deployment scale and tune their cadence
-  separately from job polling; the local concurrency proof covers only small fixtures. Complete continuous server recovery and activation depend on Waitron slice 2.
+  separately from job polling; the local concurrency proof covers only small fixtures. Complete continuous server recovery still needs integration with Waitron's current stream, sealed-state and cold-restore contracts.
   Retention, restore checks, export, deletion and access review;
   define what survives subscription termination and for how long.
   The catalogue implements daily retention for 30 days and monthly retention for 12 months.
