@@ -83,3 +83,17 @@ the incoming SQLite work lands before implementing the backup adapter.
 Cloud owns the managed service and key-delivery contract; Waitron owns capture,
 restore and activation. Update the Waitron integration docs alongside implementation
 so the two repositories do not acquire competing recovery protocols.
+
+## Coordinate work with the Waitron campaigns
+
+Before choosing an integration task, check Waitron's active campaign queues, worktrees
+and pull requests as well as its main branch. On the development machine, Lane A's
+queue is `~/waitron-campaign/queue.md` and Lane B's is
+`~/waitron-campaign-b/queue.md`. Read their latest progress entries and compare the
+active branch changes with your proposed work. Code under review may already provide
+the interface you need even though it has not reached main.
+
+Reuse Waitron's stream restore engine, cold-restore checks and bucket setup journey.
+Cloud owns managed storage provisioning, scoped credentials, owner authorisation and
+integration with those interfaces. Keep that division when selecting work so the two
+repositories do not implement competing restore paths.
