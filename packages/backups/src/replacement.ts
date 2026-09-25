@@ -98,6 +98,8 @@ export class ReplacementStore {
    await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='retained_snapshots'",[installationId,{version:1,provider:'local-s3',bucket:l.bucket}]);
    const remote=(await client.query('SELECT * FROM remote_placements WHERE venue_id=$1 FOR UPDATE',[r.venue_id])).rows[0];
    if(remote){
+    // Export holds the cell while reading installation ids and routes in separate statements.
+    await client.query('SELECT id FROM remote_cells WHERE id=$1 FOR UPDATE',[remote.cell_id]);
     if(remote.installation_id!==old.id||remote.peer_public_key!==p.old_peer_public_key)backupFail('conflict');
     await client.query('UPDATE remote_placements SET installation_id=$2,peer_public_key=$3 WHERE venue_id=$1',[r.venue_id,installationId,p.peer_public_key]);
     const config=(await client.query(`SELECT 1 AS version,p.installation_id AS "installationId",p.venue_id AS "venueId",p.cell_id AS "cellId",host(p.address) AS address,p.port,p.peer_public_key AS "peerPublicKey",c.public_key AS "gatewayPublicKey",c.endpoint,s.hostname AS "staffHostname",u.hostname AS "publicHostname" FROM remote_placements p JOIN remote_cells c ON c.id=p.cell_id JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff' JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public' WHERE p.venue_id=$1`,[r.venue_id])).rows[0];
