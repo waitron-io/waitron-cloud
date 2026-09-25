@@ -13,6 +13,8 @@ import {SignupStore,PairingStore,InstallationStore} from '../packages/registrati
 import {login} from '../packages/identity/src/index.ts';
 import {transaction} from '../packages/registration/src/transaction.ts';
 import {RemoteAccessStore} from '../packages/remote-access/src/placement.ts';
+import {RemoteProbeStore} from '../packages/remote-access/src/probe-targets.ts';
+import {probeTarget} from '../packages/remote-access/src/probe.ts';
 import {signManifest} from '../packages/remote-access/src/manifest.ts';
 import {startAcme,docker,waitFor} from './remote-fixtures.mjs';
 const waitron=resolve(process.env.WAITRON_CHECKOUT??'');
@@ -132,6 +134,12 @@ try{
  await ipc(renewing.server,{certificate:renewed,hostname:renewing.placement.staffHostname});
  const fingerprint=()=>new Promise((resolve,reject)=>{const socket=tlsConnect({host:'127.0.0.1',port:gatewayPort,servername:renewing.placement.staffHostname,ca:acme.certificateRoot},()=>{const value=socket.getPeerCertificate().fingerprint256;socket.end();resolve(value);});socket.on('error',reject);socket.setTimeout(3000,()=>socket.destroy(Error('TLS timeout')));});
  await waitFor(async()=>{await delay(1000);return await fingerprint()===new X509Certificate(renewed).fingerprint256;},20000);checks.push('real ACME renewal hot-reloaded by running Waitron');
+ const probeTargets=await new RemoteProbeStore(f.db.pool).targets();assert.equal(probeTargets.length,2);
+ const fixtureConnections=new Map(probeTargets.flatMap(target=>[target.publicHostname,target.staffHostname].map(hostname=>[hostname,{address:'127.0.0.1',family:4,port:gatewayPort}]))),fixtureConnect=hostname=>{const connection=fixtureConnections.get(hostname);if(!connection)throw Error('fixture_host_unavailable');return connection;};
+ const functionalProbes=await Promise.all(probeTargets.map(target=>probeTarget(target,{ca:acme.certificateRoot,connect:fixtureConnect})));
+ for(const [index,result] of functionalProbes.entries()){assert.equal(result.version,1);assert.equal(result.installationId,probeTargets[index].installationId);assert.equal(result.venueId,probeTargets[index].venueId);assert.equal(result.revision,probeTargets[index].revision);for(const service of [result.public,result.staff]){assert.equal(service.status,'healthy');if(service.status==='healthy'){assert.match(service.certificate.notAfter,/Z$/);assert.match(service.certificate.fingerprint256,/^[0-9A-F:]+$/);}}}
+ const unknown='unknown.remote.example.test',rejectedProbe=await probeTarget({...probeTargets[0],publicHostname:unknown},{ca:acme.certificateRoot,connect:hostname=>({address:'127.0.0.1',family:4,port:gatewayPort})});assert.equal(rejectedProbe.public.status,'failed');
+ checks.push('Cloud functional probes solve the real public challenge and verify staff TLS for two isolated placements; unknown SNI is refused');
  for(const [index,venue] of venues.entries()){const view=(await f.db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[venue.placement.installationId])).rows[0];await installations.configure(venue.placement.installationId,Number(view.configuration_revision),[{service:'remote_access',state:'ready',configuration:{version:1,...venue.placement}}]);assert.equal((await remote(venue.placement.staffHostname,'/management-api/cloud/refresh',{body:{},headers:{cookie:cookies[index],origin:'https://'+venue.placement.staffHostname}})).status,200);const report=await ipc(venue.server,{report:[{service:'remote_access',health:'healthy',failure:null}]});assert.equal(report.status.installation.services.find(s=>s.service==='remote_access').health,'healthy');}
  const held=tlsConnect({host:'127.0.0.1',port:gatewayPort,servername:venues[0].placement.staffHostname,ca:acme.certificateRoot});held.on('error',()=>{});await new Promise((resolve,reject)=>{held.once('secureConnect',resolve);held.once('error',reject);});held.write('GET /public/availability HTTP/1.1\r\nHost: '+venues[0].placement.staffHostname+'\r\n');
  await installations.revokeWithSession(session.token,session.csrfToken,venues[0].placement.installationId);const revokedAt=Date.now();await publish(await placementStore.manifest(cellId));
@@ -147,7 +155,7 @@ try{
  assert.equal(lan,'LAN HTTPS trusted');checks.push('fresh DNS client uses venue LAN override with gateway authority expired');
 
  docker('rm','-f',name+'-gateway');owned.delete(name+'-gateway');await secret(join(state,'accepted.json'),'{broken');startGateway();await waitFor(()=>docker('inspect','--format','{{.State.Running}}',name+'-gateway')==='false');assert.notEqual(docker('inspect','--format','{{.State.ExitCode}}',name+'-gateway'),'0');checks.push('corrupt gateway cache refuses startup');
- const receipt={cloudHead:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),cloudDirty:execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim()!=='',waitronDirty:execFileSync('git',['-C',waitron,'status','--porcelain'],{encoding:'utf8'}).trim()!=='',waitronHead:execFileSync('git',['-C',waitron,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),checks,replacementMs,revocationMs};
+ const receipt={cloudHead:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),cloudDirty:execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim()!=='',waitronDirty:execFileSync('git',['-C',waitron,'status','--porcelain'],{encoding:'utf8'}).trim()!=='',waitronHead:execFileSync('git',['-C',waitron,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),checks,replacementMs,revocationMs,functionalProbes};
  if(process.env.REMOTE_RECEIPT)await secret(process.env.REMOTE_RECEIPT,JSON.stringify(receipt,null,2));console.log(JSON.stringify(receipt,null,2));
 }catch(error){for(const container of owned){try{console.error(container,docker('logs','--tail','30',container));}catch{}}throw error;}
 finally{for(const container of [...owned].reverse())docker('rm','-f',container);if(network)docker('network','rm',name);for(const child of children)await stop(child);await acme?.close();await f?.close();for(const venueRoot of roots)await rm(venueRoot,{recursive:true,force:true});await rm(root,{recursive:true,force:true});}

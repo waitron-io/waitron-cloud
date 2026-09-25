@@ -365,9 +365,14 @@ mobile notifications separately.
   Durable transition records prevent repeated scans from enqueueing duplicates, with
   live ownership/preference checks before delivery and recovery notices for prior
   recipients. Queued notices use the current email language. Locked installations and
-  failed observations defer their next check while other venues continue. SMTP uncertain-acceptance duplicates remain possible. Next: external
-  functional probes, incident/delivery-history retention, deployment-scale scheduling
-  and recipient fan-out measurements, escalation/quiet periods and rollout pause criteria.
+  failed observations defer their next check while other venues continue. SMTP uncertain-acceptance duplicates remain possible. A separate bounded
+  functional probe now derives current authorised placements, solves the real public
+  challenge, verifies staff TLS/hostname trust and emits revision-bound JSON evidence
+  with certificate validity while refusing private production targets. The local
+  two-venue gateway proof exercises both paths. Next: persist probe evidence with stale,
+  route-failure, certificate-expiry and recovery transitions; then add
+  incident/delivery-history retention, deployment-scale scheduling and recipient fan-out
+  measurements, escalation/quiet periods and rollout pause criteria.
 - **Usage metering.** Attribute lookups/API calls, reports, storage, transfers,
   messages and compute to customers and services. Show consumption and allowances,
   track provider costs and define limits. Any billing records need durable capture,
