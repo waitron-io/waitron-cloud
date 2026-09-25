@@ -161,6 +161,30 @@ External remote-access probes now persist revision-bound evidence and the monito
 route, stale-probe, certificate-expiry and recovery transitions without confusing a live
 control connection for a working route. The portal presents redacted evidence, and opted-in
 owners receive bilingual incident and recovery emails after delivery-time authority checks.
+The two-venue proof runs this whole path against real local gateway and TLS fixtures. It stops
+one venue peer while the other continues working, restores it, lets probe evidence become
+stale, verifies rejection with the wrong trust root, stops and replaces the gateway, and uses
+the local ACME certificate dates with a proof-only warning threshold. Control contact remains
+fresh throughout the route failures. Mailpit captures every opening and recovery, while the
+proof re-runs an unchanged monitor transition and confirms the complete Mailpit mailbox gains
+no duplicate opening.
+
+Build the portal and local gateway image as described in
+[the remote-access guide](local-remote-access.md#run-the-proof), then write and verify the
+machine-readable receipt:
+
+```sh
+WAITRON_CHECKOUT=/absolute/path/to/waitron \
+  REMOTE_RECEIPT=/tmp/cloud-remote-monitoring-receipt.json \
+  node scripts/test-postgres.mjs exec node scripts/test-local-remote.mjs
+node scripts/verify-remote-monitoring-receipt.mjs \
+  /tmp/cloud-remote-monitoring-receipt.json
+```
+
+The receipt records elapsed time and open-incident count for the route-healthy baseline, isolated
+route outage and recovery, stale worker, invalid trust, gateway outage and recovery, and
+certificate warning phases. These are local measurements, not production availability or
+delivery guarantees.
 Before deployment, add retention for incident/delivery history and scheduler/fan-out
 measurements at the intended scale.
 Define outage escalation and quiet-period policies with actual operating data. Live email

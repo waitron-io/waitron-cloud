@@ -31,9 +31,9 @@ actual Waitron SQLite servers using authenticated manager requests. Staff keys a
 generated inside each Waitron state directory; Cloud receives only signing requests.
 The gateway holds its own public-site keys and WireGuard key, never staff TLS keys.
 
-The run prints `PASS` checks and a JSON receipt with gateway replacement and revocation
-times. It checks real staff logins, cross-venue cookie rejection, an actual browser
-Worker solving the bot challenge, zero upstream calls for rejected public traffic,
+The run prints `PASS` checks and a JSON receipt with gateway replacement, revocation and
+monitoring-phase times. It checks real staff logins, cross-venue cookie rejection, an actual
+browser Worker solving the bot challenge, zero upstream calls for rejected public traffic,
 peer isolation after malicious route expansion, live certificate renewal, removal of
 an established revoked connection, cache expiry across restart and corrupt-cache
 startup refusal. `node scripts/test-gateway-cache-loss.mjs` separately proves refusal
@@ -43,7 +43,11 @@ gateway authority. Normal exit removes every owned container and temporary state
 The same proof runs Cloud's functional probe against both authorised placements through
 the actual gateway. It solves the public challenge and verifies staff TLS passthrough,
 records certificate validity/fingerprints and refuses unknown SNI. The machine-readable
-receipt includes the two structured probe results.
+receipt includes the two structured probe results. It then persists real observations and
+drives the durable monitor, account portal and Mailpit through an isolated venue route
+failure, stale evidence, invalid certificate trust, a full gateway outage and each recovery.
+Run `node scripts/verify-remote-monitoring-receipt.mjs /tmp/cloud-remote-receipt.json` to
+check the versioned phase list, timings, tenant-isolation flags and alert deduplication.
 
 The test root is trusted explicitly by its test clients. It never installs a system
 certificate authority, disables certificate verification or changes host DNS. The
@@ -206,10 +210,15 @@ ECH is not configured: an unrecognized outer ClientHello name cannot route.
 
 A failed apply retries the exact persisted configuration without extending its expiry.
 A dead HAProxy child restarts from still-valid authority; it cannot restart after expiry.
-Gateway replacement and certificate reload may interrupt remote connections. The local
-target is recovery within sixty seconds, not a production availability promise. LAN
-access remains independent. Production DNS, provider credentials, appliance installation,
-automatic customer appliance setup and deployment hardening still need their own
+Gateway replacement and certificate reload may interrupt remote connections. In repeated
+2026-09-25 local proofs, a mature unchanged WireGuard peer recovered after about 111 seconds: its
+old kernel session was not available in the replacement gateway, so it reconnected at the
+normal WireGuard rekey window. The runner allows up to three minutes to measure this case.
+The earlier sub-minute result covered freshly established peers and is not a production
+availability target. Define a launch target and test any explicit peer-side rekey strategy
+before promising faster recovery. LAN access remains independent. Production DNS, provider
+credentials, appliance installation, automatic customer appliance setup and deployment
+hardening still need their own
 implementation and validation before customers can subscribe. The local account portal
 and opt-in email queue now present redacted public/staff route incidents and recoveries;
 live sender and deployment proof remain separate launch work.
