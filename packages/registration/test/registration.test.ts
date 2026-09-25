@@ -366,10 +366,11 @@ test('unexpected database uniqueness errors remain distinguishable from registra
   }
 });
 
-test('concurrent approved requests sharing a key link the same new venue once', async () => {
+test('concurrent approved requests sharing a key serialize an existing unlinked venue', async () => {
   const localVenueId = randomUUID();
   const installationKey = `key:${randomUUID()}`;
   const venueId = randomUUID();
+  // An unlinked venue bypasses insert-conflict serialization, so its row lock must arbitrate installation creation.
   await pool.query(`INSERT INTO venues (id, organisation_id, legal_business_id, local_venue_id, environment)
     VALUES ($1, $2, $3, $4, 'test')`, [venueId, organisationId, legalBusinessId, localVenueId]);
   const first = await approved(binding({localVenueId, installationKey}));

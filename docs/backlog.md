@@ -284,7 +284,9 @@ mobile notifications separately.
   lockout mitigation with the public ingress policy before launch.
   HTTP tests now accept a password at exactly 1024 UTF-8 bytes, reject 1025 bytes
   without consuming the signup token, and reject a declared body over 16 KiB before
-  an incomplete client finishes sending it. Guard-deletion controls fail those tests;
+  an incomplete client finishes sending it. Deleting both independent password guards
+  breaks the boundary test; deleting only the HTTP guard remains masked by the store's
+  defence-in-depth check. Deleting the declared-length guard breaks its early-refusal test;
   the separate streamed-body bound remains covered.
   Review the inherited password cost for deployment and apply the source map's
   security-fix process to both repositories. Further reuse should take code and
@@ -341,10 +343,11 @@ mobile notifications separately.
   inserts. PostgreSQL race tests run the real monitor worker while a new pairing
   request waits on its installation lock: matching keys retain the existing link,
   and different keys return a registration conflict while the incident commits.
-  A real PostgreSQL regression now pauses the first installation insert while two
-  approved operations share one key and new venue. Both complete with the same link;
-  deleting the venue lock reproduces a `registration_conflict`, proving the
-  serialization guard and leaving no proposed same-key race unverified.
+  A real PostgreSQL probe of two approved operations sharing one key and a genuinely
+  new venue completed with one shared link, so the proposed race was not reproduced
+  and gained no speculative regression. The adjacent existing-but-unlinked venue path
+  did expose a coverage gap: a new test pauses the first installation insert, and
+  deleting the venue lock reproduces a `registration_conflict` in the second operation.
 - **Provisioning and placement.** Use Kubernetes for orchestration when needed;
   cluster provisioning and manifests are deferred until there is a service to deploy
   and a concrete operational need. Country/provider/cell registry, repeatable resource
