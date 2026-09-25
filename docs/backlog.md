@@ -336,6 +336,10 @@ mobile notifications separately.
   inserts. PostgreSQL race tests run the real monitor worker while a new pairing
   request waits on its installation lock: matching keys retain the existing link,
   and different keys return a registration conflict while the incident commits.
+  Cloud test follow-up: the review removed the venue lock and these 63 tests still
+  passed. Probe concurrent operations sharing an installation key and add a
+  regression test if a failing case is reproduced; the proposed race on a new
+  venue remains unverified.
 - **Provisioning and placement.** Use Kubernetes for orchestration when needed;
   cluster provisioning and manifests are deferred until there is a service to deploy
   and a concrete operational need. Country/provider/cell registry, repeatable resource
