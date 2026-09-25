@@ -93,10 +93,21 @@ test('overview exposes current monitoring evidence only to current organisation 
  await db.pool.query("INSERT INTO venue_incidents(venue_id,kind,status,revision) VALUES($1,'disconnected','open',1)",[venueId]);
  let item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.enabled,true);assert.equal(item.monitoring.fresh,true);assert.deepEqual(item.monitoring.incidents.map((v:{kind:string})=>v.kind),['disconnected']);
  assert.deepEqual(Object.keys(item.monitoring.incidents[0]).sort(),['changedAt','kind','openedAt']);
- await db.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='retained_snapshots'",[id]);
+ const cell=randomUUID(),checked='2026-09-25T12:00:00.000Z',expires='2026-10-01T12:00:00.000Z';
+ await db.pool.query("INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint) VALUES($1,'ES','aws','test','cell.example.test',7,'fixture-key','gateway.example.test:51820')",[cell]);
+ await db.pool.query("INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port) VALUES($1,$2,$3,'10.77.7.2','fixture-peer',443)",[venueId,id,cell]);
+ await db.pool.query("INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES('public.cell.example.test',$1,'public'),('staff.cell.example.test',$1,'staff')",[venueId]);
+ await db.pool.query(`INSERT INTO remote_probe_observations
+  (installation_id,venue_id,service,configuration_revision,hostname,status,checked_at,elapsed_ms,failure,certificate_not_before,certificate_not_after,certificate_fingerprint256,last_success_at,last_failure_at,last_failure)
+  VALUES($1,$2,'public',0,'public.cell.example.test','failed',$3,12,'timeout',$3,$4,'AA:BB',$3,$3,'timeout'),
+   ($1,$2,'staff',0,'staff.cell.example.test','healthy',$3,8,NULL,$3,$4,'CC:DD',$3,NULL,NULL)`,[id,venueId,checked,expires]);
  await db.pool.query("INSERT INTO venue_incidents(venue_id,kind,status,revision) VALUES($1,'public_route_failed','open',1),($1,'staff_probe_stale','open',1),($1,'public_certificate_expiring','open',1)",[venueId]);
- item=(await(await browser('')).json()).installations[0];assert.deepEqual(item.monitoring.incidents.map((v:{kind:string})=>v.kind),['disconnected']);
- await db.pool.query("UPDATE venue_monitors SET checked_at=clock_timestamp()-interval '5 minutes 1 second'");item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.fresh,false);assert.equal(item.monitoring.incidents.length,1);
- await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp()');item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.enabled,false);assert.deepEqual(item.monitoring.incidents,[]);
+ item=(await(await browser('')).json()).installations[0];
+ assert.deepEqual(item.monitoring.incidents.map((v:{kind:string})=>v.kind),['disconnected','public_certificate_expiring','public_route_failed','staff_probe_stale']);
+ assert.deepEqual(item.monitoring.remoteChecks,{public:{status:'failed',checkedAt:checked,certificateNotAfter:expires},staff:{status:'healthy',checkedAt:checked,certificateNotAfter:expires}});
+ assert.deepEqual(Object.keys(item.monitoring.remoteChecks.public).sort(),['certificateNotAfter','checkedAt','status']);
+ for(const secret of ['public.cell.example.test','staff.cell.example.test','AA:BB','CC:DD','timeout','10.77.7.2'])assert(!JSON.stringify(item.monitoring).includes(secret));
+ await db.pool.query("UPDATE venue_monitors SET checked_at=clock_timestamp()-interval '5 minutes 1 second'");item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.fresh,false);assert.equal(item.monitoring.incidents.length,4);
+ await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp()');item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.enabled,false);assert.deepEqual(item.monitoring.incidents,[]);assert.equal(item.monitoring.remoteChecks,null);
  await db.pool.query('DELETE FROM organisation_memberships');assert.deepEqual((await(await browser('')).json()).installations,[]);
 });
