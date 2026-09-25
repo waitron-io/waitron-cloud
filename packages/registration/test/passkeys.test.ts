@@ -225,7 +225,7 @@ test('list and password-confirmed removal stay account-scoped', async () => {
 test('expired and wrong-kind ceremonies cannot be completed or revived', async () => {
   const session = await signIn();
   const registration = await store.registrationOptions(session.token, session.csrfToken, password);
-  await pool.query("UPDATE cloud_webauthn_ceremonies SET expires_at = clock_timestamp() - interval '1 second', created_at = clock_timestamp() - interval '5 minutes 1 second' WHERE id = $1", [registration.ceremonyId]);
+  await pool.query("UPDATE cloud_webauthn_ceremonies SET expires_at = statement_timestamp() - interval '1 second', created_at = statement_timestamp() - interval '5 minutes 1 second' WHERE id = $1", [registration.ceremonyId]);
   await expectPasskeyInvalid(store.verifyRegistration(session.token, session.csrfToken, registration.ceremonyId, registrationResponse()));
   const authentication = await store.authenticationOptions();
   await expectPasskeyInvalid(store.verifyRegistration(session.token, session.csrfToken, authentication.ceremonyId, registrationResponse()));
