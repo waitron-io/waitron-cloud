@@ -21,3 +21,9 @@ CREATE TABLE remote_probe_observations (
  CHECK((last_failure_at IS NULL)=(last_failure IS NULL))
 );
 CREATE INDEX remote_probe_observations_venue ON remote_probe_observations(venue_id,service);
+ALTER TABLE venue_incidents DROP CONSTRAINT venue_incidents_kind_check;
+ALTER TABLE venue_incidents ADD CONSTRAINT venue_incidents_kind_check CHECK(kind IN (
+ 'disconnected','snapshot_stale','verification_failed',
+ 'public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale',
+ 'public_certificate_expiring','staff_certificate_expiring'
+));

@@ -76,6 +76,27 @@ async function snapshot(verification:string,seconds=0){
  await db.pool.query("INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules,verification) VALUES($1,$2,$3,1,'snapshot',$1::uuid::text,$4,1,clock_timestamp()-$5*interval '1 second','daily',$6,'{}',$7)",[id,venue.venueId,venue.installationId,'a'.repeat(64),seconds,randomUUID(),verification]);return id;
 }
 async function kinds(){return(await db.pool.query("SELECT kind FROM venue_incidents WHERE status='open' ORDER BY kind")).rows.map(r=>r.kind);}
+async function remoteRoute(){
+ const cell=randomUUID();
+ await db.pool.query("INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint) VALUES($1,'ES','aws','test','monitor.example.test',55,'fixture-key','gateway.example.test:51820')",[cell]);
+ await db.pool.query("INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port) VALUES($1,$2,$3,'10.77.55.2','fixture-peer',443)",[venue.venueId,venue.installationId,cell]);
+ await db.pool.query("INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES('staff.monitor.example.test',$1,'staff'),('public.monitor.example.test',$1,'public')",[venue.venueId]);
+}
+async function remoteObservation(service:'public'|'staff',status:'healthy'|'failed',secondsOld=0,certificateDays=31){
+ const hostname=`${service}.monitor.example.test`,failure=status==='failed'?'timeout':null;
+ await db.pool.query(`INSERT INTO remote_probe_observations
+  (installation_id,venue_id,service,configuration_revision,hostname,status,checked_at,elapsed_ms,failure,certificate_not_before,certificate_not_after,certificate_fingerprint256,last_success_at,last_failure_at,last_failure)
+  VALUES($1,$2,$3,0,$4,$5,clock_timestamp()-$6*interval '1 second',12,$7,
+   CASE WHEN $5='healthy' THEN clock_timestamp()-interval '1 day' END,
+   CASE WHEN $5='healthy' THEN clock_timestamp()+$8*interval '1 day' END,
+   CASE WHEN $5='healthy' THEN 'AA:BB' END,
+   CASE WHEN $5='healthy' THEN clock_timestamp()-$6*interval '1 second' END,
+   CASE WHEN $5='failed' THEN clock_timestamp()-$6*interval '1 second' END,$7)
+  ON CONFLICT(installation_id,service) DO UPDATE SET status=excluded.status,checked_at=excluded.checked_at,failure=excluded.failure,
+   certificate_not_before=COALESCE(excluded.certificate_not_before,remote_probe_observations.certificate_not_before),
+   certificate_not_after=COALESCE(excluded.certificate_not_after,remote_probe_observations.certificate_not_after),
+   certificate_fingerprint256=COALESCE(excluded.certificate_fingerprint256,remote_probe_observations.certificate_fingerprint256)`,[venue.installationId,venue.venueId,service,hostname,status,secondsOld,failure,certificateDays]);
+}
 test('missing-snapshot grace and failed-verification grace use independent durable clocks',async()=>{
  await db.pool.query("UPDATE installation_services SET state='ready' WHERE service='retained_snapshots'");
  await monitor.schedule();await contact(0);await monitor.runOnce();assert.deepEqual(await kinds(),[]);
@@ -100,6 +121,28 @@ test('unconfigured and production installations are not scheduled; stale checks 
  await db.pool.query("UPDATE venues SET environment='test'");assert.equal(await monitor.schedule(),1);assert.equal((await monitor.status()).unknown,1);
  await monitor.runOnce();assert.equal((await monitor.status()).unknown,0);
  await db.pool.query("UPDATE venue_monitors SET checked_at=clock_timestamp()-interval '5 minutes 1 second'");assert.equal((await monitor.status()).unknown,1);
+});
+
+test('remote evidence records unknown, failure, recovery, certificate expiry and revocation independently of contact',async()=>{
+ await remoteRoute();await monitor.schedule();await contact(0);await monitor.runOnce();
+ assert.deepEqual(await kinds(),['public_probe_stale','staff_probe_stale']);assert.equal((await alerts()).length,0);
+
+ await remoteObservation('public','failed');await remoteObservation('staff','healthy');await due();await monitor.runOnce();
+ assert.deepEqual(await kinds(),['public_route_failed']);assert.equal((await alerts()).length,0);
+ assert.equal((await db.pool.query('SELECT last_contact_at>clock_timestamp()-interval \'5 seconds\' AS fresh FROM installations WHERE id=$1',[venue.installationId])).rows[0].fresh,true);
+
+ await remoteObservation('public','healthy');await due();const restarted=new MonitorWorker(db.pool,db.outbox);await restarted.runOnce();assert.deepEqual(await kinds(),[]);
+ await db.pool.query("UPDATE remote_probe_observations SET checked_at=clock_timestamp()-interval '301 seconds'");await due();await restarted.runOnce();assert.deepEqual(await kinds(),['public_probe_stale','staff_probe_stale']);
+
+ await remoteObservation('public','healthy',0,-1);await remoteObservation('staff','healthy',0,29);await due();
+ const concurrent=new MonitorWorker(db.secondPool,db.outbox,{probeStaleSeconds:300,certificateWarningDays:30});await Promise.all([restarted.runOnce(),concurrent.runOnce()]);
+ assert.deepEqual(await kinds(),['public_certificate_expiring','staff_certificate_expiring']);
+ const revisions=await db.pool.query("SELECT kind,revision FROM venue_incidents WHERE kind LIKE '%certificate_expiring' ORDER BY kind");assert.deepEqual(revisions.rows.map(row=>[row.kind,row.revision]),[['public_certificate_expiring',1],['staff_certificate_expiring',1]]);
+ assert.throws(()=>new MonitorWorker(db.pool,db.outbox,{probeStaleSeconds:0}),/invalid_monitor_config/);
+
+ await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[venue.installationId]);await due();await restarted.runOnce();
+ assert.deepEqual(await kinds(),[]);assert.equal((await db.pool.query("SELECT count(*) FROM venue_incidents WHERE kind LIKE 'public_%' OR kind LIKE 'staff_%'")).rows[0].count,'5');
+ assert.equal((await db.pool.query("SELECT count(*) FROM venue_incidents WHERE (kind LIKE 'public_%' OR kind LIKE 'staff_%') AND status<>'suppressed'")).rows[0].count,'0');
 });
 
 test('monitor CLI observes durable incidents and reports status without sending mail',async()=>{

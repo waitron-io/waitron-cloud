@@ -45,6 +45,9 @@ test('probe evidence survives restart and rejects older, replaced and revoked ro
  await Promise.all([store.record(simultaneous[0]!),new RemoteProbeObservationStore(db.secondPool).record(simultaneous[1]!)]);
  assert.deepEqual((await db.pool.query("SELECT DISTINCT status,checked_at FROM remote_probe_observations WHERE installation_id=$1",[target.installationId])).rows.map(row=>[row.status,row.checked_at.toISOString()]),[['healthy','2026-09-25T10:00:03.000Z']]);
 
+ const future=new Date(Date.now()+10*60*1000).toISOString();
+ await assert.rejects(store.record(result(target,future,'healthy')),/invalid_probe_result/);
+
  await db.pool.query("UPDATE remote_hostnames SET hostname='new.evidence.example.test' WHERE venue_id=$1 AND kind='public'",[target.venueId]);
  await db.pool.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[target.installationId]);
  assert.equal(await store.record(result(target,'2026-09-25T10:00:04.000Z','failed')),false);

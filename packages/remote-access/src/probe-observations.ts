@@ -42,6 +42,8 @@ export class RemoteProbeObservationStore {
  async record(result:RemoteProbeResult):Promise<boolean>{
   validate(result);
   return transaction(this.#pool,async client=>{
+   const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
+   if([result.checkedAt,result.public.checkedAt,result.staff.checkedAt].some(value=>date(value).getTime()>now.getTime()+60000))throw new Error('invalid_probe_result');
    // Configuration, hostname changes and revocation take this installation lock exclusively.
    const current=(await client.query(`SELECT i.configuration_revision,s.hostname AS staff_hostname,u.hostname AS public_hostname
     FROM installations i JOIN remote_placements p ON p.installation_id=i.id AND p.venue_id=i.venue_id

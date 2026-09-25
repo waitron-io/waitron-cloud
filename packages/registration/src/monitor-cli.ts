@@ -4,6 +4,7 @@ import {EmailOutbox} from './email-outbox.ts';
 import {MonitorWorker,monitorStatus} from './monitoring.ts';
 let pool:Pool|undefined;
 const stop=new AbortController(),shutdown=()=>stop.abort();
+function configuredInteger(name:string,fallback:number,max:number){const raw=process.env[name];if(raw===undefined)return fallback;const value=Number(raw);if(!Number.isInteger(value)||value<1||value>max)throw Error();return value;}
 process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
 try{
  const args=process.argv.slice(2),mode=args[0];
@@ -15,7 +16,7 @@ try{
  else{
   if(!process.env.CLOUD_EMAIL_KEYS||!process.env.CLOUD_EMAIL_ACTIVE_KEY_ID)throw Error();
   const outbox=new EmailOutbox({activeKeyId:process.env.CLOUD_EMAIL_ACTIVE_KEY_ID,keys:JSON.parse(process.env.CLOUD_EMAIL_KEYS)});
-  const worker=new MonitorWorker(pool,outbox);
+  const worker=new MonitorWorker(pool,outbox,{probeStaleSeconds:configuredInteger('CLOUD_REMOTE_PROBE_STALE_SECONDS',300,86400),certificateWarningDays:configuredInteger('CLOUD_REMOTE_CERTIFICATE_WARNING_DAYS',30,3650)});
   while(!stop.signal.aborted){
    let ran=false;
    try{
