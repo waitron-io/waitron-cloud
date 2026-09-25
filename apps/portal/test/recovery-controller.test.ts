@@ -6,6 +6,26 @@ import type {ApiResult} from '../src/api.ts';
 const id='12345678-1234-4234-8234-123456789abc',pointId='22345678-1234-4234-8234-123456789abc',venueId='32345678-1234-4234-8234-123456789abc';
 const pending={requestId:id,state:'awaiting_owner',expiresAt:new Date(Date.now()+600000).toISOString(),operationId:null,operation:null};
 const approved={...pending,state:'approved',operationId:id,operation:{id,pointId,venueId,mode:'failure',status:'pending',expiresAt:new Date(Date.now()+3600000).toISOString()}};
+const replacement={requestId:id,pointId,venueId,oldInstallationId:'42345678-1234-4234-8234-123456789abc',localVenueId:'52345678-1234-4234-8234-123456789abc',nodeId:'62345678-1234-4234-8234-123456789abc',environment:'test',publicKey:'MCowBQYDK2VwAyEA'+'A'.repeat(43),peerPublicKey:Buffer.alloc(32).toString('base64'),state:'awaiting_owner',expiresAt:new Date(Date.now()+3600000).toISOString(),organisationName:'Café Sol',legalBusinessName:'Sol SL',registration:null};
+test('replacement view requires a restored operation and matching request, point and venue',()=>{
+ const restored={...approved,operation:{...approved.operation,status:'restored'},replacement};
+ assert(validRecoveryView(restored));assert(!validRecoveryView({...restored,replacement:{...replacement,pointId:id}}));
+ assert(!validRecoveryView({...approved,replacement}));assert(!validRecoveryView({...pending,replacement}));
+});
+test('owner replacement uses a fresh confirmation bound to the displayed installation',async()=>{
+ const calls:{path:string;body:Record<string,string>|undefined}[]=[];const ready={...approved,operation:{...approved.operation,status:'restored'},replacement};
+ const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,string>):Promise<ApiResult<T>>=>{calls.push({path,body});return {ok:true,value:ready as T};});
+ c.open(id);c.account('owner');c.code='12345678';await c.inspect();await c.replace();assert.equal(calls.length,1);
+ c.confirmReplacement=true;await c.replace();assert.equal(calls[1]?.path,'/recovery/replace');assert.deepEqual(calls[1]?.body,{requestId:id,code:'12345678',oldInstallationId:replacement.oldInstallationId,oldServerUnavailable:'true',confirmReplacement:'true'});
+});
+test('proposal changes, account changes and uncertain writes clear replacement confirmation',async()=>{
+ let proposed={...approved,operation:{...approved.operation,status:'restored'},replacement};let lose=false;const calls:string[]=[];
+ const c=new RecoveryController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{calls.push(path);return path.endsWith('/replace')&&lose?{ok:false,status:0,code:'network_error',retryAfterMs:0}:{ok:true,value:proposed as T};});
+ c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.confirmReplacement=true;
+ proposed={...proposed,replacement:{...replacement,publicKey:'MCowBQYDK2VwAyEA'+'B'.repeat(43)}};await c.inspect();assert.equal(c.confirmReplacement,false);
+ c.confirmReplacement=true;lose=true;await c.replace();assert.equal(c.confirmReplacement,false);assert.equal(c.view?.replacement?.state,'awaiting_owner');assert.deepEqual(calls.slice(-2),['/recovery/replace','/recovery/inspect']);
+ c.account('other');assert.equal(c.confirmReplacement,false);
+});
 test('owner view validation rejects malformed or mismatched recovery bindings',()=>{assert(validRecoveryView(pending));assert(validRecoveryView(approved));assert(!validRecoveryView({...approved,operationId:pointId}));assert(!validRecoveryView({...approved,operation:{...approved.operation,status:'active'}}));});
 test('lost approval replies reconcile by inspection without another grant; confirmations bind the chosen point',async()=>{
  const calls:string[]=[];let granted=false;const c=new RecoveryController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{calls.push(path);if(path.endsWith('/approve')){granted=true;return {ok:false,status:0,code:'network_error',retryAfterMs:0};}return {ok:true,value:(granted?approved:pending) as T};});
