@@ -56,6 +56,9 @@ async function binary(root, platform) {
   const bin = join(root, "litestream");
   return bin;
 }
+export function localLitestreamBinary(root, platform = process.platform + "-" + process.arch) {
+  return binary(root, platform);
+}
 // Storage proof only: this does not add the still-unimplemented sealed state row to Waitron.
 export async function probeBackupStream({
   root,

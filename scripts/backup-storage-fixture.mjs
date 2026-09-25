@@ -17,7 +17,7 @@ import { StorageAuthority } from "../packages/backups/src/storage.ts";
 const require = createRequire(
   new URL("../packages/backups/package.json", import.meta.url),
 );
-const { S3Client, CreateBucketCommand } = require("@aws-sdk/client-s3");
+const { S3Client, CreateBucketCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const {
   STSClient,
   AssumeRoleWithWebIdentityCommand,
@@ -69,6 +69,7 @@ async function binary(root) {
 export async function startBackupStorage() {
   const root = await mkdtemp(join(tmpdir(), "cloud-backup-storage-"));
   let oidc, child, log, adminClient;
+  const managed = new Map();
   async function stop() {
     adminClient?.destroy();
     if (child && child.exitCode === null && child.signalCode === null) {
@@ -228,24 +229,19 @@ export async function startBackupStorage() {
       accessKeyId: "local-" + randomBytes(8).toString("hex"),
       secretAccessKey: randomBytes(32).toString("base64url"),
     };
-    await writeFile(
-      join(root, "iam.json"),
-      JSON.stringify({
-        identities: [
-          {
-            name: "admin",
-            credentials: [
-              {
-                accessKey: admin.accessKeyId,
-                secretKey: admin.secretAccessKey,
-              },
-            ],
-            actions: ["Admin", "Read", "Write", "List", "Tagging"],
-          },
-        ],
-      }),
-      { mode: 0o600 },
-    );
+    const iamPath = join(root, "iam.json"),
+      identities = [
+        {
+          name: "admin",
+          credentials: [
+            { accessKey: admin.accessKeyId, secretKey: admin.secretAccessKey },
+          ],
+          actions: ["Admin", "Read", "Write", "List", "Tagging"],
+        },
+      ];
+    const writeIdentities = () =>
+      writeFile(iamPath, JSON.stringify({ identities }), { mode: 0o600 });
+    await writeIdentities();
     const ports = [];
     for (let i = 0; i < 7; i++) ports.push(await freePort());
     const [s3, master, masterGrpc, volume, volumeGrpc, filer, filerGrpc] =
@@ -261,7 +257,7 @@ export async function startBackupStorage() {
       "-s3.port=" + s3,
       "-s3.cert.file=" + join(root, "cert.pem"),
       "-s3.key.file=" + join(root, "key.pem"),
-      "-s3.config=" + join(root, "iam.json"),
+      "-s3.config=" + iamPath,
       "-s3.iam.config=" + join(root, "sts.json"),
       "-master.port=" + master,
       "-master.port.grpc=" + masterGrpc,
@@ -307,6 +303,98 @@ export async function startBackupStorage() {
       }
     }
     if (!ready) throw Error("SeaweedFS not ready");
+    const sameLocation = (a, b) =>
+      a?.endpoint === b?.endpoint && a?.region === b?.region && a?.bucket === b?.bucket;
+    const managedStreams = {
+      async provision(input) {
+        const prior = managed.get(input.venueId);
+        if (prior) {
+          if (!sameLocation(prior.location, input.location) || prior.prefix !== input.prefix)
+            throw Error("managed stream scope changed");
+          return prior.provision;
+        }
+        const writer = {
+            accessKeyId: "managed-write-" + randomBytes(8).toString("hex"),
+            secretAccessKey: randomBytes(32).toString("base64url"),
+          },
+          reader = {
+            accessKeyId: "managed-read-" + randomBytes(8).toString("hex"),
+            secretAccessKey: randomBytes(32).toString("base64url"),
+          },
+          scope = `${input.location.bucket}/${input.prefix}*`;
+        identities.push(
+          {
+            name: `managed-writer-${input.venueId}`,
+            credentials: [
+              { accessKey: writer.accessKeyId, secretKey: writer.secretAccessKey },
+            ],
+            actions: [`Read:${scope}`, `Write:${scope}`, `List:${scope}`],
+          },
+          {
+            name: `managed-reader-${input.venueId}`,
+            credentials: [
+              { accessKey: reader.accessKeyId, secretKey: reader.secretAccessKey },
+            ],
+            actions: [`Read:${scope}`, `List:${scope}`],
+          },
+        );
+        await writeIdentities();
+        child.kill("SIGHUP");
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const provision = {
+          writerReference: `managed:${input.venueId}:writer`,
+          readerReference: `managed:${input.venueId}:reader`,
+          writerCredentials: writer,
+        };
+        managed.set(input.venueId, {
+          location: input.location,
+          prefix: input.prefix,
+          writer,
+          reader,
+          provision,
+        });
+        return provision;
+      },
+      async read(reference, location, key) {
+        const item = [...managed.values()].find(
+          (value) => value.provision.readerReference === reference,
+        );
+        if (!item || !sameLocation(item.location, location))
+          throw Error("unknown managed reader");
+        const client = new S3Client({
+          endpoint: location.endpoint,
+          region: location.region,
+          credentials: item.reader,
+          forcePathStyle: true,
+          maxAttempts: 1,
+          requestHandler: { httpsAgent: agent() },
+        });
+        try {
+          const result = await client.send(
+            new GetObjectCommand({ Bucket: location.bucket, Key: key }),
+          );
+          return Buffer.from(await result.Body.transformToByteArray());
+        } finally {
+          client.destroy();
+        }
+      },
+      async reader(input) {
+        const item = managed.get(input.venueId);
+        if (
+          !item ||
+          item.provision.readerReference !== input.reference ||
+          item.prefix !== input.prefix ||
+          !sameLocation(item.location, input.location)
+        )
+          throw Error("unknown managed reader");
+        // The AWS client decorates its input object with `$source`; the recovery boundary accepts
+        // only these two fields, so return a fresh provider response.
+        return {
+          accessKeyId: item.reader.accessKeyId,
+          secretAccessKey: item.reader.secretAccessKey,
+        };
+      },
+    };
     async function assume(scope, role, now) {
       const client = new STSClient({
         endpoint,
@@ -334,6 +422,7 @@ export async function startBackupStorage() {
       ca,
       admin,
       authority,
+      managedStreams,
       agent,
       stop,
       async bucket(name) {

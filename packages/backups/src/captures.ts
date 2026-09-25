@@ -3,10 +3,12 @@ import {InstallationStore,InstallationError,readMachineClaims,verifyMachine,veri
 import {BackupCatalogue,backupFail,type ObjectFactory,type PointMetadata} from './catalogue.ts';
 import type {BackupKeyVault} from './keys.ts';
 import type {StorageLocation,StorageScope,StorageCredentials} from './storage.ts';
+import type {ManagedStreamAuthority} from './managed-streams.ts';
 export interface CaptureOptions {
  vault:BackupKeyVault;
  objects:ObjectFactory;
  grant(location:StorageLocation,scope:StorageScope):Promise<{credentials:StorageCredentials;expiresAt:string}>;
+ managedStreams?:ManagedStreamAuthority;
 }
 export type CaptureAction='backup-reserve'|'backup-publish';
 export class BackupCaptures {

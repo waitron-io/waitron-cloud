@@ -5,10 +5,14 @@ import {validBackupPage} from '../src/backup-types.ts';
 import type {ApiResult} from '../src/api.ts';
 const venue='12345678-1234-4234-8234-123456789abc',other='22345678-1234-4234-8234-123456789abc';
 const point={id:venue,capturedAt:'2026-01-01T12:00:00.000Z',expiresAt:'2026-01-31T12:00:00.000Z',retention:'daily',verification:'verified',protection:'fallback'};
-const page={venueId:venue,points:[point],nextCursor:'next',defaultPointId:venue,continuousRecoveryAvailable:false};
+const continuous={recoverableAt:'2026-01-02T12:00:00.000Z',checkedAt:'2026-01-02T12:00:30.000Z',sourceNodeId:other};
+const page={venueId:venue,points:[point],nextCursor:'next',defaultPointId:venue,continuousRecovery:continuous};
 test('catalogue validates bounded public metadata and refuses malformed success responses',()=>{
  assert.equal(validBackupPage(page),true);
- for(const patch of [{points:Array(51).fill(point)},{points:[{...point,verification:'uploaded'}]},{points:[{...point,expiresAt:'bad'}]},{venueId:'bad'},{continuousRecoveryAvailable:true}])assert.equal(validBackupPage({...page,...patch}),false);
+ for(const patch of [{points:Array(51).fill(point)},{points:[{...point,verification:'uploaded'}]},{points:[{...point,expiresAt:'bad'}]},{venueId:'bad'},
+  {continuousRecovery:{...continuous,checkedAt:'bad'}},{continuousRecovery:{...continuous,sourceNodeId:'bad'}},{continuousRecovery:{...continuous,bucket:'secret'}}])assert.equal(validBackupPage({...page,...patch}),false);
+ assert.equal(validBackupPage({...page,continuousRecovery:null}),true);
+ assert.equal(validBackupPage({...page,readerCredentials:{accessKeyId:'secret'}}),false);
 });
 test('changing account or venue fences delayed catalogue replies and clears private data',async()=>{
  let finish!:(result:ApiResult<unknown>)=>void;
@@ -19,8 +23,14 @@ test('changing account or venue fences delayed catalogue replies and clears priv
 test('pagination replaces the page; failures retain it and Retry-After survives reopening',async()=>{
  const calls:unknown[]=[];let mode='first';
  const c=new BackupController(()=>{},async<T>(path:string,body?:Record<string,string>):Promise<ApiResult<T>>=>{calls.push({path,body});return mode==='limited'?{ok:false,status:429,code:'rate_limited',retryAfterMs:60000}:mode==='failed'?{ok:false,status:503,code:'temporarily_unavailable',retryAfterMs:0}:{ok:true,value:(mode==='first'?page:{...page,points:[{...point,id:other}],nextCursor:null}) as T};});
- c.account('owner');await c.open(venue);assert.equal(c.selected,venue);c.select('not-offered');assert.equal(c.selected,venue);
+ c.account('owner');await c.open(venue);assert.equal(c.selectedSource,'continuous');assert.equal(c.selected,venue);c.select('not-offered');assert.equal(c.selectedSource,'continuous');
+ c.select(venue);assert.equal(c.selectedSource,'snapshot');
  mode='failed';await c.load(true);assert.equal(c.page?.points[0]?.id,venue);assert.equal(c.error,'unavailable');
- mode='second';await c.load(true);assert.equal(c.page?.points.length,1);assert.equal(c.page?.points[0]?.id,other);assert.deepEqual(calls.at(-1),{path:'/backups/list',body:{venueId:venue,cursor:'next'}});
+ mode='second';await c.load(true);assert.equal(c.page?.points.length,1);assert.equal(c.page?.points[0]?.id,other);assert.equal(c.selectedSource,'continuous');assert.deepEqual(calls.at(-1),{path:'/backups/list',body:{venueId:venue,cursor:'next'}});
  mode='limited';await c.load();assert.equal(c.error,'limited');c.close();await c.open(venue);assert.equal(calls.length,4);assert(c.waiting>0);
+});
+test('a stale continuous source falls back to the default verified snapshot on reload',async()=>{
+ let fresh=true;
+ const c=new BackupController(()=>{},async<T>():Promise<ApiResult<T>>=>({ok:true,value:{...page,continuousRecovery:fresh?continuous:null} as T}));
+ c.account('owner');await c.open(venue);assert.equal(c.selectedSource,'continuous');fresh=false;await c.load();assert.equal(c.selectedSource,'snapshot');assert.equal(c.selected,venue);
 });

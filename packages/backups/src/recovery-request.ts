@@ -2,7 +2,7 @@ import {createHash,timingSafeEqual,verify} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
 import {transaction} from '@waitron-cloud/registration';
-import {BackupRecovery,decode,publicKey,type Proof,type RecoveryInput} from './recovery.ts';
+import {BackupRecovery,decode,publicKey,type Proof,type RecoveryApprovalInput} from './recovery.ts';
 import {backupFail,uuid,uniqueViolation} from './catalogue.ts';
 import type {BackupKeyVault} from './keys.ts';
 type Action='start'|'status';
@@ -36,7 +36,7 @@ export class RecoveryRequests {
    const row=await lock(client,c.id);if(row.public_key!==c.publicKey||row.code_hash!==digest(c.code))backupFail('conflict');await available(client,row);verifyRecoveryRequest(this.origin,action,proof);return view(row);
   }).catch(error=>{if(uniqueViolation(error,'backup_recovery_requests_public_key_key'))backupFail('target_not_fresh');throw error;});
  }
- async #browser(id:string,code:string,token:string,csrf:string,input?:Pick<RecoveryInput,'pointId'|'oldServerUnavailable'|'acceptDataLoss'>){
+ async #browser(id:string,code:string,token:string,csrf:string,input?:RecoveryApprovalInput){
   const result=await transaction(this.pool,async client=>{
    const row=await lock(client,id),session=await resolveSession(client,token,{csrfToken:csrf,touch:false});await available(client,row);
    if(row.account_id&&row.account_id!==session.accountId)backupFail('permission_denied');
@@ -54,5 +54,5 @@ export class RecoveryRequests {
   if(!result)backupFail('unavailable');return result;
  }
  inspect(id:string,code:string,token:string,csrf:string){return this.#browser(id,code,token,csrf);}
- approve(id:string,code:string,token:string,csrf:string,input:Pick<RecoveryInput,'pointId'|'oldServerUnavailable'|'acceptDataLoss'>){return this.#browser(id,code,token,csrf,input);}
+ approve(id:string,code:string,token:string,csrf:string,input:RecoveryApprovalInput){return this.#browser(id,code,token,csrf,input);}
 }

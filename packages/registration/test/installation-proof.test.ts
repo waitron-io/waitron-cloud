@@ -63,3 +63,10 @@ test('literal installation and lease vectors remain compatible across repositori
   assert.deepEqual(fixedIssuer.issue(v.leaseClaims),v.lease);
   assert.deepEqual(verifyLease(v.lease,new Map([[v.issuerKeyId,v.issuerPublicKey]]),v.claims.origin,v.claims.issuedAt),{...v.leaseClaims,keyId:v.issuerKeyId,audience:'control'});
 });
+test('managed stream actions use the same signed machine namespace',()=>{
+  for(const action of ['backup-stream-configure','backup-stream-observe'] as const){
+    const value={...claims,action};const signed=proof(value);
+    assert.equal(readMachineClaims(signed).action,action);
+    assert.equal(verifyMachine(signed,publicKey,origin,action,now).action,action);
+  }
+});

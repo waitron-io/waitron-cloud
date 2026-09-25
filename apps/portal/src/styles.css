@@ -10,6 +10,7 @@ wt-input { margin: 1rem 0; }
 .help { color: var(--wt-color-text-muted); font-size: .9rem; }
 nav { display: grid; gap: .8rem; margin-top: 1.25rem; }
 a, .text-button { color: var(--wt-color-primary); text-underline-offset: .15em; }
+wt-button[variant="primary"]::part(button):hover { opacity: 1; }
 button { font: inherit; cursor: pointer; }
 .reveal { border: 0; background: transparent; color: var(--wt-color-text); padding: .4rem; font-size: .8rem; }
 .text-button { border: 0; background: none; text-decoration: underline; padding: .8rem 0; }

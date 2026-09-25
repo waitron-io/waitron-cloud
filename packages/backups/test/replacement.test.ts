@@ -64,6 +64,13 @@ test('restored replacement preserves venue and history, retires old authority, a
  await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[result.registration.installationId]);
  await assert.rejects(f.store.machine('status',f.envelope('status')),/revoked/);
 });
+test('a restored continuous operation keeps the existing owner-confirmed replacement path',async()=>{
+ const f=await ready(),generation=`gen-2-${f.point.sourceNodeId}-20260925T190000Z`;
+ await db.pool.query(`UPDATE backup_recoveries SET source_kind='continuous',point_id=NULL,stream_configuration_revision=2,
+  stream_generation=$2,stream_recoverable_at=clock_timestamp(),stream_source_node_id=$3 WHERE id=$1`,[f.t.id,generation,f.point.sourceNodeId]);
+ const proposal=await f.store.machine('prepare',f.envelope('prepare'));assert.equal(proposal.source.kind,'continuous');assert.equal(proposal.pointId,null);
+ const result=await f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f));assert.equal(result.state,'complete');assert.equal(result.registration.venueId,f.installed.venueId);
+});
 const confirm=(f:Awaited<ReturnType<typeof ready>>)=>({oldInstallationId:f.installed.installationId,oldServerUnavailable:true,confirmReplacement:true});
 test('an abandoned proposal does not prevent a new recovery replacing the same installation',async()=>{
  const f=await ready();await f.store.machine('prepare',f.envelope('prepare'));await f.recovery.close(f.session.token,f.session.csrfToken,f.t.id);
@@ -112,7 +119,7 @@ test('HTTP requires two proofs, matching owner code and explicit confirmation; r
  const post=(path:string,body:unknown,owner=false,headers:Record<string,string>={},ip='192.0.2.234')=>app.request(origin+path,{method:'POST',headers:{'content-type':'application/json',...(owner?{origin,cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken}:{}),...headers},body:JSON.stringify(body)},{incoming:{socket:{remoteAddress:ip}}});
  const owner=(action:string,extra:Record<string,string>={})=>post('/api/account/recovery/'+action,{requestId:f.t.id,code:f.t.code,...extra},true);
  assert.equal((await post('/api/replacement/prepare',f.envelope('prepare'),false,{origin})).status,403);
- assert.equal((await post('/api/replacement/prepare',f.envelope('prepare'))).status,200);
+ const prepared=await post('/api/replacement/prepare',f.envelope('prepare'));assert.equal(prepared.status,200);assert(!('source' in await prepared.json()));
  const inspected=await owner('inspect');assert.equal(inspected.status,200);assert.equal((await inspected.json()).replacement.state,'awaiting_owner');
  assert.equal((await owner('replace',{oldInstallationId:f.installed.installationId,oldServerUnavailable:'true',confirmReplacement:'false'})).status,400);
  const body={requestId:f.t.id,code:f.t.code,oldInstallationId:f.installed.installationId,oldServerUnavailable:'true',confirmReplacement:'true'};

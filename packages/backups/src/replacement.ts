@@ -22,15 +22,18 @@ async function permission(client:PoolClient,account:string,venue:string){
  if(!(await client.query(`SELECT m.account_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id JOIN cloud_accounts a ON a.id=m.account_id WHERE m.account_id=$1 AND v.id=$2 AND m.is_owner AND a.disabled_at IS NULL FOR SHARE OF a,m`,[account,venue])).rowCount)backupFail('permission_denied');
 }
 async function recovery(client:PoolClient,id:string){
- const r=(await client.query(`SELECT r.*,p.source_node_id,p.kind,p.verification,p.deleting,p.deleted_at,v.local_venue_id,v.environment,v.organisation_id,v.legal_business_id,o.name AS organisation_name,b.name AS business_name
- FROM backup_recoveries r JOIN backup_points p ON p.id=r.point_id JOIN venues v ON v.id=r.venue_id JOIN organisations o ON o.id=v.organisation_id JOIN legal_businesses b ON b.id=v.legal_business_id WHERE r.id=$1`,[id])).rows[0];
+ const r=(await client.query(`SELECT r.*,COALESCE(p.source_node_id,r.stream_source_node_id) AS source_node_id,r.source_kind AS kind,p.verification,p.deleting,p.deleted_at,v.local_venue_id,v.environment,v.organisation_id,v.legal_business_id,o.name AS organisation_name,b.name AS business_name
+ FROM backup_recoveries r LEFT JOIN backup_points p ON p.id=r.point_id JOIN venues v ON v.id=r.venue_id JOIN organisations o ON o.id=v.organisation_id JOIN legal_businesses b ON b.id=v.legal_business_id WHERE r.id=$1`,[id])).rows[0];
  if(!r)backupFail('unavailable');if(r.environment!=='test')backupFail('local_integration_only');return r;
 }
 async function current(client:PoolClient,id:string){
- const r=(await client.query("SELECT r.status='restored' AND r.expires_at>clock_timestamp() AND p.kind='snapshot' AND p.verification='verified' AND NOT p.deleting AND p.deleted_at IS NULL AS valid FROM backup_recoveries r JOIN backup_points p ON p.id=r.point_id WHERE r.id=$1",[id])).rows[0];if(!r?.valid)backupFail('unavailable');
+ const r=(await client.query(`SELECT r.status='restored' AND r.expires_at>clock_timestamp() AND
+  ((r.source_kind='snapshot' AND p.kind='snapshot' AND p.verification='verified' AND NOT p.deleting AND p.deleted_at IS NULL)
+   OR (r.source_kind='continuous' AND r.stream_generation IS NOT NULL)) AS valid
+  FROM backup_recoveries r LEFT JOIN backup_points p ON p.id=r.point_id WHERE r.id=$1`,[id])).rows[0];if(!r?.valid)backupFail('unavailable');
 }
 function bound(row:Record<string,any>,c:ReplacementClaims){if(row.public_key!==c.publicKey||row.peer_public_key!==c.peerPublicKey||row.local_venue_id!==c.localVenueId||row.node_id!==c.nodeId)backupFail('conflict');}
-function view(r:Record<string,any>,p:Record<string,any>){return p.result??{requestId:r.id,pointId:r.point_id,venueId:r.venue_id,oldInstallationId:p.old_installation_id,localVenueId:p.local_venue_id,nodeId:p.node_id,environment:'test',publicKey:p.public_key,peerPublicKey:p.peer_public_key,state:'awaiting_owner',expiresAt:r.expires_at.toISOString(),organisationName:r.organisation_name,legalBusinessName:r.business_name,registration:null};}
+function view(r:Record<string,any>,p:Record<string,any>){return p.result??{requestId:r.id,pointId:r.point_id,source:r.source_kind==='continuous'?{kind:'continuous',recoverableAt:r.stream_recoverable_at.toISOString(),sourceNodeId:r.stream_source_node_id}:{kind:'snapshot',pointId:r.point_id},venueId:r.venue_id,oldInstallationId:p.old_installation_id,localVenueId:p.local_venue_id,nodeId:p.node_id,environment:'test',publicKey:p.public_key,peerPublicKey:p.peer_public_key,state:'awaiting_owner',expiresAt:r.expires_at.toISOString(),organisationName:r.organisation_name,legalBusinessName:r.business_name,registration:null};}
 export class ReplacementStore {
  readonly pool:Pool;readonly vault:BackupKeyVault;readonly origin:string;
  constructor(pool:Pool,vault:BackupKeyVault,origin:string){this.pool=pool;this.vault=vault;this.origin=origin;}
@@ -64,7 +67,7 @@ export class ReplacementStore {
    if(r.local_venue_id!==c.localVenueId||r.source_node_id!==c.nodeId)backupFail('conflict');
    if(p?.result){bound(p,c);const result=await this.#activeResult(client,p);claims(this.origin,action,envelope);return result;}
    await current(client,c.id);
-   if(r.kind!=='snapshot'||r.verification!=='verified'||r.deleting||r.deleted_at)backupFail('unavailable');
+   if(r.kind==='snapshot'&&(r.verification!=='verified'||r.deleting||r.deleted_at))backupFail('unavailable');
    if(l.installation_id!==old.id)backupFail('conflict');
    if(p){bound(p,c);claims(this.origin,action,envelope);return view(r,p);}
    if(action!=='prepare')backupFail('unavailable');

@@ -45,7 +45,12 @@ export class PortalApp {
     this.remote = new RemoteController(() => this.draw());
     this.recovery = new RecoveryController(() => this.draw());
     this.recovery.open(this.link.recoveryId);
-    this.backups = new BackupController(() => {const selected=this.backups.page?.points.find(p=>p.id===this.backups.selected&&p.verification==='verified');this.recovery.choose(this.backups.venueId,selected?.id);this.draw();});
+    this.backups = new BackupController(() => {
+      const selected=this.backups.page?.points.find(p=>p.id===this.backups.selected&&p.verification==='verified');
+      if(this.backups.selectedSource==='continuous'&&this.backups.page?.continuousRecovery)this.recovery.chooseContinuous(this.backups.venueId);
+      else this.recovery.choose(this.backups.venueId,selected?.id);
+      this.draw();
+    });
     this.installations = new InstallationController(() => {
       if(this.remote.installationId&&!this.installations.visible.some(i=>i.installationId===this.remote.installationId&&i.canRevoke&&!i.revokedAt))this.remote.close();
       if(this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke)){this.backups.close();this.recovery.choose(undefined,undefined);}

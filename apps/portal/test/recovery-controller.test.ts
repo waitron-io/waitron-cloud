@@ -5,8 +5,11 @@ import {validRecoveryView} from '../src/recovery-types.ts';
 import type {ApiResult} from '../src/api.ts';
 const id='12345678-1234-4234-8234-123456789abc',pointId='22345678-1234-4234-8234-123456789abc',venueId='32345678-1234-4234-8234-123456789abc';
 const pending={requestId:id,state:'awaiting_owner',expiresAt:new Date(Date.now()+600000).toISOString(),operationId:null,operation:null};
-const approved={...pending,state:'approved',operationId:id,operation:{id,pointId,venueId,mode:'failure',status:'pending',expiresAt:new Date(Date.now()+3600000).toISOString()}};
-const replacement={requestId:id,pointId,venueId,oldInstallationId:'42345678-1234-4234-8234-123456789abc',localVenueId:'52345678-1234-4234-8234-123456789abc',nodeId:'62345678-1234-4234-8234-123456789abc',environment:'test',publicKey:'MCowBQYDK2VwAyEA'+'A'.repeat(43),peerPublicKey:Buffer.alloc(32).toString('base64'),state:'awaiting_owner',expiresAt:new Date(Date.now()+3600000).toISOString(),organisationName:'Café Sol',legalBusinessName:'Sol SL',registration:null};
+const snapshotSource={kind:'snapshot',pointId} as const;
+const continuousSource={kind:'continuous',recoverableAt:'2026-01-02T12:00:00.000Z',sourceNodeId:'62345678-1234-4234-8234-123456789abc'} as const;
+const approved={...pending,state:'approved',operationId:id,operation:{id,pointId,venueId,source:snapshotSource,mode:'failure',status:'pending',expiresAt:new Date(Date.now()+3600000).toISOString()}};
+const continuousApproved={...pending,state:'approved',operationId:id,operation:{...approved.operation,pointId:null,source:continuousSource}};
+const replacement={requestId:id,pointId,venueId,source:snapshotSource,oldInstallationId:'42345678-1234-4234-8234-123456789abc',localVenueId:'52345678-1234-4234-8234-123456789abc',nodeId:'62345678-1234-4234-8234-123456789abc',environment:'test',publicKey:'MCowBQYDK2VwAyEA'+'A'.repeat(43),peerPublicKey:Buffer.alloc(32).toString('base64'),state:'awaiting_owner',expiresAt:new Date(Date.now()+3600000).toISOString(),organisationName:'Café Sol',legalBusinessName:'Sol SL',registration:null};
 test('replacement view requires a restored operation and matching request, point and venue',()=>{
  const restored={...approved,operation:{...approved.operation,status:'restored'},replacement};
  assert(validRecoveryView(restored));assert(!validRecoveryView({...restored,replacement:{...replacement,pointId:id}}));
@@ -27,12 +30,35 @@ test('proposal changes, account changes and uncertain writes clear replacement c
  c.account('other');assert.equal(c.confirmReplacement,false);
 });
 test('owner view validation rejects malformed or mismatched recovery bindings',()=>{assert(validRecoveryView(pending));assert(validRecoveryView(approved));assert(!validRecoveryView({...approved,operationId:pointId}));assert(!validRecoveryView({...approved,operation:{...approved.operation,status:'active'}}));});
+test('owner view accepts strict continuous sources and excludes provider or tenant secrets',()=>{
+ assert(validRecoveryView(continuousApproved));
+ for(const operation of [
+  {...continuousApproved.operation,pointId},
+  {...continuousApproved.operation,source:{...continuousSource,recoverableAt:'bad'}},
+  {...continuousApproved.operation,source:{...continuousSource,generation:7}},
+  {...continuousApproved.operation,bucket:'private'},
+ ])assert(!validRecoveryView({...continuousApproved,operation}));
+ assert(!validRecoveryView({...pending,tenantId:'private'}));
+});
 test('lost approval replies reconcile by inspection without another grant; confirmations bind the chosen point',async()=>{
  const calls:string[]=[];let granted=false;const c=new RecoveryController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{calls.push(path);if(path.endsWith('/approve')){granted=true;return {ok:false,status:0,code:'network_error',retryAfterMs:0};}return {ok:true,value:(granted?approved:pending) as T};});
  c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId,pointId);await c.approve();assert.equal(calls.length,1);
  c.stopped=true;c.acceptLoss=true;await c.approve();assert.equal(c.view?.state,'approved');assert.deepEqual(calls,['/recovery/inspect','/recovery/approve','/recovery/inspect']);
  await c.approve();assert.equal(calls.length,3);
  c.choose(venueId,id);assert.equal(c.stopped,false);assert.equal(c.acceptLoss,false);
+});
+test('continuous approval is the default source shape and reconciles an uncertain write',async()=>{
+ const calls:{path:string;body:Record<string,string>|undefined}[]=[];let granted=false;
+ const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,string>):Promise<ApiResult<T>>=>{calls.push({path,body});if(path.endsWith('/approve')){granted=true;return {ok:false,status:0,code:'network_error',retryAfterMs:0};}return {ok:true,value:(granted?continuousApproved:pending) as T};});
+ c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.chooseContinuous(venueId);c.stopped=true;c.acceptLoss=true;await c.approve();
+ assert.equal(c.view?.operation?.source.kind,'continuous');assert.equal(c.uncertain,false);
+ assert.deepEqual(calls[1],{path:'/recovery/approve',body:{requestId:id,code:'12345678',source:'continuous',venueId,oldServerUnavailable:'true',acceptDataLoss:'true'}});
+});
+test('snapshot fallback approval names its source and selected point explicitly',async()=>{
+ const calls:{path:string;body:Record<string,string>|undefined}[]=[];
+ const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,string>):Promise<ApiResult<T>>=>{calls.push({path,body});return {ok:true,value:(path.endsWith('/approve')?approved:pending) as T};});
+ c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;await c.approve();
+ assert.deepEqual(calls[1],{path:'/recovery/approve',body:{requestId:id,code:'12345678',source:'snapshot',pointId,oldServerUnavailable:'true',acceptDataLoss:'true'}});
 });
 test('account reset discards delayed inspection and clears matching code',async()=>{
  let finish!:(r:ApiResult<unknown>)=>void;const c=new RecoveryController(()=>{},<T>()=>new Promise<ApiResult<T>>(r=>{finish=r as typeof finish;}));c.open(id);c.account('a');c.code='12345678';const load=c.inspect();c.account('b');finish({ok:true,value:approved});await load;assert.equal(c.view,undefined);assert.equal(c.code,'');

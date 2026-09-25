@@ -1,6 +1,6 @@
 # Waitron and Cloud integration contract
 
-Status: implementation proposal, 2026-09-22. This translates the agreed
+Status: locally implemented through continuous cold restore, updated 2026-09-25. This translates the agreed
 [product requirements](product-and-platform.md) into responsibilities and exchanges.
 It does not declare endpoints implemented or replace Waitron's recovery rules.
 
@@ -16,17 +16,20 @@ permissions and service configuration can proceed against the current SQLite app
 ## Local implementation update, 2026-09-25
 
 Pairing, lifecycle and the shared remote gateway now have executable local proofs.
-The [managed-backup proof](local-backups.md) adds actual Waitron SQLite archives,
+The [managed-backup proof](local-backups.md) adds actual Waitron SQLite streams and archives,
 protected key versions, scoped encrypted storage, immutable publication, verified
 restore records, retention and owner-bound snapshot recovery. The catalogue exposes
-snapshot capture times through the customer catalogue and guided recovery screens.
+snapshot capture times and signed continuous recovery times through the customer
+catalogue and guided recovery screens.
 
 The proof excludes actual source Cloud credentials/staff TLS keys and drops captured
 backup destination settings on the disposable replacement. It invokes Waitron's
 validation, SQLite restore/migration and module hooks without starting workers.
-Litestream storage restores are a separate database proof. Complete continuous server
-recovery still needs integration with Waitron's current sealed-state, stream and
-cold-restore interfaces. Owner-confirmed test-snapshot replacement now preserves the
+The same two-venue proof configures Waitron's stream supervisor, verifies each signed
+pointer in Cloud, stops both originals, interrupts and retries Waitron's cold restore,
+and matches the restored database head to its source. Deleting the other continuous
+prefix leaves its neighbour unchanged and its verified snapshot still restores.
+Owner-confirmed test-snapshot replacement now preserves the
 venue and history, imports fresh installation credentials, retires old Cloud access
 and updates the remote placement. Local tunnel/certificate installation and trading
 activation remain outside this exchange;
@@ -111,7 +114,7 @@ different request is rejected. Resume after failure from recorded progress.
 | Obtain storage access | Authenticated installation, venue and requested upload capability | Cloud supplies bounded access to the assigned storage location. Restore read access and snapshot deletion require separate authority. Direct uploads remain independent of gateway availability. |
 | Report service status | Authenticated installation, configuration revision, observation time and progress | Cloud records tunnel state, backup progress and errors with a receive time. A stale report becomes unknown/out of date, not healthy. Scope usage reports to this installation and venue. |
 | Publish recovery point | Upload completion, object identity, digest/size, capture time, backup kind, source identity, format/module versions and key-version references | Cloud verifies storage completion and records an immutable catalogue entry bound to the authenticated venue. An upload report alone does not make it a verified recovery point. |
-| Start replacement | Authorised account, venue, planned/failure mode, selected recovery point and replacement installation identity | Cloud records one active replacement operation per venue and gives the replacement limited restore access. Return the recovery timestamp and progress; do not route traffic or activate trading yet. |
+| Start replacement | Authorised account, venue, planned/failure mode, selected continuous generation or snapshot and replacement installation identity | Cloud records one active replacement operation per venue and gives the replacement limited restore access. Return the recovery timestamp and progress; do not route traffic or activate trading yet. |
 | Complete replacement | Waitron restore/compatibility results and activation evidence, with the required owner confirmations | Waitron applies its recovery rules. Cloud coordinates old-credential retirement and routing, recording each step. After an uncertain reply, query operation state before retrying activation. |
 | Revoke installation | Authorised account, target installation and reason | Cloud withdraws its service permissions and reports enforcement progress. Define expiry and active-session behaviour for each credential type; do not promise instantaneous revocation of all provider credentials. Local offline trading is unaffected by this operation alone. |
 
@@ -124,7 +127,7 @@ because the tunnel connected successfully.
 
 | Item | Contract |
 | --- | --- |
-| Continuous replica | Waitron writes the Litestream replica directly to its assigned object-store scope. Recovery needs a selected generation and evidence of the restorable end point. Cloud must not invent that timestamp from upload time. Provider-specific conditional-write and recovery tests remain required. |
+| Continuous replica | Waitron writes the Litestream replica directly to its assigned object-store scope. Cloud verifies Waitron's signed pointer and freezes that generation for recovery. Its `writtenAt` is the recoverable time; Cloud does not invent a time from an upload. The local SeaweedFS proof covers exact prefix isolation and recovery, while the selected production provider still needs the same conditional-write and recovery checks. |
 | Retained snapshot | Waitron creates a consistent, independently recoverable artifact using its manifest and module contributions. Cloud retains, catalogues and verifies it under the agreed daily/monthly policy. Do not expose a raw SQLite file as a complete server backup unless all required state is accounted for. |
 | Configuration and module-owned state | Waitron declares the exact captured contents and missing-optional-file rules. The inspected archive captures `backup.env` and `modules.json` when present. Restore must reconcile Cloud access settings with the new installation rather than reactivate obsolete credentials. |
 | Backup decryption and vault keys | Cloud-managed recovery delivers only the required key versions to the authorised target through a protected channel. Key references in catalogue metadata are not secret values. Keep old key versions usable while retained backups require them. Preserve customer-managed archive key custody. |

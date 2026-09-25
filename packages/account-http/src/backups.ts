@@ -44,8 +44,14 @@ export async function backupResponse(c:Context,options:{pool:Pool;origin:string;
    AND ($2::uuid IS NULL OR (p.captured_at,p.id)<(SELECT captured_at,id FROM backup_points WHERE id=$2 AND venue_id=$1))
    ORDER BY p.captured_at DESC,p.id DESC LIMIT 51`,[venueId,after]);
   const defaultPoint=(await client.query("SELECT id FROM backup_points WHERE venue_id=$1 AND kind='snapshot' AND verification='verified' AND NOT deleting AND deleted_at IS NULL ORDER BY captured_at DESC,id DESC LIMIT 1",[venueId])).rows[0];
+  const stream=(await client.query(`SELECT s.recoverable_at,s.observed_at,s.source_node_id FROM backup_managed_streams s
+   JOIN backup_locations l ON l.venue_id=s.venue_id AND l.installation_id=s.installation_id
+   JOIN installations i ON i.id=s.installation_id AND i.configuration_revision=s.configuration_revision
+   WHERE s.venue_id=$1 AND i.revoked_at IS NULL AND i.superseded_by IS NULL AND s.generation IS NOT NULL
+   AND s.observed_at>clock_timestamp()-interval '5 minutes'`,[venueId])).rows[0];
   const points=result.rows.slice(0,50).map(p=>({id:p.id as string,capturedAt:p.captured_at.toISOString() as string,verification:p.verification as string,retention:p.retention as string,expiresAt:p.expires_at.toISOString() as string,protection:p.protection as string|null}));
   await resolveSession(client,token,{csrfToken,touch:false});
-  return {venueId,points,nextCursor:result.rows.length>50?Buffer.from(JSON.stringify([venueId,points.at(-1)!.id])).toString('base64url'):null,defaultPointId:defaultPoint?.id??null,continuousRecoveryAvailable:false};
+  return {venueId,points,nextCursor:result.rows.length>50?Buffer.from(JSON.stringify([venueId,points.at(-1)!.id])).toString('base64url'):null,defaultPointId:defaultPoint?.id??null,
+   continuousRecovery:stream?{recoverableAt:stream.recoverable_at.toISOString(),checkedAt:stream.observed_at.toISOString(),sourceNodeId:stream.source_node_id}:null};
  }));
 }

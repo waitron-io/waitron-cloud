@@ -17,7 +17,9 @@ export async function replacementResponse(c:Context,options:{pool:Pool;origin:st
  try{
   const claims=await store.authenticate(action as 'prepare'|'status',envelope);
   await options.consume([{scope:'replacement-key',subject:claims.publicKey,limit:30,windowSeconds:60}]);
-  return c.json(await store.machine(action as 'prepare'|'status',envelope));
+  // The owner view names its selected source; Waitron's exact machine contract predates that field.
+  const {source: _ownerSource, ...machineView}=await store.machine(action as 'prepare'|'status',envelope);
+  return c.json(machineView);
  }catch(error){
   const code=error instanceof Error?error.message:'';
   const statuses:Record<string,400|401|403|409|410>={'backup.invalid_proof':401,'backup.permission_denied':403,'backup.local_integration_only':403,'backup.revoked':403,'backup.unavailable':410,'backup.conflict':409,'backup.target_not_fresh':409};

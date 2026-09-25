@@ -10,6 +10,7 @@ import {BackupRecovery,recoveryPayload} from '../src/recovery.ts';
 import {RecoveryRequests,requestPayload} from '../src/recovery-request.ts';
 import {createAccountApp} from '../../account-http/src/app.ts';
 import {receipt} from '../src/storage.ts';
+import {ManagedStreams,type ManagedStreamAuthority} from '../src/managed-streams.ts';
 let db:Awaited<ReturnType<typeof database>>;
 before(async()=>{db=await database();});after(async()=>db?.close());
 const origin='https://cloud.test';
@@ -34,7 +35,7 @@ test('matching code creates exactly one owner-bound grant; target metadata conta
  assert.equal(approved.state,'approved');assert.equal(approved.operationId,t.id);
  assert.deepEqual(await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,input),approved);
  assert.equal((await f.requests.machine('status',t.proof('status'))).operationId,t.id);
- const info=await f.recovery.target(t.id,'info',t.recovery('info'));assert.equal(info.point.id,f.point.id);assert(!('keys' in info));assert(!('location' in info));
+ const info=await f.recovery.target(t.id,'info',t.recovery('info'));assert('point' in info);assert.equal(info.point.id,f.point.id);assert(!('keys' in info));assert(!('location' in info));
  assert(!JSON.stringify(approved).includes(f.capture.keys.recoveryKey));
  await assert.rejects(f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,{...input,pointId:randomUUID()}));
  const foreign=await fixture();await assert.rejects(f.requests.inspect(t.id,t.code,foreign.session.token,foreign.session.csrfToken),/permission_denied/);
@@ -114,6 +115,24 @@ test('target metadata and download access refuse a continuous record',async()=>{
  await db.pool.query("UPDATE backup_points SET kind='continuous' WHERE id=$1",[f.point.id]);
  await assert.rejects(f.recovery.target(t.id,'info',t.recovery('info')),/unavailable/);
  await assert.rejects(f.recovery.target(t.id,'read',t.recovery('read',f.point.digest)),/unavailable/);
+});
+test('HTTP continuous recovery exposes fresh evidence and releases one exact Waitron kit after final authority checks',async()=>{
+ const f=await fixture(),t=target(),signer=generateKeyPairSync('ed25519'),nodeId=randomUUID(),localVenueId=(await db.pool.query('SELECT local_venue_id FROM venues WHERE id=$1',[f.installed.venueId])).rows[0].local_venue_id,stored=new Map<string,Buffer>(),readerInputs:unknown[]=[];let readerHook=async()=>{};
+ const authority:ManagedStreamAuthority&{reader(input:unknown):Promise<{accessKeyId:string;secretAccessKey:string}>}={
+  async provision(){return {writerReference:'writer-ref',readerReference:'reader-ref',writerCredentials:{accessKeyId:'writer-id',secretAccessKey:'writer-secret'}};},
+  async read(_reference,_location,key){const value=stored.get(key);if(!value)throw Error('missing');return value;},
+  async reader(input){readerInputs.push(input);await readerHook();return {accessKeyId:'reader-id',secretAccessKey:'reader-secret'};},
+ };
+ const streams=new ManagedStreams(db.pool,f.vault,authority),revision=Number((await db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[f.installed.installationId])).rows[0].configuration_revision),configured=await streams.configure(f.installed.installationId,revision,{localVenueId,sourceNodeId:nodeId,pointerSignerPublicKey:signer.publicKey.export({type:'spki',format:'der'}).toString('base64')}),writtenAt=new Date().toISOString(),generation=`gen-2-${nodeId}-${writtenAt.replace(/[-:.]/g,'').replace(/\d{3}Z$/,'Z')}`,body={venueId:localVenueId,term:2,nodeId,generation,writtenAt},message=`{"pointer":{"generation":"${generation}","nodeId":"${nodeId}","term":2,"venueId":"${localVenueId}","writtenAt":"${writtenAt}"},"purpose":"waitron.stream.pointer.v1"}`;
+ stored.set(`${configured.bucket.prefix}venues/${localVenueId}/current.json`,Buffer.from(JSON.stringify({body,signature:sign(null,Buffer.from(message),signer.privateKey).toString('base64')})));await streams.observe(f.installed.installationId,configured.configurationRevision);
+ const app=createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},leaseIssuer:createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')),captures:{vault:f.vault,objects:()=>({async read(k){return f.objects.get(k)!;},async put(k,b){f.objects.set(k,Buffer.from(b));return receipt(b);},async remove(k){f.objects.delete(k);}}),async grant(){throw Error('snapshot grant must not run');},managedStreams:authority}});
+ const bindings={incoming:{socket:{remoteAddress:'192.0.2.77'}}},post=(path:string,body:unknown,owner=false)=>app.request(origin+path,{method:'POST',headers:{'content-type':'application/json',...(owner?{origin,cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken}:{})},body:JSON.stringify(body)},bindings);
+ const catalogue=await post('/api/account/backups/list',{venueId:f.installed.venueId},true);assert.equal(catalogue.status,200);const page=await catalogue.json();assert.deepEqual(page.continuousRecovery,{recoverableAt:writtenAt,checkedAt:page.continuousRecovery.checkedAt,sourceNodeId:nodeId});assert(!JSON.stringify(page).includes(generation));assert(!JSON.stringify(page).includes('reader-ref'));
+ assert.equal((await post('/api/recovery/start',t.proof('start'))).status,200);const approved=await post('/api/account/recovery/approve',{requestId:t.id,code:t.code,source:'continuous',venueId:f.installed.venueId,oldServerUnavailable:'true',acceptDataLoss:'true'},true);assert.equal(approved.status,200,await approved.clone().text());assert(!JSON.stringify(await approved.clone().json()).includes(generation));
+ const infoResponse=await post('/api/recovery/info',{id:t.id,...t.recovery('info')});assert.equal(infoResponse.status,200);const info=await infoResponse.json();assert.equal(info.source.kind,'continuous');
+ const read=()=>post('/api/recovery/read',{id:t.id,...t.recovery('read',info.source.sourceDigest)}),access=await read();assert.equal(access.status,200,await access.clone().text());const result=await access.json();assert.equal(result.source.kind,'continuous');assert.deepEqual(readerInputs[0],{reference:'reader-ref',venueId:f.installed.venueId,location:{endpoint:'https://store.test',bucket:configured.bucket.bucket,region:'local'},prefix:configured.bucket.prefix});assert.match(result.recoveryKit,/^WAITRON-RECOVERY-KIT-1:[A-Za-z0-9_-]+$/);const kit=JSON.parse(Buffer.from(result.recoveryKit.split(':')[1],'base64url').toString());assert.deepEqual(kit,{version:1,venueId:localVenueId,bucket:{endpoint:'https://store.test',region:'local',bucket:configured.bucket.bucket,prefix:configured.bucket.prefix,accessKeyId:'reader-id',secretAccessKey:'reader-secret'},recoveryKey:configured.recoveryKey,pointerSignerPublicKey:signer.publicKey.export({type:'spki',format:'der'}).toString('base64')});
+ readerHook=async()=>{await db.secondPool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[f.owner.accountId]);};const forbidden=await read();assert.equal(forbidden.status,403);assert(!JSON.stringify(await forbidden.json()).includes('reader-secret'));await db.pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1',[f.owner.accountId]);
+ readerHook=()=>f.recovery.close(f.session.token,f.session.csrfToken,t.id);const refused=await read();assert.equal(refused.status,410);assert(!JSON.stringify(await refused.json()).includes('reader-secret'));
 });
 test('request expiry follows the database clock when the application clock runs behind',async(context)=>{
  const f=await fixture(),t=target();await f.requests.machine('start',t.proof('start'));await db.pool.query("UPDATE backup_recovery_requests SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",[t.id]);
