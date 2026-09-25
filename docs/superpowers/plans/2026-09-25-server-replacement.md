@@ -49,5 +49,5 @@ Files: scripts/test-local-backups.mjs, local-backups.md, waitron-integration-con
 
 - [x] Extend existing proof: actual cold restore -> local replacement proposal -> owner HTTP confirmation with lost reply -> restarted client import -> lease/renewed new capture; old key refusal, stable hostnames and unrelated venue unchanged.
 - [x] Update docs/backlogs, including precise remaining certificate installation and activation boundaries.
-- [ ] Review each complete production branch in installed independent temporary clone, triage with executable receipts, fix with TDD.
-- [ ] Run final clean integration, normal push gates, current-head CI. Land normally, refresh main dependencies and remove feature worktrees/branches. Report results.
+- [x] Review each complete production branch in installed independent temporary clone, triage with executable receipts, fix with TDD.
+Delivery records: keep the final clean integration receipt, normal push/CI results and merge receipts with each PR. Landing refreshes main dependencies and removes feature worktrees/branches.

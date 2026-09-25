@@ -3,7 +3,7 @@ import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
 import {transaction} from '@waitron-cloud/registration';
 import {decode,publicKey,type Proof} from './recovery.ts';
-import {backupFail,lockVenue,uuid} from './catalogue.ts';
+import {backupFail,lockVenue,uuid,uniqueViolation} from './catalogue.ts';
 import type {BackupKeyVault} from './keys.ts';
 export interface ReplacementClaims {id:string;localVenueId:string;nodeId:string;publicKey:string;peerPublicKey:string;issuedAt?:number;}
 export interface ReplacementEnvelope extends Proof {id:string;keySignature:string;}
@@ -44,7 +44,8 @@ export class ReplacementStore {
   const r=await recovery(client,id);
   if(token!==undefined){const s=await resolveSession(client,token,{csrfToken:csrf,touch:false});if(s.accountId!==r.account_id)backupFail('permission_denied');}
   await permission(client,r.account_id,r.venue_id);
-  await client.query('SELECT id FROM venues WHERE id=$1 FOR UPDATE',[r.venue_id]);
+  // Serialize changes to the current installation without blocking monitor foreign-key checks.
+  await client.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[r.venue_id]);
   const old=(await client.query('SELECT * FROM installations WHERE venue_id=$1 AND superseded_by IS NULL FOR UPDATE',[r.venue_id])).rows[0];
   if(!old)backupFail('unavailable');
   const l=await lockVenue(client,r.venue_id);
@@ -106,12 +107,12 @@ export class ReplacementStore {
     await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='remote_access'",[installationId,config]);
    }
    // A replacement has not contacted Cloud yet; old disconnection alerts must not describe it.
-   // Monitors skip locked installations, so updating their row after this installation lock cannot cycle.
+   // A monitor already holding the old installation can finish its venue foreign-key checks; later monitors skip this installation lock.
    await client.query("UPDATE venue_monitors SET checked_at=NULL,contact_since=clock_timestamp(),next_check_at=clock_timestamp() WHERE venue_id=$1",[r.venue_id]);
    await client.query("UPDATE venue_incidents SET status='suppressed',revision=revision+1,changed_at=clock_timestamp() WHERE venue_id=$1 AND kind='disconnected' AND status='open'",[r.venue_id]);
    const result={...view(r,p),state:'complete',registration:{venueId:r.venue_id,installationId,organisationId:r.organisation_id,legalBusinessId:r.legal_business_id}};
    await client.query('UPDATE installation_replacements SET result=$2,completed_at=clock_timestamp() WHERE id=$1',[id,result]);
    await current(client,id);await resolveSession(client,token,{csrfToken:csrf,touch:false});return result;
-  });
+  }).catch(error=>{if(['installations_public_key_key','remote_placements_peer_public_key_key','installation_replacements_completed_old_key'].some(name=>uniqueViolation(error,name)))backupFail('conflict');throw error;});
  }
 }

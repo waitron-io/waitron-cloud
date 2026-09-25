@@ -332,6 +332,10 @@ mobile notifications separately.
   launch and retain explicit local business confirmation.
   Terminated database connections and lost replies have regression tests; actual
   database failover and recovery under deployment credentials still need proof.
+  Before production, reproduce ordinary pairing racing a monitor incident insert for
+  an already registered venue; its venue lock may conflict with the incident foreign-key
+  check. Replacement has a tested compatible lock, but the ordinary-pairing case has
+  not been verified.
 - **Provisioning and placement.** Use Kubernetes for orchestration when needed;
   cluster provisioning and manifests are deferred until there is a service to deploy
   and a concrete operational need. Country/provider/cell registry, repeatable resource

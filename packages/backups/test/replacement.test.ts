@@ -129,7 +129,7 @@ test('current installation consumers preserve one venue and do not inherit the o
  await f.store.machine('prepare',f.envelope('prepare'));const result=await f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f));
  const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')),store=new InstallationStore(db.pool,issuer,origin);
  const list=await store.listWithSession(f.session.token);assert.equal(list.length,1);assert.equal(list[0]!.installationId,result.registration.installationId);assert(list[0]!.services.every(s=>s.health==='unknown'));
- const overview=await venueOverview(db.pool,f.session.token,list);assert.equal(overview.length,1);assert.equal(overview[0]!.monitoring.fresh,false);assert.deepEqual(overview[0]!.monitoring.incidents,[]);
+ const overview=await venueOverview(db.pool,f.session.token,list);assert.equal(overview.length,1);assert.equal(overview[0]!.monitoring.enabled,true);assert.equal(overview[0]!.monitoring.fresh,false);assert.deepEqual(overview[0]!.monitoring.incidents,[]);
  // Keep unrelated fixtures out of this worker selection, so it must evaluate this current installation.
  await db.pool.query("UPDATE venue_monitors SET next_check_at=clock_timestamp()+interval '1 day' WHERE venue_id<>$1",[f.installed.venueId]);
  await new MonitorWorker(db.pool,db.outbox).runOnce();assert.equal((await db.pool.query("SELECT status FROM venue_incidents WHERE venue_id=$1 AND kind='disconnected'",[f.installed.venueId])).rows[0].status,'recovered');
@@ -153,4 +153,37 @@ test('replacement serializes with gateway export so it cannot split route identi
  try{let blocked=false;for(let i=0;i<150&&!finished;i++){if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE '%remote_cells%FOR UPDATE%'",[db.schema])).rowCount){blocked=true;break;}await new Promise(r=>setTimeout(r,10));}assert(blocked,'replacement must wait for the in-progress cell export');}
  finally{release();await Promise.allSettled([manifest,replacement]);}
  assert.equal((await manifest).routes[0]!.installationId,f.installed.installationId);const done=await replacement;assert.equal((await remote.manifest(cell)).routes[0]!.installationId,done.registration.installationId);
+});
+test('monitor incident insertion can finish while replacement waits for its installation lock',async()=>{
+ const f=await ready();await f.store.machine('prepare',f.envelope('prepare'));await db.pool.query('INSERT INTO venue_monitors(venue_id) VALUES($1)',[f.installed.venueId]);
+ const monitor=await db.secondPool.connect();let pending:Promise<any>|undefined;
+ try{
+  await monitor.query('BEGIN');await monitor.query('SELECT venue_id FROM venue_monitors WHERE venue_id=$1 FOR UPDATE',[f.installed.venueId]);await monitor.query('SELECT id FROM installations WHERE id=$1 FOR SHARE',[f.installed.installationId]);
+  pending=f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f));void pending.catch(()=>{});
+  let waiting=false;for(let n=0;n<150;n++){if((await db.pool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT * FROM installations WHERE venue_id%'",[db.schema])).rowCount){waiting=true;break;}await new Promise(r=>setTimeout(r,10));}assert(waiting);
+  // This foreign-key check takes a venue key-share lock, as MonitorWorker's incident insert does.
+  await monitor.query("INSERT INTO venue_incidents(venue_id,kind,status,revision) VALUES($1,'disconnected','open',1)",[f.installed.venueId]);await monitor.query('COMMIT');assert.equal((await pending).state,'complete');
+ }finally{await monitor.query('ROLLBACK');monitor.release();await pending?.catch(()=>{});}
+});
+test('a proposed key claimed by another registration returns a conflict with no partial retirement',async()=>{
+ const f=await ready();await f.store.machine('prepare',f.envelope('prepare'));
+ const other={...f.binding,operationId:randomUUID(),localVenueId:randomUUID(),installationKey:f.proposed.publicKey};await f.reg.start(other);await f.reg.approveCloud(other,f.owner.accountId);await f.reg.approveLocal(other,randomUUID());await f.reg.complete(other);
+ await assert.rejects(f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f)),/backup.conflict/);
+ assert.equal((await db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[f.installed.installationId])).rows[0].revoked_at,null);
+});
+test('expiry after key rotation begins rolls back the entire replacement',async()=>{
+ const f=await ready();await f.store.machine('prepare',f.envelope('prepare'));await db.pool.query("UPDATE backup_recoveries SET expires_at=clock_timestamp()+interval '1 second' WHERE id=$1",[f.t.id]);const blocker=await db.secondPool.connect();let pending:Promise<unknown>|undefined;
+ try{await blocker.query('BEGIN');await blocker.query('LOCK backup_key_versions IN ACCESS EXCLUSIVE MODE');pending=f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f));const rejected=assert.rejects(pending,/unavailable/);void rejected.catch(()=>{});
+ let waiting=false;for(let n=0;n<150;n++){if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'INSERT INTO backup_key_versions%'",[db.schema])).rowCount){waiting=true;break;}await new Promise(r=>setTimeout(r,10));}assert(waiting);await new Promise(r=>setTimeout(r,1100));await blocker.query('COMMIT');await rejected;
+ assert.equal((await db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[f.installed.installationId])).rows[0].revoked_at,null);assert.equal((await db.pool.query('SELECT count(*) FROM backup_key_versions WHERE venue_id=$1',[f.installed.venueId])).rows[0].count,'1');
+ }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
+});
+test('completion refuses backup ownership that changed after preparing the proposal',async()=>{
+ const f=await ready();await f.store.machine('prepare',f.envelope('prepare'));const binding={...f.binding,operationId:randomUUID(),localVenueId:randomUUID(),installationKey:target().publicKey};await f.reg.start(binding);await f.reg.approveCloud(binding,f.owner.accountId);await f.reg.approveLocal(binding,randomUUID());const other=await f.reg.complete(binding);
+ await db.pool.query('UPDATE backup_locations SET installation_id=$2 WHERE venue_id=$1',[f.installed.venueId,other.installationId]);await assert.rejects(f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f)),/conflict/);assert.equal((await db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[f.installed.installationId])).rows[0].revoked_at,null);
+});
+test('unexpected database failures are redacted and retryable at the HTTP boundary',async context=>{
+ const app=createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});
+ context.mock.method(db.pool,'connect',async()=>{throw Object.assign(Error('private database diagnostics'),{code:'40P01'});});
+ const response=await app.request(origin+'/api/account/recovery/replace',{method:'POST',headers:{origin,'content-type':'application/json'},body:'{}'},{incoming:{socket:{remoteAddress:'192.0.2.77'}}});assert.equal(response.status,503);assert.equal(response.headers.get('retry-after'),'1');assert.deepEqual(await response.json(),{error:'temporarily_unavailable'});
 });

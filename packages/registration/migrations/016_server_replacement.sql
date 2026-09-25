@@ -19,3 +19,6 @@ CREATE TABLE installation_replacements (
 
 CREATE UNIQUE INDEX installation_replacements_completed_old_key
  ON installation_replacements(old_installation_id) WHERE result IS NOT NULL;
+
+-- Historical venue lookups and foreign-key checks also need an index outside the current-row predicate.
+CREATE INDEX installations_venue_key ON installations(venue_id);
