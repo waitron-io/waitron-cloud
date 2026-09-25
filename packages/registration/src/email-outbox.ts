@@ -45,7 +45,7 @@ export class EmailOutbox {
     if (kind === 'service_alert') {
       if(!validServiceAlert(message))throw new Error('Invalid queued email');
       expiresAt=(await client.query("SELECT clock_timestamp()+interval '1 day' AS expiry")).rows[0].expiry;
-      content={email:message.email,incidentId:message.incidentId,revision:message.revision,venueId:message.venueId,issue:message.issue,state:message.state};
+      content={email:message.email,incidentId:message.incidentId,revision:message.revision,venueId:message.venueId,issue:message.issue,state:message.state,...(message.checkedAt?{checkedAt:message.checkedAt}:{}),...(message.certificateNotAfter?{certificateNotAfter:message.certificateNotAfter}:{})};
     } else if (kind === 'password_changed') {
       expiresAt = (await client.query("SELECT clock_timestamp() + interval '7 days' AS expiry")).rows[0].expiry;
     } else {
@@ -172,7 +172,10 @@ export class EmailWorker {
           AND m.is_owner AND a.disabled_at IS NULL AND c.email_verified_at IS NOT NULL AND c.email=$7 AND p.enabled
           AND v.environment='test' AND n.revoked_at IS NULL
           AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured'
-            AND (i.kind='disconnected' OR s.service='retained_snapshots'))`,
+            AND (i.kind='disconnected' OR (i.kind IN ('snapshot_stale','verification_failed') AND s.service='retained_snapshots')
+             OR (i.kind IN ('public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale','public_certificate_expiring','staff_certificate_expiring') AND s.service='remote_access'
+              AND EXISTS(SELECT 1 FROM remote_placements rp JOIN remote_hostnames h ON h.venue_id=rp.venue_id WHERE rp.installation_id=n.id AND rp.venue_id=v.id
+               AND h.kind=CASE WHEN i.kind LIKE 'public_%' THEN 'public' ELSE 'staff' END))))`,
         [row.id,message.incidentId,message.revision,message.venueId,message.issue,message.state,message.email,row.claim_id])).rows[0];
       if(!live)return false;
       message.locale=live.locale;return true;

@@ -37,3 +37,19 @@ test('overview accepts database character limits for Unicode names',()=>{
  const item={...view,services:['remote_access','continuous_backup','retained_snapshots'].map(service=>({service,state:'unconfigured',health:'unknown',observedAt:null})),overview:{organisationName:'☀️'.repeat(100),businessName:'🌞'.repeat(200),countryCode:'ES',latestSnapshotAt:null,verifiedSnapshotAt:null}};
  assert.equal(validInstallation(item),true);item.overview.businessName+='x';assert.equal(validInstallation(item),false);
 });
+
+test('remote monitoring accepts only redacted route evidence and known incidents',()=>{
+ const checkedAt='2026-09-25T12:00:00.000Z',certificateNotAfter='2026-10-01T12:00:00.000Z';
+ const item={...view,services:['remote_access','continuous_backup','retained_snapshots'].map(service=>({service,state:'ready',health:'healthy',observedAt:checkedAt})),monitoring:{enabled:true,fresh:true,checkedAt,incidents:[
+  {kind:'public_route_failed',openedAt:checkedAt,changedAt:checkedAt},{kind:'staff_probe_stale',openedAt:checkedAt,changedAt:checkedAt},{kind:'public_certificate_expiring',openedAt:checkedAt,changedAt:checkedAt},
+ ],remoteChecks:{public:{status:'failed',checkedAt,certificateNotAfter},staff:{status:'healthy',checkedAt,certificateNotAfter:null}}}};
+ assert.equal(validInstallation(item),true);
+ assert.equal(validInstallation({...item,monitoring:{...item.monitoring,remoteChecks:undefined}}),true);
+ assert.equal(validInstallation({...item,monitoring:{...item.monitoring,remoteChecks:{public:item.monitoring.remoteChecks.public}}}),false);
+ for(const remoteChecks of [
+  {...item.monitoring.remoteChecks,public:{...item.monitoring.remoteChecks.public,status:'degraded'}},
+  {...item.monitoring.remoteChecks,public:{...item.monitoring.remoteChecks.public,checkedAt:'yesterday'}},
+  {...item.monitoring.remoteChecks,public:{...item.monitoring.remoteChecks.public,failure:'timeout'}},
+ ])assert.equal(validInstallation({...item,monitoring:{...item.monitoring,remoteChecks}}),false);
+ assert.equal(validInstallation({...item,monitoring:{...item.monitoring,incidents:[{kind:'remote_failed',openedAt:checkedAt,changedAt:checkedAt}]}}),false);
+});

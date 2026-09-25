@@ -31,8 +31,10 @@ The first three checks use received control contact and the retained snapshot ca
 The route checks use only the external probe evidence. None of them establishes
 continuous-server recoverability or permission to trade. When the venue monitor stops
 for five minutes, the portal shows its existing contact and snapshot view as unknown and
-keeps the last incident evidence visible. Remote route evidence is durable operator data
-until the next portal change adds its customer-facing view.
+keeps the last incident evidence visible. The portal also shows the latest public and
+staff checks separately, including an approaching certificate expiry. Missing or stale
+remote evidence appears as unknown. It never exposes hostnames, certificate fingerprints,
+fixed failure codes or raw network errors.
 
 Stopping Cloud access or removing a service suppresses its incidents and queued notices.
 It does not send a recovery message. Missing data gets a fresh grace if you enable the
@@ -113,9 +115,9 @@ time is rejected so a bad clock cannot leave a stopped worker looking fresh.
 
 The monitor records deduplicated route, stale-probe and certificate-expiry incidents and
 their recoveries. It suppresses them when you remove the route or revoke the installation.
-These new incident kinds do not yet enter the customer email queue or appear in the portal;
-that presentation and opt-in delivery is the next monitoring change. Existing contact and
-snapshot alerts continue unchanged.
+The portal presents the public and staff routes separately. If you have opted in to service
+alerts, their incident and recovery transitions use the same bilingual email queue as contact
+and snapshot alerts.
 
 For local delivery, start Mailpit and run the existing mail worker with local transport:
 
@@ -133,7 +135,8 @@ opting in mid-incident can see the current status in the portal and receive futu
 
 Before handing an alert to the transport, the email worker rechecks its delivery claim,
 current ownership, account status, verified email address, preference,
-service configuration, revocation and incident revision. An obsolete message is cancelled.
+service configuration, current public or staff route, revocation and incident revision.
+An obsolete message is cancelled.
 Language is refreshed from your current preference at sending time, so changing it
 does not discard a queued alert. Run the monitor and mail worker from the same updated
 checkout. Messages expire after 24 hours and use the existing bounded email retries. They contain
@@ -149,14 +152,17 @@ limitation.
 
 PostgreSQL tests cover clock boundaries, concurrent monitors, rollback, restart,
 revocation, opt-in changes, permission changes during a queue wait and notification retries.
-Real browser tests cover both languages, saved preferences, stale monitoring, phone
-layout and accessibility. Mailpit captures incident and recovery messages in both languages.
+Real browser tests cover both languages, saved preferences, fresh, failed and stale remote
+checks, phone and desktop layouts, light and dark journeys, and accessibility. PostgreSQL
+API tests cover venue isolation. Mailpit captures incident and recovery messages in both
+languages, and proves that opting out or revoking a route suppresses queued remote notices.
 
 External remote-access probes now persist revision-bound evidence and the monitor records
 route, stale-probe, certificate-expiry and recovery transitions without confusing a live
-control connection for a working route. Before deployment, add customer-facing portal
-evidence and opt-in alerts, then add retention for incident/delivery history and
-scheduler/fan-out measurements at the intended scale.
+control connection for a working route. The portal presents redacted evidence, and opted-in
+owners receive bilingual incident and recovery emails after delivery-time authority checks.
+Before deployment, add retention for incident/delivery history and scheduler/fan-out
+measurements at the intended scale.
 Define outage escalation and quiet-period policies with actual operating data. Live email
 provider setup, Spain processing requirements and delivery monitoring remain separate
 launch work. This local implementation creates no cloud resources and sends no live
