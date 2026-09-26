@@ -5,6 +5,8 @@ const source=process.argv[2]?await readFile(process.argv[2],'utf8'):await new Pr
  let value='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>value+=chunk);process.stdin.on('end',()=>resolve(value));process.stdin.on('error',reject);
 });
 const receipt=JSON.parse(source),movement=receipt.movement;
+assert.match(receipt.cloudHead,/^[0-9a-f]{40}$/,'invalid Cloud head');
+assert.equal(receipt.cloudDirty,false,'Cloud checkout was dirty');
 assert.ok(movement&&typeof movement==='object','missing cell movement receipt');
 assert.equal(movement.version,1);
 assert.deepEqual(movement.failedApply,{cancelled:true,sourceStayedHealthy:true,destinationRemoved:true});

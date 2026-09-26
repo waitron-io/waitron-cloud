@@ -406,8 +406,8 @@ mobile notifications separately.
   movement state machine now reserves a destination without replacing the source, rejects
   competing/stale operations, retains durable retry results and revokes the old route only
   after the destination manifest was applied and tested. The two-cell proof preserves the
-  venue's hostnames and certificate fingerprints, isolates the other venue and measures a
-  1,321 ms and 1,486 ms fresh-peer reconnections; it also proves failed-apply cancellation leaves the
+  venue's hostnames and certificate fingerprints, isolates the other venue and measures
+  fresh-peer reconnections of 1,321 ms and 1,486 ms; it also proves failed-apply cancellation leaves the
   source healthy. Repeat this with provider-native cells, the DNS/certificate reconciler
   and appliance configuration before choosing an explicit recovery-time target.
   Define how established connections and

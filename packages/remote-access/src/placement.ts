@@ -13,6 +13,8 @@ export interface CellMove {
 export interface StageMoveInput {operationId:string;installationId:string;targetCellId:string;targetPeerPublicKey:string;port?:number;expectedRevision:number}
 function fail(code:string):never {throw new Error(code);}
 const route=(p:Placement):GatewayRoute=>({installationId:p.installationId,venueId:p.venueId,staffHostname:p.staffHostname,publicHostname:p.publicHostname,address:p.address,port:p.port,peerPublicKey:p.peerPublicKey});
+// Peer keys are claimed in two tables, so both claim paths share this transaction lock.
+async function lockPeerKey(client:PoolClient,key:string){await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[key]);}
 async function placement(client:PoolClient,id:string):Promise<Placement|undefined>{
  const {rows}=await client.query(`SELECT p.installation_id AS "installationId",p.venue_id AS "venueId",p.cell_id AS "cellId",
   host(p.address) AS address,p.port,p.peer_public_key AS "peerPublicKey",c.public_key AS "gatewayPublicKey",c.endpoint,
@@ -57,6 +59,8 @@ export class RemoteAccessStore {
    if(!cell||cell.environment!==install.environment)fail('cell_unavailable');
    const prior=await placement(client,installationId);
    if(prior){if(prior.cellId!==cellId||prior.peerPublicKey!==peerPublicKey||prior.port!==port)fail('placement_conflict');return prior;}
+   await lockPeerKey(client,peerPublicKey);
+   if((await client.query("SELECT 1 FROM remote_cell_moves WHERE target_peer_public_key=$1 AND state IN ('staged','ready') LIMIT 1",[peerPublicKey])).rowCount)fail('placement_conflict');
    if(cell.next_address>=66)fail('cell_full');
    const address=`10.77.${cell.subnet}.${cell.next_address}`;
    await client.query('INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port) VALUES($1,$2,$3,$4,$5,$6)',[install.venue_id,installationId,cellId,address,peerPublicKey,port]);
@@ -80,6 +84,7 @@ export class RemoteAccessStore {
    const source=await placement(client,input.installationId);if(!source)fail('installation_unavailable');if(source.cellId===input.targetCellId)fail('move_conflict');
    const cell=(await client.query('SELECT * FROM remote_cells WHERE id=$1 FOR UPDATE',[input.targetCellId])).rows[0];
    if(!cell||cell.environment!==install.environment)fail('cell_unavailable');if(cell.next_address>=66)fail('cell_full');
+   await lockPeerKey(client,input.targetPeerPublicKey);
    const conflict=await client.query(`SELECT 1 FROM remote_placements WHERE peer_public_key=$1 AND installation_id<>$2
     UNION ALL SELECT 1 FROM remote_cell_moves WHERE target_peer_public_key=$1 AND id<>$3 AND state IN ('staged','ready') LIMIT 1`,[input.targetPeerPublicKey,input.installationId,input.operationId]);
    if(conflict.rowCount)fail('move_conflict');
@@ -107,7 +112,7 @@ export class RemoteAccessStore {
  }
  async completeMove(operationId:string,expectedRevision:number):Promise<CellMove>{
   if(!isUuid(operationId)||!Number.isSafeInteger(expectedRevision)||expectedRevision<0)fail('invalid_move');
-  return transaction(this.#pool,async client=>{
+  try{return await transaction(this.#pool,async client=>{
    const found=(await client.query('SELECT installation_id FROM remote_cell_moves WHERE id=$1',[operationId])).rows[0];if(!found)fail('move_unavailable');
    const install=(await client.query('SELECT * FROM installations WHERE id=$1 FOR UPDATE',[found.installation_id])).rows[0],current=(await move(client,operationId,true))!;
    if(current.expectedRevision!==expectedRevision)fail('move_conflict');if(current.state==='completed')return current;if(current.state==='cancelled')fail('move_conflict');if(current.state!=='ready')fail('move_not_ready');
@@ -117,7 +122,7 @@ export class RemoteAccessStore {
    await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='remote_access'",[current.installationId,{version:1,...result}]);
    await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[current.installationId]);
    await client.query("UPDATE remote_cell_moves SET state='completed',completed_revision=$2,completed_at=clock_timestamp() WHERE id=$1",[operationId,expectedRevision+1]);return (await move(client,operationId))!;
-  });
+  });}catch(error){if(error&&typeof error==='object'&&'code' in error&&error.code==='23505')return fail('move_conflict');throw error;}
  }
  async cancelMove(operationId:string,expectedRevision:number):Promise<CellMove>{
   if(!isUuid(operationId)||!Number.isSafeInteger(expectedRevision)||expectedRevision<0)fail('invalid_move');

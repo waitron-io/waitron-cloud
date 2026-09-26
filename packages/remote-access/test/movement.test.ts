@@ -43,6 +43,45 @@ test('a tested destination route cuts over once and preserves customer-facing na
  assert.equal(row.configuration_revision,2);assert.equal(row.state,'provisioning');assert.equal(row.configuration.cellId,target.id);assert.equal(row.configuration.staffHostname,active.staffHostname);
 });
 
+test('readiness evidence must come from a manifest exported after staging',async()=>{
+ const source={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'ready-source.example.test',subnet:30,publicKey:peerKey(),endpoint:'ready-source-gateway.example.test:51820'};
+ const target={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'ready-target.example.test',subnet:31,publicKey:peerKey(),endpoint:'ready-target-gateway.example.test:51820'};
+ await store.createCell(source);await store.createCell(target);
+ const installed=await installation('ready-evidence@example.test'),active=await store.provision(installed.installationId,source.id,peerKey());
+ const beforeStage=await store.manifest(target.id),operationId=randomUUID();
+ await store.stageMove({operationId,installationId:installed.installationId,targetCellId:target.id,targetPeerPublicKey:active.peerPublicKey,expectedRevision:1});
+ await assert.rejects(store.markMoveReady(operationId,1,beforeStage.sequence),/move_not_exported/);
+ const afterStage=await store.manifest(target.id);
+ assert.equal((await store.markMoveReady(operationId,1,afterStage.sequence)).state,'ready');
+});
+
+test('a staged destination peer key is reserved against later provisioning',async()=>{
+ const source={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'reserved-source.example.test',subnet:32,publicKey:peerKey(),endpoint:'reserved-source-gateway.example.test:51820'};
+ const target={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'reserved-target.example.test',subnet:33,publicKey:peerKey(),endpoint:'reserved-target-gateway.example.test:51820'};
+ await store.createCell(source);await store.createCell(target);
+ const selected=await installation('reserved-selected@example.test'),claimant=await installation('reserved-claimant@example.test');
+ await store.provision(selected.installationId,source.id,peerKey());
+ const reservedKey=peerKey();
+ await store.stageMove({operationId:randomUUID(),installationId:selected.installationId,targetCellId:target.id,targetPeerPublicKey:reservedKey,expectedRevision:1});
+ await assert.rejects(store.provision(claimant.installationId,source.id,reservedKey),/placement_conflict/);
+});
+
+test('a late peer-key conflict is reported as a move conflict without changing the source',async()=>{
+ const source={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'late-source.example.test',subnet:34,publicKey:peerKey(),endpoint:'late-source-gateway.example.test:51820'};
+ const target={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'late-target.example.test',subnet:35,publicKey:peerKey(),endpoint:'late-target-gateway.example.test:51820'};
+ await store.createCell(source);await store.createCell(target);
+ const selected=await installation('late-selected@example.test'),claimant=await installation('late-claimant@example.test');
+ const active=await store.provision(selected.installationId,source.id,peerKey());await store.provision(claimant.installationId,source.id,peerKey());
+ const operationId=randomUUID(),reservedKey=peerKey();
+ await store.stageMove({operationId,installationId:selected.installationId,targetCellId:target.id,targetPeerPublicKey:reservedKey,expectedRevision:1});
+ await db.pool.query('UPDATE remote_placements SET peer_public_key=$2 WHERE installation_id=$1',[claimant.installationId,reservedKey]);
+ const exported=await store.manifest(target.id);await store.markMoveReady(operationId,1,exported.sequence);
+ await assert.rejects(store.completeMove(operationId,1),/move_conflict/);
+ const current=(await db.pool.query('SELECT cell_id,host(address) AS address FROM remote_placements WHERE installation_id=$1',[selected.installationId])).rows[0];
+ assert.deepEqual(current,{cell_id:source.id,address:active.address});
+ assert.equal((await store.cancelMove(operationId,1)).state,'cancelled');
+});
+
 test('competing, cancelled and stale moves cannot disturb either active venue',async()=>{
  const source={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'move-source.example.test',subnet:23,publicKey:peerKey(),endpoint:'move-source-gateway.example.test:51820'};
  const target={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'move-target.example.test',subnet:24,publicKey:peerKey(),endpoint:'move-target-gateway.example.test:51820'};
