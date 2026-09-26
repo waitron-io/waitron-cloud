@@ -21,15 +21,17 @@ export async function verifyDelegation(custom:string,assigned:string,resolve:typ
  catch{throw new Error('dns_not_verified');}
 }
 export interface DnsChallengeProvider {present:(name:string,value:string)=>Promise<void>;remove:(name:string,value:string)=>Promise<void>}
-export async function issueCertificate(options:{directoryUrl:string;accountKey:Buffer;email:string;hostname:string;csr:string;dnsName:string;dns:DnsChallengeProvider}):Promise<string>{
+export async function issueCertificate(options:{directoryUrl:string;accountKey:Buffer;email:string;hostname:string;csr:string;dnsName:string;dns:DnsChallengeProvider;signal?:AbortSignal}):Promise<string>{
+ options.signal?.throwIfAborted();
  validateCsr(options.csr,options.hostname);
  if(!options.dnsName.startsWith('_acme-challenge.')||!isHostname(options.dnsName.slice('_acme-challenge.'.length)))throw new Error('invalid_dns_name');
  const directory=new URL(options.directoryUrl);if(directory.protocol!=='https:'||directory.username||directory.password)throw new Error('invalid_acme_directory');
  const client=new Client({directoryUrl:options.directoryUrl,accountKey:options.accountKey,backoffAttempts:5,backoffMin:500,backoffMax:3000});
- return client.auto({csr:options.csr,email:options.email,termsOfServiceAgreed:true,challengePriority:['dns-01'],
+ const certificate=await client.auto({csr:options.csr,email:options.email,termsOfServiceAgreed:true,challengePriority:['dns-01'],
   // The ACME server performs DNS validation. Local Pebble uses its isolated resolver.
   skipChallengeVerification:true,
-  challengeCreateFn:async(authz,challenge,value)=>{if(authz.identifier.value!==options.hostname||challenge.type!=='dns-01')throw new Error('unexpected_challenge');await options.dns.present(options.dnsName,value);},
-  challengeRemoveFn:async(authz,challenge,value)=>{if(authz.identifier.value!==options.hostname||challenge.type!=='dns-01')throw new Error('unexpected_challenge');await options.dns.remove(options.dnsName,value);},
+  challengeCreateFn:async(authz,challenge,value)=>{options.signal?.throwIfAborted();if(authz.identifier.value!==options.hostname||challenge.type!=='dns-01')throw new Error('unexpected_challenge');await options.dns.present(options.dnsName,value);options.signal?.throwIfAborted();},
+  challengeRemoveFn:async(authz,challenge,value)=>{if(authz.identifier.value!==options.hostname||challenge.type!=='dns-01')throw new Error('unexpected_challenge');await options.dns.remove(options.dnsName,value);options.signal?.throwIfAborted();},
  });
+ options.signal?.throwIfAborted();return certificate;
 }

@@ -11,6 +11,7 @@ export interface CellMove {
  source:Placement;target:Placement;
 }
 export interface StageMoveInput {operationId:string;installationId:string;targetCellId:string;targetPeerPublicKey:string;port?:number;expectedRevision:number}
+export interface CertificateAuthorization {hostname:string;dnsName:string;revision:number}
 function fail(code:string):never {throw new Error(code);}
 const route=(p:Placement):GatewayRoute=>({installationId:p.installationId,venueId:p.venueId,staffHostname:p.staffHostname,publicHostname:p.publicHostname,address:p.address,port:p.port,peerPublicKey:p.peerPublicKey});
 // Peer keys are claimed in two tables, so both claim paths share this transaction lock.
@@ -22,6 +23,14 @@ async function placement(client:PoolClient,id:string):Promise<Placement|undefine
   FROM remote_placements p JOIN remote_cells c ON c.id=p.cell_id
   JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff'
   JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public' WHERE p.installation_id=$1`,[id]);return rows[0];
+}
+async function certificateAuthorization(client:PoolClient,id:string,kind:'staff'|'public',csr:string,lock:'share'|'update'):Promise<CertificateAuthorization>{
+ const row=(await client.query(`SELECT i.revoked_at,i.configuration_revision,p.venue_id,c.suffix,s.hostname AS staff_hostname,u.hostname AS public_hostname
+  FROM installations i JOIN remote_placements p ON p.installation_id=i.id JOIN remote_cells c ON c.id=p.cell_id
+  JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff' JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public'
+  WHERE i.id=$1 FOR ${lock==='update'?'UPDATE':'SHARE'} OF i`,[id])).rows[0];
+ if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');const hostname=kind==='staff'?row.staff_hostname:row.public_hostname;validateCsr(csr,hostname);
+ return {hostname,dnsName:`_acme-challenge.${kind==='staff'?'staff-':''}v-${row.venue_id}.${row.suffix}`,revision:Number(row.configuration_revision)};
 }
 async function move(client:PoolClient,id:string,lock=false):Promise<CellMove|undefined>{
  const {rows}=await client.query(`SELECT m.id AS "operationId",m.installation_id AS "installationId",m.venue_id AS "venueId",
@@ -164,12 +173,13 @@ export class RemoteAccessStore {
   });}catch(error){if(error&&typeof error==='object'&&'code' in error&&error.code==='23505')return fail('hostname_conflict');throw error;}
  }
  async authorizeCertificate(id:string,kind:'staff'|'public',csr:string){
-  const assigned=await this.#assigned(id,kind);
-  return transaction(this.#pool,async client=>{
-   const row=(await client.query('SELECT revoked_at FROM installations WHERE id=$1 FOR SHARE',[id])).rows[0];if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');
-   const p=(await placement(client,id))!;const hostname=kind==='staff'?p.staffHostname:p.publicHostname;validateCsr(csr,hostname);
-   return {hostname,dnsName:'_acme-challenge.'+assigned};
-  });
+  if(!isUuid(id)||!['staff','public'].includes(kind))fail('invalid_placement');
+  return transaction(this.#pool,client=>certificateAuthorization(client,id,kind,csr,'share'));
+ }
+ async publishAuthorizedCertificate(client:PoolClient,id:string,kind:'staff'|'public',csr:string,expected:CertificateAuthorization,publish:()=>Promise<void>){
+  if(!isUuid(id)||!['staff','public'].includes(kind))fail('invalid_placement');
+  const current=await certificateAuthorization(client,id,kind,csr,'update');
+  if(JSON.stringify(current)!==JSON.stringify(expected))fail('placement_changed');await publish();return current;
  }
  async manifest(cellId:string,now=Date.now()):Promise<GatewayManifest>{
   if(!isUuid(cellId))fail('invalid_cell');

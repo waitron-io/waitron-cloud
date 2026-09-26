@@ -32,7 +32,7 @@ test('two venues share one cell with distinct stable routes, independent configu
  await assert.rejects(store.setHostname(a.installationId,'staff',custom,0,async name=>[dns.find(r=>r.name===name)!.value]),/revision_conflict/);
  const changed=await store.setHostname(a.installationId,'staff',custom,1,async name=>[dns.find(r=>r.name===name)!.value]);assert.equal(changed.staffHostname,custom);
  const [,csr]=await crypto.createCsr({commonName:custom,altNames:[custom]});
- assert.deepEqual(await store.authorizeCertificate(a.installationId,'staff',csr.toString()),{hostname:custom,dnsName:'_acme-challenge.'+one.staffHostname});
+ assert.deepEqual(await store.authorizeCertificate(a.installationId,'staff',csr.toString()),{hostname:custom,dnsName:'_acme-challenge.'+one.staffHostname,revision:2});
  await assert.rejects(store.authorizeCertificate(b.installationId,'staff',csr.toString()),/invalid_csr/);
  await assert.rejects(store.setHostname(b.installationId,'staff',custom,1,async name=>[name.startsWith('_acme')?'_acme-challenge.'+two.staffHostname:two.staffHostname]),/hostname_conflict/);
  await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[a.installationId]);

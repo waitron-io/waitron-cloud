@@ -65,10 +65,15 @@ confirmation. PostgreSQL and real two-server tests cover renewal/revocation race
 lost replies, worker restart and venue isolation. The [local remote-access proof](local-remote-access.md)
 now uses real WireGuard/HAProxy, two Waitron servers, ACME DNS validation, browser bot
 challenges, local DNS, gateway replacement, revocation and expiring route authority.
-Operator placement, signed export and certificate commands are implemented. Customer
+Operator placement and customer
 remote setup now has owner-only English/Spanish screens for assigned names, custom DNS
-changes, readiness and local-network guidance. Automated appliance/certificate setup and
-production deployment remain open. The [local backup proof](local-backups.md)
+changes, readiness and local-network guidance. A PostgreSQL-backed local reconciler now
+publishes signed routes and renews public/staff certificates through explicit filesystem,
+DNS and ACME adapters. Its receipt covers duplicate workers, expired-lease restart,
+bounded failure, failed-renewal retention and hostname/lease fences; focused filesystem
+tests cover atomic replacement while Waitron keeps the staff private key.
+Live provider DNS, production key storage/deployment, CSR/chain transport and automatic
+appliance setup remain open. The [local backup proof](local-backups.md)
 now provides encrypted scoped storage, protected key versions, an immutable snapshot catalogue,
 restore verification, retention and owner-bound recovery operations. Two real Waitron
 snapshots restore independently of deleted Litestream data, including after key rotation.
@@ -141,6 +146,10 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   Test that the public route cannot expose staff functions; define limits and monitor
   false positives. Staff application-level filtering remains at the venue.
 - Provide assigned or customer-owned hostnames and automatic Let's Encrypt certificates.
+  The durable local reconciler now issues and renews both certificate kinds through the
+  existing DNS/ACME adapter contract and publishes signed cell routes. Repeat this with
+  live provider DNS, production key storage and deployed workers; add automatic staff
+  CSR/chain transport without moving the private key out of Waitron.
   Prefer local DNS overrides so the registered staff hostname and venue certificate
   work on both LAN and internet paths. Define router-specific setup, address stability,
   resolver recovery and initial bootstrap. Test fresh local connections without internet.
@@ -408,8 +417,10 @@ mobile notifications separately.
   after the destination manifest was applied and tested. The two-cell proof preserves the
   venue's hostnames and certificate fingerprints, isolates the other venue and measures
   fresh-peer reconnections of 1,321 ms and 1,486 ms; it also proves failed-apply cancellation leaves the
-  source healthy. Repeat this with provider-native cells, the DNS/certificate reconciler
-  and appliance configuration before choosing an explicit recovery-time target.
+  source healthy. The local DNS/certificate reconciler now preserves usable material,
+  fences stale external work and republishes signed routes after restart. Repeat the full
+  path with provider-native cells, live adapters and appliance configuration before
+  choosing an explicit recovery-time target.
   Define how established connections and
   backups continue during a portal outage, including credential expiry and revocation.
   The [local control-plane outage drill](control-plane-outages.md) now stops the real account
@@ -572,7 +583,7 @@ mobile notifications separately.
 
 | Service | Design work still needed |
 | --- | --- |
-| Remote access (initial) | The local two-venue adapter and operator commands are implemented; see [the executable proof](local-remote-access.md). Customer setup screens now expose assigned names, revision-bound custom DNS changes and readiness. Live DNS/provider integration, automatic appliance/certificate setup and deployment remain open. Public HTTPS terminates in Cloud for bot inspection; staff uses a separate hostname with TLS passthrough and network controls. Share a gateway within each cell, with separate venue tunnels and credentials. Define and test route/session isolation, traffic limits and legitimate automated-client handling. Provide assigned/custom domains and automated certificates; implement the preferred local DNS overrides with router-specific setup and offline/recovery tests. Decide the bootstrap role of waitron.local. Temporary unavailability while the venue is offline and short interruptions during cell replacement are accepted; define and test the cell recovery-time target. |
+| Remote access (initial) | The local two-venue adapter, operator commands and durable route/certificate reconciler are implemented; see [the executable proof](local-remote-access.md). Customer setup screens expose assigned names, revision-bound custom DNS changes and readiness. The local worker has explicit per-cell/per-certificate mappings, bounded leased retries, atomic publication and stale-work fences; it reuses Waitron's CSR/install interface without taking its staff private key. Live provider DNS/ACME credentials, production key storage and deployment, automatic CSR/chain transport and appliance setup remain open. Public HTTPS terminates in Cloud for bot inspection; staff uses a separate hostname with TLS passthrough and network controls. Share a gateway within each cell, with separate venue tunnels and credentials. Define and test route/session isolation, traffic limits and legitimate automated-client handling. Implement the preferred local DNS overrides with router-specific setup and offline/recovery tests. Decide the bootstrap role of waitron.local. Temporary unavailability while the venue is offline and short interruptions during cell replacement are accepted; define and test the cell recovery-time target. |
 | Backups (initial) | Guided continuous and verified-snapshot recovery are implemented for local test venues. The two-venue proof restores an exact Litestream database head after interruption and restores a verified snapshot after deleting its continuous source. Production still needs provider credential lifecycle, retention and monitoring checks, planned final-write handover and safe Waitron activation. |
 | SQLite snapshots (initial backup service) | Retain daily snapshots for 30 days and monthly snapshots for 12 months, with longer paid retention for selected snapshots. Each must remain restorable if continuous backup data disappears. Protect the last verified snapshot from automatic expiry while subscribed; verify a newer copy before replacing it and show stale backup health. Define schedule details, consistency, extended-retention terms and prices, and independent storage/deletion controls. Explicit verified-snapshot selection and restoration with continuous data absent are proved locally; run the same flow against the selected production provider. |
 | Failover to cloud | Allocate a replacement instance, coordinate promotion with Waitron, connect devices, stream the new primary and support return to the venue. |
