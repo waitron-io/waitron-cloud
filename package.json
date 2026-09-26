@@ -12,6 +12,7 @@
     "test:registration": "pnpm --filter @waitron-cloud/registration test",
     "test:abuse": "node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test --test-timeout=120000 test/abuse-receipt.test.ts test/abuse-boundaries.test.ts",
     "test:worker-scheduling": "node --test packages/registration/test/worker-loop.test.ts scripts/verify-worker-scheduling-receipt.test.mjs",
+    "test:managed-keys": "node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test --test-timeout=30000 test/key-operations.test.ts",
     "measure:worker-scheduling-baseline": "node scripts/test-postgres.mjs exec node scripts/worker-scheduling-receipt.mjs --baseline /tmp/cloud-worker-scheduling-baseline.json",
     "db:migrate": "pnpm --filter @waitron-cloud/registration db:migrate",
     "history:cleanup": "pnpm --dir packages/registration history:cleanup",
@@ -26,6 +27,7 @@
     "portal:build": "pnpm --filter @waitron-cloud/portal build",
     "backup:worker": "node --env-file-if-exists=.env packages/backups/src/worker-cli.ts",
     "backup:status": "node --env-file-if-exists=.env packages/backups/src/worker-cli.ts --status",
+    "keys:check": "node --env-file-if-exists=.env packages/backups/src/key-operations-cli.ts",
     "monitor:worker": "node --env-file-if-exists=.env packages/registration/src/monitor-cli.ts",
     "monitor:status": "node --env-file-if-exists=.env packages/registration/src/monitor-cli.ts --status",
     "remote:probe": "node --env-file-if-exists=.env packages/remote-access/src/probe-cli.ts"

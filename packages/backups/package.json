@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p ../../tsconfig.json",
-    "test": "node --test --test-timeout=30000 test/*.test.ts"
+    "test": "node --test --test-timeout=30000 test/*.test.ts",
+    "keys:check": "node src/key-operations-cli.ts"
   },
   "dependencies": {
     "@waitron-cloud/registration": "workspace:*",
@@ -21,6 +22,7 @@
     "./captures": "./src/captures.ts",
     "./capture-config": "./src/capture-config.ts",
     "./managed-streams": "./src/managed-streams.ts",
+    "./key-operations": "./src/key-operations.ts",
     "./keys": "./src/keys.ts",
     "./recovery": "./src/recovery.ts",
     "./recovery-request": "./src/recovery-request.ts",

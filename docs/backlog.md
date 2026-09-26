@@ -295,8 +295,9 @@ mobile notifications separately.
   controls; configure the sender and prove live delivery. Implement authenticated
   bounce/complaint ingestion, suppression reconciliation and delivery alerts for that
   provider before public use.
-  Provision separately held encryption keys and document rotation/restore before
-  production; the code accepts an active key plus retained older keys. A send timeout
+  Separately supplied email keys now have a read-only dependency and decryption preflight,
+  plus a local restart drill and documented rotation/restore order. Choose and operate the
+  production key store, and retain each database backup's matching key set. A send timeout
   or crash after provider acceptance may duplicate an email. Terminal delivery metadata
   has an explicit cutoff category in the cleanup command; choose its production cutoff.
   Immutable customer security events now cover pairing approvals, installation credential
@@ -476,7 +477,10 @@ mobile notifications separately.
   acknowledged storage object waits until capture expiry before recapture. Next: measure
   production uplink budgets, spool disk use and shutdown latency during local database/encryption
   work, stream archive assembly and object I/O beyond the current 512 MiB bound,
-  master-key operations and production verifier isolation. The history cleanup command
+  production master-key custody/rewrapping and production verifier isolation. A read-only
+  dependency inventory and local drill now prove active-key rotation, old snapshot restore,
+  worker restart and wrong/missing-key refusal without exposing secrets or deleting keys.
+  The history cleanup command
   now removes completed jobs and already-deleted tombstone metadata in bounded chunks
   after exact operator cutoffs; pending/running/failed jobs, current points, protected
   snapshots and recovery references remain. Choose the production cutoffs before use.
@@ -505,8 +509,8 @@ mobile notifications separately.
   custody and authorised delivery, respecting the existing external vault-key design.
   Implement the integration contract's mapped backup contents, manifests, module
   restore hooks and per-secret handling after checking the incoming SQLite interfaces.
-  Test key rotation with retained snapshots and recovery
-  after loss of the original server without an owner-held backup key. See the
+  The local key drill and two-venue recovery proof test rotation with retained snapshots
+  and recovery after loss of the original server without an owner-held backup key. See the
   [existing-design reconciliation](documentation-ownership.md#backup-and-recovery-design-reconciliation).
   Cloud registration credentials must respect Waitron's different node-identity rules
   for stream and archive restores. Keep the on-prem-archive-to-cloud vault re-encryption
