@@ -3,10 +3,10 @@ import {IDLE_TIMEOUT_MS} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
 
 export const historyCleanupCategories = [
+  'webauthnCeremonies',
   'sessions',
   'signupRequests',
   'passwordResetRequests',
-  'webauthnCeremonies',
   'pairingRequests',
   'registrationOperations',
   'emailDeliveries',
@@ -72,6 +72,8 @@ export class HistoryCleanup {
   readonly #pool: Pool;
   constructor(pool: Pool) { this.#pool = pool; }
   async run(policy: HistoryCleanupPolicy, options: {apply: boolean}): Promise<HistoryCleanupReport> {
+    const now: Date = (await this.#pool.query('SELECT clock_timestamp() AS now')).rows[0].now;
+    if (Object.values(policy.cutoffs).some(value => Date.parse(value) > now.getTime())) fail();
     const categories: Partial<Record<HistoryCleanupCategory, HistoryCleanupCategoryReport>> = {};
     for (const category of historyCleanupCategories) {
       const value = policy.cutoffs[category];
@@ -187,19 +189,30 @@ export class HistoryCleanup {
 
   async #emailDeliveries(client: PoolClient, cutoff: string, limit: number, apply: boolean) {
     const terminal = `e.status IN ('sent','expired','cancelled','failed') AND e.finished_at<$1`;
-    const eligible = await count(client, `SELECT count(*)::integer AS count FROM email_outbox e WHERE ${terminal}`, [cutoff]);
+    const currentIncident = `EXISTS(SELECT 1 FROM service_alert_deliveries d JOIN venue_incidents i ON i.id=d.incident_id
+      WHERE d.outbox_id=e.id AND i.status='open')`;
+    const eligible = await count(client, `SELECT count(*)::integer AS count FROM email_outbox e WHERE ${terminal} AND NOT ${currentIncident}`, [cutoff]);
+    const blocked = await count(client, `SELECT count(*)::integer AS count FROM email_outbox e WHERE ${terminal} AND ${currentIncident}`, [cutoff]);
     let deleted = 0;
     if (apply) {
-      const selected = await client.query<{id: string}>(`SELECT e.id FROM email_outbox e WHERE ${terminal}
-        ORDER BY e.finished_at,e.id LIMIT $2 FOR UPDATE OF e SKIP LOCKED`, [cutoff, limit]);
-      const ids = selected.rows.map(row => row.id);
+      const alerts = await client.query<{id: string}>(`SELECT e.id FROM email_outbox e
+        JOIN service_alert_deliveries d ON d.outbox_id=e.id WHERE ${terminal} AND NOT ${currentIncident}
+        ORDER BY e.finished_at,e.id LIMIT $2 FOR UPDATE OF e,d SKIP LOCKED`, [cutoff, limit]);
+      const ids = alerts.rows.map(row => row.id);
+      if (ids.length < limit) {
+        const plain = await client.query<{id: string}>(`SELECT e.id FROM email_outbox e WHERE ${terminal}
+          AND NOT ${currentIncident} AND NOT EXISTS(SELECT 1 FROM service_alert_deliveries d WHERE d.outbox_id=e.id)
+          ORDER BY e.finished_at,e.id LIMIT $2 FOR UPDATE OF e SKIP LOCKED`, [cutoff, limit - ids.length]);
+        ids.push(...plain.rows.map(row => row.id));
+      }
       if (ids.length) {
         await client.query('DELETE FROM service_alert_deliveries WHERE outbox_id=ANY($1::uuid[])', [ids]);
-        const result = await client.query(`DELETE FROM email_outbox e WHERE e.id=ANY($2::uuid[]) AND ${terminal} RETURNING e.id`, [cutoff, ids]);
+        const result = await client.query(`DELETE FROM email_outbox e WHERE e.id=ANY($2::uuid[]) AND ${terminal}
+          AND NOT ${currentIncident} RETURNING e.id`, [cutoff, ids]);
         deleted = result.rowCount ?? 0;
       }
     }
-    return {cutoff, eligible, blocked: 0, deleted, hasMore: apply ? eligible > deleted : eligible > 0};
+    return {cutoff, eligible, blocked, deleted, hasMore: apply ? eligible > deleted : eligible > 0};
   }
 
   async #recoveryHistory(client: PoolClient, cutoff: string, limit: number, apply: boolean) {
@@ -211,7 +224,9 @@ export class HistoryCleanup {
     if (apply) {
       const selected = await client.query<{id: string}>(`SELECT r.id FROM backup_recoveries r WHERE ${aged} AND NOT ${incomplete}
         ORDER BY r.expires_at,r.id LIMIT $2 FOR UPDATE OF r SKIP LOCKED`, [cutoff, limit]);
-      const ids = selected.rows.map(row => row.id);
+      let ids = selected.rows.map(row => row.id);
+      ids = await retainIdsWithLockedChildren(client, ids, 'backup_recovery_requests');
+      ids = await retainIdsWithLockedChildren(client, ids, 'installation_replacements');
       if (ids.length) {
         await client.query('DELETE FROM backup_recovery_requests WHERE id=ANY($1::uuid[])', [ids]);
         await client.query('DELETE FROM installation_replacements WHERE id=ANY($1::uuid[]) AND completed_at IS NOT NULL', [ids]);
@@ -224,7 +239,8 @@ export class HistoryCleanup {
   }
 
   async #backupTombstones(client: PoolClient, cutoff: string, limit: number, apply: boolean) {
-    const referenced = `EXISTS(SELECT 1 FROM backup_recoveries r WHERE r.point_id=p.id)`;
+    const referenced = `(EXISTS(SELECT 1 FROM backup_recoveries r WHERE r.point_id=p.id)
+      OR EXISTS(SELECT 1 FROM backup_jobs j WHERE j.target_id=p.id))`;
     const aged = `p.deleted_at<$1`;
     const eligible = await count(client, `SELECT count(*)::integer AS count FROM backup_points p
       WHERE ${aged} AND NOT ${referenced}`, [cutoff]);
@@ -233,14 +249,18 @@ export class HistoryCleanup {
     let deleted = 0;
     if (apply) {
       const selected = await client.query<{id: string}>(`SELECT p.id FROM backup_points p
+        JOIN backup_captures c ON c.id=p.id
         WHERE ${aged} AND NOT ${referenced}
-        ORDER BY p.deleted_at,p.id LIMIT $2 FOR UPDATE OF p SKIP LOCKED`, [cutoff, limit]);
+        ORDER BY p.deleted_at,p.id LIMIT $2 FOR UPDATE OF p,c SKIP LOCKED`, [cutoff, limit]);
       const ids = selected.rows.map(row => row.id);
       if (ids.length) {
-        await client.query('DELETE FROM backup_verifications WHERE point_id=ANY($1::uuid[])', [ids]);
-        await client.query("DELETE FROM backup_jobs WHERE kind='verify' AND status='completed' AND target_id=ANY($1::uuid[])", [ids]);
+        await client.query(`WITH selected AS(
+          SELECT id FROM backup_verifications WHERE point_id=ANY($1::uuid[]) FOR UPDATE SKIP LOCKED)
+          DELETE FROM backup_verifications v USING selected s WHERE v.id=s.id`, [ids]);
         const result = await client.query(`DELETE FROM backup_points p WHERE p.id=ANY($2::uuid[]) AND ${aged}
-          AND NOT ${referenced} RETURNING p.id`, [cutoff, ids]);
+          AND NOT ${referenced}
+          AND NOT EXISTS(SELECT 1 FROM backup_verifications v WHERE v.point_id=p.id)
+          RETURNING p.id`, [cutoff, ids]);
         const removed = result.rows.map(row => row.id as string);
         deleted = removed.length;
         if (removed.length) await client.query(`DELETE FROM backup_captures c WHERE c.id=ANY($2::uuid[])
@@ -254,4 +274,13 @@ export class HistoryCleanup {
 async function count(client: PoolClient, sql: string, values: unknown[]): Promise<number> {
   const result: QueryResult<{count: number}> = await client.query(sql, values);
   return result.rows[0]?.count ?? 0;
+}
+
+async function retainIdsWithLockedChildren(client: PoolClient, ids: string[],
+  table: 'backup_recovery_requests' | 'installation_replacements'): Promise<string[]> {
+  if (!ids.length) return ids;
+  const existing = new Set((await client.query<{id: string}>(`SELECT id FROM ${table} WHERE id=ANY($1::uuid[])`, [ids])).rows.map(row => row.id));
+  const locked = new Set((await client.query<{id: string}>(
+    `SELECT id FROM ${table} WHERE id=ANY($1::uuid[]) FOR UPDATE SKIP LOCKED`, [ids])).rows.map(row => row.id));
+  return ids.filter(id => !existing.has(id) || locked.has(id));
 }

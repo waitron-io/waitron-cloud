@@ -17,6 +17,7 @@ const options = `-c search_path=${schema} -c statement_timeout=10000`;
 const admin = new Pool({connectionString: url});
 const pool = new Pool({connectionString: url, options, application_name: `${schema}_cleanup`});
 const otherPool = new Pool({connectionString: url, options, application_name: `${schema}_worker`});
+const racePool = new Pool({connectionString: url, options: `${options} -c lock_timeout=150`, application_name: `${schema}_race`});
 const cleanup = new HistoryCleanup(pool);
 const execute = promisify(execFile);
 const accountId = randomUUID(), organisationId = randomUUID(), businessId = randomUUID();
@@ -31,7 +32,7 @@ before(async () => {
   await migrate(pool);
 });
 after(async () => {
-  await Promise.all([pool.end(), otherPool.end()]);
+  await Promise.all([pool.end(), otherPool.end(), racePool.end()]);
   await admin.query(`DROP SCHEMA ${schema} CASCADE`);
   await admin.end();
 });
@@ -91,6 +92,36 @@ test('history cleanup policy rejects ambiguous, unknown and unbounded input', ()
   ]) assert.throws(() => parseHistoryCleanupPolicy(value), /Invalid history cleanup policy/);
 });
 
+test('a future cutoff is refused before it can delete live authority or fresh replay results', async () => {
+  await pool.query(`INSERT INTO cloud_sessions(token_hash,csrf_hash,account_id,created_at,last_seen_at,absolute_expires_at)
+    VALUES($1,$2,$3,clock_timestamp(),clock_timestamp(),clock_timestamp()+interval '12 hours')`,
+  [hash('9'), hash('0'), accountId]);
+  await pool.query(`INSERT INTO installation_operations(installation_id,operation_id,digest,result)
+    VALUES($1,$2,'fresh-result','{}')`, [installationId, randomUUID()]);
+  const policy = parseHistoryCleanupPolicy({cutoffs: {sessions: future, registrationOperations: future}});
+  await assert.rejects(cleanup.run(policy, {apply: true}), /Invalid history cleanup policy/);
+  assert.equal(await count('cloud_sessions'), 1);
+  assert.equal(await count('installation_operations'), 1);
+});
+
+test('one run removes an expired WebAuthn ceremony before its ended session', async () => {
+  const tokenHash = hash('7');
+  await pool.query(`INSERT INTO cloud_sessions(token_hash,csrf_hash,account_id,created_at,last_seen_at,absolute_expires_at,ended_at)
+    VALUES($1,$2,$3,$4,$4,$4,$4)`, [tokenHash, hash('6'), accountId, old]);
+  await pool.query(`INSERT INTO cloud_webauthn_ceremonies(id,kind,challenge,account_id,session_token_hash,created_at,expires_at,consumed_at)
+    VALUES($1,'registration','expired-session-challenge',$2,$3,$4,$5,$5)`,
+  [randomUUID(), accountId, tokenHash, older, old]);
+
+  const report = await cleanup.run(parseHistoryCleanupPolicy({cutoffs: {
+    sessions: cutoff, webauthnCeremonies: cutoff,
+  }}), {apply: true});
+
+  assert.equal(report.categories.webauthnCeremonies?.deleted, 1);
+  assert.equal(report.categories.sessions?.deleted, 1);
+  assert.equal(await count('cloud_webauthn_ceremonies'), 0);
+  assert.equal(await count('cloud_sessions'), 0);
+});
+
 test('dry run and apply bound identity, registration, delivery and operation history', async () => {
   await pool.query(`INSERT INTO cloud_sessions(token_hash,csrf_hash,account_id,created_at,last_seen_at,absolute_expires_at,ended_at)
     VALUES($1,$2,$3,$4,$4,$4,$4),($5,$6,$3,$4,$4,$4,$4),($7,$8,$3,$9,$9,$9,NULL)`,
@@ -120,14 +151,17 @@ test('dry run and apply bound identity, registration, delivery and operation his
     VALUES($1,$2,'old-digest','{}',$3),($1,$4,'recent-digest','{}',$5)`,
   [installationId, randomUUID(), old, randomUUID(), future]);
 
-  const genericOutbox = randomUUID(), alertOutbox = randomUUID(), incidentId = randomUUID();
+  const genericOutbox = randomUUID(), alertOutbox = randomUUID(), openOutbox = randomUUID();
+  const incidentId = randomUUID(), openIncidentId = randomUUID();
   await pool.query(`INSERT INTO email_outbox(id,kind,status,created_at,expires_at,available_at,finished_at)
-    VALUES($1,'password_changed','sent',$3,$3,$3,$3),($2,'service_alert','sent',$3,$3,$3,$3)`,
-  [genericOutbox, alertOutbox, old]);
+    VALUES($1,'password_changed','sent',$4,$4,$4,$4),($2,'service_alert','sent',$4,$4,$4,$4),
+      ($3,'service_alert','sent',$4,$4,$4,$4)`, [genericOutbox, alertOutbox, openOutbox, old]);
   await pool.query(`INSERT INTO venue_incidents(id,venue_id,kind,status,revision,opened_at,changed_at)
-    VALUES($1,$2,'disconnected','recovered',2,$3,$3)`, [incidentId, venueId, old]);
+    VALUES($1,$2,'disconnected','recovered',2,$3,$3),($4,$2,'snapshot_stale','open',1,$3,$3)`,
+  [incidentId, venueId, old, openIncidentId]);
   await pool.query(`INSERT INTO service_alert_deliveries(outbox_id,incident_id,revision,state,account_id)
-    VALUES($1,$2,2,'recovered',$3)`, [alertOutbox, incidentId, accountId]);
+    VALUES($1,$3,2,'recovered',$5),($2,$4,1,'open',$5)`,
+  [alertOutbox, openOutbox, incidentId, openIncidentId, accountId]);
 
   const policy = parseHistoryCleanupPolicy({cutoffs: {
     sessions: cutoff, signupRequests: cutoff, passwordResetRequests: cutoff, webauthnCeremonies: cutoff,
@@ -150,7 +184,7 @@ test('dry run and apply bound identity, registration, delivery and operation his
     ceremonies: {cutoff, eligible: 1, blocked: 0, deleted: 0, hasMore: true},
     pairing: {cutoff, eligible: 1, blocked: 0, deleted: 0, hasMore: true},
     operations: {cutoff, eligible: 2, blocked: 0, deleted: 0, hasMore: true},
-    delivery: {cutoff, eligible: 2, blocked: 0, deleted: 0, hasMore: true},
+    delivery: {cutoff, eligible: 2, blocked: 1, deleted: 0, hasMore: true},
   });
   assert.deepEqual({
     sessions: await count('cloud_sessions'), signup: await count('signup_requests'), reset: await count('password_reset_requests'),
@@ -169,7 +203,7 @@ test('dry run and apply bound identity, registration, delivery and operation his
     operations: await count('installation_operations'), outbox: await count('email_outbox'),
     deliveries: await count('service_alert_deliveries'), incidents: await count('venue_incidents')},
   {sessions: 2, signup: 2, reset: 1, ceremonies: 1, pairing: 1, connections: 1,
-    operations: 1, outbox: 1, deliveries: 0, incidents: 1});
+    operations: 1, outbox: 2, deliveries: 1, incidents: 2});
 });
 
 test('backup cleanup preserves work and references while chunks resume across workers', async () => {
@@ -212,9 +246,6 @@ test('backup cleanup preserves work and references while chunks resume across wo
     VALUES($1,'verify',$3,$4,'completed',$5,$5),($2,'verify',$3,$6,'completed',$5,$5),
       ($7,'incoming',$3,$3,'pending',$5,NULL),($8,'retention',$3,$3,'failed',$5,NULL)`,
   [lockedJob, freeJob, venueId, randomUUID(), old, randomUUID(), randomUUID(), randomUUID()]);
-  await pool.query(`INSERT INTO backup_jobs(id,kind,venue_id,target_id,status,available_at,last_success_at)
-    VALUES($1,'verify',$2,$3,'completed',$4,$5)`, [randomUUID(), venueId, pointA, future, future]);
-
   const policy = parseHistoryCleanupPolicy({cutoffs: {
     backupJobs: cutoff, recoveryHistory: cutoff, backupTombstones: cutoff,
   }, chunkSize: 1});
@@ -306,4 +337,117 @@ test('history cleanup CLI defaults to dry-run and fails closed without exposing 
   } finally {
     await rm(directory, {recursive: true, force: true});
   }
+});
+
+test('email cleanup skips a terminal delivery whose dependent row is worker-locked', async () => {
+  const outboxId = randomUUID(), incidentId = randomUUID();
+  await pool.query(`INSERT INTO email_outbox(id,kind,status,created_at,expires_at,available_at,finished_at)
+    VALUES($1,'service_alert','sent',$2,$2,$2,$2)`, [outboxId, old]);
+  await pool.query(`INSERT INTO venue_incidents(id,venue_id,kind,status,revision,opened_at,changed_at)
+    VALUES($1,$2,'disconnected','recovered',2,$3,$3)`, [incidentId, venueId, old]);
+  await pool.query(`INSERT INTO service_alert_deliveries(outbox_id,incident_id,revision,state,account_id)
+    VALUES($1,$2,2,'recovered',$3)`, [outboxId, incidentId, accountId]);
+  const worker = await otherPool.connect();
+  await worker.query('BEGIN');
+  await worker.query('SELECT outbox_id FROM service_alert_deliveries WHERE outbox_id=$1 FOR UPDATE', [outboxId]);
+  try {
+    const report = await new HistoryCleanup(racePool).run(
+      parseHistoryCleanupPolicy({cutoffs: {emailDeliveries: cutoff}, chunkSize: 1}), {apply: true});
+    assert.deepEqual(report.categories.emailDeliveries,
+      {cutoff, eligible: 1, blocked: 0, deleted: 0, hasMore: true});
+    assert.equal(await count('email_outbox'), 1);
+    assert.equal(await count('service_alert_deliveries'), 1);
+  } finally {
+    await worker.query('ROLLBACK');
+    worker.release();
+  }
+});
+
+test('recovery cleanup skips a closed operation whose replacement row is worker-locked', async () => {
+  await pool.query(`INSERT INTO backup_locations(venue_id,installation_id,endpoint,bucket,region)
+    VALUES($1,$2,'https://storage.example.test','locked-recovery','test')`, [venueId, installationId]);
+  await pool.query("INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,1,'sealed')", [venueId]);
+  const pointId = randomUUID(), recoveryId = randomUUID();
+  await pool.query(`INSERT INTO backup_captures(id,venue_id,installation_id,key_version,created_at)
+    VALUES($1,$2,$3,1,$4)`, [pointId, venueId, installationId, old]);
+  await pool.query(`INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules,verification)
+    VALUES($1,$2,$3,1,'snapshot',$4,$5,1,$6,'daily',$7,'{}','verified')`,
+  [pointId, venueId, installationId, `snapshots/${pointId}`, 'a'.repeat(64), old, randomUUID()]);
+  await pool.query(`INSERT INTO backup_recoveries(id,venue_id,point_id,account_id,target_public_key,mode,status,created_at,expires_at)
+    VALUES($1,$2,$3,$4,'locked-recovery-key','failure','closed',$5,$5)`,
+  [recoveryId, venueId, pointId, accountId, old]);
+  await pool.query(`INSERT INTO installation_replacements(id,venue_id,old_installation_id,public_key,peer_public_key,local_venue_id,node_id,created_at,completed_at,result)
+    VALUES($1,$2,$3,'locked-replacement','locked-peer',$4,$5,$6,$6,'{}')`,
+  [recoveryId, venueId, installationId, randomUUID(), randomUUID(), old]);
+  const worker = await otherPool.connect();
+  await worker.query('BEGIN');
+  await worker.query('SELECT id FROM installation_replacements WHERE id=$1 FOR UPDATE', [recoveryId]);
+  try {
+    const report = await new HistoryCleanup(racePool).run(
+      parseHistoryCleanupPolicy({cutoffs: {recoveryHistory: cutoff}, chunkSize: 1}), {apply: true});
+    assert.deepEqual(report.categories.recoveryHistory,
+      {cutoff, eligible: 1, blocked: 0, deleted: 0, hasMore: true});
+    assert.equal(await count('backup_recoveries'), 1);
+    assert.equal(await count('installation_replacements'), 1);
+  } finally {
+    await worker.query('ROLLBACK');
+    worker.release();
+  }
+});
+
+test('tombstone cleanup skips a point whose verification row is worker-locked', async () => {
+  await pool.query(`INSERT INTO backup_locations(venue_id,installation_id,endpoint,bucket,region)
+    VALUES($1,$2,'https://storage.example.test','locked-tombstone','test')`, [venueId, installationId]);
+  await pool.query("INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,1,'sealed')", [venueId]);
+  const pointId = randomUUID(), verificationId = randomUUID();
+  await pool.query(`INSERT INTO backup_captures(id,venue_id,installation_id,key_version,created_at,expired_at,cleaned_at)
+    VALUES($1,$2,$3,1,$4,$4,$4)`, [pointId, venueId, installationId, old]);
+  await pool.query(`INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules,verification,deleting,deleted_at)
+    VALUES($1,$2,$3,1,'snapshot',$4,$5,1,$6,'daily',$7,'{}','verified',true,$6)`,
+  [pointId, venueId, installationId, `snapshots/${pointId}`, 'b'.repeat(64), old, randomUUID()]);
+  await pool.query(`INSERT INTO backup_verifications(id,point_id,digest,verifier,outcome,checked_at)
+    VALUES($1,$2,$3,'locked-verifier','verified',$4)`, [verificationId, pointId, 'b'.repeat(64), old]);
+  const worker = await otherPool.connect();
+  await worker.query('BEGIN');
+  await worker.query('SELECT id FROM backup_verifications WHERE id=$1 FOR UPDATE', [verificationId]);
+  try {
+    const report = await new HistoryCleanup(racePool).run(
+      parseHistoryCleanupPolicy({cutoffs: {backupTombstones: cutoff}, chunkSize: 1}), {apply: true});
+    assert.deepEqual(report.categories.backupTombstones,
+      {cutoff, eligible: 1, blocked: 0, deleted: 0, hasMore: true});
+    assert.equal(await count('backup_points'), 1);
+    assert.equal(await count('backup_captures'), 1);
+    assert.equal(await count('backup_verifications'), 1);
+  } finally {
+    await worker.query('ROLLBACK');
+    worker.release();
+  }
+});
+
+test('tombstone cleanup cannot remove a completed job unless its category is enabled', async () => {
+  await pool.query(`INSERT INTO backup_locations(venue_id,installation_id,endpoint,bucket,region)
+    VALUES($1,$2,'https://storage.example.test','job-bound-tombstone','test')`, [venueId, installationId]);
+  await pool.query("INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,1,'sealed')", [venueId]);
+  const pointId = randomUUID();
+  await pool.query(`INSERT INTO backup_captures(id,venue_id,installation_id,key_version,created_at,expired_at,cleaned_at)
+    VALUES($1,$2,$3,1,$4,$4,$4)`, [pointId, venueId, installationId, old]);
+  await pool.query(`INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules,verification,deleting,deleted_at)
+    VALUES($1,$2,$3,1,'snapshot',$4,$5,1,$6,'daily',$7,'{}','verified',true,$6)`,
+  [pointId, venueId, installationId, `snapshots/${pointId}`, 'c'.repeat(64), old, randomUUID()]);
+  await pool.query(`INSERT INTO backup_jobs(kind,venue_id,target_id,status,available_at,last_success_at)
+    VALUES('verify',$1,$2,'completed',$3,$3)`, [venueId, pointId, old]);
+
+  const tombstonesOnly = await cleanup.run(
+    parseHistoryCleanupPolicy({cutoffs: {backupTombstones: cutoff}}), {apply: true});
+  assert.deepEqual(tombstonesOnly.categories.backupTombstones,
+    {cutoff, eligible: 0, blocked: 1, deleted: 0, hasMore: false});
+  assert.equal(await count('backup_jobs'), 1);
+  assert.equal(await count('backup_points'), 1);
+
+  const authorised = await cleanup.run(
+    parseHistoryCleanupPolicy({cutoffs: {backupJobs: cutoff, backupTombstones: cutoff}}), {apply: true});
+  assert.equal(authorised.categories.backupJobs?.deleted, 1);
+  assert.equal(authorised.categories.backupTombstones?.deleted, 1);
+  assert.equal(await count('backup_jobs'), 0);
+  assert.equal(await count('backup_points'), 0);
 });
