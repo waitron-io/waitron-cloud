@@ -6,6 +6,7 @@ import { validBusinesses, validPairingView } from './pairing-types.ts';
 import {validAuthenticationOptions, validPasskeyList, validPasskeySummary, validRegistrationOptions} from './passkey-types.ts';
 import {validAccountSessions} from './account-security-types.ts';
 import {validUsageSummary} from './usage-types.ts';
+import {validDiagnosticExport} from './diagnostic-types.ts';
 export type ApiResult<T> = {ok: true; value: T} | {ok: false; status: number; code: string; retryAfterMs: number};
 function validResult(path: string, value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
@@ -21,6 +22,7 @@ function validResult(path: string, value: unknown): boolean {
   if(path==='/remote-access/dns')return validRemoteDns(value);
   if(path==='/alerts')return typeof data.enabled==='boolean'&&typeof data.locale==='string'&&['en','es'].includes(data.locale);
   if(path==='/usage/read')return validUsageSummary(value);
+  if(path==='/diagnostics/read')return validDiagnosticExport(value);
   if(path==='/backups/list')return validBackupPage(value);
   if (path === '/pairing/businesses') return validBusinesses(data.businesses);
   if (path === '/pairing/inspect' || path === '/pairing/approve') return validPairingView(data);
@@ -36,7 +38,7 @@ function validResult(path: string, value: unknown): boolean {
 export async function accountRequest<T>(path: string, body?: Record<string, unknown>): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
-  if (path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path === '/usage/read' || (path === '/alerts' && body) || path === '/backups/list' || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || path === '/installations/revoke' || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove') {
+  if (path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || path === '/backups/list' || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || path === '/installations/revoke' || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove') {
     const name = location.protocol === 'https:' ? '__Host-cloud_csrf' : 'cloud_csrf';
     const values = document.cookie.split(';').map(v => v.trim()).filter(v => v.startsWith(`${name}=`));
     headers['X-CSRF-Token'] = values.length === 1 ? values[0]!.slice(name.length + 1) : '';

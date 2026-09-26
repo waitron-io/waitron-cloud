@@ -7,6 +7,7 @@ import { PairingController } from './pairing-controller.ts';
 import {PasskeyController} from './passkey-controller.ts';
 import {AccountSecurityController} from './account-security-controller.ts';
 import {UsageController} from './usage-controller.ts';
+import {DiagnosticController} from './diagnostic-controller.ts';
 import { render } from 'lit';
 import { accountRequest } from './api.ts';
 import { captureLink, type CapturedLink } from './links.ts';
@@ -39,6 +40,7 @@ export class PortalApp {
   passkeys: PasskeyController;
   security: AccountSecurityController;
   usage: UsageController;
+  diagnostics: DiagnosticController;
   #route = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
   constructor(root: HTMLElement) {
@@ -52,6 +54,7 @@ export class PortalApp {
     void this.passkeys.checkSupport();
     this.alerts = new AlertController(() => this.draw());
     this.usage = new UsageController(() => this.draw());
+    this.diagnostics = new DiagnosticController(() => this.draw());
     this.remote = new RemoteController(() => this.draw());
     this.recovery = new RecoveryController(() => this.draw());
     this.recovery.open(this.link.recoveryId);
@@ -74,7 +77,7 @@ export class PortalApp {
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); });
     document.addEventListener('pointerdown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.remote.account(undefined); this.alerts.account(undefined); this.usage.account(undefined); this.passkeys.account(undefined); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.remote.account(undefined); this.alerts.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -83,6 +86,7 @@ export class PortalApp {
   #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
+    this.diagnostics.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.usage.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.security.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.security.loaded) void this.security.load();
@@ -115,7 +119,7 @@ export class PortalApp {
   get waiting() {
     if (this.path === '/recover') return Math.max(this.recovery.waiting,this.backups.waiting,this.installations.waiting,Math.max(0,Math.ceil((this.session.retryAt-Date.now())/1000)));
     if (this.path === '/connect') return Math.max(this.pairing.waiting, Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)));
-    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt,this.alerts.retryAt,this.remote.retryAt,this.usage.retryAt) : this.cooldownOperation === this.operation ? this.cooldownUntil : 0;
+    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt,this.alerts.retryAt,this.remote.retryAt,this.usage.retryAt,this.diagnostics.retryAt) : this.cooldownOperation === this.operation ? this.cooldownUntil : 0;
     return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
   }
   draw() {

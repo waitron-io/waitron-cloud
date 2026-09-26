@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
 import axe from 'axe-core';
 import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
@@ -15,13 +16,18 @@ for(const locale of ['en','es'] as const)test(`${locale} installation status and
   await f.db.pool.query('INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,$3,$4)',[biz2,org2,'Luna SL','ES']);
   await f.db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner,can_register_venues) VALUES($1,$2,true,true)',[owner.accountId,org2]);
   const b2={...b,organisationId:org2,legalBusinessId:biz2,operationId:randomUUID(),localVenueId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url')};
-  await r.start(b2);await r.approveCloud(b2,owner.accountId);await r.approveLocal(b2,randomUUID());await r.complete(b2);
+  await r.start(b2);await r.approveCloud(b2,owner.accountId);await r.approveLocal(b2,randomUUID());const other=await r.complete(b2);
   const context=await f.browser.newContext({locale,viewport:{width:375,height:812}}),page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
   const stop=locale==='en'?'Stop Cloud access':'Detener el acceso a Cloud',confirm=locale==='en'?'Confirm stop':'Confirmar detención',cancel=locale==='en'?'Keep Cloud access':'Mantener el acceso a Cloud',stopped=locale==='en'?'Cloud access stopped':'Acceso a Cloud detenido';
   await page.getByRole('button',{name:stop,exact:true}).waitFor();
   await page.getByRole('heading',{name:/Sol SL/}).waitFor();
   await page.getByText(locale==='en'?'No verified snapshot yet':'Todavía no hay una instantánea verificada',{exact:true}).waitFor();
+  const downloadStarted=page.waitForEvent('download');await page.getByRole('button',{name:c.diagnosticDownload,exact:true}).click();const download=await downloadStarted;
+  assert.match(download.suggestedFilename(),/^waitron-cloud-diagnostic-[0-9a-f]{8}-\d{8}T\d{6}Z\.json$/);
+  const downloadPath=await download.path();assert.ok(downloadPath);const diagnostic=JSON.parse(await readFile(downloadPath,'utf8'));
+  assert.equal(diagnostic.version,1);assert.equal(diagnostic.installation.installationId,installed.installationId);assert.equal(diagnostic.installation.venueId,installed.venueId);
+  const encoded=JSON.stringify(diagnostic);for(const forbidden of [owner.accountId,owner.organisationId,other.installationId,other.venueId,b2.installationKey])assert.equal(encoded.includes(forbidden),false,forbidden);
   const choose=page.getByLabel(locale==='en'?'Organisation':'Organización',{exact:true});await choose.selectOption(org2);await page.getByRole('heading',{name:/Luna SL/}).waitFor();assert.equal(await page.getByRole('heading',{name:/Sol SL/}).count(),0);await choose.selectOption(owner.organisationId);
   const pointId=randomUUID(),capturedAt=new Date(Date.now()-3*86400000).toISOString();
   await f.db.pool.query("INSERT INTO backup_locations(venue_id,installation_id,endpoint,bucket,region) VALUES($1,$2,'https://store.test','browser-fixture','local')",[installed.venueId,installed.installationId]);
