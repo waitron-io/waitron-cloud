@@ -71,7 +71,7 @@ test('enrolment requires the current password, refreshes the list, and fences ac
     calls.push({path, body});
     if (path === '/passkeys') return new Promise<ApiResult<T>>(resolve => { finishList = resolve as (result: ApiResult<unknown>) => void; });
     if (path.endsWith('/registration/options')) return wrongPassword
-      ? {ok: false, status: 403, code: 'forbidden', retryAfterMs: 0}
+      ? {ok: false, status: 403, code: 'credentials_invalid', retryAfterMs: 0}
       : {ok: true, value: registrationOptions as T};
     return {ok: true, value: {id, createdAt} as T};
   };
@@ -106,4 +106,16 @@ test('lost remove replies are reconciled by reloading the list', async () => {
   assert.deepEqual(controller.passkeys, []);
   assert.equal(controller.notice, 'passkeyRemoved');
   assert.equal(controller.error, undefined);
+});
+
+test('fresh-password errors stay distinct from stale CSRF authority', async () => {
+  let code = 'credentials_invalid';
+  const request = async <T>(): Promise<ApiResult<T>> => ({ok: false, status: 403, code, retryAfterMs: 0});
+  const controller = new PasskeyController(() => {}, request, browser());
+  controller.account('owner');
+  await controller.enroll('wrong');
+  assert.equal(controller.error, 'passkeyPasswordInvalid');
+  code = 'forbidden';
+  await controller.enroll('correct');
+  assert.equal(controller.error, 'forbidden');
 });

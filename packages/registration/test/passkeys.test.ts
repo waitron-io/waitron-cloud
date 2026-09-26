@@ -42,6 +42,7 @@ class FixtureAdapter implements PasskeyCeremonyAdapter {
   authenticationFailure = false;
   registrationFailure = false;
   fixedCounter: number | undefined;
+  userVerified = true;
   async registrationOptions(input: GenerateRegistrationOptionsOpts): Promise<PublicKeyCredentialCreationOptionsJSON> {
     return {
       rp: { name: input.rpName, id: input.rpID },
@@ -58,10 +59,11 @@ class FixtureAdapter implements PasskeyCeremonyAdapter {
     if (this.registrationFailure) throw new Error('private verifier detail');
     assert.equal(input.expectedOrigin, origin);
     assert.equal(input.expectedRPID, 'cloud.example.test');
+    assert.equal(input.requireUserVerification, true);
     return { verified: true, registrationInfo: {
       fmt: 'none', aaguid: '00000000-0000-0000-0000-000000000000',
       credential: { id: input.response.id, publicKey: new Uint8Array([1, 2, 3]), counter: 0, transports: input.response.response.transports },
-      credentialType: 'public-key', attestationObject: new Uint8Array([1]), userVerified: true,
+      credentialType: 'public-key', attestationObject: new Uint8Array([1]), userVerified: this.userVerified,
       credentialDeviceType: 'multiDevice', credentialBackedUp: true, origin, rpID: 'cloud.example.test',
     }};
   }
@@ -73,10 +75,11 @@ class FixtureAdapter implements PasskeyCeremonyAdapter {
     if (this.authenticationFailure) throw new Error('private verifier detail');
     assert.equal(input.expectedOrigin, origin);
     assert.equal(input.expectedRPID, 'cloud.example.test');
+    assert.equal(input.requireUserVerification, true);
     return { verified: true, authenticationInfo: {
       credentialID: input.response.id,
       newCounter: this.fixedCounter ?? input.credential.counter + 1,
-      userVerified: true, credentialDeviceType: 'multiDevice', credentialBackedUp: true,
+      userVerified: this.userVerified, credentialDeviceType: 'multiDevice', credentialBackedUp: true,
       origin, rpID: 'cloud.example.test',
     }};
   }
@@ -142,6 +145,7 @@ test('registration is bound to the initiating live session and rechecks suspensi
   await expectPasskeyInvalid(store.verifyRegistration(second.token, second.csrfToken, options.ceremonyId, registrationResponse()));
   assert.equal((await pool.query('SELECT consumed_at FROM cloud_webauthn_ceremonies WHERE id = $1', [options.ceremonyId])).rows[0].consumed_at, null);
   await run(client => endSession(client, first.token));
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_webauthn_ceremonies WHERE id = $1', [options.ceremonyId])).rows[0].count, '1');
   await assert.rejects(store.verifyRegistration(first.token, first.csrfToken, options.ceremonyId, registrationResponse()));
   options = await store.registrationOptions(second.token, second.csrfToken, password);
   await pool.query('UPDATE cloud_accounts SET disabled_at = clock_timestamp()');
@@ -184,6 +188,25 @@ test('authentication rejects absent or cross-account user handles and consumes f
     authenticationResponse(randomBytes(32).toString('base64url'), randomBytes(32).toString('base64url'))));
 });
 
+test('registration and authentication reject results without device user verification', async () => {
+  const session = await signIn();
+  let registration = await store.registrationOptions(session.token, session.csrfToken, password);
+  adapter.userVerified = false;
+  await expectPasskeyInvalid(store.verifyRegistration(session.token, session.csrfToken,
+    registration.ceremonyId, registrationResponse()));
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_passkeys')).rows[0].count, '0');
+
+  adapter.userVerified = true;
+  registration = await store.registrationOptions(session.token, session.csrfToken, password);
+  const response = registrationResponse();
+  await store.verifyRegistration(session.token, session.csrfToken, registration.ceremonyId, response);
+  const handle = (await pool.query('SELECT user_handle FROM cloud_passkey_users')).rows[0].user_handle.toString('base64url');
+  adapter.userVerified = false;
+  const authentication = await store.authenticationOptions();
+  await expectPasskeyInvalid(store.authenticate(authentication.ceremonyId, authenticationResponse(response.id, handle)));
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count, '1');
+});
+
 test('credential locking serialises concurrent counters and refuses a stale counter', async () => {
   const session = await signIn();
   const registration = await store.registrationOptions(session.token, session.csrfToken, password);
@@ -224,10 +247,23 @@ test('list and password-confirmed removal stay account-scoped', async () => {
 
 test('expired and wrong-kind ceremonies cannot be completed or revived', async () => {
   const session = await signIn();
-  const registration = await store.registrationOptions(session.token, session.csrfToken, password);
+  let registration = await store.registrationOptions(session.token, session.csrfToken, password);
   await pool.query("UPDATE cloud_webauthn_ceremonies SET expires_at = statement_timestamp() - interval '1 second', created_at = statement_timestamp() - interval '5 minutes 1 second' WHERE id = $1", [registration.ceremonyId]);
   await expectPasskeyInvalid(store.verifyRegistration(session.token, session.csrfToken, registration.ceremonyId, registrationResponse()));
-  const authentication = await store.authenticationOptions();
-  await expectPasskeyInvalid(store.verifyRegistration(session.token, session.csrfToken, authentication.ceremonyId, registrationResponse()));
-  assert.equal((await pool.query('SELECT consumed_at FROM cloud_webauthn_ceremonies WHERE id = $1', [authentication.ceremonyId])).rows[0].consumed_at, null);
+
+  registration = await store.registrationOptions(session.token, session.csrfToken, password);
+  const response = registrationResponse();
+  await store.verifyRegistration(session.token, session.csrfToken, registration.ceremonyId, response);
+  const handle = (await pool.query('SELECT user_handle FROM cloud_passkey_users')).rows[0].user_handle.toString('base64url');
+  const expiredAuthentication = await store.authenticationOptions();
+  await pool.query("UPDATE cloud_webauthn_ceremonies SET expires_at = statement_timestamp() - interval '1 second', created_at = statement_timestamp() - interval '5 minutes 1 second' WHERE id = $1", [expiredAuthentication.ceremonyId]);
+  await expectPasskeyInvalid(store.authenticate(expiredAuthentication.ceremonyId, authenticationResponse(response.id, handle)));
+
+  const wrongAuthentication = await store.authenticationOptions();
+  await expectPasskeyInvalid(store.verifyRegistration(session.token, session.csrfToken,
+    wrongAuthentication.ceremonyId, registrationResponse()));
+  assert.equal((await pool.query('SELECT consumed_at FROM cloud_webauthn_ceremonies WHERE id = $1', [wrongAuthentication.ceremonyId])).rows[0].consumed_at, null);
+  const wrongRegistration = await store.registrationOptions(session.token, session.csrfToken, password);
+  await expectPasskeyInvalid(store.authenticate(wrongRegistration.ceremonyId, authenticationResponse(response.id, handle)));
+  assert.equal((await pool.query('SELECT consumed_at FROM cloud_webauthn_ceremonies WHERE id = $1', [wrongRegistration.ceremonyId])).rows[0].consumed_at, null);
 });

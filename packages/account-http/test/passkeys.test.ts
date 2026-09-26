@@ -116,7 +116,9 @@ test('HTTP passkey journey enrols, lists, authenticates once and removes with fr
   assert.equal(replay.status, 401);
   assert.deepEqual(await replay.json(), {error: 'credentials_invalid'});
 
-  assert.equal((await request('/passkeys/remove', {id: created.id, password: 'wrong'}, {headers})).status, 403);
+  const wrongPassword = await request('/passkeys/remove', {id: created.id, password: 'wrong'}, {headers});
+  assert.equal(wrongPassword.status, 403);
+  assert.deepEqual(await wrongPassword.json(), {error: 'credentials_invalid'});
   assert.equal((await request('/passkeys/remove', {id: created.id, password}, {headers})).status, 204);
   assert.deepEqual(await (await request('/passkeys', undefined, {headers: {cookie: session.header}})).json(), {passkeys: []});
   assert.equal((await request('/login', {email: owner.email, password})).status, 200);

@@ -85,6 +85,21 @@ test('real resident passkeys enrol, authenticate once, stay account-scoped, and 
           assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_passkeys WHERE id = $1', [created])).rows[0].count, '1');
         } finally { await otherContext.close(); }
 
+        const unsupportedContext = await f.browser.newContext({locale});
+        await unsupportedContext.addInitScript(() => {
+          Object.defineProperty(globalThis, 'PublicKeyCredential', {value: undefined, configurable: true});
+        });
+        try {
+          const login = await unsupportedContext.request.post(`${f.origin}/api/account/login`,
+            {headers: {origin: f.origin}, data: {email: owner.email, password}});
+          assert.equal(login.status(), 200);
+          const unsupportedPage = await unsupportedContext.newPage(); unsupportedPage.setDefaultTimeout(5000);
+          await unsupportedPage.goto(`${f.origin}/account#lang=${locale}`);
+          await unsupportedPage.getByText(c.passkeyUnsupported, {exact: true}).waitFor();
+          await unsupportedPage.locator('input[name=passkeyPassword]').waitFor();
+          await unsupportedPage.getByRole('button', {name: c.passkeyRemove, exact: true}).waitFor();
+        } finally { await unsupportedContext.close(); }
+
         await page.locator('input[name=passkeyPassword]').fill(password);
         await page.getByRole('button', {name: c.passkeyRemove, exact: true}).click();
         await page.getByText(c.passkeyRemoved, {exact: true}).waitFor();

@@ -22,7 +22,7 @@ test('changing account or venue fences delayed catalogue replies and clears priv
 });
 test('pagination replaces the page; failures retain it and Retry-After survives reopening',async()=>{
  const calls:unknown[]=[];let mode='first';
- const c=new BackupController(()=>{},async<T>(path:string,body?:Record<string,string>):Promise<ApiResult<T>>=>{calls.push({path,body});return mode==='limited'?{ok:false,status:429,code:'rate_limited',retryAfterMs:60000}:mode==='failed'?{ok:false,status:503,code:'temporarily_unavailable',retryAfterMs:0}:{ok:true,value:(mode==='first'?page:{...page,points:[{...point,id:other}],nextCursor:null}) as T};});
+ const c=new BackupController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{calls.push({path,body});return mode==='limited'?{ok:false,status:429,code:'rate_limited',retryAfterMs:60000}:mode==='failed'?{ok:false,status:503,code:'temporarily_unavailable',retryAfterMs:0}:{ok:true,value:(mode==='first'?page:{...page,points:[{...point,id:other}],nextCursor:null}) as T};});
  c.account('owner');await c.open(venue);assert.equal(c.selectedSource,'continuous');assert.equal(c.selected,venue);c.select('not-offered');assert.equal(c.selectedSource,'continuous');
  c.select(venue);assert.equal(c.selectedSource,'snapshot');
  mode='failed';await c.load(true);assert.equal(c.page?.points[0]?.id,venue);assert.equal(c.error,'unavailable');

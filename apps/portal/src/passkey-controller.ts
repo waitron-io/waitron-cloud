@@ -67,7 +67,7 @@ export class PasskeyController {
   }
 
   #failure(result: Extract<ApiResult<unknown>, {ok: false}>, password = false) {
-    this.error = password && result.status === 403 ? 'passkeyPasswordInvalid'
+    this.error = password && result.code === 'credentials_invalid' ? 'passkeyPasswordInvalid'
       : result.status === 429 ? 'limited'
       : result.status === 401 ? 'pairSession'
       : result.status === 403 ? 'forbidden'

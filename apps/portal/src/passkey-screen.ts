@@ -27,11 +27,13 @@ export function passkeyAccountScreen(app: PortalApp) {
       <span>${c.passkeyCreated} ${date.format(new Date(passkey.createdAt))}</span>
       <wt-button .disabled=${app.passkeys.pending} @click=${() => {void app.removePasskey(passkey.id);}}>${c.passkeyRemove}</wt-button>
     </li>`)}</ul>` : nothing}
-    ${app.passkeys.supported === false ? html`<p class="help" role="status">${c.passkeyUnsupported}</p>` : html`
-      <wt-input name="passkeyPassword" .label=${c.passkeyCurrentPassword} .value=${app.passkeys.password} .type=${'password'}
-        .autocomplete=${'current-password'} .disabled=${app.passkeys.pending} .required=${true}
-        @wt-change=${(event: CustomEvent<{value: string}>) => {app.passkeys.password = event.detail.value;}}></wt-input>
-      <wt-form-actions><wt-button .disabled=${app.passkeys.pending || !app.passkeys.password} .loading=${app.passkeys.pending}
-        @click=${() => {void app.addPasskey();}}>${app.passkeys.pending ? c.wait : c.passkeyAdd}</wt-button></wt-form-actions>`}
+    ${app.passkeys.supported === false ? html`<p class="help" role="status">${c.passkeyUnsupported}</p>` : nothing}
+    <wt-input name="passkeyPassword" .label=${c.passkeyCurrentPassword} .value=${app.passkeys.password} .type=${'password'}
+      .autocomplete=${'current-password'} .disabled=${app.passkeys.pending} .required=${true}
+      @wt-change=${(event: CustomEvent<{value: string}>) => {app.passkeys.password = event.detail.value;}}></wt-input>
+    ${app.passkeys.supported === false ? nothing : html`<wt-form-actions>
+      <wt-button .disabled=${app.passkeys.pending || !app.passkeys.password} .loading=${app.passkeys.pending}
+        @click=${() => {void app.addPasskey();}}>${app.passkeys.pending ? c.wait : c.passkeyAdd}</wt-button>
+    </wt-form-actions>`}
   </section>`;
 }

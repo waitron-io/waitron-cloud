@@ -6,8 +6,8 @@ const requestId='12345678-1234-4234-8234-123456789abc';
 const business={organisationId:requestId,legalBusinessId:'22345678-1234-4234-8234-123456789abc',organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'};
 const view={requestId,localVenueId:'32345678-1234-4234-8234-123456789abc',environment:'test',expiresAt:new Date(Date.now()+600000).toISOString(),state:'awaiting_cloud'};
 test('inspection never approves; approval uses only an offered business and stays recoverable after a lost reply',async()=>{
-  const calls:{path:string;body?:Record<string,string>}[]=[];let lose=false;
-  const controller=new PairingController(()=>{},async<T>(path:string,body?:Record<string,string>):Promise<ApiResult<T>>=>{
+  const calls:{path:string;body?:Record<string,unknown>}[]=[];let lose=false;
+  const controller=new PairingController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
     calls.push({path,body});
     return lose?{ok:false,status:0,code:'network_error',retryAfterMs:0}:{ok:true,value:(path.endsWith('businesses')?{businesses:[business]}:path.endsWith('inspect')?view:{...view,...business,state:'awaiting_local'}) as T};
   });
@@ -46,8 +46,8 @@ test('changing accounts while approval waits discards the old approval',async()=
 });
 test('multiple businesses require an explicit choice from the permitted list',async()=>{
   const second={...business,organisationId:'42345678-1234-4234-8234-123456789abc',legalBusinessId:'52345678-1234-4234-8234-123456789abc',organisationName:'Other group',legalBusinessName:'Other SL'};
-  const approvals:Record<string,string>[]=[];
-  const controller=new PairingController(()=>{},async<T>(path:string,body?:Record<string,string>):Promise<ApiResult<T>>=>{
+  const approvals:Record<string,unknown>[]=[];
+  const controller=new PairingController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
     if(path.endsWith('approve'))approvals.push(body!);
     return {ok:true,value:(path.endsWith('businesses')?{businesses:[business,second]}:path.endsWith('inspect')?view:{...view,...second,state:'awaiting_local'}) as T};
   });

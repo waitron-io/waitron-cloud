@@ -29,7 +29,7 @@ function validResult(path: string, value: unknown): boolean {
   if (path.endsWith('/request')) return data.status === 'accepted';
   return path === '/password-reset/complete' && data.status === 'completed';
 }
-export async function accountRequest<T>(path: string, body?: Record<string, any>): Promise<ApiResult<T>> {
+export async function accountRequest<T>(path: string, body?: Record<string, unknown>): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
   if (path.startsWith('/recovery/') || path.startsWith('/remote-access/') || (path === '/alerts' && body) || path === '/backups/list' || path === '/session/activity' || path === '/logout' || path === '/installations/revoke' || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove') {

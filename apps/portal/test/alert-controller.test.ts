@@ -10,7 +10,7 @@ test('account changes fence pending preference replies and clear private choices
 });
 test('preferences survive a reload, report uncertain writes and preserve retry delays across accounts',async()=>{
  let mode='ok';const calls:unknown[]=[];
- const c=new AlertController(()=>{},async<T>(path:string,body?:Record<string,string>):Promise<ApiResult<T>>=>{calls.push({path,body});return mode==='ok'?{ok:true,value:{enabled:true,locale:'es'} as T}:{ok:false,status:mode==='limited'?429:503,code:'unavailable',retryAfterMs:mode==='limited'?60000:0};});
+ const c=new AlertController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{calls.push({path,body});return mode==='ok'?{ok:true,value:{enabled:true,locale:'es'} as T}:{ok:false,status:mode==='limited'?429:503,code:'unavailable',retryAfterMs:mode==='limited'?60000:0};});
  c.account('one');await c.load();assert.equal(c.enabled,true);assert.equal(c.locale,'es');c.choose(false,'en');await c.save();assert.deepEqual(calls.at(-1),{path:'/alerts',body:{enabled:'off',locale:'en'}});
  mode='failed';await c.save();assert.equal(c.error,'alertsUncertain');assert.equal(c.saved,false);
  mode='limited';await c.load();const count=calls.length;c.account('two');await c.load();assert.equal(calls.length,count);assert(c.waiting>0);

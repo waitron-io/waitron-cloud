@@ -69,7 +69,7 @@ export async function passkeyResponse(c: Context, options: Options): Promise<Res
       throw new AccountHttpError(path === '/authentication/verify' ? 401 : 400,
         path === '/authentication/verify' ? 'credentials_invalid' : 'invalid_input');
     }
-    if (error instanceof IdentityError && error.code === 'credentials_invalid') throw new AccountHttpError(403, 'forbidden');
+    if (error instanceof IdentityError && error.code === 'credentials_invalid') throw new AccountHttpError(403, 'credentials_invalid');
     throw error;
   }
 }
