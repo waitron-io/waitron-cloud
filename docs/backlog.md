@@ -199,7 +199,7 @@ mobile notifications separately.
 | Customer model | Support an organisation with several legal businesses and tax identities across countries from the outset. A venue belongs to one organisation at a time. Focus signup on one owner with one venue or several venues in the same city; defer the ownership-transfer workflow. |
 | Cloud staff access | Customer-approved, time-limited support access and an explicitly authorised, audited emergency route are agreed. Define platform roles, eligible approvers, grant scope and enforcement. Possible on-prem SSH support requires separate, explicit customer approval for a limited period. |
 | Residency | Spain is the first deployment country. Define the country policy for operational data, backups, archives, analytics, identities, logs and messages; verify AWS service locations and actual obligations before making customer promises. |
-| Cells | Venues are independently placed, with a shared gateway per cell and stable customer-facing addresses on movement. Short remote-access interruptions during cell replacement are accepted. Define group size, availability-zone layout, recovery-time target and tested replacement. Specify shared dependencies, movement and staged rollout; keep backups and portal recovery independent of gateway machines. |
+| Cells | Venues are independently placed, with a shared gateway per cell and stable customer-facing addresses on movement. The local two-cell workflow now stages a revision-bound destination, cancels a failed apply without replacing the source, requires a tested destination manifest sequence before commit, preserves hostnames/certificates and publishes newer source/destination manifests. Its 2026-09-26 Docker run reconnected the fresh destination peer in 1,321 ms while the other venue stayed source-only. This is not a production target. Define group size, availability-zone layout and recovery-time objective; repeat movement with the selected gateway deployment, provider network, DNS/certificate reconciler and appliance automation. Keep backups and portal recovery independent of gateway machines. |
 | Provider support | AWS is the first provider, deploying in Spain. Select and verify the required region and services. Keep Google Cloud as a future target and define the evidence needed to support it. Decide separately whether cross-provider failover is wanted. |
 | Product packages | Remote access and backups are the initial paid services. Address lookup and transactional account email are planned free services for open-source Waitron with a Cloud login and per-user limits; mobile notifications remain a candidate. Define their release scope, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
 | Usage policy | Define lookup and other usage units, customer visibility, allowances and excess-use behaviour. Decide which measurements affect pricing and how retries, failed calls, cached results and batches count. |
@@ -402,9 +402,15 @@ mobile notifications separately.
 - **Provisioning and placement.** Use Kubernetes for orchestration when needed;
   cluster provisioning and manifests are deferred until there is a service to deploy
   and a concrete operational need. Country/provider/cell registry, repeatable resource
-  creation, recovery from partial failures, capacity and customer movement.
-  Place venues independently, preserve their addresses on movement and test replacement
-  against an explicit recovery-time target. Define how established connections and
+  creation, recovery from partial failures, capacity and customer movement. The local
+  movement state machine now reserves a destination without replacing the source, rejects
+  competing/stale operations, retains durable retry results and revokes the old route only
+  after the destination manifest was applied and tested. The two-cell proof preserves the
+  venue's hostnames and certificate fingerprints, isolates the other venue and measures a
+  1,321 ms fresh-peer reconnection; it also proves failed-apply cancellation leaves the
+  source healthy. Repeat this with provider-native cells, the DNS/certificate reconciler
+  and appliance configuration before choosing an explicit recovery-time target.
+  Define how established connections and
   backups continue during a portal outage, including credential expiry and revocation.
   The [local control-plane outage drill](control-plane-outages.md) now stops the real account
   API process while a gateway HTTP route and TLS SeaweedFS transfer continue under their
