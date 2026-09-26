@@ -1,6 +1,6 @@
 import type {Pool,PoolClient} from 'pg';
 import type {EmailOutbox} from './email-outbox.ts';
-import type {IncidentKind} from './service-alert.ts';
+import type {IncidentKind,ServiceAlert} from './service-alert.ts';
 import {transaction} from './transaction.ts';
 export interface MonitorConfig {probeStaleSeconds?:number;certificateWarningDays?:number}
 export class MonitorWorker {
@@ -75,9 +75,16 @@ export class MonitorWorker {
    WHERE v.id=$1 AND m.is_owner AND a.disabled_at IS NULL AND c.email_verified_at IS NOT NULL AND p.enabled
    AND ($2='open' OR EXISTS(SELECT 1 FROM service_alert_deliveries d JOIN email_outbox e ON e.id=d.outbox_id
     WHERE d.incident_id=$3 AND d.revision=$4 AND d.account_id=a.id AND d.state='open' AND e.status='sent'))`,[venueId,status,row.id,previous?.revision??0]);
-  for(const recipient of recipients.rows){
-   const outboxId=await this.#outbox.enqueue(client,'service_alert',{email:recipient.email,locale:recipient.locale,incidentId:row.id,revision:row.revision,venueId,issue:kind,state:status,...evidence});
-   await client.query('INSERT INTO service_alert_deliveries(outbox_id,incident_id,revision,state,account_id) VALUES($1,$2,$3,$4,$5)',[outboxId,row.id,row.revision,status,recipient.id]);
+  for(let offset=0;offset<recipients.rows.length;offset+=100){
+   const batch=recipients.rows.slice(offset,offset+100);
+   const messages:ServiceAlert[]=batch.map(recipient=>({email:recipient.email,locale:recipient.locale,incidentId:row.id,revision:row.revision,venueId,issue:kind,state:status,...evidence}));
+   const outboxIds=await this.#outbox.enqueueServiceAlerts(client,messages);
+   const parameters:unknown[]=[];
+   const values=batch.map((recipient,index)=>{
+    const base=index*5;parameters.push(outboxIds[index],row.id,row.revision,status,recipient.id);
+    return`($${base+1},$${base+2},$${base+3},$${base+4},$${base+5})`;
+   });
+   await client.query(`INSERT INTO service_alert_deliveries(outbox_id,incident_id,revision,state,account_id) VALUES ${values.join(',')}`,parameters);
   }
  }
  async status(){return monitorStatus(this.#pool);}

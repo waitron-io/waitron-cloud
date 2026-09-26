@@ -261,6 +261,39 @@ test('changing email language preserves the queued alert and renders the current
  await monitor.schedule();await contact(901);await monitor.runOnce();await db.pool.query("UPDATE account_alert_preferences SET locale='es'");await deliver();
  assert.equal(sent.length,1);assert.equal((sent[0] as {locale:string}).locale,'es');assert.equal((await alerts())[0].status,'sent');
 });
+test('many-owner alert fan-out uses bounded statements and remains atomic across restart',async()=>{
+ const emails=['monitor@example.test'];
+ for(let n=1;n<=102;n++)emails.push(`monitor-owner-${n}@example.test`);
+ await db.pool.query('CREATE TABLE fixture_alert_accounts(n integer PRIMARY KEY,id uuid NOT NULL UNIQUE DEFAULT gen_random_uuid())');
+ await db.pool.query('INSERT INTO fixture_alert_accounts(n) SELECT generate_series(1,102)');
+ await db.pool.query('INSERT INTO cloud_accounts(id) SELECT id FROM fixture_alert_accounts');
+ await db.pool.query("INSERT INTO cloud_credentials(account_id,email,email_verified_at) SELECT id,'monitor-owner-'||n||'@example.test',clock_timestamp() FROM fixture_alert_accounts");
+ await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) SELECT id,$1,true FROM fixture_alert_accounts',[owner.organisationId]);
+ await db.pool.query("INSERT INTO account_alert_preferences(account_id,enabled,locale) SELECT id,true,'en' FROM fixture_alert_accounts");
+ await db.pool.query(`CREATE TABLE fixture_alert_statement_counts(name text PRIMARY KEY,calls integer NOT NULL DEFAULT 0);
+  INSERT INTO fixture_alert_statement_counts(name) VALUES('outbox'),('deliveries');
+  CREATE FUNCTION fixture_count_alert_statement() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN UPDATE fixture_alert_statement_counts SET calls=calls+1 WHERE name=TG_ARGV[0];RETURN NULL;END$$;
+  CREATE TRIGGER fixture_count_alert_outbox AFTER INSERT ON email_outbox FOR EACH STATEMENT EXECUTE FUNCTION fixture_count_alert_statement('outbox');
+  CREATE TRIGGER fixture_count_alert_deliveries AFTER INSERT ON service_alert_deliveries FOR EACH STATEMENT EXECUTE FUNCTION fixture_count_alert_statement('deliveries')`);
+ try{
+  await monitor.schedule();await contact(901);await monitor.runOnce();
+  let rows=await alerts();assert.equal(rows.length,emails.length);
+  const statements=await db.pool.query('SELECT name,calls FROM fixture_alert_statement_counts ORDER BY name');
+  assert.deepEqual(statements.rows.map(row=>[row.name,row.calls]),[['deliveries',2],['outbox',2]]);
+  for(const row of rows)for(const email of [emails[0]!,emails.at(-1)!])assert(!row.payload.includes(Buffer.from(email)));
+  const restarted=new MonitorWorker(db.secondPool,db.outbox);await due();await restarted.runOnce();assert.equal((await alerts()).length,emails.length);
+  const worker=new EmailWorker(db.pool,db.outbox,{async sendVerification(){},async sendPasswordReset(){},async sendPasswordChanged(){},async sendServiceAlert(message:unknown){sent.push(message);}});
+  while(await worker.runOnce()){}assert.equal(sent.length,emails.length);
+  await db.pool.query('ALTER TABLE service_alert_deliveries ADD CONSTRAINT fixture_reject_recovery CHECK(revision<>2)');
+  await contact(0);await assert.rejects(restarted.runOnce(),/check constraint/);
+  rows=await alerts();assert.equal(rows.length,emails.length);
+  const incident=(await db.pool.query("SELECT status,revision FROM venue_incidents WHERE kind='disconnected'")).rows[0];assert.deepEqual(incident,{status:'open',revision:1});
+ }finally{
+  await db.pool.query('ALTER TABLE service_alert_deliveries DROP CONSTRAINT IF EXISTS fixture_reject_recovery');
+  await db.pool.query('DROP TRIGGER IF EXISTS fixture_count_alert_outbox ON email_outbox;DROP TRIGGER IF EXISTS fixture_count_alert_deliveries ON service_alert_deliveries;DROP FUNCTION IF EXISTS fixture_count_alert_statement();DROP TABLE IF EXISTS fixture_alert_statement_counts');
+  await db.pool.query('DROP TABLE IF EXISTS fixture_alert_accounts');
+ }
+});
 test('continuous monitoring skips locked installations and survives a failed observation',async()=>{
  const r=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await r.start(binding);await r.approveCloud(binding,owner.accountId);await r.approveLocal(binding,randomUUID());const other=await r.complete(binding);
