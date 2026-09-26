@@ -53,8 +53,10 @@ export async function stageReadable(
     !Number.isSafeInteger(contentLength) ||
     contentLength < 1 ||
     contentLength > maximum
-  )
+  ) {
+    body.destroy();
     throw new Error("backup.object_invalid");
+  }
 
   const directory = await mkdtemp(
       join(options.temporaryRoot ?? tmpdir(), "cloud-backup-object-"),

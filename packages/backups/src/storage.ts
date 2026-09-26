@@ -187,6 +187,14 @@ export class BackupObjects {
     options: StageOptions = {},
   ): Promise<ReplayableObject> {
     const operationSignal = abortSignal(options);
+    return this.#stage(key, streamKey, options, operationSignal);
+  }
+  async #stage(
+    key: string,
+    streamKey: string | undefined,
+    options: StageOptions,
+    operationSignal: AbortSignal,
+  ): Promise<ReplayableObject> {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const result = await this.#client.send(
@@ -262,7 +270,12 @@ export class BackupObjects {
       } catch (error) {
         if (operationSignal.aborted) throw new Error("backup.cancelled");
         if (status(error) === 412) {
-          const prior = await this.stage(key, streamKey, options);
+          const prior = await this.#stage(
+            key,
+            streamKey,
+            options,
+            operationSignal,
+          );
           try {
             if (
               prior.receipt.digest !== expected.digest ||
@@ -281,10 +294,19 @@ export class BackupObjects {
     throw new Error("backup.object_invalid");
   }
   async remove(key: string): Promise<void> {
-    await this.#client.send(
-      new DeleteObjectCommand({ Bucket: this.location.bucket, Key: key }),
-      { abortSignal: AbortSignal.timeout(10000) },
-    );
+    const operationSignal = AbortSignal.timeout(10000);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await this.#client.send(
+          new DeleteObjectCommand({ Bucket: this.location.bucket, Key: key }),
+          { abortSignal: operationSignal },
+        );
+        return;
+      } catch (error) {
+        if (attempt === 0 && transient(error)) continue;
+        throw error;
+      }
+    }
   }
   close() {
     this.#client.destroy();

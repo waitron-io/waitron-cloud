@@ -256,6 +256,54 @@ test("conditional conflicts stream and compare existing bytes", async () => {
   });
 });
 
+test("conditional conflict checks stay inside the original operation deadline", async () => {
+  const source = bufferObject(Buffer.from("same encrypted bytes")),
+    signals: AbortSignal[] = [];
+  await fakeS3(async (command, options) => {
+    assert(options?.abortSignal);
+    signals.push(options.abortSignal);
+    if (command.constructor.name === "PutObjectCommand")
+      throw Object.assign(new Error("exists"), {
+        $metadata: { httpStatusCode: 412 },
+      });
+    return {
+      $metadata: { httpStatusCode: 200 },
+      Body: Readable.from([Buffer.from("same encrypted bytes")]),
+      ContentLength: source.receipt.size,
+      ETag: "existing",
+    };
+  }, async () => {
+    const objects = new BackupObjects(location, credentials);
+    try {
+      await objects.putStaged("snapshots/one", source);
+    } finally {
+      objects.close();
+    }
+  });
+  assert.equal(signals.length, 2);
+  assert.strictEqual(signals[1], signals[0]);
+});
+
+test("deletes retry one transient storage failure", async () => {
+  let attempts = 0;
+  await fakeS3(async (command) => {
+    assert.equal(command.constructor.name, "DeleteObjectCommand");
+    if (attempts++ === 0)
+      throw Object.assign(new Error("temporary"), {
+        $metadata: { httpStatusCode: 503 },
+      });
+    return { $metadata: { httpStatusCode: 204 } };
+  }, async () => {
+    const objects = new BackupObjects(location, credentials);
+    try {
+      await objects.remove("snapshots/one");
+    } finally {
+      objects.close();
+    }
+  });
+  assert.equal(attempts, 2);
+});
+
 test("SSE-C staged writes still require provider encryption confirmation", async () => {
   const source = bufferObject(Buffer.from("encrypted archive")),
     streamKey = randomBytes(32).toString("base64");

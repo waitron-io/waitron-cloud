@@ -108,6 +108,16 @@ test("staging refuses an advertised object above the unchanged 512 MiB ceiling",
   assert.deepEqual(await readdir(root), []);
 });
 
+test("invalid advertised lengths close the unread provider body", async () => {
+  const body = Readable.from([Buffer.from("unread")]);
+  await assert.rejects(
+    stageReadable(body, Number.NaN, { temporaryRoot: root }),
+    /^Error: backup.object_invalid$/,
+  );
+  assert.equal(body.destroyed, true);
+  assert.deepEqual(await readdir(root), []);
+});
+
 test("caller cancellation stops staging and removes its partial file", async () => {
   const controller = new AbortController();
   const operation = stageReadable(repeated(0x62, 1024 * 1024, 5), 1024 * 1024, {
