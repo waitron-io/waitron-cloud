@@ -441,9 +441,15 @@ mobile notifications separately.
   incident and recovery messages; delivery rechecks route authority, and opt-out or
   revocation suppresses queued mail. Current incident and observation tables are bounded
   current-state projections; terminal delivery links follow the explicit cleanup cutoff.
-  Next: choose that cutoff, measure deployment-scale scheduling and recipient fan-out,
-  add escalation/quiet
-  periods and rollout pause criteria.
+  The local worker-scale receipt now separates scheduling from polling, runs scheduling
+  once a minute, bounds monitor/email claim batches at four and batches encrypted alert
+  insertion in groups of 100. On an Apple M5 Pro with 18 logical CPUs, its 1,000-venue/200-recipient
+  fixture reduced monitor processing from 7,030 ms with 1,001 sweeps to 2,365 ms with one,
+  incident fan-out from 211 ms to 28 ms and delivery backlog lag from 1,558 ms to 470 ms.
+  Locked venues, restart completion and shutdown fencing remained intact. These are local
+  measurements, not capacity promises. Next: choose the terminal-delivery cutoff, repeat
+  the receipt in the selected deployment environment, and add escalation/quiet periods
+  and rollout pause criteria.
 - **Usage metering.** Attribute lookups/API calls, reports, storage, transfers,
   messages and compute to customers and services. Show consumption and allowances,
   track provider costs and define limits. Any billing records need durable capture,
@@ -473,8 +479,11 @@ mobile notifications separately.
   now removes completed jobs and already-deleted tombstone metadata in bounded chunks
   after exact operator cutoffs; pending/running/failed jobs, current points, protected
   snapshots and recovery references remain. Choose the production cutoffs before use.
-  Measure scheduling sweeps at the intended deployment scale and tune their cadence
-  separately from job polling; the local concurrency proof covers only small fixtures.
+  A reproducible 1,000-venue local fixture now measures scheduling separately from job
+  polling. It reduced 1,000 repeated empty backup sweeps from 3,602 ms to one 4 ms cadence
+  sweep while preserving the 100-row query bound. Repeat this with the selected database
+  topology and deployment-sized venue distribution before setting worker counts or
+  scheduling objectives.
   The local two-venue proof now exercises Waitron's stream, sealed recovery kit and
   cold-restore contracts. Production still needs dynamic writer/reader credential
   delivery, rotation and revocation; the selected provider's prefix and conditional

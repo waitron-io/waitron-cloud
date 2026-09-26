@@ -55,11 +55,13 @@ pnpm monitor:status
 
 A scheduling sweep adds at most 100 missing venues. Each transaction processes one due
 venue and saves its observation, incident transition and queued messages together.
-Concurrent monitors skip rows already being processed. If enqueueing fails, the whole
+The continuous worker runs a sweep at startup and then once a minute. Its one-second
+idle poll does not repeat that sweep. Up to four venue transactions run together, and
+concurrent monitors skip rows already being processed. If enqueueing fails, the whole
 observation rolls back and retries after 30 seconds. Locked installations are skipped
 for the same interval, without marking their check fresh. A failing venue does not
 stop the continuous process or hold up other due venues. `--once` schedules and processes at most one venue.
-The continuous command polls when idle and stops claiming new work on shutdown.
+The continuous command stops claiming new work on shutdown and finishes the active batch.
 
 The route freshness and certificate warning thresholds have conservative defaults. Change
 them only when your local schedule needs different bounds:
@@ -132,6 +134,9 @@ Repeated scans and worker restarts do not queue the same incident transition twi
 Each recipient has a unique record for that incident revision. Recovery mail goes only
 to current owners whose opening message was recorded as sent. New owners and people
 opting in mid-incident can see the current status in the portal and receive future alerts.
+One transition encrypts and inserts recipient messages in groups of at most 100. The
+matching delivery rows use the same bound and transaction, so a failed group rolls back
+the incident and every message instead of leaving a partial fan-out.
 
 Before handing an alert to the transport, the email worker rechecks its delivery claim,
 current ownership, account status, verified email address, preference,
@@ -185,9 +190,43 @@ The receipt records elapsed time and open-incident count for the route-healthy b
 route outage and recovery, stale worker, invalid trust, gateway outage and recovery, and
 certificate warning phases. These are local measurements, not production availability or
 delivery guarantees.
-Before deployment, add retention for incident/delivery history and scheduler/fan-out
-measurements at the intended scale.
+Before deployment, add retention for incident/delivery history and repeat the
+scheduler/fan-out measurements in the selected deployment environment.
 Define outage escalation and quiet-period policies with actual operating data. Live email
 provider setup, Spain processing requirements and delivery monitoring remain separate
 launch work. This local implementation creates no cloud resources and sends no live
 customer messages during its tests.
+
+## Measure worker scheduling locally
+
+Use the disposable PostgreSQL runner to reproduce the worker measurement. The baseline
+mode records the old per-claim scheduling pattern. The comparison mode embeds that
+baseline and measures the current cadence and bounded concurrency with the same fixture.
+
+```sh
+node scripts/test-postgres.mjs exec node scripts/worker-scheduling-receipt.mjs \
+  --baseline /tmp/cloud-worker-scheduling-baseline.json
+node scripts/test-postgres.mjs exec node scripts/worker-scheduling-receipt.mjs \
+  --compare /tmp/cloud-worker-scheduling-baseline.json \
+  /tmp/cloud-worker-scheduling-receipt.json
+node scripts/verify-worker-scheduling-receipt.mjs \
+  /tmp/cloud-worker-scheduling-receipt.json
+```
+
+The 2026-09-26 local run used Node 26.7.0 on an Apple M5 Pro with 18 logical CPUs. Its fixture had
+1,000 venues, 1,000 snapshot candidates and 200 alert recipients. Every scheduling
+query kept the 100-row limit. The old backup loop repeated 1,000 empty scheduling sweeps
+in 3,602 ms. The current cadence made one empty sweep in 4 ms. Monitoring 1,000 due
+venues fell from 7,030 ms with 1,001 scheduling sweeps to 2,365 ms with one sweep.
+
+The same run queued 200 encrypted incident messages in 28 ms instead of 211 ms. Four
+email claim slots delivered them in 455 ms, with 470 ms from the oldest queue timestamp
+to the last completion. The previous single-slot run took 1,353 ms and 1,558 ms
+respectively. A locked venue did not block another venue, and a restarted worker drained
+all 400 opening and recovery messages without loss. Shutdown finished the in-flight send
+in 13 ms and claimed no later row. Peak resident memory was 203 MiB, compared with 192
+MiB in the untuned run.
+
+These figures describe one local machine and fixture. Use the receipt to compare code
+changes, not to promise production throughput or availability. Repeat it with the chosen
+database, mail relay limits and deployment-sized venue distribution before launch.

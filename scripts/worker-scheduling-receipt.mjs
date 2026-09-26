@@ -7,6 +7,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {database} from '../packages/account-http/test/fixtures.ts';
 import {EmailWorker} from '../packages/registration/src/email-outbox.ts';
 import {MonitorWorker} from '../packages/registration/src/monitoring.ts';
+import {runWorkerLoop} from '../packages/registration/src/worker-loop.ts';
 import {BackupWorker} from '../packages/backups/src/worker.ts';
 import {verifyWorkerSchedulingReceipt} from './verify-worker-scheduling-receipt.mjs';
 
@@ -47,7 +48,7 @@ async function timed(action){
   return{durationMs:performance.now()-started,operations};
 }
 
-async function measure(db){
+async function measure(db,tuned){
   let peakRssBytes=process.memoryUsage().rss;
   const sampleMemory=()=>{peakRssBytes=Math.max(peakRssBytes,process.memoryUsage().rss);};
   const outbox=db.outbox,monitor=new MonitorWorker(db.pool,outbox);
@@ -67,9 +68,13 @@ async function measure(db){
       previous=current;total+=count;if(!count)return total;
     }
   });
-  const repeatedBackupSweeps=fixture.venues;
   const repeatedBackupStarted=performance.now();
-  for(let n=0;n<repeatedBackupSweeps;n++)assert.equal(await backup.schedule(),0);
+  let repeatedBackupSweeps=0;
+  if(tuned){
+    const stop=new AbortController();
+    await runWorkerLoop({signal:stop.signal,concurrency:1,scheduleIntervalMs:60000,pollIntervalMs:1000,now:()=>0,
+      schedule:async()=>{repeatedBackupSweeps++;assert.equal(await backup.schedule(),0);},runOnce:async()=>false,wait:async()=>{stop.abort();}});
+  }else for(let n=0;n<fixture.venues;n++){assert.equal(await backup.schedule(),0);repeatedBackupSweeps++;}
   backupScheduling.repeatedIdleSweeps=repeatedBackupSweeps;
   backupScheduling.repeatedIdleSweepDurationMs=performance.now()-repeatedBackupStarted;
   sampleMemory();
@@ -82,13 +87,19 @@ async function measure(db){
   const monitorPolling=await timed(async()=>{
     let total=0;
     try{
+     if(tuned){
+      const stop=new AbortController();
+      await runWorkerLoop({signal:stop.signal,concurrency:fixture.emailWorkers,scheduleIntervalMs:60000,pollIntervalMs:1000,now:()=>0,
+       schedule:async()=>{pollScheduleSweeps++;await monitor.schedule();},runOnce:async()=>{const ran=await monitor.runOnce();if(ran)total++;return ran;},wait:async()=>{stop.abort();}});
+     }else{
       await monitor.schedule();pollScheduleSweeps++;
       assert.equal(await monitor.runOnce(),true);total++;
       await monitor.schedule();pollScheduleSweeps++;
       assert.equal(await monitor.runOnce(),true);total++;
+      for(;;){await monitor.schedule();pollScheduleSweeps++;if(!await monitor.runOnce())break;total++;}
+     }
       unlockedVenueCompleted=Number((await db.pool.query('SELECT count(*) FROM venue_monitors WHERE venue_id<>$1 AND checked_at IS NOT NULL',[locked.venue_id])).rows[0].count)>0;
     }finally{await lock.query('ROLLBACK');lock.release();}
-    for(;;){await monitor.schedule();pollScheduleSweeps++;if(!await monitor.runOnce())break;total++;}
     return total;
   });
   monitorPolling.scheduleSweeps=pollScheduleSweeps;
@@ -107,7 +118,13 @@ async function measure(db){
   const mailer={async sendVerification(){},async sendPasswordReset(){},async sendPasswordChanged(){},async sendServiceAlert(message){delivered.push(message);}};
   const emailDelivery=await timed(async()=>{
     const worker=new EmailWorker(db.pool,outbox,mailer);
-    let total=0;while(await worker.runOnce())total++;return total;
+    let total=0;
+    if(tuned){
+      const stop=new AbortController();
+      await runWorkerLoop({signal:stop.signal,concurrency:fixture.emailWorkers,scheduleIntervalMs:60000,pollIntervalMs:1000,
+        runOnce:async()=>{const ran=await worker.runOnce();if(ran)total++;return ran;},wait:async()=>{stop.abort();}});
+    }else while(await worker.runOnce())total++;
+    return total;
   });
   const lag=await db.pool.query("SELECT extract(epoch FROM(max(finished_at)-min(created_at)))*1000 AS ms FROM email_outbox WHERE kind='service_alert'");
   emailDelivery.backlogLagMs=Number(lag.rows[0].ms);
@@ -127,7 +144,7 @@ async function measure(db){
   let enter,release;const entered=new Promise(resolve=>{enter=resolve;}),gate=new Promise(resolve=>{release=resolve;});
   const shutdownMailer={...mailer,async sendPasswordChanged(message){if(message.email==='shutdown-first@example.test'){enter();await gate;}}};
   const shutdownWorker=new EmailWorker(db.pool,outbox,shutdownMailer,{sendTimeoutMs:5000}),controller=new AbortController();
-  const loop=(async()=>{while(!controller.signal.aborted){if(!await shutdownWorker.runOnce())await delay(1);}})();
+  const loop=tuned?runWorkerLoop({signal:controller.signal,concurrency:1,scheduleIntervalMs:60000,pollIntervalMs:1,runOnce:()=>shutdownWorker.runOnce(),wait:milliseconds=>delay(milliseconds)}):(async()=>{while(!controller.signal.aborted){if(!await shutdownWorker.runOnce())await delay(1);}})();
   await entered;const stoppedAt=performance.now();controller.abort();await delay(10);release();await loop;
   const signalToStopMs=performance.now()-stoppedAt;
   const shutdownRows=await db.pool.query('SELECT id,status,attempts FROM email_outbox WHERE id=ANY($1::uuid[])',[ [firstId,secondId] ]);
@@ -149,7 +166,7 @@ async function measure(db){
 const args=argumentsFor(process.argv.slice(2)),startRssBytes=process.memoryUsage().rss,db=await database();
 try{
   await seed(db);
-  const result=await measure(db);
+  const result=await measure(db,args.mode==='compare');
   const prior=args.mode==='compare'?verifyWorkerSchedulingReceipt(JSON.parse(await readFile(args.baseline,'utf8'))):undefined;
   const receipt={
     schemaVersion:1,mode:args.mode,fixture,

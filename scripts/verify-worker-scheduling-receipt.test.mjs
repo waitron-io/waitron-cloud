@@ -3,13 +3,18 @@ import {test} from 'node:test';
 import {verifyWorkerSchedulingReceipt} from './verify-worker-scheduling-receipt.mjs';
 
 function validReceipt(){
-  const phase=()=>({durationMs:12.5,operations:4});
+  const measurement=()=>({
+    monitorScheduling:{durationMs:12.5,operations:240},
+    backupScheduling:{durationMs:12.5,operations:720,repeatedIdleSweeps:1,repeatedIdleSweepDurationMs:3.5},
+    monitorPolling:{durationMs:12.5,operations:240,scheduleSweeps:1},
+    alertFanout:{durationMs:12.5,operations:32},
+    emailDelivery:{durationMs:12.5,operations:32,backlogLagMs:14.5},
+  });
   return {
-    schemaVersion:1,
+    schemaVersion:1,mode:'compare',
     fixture:{venues:240,recipients:32,backupPoints:240,emailWorkers:4,scheduleLimit:100},
     machine:{platform:'darwin',architecture:'arm64',cpu:'Apple M5 Pro',logicalCpus:18,node:'v24.8.0'},
-    baseline:{monitorScheduling:phase(),backupScheduling:phase(),monitorPolling:phase(),alertFanout:phase(),emailDelivery:phase()},
-    final:{monitorScheduling:phase(),backupScheduling:phase(),monitorPolling:phase(),alertFanout:phase(),emailDelivery:phase()},
+    baseline:measurement(),final:measurement(),
     correctness:{maximumScheduleInsert:100,unlockedVenueCompleted:true,restartRemaining:0,delivered:32,queued:32},
     memory:{startRssBytes:100_000_000,peakRssBytes:110_000_000},
     shutdown:{signalToStopMs:15.2,inFlightCompleted:true,postSignalClaims:0},
@@ -49,4 +54,18 @@ test('rejects non-finite timings and memory readings',()=>{
   assert.throws(()=>verifyWorkerSchedulingReceipt(timing),/duration/);
   const memory=validReceipt();memory.memory.peakRssBytes=Number.POSITIVE_INFINITY;
   assert.throws(()=>verifyWorkerSchedulingReceipt(memory),/memory/);
+});
+
+test('rejects missing cadence evidence and phase counts that do not match the fixture',()=>{
+  const cadence=validReceipt();delete cadence.final.monitorPolling.scheduleSweeps;
+  assert.throws(()=>verifyWorkerSchedulingReceipt(cadence),/schedule sweeps/);
+  const count=validReceipt();count.final.emailDelivery.operations--;
+  assert.throws(()=>verifyWorkerSchedulingReceipt(count),/emailDelivery operations/);
+});
+
+test('accepts a baseline receipt whose mirrored final section records the old loop',()=>{
+  const receipt=validReceipt();receipt.mode='baseline';
+  receipt.baseline.monitorPolling.scheduleSweeps=241;receipt.final.monitorPolling.scheduleSweeps=241;
+  receipt.baseline.backupScheduling.repeatedIdleSweeps=240;receipt.final.backupScheduling.repeatedIdleSweeps=240;
+  assert.doesNotThrow(()=>verifyWorkerSchedulingReceipt(receipt));
 });
