@@ -212,6 +212,8 @@ export class HistoryCleanup {
         ids.push(...plain.rows.map(row => row.id));
       }
       if (ids.length) {
+        // Selection locks the alert delivery and outbox row. Its usage event and terminal
+        // status cannot change before these dependent rows are removed.
         await client.query('DELETE FROM service_alert_deliveries WHERE outbox_id=ANY($1::uuid[])', [ids]);
         const result = await client.query(`DELETE FROM email_outbox e WHERE e.id=ANY($2::uuid[]) AND ${terminal}
           AND NOT ${currentIncident} RETURNING e.id`, [cutoff, ids]);

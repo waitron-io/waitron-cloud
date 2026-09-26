@@ -71,7 +71,10 @@ test('identical reports keep one stable immutable event and conflicting source r
  ])await expectCode(transaction(pool,client=>recordUsageEvent(client,{...same,...changed})),'usage_conflict');
  await assert.rejects(pool.query('UPDATE usage_events SET quantity=1'),/usage_event_immutable/);
  await assert.rejects(pool.query('DELETE FROM usage_events'),/usage_event_immutable/);
- assert.equal(await count('usage_events'),1);
+ const alertReference=randomUUID(),alert=input({type:'message.service_alert_sent',quantity:1n,sourceKind:'service_alert',sourceReference:alertReference});
+ await transaction(pool,client=>recordUsageEvent(client,alert));
+ await expectCode(transaction(pool,client=>recordUsageEvent(client,{...alert,type:'message.service_alert_cancelled'})),'usage_conflict');
+ assert.equal(await count('usage_events'),2);
 });
 
 test('reports reject foreign venues and invalid fixed fields before writing',async()=>{
@@ -123,6 +126,23 @@ test('owner summary is passive, tenant-scoped, precision-safe and honest about f
  await expectCode(store.summary(session.token,{organisationId}),'permission_denied');
 });
 
+test('a summary that outlives its session is refused after the aggregate wait',async()=>{
+ const session=await transaction(pool,client=>createSession(client,accountId));
+ await pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '250 milliseconds' WHERE account_id=$1",[accountId]);
+ const blocker=await admin.connect();await blocker.query('BEGIN');await blocker.query(`LOCK TABLE ${schema}.usage_events IN ACCESS EXCLUSIVE MODE`);
+ const summary=new UsageStore(pool).summary(session.token,{organisationId}).then(value=>({value}),error=>({error}));
+ try{
+  for(let attempt=0;attempt<100;attempt++){
+   const waiting=await admin.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[`${schema}_usage`]);
+   if(waiting.rowCount)break;
+   if(attempt===99)throw new Error('summary did not reach aggregate lock');
+   await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  await new Promise(resolve=>setTimeout(resolve,300));await blocker.query('COMMIT');
+  const outcome=await summary;assert('error' in outcome&&outcome.error&&typeof outcome.error==='object'&&'code' in outcome.error&&outcome.error.code==='session_expired');
+ }finally{await blocker.query('ROLLBACK').catch(()=>{});blocker.release();}
+});
+
 async function seedSources(){
  await pool.query("INSERT INTO backup_locations(venue_id,installation_id,endpoint,bucket,region) VALUES($1,$2,'https://storage.example.test','usage-bucket','test')",[venueId,installationId]);
  await pool.query("INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,1,'sealed')",[venueId]);
@@ -167,6 +187,12 @@ test('bounded reconciliation resumes to exact totals and a lost reply is idempot
  const status=await reconciler.status();
  assert.deepEqual(status.sources.map(source=>source.source),['backup_points','backup_recoveries','installation_operations','service_alerts']);
  assert.ok(status.sources.every(source=>source.lastAttemptedAt&&source.caughtUpAt));
+});
+
+test('a terminal administrative alert outcome cannot change after it becomes a usage source',async()=>{
+ await seedSources();const sent=(await pool.query("SELECT id FROM email_outbox WHERE status='sent'")).rows[0].id;
+ await assert.rejects(pool.query("UPDATE email_outbox SET status='cancelled' WHERE id=$1",[sent]),/email_outbox_terminal_status_immutable/);
+ assert.equal((await pool.query('SELECT status FROM email_outbox WHERE id=$1',[sent])).rows[0].status,'sent');
 });
 
 test('a failed reconciliation batch leaves no partial events or false freshness and can retry',async()=>{

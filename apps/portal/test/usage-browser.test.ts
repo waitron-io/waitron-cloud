@@ -46,6 +46,8 @@ for(const locale of ['en','es'] as const)test(`${locale} owner sees isolated mea
   await f.db.pool.query("UPDATE usage_reconciliation_sources SET caught_up_at='2026-09-26T12:05:00.000Z'");
   const refresh=page.getByRole('button',{name:locale==='en'?'Refresh measured usage':'Actualizar uso medido',exact:true});await refresh.press('Enter');
   await page.locator('time[datetime="2026-09-26T12:05:00.000Z"]').waitFor();
+  await page.getByText(locale==='en'?'Oldest reconciliation scan completed':'Conciliación más antigua completada',{exact:false}).waitFor();
+  await page.getByText(locale==='en'?'Restored snapshot bytes include receipts recorded after usage metering was installed. Earlier restores are not included.':'Los bytes de instantáneas restauradas incluyen los recibos registrados después de instalar la medición de uso. No se incluyen las restauraciones anteriores.',{exact:true}).waitFor();
   await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await window.axe.run(document)).violations),[]);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.screenshot({path:new URL(`../dist/usage-${locale}-phone.png`,import.meta.url).pathname,fullPage:true});
   await page.setViewportSize({width:1280,height:900});await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await window.axe.run(document)).violations),[]);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));

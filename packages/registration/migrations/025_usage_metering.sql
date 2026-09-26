@@ -30,6 +30,8 @@ CREATE TABLE usage_events (
  UNIQUE(event_type,source_kind,source_reference)
 );
 CREATE INDEX usage_events_organisation_type_idx ON usage_events(organisation_id,event_type,occurred_at,id);
+CREATE UNIQUE INDEX usage_events_service_alert_source_idx ON usage_events(source_kind,source_reference)
+ WHERE source_kind='service_alert';
 
 CREATE FUNCTION reject_usage_event_mutation() RETURNS trigger
 LANGUAGE plpgsql AS $$
@@ -39,6 +41,19 @@ END;
 $$;
 CREATE TRIGGER usage_events_immutable BEFORE UPDATE OR DELETE ON usage_events
  FOR EACH ROW EXECUTE FUNCTION reject_usage_event_mutation();
+
+-- Reconciliation derives the administrative message outcome from this status, so a terminal state is a fixed fact.
+CREATE FUNCTION reject_email_outbox_terminal_status_change() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+ IF OLD.status IN ('sent','failed','expired','cancelled') AND NEW.status<>OLD.status THEN
+  RAISE EXCEPTION 'email_outbox_terminal_status_immutable' USING ERRCODE='55000';
+ END IF;
+ RETURN NEW;
+END;
+$$;
+CREATE TRIGGER email_outbox_terminal_status_immutable BEFORE UPDATE OF status ON email_outbox
+ FOR EACH ROW EXECUTE FUNCTION reject_email_outbox_terminal_status_change();
 
 CREATE TABLE usage_reconciliation_sources (
  source text PRIMARY KEY CHECK(source IN ('backup_points','backup_recoveries','installation_operations','service_alerts')),

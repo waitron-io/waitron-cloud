@@ -93,9 +93,11 @@ export async function recordUsageEvent(client:PoolClient,input:UsageEventInput):
  const values=[input.organisationId,input.venueId,input.type,input.quantity.toString(),input.sourceKind,input.sourceReference,input.occurredAt];
  const inserted=await client.query<UsageRow>(`INSERT INTO usage_events
   (organisation_id,venue_id,event_type,quantity,source_kind,source_reference,occurred_at)
-  VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(event_type,source_kind,source_reference) DO NOTHING RETURNING *`,values);
- const row=inserted.rows[0]??(await client.query<UsageRow>(`SELECT * FROM usage_events
-  WHERE event_type=$1 AND source_kind=$2 AND source_reference=$3 FOR SHARE`,[input.type,input.sourceKind,input.sourceReference])).rows[0];
+  VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING RETURNING *`,values);
+ let row=inserted.rows[0];
+ if(!row)row=(input.sourceKind==='service_alert'
+  ?await client.query<UsageRow>('SELECT * FROM usage_events WHERE source_kind=$1 AND source_reference=$2 FOR SHARE',[input.sourceKind,input.sourceReference])
+  :await client.query<UsageRow>('SELECT * FROM usage_events WHERE event_type=$1 AND source_kind=$2 AND source_reference=$3 FOR SHARE',[input.type,input.sourceKind,input.sourceReference])).rows[0];
  if(!row||!same(row,input))throw new UsageError('usage_conflict');
  return receipt(row);
 }

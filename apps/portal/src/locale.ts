@@ -114,8 +114,8 @@ const en = {
 
   usageTitle:"Measured Cloud usage",
   usageIntro:"These totals measure Cloud activity for the selected organisation. They do not change service or create a charge.",
-  usageMeasuredThrough:"All durable sources measured through",
-  usageMayLag:"Recent activity can appear after the next reconciliation pass.",
+  usageMeasuredThrough:"Oldest reconciliation scan completed",
+  usageMayLag:"Transactions that finish after a scan can add earlier activity during a later pass.",
   usagePending:"Measurement is not complete yet. Totals can increase after reconciliation runs.",
   usageLatestEvent:"Latest measured activity",
   usageNoEvents:"No measured activity is recorded yet.",
@@ -124,6 +124,7 @@ const en = {
   usageOperations:"Cloud operations",usageInstallations:"Completed installations",usageProbes:"Monitoring probes",
   usageMessages:"Service alert outcomes",usageSent:"Sent",usageFailed:"Failed",usageExpired:"Expired",usageCancelled:"Cancelled",
   usageExclusions:"Continuous backup stream bytes and account email are not included.",
+  usageHistory:"Restored snapshot bytes include receipts recorded after usage metering was installed. Earlier restores are not included.",
   usageRefresh:"Refresh measured usage",usageUnavailable:"Measured usage is temporarily unavailable.",usageBytes:"bytes",
 
   viewSnapshots:'View snapshots', snapshotHistory:'Snapshot history', chooseSnapshot:'Choose a snapshot', noSnapshots:'No snapshots have been stored for this venue.',
@@ -302,8 +303,8 @@ const es: Copy = {
 
   usageTitle:"Uso medido de Cloud",
   usageIntro:"Estos totales miden la actividad de Cloud de la organización seleccionada. No cambian el servicio ni crean un cargo.",
-  usageMeasuredThrough:"Todas las fuentes duraderas medidas hasta",
-  usageMayLag:"La actividad reciente puede aparecer tras la siguiente conciliación.",
+  usageMeasuredThrough:"Conciliación más antigua completada",
+  usageMayLag:"Las transacciones que terminan después de una conciliación pueden añadir actividad anterior en una ejecución posterior.",
   usagePending:"La medición aún no está completa. Los totales pueden aumentar cuando se ejecute la conciliación.",
   usageLatestEvent:"Actividad medida más reciente",
   usageNoEvents:"Aún no hay actividad medida registrada.",
@@ -312,6 +313,7 @@ const es: Copy = {
   usageOperations:"Operaciones de Cloud",usageInstallations:"Instalaciones completadas",usageProbes:"Comprobaciones de supervisión",
   usageMessages:"Resultados de alertas de servicio",usageSent:"Enviadas",usageFailed:"Fallidas",usageExpired:"Caducadas",usageCancelled:"Canceladas",
   usageExclusions:"No se incluyen los bytes del flujo de copia continua ni el correo de la cuenta.",
+  usageHistory:"Los bytes de instantáneas restauradas incluyen los recibos registrados después de instalar la medición de uso. No se incluyen las restauraciones anteriores.",
   usageRefresh:"Actualizar uso medido",usageUnavailable:"El uso medido no está disponible temporalmente.",usageBytes:"bytes",
 
   viewSnapshots:'Ver instantáneas', snapshotHistory:'Historial de instantáneas', chooseSnapshot:'Elige una instantánea', noSnapshots:'No se han guardado instantáneas de este local.',

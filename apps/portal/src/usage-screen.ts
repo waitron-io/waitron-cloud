@@ -30,7 +30,7 @@ export function usageScreen(app:PortalApp){
     <section aria-label=${c.usageTransfer}><h3>${c.usageTransfer}</h3><dl><dt>${c.usageUploaded}</dt><dd>${bytes(summary.transfer.uploadedBytes)}</dd><dt>${c.usageRestored}</dt><dd>${bytes(summary.transfer.restoredBytes)}</dd></dl></section>
     <section aria-label=${c.usageOperations}><h3>${c.usageOperations}</h3><dl><dt>${c.usageInstallations}</dt><dd>${summary.operations.installationCompleted}</dd><dt>${c.usageProbes}</dt><dd>${summary.operations.monitoringProbes}</dd></dl></section>
     <section aria-label=${c.usageMessages}><h3>${c.usageMessages}</h3><dl><dt>${c.usageSent}</dt><dd>${summary.messages.sent}</dd><dt>${c.usageFailed}</dt><dd>${summary.messages.failed}</dd><dt>${c.usageExpired}</dt><dd>${summary.messages.expired}</dd><dt>${c.usageCancelled}</dt><dd>${summary.messages.cancelled}</dd></dl></section>
-   </div><p class="help">${c.usageExclusions}</p>`}
+   </div><p class="help">${c.usageExclusions}</p><p class="help">${c.usageHistory}</p>`}
   <wt-button .disabled=${disabled} @click=${refresh}>${c.usageRefresh}</wt-button>
  </section>`;
 }

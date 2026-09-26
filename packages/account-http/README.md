@@ -191,7 +191,8 @@ privacy boundary and retention limitation.
 POST `/usage/read` is also passive and owner-only. It returns measured snapshot storage
 and transfer, completed operations, monitoring probes and terminal service-alert outcomes
 for one organisation. Totals are decimal strings, and `measuredThrough` remains `null`
-until every durable reconciliation source has caught up. See the
+until every durable reconciliation source has caught up. When present, it is the oldest
+completed source scan, not an event-time completeness boundary. See the
 [usage metering guide](../../docs/usage-metering.md) for event meanings, exclusions and
 the operator command.
 

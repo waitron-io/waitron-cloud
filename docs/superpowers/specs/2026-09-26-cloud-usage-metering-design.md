@@ -8,7 +8,7 @@ The result is an operational measurement ledger, not a billing ledger. It does n
 
 ## Event model
 
-`usage_events` is an immutable ledger. Each event has a generated stable UUID, organisation and optional venue, a fixed event type, a positive integer quantity, a fixed source kind and bounded source reference, the source occurrence time and the database recording time. There is no arbitrary metadata or error-text column.
+`usage_events` is an immutable ledger. Each event has a generated stable UUID, organisation and optional venue, a fixed event type, a positive integer quantity, a fixed source kind and bounded source reference, the source occurrence time and the database recording time. There is no arbitrary metadata or error-text column. A service-alert source has exactly one outcome event, and its terminal outbox status cannot change after it becomes a reconciliation source.
 
 The first event types are:
 
@@ -63,9 +63,9 @@ The CLI runs one bounded pass by default and can print status. Deployment schedu
 - completed installation-operation and monitoring-probe counts;
 - sent, failed, expired and cancelled service-alert counts;
 - the latest event time; and
-- `measuredThrough`, the oldest `caught_up_at` across required reconciliation sources, or `null` until every durable source has completed a pass.
+- `measuredThrough`, the oldest `caught_up_at` across required reconciliation sources, or `null` until every durable source has completed a pass. This is scan freshness rather than an event-time completeness boundary because a source transaction can commit after a pass with an older occurrence time.
 
-The account portal adds a usage section for the selected organisation. It labels the totals as measurements, shows when reconciliation last covered every source, distinguishes stale/not-yet-measured data from zero, and states that continuous-stream bytes and account-level identity mail are not included. The section follows the existing English/Spanish, responsive and theme-aware portal patterns.
+The account portal adds a usage section for the selected organisation. It labels the totals as measurements, shows the oldest completed source scan, distinguishes stale/not-yet-measured data from zero, and states that continuous-stream bytes, account-level identity mail and pre-metering restore history are not included. The section follows the existing English/Spanish, responsive and theme-aware portal patterns.
 
 ## Failure and privacy rules
 
