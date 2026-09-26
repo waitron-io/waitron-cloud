@@ -1,6 +1,6 @@
 import { accountRequest, type ApiResult } from './api.ts';
 type Session = {accountId: string; expiresAt: string};
-export type SessionState = {kind: 'checking' | 'anonymous' | 'unavailable'} | ({kind: 'authenticated'} & Session);
+export type SessionState = {kind: 'checking' | 'unavailable'} | {kind: 'anonymous'; expired?: true} | ({kind: 'authenticated'} & Session);
 export class PortalSession {
   state: SessionState = {kind: 'checking'};
   retryAt = 0;
@@ -32,7 +32,7 @@ export class PortalSession {
     this.retryAt = result.ok ? 0 : Date.now() + result.retryAfterMs;
     if (!result.ok && result.status === 401) this.#generation++;
     this.#set(result.ok ? {kind: 'authenticated', ...result.value}
-      : {kind: result.status === 401 ? 'anonymous' : 'unavailable'});
+      : result.status === 401 ? {kind: 'anonymous', ...(result.code === 'session_expired' ? {expired: true as const} : {})} : {kind: 'unavailable'});
   }
   check(): Promise<void> {
     if (this.#disposed || Date.now() < this.retryAt) return Promise.resolve();

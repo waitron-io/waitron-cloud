@@ -3,6 +3,7 @@ import { after, before, test } from 'node:test';
 import { request, type ClientRequest } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startAccountServer } from '../src/server.ts';
+import {portalErrorResponse} from '../src/portal.ts';
 import { database } from './fixtures.ts';
 let db: Awaited<ReturnType<typeof database>>;
 before(async () => { db = await database(); });
@@ -19,11 +20,11 @@ async function host() {
   const address = running.server.address(); assert.ok(address && typeof address !== 'string');
   return {...running, port: address.port};
 }
-function send(port: number, path: string, method = 'GET', host = 'localhost', stall = false) {
+function send(port: number, path: string, method = 'GET', host = 'localhost', stall = false, headers: Record<string, string> = {}) {
   let req: ClientRequest;
   const result = new Promise<{status: number; headers: import('node:http').IncomingHttpHeaders; body: string}>((resolve, reject) => {
     req = request({host: '127.0.0.1', port, path, method,
-      headers: {host, origin: 'http://localhost', 'content-type': 'application/json'}}, res => {
+      headers: {host, origin: 'http://localhost', 'content-type': 'application/json', ...headers}}, res => {
       let body = ''; res.on('data', data => {body += data;});
       res.on('end', () => resolve({status: res.statusCode!, headers: res.headers, body}));
       res.on('error', reject);
@@ -50,10 +51,23 @@ test('portal serves only named documents and assets with host, method and securi
       const res = await send(running.port, path!).result;
       assert.equal(res.status, 200); assert.ok(String(res.headers['content-type']).startsWith(mime!));
     }
-    for (const path of ['/missing', '/index.html', '/package.json', '/%2e%2e/package.json', '/app.js.map'])
+    for (const path of ['/index.html', '/package.json', '/%2e%2e/package.json', '/app.js.map'])
       assert.equal((await send(running.port, path).result).status, 404, path);
-    assert.equal((await send(running.port, '/login?token=secret').result).status, 400);
-    assert.equal((await send(running.port, '/login', 'POST').result).status, 405);
+    const missing = await send(running.port, '/missing').result;
+    assert.equal(missing.status, 404); assert.match(missing.headers['content-type']!, /text\/html/);
+    assert.match(missing.body, /Page not found/); assert.match(missing.body, /Return to Waitron Cloud/);
+    const missingEs = await send(running.port, '/missing', 'GET', 'localhost', false, {'accept-language': 'es-ES,es;q=0.9'}).result;
+    assert.equal(missingEs.status, 404); assert.match(missingEs.body, /Página no encontrada/);
+    assert.match(missingEs.body, /Volver a Waitron Cloud/);
+    const preferredEs = await send(running.port, '/missing', 'GET', 'localhost', false, {'accept-language': 'en-GB;q=0.2, es;q=0.9'}).result;
+    assert.match(preferredEs.body, /Página no encontrada/);
+    const refusedEs = await send(running.port, '/missing', 'GET', 'localhost', false, {'accept-language': 'es;q=0, en;q=0.5'}).result;
+    assert.match(refusedEs.body, /Page not found/);
+    const rejectedQuery = await send(running.port, '/login?token=secret').result;
+    assert.equal(rejectedQuery.status, 400); assert.match(rejectedQuery.body, /address is not valid/i);
+    const wrongMethod = await send(running.port, '/login', 'POST').result;
+    assert.equal(wrongMethod.status, 405); assert.match(wrongMethod.body, /cannot be opened this way/i);
+    assert.equal(wrongMethod.headers.allow, 'GET, HEAD');
     assert.equal((await send(running.port, '/', 'GET', 'evil.example').result).status, 403);
     assert.equal((await send(running.port, '/api/account/session?x=1').result).status, 400);
   } finally { await running.close(); }
@@ -74,4 +88,11 @@ test('portal traffic spends neither database limits nor the eight account slots'
     const busy = await send(running.port, '/api/account/session').result;
     assert.equal(busy.status, 503); assert.match(String(busy.headers['content-security-policy']), /script-src 'self'/);
   } finally { pending.forEach(p => p.abort()); await running.close(); }
+});
+
+test('portal unavailability remains retryable and translated without an application request', async () => {
+  const response = portalErrorResponse(new Request('http://localhost/', {headers: {'accept-language': 'es'}}), 503);
+  assert.equal(response.status, 503); assert.equal(response.headers.get('retry-after'), '1');
+  assert.match(response.headers.get('content-security-policy')!, /style-src 'self' 'unsafe-inline'/);
+  assert.match(await response.text(), /Servicio no disponible/);
 });

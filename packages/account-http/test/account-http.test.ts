@@ -264,13 +264,16 @@ test('session expiry after an HTTP request waits on its row cannot extend activi
   const pending = request('/session/activity', {}, {headers: {cookie: session.header, 'x-csrf-token': session.csrf}});
   try {await new Promise(resolve => setTimeout(resolve, 200));}
   finally {await lock.query('COMMIT'); lock.release();}
-  assert.equal((await pending).status, 401);
+  const expired = await pending;
+  assert.equal(expired.status, 401);
+  assert.deepEqual(await expired.json(), {error: 'session_expired'});
   assert.equal((await db.pool.query('SELECT last_seen_at FROM cloud_sessions')).rows[0].last_seen_at.getTime(), before);
 });
 test('suspension denies an existing HTTP session and the development cookie stays separate', async () => {
   const owner = await account(); const session = cookies(await request('/login', {email: owner.email, password}));
   await db.pool.query('UPDATE cloud_accounts SET disabled_at = clock_timestamp() WHERE id = $1', [owner.accountId]);
-  assert.equal((await request('/session', undefined, {headers: {cookie: session.header}})).status, 401);
+  const suspended = await request('/session', undefined, {headers: {cookie: session.header}});
+  assert.equal(suspended.status, 401); assert.deepEqual(await suspended.json(), {error: 'unauthenticated'});
   await db.pool.query('UPDATE cloud_accounts SET disabled_at = NULL WHERE id = $1', [owner.accountId]);
   const dev = createAccountApp({pool: db.pool, outbox: db.outbox, config: {...config(), production: false, portalOrigin: 'http://localhost:3000'}});
   const response = await request('/login', {email: owner.email, password}, {target: dev, url: 'http://localhost:3000/api/account/login', headers: {origin: 'http://localhost:3000'}});
