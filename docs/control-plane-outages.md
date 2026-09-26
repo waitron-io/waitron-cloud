@@ -6,9 +6,10 @@ credential continue to work until their signed expiry. They never gain extra tim
 a restart or from cached state.
 
 This distinction matters during an outage. An unavailable account API is not a
-revocation. A gateway keeps its last signed manifest for at most ten minutes, a storage
-grant lasts for at most fifteen minutes, and an installation control lease lasts for at
-most one hour. Each verifier rejects the authority at its exact expiry. There is no
+revocation. A gateway keeps its last signed manifest for at most ten minutes. Cloud asks
+the provider for a fifteen-minute storage credential and rejects a returned expiry more
+than fifteen minutes plus one second ahead. An installation control lease lasts for at
+most one hour. Each verifier rejects authority at its exact signed expiry. There is no
 offline grace period.
 
 Run the complete local drill with:
@@ -39,8 +40,8 @@ Use an overlap when you rotate the issuer:
 1. Add the new public key to `CLOUD_INSTALLATION_TRUSTED_KEYS` on every API instance.
    Keep the old private key active.
 2. Confirm every instance trusts both keys. Then replace
-   `CLOUD_INSTALLATION_ISSUER_KEY` with the new private key on every instance. Keep
-   the old public key in the trust list.
+   `CLOUD_INSTALLATION_ISSUER_KEY` with the new private key and restart every instance.
+   Keep the old public key in the trust list.
 3. Record the time when the final old signer stopped. Wait until every lease it could
    have issued has expired. The current maximum is one hour.
 4. Remove the old public key and restart each instance. A request with an old lease is

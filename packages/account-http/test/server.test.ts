@@ -125,8 +125,10 @@ test('CLI fails closed with fixed diagnostics for invalid settings and absent mi
 });
 test('CLI rejects malformed installation issuer trust without exposing its value',async()=>{
  const privateKey=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url');
- const outcome=await cli({CLOUD_INSTALLATION_ISSUER_KEY:privateKey,CLOUD_INSTALLATION_TRUSTED_KEYS:'["private-trust-sentinel"]'}).exited;
- assert.equal(outcome.code,1);assert.equal(outcome.stdout,'');assert.equal(outcome.stderr,'Account server failed; check database, migrations and configuration\n');
+ for(const overrides of [{CLOUD_INSTALLATION_ISSUER_KEY:privateKey,CLOUD_INSTALLATION_TRUSTED_KEYS:'["private-trust-sentinel"]'},{CLOUD_INSTALLATION_ISSUER_KEY:'',CLOUD_INSTALLATION_TRUSTED_KEYS:'[]'}]){
+  const outcome=await cli(overrides).exited;
+  assert.equal(outcome.code,1);assert.equal(outcome.stdout,'');assert.equal(outcome.stderr,'Account server failed; check database, migrations and configuration\n');
+ }
 });
 test('CLI shutdown and restart preserve committed work and shared request limits', async () => {
   let running = cli();

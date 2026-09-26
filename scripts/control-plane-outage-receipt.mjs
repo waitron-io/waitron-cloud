@@ -39,17 +39,13 @@ try{
   const placementStore=new RemoteAccessStore(db.pool),cellId=randomUUID();
   await placementStore.createCell({id:cellId,country:'ES',provider:'aws',environment:'test',suffix:'outage.example.test',subnet:41,publicKey:randomBytes(32).toString('base64'),endpoint:'gateway.outage.example.test:51820'});
   await placementStore.provision(connected.installationId,cellId,randomBytes(32).toString('base64'));
-  let cachedManifest,gateway;
+  let cachedManifest,gateway,routeExpiresAt;
   const gatewayHooks={persist:async envelope=>{cachedManifest=envelope;},apply:async()=>{},close:async()=>{}};
   gateway=new GatewayAuthority(gatewaySigningKey.publicKey,cellId,gatewayHooks);
-  const initial=await placementStore.manifest(cellId),routeExpiresAt=Date.now()+3500;
-  initial.issuedAt=Date.now();initial.expiresAt=routeExpiresAt;await gateway.accept(signManifest(initial,gatewaySigningKey.privateKey));
   routeServer=createServer((_request,response)=>{response.statusCode=gateway.routes.some(route=>route.installationId===connected.installationId)?200:503;response.end();});
   await new Promise((resolve,reject)=>{routeServer.once('error',reject);routeServer.listen(0,'127.0.0.1',()=>{routeServer.removeListener('error',reject);resolve();});});
   const routeAddress=routeServer.address();assert(routeAddress&&typeof routeAddress!=='string');
   const routeStatus=async()=>{const response=await fetch(`http://127.0.0.1:${routeAddress.port}/route`);return response.status;};
-  assert.equal(await routeStatus(),200);const availableBeforeOutage=true;
-
   storage=await startBackupStorage({tokenDuration:'12s'});const location=await storage.bucket('control-plane-outage');
   const storageGrant=await storage.authority.grant(location,{kind:'capture',bucket:location.bucket,scope:'incoming/outage'},storage.ca);
   const storageClient=new S3Client({endpoint:location.endpoint,region:location.region,forcePathStyle:true,credentials:storageGrant.credentials,maxAttempts:1,requestHandler:{httpsAgent:storage.agent()}});
@@ -68,6 +64,10 @@ try{
   async function machine(action,envelope){return fetch(`${origin}/api/installations/${action}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(envelope),signal:AbortSignal.timeout(5000)});}
 
   account=startAccount(oldIssuer);await account.ready();
+  // Start the short route clock after slow fixture setup so it measures only the outage/restart path.
+  const initial=await placementStore.manifest(cellId);routeExpiresAt=Date.now()+5000;
+  initial.issuedAt=Date.now();initial.expiresAt=routeExpiresAt;await gateway.accept(signManifest(initial,gatewaySigningKey.privateKey));
+  assert.equal(await routeStatus(),200);const availableBeforeOutage=true;
   const outageStarted=Date.now();await account.stop();account=undefined;
   let connectionRefusedDuringOutage=false;try{await fetch(`${origin}/api/account/session`,{signal:AbortSignal.timeout(1000)});}catch{connectionRefusedDuringOutage=true;}assert.equal(connectionRefusedDuringOutage,true);
   assert.equal(await routeStatus(),200);const availableDuringOutage=true;
@@ -81,10 +81,13 @@ try{
   response=await machine('renew',proof('renew'));assert.equal(response.status,200,await response.clone().text());const renewed=await response.json(),newLease=renewed.lease;
   const newLeaseSignedByNewKey=JSON.parse(Buffer.from(newLease.payload,'base64url').toString())[2]===newIssuer.keyId;assert.equal(newLeaseSignedByNewKey,true);
 
-  while(Date.now()<=routeExpiresAt)await delay(Math.min(250,routeExpiresAt+1-Date.now()));await gateway.tick();assert.equal(await routeStatus(),503);const refusedAtSignedExpiry=true;
+  while(Date.now()<=routeExpiresAt)await delay(Math.min(250,routeExpiresAt+1-Date.now()));assert.equal(await routeStatus(),503);const refusedAtSignedExpiry=true;await gateway.tick();
   while(Date.now()<=oldLeaseExpiresAt)await delay(Math.min(250,oldLeaseExpiresAt+1-Date.now()));const oldLeaseExpiredBeforeRemoval=true;
+  // This fresh old-key lease is a negative control. A 401 proves key removal rather than expiry.
+  const liveOldLease=oldIssuer.issue({origin,leaseId:randomUUID(),installationId:connected.installationId,venueId:connected.venueId,environment:'test',publicKey:binding.installationKey,issuedAt:Date.now(),expiresAt:Date.now()+3600000});
   await account.stop();account=startAccount(newIssuer);await account.ready();
-  response=await machine('configuration',proof('configuration',oldLease));assert.equal(response.status,401);const oldLeaseRefusedAfterRemoval=true;
+  response=await machine('configuration',proof('configuration',oldLease));assert.equal(response.status,401);const expiredOldLeaseRefusedAfterRemoval=true;
+  response=await machine('configuration',proof('configuration',liveOldLease));assert.equal(response.status,401);const liveOldIssuerNegativeControlRefusedAfterRemoval=true;
   response=await machine('configuration',proof('configuration',newLease));assert.equal(response.status,200,await response.clone().text());const recoveredAfterRestart=true;
 
   const recoveredManifest=await placementStore.manifest(cellId);await gateway.accept(signManifest(recoveredManifest,gatewaySigningKey.privateKey));assert.equal(await routeStatus(),200);const availableAfterControlRecovery=true;
@@ -95,7 +98,7 @@ try{
   response=await machine('configuration',proof('configuration',newLease));assert.equal(response.status,403);const revokedLeaseRefused=true;
   const revokedManifest=await placementStore.manifest(cellId);await gateway.accept(signManifest(revokedManifest,gatewaySigningKey.privateKey));assert.equal(await routeStatus(),503);const revokedAfterRefresh=true;
 
-  const receipt={schemaVersion:1,cloudHead:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),cloudDirty:execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim()!=='',measuredAt:new Date().toISOString(),environment:{accountServerProcess:true,gatewaySocket:true,storageTls:true,storageProvider:'SeaweedFS 4.47'},controlPlane:{connectionRefusedDuringOutage,recoveredAfterRestart,outageMs},route:{availableBeforeOutage,availableDuringOutage,cachedRestartAvailable,refusedAtSignedExpiry,availableAfterControlRecovery,revokedAfterRefresh},storage:{availableDuringOutage:availableStorageDuringOutage,refusedAfterCredentialExpiry,credentialExpiresAt:storageGrant.expiresAt},rotation:{oldKeyId:oldIssuer.keyId,newKeyId:newIssuer.keyId,oldLeaseAcceptedDuringOverlap,newLeaseSignedByNewKey,oldLeaseExpiredBeforeRemoval,oldLeaseRefusedAfterRemoval,revokedLeaseRefused}};
+  const receipt={schemaVersion:1,cloudHead:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),cloudDirty:execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim()!=='',measuredAt:new Date().toISOString(),environment:{accountServerProcess:true,gatewaySocket:true,storageTls:true,storageProvider:'SeaweedFS 4.47'},controlPlane:{connectionRefusedDuringOutage,recoveredAfterRestart,outageMs},route:{availableBeforeOutage,availableDuringOutage,cachedRestartAvailable,refusedAtSignedExpiry,availableAfterControlRecovery,revokedAfterRefresh},storage:{availableDuringOutage:availableStorageDuringOutage,refusedAfterCredentialExpiry,credentialExpiresAt:storageGrant.expiresAt},rotation:{oldKeyId:oldIssuer.keyId,newKeyId:newIssuer.keyId,oldLeaseAcceptedDuringOverlap,newLeaseSignedByNewKey,oldLeaseExpiredBeforeRemoval,expiredOldLeaseRefusedAfterRemoval,liveOldIssuerNegativeControlRefusedAfterRemoval,revokedLeaseRefused}};
   await writeFile(output,JSON.stringify(receipt,null,2)+'\n',{mode:0o600});console.log(JSON.stringify({output,...receipt}));
 }finally{
   if(account?.child.exitCode===null)await account.stop().catch(()=>{});

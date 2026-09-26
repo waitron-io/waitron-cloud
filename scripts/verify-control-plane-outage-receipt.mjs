@@ -9,7 +9,8 @@ const requiredTrue=[
   ['route','refusedAtSignedExpiry'],['route','availableAfterControlRecovery'],['route','revokedAfterRefresh'],
   ['storage','availableDuringOutage'],['storage','refusedAfterCredentialExpiry'],
   ['rotation','oldLeaseAcceptedDuringOverlap'],['rotation','newLeaseSignedByNewKey'],
-  ['rotation','oldLeaseExpiredBeforeRemoval'],['rotation','oldLeaseRefusedAfterRemoval'],['rotation','revokedLeaseRefused'],
+  ['rotation','oldLeaseExpiredBeforeRemoval'],['rotation','expiredOldLeaseRefusedAfterRemoval'],
+  ['rotation','liveOldIssuerNegativeControlRefusedAfterRemoval'],['rotation','revokedLeaseRefused'],
 ];
 function invalid(){throw new Error('control-plane outage receipt is invalid');}
 export function verifyControlPlaneOutageReceipt(receipt){
