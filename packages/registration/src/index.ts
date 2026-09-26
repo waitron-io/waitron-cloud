@@ -11,6 +11,7 @@ export { EmailDeliveryError, type EmailDeliveryContext, type EmailDeliveryReceip
 export { createLocalAccountMailer } from './local-mailer.ts';
 export { LocalPasswordCorpus, type PasswordScreeningProvider, type PasswordScreeningResult } from './compromised-passwords.ts';
 export {SecurityAuditError,SecurityAuditStore,recordSecurityAuditEvent,type SecurityAuditActorKind,type SecurityAuditEvent,type SecurityAuditEventType,type SecurityAuditInput,type SecurityAuditPage,type SecurityAuditSubjectKind} from './security-audit.ts';
+export {runWorkerLoop} from './worker-loop.ts';
 
 export interface ConnectionBinding {
   operationId: string;

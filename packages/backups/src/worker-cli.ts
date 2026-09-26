@@ -1,6 +1,6 @@
 import {readFile} from 'node:fs/promises';
-import {setTimeout as delay} from 'node:timers/promises';
 import {Pool} from 'pg';
+import {runWorkerLoop} from '@waitron-cloud/registration';
 import {BackupCatalogue} from './catalogue.ts';
 import {BackupKeyVault} from './keys.ts';
 import {BackupWorker,backupWorkerStatus,retryFailedBackupJobs} from './worker.ts';
@@ -24,12 +24,11 @@ try{
   const ca=process.env.CLOUD_BACKUP_CA_FILE?await readFile(process.env.CLOUD_BACKUP_CA_FILE,'utf8'):undefined;
   storage=workerObjects(process.env,ca);
   const worker=new BackupWorker(pool,new BackupCatalogue(pool,new BackupKeyVault(Buffer.from(master,'hex')),storage.objects),restore);
-  do{
-   await worker.schedule();let ran=false;
-   try{ran=await worker.runOnce(stop.signal);}finally{storage.close();}
-   if(mode==='--once'){console.log(JSON.stringify(await worker.status()));break;}
-   if(!ran)try{await delay(1000,undefined,{signal:stop.signal});}catch{if(!stop.signal.aborted)throw Error();}
-  }while(!stop.signal.aborted);
+  if(mode==='--once'){
+   await worker.schedule();try{await worker.runOnce(stop.signal);}finally{storage.close();}
+   console.log(JSON.stringify(await worker.status()));
+  }else await runWorkerLoop({signal:stop.signal,concurrency:1,scheduleIntervalMs:60000,pollIntervalMs:1000,
+   schedule:()=>worker.schedule(),runOnce:async signal=>{try{return await worker.runOnce(signal);}finally{storage?.close();}}});
  }
 }catch{
  // Provider and database errors can contain credentials; emit only a fixed diagnostic.

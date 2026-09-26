@@ -1,7 +1,7 @@
-import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
 import { EmailOutbox, EmailWorker, emailDeliveryStatus } from './email-outbox.ts';
 import { configuredAccountMailer } from './configured-mailer.ts';
+import {runWorkerLoop} from './worker-loop.ts';
 
 let pool: Pool | undefined;
 const stop = new AbortController();
@@ -20,14 +20,7 @@ try {
     const outbox = new EmailOutbox({activeKeyId: process.env.CLOUD_EMAIL_ACTIVE_KEY_ID, keys: JSON.parse(process.env.CLOUD_EMAIL_KEYS)});
     const worker = new EmailWorker(pool, outbox, configuredAccountMailer());
     if (args[0] === '--once') { await worker.runOnce(); console.log(JSON.stringify(await worker.status())); }
-    else {
-      while (!stop.signal.aborted) {
-        if (!await worker.runOnce()) {
-          try { await delay(1000, undefined, {signal: stop.signal}); }
-          catch { if (!stop.signal.aborted) throw new Error(); }
-        }
-      }
-    }
+    else await runWorkerLoop({signal:stop.signal,concurrency:4,scheduleIntervalMs:60000,pollIntervalMs:1000,runOnce:()=>worker.runOnce()});
   }
 } catch {
   // Configuration and database errors can include secrets; operational output uses fixed diagnostics.

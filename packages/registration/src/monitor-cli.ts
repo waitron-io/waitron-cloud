@@ -2,6 +2,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {Pool} from 'pg';
 import {EmailOutbox} from './email-outbox.ts';
 import {MonitorWorker,monitorStatus} from './monitoring.ts';
+import {runWorkerLoop} from './worker-loop.ts';
 let pool:Pool|undefined;
 const stop=new AbortController(),shutdown=()=>stop.abort();
 class MonitorConfigurationError extends Error{}
@@ -19,16 +20,15 @@ try{
   if(!process.env.CLOUD_EMAIL_KEYS||!process.env.CLOUD_EMAIL_ACTIVE_KEY_ID)throw Error();
   const outbox=new EmailOutbox({activeKeyId:process.env.CLOUD_EMAIL_ACTIVE_KEY_ID,keys:JSON.parse(process.env.CLOUD_EMAIL_KEYS)});
   const worker=new MonitorWorker(pool,outbox,monitorConfig);
-  while(!stop.signal.aborted){
-   let ran=false;
-   try{
-    await worker.schedule();ran=await worker.runOnce();
-    if(mode==='--once'){console.log(JSON.stringify(await worker.status()));break;}
-   }catch(error){
-    if(mode==='--once')throw error;
+  if(mode==='--once'){
+   await worker.schedule();await worker.runOnce();console.log(JSON.stringify(await worker.status()));
+  }else while(!stop.signal.aborted){
+   try{await runWorkerLoop({signal:stop.signal,concurrency:4,scheduleIntervalMs:60000,pollIntervalMs:1000,schedule:()=>worker.schedule(),runOnce:()=>worker.runOnce()});}
+   catch{
+    if(stop.signal.aborted)break;
     console.error('Monitor observation failed; retrying');
+    try{await delay(1000,undefined,{signal:stop.signal});}catch{if(!stop.signal.aborted)throw Error();}
    }
-   if(!ran)try{await delay(1000,undefined,{signal:stop.signal});}catch{if(!stop.signal.aborted)throw Error();}
   }
  }
 }catch(error){
