@@ -332,7 +332,7 @@ function guardedUploadBody(
       try {
         for await (const chunk of source) yield chunk;
       } catch (error) {
-        // Smithy's Node handler pipes without forwarding source errors to the request.
+        // A source failure must abort the request before any SDK wrapper can emit it unhandled.
         failed(error);
       }
     })(),

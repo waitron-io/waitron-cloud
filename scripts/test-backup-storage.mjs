@@ -18,6 +18,10 @@ const {
   ListObjectsV2Command,
   PutBucketVersioningCommand,
 } = require("@aws-sdk/client-s3");
+const forbidden = (error) => error?.$metadata?.httpStatusCode === 403,
+  expiredToken = (error) =>
+    error?.$metadata?.httpStatusCode === 400 &&
+    error?.name === "ExpiredTokenException";
 const store = await startBackupStorage({ tokenDuration: "12s" });
 try {
   const a = await store.bucket("venue-a"),
@@ -76,7 +80,10 @@ try {
     objects.putStaged("snapshots/interrupted", interruptedSource),
     /fixture upload interrupted/,
   );
-  await assert.rejects(objects.read("snapshots/interrupted"));
+  await assert.rejects(
+    objects.read("snapshots/interrupted"),
+    (error) => error?.name === "NoSuchKey",
+  );
   const largeSize = 32 * 1024 * 1024,
     largeChunk = Buffer.alloc(64 * 1024, 0x64),
     expectedLarge = {
@@ -120,16 +127,6 @@ try {
   assert(
     arrayBufferGrowth < 16 * 1024 * 1024,
     `streaming retained ${arrayBufferGrowth} bytes of ArrayBuffers`,
-  );
-  const grantStartedAt = Date.now(),
-    capture = await store.authority.grant(
-    a,
-    { kind: "capture", bucket: a.bucket, scope: "incoming/point-a" },
-    store.ca,
-  );
-  assert(
-    Date.parse(capture.expiresAt) <= grantStartedAt + 13000,
-    "the local fixture must issue a short-lived credential for the expiry contract",
   );
   const make = (c) =>
     new S3Client({
@@ -247,6 +244,7 @@ try {
     rotatingWriter.send(
       new PutObjectCommand({ Bucket: b.bucket, Key: "rotation/cross-venue", Body: bytes }),
     ),
+    forbidden,
   );
   const replacementCredentials = await store.rotateCredentials(
       "venue-a-rotating-writer",
@@ -259,6 +257,17 @@ try {
     rotatingWriter.send(
       new PutObjectCommand({ Bucket: a.bucket, Key: "rotation/old-key", Body: bytes }),
     ),
+    forbidden,
+  );
+  const grantStartedAt = Date.now(),
+    capture = await store.authority.grant(
+      a,
+      { kind: "capture", bucket: a.bucket, scope: "incoming/point-a" },
+      store.ca,
+    );
+  assert(
+    Date.parse(capture.expiresAt) <= grantStartedAt + 13000,
+    "the local fixture must issue a short-lived credential for the expiry contract",
   );
   const writer = make(capture.credentials);
   await writer.send(
@@ -283,7 +292,7 @@ try {
     new DeleteObjectCommand({ Bucket: a.bucket, Key: "incoming/point-a" }),
     new ListObjectsV2Command({ Bucket: a.bucket }),
   ])
-    await assert.rejects(writer.send(command));
+    await assert.rejects(writer.send(command), forbidden);
   await objects.put("snapshots/point-a", bytes);
   const restore = await store.authority.grant(
       a,
@@ -307,11 +316,13 @@ try {
         Body: bytes,
       }),
     ),
+    forbidden,
   );
   await assert.rejects(
     reader.send(
       new GetObjectCommand({ Bucket: b.bucket, Key: "snapshots/point-a" }),
     ),
+    forbidden,
   );
   const stream = await store.authority.grant(
       a,
@@ -333,17 +344,20 @@ try {
     replicator.send(
       new GetObjectCommand({ Bucket: a.bucket, Key: "snapshots/point-a" }),
     ),
+    forbidden,
   );
   await assert.rejects(
     replicator.send(
       new ListObjectsV2Command({ Bucket: a.bucket, Prefix: "streams/gen-b/" }),
     ),
+    forbidden,
   );
   await assert.rejects(
     store.assumeOtherRole(
       { kind: "capture", bucket: a.bucket, scope: "incoming/point-a" },
       "restore",
     ),
+    forbidden,
   );
   await assert.rejects(
     store.assumeExpired({
@@ -351,6 +365,7 @@ try {
       bucket: a.bucket,
       scope: "incoming/point-a",
     }),
+    expiredToken,
   );
   while (Date.now() <= Date.parse(capture.expiresAt) + 1000)
     await new Promise((resolve) =>
@@ -367,6 +382,7 @@ try {
         Body: bytes,
       }),
     ),
+    forbidden,
   );
   objects.close();
   writer.destroy();

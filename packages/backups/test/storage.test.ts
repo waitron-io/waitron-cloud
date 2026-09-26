@@ -223,6 +223,40 @@ test("a staged upload source failure aborts the provider request before the erro
   assert.equal(requestAborted, true);
 });
 
+test("a provider success cannot hide a source failure after the final byte", async () => {
+  const bytes = Buffer.from("complete archive bytes"),
+    source = {
+      receipt: bufferObject(bytes).receipt,
+      open() {
+        return Readable.from(
+          (async function* () {
+            yield bytes;
+            throw new Error("fixture failed after the final byte");
+          })(),
+        );
+      },
+      async dispose() {},
+    };
+  await fakeS3(async (command, options) => {
+    const received: Buffer[] = [];
+    for await (const chunk of command.input.Body as Readable)
+      received.push(Buffer.from(chunk));
+    assert.deepEqual(Buffer.concat(received), bytes);
+    assert.equal(options?.abortSignal?.aborted, true);
+    return { $metadata: { httpStatusCode: 200 } };
+  }, async () => {
+    const objects = new BackupObjects(location, credentials);
+    try {
+      await assert.rejects(
+        objects.putStaged("snapshots/late-failure", source),
+        /fixture failed after the final byte/,
+      );
+    } finally {
+      objects.close();
+    }
+  });
+});
+
 test("staged downloads hash provider bytes and compose caller cancellation", async () => {
   const bytes = Buffer.from("downloaded encrypted archive");
   await fakeS3(async (command, options) => {
