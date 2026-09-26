@@ -136,6 +136,35 @@ public-site chains and keys. Set `GATEWAY_CELL_ID`, `GATEWAY_SUBNET`, and, for a
 Its `peer-cli.ts` is a local bridge to `host.docker.internal`, not an installer for a
 customer appliance. Neither component changes the host's network interfaces.
 
+## Move a venue between existing cells
+
+Cell movement is a trusted operator workflow. It preserves the current staff and public
+hostnames, but it does not provision a cell, change public DNS or install the venue peer.
+Use one UUID as the durable operation ID and keep the installation revision returned by
+the account/control API.
+
+1. Run `move-stage` with `operationId`, `installationId`, `targetCellId`,
+   `targetPeerPublicKey`, `expectedRevision` and optional `port`. The result contains the
+   unchanged hostnames plus the source and reserved destination routes.
+2. Export the destination cell. Apply that exact signed manifest, configure the venue
+   peer for the destination gateway, and test both public HTTPS and staff TLS through the
+   destination route. A failed apply is not readiness: run `move-cancel`, then export the
+   destination cell again so its staged route is removed.
+3. After a successful route test, run `move-ready` with the same `operationId` and
+   `expectedRevision`, plus the sequence reported by the tested destination gateway. The
+   command refuses a sequence that was not generated after this move was staged.
+4. Run `move-commit` with the same operation and revision. Then export and apply newer
+   manifests for both cells. The destination keeps the active route and the source removes
+   it. Do not treat the move as complete while either gateway still reports the older
+   sequence.
+
+Exact retries return the durable stage, readiness, cancellation or completed result.
+A competing move, changed installation revision, revocation or mismatched operation input
+fails without changing the active placement. Cancellation never reuses an uncertain tunnel
+address. If the commit reply is lost, retry `move-commit`; do not create a new operation.
+Certificate copying, public DNS reconciliation and production appliance automation remain
+separate deployment work.
+
 ## Issue and renew certificates
 
 Use Waitron's `apps/server/scripts/cloud-certificate.ts csr` command to create a CSR
