@@ -69,8 +69,9 @@ Operator placement and customer
 remote setup now has owner-only English/Spanish screens for assigned names, custom DNS
 changes, readiness and local-network guidance. A PostgreSQL-backed local reconciler now
 publishes signed routes and renews public/staff certificates through explicit filesystem,
-DNS and ACME adapters. Its receipt covers duplicate workers, restart, bounded failure,
-atomic retention and hostname/lease fences while Waitron keeps the staff private key.
+DNS and ACME adapters. Its receipt covers duplicate workers, expired-lease restart,
+bounded failure, failed-renewal retention and hostname/lease fences; focused filesystem
+tests cover atomic replacement while Waitron keeps the staff private key.
 Live provider DNS, production key storage/deployment, CSR/chain transport and automatic
 appliance setup remain open. The [local backup proof](local-backups.md)
 now provides encrypted scoped storage, protected key versions, an immutable snapshot catalogue,

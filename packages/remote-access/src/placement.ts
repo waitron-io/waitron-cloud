@@ -176,12 +176,10 @@ export class RemoteAccessStore {
   if(!isUuid(id)||!['staff','public'].includes(kind))fail('invalid_placement');
   return transaction(this.#pool,client=>certificateAuthorization(client,id,kind,csr,'share'));
  }
- async publishAuthorizedCertificate(id:string,kind:'staff'|'public',csr:string,expected:CertificateAuthorization,publish:()=>Promise<void>){
+ async publishAuthorizedCertificate(client:PoolClient,id:string,kind:'staff'|'public',csr:string,expected:CertificateAuthorization,publish:()=>Promise<void>){
   if(!isUuid(id)||!['staff','public'].includes(kind))fail('invalid_placement');
-  return transaction(this.#pool,async client=>{
-   const current=await certificateAuthorization(client,id,kind,csr,'update');
-   if(JSON.stringify(current)!==JSON.stringify(expected))fail('placement_changed');await publish();return current;
-  });
+  const current=await certificateAuthorization(client,id,kind,csr,'update');
+  if(JSON.stringify(current)!==JSON.stringify(expected))fail('placement_changed');await publish();return current;
  }
  async manifest(cellId:string,now=Date.now()):Promise<GatewayManifest>{
   if(!isUuid(cellId))fail('invalid_cell');

@@ -17,6 +17,7 @@
     "test:control-plane-outages": "node scripts/test-postgres.mjs exec node scripts/control-plane-outage-receipt.mjs /tmp/cloud-control-plane-outage-receipt.json && node scripts/verify-control-plane-outage-receipt.mjs /tmp/cloud-control-plane-outage-receipt.json",
     "test:cell-movement-receipt": "node --test scripts/verify-cell-movement-receipt.test.mjs",
     "verify:cell-movement": "node scripts/verify-cell-movement-receipt.mjs",
+    "proof:remote-reconciler": "node scripts/test-postgres.mjs exec node scripts/remote-reconciler-receipt.mjs /tmp/cloud-remote-reconciler-receipt.json && node scripts/verify-remote-reconciler-receipt.mjs /tmp/cloud-remote-reconciler-receipt.json",
     "test:remote-reconciler-receipt": "node --test scripts/verify-remote-reconciler-receipt.test.mjs",
     "verify:remote-reconciler": "node scripts/verify-remote-reconciler-receipt.mjs",
     "measure:worker-scheduling-baseline": "node scripts/test-postgres.mjs exec node scripts/worker-scheduling-receipt.mjs --baseline /tmp/cloud-worker-scheduling-baseline.json",

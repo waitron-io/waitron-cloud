@@ -191,17 +191,21 @@ or manifest. Cloud reads the staff CSR and returns only the chain; the private k
 in Waitron. Transporting that CSR and chain between a production appliance and Cloud is
 not implemented by this local filesystem adapter.
 
+On shutdown, the worker refuses to publish a result completed after the signal and returns
+that claim without consuming retry budget. The current ACME client does not expose request
+cancellation, so the process may still wait for an in-flight ACME request or backoff to
+return before it exits. Choose and test the deployment grace and forced-termination policy
+against the selected ACME provider before production rollout.
+
 Run the local reconciliation receipt against clean Cloud and Waitron checkouts:
 
 ```sh
-WAITRON_CHECKOUT=/absolute/path/to/waitron \
-  node scripts/test-postgres.mjs exec \
-  node scripts/remote-reconciler-receipt.mjs /tmp/cloud-remote-reconciler-receipt.json
-pnpm verify:remote-reconciler -- /tmp/cloud-remote-reconciler-receipt.json
+WAITRON_CHECKOUT=/absolute/path/to/waitron pnpm proof:remote-reconciler
 ```
 
 The receipt uses PostgreSQL plus the local Pebble and DNS fixtures. It proves signed
-two-venue route publication, restart and duplicate-worker recovery, initial public and
+two-venue route publication, expired-lease restart and duplicate-worker recovery, bounded
+failure parking, initial public and
 staff issuance, renewal after CSR-key changes, Waitron's existing staff install command,
 retention after failed renewal, and hostname and expired-lease fences. It creates no live
 DNS record or certificate.

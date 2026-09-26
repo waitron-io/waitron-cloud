@@ -32,7 +32,7 @@ try{
  const accountKey=await readFile(config.acme.accountKeyFile);pool=new Pool({connectionString:process.env.DATABASE_URL,max:5,connectionTimeoutMillis:5000,statement_timeout:10000});pool.on('error',()=>console.error('Remote configuration database connection failed; retrying'));
  await pool.query('SELECT claim_id,lease_until FROM remote_configuration_jobs LIMIT 0');
  const worker=new RemoteConfigurationReconciler(pool,{artifacts,signingKeyForCell:async cellId=>{const key=keys.get(cellId);if(!key)throw new Error('route_mapping_missing');return key;},
-  issueCertificate:target=>issueCertificate({directoryUrl:config.acme.directoryUrl,accountKey,email:config.acme.email,csr:target.csr,hostname:target.hostname,dnsName:target.dnsName,dns})});
+  issueCertificate:target=>issueCertificate({directoryUrl:config.acme.directoryUrl,accountKey,email:config.acme.email,csr:target.csr,hostname:target.hostname,dnsName:target.dnsName,dns,signal:target.signal})});
  if(mode==='--status')console.log(JSON.stringify(await remoteConfigurationStatus(pool)));
  else if(mode==='--once'){await worker.schedule();await worker.runOnce(stop.signal);console.log(JSON.stringify(await remoteConfigurationStatus(pool)));}
  else await runWorkerLoop({signal:stop.signal,concurrency:4,scheduleIntervalMs:5000,pollIntervalMs:1000,schedule:()=>worker.schedule(),runOnce:signal=>worker.runOnce(signal),onError:()=>console.error('Remote configuration reconciliation failed; retrying')});

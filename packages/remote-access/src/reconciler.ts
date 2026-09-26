@@ -99,19 +99,25 @@ export class RemoteConfigurationReconciler {
  }
  async runOnce(signal=new AbortController().signal):Promise<boolean>{
   const claimed=await transaction(this.#pool,async client=>{
+   const exhausted=(await client.query(`SELECT kind,target_id FROM remote_configuration_jobs WHERE enabled AND status='running' AND attempts>=8
+    AND lease_until<=clock_timestamp() ORDER BY lease_until,kind,target_id LIMIT 1 FOR UPDATE SKIP LOCKED`)).rows[0];
+   if(exhausted){await client.query(`UPDATE remote_configuration_jobs SET status='failed',claim_id=NULL,lease_until=NULL,failures=failures+1,
+    last_error='reconcile_failed',updated_at=clock_timestamp() WHERE kind=$1 AND target_id=$2`,[exhausted.kind,exhausted.target_id]);return {parked:true as const};}
    const row=(await client.query(`SELECT * FROM remote_configuration_jobs WHERE enabled AND attempts<8 AND
     ((status='pending' AND available_at<=clock_timestamp()) OR (status='running' AND lease_until<=clock_timestamp()))
     ORDER BY available_at,kind,target_id LIMIT 1 FOR UPDATE SKIP LOCKED`)).rows[0];if(!row)return;
-   return rowJob((await client.query(`UPDATE remote_configuration_jobs SET status='running',claim_id=$3,lease_until=clock_timestamp()+interval '120 seconds',
-    attempts=attempts+1,runs=runs+1,updated_at=clock_timestamp() WHERE kind=$1 AND target_id=$2 RETURNING *`,[row.kind,row.target_id,randomUUID()])).rows[0]);
+   return {parked:false as const,job:rowJob((await client.query(`UPDATE remote_configuration_jobs SET status='running',claim_id=$3,lease_until=clock_timestamp()+interval '120 seconds',
+    attempts=attempts+1,runs=runs+1,updated_at=clock_timestamp() WHERE kind=$1 AND target_id=$2 RETURNING *`,[row.kind,row.target_id,randomUUID()])).rows[0])};
   });
   if(!claimed)return false;
-  if(signal.aborted){await this.#release(claimed,true);return true;}
+  if(claimed.parked)return true;
+  const job=claimed.job;
+  if(signal.aborted){await this.#release(job,true);return true;}
   try{
-   if(this.#execute){await this.#execute(claimed,{signal,isCurrent:()=>this.#current(claimed)});await this.#complete(claimed,async()=>{});}
-   else if(claimed.kind==='certificate_staff'||claimed.kind==='certificate_public')await this.#certificate(claimed,signal);
-   else await this.#route(claimed);
-  }catch{await this.#release(claimed,false);}
+   if(this.#execute){await this.#execute(job,{signal,isCurrent:()=>this.#current(job)});await this.#complete(job,async()=>{});}
+   else if(job.kind==='certificate_staff'||job.kind==='certificate_public')await this.#certificate(job,signal);
+   else await this.#route(job);
+  }catch{await this.#release(job,signal.aborted);}
   return true;
  }
  async #route(job:RemoteConfigurationJob){
@@ -128,18 +134,19 @@ export class RemoteConfigurationReconciler {
   const existing=await this.#artifacts.readCertificate(job.targetId,kind);
   if(existing&&!certificateNeedsRenewal(existing,csr,authority.hostname,this.#now())){await this.#complete(job,async()=>{});return;}
   const certificate=await this.#issueCertificate({...authority,installationId:job.targetId,kind,csr,signal});
+  signal.throwIfAborted();
   if(certificateNeedsRenewal(certificate,csr,authority.hostname,this.#now()))throw new Error('invalid_certificate');
-  await this.#complete(job,async()=>{
+  await this.#complete(job,async client=>{
    const latestCsr=await this.#artifacts!.readCsr(job.targetId,kind);if(latestCsr!==csr)throw new Error('csr_changed');
-   await this.#store.publishAuthorizedCertificate(job.targetId,kind,csr,authority,()=>this.#artifacts!.publishCertificate(job.targetId,kind,certificate));
+   await this.#store.publishAuthorizedCertificate(client,job.targetId,kind,csr,authority,()=>this.#artifacts!.publishCertificate(job.targetId,kind,certificate));
   });
  }
- async #complete(job:RemoteConfigurationJob,action:()=>Promise<void>){
+ async #complete(job:RemoteConfigurationJob,action:(client:PoolClient)=>Promise<void>){
   const interval=job.kind==='route'?'5 minutes':'1 day';
   return transaction(this.#pool,async client=>{
    const live=(await client.query(`SELECT 1 FROM remote_configuration_jobs WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4
     AND enabled AND status='running' AND lease_until>clock_timestamp() FOR UPDATE`,[job.kind,job.targetId,job.desiredDigest,job.claimId])).rows[0];
-   if(!live)throw new Error('stale_claim');await action();
+   if(!live)throw new Error('stale_claim');await action(client);
    await client.query(`UPDATE remote_configuration_jobs SET status='pending',applied_digest=desired_digest,available_at=clock_timestamp()+$5::interval,
     claim_id=NULL,lease_until=NULL,attempts=0,last_error=NULL,last_success_at=clock_timestamp(),updated_at=clock_timestamp()
     WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4`,[job.kind,job.targetId,job.desiredDigest,job.claimId,interval]);
