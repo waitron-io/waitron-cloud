@@ -123,9 +123,17 @@ export class HistoryCleanup {
       });
       case 'registrationOperations': return this.#registrationOperations(client, cutoff, limit, apply);
       case 'emailDeliveries': return this.#emailDeliveries(client, cutoff, limit, apply);
-      case 'backupJobs':
-      case 'recoveryHistory':
-      case 'backupTombstones': return {cutoff, eligible: 0, blocked: 0, deleted: 0, hasMore: false};
+      case 'backupJobs': return this.#simple(client, cutoff, limit, apply, {
+        eligible: `SELECT count(*)::integer AS count FROM backup_jobs
+          WHERE status='completed' AND COALESCE(last_success_at,available_at)<$1`,
+        apply: `WITH selected AS(SELECT id FROM backup_jobs
+          WHERE status='completed' AND COALESCE(last_success_at,available_at)<$1
+          ORDER BY COALESCE(last_success_at,available_at),id LIMIT $2 FOR UPDATE SKIP LOCKED)
+          DELETE FROM backup_jobs j USING selected s WHERE j.id=s.id
+          AND j.status='completed' AND COALESCE(j.last_success_at,j.available_at)<$1 RETURNING j.id`,
+      });
+      case 'recoveryHistory': return this.#recoveryHistory(client, cutoff, limit, apply);
+      case 'backupTombstones': return this.#backupTombstones(client, cutoff, limit, apply);
     }
   }
 
@@ -191,6 +199,56 @@ export class HistoryCleanup {
       }
     }
     return {cutoff, eligible, blocked: 0, deleted, hasMore: apply ? eligible > deleted : eligible > 0};
+  }
+
+  async #recoveryHistory(client: PoolClient, cutoff: string, limit: number, apply: boolean) {
+    const aged = `r.status='closed' AND r.expires_at<$1`;
+    const incomplete = `EXISTS(SELECT 1 FROM installation_replacements x WHERE x.id=r.id AND x.completed_at IS NULL)`;
+    const eligible = await count(client, `SELECT count(*)::integer AS count FROM backup_recoveries r WHERE ${aged} AND NOT ${incomplete}`, [cutoff]);
+    const blocked = await count(client, `SELECT count(*)::integer AS count FROM backup_recoveries r WHERE ${aged} AND ${incomplete}`, [cutoff]);
+    let deleted = 0;
+    if (apply) {
+      const selected = await client.query<{id: string}>(`SELECT r.id FROM backup_recoveries r WHERE ${aged} AND NOT ${incomplete}
+        ORDER BY r.expires_at,r.id LIMIT $2 FOR UPDATE OF r SKIP LOCKED`, [cutoff, limit]);
+      const ids = selected.rows.map(row => row.id);
+      if (ids.length) {
+        await client.query('DELETE FROM backup_recovery_requests WHERE id=ANY($1::uuid[])', [ids]);
+        await client.query('DELETE FROM installation_replacements WHERE id=ANY($1::uuid[]) AND completed_at IS NOT NULL', [ids]);
+        const result = await client.query(`DELETE FROM backup_recoveries r WHERE r.id=ANY($2::uuid[]) AND ${aged}
+          AND NOT ${incomplete} RETURNING r.id`, [cutoff, ids]);
+        deleted = result.rowCount ?? 0;
+      }
+    }
+    return {cutoff, eligible, blocked, deleted, hasMore: apply ? eligible > deleted : eligible > 0};
+  }
+
+  async #backupTombstones(client: PoolClient, cutoff: string, limit: number, apply: boolean) {
+    const protectedPoint = `p.id=(SELECT q.id FROM backup_points q WHERE q.venue_id=p.venue_id AND q.kind='snapshot'
+      AND NOT q.deleting AND q.deleted_at IS NULL AND q.verification='verified' ORDER BY q.captured_at DESC,q.id DESC LIMIT 1)`;
+    const referenced = `EXISTS(SELECT 1 FROM backup_recoveries r WHERE r.point_id=p.id)`;
+    const aged = `p.deleted_at<$1`;
+    const eligible = await count(client, `SELECT count(*)::integer AS count FROM backup_points p
+      WHERE ${aged} AND NOT ${referenced} AND NOT ${protectedPoint}`, [cutoff]);
+    const blocked = await count(client, `SELECT count(*)::integer AS count FROM backup_points p
+      WHERE ${aged} AND (${referenced} OR ${protectedPoint})`, [cutoff]);
+    let deleted = 0;
+    if (apply) {
+      const selected = await client.query<{id: string}>(`SELECT p.id FROM backup_points p
+        WHERE ${aged} AND NOT ${referenced} AND NOT ${protectedPoint}
+        ORDER BY p.deleted_at,p.id LIMIT $2 FOR UPDATE OF p SKIP LOCKED`, [cutoff, limit]);
+      const ids = selected.rows.map(row => row.id);
+      if (ids.length) {
+        await client.query('DELETE FROM backup_verifications WHERE point_id=ANY($1::uuid[])', [ids]);
+        await client.query("DELETE FROM backup_jobs WHERE kind='verify' AND status='completed' AND target_id=ANY($1::uuid[])", [ids]);
+        const result = await client.query(`DELETE FROM backup_points p WHERE p.id=ANY($2::uuid[]) AND ${aged}
+          AND NOT ${referenced} AND NOT ${protectedPoint} RETURNING p.id`, [cutoff, ids]);
+        const removed = result.rows.map(row => row.id as string);
+        deleted = removed.length;
+        if (removed.length) await client.query(`DELETE FROM backup_captures c WHERE c.id=ANY($2::uuid[])
+          AND c.cleaned_at<$1 AND NOT EXISTS(SELECT 1 FROM backup_points p WHERE p.id=c.id)`, [cutoff, removed]);
+      }
+    }
+    return {cutoff, eligible, blocked, deleted, hasMore: apply ? eligible > deleted : eligible > 0};
   }
 }
 

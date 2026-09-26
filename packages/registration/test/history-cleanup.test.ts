@@ -11,6 +11,7 @@ const schema = `history_${randomUUID().replaceAll('-', '')}`;
 const options = `-c search_path=${schema} -c statement_timeout=10000`;
 const admin = new Pool({connectionString: url});
 const pool = new Pool({connectionString: url, options, application_name: `${schema}_cleanup`});
+const otherPool = new Pool({connectionString: url, options, application_name: `${schema}_worker`});
 const cleanup = new HistoryCleanup(pool);
 const accountId = randomUUID(), organisationId = randomUUID(), businessId = randomUUID();
 const venueId = randomUUID(), installationId = randomUUID();
@@ -24,7 +25,7 @@ before(async () => {
   await migrate(pool);
 });
 after(async () => {
-  await pool.end();
+  await Promise.all([pool.end(), otherPool.end()]);
   await admin.query(`DROP SCHEMA ${schema} CASCADE`);
   await admin.end();
 });
@@ -157,4 +158,84 @@ test('dry run and apply bound identity, registration, delivery and operation his
     deliveries: await count('service_alert_deliveries'), incidents: await count('venue_incidents')},
   {sessions: 2, signup: 2, reset: 1, ceremonies: 1, pairing: 1, connections: 1,
     operations: 1, outbox: 1, deliveries: 0, incidents: 1});
+});
+
+test('backup cleanup preserves work and references while chunks resume across workers', async () => {
+  await pool.query(`INSERT INTO backup_locations(venue_id,installation_id,endpoint,bucket,region)
+    VALUES($1,$2,'https://storage.example.test','history-bucket','test')`, [venueId, installationId]);
+  await pool.query("INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,1,'sealed')", [venueId]);
+  const pointA = '00000000-0000-4000-8000-000000000011';
+  const protectedPoint = '00000000-0000-4000-8000-000000000012';
+  const recoveredPoint = '00000000-0000-4000-8000-000000000013';
+  const blockedPoint = '00000000-0000-4000-8000-000000000014';
+  const node = randomUUID();
+  for (const [id, deleted] of [[pointA, true], [protectedPoint, false], [recoveredPoint, true], [blockedPoint, true]] as const) {
+    await pool.query(`INSERT INTO backup_captures(id,venue_id,installation_id,key_version,created_at,expired_at,cleaned_at)
+      VALUES($1,$2,$3,1,$4,$5,$5)`, [id, venueId, installationId, old, deleted ? old : null]);
+    await pool.query(`INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules,verification,deleting,deleted_at)
+      VALUES($1,$2,$3,1,'snapshot',$4,$5,1,$6,'daily',$7,'{}','verified',$8,$9)`,
+    [id, venueId, installationId, `snapshots/${id}`, id.slice(-1).repeat(64), old, node, deleted, deleted ? old : null]);
+  }
+  await pool.query(`INSERT INTO backup_verifications(id,point_id,digest,verifier,outcome,checked_at)
+    VALUES($1,$2,$3,'history-test','verified',$4),($5,$6,$7,'history-test','verified',$4)`,
+  [randomUUID(), pointA, '1'.repeat(64), old, randomUUID(), recoveredPoint, '3'.repeat(64)]);
+
+  const oldRecovery = randomUUID(), blockedRecovery = randomUUID(), activeRecovery = randomUUID();
+  await pool.query(`INSERT INTO backup_recoveries(id,venue_id,point_id,account_id,target_public_key,mode,status,created_at,expires_at)
+    VALUES($1,$2,$3,$4,'recovery-complete','failure','closed',$5,$5),
+      ($6,$2,$7,$4,'recovery-blocked','failure','closed',$5,$5),
+      ($8,$2,$9,$4,'recovery-active','failure','pending',$10,$10)`,
+  [oldRecovery, venueId, recoveredPoint, accountId, old, blockedRecovery, blockedPoint, activeRecovery, protectedPoint, future]);
+  await pool.query(`INSERT INTO backup_recovery_requests(id,public_key,code_hash,expires_at,account_id,operation_id)
+    VALUES($1,'recovery-complete',$2,$3,$4,$1)`, [oldRecovery, hash('8'), old, accountId]);
+  await pool.query(`INSERT INTO installation_replacements(id,venue_id,old_installation_id,public_key,peer_public_key,local_venue_id,node_id,created_at,completed_at,result)
+    VALUES($1,$2,$3,'replacement-complete','peer-complete',$4,$5,$6,$6,'{}'),
+      ($7,$2,$3,'replacement-incomplete','peer-incomplete',$8,$9,$6,NULL,NULL)`,
+  [oldRecovery, venueId, installationId, randomUUID(), randomUUID(), old,
+    blockedRecovery, randomUUID(), randomUUID()]);
+
+  const lockedJob = '00000000-0000-4000-8000-000000000021';
+  const freeJob = '00000000-0000-4000-8000-000000000022';
+  await pool.query(`INSERT INTO backup_jobs(id,kind,venue_id,target_id,status,available_at,last_success_at)
+    VALUES($1,'verify',$3,$4,'completed',$5,$5),($2,'verify',$3,$6,'completed',$5,$5),
+      ($7,'incoming',$3,$3,'pending',$5,NULL),($8,'retention',$3,$3,'failed',$5,NULL)`,
+  [lockedJob, freeJob, venueId, randomUUID(), old, randomUUID(), randomUUID(), randomUUID()]);
+  await pool.query(`INSERT INTO backup_jobs(id,kind,venue_id,target_id,status,available_at,last_success_at)
+    VALUES($1,'verify',$2,$3,'completed',$4,$5)`, [randomUUID(), venueId, pointA, future, future]);
+
+  const policy = parseHistoryCleanupPolicy({cutoffs: {
+    backupJobs: cutoff, recoveryHistory: cutoff, backupTombstones: cutoff,
+  }, chunkSize: 1});
+  const dry = await cleanup.run(policy, {apply: false});
+  assert.deepEqual(dry.categories.backupJobs, {cutoff, eligible: 2, blocked: 0, deleted: 0, hasMore: true});
+  assert.deepEqual(dry.categories.recoveryHistory, {cutoff, eligible: 1, blocked: 1, deleted: 0, hasMore: true});
+  assert.deepEqual(dry.categories.backupTombstones, {cutoff, eligible: 1, blocked: 2, deleted: 0, hasMore: true});
+
+  const lock = await otherPool.connect();
+  await lock.query('BEGIN');
+  await lock.query('SELECT id FROM backup_jobs WHERE id=$1 FOR UPDATE', [lockedJob]);
+  try {
+    const first = await cleanup.run(policy, {apply: true});
+    assert.equal(first.categories.backupJobs?.deleted, 1, 'the unlocked completed job is the first chunk');
+    assert.equal(first.categories.recoveryHistory?.deleted, 1);
+    assert.equal(first.categories.backupTombstones?.deleted, 1);
+    assert.equal((await pool.query('SELECT count(*) FROM backup_jobs WHERE id=$1', [lockedJob])).rows[0].count, '1');
+  } finally {
+    await lock.query('ROLLBACK');
+    lock.release();
+  }
+
+  const restarted = new HistoryCleanup(pool);
+  const second = await restarted.run(policy, {apply: true});
+  assert.equal(second.categories.backupJobs?.deleted, 1);
+  assert.equal(second.categories.recoveryHistory?.deleted, 0);
+  assert.equal(second.categories.backupTombstones?.deleted, 1);
+  assert.equal(await count('backup_recovery_requests'), 0);
+  assert.equal((await pool.query('SELECT count(*) FROM installation_replacements WHERE id=$1', [oldRecovery])).rows[0].count, '0');
+  assert.equal((await pool.query('SELECT count(*) FROM backup_recoveries WHERE id=$1', [oldRecovery])).rows[0].count, '0');
+  assert.equal((await pool.query('SELECT count(*) FROM backup_recoveries WHERE id IN($1,$2)', [blockedRecovery, activeRecovery])).rows[0].count, '2');
+  assert.equal((await pool.query('SELECT count(*) FROM backup_points WHERE id=ANY($1::uuid[])', [[pointA, recoveredPoint]])).rows[0].count, '0');
+  assert.equal((await pool.query('SELECT count(*) FROM backup_captures WHERE id=ANY($1::uuid[])', [[pointA, recoveredPoint]])).rows[0].count, '0');
+  assert.equal((await pool.query('SELECT count(*) FROM backup_points WHERE id=ANY($1::uuid[])', [[protectedPoint, blockedPoint]])).rows[0].count, '2');
+  assert.equal((await pool.query("SELECT count(*) FROM backup_jobs WHERE status IN('pending','running','failed')")).rows[0].count, '2');
 });
