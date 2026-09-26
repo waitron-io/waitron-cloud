@@ -17,7 +17,8 @@ const denied=async operation=>{try{await operation();return false;}catch(error){
 const hostReadDenied=await denied(()=>readFile('/etc/hosts'));
 const outsideWriteDenied=await denied(()=>writeFile(join(root,'..','cloud-verify-forbidden'),'forbidden'));
 let childProcessDenied=false;try{const child=spawn(process.execPath,['-e',''],{stdio:'ignore'});child.kill();}catch(error){childProcessDenied=error.code==='ERR_ACCESS_DENIED';}
-assert(hostReadDenied&&outsideWriteDenied&&childProcessDenied);
+let addonDenied=false;try{process.dlopen({exports:{}},'/missing-addon.node');}catch(error){addonDenied=error.code==='ERR_DLOPEN_DISABLED';}
+assert(hostReadDenied&&outsideWriteDenied&&childProcessDenied&&addonDenied);
 const load=name=>import(pathToFileURL(join(request.checkout,'apps/server/src',name)).href);
 const {validateArtifact,writeValidated}=await load('restore.ts');
 const {ALL_MODULES}=await load('modules.ts');
@@ -37,4 +38,4 @@ await writeValidated({...checked,secretEntries:checked.secretEntries.filter(e=>e
 assert.deepEqual([...hooks].sort(),ALL_MODULES.filter(m=>m.backup?.restore).map(m=>m.name).sort());
 const exists=async name=>{try{await stat(join(root,name));return true;}catch(e){if(e.code!=='ENOENT')throw e;return false;}};
 for(const name of ['backup.env','cloud-connection.json','cloud-staff.key'])assert.equal(await exists(name),false);
-console.log(JSON.stringify({networkDenied,childProcessDenied,hostReadDenied,outsideWriteDenied,integrityOk:true,hooks,cloudCredentialPresent:false,staffKeyPresent:false}));
+console.log(JSON.stringify({networkDenied,childProcessDenied,addonDenied,hostReadDenied,outsideWriteDenied,integrityOk:true,hooks,cloudCredentialPresent:false,staffKeyPresent:false}));

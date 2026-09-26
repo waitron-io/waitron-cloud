@@ -240,14 +240,15 @@ entry point and the private restore directory; it writes only that directory and
 no network, subprocess or native-addon permission. The TypeScript loader keeps its
 worker-thread permission.
 
-The child has a 512 MiB V8 heap ceiling, a 25-second CPU limit, a 30-second wall deadline,
+The child has a 512 MiB V8 heap ceiling, at most 25 seconds of CPU time, a 30-second wall deadline,
 a 512 MiB per-file limit, at most 128 open files and 64 KiB total output. Cancellation
 kills its process group and waits for close before the private directory is removed.
-Malformed archives produce a fixed failure code, oversized objects are refused at the
-512 MiB catalogue/storage boundary, and a worker restart retries the durable job without
-trusting the old result. The focused verifier tests exercise every boundary with real
-child processes; the two-venue runner exercises the same policy around Waitron's real
-restore hooks.
+Malformed archives produce a fixed failure code, resource ceilings produce a distinct
+resource code, oversized objects are refused at the 512 MiB catalogue/storage boundary,
+and a worker restart retries the durable job without trusting the old result. Focused
+process tests exercise the fixed permission and resource policy with real children; the
+database suite covers object-size refusal, while the two-venue runner exercises the loader
+policy around Waitron's real restore hooks.
 
 These controls isolate trusted local Waitron code from the Cloud worker. They are not a
 hostile-code sandbox: the required loader worker can invalidate Node's permission model,

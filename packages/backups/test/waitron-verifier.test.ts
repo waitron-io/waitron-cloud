@@ -22,8 +22,8 @@ test('the isolated verifier runs Waitron restore hooks and removes its private s
  try{
  const verify=await createWaitronVerifier(checkout,{temporaryRoot:scratch});
   const signal=new AbortController().signal;
-  const result=await verify(await readFile(source),{recoveryKey:'test-key',streamKey:'test-stream'},{sourceNodeId:'node-a',modules:{fake:1},capturedAt:'2026-09-26T00:00:00.000Z'} as never,signal) as {networkDenied:boolean;childProcessDenied:boolean;hostReadDenied:boolean;outsideWriteDenied:boolean;integrityOk:boolean;hooks:string[]};
-  assert.deepEqual(result,{networkDenied:true,childProcessDenied:true,hostReadDenied:true,outsideWriteDenied:true,integrityOk:true,hooks:['fake'],cloudCredentialPresent:false,staffKeyPresent:false});assert.deepEqual(await readdir(scratch),[]);
+  const result=await verify(await readFile(source),{recoveryKey:'test-key',streamKey:'test-stream'},{sourceNodeId:'node-a',modules:{fake:1},capturedAt:'2026-09-26T00:00:00.000Z'} as never,signal) as {networkDenied:boolean;childProcessDenied:boolean;addonDenied:boolean;hostReadDenied:boolean;outsideWriteDenied:boolean;integrityOk:boolean;hooks:string[]};
+  assert.deepEqual(result,{networkDenied:true,childProcessDenied:true,addonDenied:true,hostReadDenied:true,outsideWriteDenied:true,integrityOk:true,hooks:['fake'],cloudCredentialPresent:false,staffKeyPresent:false});assert.deepEqual(await readdir(scratch),[]);
   await assert.rejects(verify(Buffer.from([0]),{recoveryKey:'test-key',streamKey:'test-stream'},{sourceNodeId:'node-a',modules:{fake:1},capturedAt:'2026-09-26T00:00:00.000Z'} as never,signal),/^Error: backup.verifier_failed$/);
   assert.deepEqual(await readdir(scratch),[]);
  }finally{await rm(fixture,{recursive:true,force:true});}

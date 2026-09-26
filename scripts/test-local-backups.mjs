@@ -483,6 +483,7 @@ try {
       const checked = await restore(...args);
       assert(checked.networkDenied);
       assert(checked.childProcessDenied);
+      assert(checked.addonDenied);
       assert(checked.hostReadDenied);
       assert(checked.outsideWriteDenied);
       assert(checked.integrityOk);
@@ -508,7 +509,7 @@ try {
     snapshots.push({ venue, reservation, point, captured, bytes, result,streamKey:internal.keys.streamKey });
   }
   record(
-    "both encrypted snapshots restored by Waitron with integrity/schema checks and module hooks while network, subprocess, host-read and outside-write permissions were denied",
+    "both encrypted snapshots restored by Waitron with integrity/schema checks and module hooks while network, subprocess, native-addon, host-read and outside-write permissions were denied",
   );
   for (const item of snapshots) await stop(item.venue.server);
   for (const item of snapshots) {

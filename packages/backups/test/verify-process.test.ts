@@ -8,10 +8,10 @@ import {runNodeVerifier} from '../src/verify-process.ts';
 test('verifier policy permits its scratch directory and denies host reads, writes, network and subprocesses',async()=>{
  const root=await mkdtemp(join(tmpdir(),'cloud-verifier-boundary-')),scratch=join(root,'scratch'),outside=join(root,'outside');
  await mkdir(scratch);
- const code=`(async()=>{const fs=require('node:fs'),net=require('node:net'),cp=require('node:child_process');let readDenied=false,writeDenied=false,childDenied=false;try{fs.readFileSync(process.cwd()+'/package.json')}catch(e){readDenied=e.code==='ERR_ACCESS_DENIED'}try{fs.writeFileSync(${JSON.stringify(outside)},'escaped')}catch(e){writeDenied=e.code==='ERR_ACCESS_DENIED'}fs.writeFileSync(${JSON.stringify(join(scratch,'allowed'))},'inside');try{cp.spawn(process.execPath,['-e',''],{stdio:'ignore'})}catch(e){childDenied=e.code==='ERR_ACCESS_DENIED'}const networkDenied=await new Promise(resolve=>{try{const socket=net.createConnection({host:'127.0.0.1',port:9});socket.once('error',e=>resolve(e.code==='ERR_ACCESS_DENIED'));socket.once('connect',()=>{socket.destroy();resolve(false)})}catch(e){resolve(e.code==='ERR_ACCESS_DENIED')}});console.log(JSON.stringify({readDenied,writeDenied,childDenied,networkDenied}))})()`;
+ const code=`(async()=>{const fs=require('node:fs'),net=require('node:net'),cp=require('node:child_process');let readDenied=false,writeDenied=false,childDenied=false,addonDenied=false;try{fs.readFileSync(process.cwd()+'/package.json')}catch(e){readDenied=e.code==='ERR_ACCESS_DENIED'}try{fs.writeFileSync(${JSON.stringify(outside)},'escaped')}catch(e){writeDenied=e.code==='ERR_ACCESS_DENIED'}fs.writeFileSync(${JSON.stringify(join(scratch,'allowed'))},'inside');try{cp.spawn(process.execPath,['-e',''],{stdio:'ignore'})}catch(e){childDenied=e.code==='ERR_ACCESS_DENIED'}try{process.dlopen({exports:{}},'/missing-addon.node')}catch(e){addonDenied=e.code==='ERR_DLOPEN_DISABLED'}const networkDenied=await new Promise(resolve=>{try{const socket=net.createConnection({host:'127.0.0.1',port:9});socket.once('error',e=>resolve(e.code==='ERR_ACCESS_DENIED'));socket.once('connect',()=>{socket.destroy();resolve(false)})}catch(e){resolve(e.code==='ERR_ACCESS_DENIED')}});console.log(JSON.stringify({readDenied,writeDenied,childDenied,addonDenied,networkDenied}))})()`;
  try{
   const result=await runNodeVerifier(['-e',code],{input:{},writablePaths:[scratch]});
-  assert.deepEqual(result,{readDenied:true,writeDenied:true,childDenied:true,networkDenied:true});
+  assert.deepEqual(result,{readDenied:true,writeDenied:true,childDenied:true,addonDenied:true,networkDenied:true});
   assert.equal(await readFile(join(scratch,'allowed'),'utf8'),'inside');
  }finally{await rm(root,{recursive:true,force:true});}
 });
@@ -24,6 +24,7 @@ test('verifier callers cannot widen the fixed process policy with Node permissio
  await assert.rejects(runNodeVerifier(['--allow-child-process','-e',"console.log('{}')"],{input:{}}),/^Error: backup.verifier_configuration$/);
  await assert.rejects(runNodeVerifier(['--allow-net','-e',"console.log('{}')"],{input:{}}),/^Error: backup.verifier_configuration$/);
  await assert.rejects(runNodeVerifier(['--allow-fs-read=*','-e',"console.log('{}')"],{input:{}}),/^Error: backup.verifier_configuration$/);
+ await assert.rejects(runNodeVerifier(['--experimental-permission','-e',"console.log('{}')"],{input:{}}),/^Error: backup.verifier_configuration$/);
 });
 test('verifier process bounds time, output and cancellation without echoing child errors',async()=>{
  await assert.rejects(runNodeVerifier(['-e','setInterval(()=>{},1000)'],{input:{},timeoutMs:100}),/^Error: backup.verifier_timeout$/);
@@ -42,7 +43,7 @@ test('verifier CPU use is stopped by the resource limit before its wall deadline
 test('verifier cannot create a file beyond its resource limit',async()=>{
  const root=await mkdtemp(join(tmpdir(),'cloud-verifier-file-limit-')),target=join(root,'too-large');
  try{
-  await assert.rejects(runNodeVerifier(['-e',`require('node:fs').writeFileSync(${JSON.stringify(target)},Buffer.alloc(4096));console.log('{}')`],{input:{},writablePaths:[root],limits:{maxFileBytes:1024}}),/backup\.verifier_(?:failed|resource)/);
+  await assert.rejects(runNodeVerifier(['-e',`require('node:fs').writeFileSync(${JSON.stringify(target)},Buffer.alloc(4096));console.log('{}')`],{input:{},writablePaths:[root],limits:{maxFileBytes:1024}}),/^Error: backup.verifier_resource$/);
   assert((await stat(target).catch(()=>({size:0}))).size<=1024);
  }finally{await rm(root,{recursive:true,force:true});}
 });
@@ -58,13 +59,14 @@ test('verifier cannot exhaust the worker host file descriptors',async()=>{
 });
 
 test('verifier JavaScript allocations stay inside the configured heap ceiling',async()=>{
- await assert.rejects(runNodeVerifier(['-e',"const values=[];for(let i=0;i<5_000_000;i++)values.push(i);console.log('{}')"],{input:{},timeoutMs:5000,limits:{heapMiB:16}}),/backup\.verifier_(?:failed|resource)/);
+ await assert.rejects(runNodeVerifier(['-e',"const values=[];for(let i=0;i<5_000_000;i++)values.push(i);console.log('{}')"],{input:{},timeoutMs:5000,limits:{heapMiB:16}}),/^Error: backup.verifier_resource$/);
 });
 
 test('a timed-out verifier is reaped before temporary files are cleaned',async()=>{
  const root=await mkdtemp(join(tmpdir(),'cloud-verifier-reap-')),pidFile=join(root,'pid');let pid=0;
  try{
-  await assert.rejects(runNodeVerifier(['-e',`require('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(process.pid));setInterval(()=>{},1000)`],{input:{},writablePaths:[root],timeoutMs:100}),/backup.verifier_timeout/);
+  // Leave cold-start headroom: this assertion targets reaping after timeout, not process launch speed.
+  await assert.rejects(runNodeVerifier(['-e',`require('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(process.pid));setInterval(()=>{},1000)`],{input:{},writablePaths:[root],timeoutMs:1000}),/backup.verifier_timeout/);
   pid=Number(await readFile(pidFile,'utf8'));assert.throws(()=>process.kill(pid,0));
  }finally{if(pid)try{process.kill(pid,'SIGKILL');}catch{/* Already reaped. */}await rm(root,{recursive:true,force:true});}
 });
