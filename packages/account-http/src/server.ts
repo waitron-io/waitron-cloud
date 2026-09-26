@@ -26,6 +26,7 @@ export async function startAccountServer(options: {pool: Pool; outbox: EmailOutb
     }
     if (stopping) return unavailable(request, portalRequest);
     if (portalRequest) return portalResponse(request, options.portalAssets!);
+    if (url.pathname === '/api/health/live') return app.fetch(request, bindings);
     if (active >= 8) return unavailable();
     active++;
     try {return await app.fetch(request, bindings);}

@@ -38,6 +38,16 @@ function send(port: number, path = '/session', body?: string, headers: Record<st
   void result.catch(() => {});
   return {result, abort() {req.destroy();}};
 }
+function health(port:number,path:'/api/health/live'|'/api/health/ready'){
+ let req:ClientRequest;
+ const result=new Promise<{status:number;body:string}>((resolve,reject)=>{
+  req=request({host:'127.0.0.1',port,path,headers:{host:'localhost'}},response=>{
+   let body='';response.on('data',chunk=>{body+=chunk;});response.on('end',()=>resolve({status:response.statusCode!,body}));response.on('error',reject);
+  });
+  req.on('error',reject);req.end();
+ });
+ void result.catch(()=>{});return {result,abort(){req.destroy();}};
+}
 async function until(check: () => Promise<boolean>, ms = 5000) {
   const deadline = Date.now() + ms;
   while (!await check()) {if (Date.now() >= deadline) throw new Error('Condition timed out'); await delay(20);}
@@ -75,6 +85,20 @@ test('stalled bodies expire, aborted clients release slots, and admission is bou
     assert.equal((await pending[1]!.result).status, 408);
     assert.equal(await queued(), 0); assert.equal((await send(running.port).result).status, 401);
   } finally {for (const item of pending) item.abort(); await running.close();}
+});
+test('liveness remains available while database-backed readiness fills admission',async()=>{
+ const running=await host(),locker=await db.secondPool.connect(),blocked:ReturnType<typeof health>[]=[];
+ try{
+  await locker.query('BEGIN');await locker.query('LOCK TABLE schema_migrations IN ACCESS EXCLUSIVE MODE');
+  for(let index=0;index<8;index++)blocked.push(health(running.port,'/api/health/ready'));
+  await until(async()=>Number((await db.secondPool.query("SELECT count(*)::integer AS count FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT count(*)::integer AS count FROM schema_migrations%'",[db.schema])).rows[0].count)===8);
+  const live=await health(running.port,'/api/health/live').result;
+  assert.equal(live.status,200);assert.deepEqual(JSON.parse(live.body),{status:'live'});
+ }finally{
+  await locker.query('ROLLBACK');locker.release();
+  for(const item of blocked)await item.result;
+  await running.close();
+ }
 });
 test('header size and receive deadlines are enforced over raw TCP', async () => {
   const running = await host();

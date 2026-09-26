@@ -9,14 +9,14 @@ let db:Awaited<ReturnType<typeof database>>;
 before(async()=>{db=await database();});
 after(async()=>db?.close());
 beforeEach(async()=>{
- await db.pool.query('TRUNCATE organisations,cloud_accounts CASCADE');
+ await db.pool.query('TRUNCATE organisations,cloud_accounts,remote_cells CASCADE');
  await db.pool.query('UPDATE usage_reconciliation_sources SET last_attempted_at=clock_timestamp(),caught_up_at=clock_timestamp()');
 });
 
 async function healthServer(handler:(request:import('node:http').IncomingMessage,response:import('node:http').ServerResponse)=>void){
  const server=createServer(handler);await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>resolve());});
  const address=server.address();assert.ok(address&&typeof address!=='string');
- return {url:`http://127.0.0.1:${address.port}`,close:()=>new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()))};
+ return {url:`http://127.0.0.1:${address.port}`,closeConnections:()=>server.closeAllConnections(),close:()=>new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()))};
 }
 const healthy=()=>healthServer((request,response)=>{
  response.setHeader('content-type','application/json');
@@ -34,6 +34,29 @@ test('empty configured system is ready and reports each evidence class without t
    remoteConfiguration:['ready','no_targets'],gateways:['ready','no_targets'],storage:['ready','no_targets'],usage:['ready','current'],
   });
   assert.equal(JSON.stringify(snapshot).includes('DATABASE_URL'),false);
+ }finally{await server.close();}
+});
+
+test('configured venues without a scheduled monitor are unknown instead of absent',async()=>{
+ await configuredVenue();
+ const server=await healthy();try{
+  const snapshot=await operationsStatus(db.pool,{controlApiUrl:server.url});
+  assert.equal(snapshot.components.monitoring.venues,1);
+  assert.equal(snapshot.components.monitoring.unknown,1);
+  assert.equal(snapshot.components.monitoring.state,'degraded');
+  assert.equal(snapshot.components.monitoring.code,'evidence_stale');
+ }finally{await server.close();}
+});
+
+test('historical terminal email failures remain counted without degrading current delivery',async()=>{
+ await db.pool.query(`INSERT INTO email_outbox(id,kind,status,expires_at,attempts,failures,last_error,finished_at)
+  VALUES($1,'password_changed','failed',clock_timestamp()+interval '1 hour',8,8,'attempts_exhausted',clock_timestamp())`,[randomUUID()]);
+ const server=await healthy();try{
+  const snapshot=await operationsStatus(db.pool,{controlApiUrl:server.url});
+  assert.equal(snapshot.components.email.counts.failed,1);
+  assert.equal(snapshot.components.email.backlogged,0);
+  assert.equal(snapshot.components.email.state,'ready');
+  assert.equal(snapshot.components.email.code,'current');
  }finally{await server.close();}
 });
 
@@ -82,4 +105,22 @@ test('control API redirects, oversized replies and timeouts fail closed with sta
   assert.equal(snapshot.components.controlApi.state,'unready');assert.equal(snapshot.components.controlApi.code,'unavailable');
   assert.equal(snapshot.ready,false);assert.equal(JSON.stringify(snapshot).includes('private.example'),false);
  }finally{await server.close();}}
+});
+
+test('rejected health responses close unfinished response streams',async()=>{
+ for(const fixture of [{status:503},{status:200,length:'1025'}]){
+  let closed!:()=>void;
+  const responseClosed=new Promise<void>(resolve=>{closed=resolve;});
+  const server=await healthServer((_request,response)=>{
+   response.on('close',closed);response.statusCode=fixture.status;
+   response.setHeader('content-type','application/json');
+   if(fixture.length)response.setHeader('content-length',fixture.length);
+   response.write('{');
+  });
+  try{
+   const snapshot=await operationsStatus(db.pool,{controlApiUrl:server.url,probeTimeoutMs:20});
+   assert.equal(snapshot.components.controlApi.state,'unready');
+   await Promise.race([responseClosed,new Promise<never>((_resolve,reject)=>setTimeout(()=>reject(new Error('rejected response stream remained open')),100))]);
+  }finally{server.closeConnections();await server.close();}
+ }
 });

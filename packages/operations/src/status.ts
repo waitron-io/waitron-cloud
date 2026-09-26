@@ -37,14 +37,15 @@ async function boundedBody(response:Response,limit=256){
 }
 async function probe(url:URL,path:string,status:string,timeoutMs:number,request:typeof fetch){
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs),started=performance.now();
+ let response:Response|undefined;
  try{
-  const response=await request(new URL(path,url),{method:'GET',redirect:'manual',signal:controller.signal,headers:{accept:'application/json'}});
+  response=await request(new URL(path,url),{method:'GET',redirect:'manual',signal:controller.signal,headers:{accept:'application/json'}});
   if(response.status!==200)throw new Error('unexpected_status');
   const text=await boundedBody(response),body:unknown=JSON.parse(text);
   if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).join(',')!=='status'||(body as {status?:unknown}).status!==status)throw new Error('unexpected_body');
   return {ok:true as const,elapsedMs:Math.max(0,Math.round(performance.now()-started))};
  }catch{return {ok:false as const,elapsedMs:Math.max(0,Math.round(performance.now()-started))};}
- finally{clearTimeout(timer);}
+ finally{clearTimeout(timer);controller.abort();if(response?.body&&!response.body.locked)await response.body.cancel().catch(()=>{});}
 }
 
 export async function operationsStatus(pool:Pool,options:OperationsStatusOptions):Promise<OperationsSnapshot>{
@@ -53,9 +54,11 @@ export async function operationsStatus(pool:Pool,options:OperationsStatusOptions
  const request=options.fetch??fetch;
  const [live,ready,monitor,email,backup,remote,gateway,storage,usage]=await Promise.all([
   probe(origin,'/api/health/live','live',probeTimeout,request),probe(origin,'/api/health/ready','ready',probeTimeout,request),
-  pool.query(`SELECT count(*)::integer AS venues,count(*) FILTER(WHERE next_check_at<=clock_timestamp())::integer AS due,
-   count(*) FILTER(WHERE checked_at IS NULL OR checked_at<=clock_timestamp()-$1*interval '1 second')::integer AS unknown,
-   min(checked_at) AS oldest FROM venue_monitors`,[evidenceStale]),
+  pool.query(`SELECT count(*)::integer AS venues,count(*) FILTER(WHERE m.next_check_at<=clock_timestamp())::integer AS due,
+   count(*) FILTER(WHERE m.checked_at IS NULL OR m.checked_at<=clock_timestamp()-$1*interval '1 second')::integer AS unknown,
+   min(m.checked_at) AS oldest FROM(SELECT DISTINCT i.venue_id FROM installations i JOIN venues v ON v.id=i.venue_id
+    WHERE v.environment='test' AND i.revoked_at IS NULL AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=i.id AND s.state<>'unconfigured'))targets
+   LEFT JOIN venue_monitors m ON m.venue_id=targets.venue_id`,[evidenceStale]),
   pool.query(`SELECT status,count(*)::integer AS count,
    count(*) FILTER(WHERE status='pending' AND created_at<=clock_timestamp()-$1*interval '1 second'
     OR status='processing' AND lease_until<=clock_timestamp())::integer AS backlogged,

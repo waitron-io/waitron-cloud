@@ -39,4 +39,3 @@ Customer diagnostic requests use the existing session, CSRF, origin, and per-acc
 ## Verification
 
 PostgreSQL tests create healthy, stale, failed, cross-tenant, and permission-race fixtures. HTTP tests prove live/readiness behavior and the complete migration check. CLI tests prove status, readiness exit codes, fixed failures, redaction, and metrics cardinality. Portal controller/browser tests cover download, retries, English/Spanish copy, phone/desktop layout, supported themes, and accessibility.
-
