@@ -1,4 +1,5 @@
 import type {Pool,PoolClient} from 'pg';
+import {resolveSession} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
 
 export const usageEventTypes=[
@@ -31,10 +32,18 @@ export type UsageReconciliationStatus={sources:Array<{
  lastAttemptedAt:string|null;
  caughtUpAt:string|null;
 }>};
+export type UsageSummary={
+ version:1;organisationId:string;
+ storage:{currentBytes:string;addedBytes:string;removedBytes:string};
+ transfer:{uploadedBytes:string;restoredBytes:string};
+ operations:{installationCompleted:string;monitoringProbes:string};
+ messages:{sent:string;failed:string;expired:string;cancelled:string};
+ latestEventAt:string|null;measuredThrough:string|null;
+};
 
 export class UsageError extends Error{
- readonly code:'invalid_input'|'usage_conflict';
- constructor(code:'invalid_input'|'usage_conflict'){super(code);this.name='UsageError';this.code=code;}
+ readonly code:'invalid_input'|'permission_denied'|'usage_conflict';
+ constructor(code:UsageError['code']){super(code);this.name='UsageError';this.code=code;}
 }
 
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
@@ -50,6 +59,12 @@ function validTimestamp(value:string){
  return Number.isFinite(parsed.getTime())&&parsed.toISOString()===value;
 }
 function validate(input:UsageEventInput){
+ const expectedSource:Record<UsageEventType,UsageSourceKind>={
+  'backup.storage_added_bytes':'backup_point','backup.storage_removed_bytes':'backup_point','backup.upload_bytes':'backup_point',
+  'backup.restore_bytes':'backup_recovery','operation.installation_completed':'installation_operation',
+  'operation.monitoring_probe':'monitoring_probe','message.service_alert_sent':'service_alert',
+  'message.service_alert_failed':'service_alert','message.service_alert_expired':'service_alert','message.service_alert_cancelled':'service_alert',
+ };
  if(!input||typeof input!=='object'||!uuid.test(input.organisationId)
   ||(input.venueId!==null&&!uuid.test(input.venueId))
   ||!(usageEventTypes as readonly string[]).includes(input.type)
@@ -57,6 +72,7 @@ function validate(input:UsageEventInput){
   ||!(usageSourceKinds as readonly string[]).includes(input.sourceKind)
   ||typeof input.sourceReference!=='string'||!sourceReference.test(input.sourceReference)
   ||!validTimestamp(input.occurredAt))throw new UsageError('invalid_input');
+ if(expectedSource[input.type]!==input.sourceKind||(!input.type.startsWith('backup.')&&input.quantity!==1n))throw new UsageError('invalid_input');
 }
 function same(row:UsageRow,input:UsageEventInput){
  return row.organisation_id===input.organisationId&&row.venue_id===input.venueId
@@ -158,5 +174,47 @@ export class UsageReconciler{
    FROM usage_reconciliation_sources ORDER BY CASE source
     WHEN 'backup_points' THEN 1 WHEN 'backup_recoveries' THEN 2 WHEN 'installation_operations' THEN 3 ELSE 4 END`);
   return {sources:rows.rows.map(row=>({source:row.source,lastAttemptedAt:row.last_attempted_at?.toISOString()??null,caughtUpAt:row.caught_up_at?.toISOString()??null}))};
+ }
+}
+
+type SummaryRow={
+ storage_added:string;storage_removed:string;uploaded:string;restored:string;
+ installation_completed:string;monitoring_probes:string;messages_sent:string;
+ messages_failed:string;messages_expired:string;messages_cancelled:string;latest_event_at:Date|null;
+};
+export class UsageStore{
+ readonly #pool:Pool;
+ constructor(pool:Pool){this.#pool=pool;}
+ async summary(token:string,input:{organisationId:string}):Promise<UsageSummary>{
+  if(!input||typeof input!=='object'||Object.keys(input).join(',')!=='organisationId'||!uuid.test(input.organisationId))throw new UsageError('invalid_input');
+  return transaction(this.#pool,async client=>{
+   const session=await resolveSession(client,token,{touch:false});
+   const membership=await client.query(`SELECT account_id FROM organisation_memberships
+    WHERE account_id=$1 AND organisation_id=$2 AND is_owner FOR SHARE`,[session.accountId,input.organisationId]);
+   if(!membership.rowCount)throw new UsageError('permission_denied');
+   const row=(await client.query<SummaryRow>(`SELECT
+    COALESCE(sum(quantity) FILTER(WHERE event_type='backup.storage_added_bytes'),0)::text AS storage_added,
+    COALESCE(sum(quantity) FILTER(WHERE event_type='backup.storage_removed_bytes'),0)::text AS storage_removed,
+    COALESCE(sum(quantity) FILTER(WHERE event_type='backup.upload_bytes'),0)::text AS uploaded,
+    COALESCE(sum(quantity) FILTER(WHERE event_type='backup.restore_bytes'),0)::text AS restored,
+    COALESCE(sum(quantity) FILTER(WHERE event_type='operation.installation_completed'),0)::text AS installation_completed,
+    COALESCE(sum(quantity) FILTER(WHERE event_type='operation.monitoring_probe'),0)::text AS monitoring_probes,
+    COALESCE(sum(quantity) FILTER(WHERE event_type='message.service_alert_sent'),0)::text AS messages_sent,
+    COALESCE(sum(quantity) FILTER(WHERE event_type='message.service_alert_failed'),0)::text AS messages_failed,
+    COALESCE(sum(quantity) FILTER(WHERE event_type='message.service_alert_expired'),0)::text AS messages_expired,
+    COALESCE(sum(quantity) FILTER(WHERE event_type='message.service_alert_cancelled'),0)::text AS messages_cancelled,
+    max(occurred_at) AS latest_event_at FROM usage_events WHERE organisation_id=$1`,[input.organisationId])).rows[0]!;
+   const freshness=(await client.query<{total:number;caught_up:number;measured_through:Date|null}>(`SELECT count(*)::integer AS total,
+    count(caught_up_at)::integer AS caught_up,min(caught_up_at) AS measured_through FROM usage_reconciliation_sources`)).rows[0]!;
+   await resolveSession(client,token,{touch:false});
+   return {version:1 as const,organisationId:input.organisationId,
+    storage:{currentBytes:(BigInt(row.storage_added)-BigInt(row.storage_removed)).toString(),addedBytes:row.storage_added,removedBytes:row.storage_removed},
+    transfer:{uploadedBytes:row.uploaded,restoredBytes:row.restored},
+    operations:{installationCompleted:row.installation_completed,monitoringProbes:row.monitoring_probes},
+    messages:{sent:row.messages_sent,failed:row.messages_failed,expired:row.messages_expired,cancelled:row.messages_cancelled},
+    latestEventAt:row.latest_event_at?.toISOString()??null,
+    measuredThrough:freshness.total===usageReconciliationSourceNames.length&&freshness.caught_up===freshness.total
+     ?freshness.measured_through?.toISOString()??null:null};
+  });
  }
 }

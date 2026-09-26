@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {after, before, beforeEach, test} from 'node:test';
 import {Pool} from 'pg';
+import {createSession} from '@waitron-cloud/identity';
 import {
   recordUsageEvent,
   transaction,
   UsageReconciler,
+  UsageStore,
   type UsageEventInput,
 } from '../src/index.ts';
 import {migrate} from '../src/migrate.ts';
@@ -77,6 +79,8 @@ test('reports reject foreign venues and invalid fixed fields before writing',asy
  for(const invalid of [
   input({type:'unknown' as UsageEventInput['type']}),
   input({sourceKind:'unknown' as UsageEventInput['sourceKind']}),
+  input({type:'operation.monitoring_probe',sourceKind:'backup_point'}),
+  input({type:'operation.monitoring_probe',sourceKind:'monitoring_probe',quantity:2n}),
   input({quantity:0n}),input({quantity:-1n}),
   input({sourceReference:'contains a space'}),
   input({sourceReference:'x'.repeat(257)}),
@@ -84,6 +88,39 @@ test('reports reject foreign venues and invalid fixed fields before writing',asy
   input({occurredAt:'not-a-date'}),
  ])await expectCode(transaction(pool,client=>recordUsageEvent(client,invalid)),'invalid_input');
  assert.equal(await count('usage_events'),0);
+});
+
+test('owner summary is passive, tenant-scoped, precision-safe and honest about freshness',async()=>{
+ const session=await transaction(pool,client=>createSession(client,accountId));
+ const eventInputs:UsageEventInput[]=[
+  input({type:'backup.storage_added_bytes',quantity:9007199254740993n,sourceKind:'backup_point',sourceReference:randomUUID(),occurredAt:'2026-09-26T10:00:00.000Z'}),
+  input({type:'backup.storage_removed_bytes',quantity:3n,sourceKind:'backup_point',sourceReference:randomUUID(),occurredAt:'2026-09-26T10:00:01.000Z'}),
+  input({type:'backup.upload_bytes',quantity:23n,sourceKind:'backup_point',sourceReference:randomUUID(),occurredAt:'2026-09-26T10:00:02.000Z'}),
+  input({type:'backup.restore_bytes',quantity:17n,sourceKind:'backup_recovery',sourceReference:randomUUID(),occurredAt:'2026-09-26T10:00:03.000Z'}),
+  input({type:'operation.installation_completed',quantity:1n,sourceKind:'installation_operation',sourceReference:`${installationId}:${randomUUID()}`,occurredAt:'2026-09-26T10:00:04.000Z'}),
+  input({type:'operation.monitoring_probe',quantity:1n,sourceKind:'monitoring_probe',sourceReference:`${installationId}:public:2026-09-26T10:00:05.000Z`,occurredAt:'2026-09-26T10:00:05.000Z'}),
+  input({type:'message.service_alert_sent',quantity:1n,sourceKind:'service_alert',sourceReference:randomUUID(),occurredAt:'2026-09-26T10:00:06.000Z'}),
+  input({type:'message.service_alert_failed',quantity:1n,sourceKind:'service_alert',sourceReference:randomUUID(),occurredAt:'2026-09-26T10:00:07.000Z'}),
+  input({type:'message.service_alert_expired',quantity:1n,sourceKind:'service_alert',sourceReference:randomUUID(),occurredAt:'2026-09-26T10:00:08.000Z'}),
+  input({type:'message.service_alert_cancelled',quantity:1n,sourceKind:'service_alert',sourceReference:randomUUID(),occurredAt:'2026-09-26T10:00:09.000Z'}),
+ ];
+ for(const event of eventInputs)await transaction(pool,client=>recordUsageEvent(client,event));
+ await transaction(pool,client=>recordUsageEvent(client,input({organisationId:secondOrganisationId,venueId:secondVenueId,quantity:999n,sourceReference:randomUUID(),occurredAt:'2026-09-26T10:00:10.000Z'})));
+ const store=new UsageStore(pool),summary=await store.summary(session.token,{organisationId});
+ assert.deepEqual(summary,{
+  version:1,organisationId,
+  storage:{currentBytes:'9007199254740990',addedBytes:'9007199254740993',removedBytes:'3'},
+  transfer:{uploadedBytes:'23',restoredBytes:'17'},
+  operations:{installationCompleted:'1',monitoringProbes:'1'},
+  messages:{sent:'1',failed:'1',expired:'1',cancelled:'1'},
+  latestEventAt:'2026-09-26T10:00:09.000Z',measuredThrough:null,
+ });
+ const sessionRow=(await pool.query('SELECT created_at,last_seen_at FROM cloud_sessions WHERE account_id=$1',[accountId])).rows[0];
+ assert.equal(sessionRow.last_seen_at.getTime(),sessionRow.created_at.getTime());
+ await pool.query("UPDATE usage_reconciliation_sources SET caught_up_at='2026-09-26T11:00:00.000Z'");
+ assert.equal((await store.summary(session.token,{organisationId})).measuredThrough,'2026-09-26T11:00:00.000Z');
+ await pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[accountId,organisationId]);
+ await expectCode(store.summary(session.token,{organisationId}),'permission_denied');
 });
 
 async function seedSources(){

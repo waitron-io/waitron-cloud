@@ -19,6 +19,14 @@ CREATE TABLE usage_events (
  ),
  occurred_at timestamptz NOT NULL,
  recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ CHECK(
+  (event_type IN ('backup.storage_added_bytes','backup.storage_removed_bytes','backup.upload_bytes') AND source_kind='backup_point')
+  OR (event_type='backup.restore_bytes' AND source_kind='backup_recovery')
+  OR (event_type='operation.installation_completed' AND source_kind='installation_operation')
+  OR (event_type='operation.monitoring_probe' AND source_kind='monitoring_probe')
+  OR (event_type LIKE 'message.service_alert_%' AND source_kind='service_alert')
+ ),
+ CHECK(event_type LIKE 'backup.%' OR quantity=1),
  UNIQUE(event_type,source_kind,source_reference)
 );
 CREATE INDEX usage_events_organisation_type_idx ON usage_events(organisation_id,event_type,occurred_at,id);

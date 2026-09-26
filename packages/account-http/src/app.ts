@@ -1,4 +1,5 @@
 import {replacementResponse} from './replacement.ts';
+import {usageResponse} from './usage.ts';
 import {securityAuditResponse} from './security-audit.ts';
 import {accountSessionResponse} from './account-sessions.ts';
 import {passkeyResponse} from './passkeys.ts';
@@ -10,7 +11,7 @@ import {ManagedStreamMachines,managedStreamResponse} from './managed-streams.ts'
 import {alertPreferencesResponse} from './alerts.ts';
 import {backupResponse} from './backups.ts';
 import {installationResponse} from './installations.ts';
-import {InstallationError,SecurityAuditError,type LeaseIssuer} from '@waitron-cloud/registration';
+import {InstallationError,SecurityAuditError,UsageError,type LeaseIssuer} from '@waitron-cloud/registration';
 import {pairingResponse} from './pairing.ts';
 import {PairingError,RegistrationError} from '@waitron-cloud/registration';
 import { securityHeaders } from './portal.ts';
@@ -47,6 +48,7 @@ function publicError(error: unknown): AccountHttpError {
   if (error instanceof PairingError) return new AccountHttpError(error.code === 'invalid_proof' ? 401 : error.code === 'permission_denied' ? 403 : 400, error.code);
   if (error instanceof RegistrationError) return new AccountHttpError(error.code === 'permission_denied' ? 403 : 400, error.code);
   if (error instanceof SecurityAuditError) return new AccountHttpError(error.code==='permission_denied'?403:error.code==='invalid_input'?400:409,error.code==='security_audit_conflict'?'conflict':error.code);
+  if (error instanceof UsageError) return new AccountHttpError(error.code==='permission_denied'?403:error.code==='invalid_input'?400:409,error.code==='usage_conflict'?'conflict':error.code);
   if (error instanceof SignupError || error instanceof PasswordRecoveryError) {
     if (error.code === 'password_compromised') return new AccountHttpError(400, 'password_compromised');
     if (error.code === 'password_screening_unavailable') return new AccountHttpError(503, 'temporarily_unavailable', 1);
@@ -81,6 +83,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if (url.search) throw new AccountHttpError(400, 'invalid_input');
     const ip = clientAddress(c.env?.incoming?.socket.remoteAddress ?? '', c.req.header('x-forwarded-for'), config.trustedProxyIps);
     await consume([{scope: 'all-ip', subject: ip, limit: 120, windowSeconds: 60}]);
+    if(c.req.path.startsWith('/api/account/usage/'))return usageResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/security-audit/'))return securityAuditResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path==='/api/account/sessions'||c.req.path.startsWith('/api/account/sessions/'))return accountSessionResponse(c,{pool,origin:config.portalOrigin,secure});
     if(c.req.path==='/api/account/passkeys'||c.req.path.startsWith('/api/account/passkeys/'))return passkeyResponse(c,{pool,store:passkeys,origin:config.portalOrigin,secure,ip,consume});
