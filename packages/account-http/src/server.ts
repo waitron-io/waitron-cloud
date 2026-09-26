@@ -5,9 +5,10 @@ import { getRequestListener } from '@hono/node-server';
 import type { Pool } from 'pg';
 import type { EmailOutbox, LeaseIssuer, PasswordScreeningProvider } from '@waitron-cloud/registration';
 import type { AccountHttpConfig } from './config.ts';
-import { portalResponse, securityHeaders, type PortalAssets } from './portal.ts';
+import { portalErrorResponse, portalResponse, securityHeaders, type PortalAssets } from './portal.ts';
 import { createAccountApp } from './app.ts';
-function unavailable() {
+function unavailable(request?: Request, portal = false) {
+  if (request && portal && !new URL(request.url).pathname.startsWith('/api/')) return portalErrorResponse(request, 503);
   return Response.json({error: 'temporarily_unavailable'}, {status: 503, headers: {
     ...securityHeaders, 'Retry-After': '1',
   }});
@@ -16,7 +17,7 @@ export async function startAccountServer(options: {pool: Pool; outbox: EmailOutb
   const app = createAccountApp(options);
   let active = 0; let stopping = false; let closing: Promise<void> | undefined;
   const listener = getRequestListener(async (request, bindings) => {
-    if (stopping) return unavailable();
+    if (stopping) return unavailable(request, !!options.portalAssets);
     if (options.portalAssets && !new URL(request.url).pathname.startsWith('/api/')) {
       const url = new URL(request.url); const host = new URL(options.config.portalOrigin).host;
       if (url.host !== host || (request.headers.has('host') && request.headers.get('host') !== host))

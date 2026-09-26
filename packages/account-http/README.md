@@ -61,7 +61,10 @@ loads exactly `index.html`, `app.js` and `app.css` at startup. Missing configure
 assets prevent startup; omitting the setting retains the API-only server.
 
 The portal serves `/`, `/signup`, `/login`, `/forgot-password`, `/reset-password`
-and `/account`, plus `/connect` for pairing and `/recover` for snapshot recovery. Unknown paths return 404. Static GET/HEAD requests retain host checks
+and `/account`, plus `/connect` for pairing and `/recover` for snapshot recovery.
+Unknown paths still return 404, but browser requests receive a small English or Spanish
+error page chosen from `Accept-Language`. Rejected query strings and methods similarly
+retain their 400 or 405 status. Static GET/HEAD requests retain host checks
 and connection limits but do not consume database counters or the eight account
 operation slots. Rebuild and restart after frontend changes.
 
@@ -192,7 +195,7 @@ All responses disable caching and referrer forwarding, and set `nosniff`. Errors
 | Status | Code | Meaning |
 | --- | --- | --- |
 | 400 | `invalid_input`, `link_unavailable`, `password_compromised` | Invalid shape, ambiguous cookies, unusable completion token or a password present in the configured corpus |
-| 401 | `credentials_invalid`, `unauthenticated` | Login failed or no usable session |
+| 401 | `credentials_invalid`, `unauthenticated`, `session_expired` | Login failed, no usable session, or a previously live session reached its deadline |
 | 403 | `forbidden` | Wrong origin/host or missing/incorrect session CSRF proof |
 | 404 / 405 | `not_found` / `method_not_allowed` | Unknown path or wrong method |
 | 408 / 413 / 415 / 431 | `invalid_input` | Receive timeout, body too large, unsupported encoding/type or headers too large |
@@ -252,6 +255,13 @@ peer IPs only when that proxy replaces `X-Forwarded-For` with one validated clie
 address. Lists, malformed values and missing values from a trusted peer are rejected.
 Wildcards, network ranges and multi-hop chains are unsupported. IPv4-mapped IPv6 is
 normalised, and IPv6 clients share an allowance within each /64 network.
+
+The local ingress test runs two account instances behind a streaming reverse proxy.
+It proves that the proxy overwrites caller-supplied forwarding data, both instances
+share the same PostgreSQL rate allowance, HTTPS cookies retain their `__Host-` and
+`Secure` attributes, and Origin, CSRF, size and slow-request checks survive the proxy.
+This does not verify your production proxy, TLS configuration or bot controls. Repeat
+those checks against the selected deployment before public use.
 
 The CLI pool permits ten clients, waits up to five seconds for a connection and
 limits SQL statements to ten seconds. SIGINT or SIGTERM stops admission and allows

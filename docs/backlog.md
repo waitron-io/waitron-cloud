@@ -269,8 +269,11 @@ mobile notifications separately.
   operator supplies exact cutoffs; no retention period or automatic deletion is enabled.
   Configure live email delivery, implement MFA,
   and define the platform role catalogue before public use. Shared login/request limits, secure
-  cookies and Origin/CSRF checks are implemented in the account API. Validate ingress
-  bot controls, trusted proxy settings and browser behaviour before deployment. Choose
+  cookies and Origin/CSRF checks are implemented in the account API. A local streaming
+  reverse-proxy test now exercises two real account instances with overwritten client
+  addresses, shared PostgreSQL rate limits, HTTPS cookie attributes, Origin/CSRF,
+  declared and streamed body bounds, and the slow-body deadline. Validate the selected
+  production ingress, TLS and bot controls before deployment. Choose
   legal and operational cutoffs for sessions, signup requests and password-reset requests,
   including reset records for unknown addresses, and measure the dry-run counts against
   the expected deployment size before applying them. Signup and password-reset completion now use an optional
@@ -281,9 +284,13 @@ mobile notifications separately.
   No password or complete digest is sent externally. Choose, verify and operate the
   production corpus update source; any external provider still requires a separate
   processing-location and residency decision.
-  Portal follow-ups before public use: decide whether to accept tracking queries and
-  trailing-slash/case aliases, and provide useful error pages for rejected URLs.
-  The current exact routes and query restrictions follow the approved portal plan.
+  Rejected portal URLs now keep their exact 400, 404 or 405 status and show a bounded
+  English or Spanish error page. An expired session has its own fixed API code and a
+  bilingual sign-in explanation, while a service outage remains distinct and retryable.
+  Browser coverage completes a real Spanish password reset from a legacy query-token
+  link and proves the token is scrubbed before later requests. Before public use, decide
+  whether to accept tracking queries and trailing-slash/case aliases. The current exact
+  routes and query restrictions follow the approved portal plan.
   Set the retirement point for legacy query-token links after every deployed sender
   generates fragments and all remaining query tokens have expired; retain compatibility
   until then. Direct development-mailer rendering failures now become rejected promises,

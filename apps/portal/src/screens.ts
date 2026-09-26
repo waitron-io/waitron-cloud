@@ -30,7 +30,7 @@ export function screen(app: PortalApp) {
   let content;
   if (app.path === '/recover') content = recoveryScreen(app);
   else if (app.path === '/connect') content = pairingScreen(app);
-  else if (app.notice && app.notice !== 'signedOut') content = html`<p role="status">${c[app.notice]}</p>${link('/login', c.login)}`;
+  else if (app.notice && !['signedOut', 'sessionExpired'].includes(app.notice)) content = html`<p role="status">${c[app.notice]}</p>${link('/login', c.login)}`;
   else if (app.path === '/' || app.path === '/account') {
     content = app.session.state.kind === 'authenticated'
       ? html`<p>${c.accountIntro}</p>${accountSecurityScreen(app)}${installationScreen(app)}<wt-form-actions><wt-button .disabled=${app.pending||!!app.logoutWaiting||app.installations.pending||app.security.pending} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions><p>${link('/forgot-password', c.forgot)}</p>`

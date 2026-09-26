@@ -40,6 +40,7 @@ function publicError(error: unknown): AccountHttpError {
   if (error instanceof IdentityError) {
     if (error.code === 'credentials_invalid') return new AccountHttpError(401, 'credentials_invalid');
     if (error.code === 'csrf_invalid' || error.code === 'permission_denied') return new AccountHttpError(403, 'forbidden');
+    if (error.code === 'session_expired') return new AccountHttpError(401, 'session_expired');
     return new AccountHttpError(401, 'unauthenticated');
   }
   if (error instanceof InstallationError) return new AccountHttpError(error.code==='invalid_proof'?401:error.code==='revoked'||error.code==='permission_denied'?403:error.code==='unavailable'?503:400,error.code);

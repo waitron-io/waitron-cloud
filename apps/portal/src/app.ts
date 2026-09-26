@@ -92,7 +92,10 @@ export class PortalApp {
     this.pairing.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (this.path === '/connect' && state.kind === 'authenticated' && !this.pairing.loaded) void this.pairing.load();
     if (this.path === '/' && state.kind === 'authenticated') this.navigate('/account');
-    else if ((['/', '/account', '/connect', '/recover'].includes(this.path)) && state.kind === 'anonymous') this.navigate('/login');
+    else if ((['/', '/account', '/connect', '/recover'].includes(this.path)) && state.kind === 'anonymous') {
+      this.navigate('/login');
+      if (state.expired) { this.notice = 'sessionExpired'; this.draw(); }
+    }
     else this.draw();
   }
   get copy() { return translations[this.locale]; }

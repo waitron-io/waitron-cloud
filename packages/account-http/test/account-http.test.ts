@@ -264,7 +264,9 @@ test('session expiry after an HTTP request waits on its row cannot extend activi
   const pending = request('/session/activity', {}, {headers: {cookie: session.header, 'x-csrf-token': session.csrf}});
   try {await new Promise(resolve => setTimeout(resolve, 200));}
   finally {await lock.query('COMMIT'); lock.release();}
-  assert.equal((await pending).status, 401);
+  const expired = await pending;
+  assert.equal(expired.status, 401);
+  assert.deepEqual(await expired.json(), {error: 'session_expired'});
   assert.equal((await db.pool.query('SELECT last_seen_at FROM cloud_sessions')).rows[0].last_seen_at.getTime(), before);
 });
 test('suspension denies an existing HTTP session and the development cookie stays separate', async () => {

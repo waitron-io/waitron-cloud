@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
 import { test } from 'node:test';
 import { startPortalFixture } from './fixtures.ts';
 test('pending requests, language changes, resend cooldown and Retry-After do not duplicate writes', async () => {
@@ -73,6 +74,38 @@ test('session unavailability honors Retry-After and remains distinct from signed
   } finally {await f.close();}
 });
 
+test('an expired session explains the sign-in redirect in both languages', async () => {
+  const f = await startPortalFixture();
+  try {
+    for (const locale of ['en', 'es'] as const) {
+      const page = await f.browser.newPage({locale}); page.setDefaultTimeout(3000); let reads = 0;
+      await page.route('**/api/account/**', route => {
+        const path = new URL(route.request().url()).pathname;
+        if (path.endsWith('/session')) {
+          reads++;
+          return route.fulfill(reads === 1
+            ? {json: {accountId: 'owner', expiresAt: new Date(Date.now() + 600_000).toISOString()}}
+            : {status: 401, json: {error: 'session_expired'}});
+        }
+        if (path.endsWith('/sessions')) return route.fulfill({json: {sessions: []}});
+        if (path.endsWith('/passkeys')) return route.fulfill({json: {passkeys: []}});
+        if (path.endsWith('/alerts')) return route.fulfill({json: {enabled: false, locale}});
+        if (path.endsWith('/installations')) return route.fulfill({json: {installations: []}});
+        return route.continue();
+      });
+      await page.goto(`${f.origin}/account`);
+      await page.getByText(locale === 'en' ? 'You are signed in to Waitron Cloud.' : 'Has iniciado sesión en Waitron Cloud.').waitFor();
+      await Promise.all([page.waitForResponse('**/api/account/session'), page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))]);
+      await page.getByText(locale === 'en'
+        ? 'Your session has expired. Sign in again to continue.'
+        : 'Tu sesión ha caducado. Inicia sesión de nuevo para continuar.').waitFor();
+      assert.ok(await page.getByLabel(locale === 'en' ? 'Email' : 'Correo electrónico').isVisible());
+      assert.equal(new URL(page.url()).pathname, '/login');
+      await page.close();
+    }
+  } finally { await f.close(); }
+});
+
 test('logout failures remain visible until a successful retry confirms sign-out',async()=>{
   const f=await startPortalFixture();
   try {
@@ -109,4 +142,33 @@ test('email requests have the same accepted screen and real invalid links offer 
     assert.ok(await page.getByRole('link',{name:'Request a new link',exact:true}).isVisible());
     await page.getByRole('link',{name:'Sign in',exact:true}).click();await page.goBack();await page.getByText('Reopen the link in your email, or request a new one.').waitFor();
   } finally {await f.close();}
+});
+
+test('a real legacy query-token recovery link is scrubbed before completing in Spanish', async () => {
+  const f = await startPortalFixture();
+  try {
+    const {PasswordRecoveryStore, SignupStore} = await import('@waitron-cloud/registration');
+    const email = `legacy-recovery-${randomUUID()}@example.test`; const original = 'An original café password';
+    const signup = new SignupStore(f.db.pool, f.db.outbox);
+    await signup.request(email);
+    let row = (await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0];
+    let message = f.db.outbox.open(row); assert.ok('token' in message);
+    await signup.complete(message.token, {password: original, organisationName: 'Café Sol', legalBusinessName: 'Café Sol SL', countryCode: 'ES'});
+    await f.db.pool.query('DELETE FROM email_outbox');
+    await new PasswordRecoveryStore(f.db.pool, f.db.outbox).request(email, 'es');
+    row = (await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='password_reset' ORDER BY created_at DESC LIMIT 1")).rows[0];
+    message = f.db.outbox.open(row); assert.ok('token' in message); const token = message.token;
+    const page = await f.browser.newPage(); page.setDefaultTimeout(3000);
+    const requests: {url: string; referrer: string}[] = [];
+    page.on('request', request => requests.push({url: request.url(), referrer: request.headers()['referer'] ?? ''}));
+    await page.goto(`${f.origin}/reset-password?token=${token}&lang=es`);
+    await page.getByRole('heading', {name: 'Elige una nueva contraseña'}).waitFor();
+    assert.equal(page.url(), `${f.origin}/reset-password`);
+    await page.locator('input[name=password]').fill('Una nueva contraseña de café');
+    await page.getByRole('button', {name: 'Guardar nueva contraseña', exact: true}).click();
+    await page.getByText('Tu contraseña ha cambiado y se han cerrado las sesiones existentes. Inicia sesión para continuar.').waitFor();
+    assert.ok(requests.slice(1).every(request => !request.url.includes(token) && !request.referrer.includes(token)));
+    assert.equal((await page.request.post(`${f.origin}/api/account/login`, {headers: {origin: f.origin},
+      data: {email, password: 'Una nueva contraseña de café'}})).status(), 200);
+  } finally { await f.close(); }
 });
