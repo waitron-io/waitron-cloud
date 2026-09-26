@@ -11,7 +11,8 @@ test('cached authority survives restart without extending expiry or accepting re
  await authority.accept(envelope);assert.equal(authority.routes.length,1);assert.equal(applied,1);
  await assert.rejects(authority.accept(envelope),/invalid_manifest/);
  const restarted=new GatewayAuthority(key.publicKey,cellId,hooks,()=>time);await restarted.restore(saved);assert.equal(restarted.routes.length,1);
- time=now+1000;await restarted.tick();assert.equal(restarted.routes.length,0);assert.equal(closed,1);
+ time=now+1000;assert.equal(restarted.hasAuthority,false);assert.equal(restarted.routes.length,0);assert.equal(closed,0);
+ await restarted.tick();assert.equal(restarted.routes.length,0);assert.equal(closed,1);
  const expiredRestart=new GatewayAuthority(key.publicKey,cellId,hooks,()=>time);await expiredRestart.restore(saved);assert.equal(expiredRestart.routes.length,0);
  await assert.rejects(expiredRestart.accept(signManifest({...value,sequence:2,expiresAt:now+2000},key.privateKey,time)),/invalid_manifest/);
  const revoked=signManifest({...value,sequence:4,issuedAt:time,expiresAt:time+1000,routes:[]},key.privateKey,time);await authority.accept(revoked);assert.equal(authority.routes.length,0);
