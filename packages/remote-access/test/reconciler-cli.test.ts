@@ -4,6 +4,7 @@ import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
 import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
 import {after,before,test} from 'node:test';
 import {crypto as acmeCrypto} from 'acme-client';
 import {database} from '../../account-http/test/fixtures.ts';
@@ -43,5 +44,6 @@ test('a missing exact route mapping fails only that target with a redacted code'
 
 test('continuous mode exits cleanly on SIGTERM',async()=>{
  const value=await fixture(),child=spawn(process.execPath,['src/reconciler-cli.ts',value.configFile],{cwd:new URL('..',import.meta.url),env:{...process.env,DATABASE_URL:databaseUrl},stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',value=>output+=value);child.stderr.on('data',value=>output+=value);
- await new Promise(resolve=>setTimeout(resolve,500));child.kill('SIGTERM');const code=await new Promise(resolve=>child.once('exit',resolve));assert.equal(code,0,output);
+ let ready=false;for(let attempt=0;attempt<50;attempt++){if((await db.pool.query("SELECT 1 FROM remote_configuration_jobs WHERE kind='route' AND target_id=$1",[value.cellId])).rowCount){ready=true;break;}if(child.exitCode!==null)break;await delay(100);}
+ assert.equal(ready,true,output);child.kill('SIGTERM');const code=await new Promise(resolve=>child.once('exit',resolve));assert.equal(code,0,output);
 });
