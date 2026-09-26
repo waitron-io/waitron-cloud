@@ -132,9 +132,10 @@ and an old-password login waiting behind reset must fail its credential recheck.
 
 Emails are sent after commit. The queue encrypts recipients and tokens, retries failures
 and discards expired or invalidated links. A notification queue failure rolls back the
-reset; a later delivery failure cannot undo it. Define production audit and cleanup
-for requests and delivery metadata before deployment. Password reset is not MFA
-recovery. The account API implements HTTP protections; recovery screens and the
+reset; a later delivery failure cannot undo it. The [history cleanup command](../../docs/history-cleanup.md)
+can remove terminal request and delivery metadata after you configure exact cutoffs.
+Security-audit retention remains separate. Password reset is not MFA recovery. The
+account API implements HTTP protections; recovery screens and the
 [remaining deployment requirements](../../docs/password-recovery-implementation.md)
 are separate work.
 
@@ -210,6 +211,11 @@ hashes; add another migration instead of editing a file that has been applied.
 The library does not migrate on import. Registration assumes existing accounts and
 organisations; call `SignupStore` explicitly to create them through email proof.
 Deployment credentials and database privileges remain to be designed before public use.
+
+After you choose deployment-specific retention cutoffs, preview bounded transient-history
+cleanup with `pnpm history:cleanup -- --policy <path>`. The command changes nothing unless
+you add `--apply`. See [Bound management history](../../docs/history-cleanup.md) for the
+policy format, category guards and repeat-until-complete procedure.
 
 ## Signed pairing
 

@@ -260,3 +260,5 @@ export {InstallationError,createLeaseIssuer,readMachineClaims,encodeMachine,veri
 
 export {MonitorWorker,monitorStatus} from './monitoring.ts';
 export type {ServiceAlert,ServiceAlertMailer,IncidentKind} from './service-alert.ts';
+export {HistoryCleanup, historyCleanupCategories, parseHistoryCleanupPolicy} from './history-cleanup.ts';
+export type {HistoryCleanupCategory, HistoryCleanupCategoryReport, HistoryCleanupPolicy, HistoryCleanupReport} from './history-cleanup.ts';

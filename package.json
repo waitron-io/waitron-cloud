@@ -12,6 +12,7 @@
     "test:registration": "pnpm --filter @waitron-cloud/registration test",
     "test:abuse": "node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test --test-timeout=120000 test/abuse-receipt.test.ts test/abuse-boundaries.test.ts",
     "db:migrate": "pnpm --filter @waitron-cloud/registration db:migrate",
+    "history:cleanup": "pnpm --dir packages/registration history:cleanup",
     "test:packages": "pnpm -r --workspace-concurrency=1 test",
     "mail:up": "docker compose up -d --wait mailpit",
     "mail:down": "docker compose down",
