@@ -30,7 +30,7 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v5
         with:
-          node-version: '24'
+          node-version: '26'
           cache: pnpm
           cache-dependency-path: .release-source/pnpm-lock.yaml
       - run: node --test scripts/release/*.test.mjs
@@ -61,7 +61,7 @@ jobs:
           path: ui-release
       - uses: actions/setup-node@v5
         with:
-          node-version: '24'
+          node-version: '26'
           registry-url: https://npm.pkg.github.com
           scope: '@waitron-io'
       - run: npm publish ./ui-release/*.tgz --registry=https://npm.pkg.github.com --access=restricted --ignore-scripts
