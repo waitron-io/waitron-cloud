@@ -7,6 +7,7 @@ import { once } from 'node:events';
 import { generateKeyPairSync } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startAccountServer } from '../src/server.ts';
+import {migrationNames} from '@waitron-cloud/registration';
 import { database } from './fixtures.ts';
 let db: Awaited<ReturnType<typeof database>>;
 before(async () => {db = await database();});
@@ -123,7 +124,7 @@ test('CLI fails closed with fixed diagnostics for invalid settings and absent mi
     assert.equal(outcome.code, 1); assert.equal(outcome.stdout, '');
     assert.equal(outcome.stderr, 'Account server failed; check database, migrations and configuration\n');
   }
-  for (const migration of ['007_account_http.sql','008_pairing.sql','009_installation_lifecycle.sql','010_remote_access.sql','011_managed_backups.sql','012_backup_jobs.sql','013_service_monitoring.sql','014_remote_hostname_changes.sql','015_backup_recovery_requests.sql','016_server_replacement.sql','017_remote_probe_observations.sql','018_managed_continuous_recovery.sql','019_passkeys.sql','020_account_security_controls.sql','021_history_cleanup.sql','022_security_audit.sql','023_remote_cell_moves.sql']) {
+  for (const migration of migrationNames.slice(6)) {
   const saved = await db.pool.query('DELETE FROM schema_migrations WHERE name = $1 RETURNING *', [migration]);
   try {assert.equal((await cli().exited).code, 1); assert.equal((await db.pool.query('SELECT count(*) FROM schema_migrations WHERE name = $1', [migration])).rows[0].count, '0');}
   finally {await db.pool.query('INSERT INTO schema_migrations(name, digest) VALUES ($1, $2)', [saved.rows[0].name, saved.rows[0].digest]);}
