@@ -24,6 +24,7 @@
     "db:migrate": "pnpm --filter @waitron-cloud/registration db:migrate",
     "history:cleanup": "pnpm --dir packages/registration history:cleanup",
     "usage:reconcile": "pnpm --dir packages/registration usage:reconcile",
+    "operations:status": "node --env-file-if-exists=.env packages/operations/src/cli.ts",
     "test:packages": "pnpm -r --workspace-concurrency=1 test",
     "mail:up": "docker compose up -d --wait mailpit",
     "mail:down": "docker compose down",

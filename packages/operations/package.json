@@ -1,0 +1,15 @@
+{
+  "name": "@waitron-cloud/operations",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p ../../tsconfig.json",
+    "test": "node --test --test-timeout=30000 test/*.test.ts"
+  },
+  "dependencies": {
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
+  }
+}
