@@ -261,6 +261,21 @@ test("successful restore verification protects a point; altered storage fails ve
     "a failed recheck must not remove protection from the last successfully verified snapshot",
   );
 });
+test("verification disposes a stage completed as shutdown arrives without recording failure",async()=>{
+ const item=await capture(),controller=new AbortController();let disposed=0;
+ const cancelling=new BackupCatalogue(db.pool,vault,()=>({
+  async stage(){
+   const source=bufferObject(item.bytes);controller.abort();
+   return {...source,async dispose(){disposed++;}};
+  },
+  async putStaged(){throw Error('unused');},
+  async remove(){throw Error('unused');},
+ }));
+ await assert.rejects(cancelling.verify(item.point.id,'shutdown',async()=>assert.fail('restore must not start'),undefined,controller.signal),error=>error instanceof Error&&error.name==='AbortError');
+ assert.equal(disposed,1);
+ assert.equal((await db.pool.query('SELECT count(*) FROM backup_verifications WHERE point_id=$1',[item.point.id])).rows[0].count,'0');
+ assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[item.point.id])).rows[0].verification,'pending');
+});
 test("cleanup is resumable, serialised and keeps the last verified snapshot and monthly retention", async () => {
   const older = await capture(a, 70),
     protectedPoint = await capture(a, 60),

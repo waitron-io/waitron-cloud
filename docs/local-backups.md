@@ -19,6 +19,9 @@ pnpm portal:build
 pnpm --dir "$WAITRON_CHECKOUT" --filter @waitron/dashboard build
 node scripts/test-backup-storage.mjs > /tmp/cloud-storage-contracts.json
 WAITRON_CHECKOUT=/absolute/path/to/waitron \
+  BACKUP_TRANSFER_RECEIPT=/tmp/cloud-backup-transfer-receipt.json \
+  pnpm test:backup-transfers
+WAITRON_CHECKOUT=/absolute/path/to/waitron \
   BACKUP_RECEIPT=/tmp/cloud-backup-receipt.json \
   node scripts/test-postgres.mjs exec node scripts/test-local-backups.mjs
 ```
@@ -59,6 +62,24 @@ without modifying your system trust settings. This needs Docker Desktop's
   promises; each run prints its current receipt. An upload stream that fails after its
   first chunk now aborts the provider request without crashing the Cloud process, and
   the provider holds no partial object.
+- The transfer-budget runner puts 4 MiB through a controlled local HTTPS storage
+  endpoint in 64 KiB chunks. It injects one HTTP 503 into both directions, then
+  records the measured upload and download rates rather than treating the configured
+  chunk delay as a bandwidth promise. Separate stalled upload and download requests
+  use a 120 ms operation deadline; both are refused and the download leaves no partial
+  stage. A missing object is refused as well. These short local deadlines prove
+  cancellation wiring and cleanup, not suitable production timeout values.
+- A real PostgreSQL catalogue proves that a lost reply after an acknowledged upload
+  creates one retained object and one point, while an exact publication retry neither
+  recopies nor duplicates it. It also refuses a missing object and the existing
+  24-hour capture expiry. A shutdown during a slow Cloud download releases the claim
+  immediately without recording a verification failure or consuming a retry.
+- The same receipt runs Waitron's landed snapshot worker through its public dependency
+  boundary. A renewed credential reuses the one durable archive, a lost publication
+  reply does not upload twice, and aborting during a controlled 160 ms archive wait
+  permits no later upload or publication. This bounds worker behavior around database
+  copy/encryption waits; it does not measure a deployment database or cryptographic
+  throughput. Use the full two-venue runner above for real archive and restore evidence.
 - The independent verifier passes each real Waitron snapshot through compatibility
   checks, SQLite integrity checks, migrations and module restore hooks, including
   the fiscal module. That fixture
@@ -109,11 +130,19 @@ Cloud registration does not change Waitron's trading or fiscal activation rules.
 Production replacement and planned final-write handover remain separate work. The local
 proof restores continuous data but deliberately records `activation: not-performed`.
 
-The JSON receipt records exact repository heads, dirty flags, checks and stream
+The managed-recovery JSON receipt records exact repository heads, dirty flags, checks and stream
 restore timings. A dirty receipt is useful during development; use clean heads for
 release evidence. Its checks now require the real Waitron restore and verifier-process
 isolation phases; removing that evidence makes the receipt invalid. Timings measure the
 local fixture, not a production recovery target.
+
+The transfer-budget JSON receipt separately records the exact fixture byte count,
+configured chunk and deadline limits, measured rates, retry counts, lifecycle outcomes
+and shutdown latency. Validate it independently with:
+
+```sh
+node scripts/verify-backup-transfer-receipt.mjs /tmp/cloud-backup-transfer-receipt.json
+```
 
 ## Internal API and retained data
 

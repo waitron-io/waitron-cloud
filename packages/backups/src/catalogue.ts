@@ -8,10 +8,14 @@ import {
   type ObjectReceipt,
   type StorageLocation,
 } from "./storage.ts";
-import { bufferObject, type ReplayableObject } from "./object-transfer.ts";
+import { bufferObject, type ReplayableObject, type StageOptions } from "./object-transfer.ts";
 export type MutationFence = (client:PoolClient)=>Promise<void>;
 interface StreamingObjectStore {
-  stage(key: string): Promise<ReplayableObject>;
+  stage(
+    key: string,
+    streamKey?: string,
+    options?: StageOptions,
+  ): Promise<ReplayableObject>;
   putStaged(key: string, source: ReplayableObject): Promise<ObjectReceipt>;
 }
 interface BufferedObjectStore {
@@ -22,8 +26,14 @@ export type ObjectStore = (StreamingObjectStore | BufferedObjectStore) & {
   remove(key: string): Promise<void>;
 };
 export type ObjectFactory = (location: StorageLocation) => ObjectStore;
-async function staged(objects:ObjectStore,key:string){
-  return 'stage' in objects?objects.stage(key):bufferObject(await objects.read(key));
+async function staged(objects:ObjectStore,key:string,signal?:AbortSignal){
+  signal?.throwIfAborted();
+  const source='stage' in objects?await objects.stage(key,undefined,{signal}):bufferObject(await objects.read(key));
+  if(signal?.aborted){
+    await source.dispose();
+    signal.throwIfAborted();
+  }
+  return source;
 }
 async function putStaged(objects:ObjectStore,key:string,source:ReplayableObject){
   if('putStaged' in objects)return objects.putStaged(key,source);
@@ -361,6 +371,7 @@ export class BackupCatalogue {
       point: BackupPoint,
     ) => Promise<void>,
     fence?: MutationFence,
+    signal?: AbortSignal,
   ): Promise<void> {
     if (!uuid(id) || !verifier || verifier.length > 200)
       backupFail("unavailable");
@@ -382,7 +393,7 @@ export class BackupCatalogue {
     let outcome: "verified" | "failed" = "verified";
     try {
       const objects=this.#objects(prepared.location),
-        source = await staged(objects,prepared.point.objectKey);
+        source = await staged(objects,prepared.point.objectKey,signal);
       try {
         if (
           source.receipt.digest !== prepared.point.digest ||
@@ -393,7 +404,8 @@ export class BackupCatalogue {
       } finally {
         await source.dispose();
       }
-    } catch {
+    } catch (error) {
+      if (signal?.aborted) throw error;
       outcome = "failed";
     }
     await transaction(this.#pool, async (client) => {
