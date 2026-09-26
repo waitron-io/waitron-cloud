@@ -10,9 +10,12 @@ for(const locale of ['en','es'] as const) for(const colorScheme of ['light','dar
     try {
       const page=await f.browser.newPage({locale,colorScheme,viewport:{width:375,height:812}});page.setDefaultTimeout(5000);
       await page.route('**/api/account/session',route=>route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+600_000).toISOString()}}));
+      const id='12345678-1234-4234-8234-123456789abc',services=['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'unconfigured',health:'unknown',failure:null,observedAt:null}));
+      await page.route('**/api/account/installations',route=>route.fulfill({json:{installations:[{installationId:id,venueId:id,organisationId:id,legalBusinessId:id,environment:'test',revision:0,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,overview:{organisationName:'Café Sol',businessName:'Sol SL',countryCode:'ES',latestSnapshotAt:null,verifiedSnapshotAt:null},services}]}}));
+      await page.route('**/api/account/usage/read',route=>route.fulfill({json:{version:1,organisationId:id,storage:{currentBytes:'0',addedBytes:'0',removedBytes:'0'},transfer:{uploadedBytes:'0',restoredBytes:'0'},operations:{installationCompleted:'0',monitoringProbes:'0'},messages:{sent:'0',failed:'0',expired:'0',cancelled:'0'},latestEventAt:null,measuredThrough:null}}));
       for(const route of ['/login','/signup','/signup#token='+'a'.repeat(43),'/forgot-password','/reset-password#token='+'b'.repeat(43),'/reset-password','/account']) {
         await page.goto(f.origin+route);await page.locator('wt-card').waitFor();
-        if(route==='/account') await page.getByText(translations[locale].accountIntro).waitFor();
+        if(route==='/account') {await page.getByText(translations[locale].accountIntro).waitFor();await page.getByRole('heading',{name:translations[locale].usageTitle,exact:true}).waitFor();}
         await page.evaluate(axe.source);
         const violations=await page.evaluate(async()=> (await window.axe.run(document)).violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})));
         assert.deepEqual(violations,[],route);

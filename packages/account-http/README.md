@@ -42,7 +42,7 @@ pnpm account:serve
 ```
 
 If you export `DATABASE_URL` in your shell, `pnpm db:migrate` applies the same migrations.
-The server refuses startup without migrations `007_account_http.sql` through `023_remote_cell_moves.sql`; it never applies
+The server refuses startup without migrations `007_account_http.sql` through `025_usage_metering.sql`; it never applies
 migrations itself. Its default listener is `127.0.0.1:3000`.
 Migration 020 assigns a distinct random ID to every existing session, so PostgreSQL rewrites and
 exclusively locks `cloud_sessions` while it runs. Schedule that migration before starting the new
@@ -112,6 +112,7 @@ parameters remain rejected, so tokens belong only in completion bodies.
 | POST `/password-reset/request` | `{"email":"owner@example.test"}` | 202 `{"status":"accepted"}` |
 | POST `/password-reset/complete` | `{"token":"<emailed token>","password":"a different long password"}` | 200 `{"status":"completed"}` |
 | POST `/security-audit/read` | `{"organisationId":"<uuid>","limit":50,"cursor":"<optional next cursor>"}`, session cookie and `X-CSRF-Token` | 200 owner-scoped schema-v1 security event page |
+| POST `/usage/read` | `{"organisationId":"<uuid>"}`, session cookie and `X-CSRF-Token` | 200 owner-scoped schema-v1 decimal-string usage totals and measurement freshness |
 
 Passkeys are optional and use the same account sessions. Start a discoverable sign-in
 with `POST /passkeys/authentication/options {}`, then send the browser result and
@@ -186,6 +187,13 @@ pairing, installation, recovery and replacement security events for one organisa
 Send `nextCursor` unchanged to read an older page. See the
 [customer security audit guide](../../docs/security-audit.md) for the event inventory,
 privacy boundary and retention limitation.
+
+POST `/usage/read` is also passive and owner-only. It returns measured snapshot storage
+and transfer, completed operations, monitoring probes and terminal service-alert outcomes
+for one organisation. Totals are decimal strings, and `measuredThrough` remains `null`
+until every durable reconciliation source has caught up. See the
+[usage metering guide](../../docs/usage-metering.md) for event meanings, exclusions and
+the operator command.
 
 ## Limits and errors
 

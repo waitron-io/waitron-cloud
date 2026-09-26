@@ -491,10 +491,18 @@ mobile notifications separately.
   measurements, not capacity promises. Next: choose the terminal-delivery cutoff, repeat
   the receipt in the selected deployment environment, and add escalation/quiet periods
   and rollout pause criteria.
-- **Usage metering.** Attribute lookups/API calls, reports, storage, transfers,
-  messages and compute to customers and services. Show consumption and allowances,
-  track provider costs and define limits. Any billing records need durable capture,
-  duplicate handling, reconciliation and a metering-outage policy.
+- **Usage metering.** Cloud now records immutable organisation-scoped events for
+  snapshot storage and transfer, completed installation operations, accepted monitoring
+  probes and terminal administrative alert outcomes. Bounded reconciliation repairs
+  interrupted durable-source writes, stable source identities suppress duplicates and
+  cleanup preserves sources until their events exist. Owner-only portal totals retain
+  exact decimal precision, show measurement freshness in English and Spanish and state
+  that continuous-stream bytes and account identity mail are excluded. PostgreSQL and
+  browser tests prove retry rollback, tenant isolation and fresh/incomplete views. This is
+  observational only. Next: schedule reconciliation in the chosen deployment, add
+  attributable lookup/API, report and compute units when those services exist, measure
+  provider costs, then define allowances, excess-use and metering-outage policy before
+  connecting any total to billing or enforcement.
 - **Data lifecycle.** The internal managed-backup catalogue now protects the latest
   successfully verified snapshot (or newest snapshot when none has verified) and active
   recoveries, with automatic operation expiry, resumable deletion and
@@ -604,7 +612,7 @@ mobile notifications separately.
 | Address lookup (free) | Implement geographic address lookup and completion for open-source Waitron with a Cloud login and per-user limits; see [free services](#free-services-for-open-source-waitron). Validate provider coverage, address quality and costs. |
 | Messaging | Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
 | Automated upgrades | Treat cloud services, cloud-hosted Waitron and on-prem installations separately; choose rollout groups, compatibility, maintenance windows, pause and recovery behaviour. |
-| Monitoring | External venue health and backup/filing/device signals, functional cloud-service checks, performance, customer alerts and incidents. Platform usage metering also tracks consumption, limits and costs. |
+| Monitoring | External venue and remote-route health, backup staleness, customer incidents and bilingual email alerts are implemented locally. Accepted public/staff probes now emit retry-safe organisation usage events and the portal shows their measured total. Add filing/device signals, broader functional checks and performance evidence. Schedule reconciliation and define cost, allowance and limit policy before using measurements for enforcement. |
 
 Further candidates remain in the complete inventory: loyalty and gift cards,
 e-receipts, opening-hours publishing, accounting/delivery connectors, AI-assisted
