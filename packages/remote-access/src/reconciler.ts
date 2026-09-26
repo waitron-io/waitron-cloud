@@ -1,8 +1,9 @@
-import {createHash,randomUUID} from 'node:crypto';
+import {createHash,randomUUID,type KeyObject} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {transaction} from '@waitron-cloud/registration';
 import {RemoteAccessStore,type CertificateAuthorization} from './placement.ts';
 import {certificateNeedsRenewal} from './renewal.ts';
+import {signManifest,type GatewayRoute} from './manifest.ts';
 
 export type RemoteConfigurationKind='route'|'certificate_staff'|'certificate_public';
 export interface RemoteConfigurationJob {
@@ -20,11 +21,13 @@ interface ReconcilerOptions {
  execute?:(job:RemoteConfigurationJob,context:ExecuteContext)=>Promise<void>;
  artifacts?:ReconcilerArtifacts;
  issueCertificate?:(target:CertificateIssueTarget)=>Promise<string>;
+ signingKeyForCell?:(cellId:string)=>Promise<KeyObject>;
  now?:()=>number;
 }
 interface DesiredTarget {kind:RemoteConfigurationKind;targetId:string;digest:string}
 
 const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const routeDigest=(routes:GatewayRoute[])=>digest([...routes].sort((a,b)=>a.venueId.localeCompare(b.venueId)).map(route=>({installationId:route.installationId,venueId:route.venueId,staffHostname:route.staffHostname,publicHostname:route.publicHostname,address:route.address,port:route.port,peerPublicKey:route.peerPublicKey})));
 const certificateDigest=(installationId:string,kind:'staff'|'public',value:CertificateAuthorization)=>digest({installationId,kind,revision:value.revision,hostname:value.hostname,dnsName:value.dnsName});
 const rowJob=(row:Record<string,unknown>):RemoteConfigurationJob=>({kind:row.kind as RemoteConfigurationKind,targetId:String(row.target_id),desiredDigest:String(row.desired_digest),claimId:String(row.claim_id),attempts:Number(row.attempts)});
 
@@ -45,7 +48,8 @@ async function desiredTargets(client:PoolClient):Promise<DesiredTarget[]>{
    JOIN remote_hostnames u ON u.venue_id=m.venue_id AND u.kind='public'
    WHERE m.target_cell_id=$1 AND m.state IN ('staged','ready') AND i.configuration_revision=m.expected_revision AND i.revoked_at IS NULL
    ORDER BY m.venue_id`,[cell.id])).rows;
-  targets.push({kind:'route',targetId:cell.id,digest:digest([...active,...staged].sort((a,b)=>String(a.venue_id).localeCompare(String(b.venue_id))))});
+  const routes=[...active,...staged].map(row=>({installationId:row.installation_id,venueId:row.venue_id,address:row.address,port:row.port,peerPublicKey:row.peer_public_key,staffHostname:row.staff_hostname,publicHostname:row.public_hostname}));
+  targets.push({kind:'route',targetId:cell.id,digest:routeDigest(routes)});
  }
  const certificates=(await client.query(`SELECT i.id,i.configuration_revision,p.venue_id,c.suffix,s.hostname AS staff_hostname,u.hostname AS public_hostname
   FROM installations i JOIN remote_placements p ON p.installation_id=i.id JOIN remote_cells c ON c.id=p.cell_id
@@ -63,8 +67,8 @@ async function desiredTargets(client:PoolClient):Promise<DesiredTarget[]>{
 
 export class RemoteConfigurationReconciler {
  readonly #pool:Pool;readonly #execute:ReconcilerOptions['execute'];readonly #artifacts:ReconcilerArtifacts|undefined;
- readonly #issueCertificate:ReconcilerOptions['issueCertificate'];readonly #now:()=>number;readonly #store:RemoteAccessStore;
- constructor(pool:Pool,options:ReconcilerOptions={}){this.#pool=pool;this.#store=new RemoteAccessStore(pool);this.#execute=options.execute;this.#artifacts=options.artifacts;this.#issueCertificate=options.issueCertificate;this.#now=options.now??Date.now;}
+ readonly #issueCertificate:ReconcilerOptions['issueCertificate'];readonly #signingKeyForCell:ReconcilerOptions['signingKeyForCell'];readonly #now:()=>number;readonly #store:RemoteAccessStore;
+ constructor(pool:Pool,options:ReconcilerOptions={}){this.#pool=pool;this.#store=new RemoteAccessStore(pool);this.#execute=options.execute;this.#artifacts=options.artifacts;this.#issueCertificate=options.issueCertificate;this.#signingKeyForCell=options.signingKeyForCell;this.#now=options.now??Date.now;}
  async schedule():Promise<number>{return transaction(this.#pool,async client=>{
   await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext('remote_configuration_schedule'))");
   const desired=await desiredTargets(client),keys=new Set(desired.map(target=>`${target.kind}:${target.targetId}`));let changed=0;
@@ -106,9 +110,15 @@ export class RemoteConfigurationReconciler {
   try{
    if(this.#execute){await this.#execute(claimed,{signal,isCurrent:()=>this.#current(claimed)});await this.#complete(claimed,async()=>{});}
    else if(claimed.kind==='certificate_staff'||claimed.kind==='certificate_public')await this.#certificate(claimed,signal);
-   else throw new Error('reconciler_not_configured');
+   else await this.#route(claimed);
   }catch{await this.#release(claimed,false);}
   return true;
+ }
+ async #route(job:RemoteConfigurationJob){
+  if(!this.#artifacts||!this.#signingKeyForCell)throw new Error('reconciler_not_configured');const now=this.#now();
+  const manifest=await this.#store.manifest(job.targetId,now);if(routeDigest(manifest.routes)!==job.desiredDigest)throw new Error('stale_configuration');
+  const key=await this.#signingKeyForCell(job.targetId),envelope=JSON.stringify(signManifest(manifest,key,now));
+  await this.#complete(job,()=>this.#artifacts!.publishManifest(job.targetId,envelope));
  }
  async #certificate(job:RemoteConfigurationJob,signal:AbortSignal){
   if(!this.#artifacts||!this.#issueCertificate)throw new Error('reconciler_not_configured');

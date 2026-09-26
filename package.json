@@ -17,6 +17,8 @@
     "test:control-plane-outages": "node scripts/test-postgres.mjs exec node scripts/control-plane-outage-receipt.mjs /tmp/cloud-control-plane-outage-receipt.json && node scripts/verify-control-plane-outage-receipt.mjs /tmp/cloud-control-plane-outage-receipt.json",
     "test:cell-movement-receipt": "node --test scripts/verify-cell-movement-receipt.test.mjs",
     "verify:cell-movement": "node scripts/verify-cell-movement-receipt.mjs",
+    "test:remote-reconciler-receipt": "node --test scripts/verify-remote-reconciler-receipt.test.mjs",
+    "verify:remote-reconciler": "node scripts/verify-remote-reconciler-receipt.mjs",
     "measure:worker-scheduling-baseline": "node scripts/test-postgres.mjs exec node scripts/worker-scheduling-receipt.mjs --baseline /tmp/cloud-worker-scheduling-baseline.json",
     "db:migrate": "pnpm --filter @waitron-cloud/registration db:migrate",
     "history:cleanup": "pnpm --dir packages/registration history:cleanup",
@@ -34,7 +36,8 @@
     "keys:check": "node --env-file-if-exists=.env packages/backups/src/key-operations-cli.ts",
     "monitor:worker": "node --env-file-if-exists=.env packages/registration/src/monitor-cli.ts",
     "monitor:status": "node --env-file-if-exists=.env packages/registration/src/monitor-cli.ts --status",
-    "remote:probe": "node --env-file-if-exists=.env packages/remote-access/src/probe-cli.ts"
+    "remote:probe": "node --env-file-if-exists=.env packages/remote-access/src/probe-cli.ts",
+    "remote:reconcile": "node --env-file-if-exists=.env packages/remote-access/src/reconciler-cli.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

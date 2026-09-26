@@ -7,6 +7,7 @@ import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
 import {database} from '../../account-http/test/fixtures.ts';
 import {RemoteAccessStore} from '../src/placement.ts';
 import {RemoteConfigurationReconciler} from '../src/reconciler.ts';
+import {verifyManifest} from '../src/manifest.ts';
 
 const peerKey=()=>randomBytes(32).toString('base64');
 let db:Awaited<ReturnType<typeof database>>,placements:RemoteAccessStore,sequence=0;
@@ -160,4 +161,16 @@ test('a changed CSR or expired claim cannot publish a completed issuance',async(
  gate=new Promise<void>(resolve=>{release=resolve;});started=new Promise<void>(resolve=>{entered=resolve;});worker=new RemoteConfigurationReconciler(db.pool,{artifacts:memory.adapter,issueCertificate:async()=>{entered();await gate;return renewed;}});
  running=worker.runOnce();await started;await db.pool.query("UPDATE remote_configuration_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE kind='certificate_staff' AND target_id=$1",[current.installationId]);release();await running;
  assert.deepEqual(memory.publications,[]);assert.equal(memory.certificates.get(`${current.installationId}:staff`),original.certificate);
+});
+
+test('route workers publish one signed current manifest and refresh it after five minutes',async()=>{
+ const current=await onePlacement(49),signing=generateKeyPairSync('ed25519'),published:string[]=[];
+ const artifacts={async readCsr(){throw new Error('unexpected_certificate');},async readCertificate(){throw new Error('unexpected_certificate');},async publishCertificate(){throw new Error('unexpected_certificate');},async publishManifest(cellId:string,envelope:string){assert.equal(cellId,current.cell.id);published.push(envelope);}};
+ const options={artifacts,signingKeyForCell:async(cellId:string)=>{assert.equal(cellId,current.cell.id);return signing.privateKey;}};
+ const first=new RemoteConfigurationReconciler(db.pool,options),second=new RemoteConfigurationReconciler(db.pool,options);await first.schedule();
+ await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'route' OR target_id<>$1",[current.cell.id]);
+ assert.deepEqual((await Promise.all([first.runOnce(),second.runOnce()])).sort(),[false,true]);const after=await db.pool.query("SELECT status,last_error,desired_digest,attempts FROM remote_configuration_jobs WHERE kind='route' AND target_id=$1",[current.cell.id]);assert.equal(published.length,1,JSON.stringify(after.rows[0]));
+ const manifest=verifyManifest(JSON.parse(published[0]!),signing.publicKey,current.cell.id);assert.equal(manifest.routes.length,1);assert.equal(manifest.routes[0]!.installationId,current.installationId);
+ const job=(await db.pool.query("SELECT status,applied_digest=desired_digest AS applied,extract(epoch FROM available_at-clock_timestamp()) AS wait_seconds FROM remote_configuration_jobs WHERE kind='route' AND target_id=$1",[current.cell.id])).rows[0];
+ assert.equal(job.status,'pending');assert.equal(job.applied,true);assert.ok(Number(job.wait_seconds)>299&&Number(job.wait_seconds)<=300);
 });

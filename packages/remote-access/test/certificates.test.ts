@@ -26,7 +26,7 @@ test('custom hostnames require both routing and DNS-01 delegation to the bound a
 test('explicit artifact mappings replace files atomically and retain old bytes on failure',async()=>{
  const root=await mkdtemp(join(tmpdir(),'cloud-reconciler-files-')),blocked=join(root,'blocked'),installationId=randomUUID(),cellId=randomUUID();
  try{
-  await mkdir(blocked);const csrFile=join(root,'staff.csr'),certificateFile=join(blocked,'staff.crt'),manifestFile=join(root,'manifest.json');
+  await mkdir(blocked);const csrFile=join(root,'staff.csr'),certificateFile=join(blocked,'staff.crt'),manifestFile=join(blocked,'manifest.json');
   await writeFile(csrFile,'csr',{mode:0o600});await writeFile(certificateFile,'old certificate',{mode:0o600});
   const artifacts=new FileReconcilerArtifacts({certificates:[{installationId,kind:'staff',csrFile,output:certificateFile}],routes:[{cellId,output:manifestFile}]});
   assert.equal(await artifacts.readCsr(installationId,'staff'),'csr');assert.equal(await artifacts.readCertificate(installationId,'staff'),'old certificate');
@@ -34,6 +34,7 @@ test('explicit artifact mappings replace files atomically and retain old bytes o
   assert.equal(await readFile(certificateFile,'utf8'),'new certificate');assert.equal(await readFile(manifestFile,'utf8'),'signed manifest');
   await chmod(blocked,0o500);await assert.rejects(artifacts.publishCertificate(installationId,'staff','must not replace'));await chmod(blocked,0o700);
   assert.equal(await readFile(certificateFile,'utf8'),'new certificate');
+  await chmod(blocked,0o500);await assert.rejects(artifacts.publishManifest(cellId,'must not replace'));await chmod(blocked,0o700);assert.equal(await readFile(manifestFile,'utf8'),'signed manifest');
   await assert.rejects(artifacts.readCsr(randomUUID(),'staff'),/certificate_mapping_missing/);
   assert.throws(()=>new FileReconcilerArtifacts({certificates:[{installationId,kind:'staff',csrFile:'relative',output:certificateFile}],routes:[]}),/invalid_reconciler_files/);
  }finally{await chmod(blocked,0o700).catch(()=>{});await rm(root,{recursive:true,force:true});}

@@ -6,7 +6,8 @@
     "typecheck": "tsc -p ../../tsconfig.json",
     "test": "node --test --test-timeout=30000 test/*.test.ts",
     "test:movement": "node --test --test-timeout=30000 test/movement.test.ts test/operator-cli.test.ts",
-    "probe": "node src/probe-cli.ts"
+    "probe": "node src/probe-cli.ts",
+    "reconcile": "node src/reconciler-cli.ts"
   },
   "dependencies": {
     "@waitron-cloud/registration": "workspace:*",
