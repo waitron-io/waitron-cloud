@@ -1,5 +1,4 @@
 import { Pool } from "pg";
-import { EmailOutbox } from "@waitron-cloud/registration";
 import { inspectManagedKeyDependencies } from "./key-operations.ts";
 import { BackupKeyVault } from "./keys.ts";
 
@@ -10,14 +9,12 @@ try {
   const backupVault = /^[a-fA-F0-9]{64}$/.test(master)
     ? new BackupKeyVault(Buffer.from(master, "hex"))
     : undefined;
-  let emailOutbox: EmailOutbox | undefined;
-  let configuredEmailKeyIds: string[] = [];
   const activeEmailKeyId = process.env.CLOUD_EMAIL_ACTIVE_KEY_ID;
-  try {
-    const keys = JSON.parse(process.env.CLOUD_EMAIL_KEYS ?? "") as Record<string, string>;
-    emailOutbox = new EmailOutbox({ activeKeyId: activeEmailKeyId ?? "", keys });
-    configuredEmailKeyIds = Object.keys(keys);
-  } catch {}
+  if (!activeEmailKeyId || !process.env.CLOUD_EMAIL_KEYS) throw new Error();
+  const emailKeys = {
+    activeKeyId: activeEmailKeyId,
+    keys: JSON.parse(process.env.CLOUD_EMAIL_KEYS) as Record<string, string>,
+  };
 
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -27,9 +24,7 @@ try {
   });
   const report = await inspectManagedKeyDependencies(pool, {
     backupVault,
-    emailOutbox,
-    activeEmailKeyId,
-    configuredEmailKeyIds,
+    emailKeys,
   });
   console.log(JSON.stringify(report));
   if (!report.ready) process.exitCode = 2;

@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from "pg";
-import type { EmailOutbox } from "@waitron-cloud/registration";
+import { EmailOutbox } from "@waitron-cloud/registration";
 import type { BackupKeyVault } from "./keys.ts";
 
 type Validation = "verified" | "configured" | "unavailable";
@@ -39,9 +39,10 @@ export interface ManagedKeyDependencyReport {
 
 export interface InspectManagedKeyOptions {
   backupVault?: BackupKeyVault;
-  emailOutbox?: EmailOutbox;
-  activeEmailKeyId?: string;
-  configuredEmailKeyIds?: readonly string[];
+  emailKeys?: {
+    activeKeyId: string;
+    keys: Record<string, string>;
+  };
 }
 
 interface BackupRow {
@@ -67,12 +68,21 @@ async function backupDependencies(
   vault: BackupKeyVault | undefined,
 ): Promise<BackupKeyDependency[]> {
   const rows = await client.query<BackupRow>(`
+    WITH capture_counts AS (
+      SELECT venue_id,key_version,count(*) AS count FROM backup_captures GROUP BY venue_id,key_version
+    ), point_counts AS (
+      SELECT venue_id,key_version,count(*) AS count FROM backup_points GROUP BY venue_id,key_version
+    ), stream_counts AS (
+      SELECT venue_id,key_version,count(*) AS count FROM backup_managed_streams GROUP BY venue_id,key_version
+    )
     SELECT k.venue_id,k.version,k.sealed,l.active_key_version=k.version AS active,
-      (SELECT count(*) FROM backup_captures c WHERE c.venue_id=k.venue_id AND c.key_version=k.version) AS captures,
-      (SELECT count(*) FROM backup_points p WHERE p.venue_id=k.venue_id AND p.key_version=k.version) AS points,
-      (SELECT count(*) FROM backup_managed_streams s WHERE s.venue_id=k.venue_id AND s.key_version=k.version) AS managed_streams
+      coalesce(c.count,0) AS captures,coalesce(p.count,0) AS points,
+      coalesce(s.count,0) AS managed_streams
     FROM backup_key_versions k
     JOIN backup_locations l ON l.venue_id=k.venue_id
+    LEFT JOIN capture_counts c ON c.venue_id=k.venue_id AND c.key_version=k.version
+    LEFT JOIN point_counts p ON p.venue_id=k.venue_id AND p.key_version=k.version
+    LEFT JOIN stream_counts s ON s.venue_id=k.venue_id AND s.key_version=k.version
     ORDER BY k.venue_id,k.version`);
   return rows.rows.map((row) => {
     let validation: Validation = "unavailable";
@@ -105,6 +115,9 @@ async function emailDependencies(
   client: PoolClient,
   options: InspectManagedKeyOptions,
 ): Promise<EmailKeyDependency[]> {
+  const emailOutbox = options.emailKeys ? new EmailOutbox(options.emailKeys) : undefined;
+  const configuredEmailKeyIds = options.emailKeys ? Object.keys(options.emailKeys.keys) : [];
+  const activeEmailKeyId = options.emailKeys?.activeKeyId;
   const counts = await client.query<EmailCountRow>(`
     SELECT key_id,
       count(*) FILTER (WHERE status='pending') AS pending,
@@ -123,8 +136,8 @@ async function emailDependencies(
       const keyId = row.key_id as string;
       if (!validationById.has(keyId)) validationById.set(keyId, true);
       try {
-        options.emailOutbox?.open(row);
-        if (!options.emailOutbox) validationById.set(keyId, false);
+        emailOutbox?.open(row);
+        if (!emailOutbox) validationById.set(keyId, false);
       } catch {
         validationById.set(keyId, false);
       }
@@ -134,8 +147,8 @@ async function emailDependencies(
     cursorKey = last.key_id as string;
     cursorId = last.id as string;
   }
-  const ids = new Set(options.configuredEmailKeyIds ?? []);
-  if (options.activeEmailKeyId) ids.add(options.activeEmailKeyId);
+  const ids = new Set(configuredEmailKeyIds);
+  if (activeEmailKeyId) ids.add(activeEmailKeyId);
   for (const row of counts.rows) ids.add(row.key_id);
 
   return [...ids].sort().map((keyId) => {
@@ -144,12 +157,12 @@ async function emailDependencies(
       pending: number(row?.pending ?? 0),
       processing: number(row?.processing ?? 0),
     };
-    const configured = options.configuredEmailKeyIds?.includes(keyId) ?? false;
+    const configured = configuredEmailKeyIds.includes(keyId);
     let validation: Validation = configured ? "configured" : "unavailable";
     if (dependencies.pending + dependencies.processing > 0) {
       validation = configured && validationById.get(keyId) ? "verified" : "unavailable";
     }
-    const active = keyId === options.activeEmailKeyId;
+    const active = keyId === activeEmailKeyId;
     return {
       keyId,
       active,
@@ -181,7 +194,7 @@ export async function inspectManagedKeyDependencies(
       schemaVersion: 1,
       ready:
         !!options.backupVault &&
-        !!options.emailOutbox &&
+        !!options.emailKeys &&
         emailKeys.some((item) => item.active && item.configured) &&
         backupKeys.every((item) => item.validation === "verified") &&
         emailKeys.every(

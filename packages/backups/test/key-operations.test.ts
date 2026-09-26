@@ -105,15 +105,20 @@ test("inventory blocks active and referenced keys without exposing key material"
   const oldPoint = await capture();
   await catalogue.rotate(installationId);
   await catalogue.rotate(installationId);
+  await db.pool.query(
+    `INSERT INTO backup_managed_streams(venue_id,installation_id,requested_revision,
+      configuration_revision,key_version,local_venue_id,source_node_id,
+      pointer_signer_public_key,object_prefix,writer_reference,reader_reference)
+     VALUES($1,$2,0,1,1,$3,$4,'test-signer',$5,'test-writer','test-reader')`,
+    [venueId, installationId, randomUUID(), randomUUID(), `streams/${venueId}/`],
+  );
   const firstOutbox = new EmailOutbox({ activeKeyId: "first", keys: emailKeys });
   await transaction(db.pool, (client) =>
     firstOutbox.enqueue(client, "password_changed", { email: "owner@example.test" }),
   );
   const report = await inspectManagedKeyDependencies(db.pool, {
     backupVault: vault,
-    emailOutbox: new EmailOutbox({ activeKeyId: "second", keys: emailKeys }),
-    activeEmailKeyId: "second",
-    configuredEmailKeyIds: Object.keys(emailKeys),
+    emailKeys: { activeKeyId: "second", keys: emailKeys },
   });
 
   assert.equal(report.schemaVersion, 1);
@@ -126,11 +131,12 @@ test("inventory blocks active and referenced keys without exposing key material"
       retirement: item.retirement,
       captures: item.dependencies.captures,
       points: item.dependencies.points,
+      managedStreams: item.dependencies.managedStreams,
     })),
     [
-      { version: 1, active: false, validation: "verified", retirement: "blocked", captures: 1, points: 1 },
-      { version: 2, active: false, validation: "verified", retirement: "eligible", captures: 0, points: 0 },
-      { version: 3, active: true, validation: "verified", retirement: "blocked", captures: 0, points: 0 },
+      { version: 1, active: false, validation: "verified", retirement: "blocked", captures: 1, points: 1, managedStreams: 1 },
+      { version: 2, active: false, validation: "verified", retirement: "eligible", captures: 0, points: 0, managedStreams: 0 },
+      { version: 3, active: true, validation: "verified", retirement: "blocked", captures: 0, points: 0, managedStreams: 0 },
     ],
   );
   assert.equal(report.backupKeys[0]?.venueId, venueId);
@@ -173,9 +179,7 @@ test("inventory reports missing or wrong keys and does not modify durable state"
   );
   const report = await inspectManagedKeyDependencies(db.pool, {
     backupVault: new BackupKeyVault(randomBytes(32)),
-    emailOutbox: new EmailOutbox({ activeKeyId: "second", keys: { second: emailKeys.second } }),
-    activeEmailKeyId: "second",
-    configuredEmailKeyIds: ["second"],
+    emailKeys: { activeKeyId: "second", keys: { second: emailKeys.second } },
   });
   const after = await db.pool.query(
     "SELECT (SELECT count(*) FROM backup_key_versions) AS backup_keys, (SELECT count(*) FROM email_outbox) AS messages",
@@ -259,9 +263,7 @@ test("a restarted worker and backup catalogue use retained keys after rotation",
 
   const report = await inspectManagedKeyDependencies(db.pool, {
     backupVault: vault,
-    emailOutbox: restartedOutbox,
-    activeEmailKeyId: "second",
-    configuredEmailKeyIds: Object.keys(emailKeys),
+    emailKeys: { activeKeyId: "second", keys: emailKeys },
   });
   assert.equal(report.emailKeys.find((item) => item.keyId === "first")?.retirement, "eligible");
   assert.equal(report.backupKeys.find((item) => item.version === 1)?.retirement, "blocked");
@@ -293,23 +295,83 @@ test("operator CLI emits a secret-free report and exits nonzero when key materia
       return true;
     },
   );
+  await assert.rejects(
+    execute(process.execPath, [cli.pathname], {
+      env: { ...environment, CLOUD_EMAIL_KEYS: "{" },
+    }),
+    (error: { code?: number; stdout?: string; stderr?: string }) => {
+      assert.equal(error.code, 1);
+      assert.equal(error.stdout, "");
+      assert.match(error.stderr ?? "", /^Managed key check failed;/);
+      return true;
+    },
+  );
 });
 
 test("email-key validation checks every live payload, not one representative row", async () => {
   const outbox = new EmailOutbox({ activeKeyId: "first", keys: emailKeys });
   await transaction(db.pool, async (client) => {
-    await outbox.enqueue(client, "password_changed", { email: "first@example.test" });
-    await outbox.enqueue(client, "password_changed", { email: "second@example.test" });
+    for (let index = 0; index < 101; index++) {
+      await outbox.enqueue(client, "password_changed", {
+        email: `recipient-${index}@example.test`,
+      });
+    }
   });
   await db.pool.query(`UPDATE email_outbox SET payload=set_byte(payload,28,get_byte(payload,28)#1)
-    WHERE id=(SELECT id FROM email_outbox ORDER BY created_at DESC,id DESC LIMIT 1)`);
+    WHERE id=(SELECT id FROM email_outbox ORDER BY key_id DESC,id DESC LIMIT 1)`);
 
   const report = await inspectManagedKeyDependencies(db.pool, {
     backupVault: vault,
-    emailOutbox: outbox,
-    activeEmailKeyId: "first",
-    configuredEmailKeyIds: Object.keys(emailKeys),
+    emailKeys: { activeKeyId: "first", keys: emailKeys },
   });
   assert.equal(report.ready, false);
   assert.equal(report.emailKeys.find((item) => item.keyId === "first")?.validation, "unavailable");
+});
+
+test("backup dependency tables are scanned once rather than once per key version", async () => {
+  await catalogue.rotate(installationId);
+  await catalogue.rotate(installationId);
+  let maximumDependencyLoops = 0;
+  const pool = new Proxy(db.pool, {
+    get(target, property) {
+      if (property !== "connect") return Reflect.get(target, property, target);
+      return async () => {
+        const client = await target.connect();
+        return new Proxy(client, {
+          get(clientTarget, clientProperty) {
+            if (clientProperty === "query") {
+              return async (query: string, values?: unknown[]) => {
+                if (query.includes("FROM backup_key_versions k")) {
+                  const explained = await clientTarget.query(`EXPLAIN (ANALYZE,FORMAT JSON) ${query}`);
+                  const visit = (plan: Record<string, unknown>) => {
+                    if (
+                      ["backup_captures", "backup_points", "backup_managed_streams"].includes(
+                        String(plan["Relation Name"]),
+                      )
+                    ) {
+                      maximumDependencyLoops = Math.max(
+                        maximumDependencyLoops,
+                        Number(plan["Actual Loops"]),
+                      );
+                    }
+                    for (const child of (plan.Plans ?? []) as Record<string, unknown>[]) visit(child);
+                  };
+                  visit(explained.rows[0]["QUERY PLAN"][0].Plan);
+                }
+                return clientTarget.query(query, values);
+              };
+            }
+            const value = Reflect.get(clientTarget, clientProperty, clientTarget);
+            return typeof value === "function" ? value.bind(clientTarget) : value;
+          },
+        });
+      };
+    },
+  });
+
+  await inspectManagedKeyDependencies(pool, {
+    backupVault: vault,
+    emailKeys: { activeKeyId: "first", keys: emailKeys },
+  });
+  assert.equal(maximumDependencyLoops, 1);
 });
