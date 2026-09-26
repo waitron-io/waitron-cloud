@@ -42,7 +42,7 @@ pnpm account:serve
 ```
 
 If you export `DATABASE_URL` in your shell, `pnpm db:migrate` applies the same migrations.
-The server refuses startup without migrations `007_account_http.sql` through `020_account_security_controls.sql`; it never applies
+The server refuses startup without migrations `007_account_http.sql` through `022_security_audit.sql`; it never applies
 migrations itself. Its default listener is `127.0.0.1:3000`.
 Migration 020 assigns a distinct random ID to every existing session, so PostgreSQL rewrites and
 exclusively locks `cloud_sessions` while it runs. Schedule that migration before starting the new
@@ -108,6 +108,7 @@ parameters remain rejected, so tokens belong only in completion bodies.
 | POST `/logout` | `{}`, session cookie and `X-CSRF-Token` | 204, clearing both cookies |
 | POST `/password-reset/request` | `{"email":"owner@example.test"}` | 202 `{"status":"accepted"}` |
 | POST `/password-reset/complete` | `{"token":"<emailed token>","password":"a different long password"}` | 200 `{"status":"completed"}` |
+| POST `/security-audit/read` | `{"organisationId":"<uuid>","limit":50,"cursor":"<optional next cursor>"}`, session cookie and `X-CSRF-Token` | 200 owner-scoped schema-v1 security event page |
 
 Passkeys are optional and use the same account sessions. Start a discoverable sign-in
 with `POST /passkeys/authentication/options {}`, then send the browser result and
@@ -176,6 +177,12 @@ token hash. It checks the acting session and CSRF proof before and after any tar
 wait. Repeating a successful request, naming an ended row or naming another account's
 row returns the same 204 response. Reload the list after an uncertain response instead
 of replaying the write; the portal does this automatically.
+
+POST `/security-audit/read` is passive and owner-only. It returns at most 100 immutable
+pairing, installation, recovery and replacement security events for one organisation.
+Send `nextCursor` unchanged to read an older page. See the
+[customer security audit guide](../../docs/security-audit.md) for the event inventory,
+privacy boundary and retention limitation.
 
 ## Limits and errors
 

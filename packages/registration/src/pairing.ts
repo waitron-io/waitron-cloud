@@ -4,6 +4,7 @@ import {resolveSession} from '@waitron-cloud/identity';
 import {RegistrationStore,type ConnectionBinding,type Registration} from './index.ts';
 import {transaction} from './transaction.ts';
 import {isPairingUuid,PairingError,type PairingClaims} from './pairing-proof.ts';
+import {recordSecurityAuditEvent} from './security-audit.ts';
 interface Row {
   id:string;public_key:string;local_venue_id:string;environment:string;code_hash:string;expires_at:Date;
   failed_codes:number;cloud_account_id:string|null;organisation_id:string|null;legal_business_id:string|null;result:Registration|null;
@@ -87,6 +88,7 @@ export class PairingStore {
         await available(client,row);
         await client.query('UPDATE pairing_requests SET cloud_account_id=$2,organisation_id=$3,legal_business_id=$4 WHERE id=$1',[id,session.accountId,choice.org,choice.business]);
         row.cloud_account_id=session.accountId;row.organisation_id=choice.org;row.legal_business_id=choice.business;
+        await recordSecurityAuditEvent(client,{organisationId:choice.org,venueId:null,type:'pairing.cloud_approved',actorKind:'account',actorId:session.accountId,subjectKind:'pairing_request',subjectId:row.id,sourceId:row.id});
       }
       await resolveSession(client,token,{csrfToken:csrf,touch:false});return view(client,row);
     });
@@ -107,6 +109,7 @@ export class PairingStore {
       const registration=new RegistrationStore(this.#pool,client);
       await registration.start(binding);await registration.approveLocal(binding,row.id);await registration.approveCloud(binding,row.cloud_account_id);
       const registered=await registration.complete(binding);
+      await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:registered.venueId,type:'pairing.local_approved',actorKind:'local_authority',actorId:row.id,subjectKind:'pairing_request',subjectId:row.id,sourceId:row.id});
       await available(client,row);
       await client.query('UPDATE pairing_requests SET result=$2 WHERE id=$1',[row.id,registered]);row.result=registered;
       return view(client,row);

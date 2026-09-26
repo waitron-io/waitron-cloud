@@ -37,6 +37,10 @@ export type RecoveryInfo=
 export type RecoveryAccess=
  |{source:SnapshotRecoverySource;point:import("./catalogue.ts").BackupPoint;location:import("./storage.ts").StorageLocation;keys:import("./keys.ts").BackupKeys;operationExpiresAt:string}
  |{source:ContinuousRecoverySource;stream:{venueId:string;location:import("./storage.ts").StorageLocation;prefix:string;readerReference:string;pointerSignerPublicKey:string;recoveryKey:string;localVenueId:string;generation:string};operationExpiresAt:string};
+export interface RecoveryView {
+  id:string;venueId:string;pointId:string|null;source:SnapshotRecoverySource|Omit<ContinuousRecoverySource,"sourceDigest">;
+  mode:"planned"|"failure";status:string;expiresAt:string;
+}
 export interface Proof {
   payload: string;
   signature: string;
@@ -148,14 +152,14 @@ function source(row:Record<string,unknown>):SnapshotRecoverySource|Omit<Continuo
 }
 function continuousSource(row:Record<string,unknown>,digest:string):ContinuousRecoverySource{return {kind:'continuous',recoverableAt:(row.stream_recoverable_at as Date).toISOString(),sourceNodeId:row.stream_source_node_id as string,sourceDigest:digest};}
 function snapshotSource(row:Record<string,unknown>):SnapshotRecoverySource{return {kind:'snapshot',pointId:row.point_id as string};}
-function view(row: Record<string, unknown>) {
+function view(row: Record<string, unknown>):RecoveryView {
   return {
-    id: row.id,
-    venueId: row.venue_id,
-    pointId: row.point_id,
+    id: row.id as string,
+    venueId: row.venue_id as string,
+    pointId: row.point_id as string|null,
     source:source(row),
-    mode: row.mode,
-    status: row.status,
+    mode: row.mode as RecoveryView['mode'],
+    status: row.status as string,
     expiresAt: (row.expires_at as Date).toISOString(),
   };
 }

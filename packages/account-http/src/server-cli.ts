@@ -27,6 +27,7 @@ const requiredMigrations = [
   '019_passkeys.sql',
   '020_account_security_controls.sql',
   '021_history_cleanup.sql',
+  '022_security_audit.sql',
 ];
 let resolveStop: () => void = () => {};
 const stopped = new Promise<void>(resolve => {resolveStop = resolve;});

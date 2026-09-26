@@ -4,6 +4,7 @@ import {resolveSession} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
 import {isPairingUuid} from './pairing-proof.ts';
 import {InstallationError,readMachineClaims,verifyMachine,verifyLease,type LeaseIssuer,type MachineAction,type SignedEnvelope} from './installation-proof.ts';
+import {recordSecurityAuditEvent,securityAuditSourceId,type SecurityAuditActorKind} from './security-audit.ts';
 const names=['continuous_backup','remote_access','retained_snapshots'] as const;
 type Service=typeof names[number];
 type State='unconfigured'|'provisioning'|'ready'|'failed';
@@ -16,7 +17,7 @@ export interface InstallationView {
   services:(DesiredService & {health:Health;failure:Failure|null;observedAt:string|null})[];
   lease?:SignedEnvelope;canRevoke?:boolean;
 }
-interface Row {id:string;venue_id:string;public_key:string;revoked_at:Date|null;configuration_revision:number;environment:'test'|'production'}
+interface Row {id:string;venue_id:string;organisation_id:string;public_key:string;revoked_at:Date|null;configuration_revision:number;environment:'test'|'production'}
 interface Report {revision:number;observedAt:number;services:{service:Service;health:Health;failure:Failure|null}[]}
 function fail(code:InstallationError['code']):never {throw new InstallationError(code);}
 function object(value:unknown,keys:string[]):value is Record<string,unknown> {
@@ -37,7 +38,7 @@ function readBody(action:MachineAction,text:string,now:number):Report|undefined 
   if(JSON.stringify(report)!==text)fail('invalid_proof');return report;
 }
 async function lock(client:PoolClient,id:string):Promise<Row> {
-  const {rows}=await client.query<Row>(`SELECT i.*,v.environment FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1 FOR UPDATE OF i`,[id]);
+  const {rows}=await client.query<Row>(`SELECT i.*,v.environment,v.organisation_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1 FOR UPDATE OF i`,[id]);
   if(!rows[0])return fail('unavailable');return rows[0];
 }
 async function view(client:PoolClient,id:string):Promise<InstallationView> {
@@ -105,6 +106,8 @@ export class InstallationStore {
       if(action==='revoke')for(const s of result.services)s.configuration={};
       verifyMachine(envelope,row.public_key,this.#origin,action);
       if(action==='revoke')await client.query("INSERT INTO installation_revocations(installation_id,actor_kind,actor_id,reason,result) VALUES($1,'installation',$1,'user_requested',$2) ON CONFLICT DO NOTHING",[row.id,result]);
+      if(action==='renew')await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:row.venue_id,type:'installation.credentials_renewed',actorKind:'installation',actorId:row.id,subjectKind:'installation',subjectId:row.id,sourceId:securityAuditSourceId('installation.credentials_renewed',row.id,c.operationId)});
+      if(action==='revoke')await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:row.venue_id,type:'installation.revoked',actorKind:'installation',actorId:row.id,subjectKind:'installation',subjectId:row.id,sourceId:row.id});
       await client.query('INSERT INTO installation_operations(installation_id,operation_id,digest,result) VALUES($1,$2,$3,$4)',[row.id,c.operationId,digest,result]);
       return result;
     });
@@ -144,7 +147,9 @@ export class InstallationStore {
       await client.query('UPDATE installations SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE id=$1',[id]);
       const result=await view(client,id);for(const s of result.services)s.configuration={};
       await resolveSession(client,token,{csrfToken,touch:false});
-      await client.query("INSERT INTO installation_revocations(installation_id,actor_kind,actor_id,reason,result) VALUES($1,'account',$2,'user_requested',$3) ON CONFLICT DO NOTHING",[id,session.accountId,result]);return result;
+      await client.query("INSERT INTO installation_revocations(installation_id,actor_kind,actor_id,reason,result) VALUES($1,'account',$2,'user_requested',$3) ON CONFLICT DO NOTHING",[id,session.accountId,result]);
+      const revocation=(await client.query<{actor_kind:SecurityAuditActorKind;actor_id:string}>('SELECT actor_kind,actor_id FROM installation_revocations WHERE installation_id=$1',[id])).rows[0]!;
+      await recordSecurityAuditEvent(client,{organisationId:permission.rows[0].organisation_id,venueId:result.venueId,type:'installation.revoked',actorKind:revocation.actor_kind,actorId:revocation.actor_id,subjectKind:'installation',subjectId:id,sourceId:id});return result;
     });
   }
 }
