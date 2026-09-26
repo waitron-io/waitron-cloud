@@ -49,3 +49,27 @@ test('propagates a claim failure only after the rest of its active batch settles
   await new Promise(resolve=>setImmediate(resolve));assert.equal(rejected,false);
   release();await assert.rejects(running,/claim failed/);assert.equal(settled,true);
 });
+
+test('contains a synchronous claim throw until the rest of the active batch settles',async()=>{
+  const stop=new AbortController();let release!:()=>void,settled=false,claim=0;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  const running=runWorkerLoop({
+    signal:stop.signal,concurrency:2,scheduleIntervalMs:60,pollIntervalMs:10,
+    runOnce:()=>{claim++;if(claim===2)throw new Error('synchronous claim failure');return gate.then(()=>{settled=true;return true;});},
+    async wait(){throw new Error('failed work must not idle');},
+  });
+  let rejected=false;void running.catch(()=>{rejected=true;});
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(rejected,false);
+  release();await assert.rejects(running,/synchronous claim failure/);assert.equal(settled,true);
+});
+
+test('claim failure retries preserve the existing scheduling deadline',async()=>{
+  const stop=new AbortController();let now=0,failures=0;
+  const schedules:number[]=[];
+  await runWorkerLoop({
+    signal:stop.signal,concurrency:1,scheduleIntervalMs:60,pollIntervalMs:10,now:()=>now,
+    async schedule(){schedules.push(now);},async runOnce(){throw new Error('observation failed');},
+    async onError(){failures++;if(failures===5)stop.abort();},async wait(milliseconds){now+=milliseconds;},
+  });
+  assert.equal(failures,5);assert.deepEqual(schedules,[0]);
+});

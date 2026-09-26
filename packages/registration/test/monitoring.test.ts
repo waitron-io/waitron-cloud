@@ -294,6 +294,33 @@ test('many-owner alert fan-out uses bounded statements and remains atomic across
   await db.pool.query('DROP TABLE IF EXISTS fixture_alert_accounts');
  }
 });
+test('four slow monitor claims have enough database connections to finish one batch',async()=>{
+ for(let n=0;n<3;n++){
+  const r=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+  await r.start(binding);await r.approveCloud(binding,owner.accountId);await r.approveLocal(binding,randomUUID());const added=await r.complete(binding);
+  await db.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[added.installationId]);
+ }
+ await monitor.schedule();
+ await db.pool.query(`CREATE FUNCTION fixture_slow_monitor_batch() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN PERFORM pg_sleep(5.5);RETURN NEW;END$$;
+  CREATE TRIGGER fixture_slow_monitor_batch BEFORE UPDATE ON venue_monitors FOR EACH ROW EXECUTE FUNCTION fixture_slow_monitor_batch()`);
+ const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+db.schema);
+ const child=spawn(process.execPath,['packages/registration/src/monitor-cli.ts'],{cwd:new URL('../../../',import.meta.url),env:{PATH:process.env.PATH,DATABASE_URL:url.href,CLOUD_EMAIL_KEYS:JSON.stringify(db.keys),CLOUD_EMAIL_ACTIVE_KEY_ID:'test'},stdio:['ignore','ignore','pipe']});
+ let errors='';child.stderr.on('data',value=>{errors+=String(value);});const exited=new Promise<number|null>(resolve=>child.once('exit',resolve));
+ try{
+  let checked=0;
+  for(let n=0;n<140;n++){
+   checked=Number((await db.pool.query('SELECT count(*) FROM venue_monitors WHERE checked_at IS NOT NULL')).rows[0].count);
+   if(checked===4||errors.includes('retrying')||child.exitCode!==null)break;
+   await delay(50);
+  }
+  assert.equal(errors.includes('retrying'),false,errors);
+  assert.equal(checked,4);
+  assert.equal(child.exitCode,null);
+ }finally{
+  child.kill('SIGTERM');const timer=setTimeout(()=>child.kill('SIGKILL'),3000);try{await exited;}finally{clearTimeout(timer);}
+  await db.pool.query('DROP TRIGGER IF EXISTS fixture_slow_monitor_batch ON venue_monitors;DROP FUNCTION IF EXISTS fixture_slow_monitor_batch()');
+ }
+});
 test('continuous monitoring skips locked installations and survives a failed observation',async()=>{
  const r=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await r.start(binding);await r.approveCloud(binding,owner.accountId);await r.approveLocal(binding,randomUUID());const other=await r.complete(binding);

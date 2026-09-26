@@ -444,8 +444,9 @@ mobile notifications separately.
   The local worker-scale receipt now separates scheduling from polling, runs scheduling
   once a minute, bounds monitor/email claim batches at four and batches encrypted alert
   insertion in groups of 100. On an Apple M5 Pro with 18 logical CPUs, its 1,000-venue/200-recipient
-  fixture reduced monitor processing from 7,030 ms with 1,001 sweeps to 2,365 ms with one,
-  incident fan-out from 211 ms to 28 ms and delivery backlog lag from 1,558 ms to 470 ms.
+  fixture reduced monitor processing from 7,030 ms with 1,001 sweeps to 2,335 ms with one,
+  queued the bounded incident fan-out in 24 ms and reduced delivery backlog lag from
+  1,558 ms to 477 ms. A 103-recipient PostgreSQL test enforces two inserts per table.
   Locked venues, restart completion and shutdown fencing remained intact. These are local
   measurements, not capacity promises. Next: choose the terminal-delivery cutoff, repeat
   the receipt in the selected deployment environment, and add escalation/quiet periods
@@ -480,7 +481,7 @@ mobile notifications separately.
   after exact operator cutoffs; pending/running/failed jobs, current points, protected
   snapshots and recovery references remain. Choose the production cutoffs before use.
   A reproducible 1,000-venue local fixture now measures scheduling separately from job
-  polling. It reduced 1,000 repeated empty backup sweeps from 3,602 ms to one 4 ms cadence
+  polling. It reduced 1,000 repeated empty backup sweeps from 3,602 ms to one 5 ms cadence
   sweep while preserving the 100-row query bound. Repeat this with the selected database
   topology and deployment-sized venue distribution before setting worker counts or
   scheduling objectives.

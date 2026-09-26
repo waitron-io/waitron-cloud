@@ -199,9 +199,10 @@ customer messages during its tests.
 
 ## Measure worker scheduling locally
 
-Use the disposable PostgreSQL runner to reproduce the worker measurement. The baseline
-mode records the old per-claim scheduling pattern. The comparison mode embeds that
-baseline and measures the current cadence and bounded concurrency with the same fixture.
+Use the disposable PostgreSQL runner to reproduce the worker measurement. Baseline mode
+records the legacy per-claim scheduling and single-slot delivery loops with the current
+fan-out implementation. Comparison mode embeds that baseline and measures the current
+cadence and bounded concurrency with the same fixture.
 
 ```sh
 node scripts/test-postgres.mjs exec node scripts/worker-scheduling-receipt.mjs \
@@ -216,15 +217,17 @@ node scripts/verify-worker-scheduling-receipt.mjs \
 The 2026-09-26 local run used Node 26.7.0 on an Apple M5 Pro with 18 logical CPUs. Its fixture had
 1,000 venues, 1,000 snapshot candidates and 200 alert recipients. Every scheduling
 query kept the 100-row limit. The old backup loop repeated 1,000 empty scheduling sweeps
-in 3,602 ms. The current cadence made one empty sweep in 4 ms. Monitoring 1,000 due
-venues fell from 7,030 ms with 1,001 scheduling sweeps to 2,365 ms with one sweep.
+in 3,602 ms. The current cadence made one empty sweep in 5 ms. Monitoring 1,000 due
+venues fell from 7,030 ms with 1,001 scheduling sweeps to 2,335 ms with one sweep.
 
-The same run queued 200 encrypted incident messages in 28 ms instead of 211 ms. Four
-email claim slots delivered them in 455 ms, with 470 ms from the oldest queue timestamp
+The current fan-out queued 200 encrypted incident messages in 24 ms. A separate
+PostgreSQL regression proves that 103 recipients use two bounded inserts per table and
+that an insertion failure rolls back the whole transition. Four email claim slots
+delivered 200 messages in 464 ms, with 477 ms from the oldest queue timestamp
 to the last completion. The previous single-slot run took 1,353 ms and 1,558 ms
 respectively. A locked venue did not block another venue, and a restarted worker drained
 all 400 opening and recovery messages without loss. Shutdown finished the in-flight send
-in 13 ms and claimed no later row. Peak resident memory was 203 MiB, compared with 192
+in 14 ms and claimed no later row. Peak resident memory was 195 MiB, compared with 192
 MiB in the untuned run.
 
 These figures describe one local machine and fixture. Use the receipt to compare code

@@ -6,13 +6,14 @@ import {runWorkerLoop} from './worker-loop.ts';
 let pool: Pool | undefined;
 const stop = new AbortController();
 const shutdown = () => stop.abort();
+const workerConcurrency = 4;
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
 try {
   const args = process.argv.slice(2);
   if (args.length > 1 || (args.length === 1 && !['--once', '--status'].includes(args[0]!))) throw new Error();
   if (!process.env.DATABASE_URL) throw new Error();
-  pool = new Pool({connectionString: process.env.DATABASE_URL, max: 2, connectionTimeoutMillis: 5000, statement_timeout: 10000});
+  pool = new Pool({connectionString: process.env.DATABASE_URL, max: workerConcurrency + 1, connectionTimeoutMillis: 5000, statement_timeout: 10000});
   pool.on('error', () => { console.error('Email worker database connection failed'); process.exitCode = 1; stop.abort(); });
   if (args[0] === '--status') console.log(JSON.stringify(await emailDeliveryStatus(pool)));
   else {
@@ -20,7 +21,7 @@ try {
     const outbox = new EmailOutbox({activeKeyId: process.env.CLOUD_EMAIL_ACTIVE_KEY_ID, keys: JSON.parse(process.env.CLOUD_EMAIL_KEYS)});
     const worker = new EmailWorker(pool, outbox, configuredAccountMailer());
     if (args[0] === '--once') { await worker.runOnce(); console.log(JSON.stringify(await worker.status())); }
-    else await runWorkerLoop({signal:stop.signal,concurrency:4,scheduleIntervalMs:60000,pollIntervalMs:1000,runOnce:()=>worker.runOnce()});
+    else await runWorkerLoop({signal:stop.signal,concurrency:workerConcurrency,scheduleIntervalMs:60000,pollIntervalMs:1000,runOnce:()=>worker.runOnce()});
   }
 } catch {
   // Configuration and database errors can include secrets; operational output uses fixed diagnostics.
