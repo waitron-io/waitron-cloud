@@ -472,11 +472,15 @@ mobile notifications separately.
   month and persists one encrypted archive for exact retries across restart. The file
   uploader streams with a 14-minute/credential-expiry deadline and bounded retry backoff;
   deliberate shutdown is not an outage. The local proof crashes after upload and restores
-  the resumed snapshot without recapture. Archive assembly still uses an in-memory format with a
-  512 MiB archive limit. Confirmed uploads retry publication without resending; loss of an
+  the resumed snapshot without recapture. Cloud now stages provider downloads to private files
+  while hashing and length-checking them, reopens the immutable stage for conditional upload
+  retries, and streams verification into the isolated Waitron restore process. A 32 MiB local
+  SeaweedFS fixture on an Apple M5 Pro observed 5,975,936 bytes of peak ArrayBuffer growth and
+  26,968,064 bytes of RSS growth. Archive assembly in Waitron still uses its existing format and
+  the end-to-end 512 MiB archive limit remains unchanged. Confirmed uploads retry publication without resending; loss of an
   acknowledged storage object waits until capture expiry before recapture. Next: measure
   production uplink budgets, spool disk use and shutdown latency during local database/encryption
-  work, stream archive assembly and object I/O beyond the current 512 MiB bound,
+  work, stream Waitron archive assembly/restoration before reconsidering the current 512 MiB bound,
   production master-key custody/rewrapping and deployment-level verifier containment. The
   local verifier now denies network, subprocesses, native addons, host reads and outside
   writes; bounds CPU, wall time, V8 heap, file size, descriptors and output; reaps its process

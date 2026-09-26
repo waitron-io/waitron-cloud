@@ -46,6 +46,14 @@ without modifying your system trust settings. This needs Docker Desktop's
   refuses changed roles, expired identities and expired storage credentials.
 - The provider requires the correct SSE-C key for stream objects. Snapshots use
   Waitron's encrypted archive format and independent immutable retained objects.
+- Cloud downloads provider objects into mode-0600 private stages while computing
+  SHA-256 and enforcing the declared length, 30-second deadline and existing
+  512 MiB ceiling. Publication uploads that same immutable stage and reopens it
+  from byte zero for a bounded retry; verification pipelines it into the isolated
+  verifier's scratch directory. A 32 MiB SeaweedFS fixture on an Apple M5 Pro
+  observed 5,975,936 bytes of peak ArrayBuffer growth and 26,968,064 bytes of RSS
+  growth on 2026-09-26. These are local measurements, not provider or capacity
+  promises; each run prints its current receipt.
 - The independent verifier passes each real Waitron snapshot through compatibility
   checks, SQLite integrity checks, migrations and module restore hooks, including
   the fiscal module. That fixture
@@ -130,9 +138,12 @@ the incoming copy after publication; a failed removal is retried by publication.
 start and cleanup close expired operations, including those whose owner is disabled.
 Verification releases the venue lock during the restore and rechecks the point before
 recording the result. A master-key error leaves archive verification status unchanged. Subscription
-cancellation and explicit deletion policy are not implemented. Object reads/writes
-are bounded to 512 MiB in memory; production-sized archives need streaming I/O and
-bounded worker concurrency. Callers own and close their object clients.
+cancellation and explicit deletion policy are not implemented. Cloud's retained-snapshot
+publication, conditional-conflict comparison, verification and local recovery proof stream
+through bounded private stages. The end-to-end archive ceiling remains 512 MiB because
+Waitron archive assembly and restore clients have not yet been proved beyond it. Production
+still needs deployment-sized transfer/concurrency evidence and live-provider validation.
+Callers own and close their object clients.
 
 ## Recover a test venue without copying keys
 
