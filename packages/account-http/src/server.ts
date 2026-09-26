@@ -17,13 +17,15 @@ export async function startAccountServer(options: {pool: Pool; outbox: EmailOutb
   const app = createAccountApp(options);
   let active = 0; let stopping = false; let closing: Promise<void> | undefined;
   const listener = getRequestListener(async (request, bindings) => {
-    if (stopping) return unavailable(request, !!options.portalAssets);
-    if (options.portalAssets && !new URL(request.url).pathname.startsWith('/api/')) {
-      const url = new URL(request.url); const host = new URL(options.config.portalOrigin).host;
+    const url = new URL(request.url);
+    const portalRequest = !!options.portalAssets && !url.pathname.startsWith('/api/');
+    if (portalRequest) {
+      const host = new URL(options.config.portalOrigin).host;
       if (url.host !== host || (request.headers.has('host') && request.headers.get('host') !== host))
         return new Response(null, {status: 403, headers: securityHeaders});
-      return portalResponse(request, options.portalAssets);
     }
+    if (stopping) return unavailable(request, portalRequest);
+    if (portalRequest) return portalResponse(request, options.portalAssets!);
     if (active >= 8) return unavailable();
     active++;
     try {return await app.fetch(request, bindings);}

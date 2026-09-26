@@ -13,8 +13,14 @@ before(async () => {db = await database();});
 after(async () => {await db.close();});
 beforeEach(async () => {await db.pool.query('TRUNCATE account_rate_limits, email_outbox, signup_requests CASCADE');});
 const config = () => ({portalOrigin: 'http://localhost', production: false, rateKey: db.rateKey, trustedProxyIps: [] as string[]});
-async function host(trustedProxyIps: string[] = []) {
-  const running = await startAccountServer({pool: db.pool, outbox: db.outbox, config: {...config(), trustedProxyIps}, port: 0});
+const portalAssets = new Map([
+  ['/index.html', {body: Buffer.from('<!doctype html><title>Cloud</title>'), contentType: 'text/html; charset=utf-8'}],
+  ['/app.js', {body: Buffer.from('/* portal */'), contentType: 'text/javascript; charset=utf-8'}],
+  ['/app.css', {body: Buffer.from('body {}'), contentType: 'text/css; charset=utf-8'}],
+]);
+async function host(trustedProxyIps: string[] = [], withPortal = false) {
+  const running = await startAccountServer({pool: db.pool, outbox: db.outbox, config: {...config(), trustedProxyIps}, port: 0,
+    ...(withPortal ? {portalAssets} : {})});
   const address = running.server.address(); assert.ok(address && typeof address !== 'string');
   return {...running, port: address.port};
 }
@@ -161,6 +167,26 @@ test('shutdown stops admission and bounds the socket drain while database work r
     await closing; assert.ok(Date.now() - started >= 9500); assert.ok(Date.now() - started < 12000);
     await assert.rejects(blocked.result);
   } finally {await locker.query('ROLLBACK'); locker.release(); await (closing ?? running.close());}
+});
+test('an in-flight portal request keeps host validation and receives the translated shutdown page', async () => {
+  async function duringShutdown(hostname: string) {
+    const running = await host([], true); let closing: Promise<void> | undefined;
+    // Begin draining after Node admits the request but before the application listener handles it.
+    running.server.prependOnceListener('request', () => {closing = running.close();});
+    const response = await new Promise<{status: number; headers: import('node:http').IncomingHttpHeaders; body: string}>((resolve, reject) => {
+      const req = request({host: '127.0.0.1', port: running.port, path: '/missing', headers: {host: hostname, 'accept-language': 'es', connection: 'close'}}, res => {
+        let body = ''; res.on('data', chunk => {body += chunk;});
+        res.on('end', () => resolve({status: res.statusCode!, headers: res.headers, body})); res.on('error', reject);
+      });
+      req.on('error', reject); req.end();
+    });
+    await (closing ?? running.close()); return response;
+  }
+  const approved = await duringShutdown('localhost');
+  assert.equal(approved.status, 503); assert.match(approved.body, /Servicio no disponible/);
+  assert.equal(approved.headers['retry-after'], '1');
+  const rejected = await duringShutdown('other.example.test');
+  assert.equal(rejected.status, 403); assert.doesNotMatch(rejected.body, /Waitron Cloud/);
 });
 test('connection resets during parser rejection do not crash the CLI or leak diagnostics', async () => {
   const running = cli();

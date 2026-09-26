@@ -31,13 +31,26 @@ const errors = {
     return: 'Volver a Waitron Cloud',
   },
 } as const;
+function preferredLocale(header: string | null): 'en' | 'es' {
+  const choices = (header ?? '').split(',').flatMap((part, index) => {
+    const [rawTag, ...parameters] = part.trim().toLowerCase().split(';');
+    const locale = rawTag?.split('-')[0];
+    if (locale !== 'en' && locale !== 'es') return [];
+    const qualityParameter = parameters.map(value => value.trim()).find(value => value.startsWith('q='));
+    const quality = qualityParameter === undefined ? 1 : Number(qualityParameter.slice(2));
+    if (!Number.isFinite(quality) || quality <= 0 || quality > 1) return [];
+    return [{locale, quality, index} as const];
+  });
+  choices.sort((left, right) => right.quality - left.quality || left.index - right.index);
+  return choices[0]?.locale ?? 'en';
+}
 export function portalErrorResponse(request: Request, status: 400 | 404 | 405 | 503): Response {
-  const requested = request.headers.get('accept-language')?.toLowerCase().split(',').map(value => value.trim().split(';')[0]!.split('-')[0]);
-  const locale = requested?.find(value => value === 'en' || value === 'es') === 'es' ? 'es' : 'en';
+  const locale = preferredLocale(request.headers.get('accept-language'));
   const copy = errors[locale]; const [title, detail] = copy[status];
   const encoded = new TextEncoder().encode(`<!doctype html><html lang="${locale}"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light dark"><title>${title} · Waitron Cloud</title><style>body{font-family:system-ui,sans-serif;line-height:1.5;margin:0}main{box-sizing:border-box;max-width:32rem;margin:10vh auto;padding:1.5rem}h1{line-height:1.2}a{text-underline-offset:.15em}</style><main><h1>${title}</h1><p>${detail}</p><p><a href="/">${copy.return}</a></p></main></html>`);
   return new Response(request.method === 'HEAD' ? null : encoded, {status, headers: {
     ...securityHeaders, 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': String(encoded.byteLength),
+    ...(status === 405 ? {Allow: 'GET, HEAD'} : {}),
     ...(status === 503 ? {'Retry-After': '1'} : {}),
   }});
 }

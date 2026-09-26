@@ -106,6 +106,18 @@ test('an expired session explains the sign-in redirect in both languages', async
   } finally { await f.close(); }
 });
 
+test('a generic unauthenticated response does not claim the session expired', async () => {
+  const f = await startPortalFixture();
+  try {
+    const page = await f.browser.newPage(); page.setDefaultTimeout(3000);
+    await page.route('**/api/account/session', route => route.fulfill({status: 401, json: {error: 'unauthenticated'}}));
+    await page.goto(`${f.origin}/account`);
+    await page.getByRole('heading', {name: 'Sign in', exact: true}).waitFor();
+    assert.ok(await page.getByLabel('Email').isVisible());
+    assert.equal(await page.getByText('Your session has expired. Sign in again to continue.').count(), 0);
+  } finally { await f.close(); }
+});
+
 test('logout failures remain visible until a successful retry confirms sign-out',async()=>{
   const f=await startPortalFixture();
   try {
@@ -159,15 +171,16 @@ test('a real legacy query-token recovery link is scrubbed before completing in S
     row = (await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='password_reset' ORDER BY created_at DESC LIMIT 1")).rows[0];
     message = f.db.outbox.open(row); assert.ok('token' in message); const token = message.token;
     const page = await f.browser.newPage(); page.setDefaultTimeout(3000);
-    const requests: {url: string; referrer: string}[] = [];
-    page.on('request', request => requests.push({url: request.url(), referrer: request.headers()['referer'] ?? ''}));
-    await page.goto(`${f.origin}/reset-password?token=${token}&lang=es`);
+    const requests: string[] = [];
+    page.on('request', request => requests.push(request.url()));
+    const navigation = await page.goto(`${f.origin}/reset-password?token=${token}&lang=es`); assert.ok(navigation);
+    assert.equal(navigation.headers()['referrer-policy'], 'no-referrer');
     await page.getByRole('heading', {name: 'Elige una nueva contraseña'}).waitFor();
     assert.equal(page.url(), `${f.origin}/reset-password`);
     await page.locator('input[name=password]').fill('Una nueva contraseña de café');
     await page.getByRole('button', {name: 'Guardar nueva contraseña', exact: true}).click();
     await page.getByText('Tu contraseña ha cambiado y se han cerrado las sesiones existentes. Inicia sesión para continuar.').waitFor();
-    assert.ok(requests.slice(1).every(request => !request.url.includes(token) && !request.referrer.includes(token)));
+    assert.ok(requests.slice(1).every(request => !request.includes(token)));
     assert.equal((await page.request.post(`${f.origin}/api/account/login`, {headers: {origin: f.origin},
       data: {email, password: 'Una nueva contraseña de café'}})).status(), 200);
   } finally { await f.close(); }

@@ -286,7 +286,9 @@ mobile notifications separately.
   processing-location and residency decision.
   Rejected portal URLs now keep their exact 400, 404 or 405 status and show a bounded
   English or Spanish error page. An expired session has its own fixed API code and a
-  bilingual sign-in explanation, while a service outage remains distinct and retryable.
+  bilingual sign-in explanation, while an admitted request during service shutdown gets
+  a distinct, retryable bilingual outage page. New connections can fail at the ingress,
+  so deployment-wide outage presentation remains an ingress responsibility.
   Browser coverage completes a real Spanish password reset from a legacy query-token
   link and proves the token is scrubbed before later requests. Before public use, decide
   whether to accept tracking queries and trailing-slash/case aliases. The current exact

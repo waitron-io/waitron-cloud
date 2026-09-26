@@ -266,6 +266,9 @@ those checks against the selected deployment before public use.
 The CLI pool permits ten clients, waits up to five seconds for a connection and
 limits SQL statements to ten seconds. SIGINT or SIGTERM stops admission and allows
 up to ten seconds for HTTP connections to drain, then closes remaining connections.
+Portal requests already admitted when draining begins receive the bilingual 503 page;
+new connections may instead fail at the ingress, which must provide any deployment-wide
+outage page you require.
 The CLI has an eleven-second hard shutdown deadline if database work still prevents
 exit. A client disconnect does not prove a transaction rolled back: recover a lost
 response through the normal signup/reset login or retry rules.

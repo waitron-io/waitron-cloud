@@ -59,10 +59,15 @@ test('portal serves only named documents and assets with host, method and securi
     const missingEs = await send(running.port, '/missing', 'GET', 'localhost', false, {'accept-language': 'es-ES,es;q=0.9'}).result;
     assert.equal(missingEs.status, 404); assert.match(missingEs.body, /Página no encontrada/);
     assert.match(missingEs.body, /Volver a Waitron Cloud/);
+    const preferredEs = await send(running.port, '/missing', 'GET', 'localhost', false, {'accept-language': 'en-GB;q=0.2, es;q=0.9'}).result;
+    assert.match(preferredEs.body, /Página no encontrada/);
+    const refusedEs = await send(running.port, '/missing', 'GET', 'localhost', false, {'accept-language': 'es;q=0, en;q=0.5'}).result;
+    assert.match(refusedEs.body, /Page not found/);
     const rejectedQuery = await send(running.port, '/login?token=secret').result;
     assert.equal(rejectedQuery.status, 400); assert.match(rejectedQuery.body, /address is not valid/i);
     const wrongMethod = await send(running.port, '/login', 'POST').result;
     assert.equal(wrongMethod.status, 405); assert.match(wrongMethod.body, /cannot be opened this way/i);
+    assert.equal(wrongMethod.headers.allow, 'GET, HEAD');
     assert.equal((await send(running.port, '/', 'GET', 'evil.example').result).status, 403);
     assert.equal((await send(running.port, '/api/account/session?x=1').result).status, 400);
   } finally { await running.close(); }
