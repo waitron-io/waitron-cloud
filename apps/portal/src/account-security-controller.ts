@@ -34,9 +34,9 @@ export class AccountSecurityController {
 
   async #list(generation: number): Promise<ApiResult<{sessions: AccountSessionSummary[]}>> {
     const result = await this.#request<{sessions: AccountSessionSummary[]}>('/sessions');
-    if (generation === this.#generation && result.ok) {
-      this.loaded = true;
-      this.sessions = result.value.sessions;
+    if (generation === this.#generation) {
+      this.loaded = result.ok;
+      this.sessions = result.ok ? result.value.sessions : [];
     }
     return result;
   }

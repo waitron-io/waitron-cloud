@@ -44,6 +44,9 @@ pnpm account:serve
 If you export `DATABASE_URL` in your shell, `pnpm db:migrate` applies the same migrations.
 The server refuses startup without migrations `007_account_http.sql` through `020_account_security_controls.sql`; it never applies
 migrations itself. Its default listener is `127.0.0.1:3000`.
+Migration 020 assigns a distinct random ID to every existing session, so PostgreSQL rewrites and
+exclusively locks `cloud_sessions` while it runs. Schedule that migration before starting the new
+server rather than treating it as an online metadata-only change.
 
 In another terminal, from the same directory:
 
@@ -120,7 +123,7 @@ Use the six requests in two pairs plus the account list:
 | POST `/passkeys/authentication/verify` | Exact `Origin` and authenticator response | Account ID plus session and CSRF cookies |
 | GET `/passkeys` | Live session | Account-scoped passkey row IDs, enrolment dates and nullable last-use times |
 | POST `/passkeys/registration/options` | Live session, CSRF and current password | Ceremony ID and browser creation options |
-| POST `/passkeys/registration/verify` | Same live session and CSRF | New passkey row ID and enrolment date |
+| POST `/passkeys/registration/verify` | Same live session and CSRF | New passkey row ID, enrolment date and `lastUsedAt: null` |
 | POST `/passkeys/remove` | Live session, CSRF and current password | 204 after an account-scoped removal attempt |
 
 Configure `portalOrigin` to the one origin that serves both the portal and this API. The

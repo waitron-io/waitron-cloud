@@ -116,13 +116,13 @@ export async function listAccountSessions(client: PoolClient, token: string): Pr
   const tokenHash = digest(token);
   const {rows} = await client.query(`WITH moment AS (SELECT clock_timestamp() AS now)
     SELECT id, created_at, last_seen_at,
-      LEAST(last_seen_at + interval '30 minutes', absolute_expires_at) AS expires_at,
+      LEAST(last_seen_at + ($3::double precision * interval '1 millisecond'), absolute_expires_at) AS expires_at,
       token_hash = $2 AS current
     FROM cloud_sessions CROSS JOIN moment
     WHERE account_id = $1 AND ended_at IS NULL
-      AND last_seen_at + interval '30 minutes' > moment.now
+      AND last_seen_at + ($3::double precision * interval '1 millisecond') > moment.now
       AND absolute_expires_at > moment.now
-    ORDER BY (token_hash = $2) DESC, last_seen_at DESC, id`, [session.accountId, tokenHash]);
+    ORDER BY (token_hash = $2) DESC, last_seen_at DESC, id`, [session.accountId, tokenHash, IDLE_TIMEOUT_MS]);
   return rows.map(row => ({id: row.id, createdAt: row.created_at.toISOString(),
     lastUsedAt: row.last_seen_at.toISOString(), expiresAt: row.expires_at.toISOString(), current: row.current}));
 }
@@ -142,9 +142,9 @@ export async function revokeAccountSession(client: PoolClient, token: string, cs
   const target = (await client.query(`WITH moment AS (SELECT clock_timestamp() AS now)
     SELECT token_hash FROM cloud_sessions CROSS JOIN moment
     WHERE id = $1 AND account_id = $2 AND ended_at IS NULL
-      AND last_seen_at + interval '30 minutes' > moment.now
+      AND last_seen_at + ($3::double precision * interval '1 millisecond') > moment.now
       AND absolute_expires_at > moment.now
-    FOR UPDATE OF cloud_sessions`, [id, actor.accountId])).rows[0];
+    FOR UPDATE OF cloud_sessions`, [id, actor.accountId, IDLE_TIMEOUT_MS])).rows[0];
   if (!target) return {revoked: false, current: false};
   // A target-row wait must not let expired or revoked acting authority commit a change.
   await resolveSession(client, token, {csrfToken, touch: false});

@@ -23,7 +23,7 @@ export function accountSecurityScreen(app: PortalApp) {
           <span><span class="security-label">${c.sessionLastUsed}</span> ${dateTime.format(new Date(session.lastUsedAt))}</span>
           <span><span class="security-label">${c.sessionExpires}</span> ${dateTime.format(new Date(session.expiresAt))}</span>
         </div>
-        <wt-button .disabled=${app.security.pending || app.passkeys.pending}
+        <wt-button .disabled=${app.security.pending}
           @click=${() => {void app.revokeSession(session.id);}}>${session.current ? c.sessionSignOut : c.sessionRevoke}</wt-button>
       </li>`)}</ul>
     </section>

@@ -246,11 +246,11 @@ test('account session summaries are passive, account-scoped and identify the cur
   await pool.query('INSERT INTO cloud_credentials (account_id, email, password_hash) VALUES ($1, $2, $3)',
     [foreignAccount, 'other@example.test', await hashSecret('other-account-password')]);
   const foreign = await run(client => login(client, {email: 'other@example.test', password: 'other-account-password'}));
-  const before = (await pool.query(`SELECT id, token_hash, created_at, last_seen_at,
-    LEAST(last_seen_at + interval '30 minutes', absolute_expires_at) AS expires_at
+  const before = (await pool.query(`SELECT id, token_hash, created_at, last_seen_at, absolute_expires_at
     FROM cloud_sessions ORDER BY token_hash`)).rows;
 
   const sessions = await run(client => listAccountSessions(client, current.token));
+  const resolvedCurrent = await run(client => resolveSession(client, current.token, {touch: false}));
 
   assert.equal(sessions.length, 2);
   const currentSummary = sessions.find(session => session.current);
@@ -263,10 +263,13 @@ test('account session summaries are passive, account-scoped and identify the cur
   const expectedOther = before.find(row => row.token_hash === digest(other.token));
   const excludedIds = before.filter(row => [digest(ended.token), digest(expired.token), digest(foreign.token)].includes(row.token_hash))
     .map(row => row.id);
+  const expectedExpiry = (row: typeof expectedCurrent) => new Date(Math.min(
+    row.last_seen_at.getTime() + 30 * 60_000, row.absolute_expires_at.getTime())).toISOString();
   assert.deepEqual(currentSummary, {id: expectedCurrent.id, createdAt: expectedCurrent.created_at.toISOString(),
-    lastUsedAt: expectedCurrent.last_seen_at.toISOString(), expiresAt: expectedCurrent.expires_at.toISOString(), current: true});
+    lastUsedAt: expectedCurrent.last_seen_at.toISOString(), expiresAt: expectedExpiry(expectedCurrent), current: true});
   assert.deepEqual(otherSummary, {id: expectedOther.id, createdAt: expectedOther.created_at.toISOString(),
-    lastUsedAt: expectedOther.last_seen_at.toISOString(), expiresAt: expectedOther.expires_at.toISOString(), current: false});
+    lastUsedAt: expectedOther.last_seen_at.toISOString(), expiresAt: expectedExpiry(expectedOther), current: false});
+  assert.equal(currentSummary.expiresAt, resolvedCurrent.expiresAt);
   assert.ok(!sessions.some(session => excludedIds.includes(session.id)));
   const after = (await pool.query('SELECT token_hash, last_seen_at FROM cloud_sessions ORDER BY token_hash')).rows;
   assert.deepEqual(after, before.map(({token_hash, last_seen_at}) => ({token_hash, last_seen_at})));

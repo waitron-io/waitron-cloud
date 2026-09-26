@@ -16,6 +16,6 @@ export function validAccountSession(value: unknown): value is AccountSessionSumm
 }
 
 export function validAccountSessions(value: unknown): value is {sessions: AccountSessionSummary[]} {
-  return object(value) && Array.isArray(value.sessions) && value.sessions.length <= 100
+  return object(value) && Array.isArray(value.sessions)
     && value.sessions.every(validAccountSession) && value.sessions.filter(session => session.current).length === 1;
 }

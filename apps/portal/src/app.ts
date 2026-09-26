@@ -249,7 +249,7 @@ export class PortalApp {
   async revokeSession(id: string) { await this.security.revoke(id); }
   get logoutWaiting() { return Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)); }
   async logout() {
-    if (this.pending || this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.passkeys.pending) return;
+    if (this.pending || this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending) return;
     this.pending = true; this.error = undefined; this.draw();
     const route = this.#route;
     const success = await this.session.logout();

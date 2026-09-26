@@ -117,7 +117,7 @@ test('revoking the current session clears its cookies and stale authority cannot
   assert.equal((await request('/session', undefined, {headers: {cookie: current.header}})).status, 401);
 });
 
-test('concurrent logout and revoke leave the target ended without deadlock', async () => {
+test('concurrent logout and revoke both return 204 and leave the target ended', async () => {
   const owner = await account('owner@example.test');
   const actor = await signIn(owner.email);
   const target = await signIn(owner.email);

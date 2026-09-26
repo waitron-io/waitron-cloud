@@ -74,6 +74,9 @@ test('account security requests validate session summaries and send CSRF on revo
   let options:RequestInit|undefined;
   t.mock.method(globalThis,'fetch',async(_url:unknown,init?:RequestInit)=>{options=init;return response;});
   assert.equal((await accountRequest('/sessions')).ok,true);
+  response=Response.json({sessions:[summary,...Array.from({length:100},(_,index)=>({...summary,
+    id:`12345678-1234-4234-8234-${String(index+1).padStart(12,'0')}`,current:false}))]});
+  assert.equal((await accountRequest('/sessions')).ok,true);
   response=Response.json({sessions:[{...summary,current:'yes'}]});
   assert.equal((await accountRequest('/sessions')).ok,false);
   response=new Response(null,{status:204});

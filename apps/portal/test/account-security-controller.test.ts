@@ -80,3 +80,19 @@ test('an unavailable initial list remains explicitly retryable', async () => {
   controller.fence();
   assert.equal(controller.loaded, false);
 });
+
+test('a failed reconciliation marks a stale session list for retry', async () => {
+  let lists = 0;
+  const request = async <T>(path: string): Promise<ApiResult<T>> => {
+    if (path === '/sessions/revoke') return {ok: true, value: undefined as T};
+    if (lists++ === 0) return {ok: true, value: {sessions: [current, other]} as T};
+    return {ok: false, status: 503, code: 'temporarily_unavailable', retryAfterMs: 0};
+  };
+  const controller = new AccountSecurityController(() => {}, () => {}, request);
+  controller.account('owner');
+  await controller.load();
+  await controller.revoke(other.id);
+  assert.equal(controller.error, 'sessionRevokeUncertain');
+  assert.equal(controller.loaded, false);
+  assert.deepEqual(controller.sessions, []);
+});

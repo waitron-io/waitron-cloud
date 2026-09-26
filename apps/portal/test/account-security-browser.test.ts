@@ -89,3 +89,35 @@ test('lost session-revoke replies reconcile the list and current-session state',
     }
   } finally { await f.close(); }
 });
+
+test('sign out remains available while a passkey prompt is open', async () => {
+  const f = await startPortalFixture();
+  try {
+    const account = {id: randomUUID(), email: `security-pending-${randomUUID()}@example.test`};
+    await f.db.pool.query('INSERT INTO cloud_accounts (id) VALUES ($1)', [account.id]);
+    await f.db.pool.query('INSERT INTO cloud_credentials (account_id, email, password_hash) VALUES ($1, $2, $3)',
+      [account.id, account.email, await hashSecret(password)]);
+    const context = await f.browser.newContext({locale: 'en'});
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator.credentials, 'create', {configurable: true, value: () => new Promise(() => {})});
+    });
+    try {
+      const login = await context.request.post(`${f.origin}/api/account/login`,
+        {headers: {origin: f.origin}, data: {email: account.email, password}});
+      assert.equal(login.status(), 200);
+      const page = await context.newPage(); page.setDefaultTimeout(5000);
+      const c = translations.en;
+      await page.goto(`${f.origin}/account`);
+      await page.locator('input[name=passkeyPassword]').fill(password);
+      const options = page.waitForResponse('**/passkeys/registration/options');
+      await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
+      assert.equal((await options).status(), 200);
+      const revokeCurrent = page.getByRole('button', {name: c.sessionSignOut, exact: true});
+      const signOut = page.getByRole('button', {name: c.signout, exact: true});
+      assert.equal(await revokeCurrent.isDisabled(), false);
+      assert.equal(await signOut.isDisabled(), false);
+      await signOut.click();
+      await page.getByRole('heading', {name: c.login, exact: true}).waitFor();
+    } finally { await context.close(); }
+  } finally { await f.close(); }
+});
