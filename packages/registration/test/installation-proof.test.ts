@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID,sign} from 'node:crypto';
 import {test} from 'node:test';
-import {createLeaseIssuer,encodeMachine,verifyMachine,verifyLease,readMachineClaims,type MachineClaims} from '../src/installation-proof.ts';
+import {createLeaseIssuer,createLeaseTrust,encodeMachine,verifyMachine,verifyLease,readMachineClaims,type MachineClaims} from '../src/installation-proof.ts';
 const key=generateKeyPairSync('ed25519'),other=generateKeyPairSync('ed25519');
 const publicKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url');
 const issuer=createLeaseIssuer(other.privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
@@ -62,6 +62,13 @@ test('literal installation and lease vectors remain compatible across repositori
   const fixedIssuer=createLeaseIssuer(v.issuerPrivateKey);assert.equal(fixedIssuer.keyId,v.issuerKeyId);
   assert.deepEqual(fixedIssuer.issue(v.leaseClaims),v.lease);
   assert.deepEqual(verifyLease(v.lease,new Map([[v.issuerKeyId,v.issuerPublicKey]]),v.claims.origin,v.claims.issuedAt),{...v.leaseClaims,keyId:v.issuerKeyId,audience:'control'});
+});
+test('operator trust configuration derives key identifiers and always includes the active issuer',()=>{
+  const next=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
+  const trusted=createLeaseTrust(issuer,JSON.stringify([next.publicKey]));
+  assert.deepEqual([...trusted.keys()].sort(),[issuer.keyId,next.keyId].sort());
+  assert.equal(trusted.get(next.keyId),next.publicKey);
+  for(const value of ['{}','["invalid"]','[1]',JSON.stringify(Array(9).fill(next.publicKey))])assert.throws(()=>createLeaseTrust(issuer,value));
 });
 test('managed stream actions use the same signed machine namespace',()=>{
   for(const action of ['backup-stream-configure','backup-stream-observe'] as const){

@@ -50,6 +50,14 @@ test("signed configuration is exact, retryable and returns only Waitron writer m
  assert.equal((await request("backup-stream-configure",proof("backup-stream-configure",desired),{origin})).status,403);
  assert.equal((await request("backup-stream-configure",proof("backup-stream-observe",{}))).status,401);
 });
+test("managed-stream authority accepts an old live lease only during issuer-key overlap",async()=>{
+ const next=createLeaseIssuer(generateKeyPairSync("ed25519").privateKey.export({type:"pkcs8",format:"der"}).toString("base64url")),trusted=new Map([[issuer.keyId,issuer.publicKey],[next.keyId,next.publicKey]]);
+ const revision=Number((await db.pool.query("SELECT configuration_revision FROM installations WHERE id=$1",[installationId])).rows[0].configuration_revision);
+ app=createAccountApp({pool:db.pool,outbox:db.outbox,config:config(),leaseIssuer:next,leaseTrust:trusted,captures:captureOptions});
+ assert.equal((await request("backup-stream-configure",proof("backup-stream-configure",configuration(revision)))).status,200);
+ app=createAccountApp({pool:db.pool,outbox:db.outbox,config:config(),leaseIssuer:next,captures:captureOptions});
+ assert.equal((await request("backup-stream-observe",proof("backup-stream-observe",{}))).status,401);
+});
 test("observation reads and verifies storage itself while lease and revision mismatches fail closed",async()=>{
  const revision=Number((await db.pool.query("SELECT configuration_revision FROM installations WHERE id=$1",[installationId])).rows[0].configuration_revision),desired=configuration(revision),configured=await(await request("backup-stream-configure",proof("backup-stream-configure",desired))).json();
  objects.set(`reader:${venueId}:managed-stream-one:${configured.bucket.prefix}venues/${localVenueId}/current.json`,signedPointer(desired.sourceNodeId,pointerKey.privateKey));

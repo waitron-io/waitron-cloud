@@ -14,6 +14,7 @@
     "test:worker-scheduling": "node --test packages/registration/test/worker-loop.test.ts scripts/verify-worker-scheduling-receipt.test.mjs",
     "test:managed-keys": "node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test --test-timeout=30000 test/key-operations.test.ts",
     "test:backup-transfers": "node scripts/test-postgres.mjs exec node scripts/backup-transfer-receipt.mjs",
+    "test:control-plane-outages": "node scripts/test-postgres.mjs exec node scripts/control-plane-outage-receipt.mjs /tmp/cloud-control-plane-outage-receipt.json && node scripts/verify-control-plane-outage-receipt.mjs /tmp/cloud-control-plane-outage-receipt.json",
     "measure:worker-scheduling-baseline": "node scripts/test-postgres.mjs exec node scripts/worker-scheduling-receipt.mjs --baseline /tmp/cloud-worker-scheduling-baseline.json",
     "db:migrate": "pnpm --filter @waitron-cloud/registration db:migrate",
     "history:cleanup": "pnpm --dir packages/registration history:cleanup",

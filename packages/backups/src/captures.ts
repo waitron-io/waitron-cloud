@@ -1,5 +1,5 @@
 import type {Pool,PoolClient} from 'pg';
-import {InstallationStore,InstallationError,readMachineClaims,verifyMachine,verifyLease,type LeaseIssuer} from '@waitron-cloud/registration';
+import {createLeaseTrust,InstallationStore,InstallationError,readMachineClaims,verifyMachine,verifyLease,type LeaseIssuer} from '@waitron-cloud/registration';
 import {BackupCatalogue,backupFail,type ObjectFactory,type PointMetadata} from './catalogue.ts';
 import type {BackupKeyVault} from './keys.ts';
 import type {StorageLocation,StorageScope,StorageCredentials} from './storage.ts';
@@ -12,9 +12,9 @@ export interface CaptureOptions {
 }
 export type CaptureAction='backup-reserve'|'backup-publish';
 export class BackupCaptures {
- readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #options:CaptureOptions;readonly #catalogue:BackupCatalogue;
- constructor(pool:Pool,issuer:LeaseIssuer,origin:string,options:CaptureOptions){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#options=options;this.#catalogue=new BackupCatalogue(pool,options.vault,options.objects);}
- async authenticate(action:CaptureAction,envelope:unknown){return new InstallationStore(this.#pool,this.#issuer,this.#origin).authenticate(action,envelope);}
+ readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;readonly #options:CaptureOptions;readonly #catalogue:BackupCatalogue;
+ constructor(pool:Pool,issuer:LeaseIssuer,origin:string,options:CaptureOptions,trusted=createLeaseTrust(issuer)){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;this.#options=options;this.#catalogue=new BackupCatalogue(pool,options.vault,options.objects);}
+ async authenticate(action:CaptureAction,envelope:unknown){return new InstallationStore(this.#pool,this.#issuer,this.#origin,this.#trusted).authenticate(action,envelope);}
  async execute(action:CaptureAction,envelope:unknown){
   const routing=readMachineClaims(envelope);
   const fence=async(client:PoolClient)=>{
@@ -27,7 +27,7 @@ export class BackupCaptures {
    if(row.environment!=='test'||row.state==='unconfigured')throw new InstallationError('permission_denied');
    let lease:unknown;try{lease=JSON.parse(claims.lease);}catch{throw new InstallationError('invalid_proof');}
    if(JSON.stringify(lease)!==claims.lease)throw new InstallationError('invalid_proof');
-   const bound=verifyLease(lease,new Map([[this.#issuer.keyId,this.#issuer.publicKey]]),this.#origin,now);
+   const bound=verifyLease(lease,this.#trusted,this.#origin,now);
    if(bound.installationId!==row.id||bound.venueId!==row.venue_id||bound.environment!==row.environment||bound.publicKey!==row.public_key)throw new InstallationError('invalid_proof');
   };
   if(action==='backup-reserve'){

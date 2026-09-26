@@ -4,6 +4,7 @@ import { request, type ClientRequest } from 'node:http';
 import { connect } from 'node:net';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { generateKeyPairSync } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startAccountServer } from '../src/server.ts';
 import { database } from './fixtures.ts';
@@ -121,6 +122,11 @@ test('CLI fails closed with fixed diagnostics for invalid settings and absent mi
   try {assert.equal((await cli().exited).code, 1); assert.equal((await db.pool.query('SELECT count(*) FROM schema_migrations WHERE name = $1', [migration])).rows[0].count, '0');}
   finally {await db.pool.query('INSERT INTO schema_migrations(name, digest) VALUES ($1, $2)', [saved.rows[0].name, saved.rows[0].digest]);}
   }
+});
+test('CLI rejects malformed installation issuer trust without exposing its value',async()=>{
+ const privateKey=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url');
+ const outcome=await cli({CLOUD_INSTALLATION_ISSUER_KEY:privateKey,CLOUD_INSTALLATION_TRUSTED_KEYS:'["private-trust-sentinel"]'}).exited;
+ assert.equal(outcome.code,1);assert.equal(outcome.stdout,'');assert.equal(outcome.stderr,'Account server failed; check database, migrations and configuration\n');
 });
 test('CLI shutdown and restart preserve committed work and shared request limits', async () => {
   let running = cli();

@@ -65,6 +65,18 @@ export function createLeaseIssuer(encoded:string) {
   }};
 }
 export type LeaseIssuer=ReturnType<typeof createLeaseIssuer>;
+export function createLeaseTrust(issuer:LeaseIssuer,encoded?:string):ReadonlyMap<string,string> {
+  const trusted=new Map([[issuer.keyId,issuer.publicKey]]);
+  if(encoded===undefined||encoded==='')return trusted;
+  let values:unknown;try{values=JSON.parse(encoded);}catch{return invalid();}
+  if(!Array.isArray(values)||values.length>8)return invalid();
+  for(const value of values){
+    if(typeof value!=='string')return invalid();
+    const key=publicKey(value),bytes=key.export({type:'spki',format:'der'});
+    trusted.set(createHash('sha256').update(bytes).digest('base64url'),bytes.toString('base64url'));
+  }
+  return trusted;
+}
 export function verifyLease(value:unknown,trusted:ReadonlyMap<string,string>,origin:string,now=Date.now()):LeaseClaims {
   try {
     const e=envelope(value),v=e.values;if(v.length!==11||v[0]!=='waitron-cloud-access-v1')return invalid();

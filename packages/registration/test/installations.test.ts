@@ -135,6 +135,16 @@ test('operation identity survives lease renewal while every replay authenticates
   const wrong=(await store.execute('renew',request(b))).lease;
   await assert.rejects(store.execute('configuration',request(a,'configuration',wrong,{},id)),/invalid_proof/);
 });
+test('issuer rotation accepts an old live lease during configured overlap and signs renewals with the new key',async()=>{
+  const next=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
+  const old=(await store.execute('renew',request())).lease!;
+  const trusted=new Map([[issuer.keyId,issuer.publicKey],[next.keyId,next.publicKey]]);
+  const rotated=new InstallationStore(db.pool,next,origin,trusted);
+  assert.equal((await rotated.execute('configuration',request(a,'configuration',old))).installationId,a.installationId);
+  const renewed=(await rotated.execute('renew',request())).lease!;
+  assert.equal(JSON.parse(Buffer.from(renewed.payload,'base64url').toString())[2],next.keyId);
+  await assert.rejects(new InstallationStore(db.pool,next,origin).execute('configuration',request(a,'configuration',old)),/invalid_proof/);
+});
 test('machine revocation stores status without adapter authority in either replay or audit',async()=>{
   await store.configure(a.installationId,0,[{service:'remote_access',state:'ready',configuration:{secret:'adapter-authority'}}]);
   const proof=request(a,'revoke'),result=await store.execute('revoke',proof);

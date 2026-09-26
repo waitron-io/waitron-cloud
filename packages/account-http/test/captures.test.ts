@@ -47,6 +47,14 @@ test('authenticated reserve renews one capture key; publish is immutable, pendin
  assert.equal((await request('backup-publish',proof('backup-publish',capture,{...m,size:1}))).status,409);
  const history=JSON.stringify((await db.pool.query('SELECT * FROM installation_operations')).rows);for(const secret of [grant.recoveryKey,'scoped-secret','scoped-token'])assert(!history.includes(secret));
 });
+test('capture authority accepts an old live lease only while its issuer remains in the rotation overlap',async()=>{
+ const next=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
+ const trusted=new Map([[issuer.keyId,issuer.publicKey],[next.keyId,next.publicKey]]);
+ app=createAccountApp({pool:db.pool,outbox:db.outbox,config:config(),leaseIssuer:next,leaseTrust:trusted,captures:captureOptions});
+ const capture=randomUUID();assert.equal((await request('backup-reserve',proof('backup-reserve',capture))).status,200);
+ app=createAccountApp({pool:db.pool,outbox:db.outbox,config:config(),leaseIssuer:next,captures:captureOptions});
+ assert.equal((await request('backup-reserve',proof('backup-reserve',randomUUID()))).status,401);
+});
 test('refuses browser origin, forged/wrong action, expired lease, cross-venue capture and arbitrary reserve body',async()=>{
  const capture=randomUUID();assert.equal((await request('backup-reserve',proof('backup-reserve',capture),{origin})).status,403);
  assert.equal((await request('backup-reserve',{...proof('backup-reserve'),signature:'a'.repeat(86)})).status,401);

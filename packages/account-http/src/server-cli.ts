@@ -1,6 +1,6 @@
 import {captureRuntime} from '@waitron-cloud/backups/capture-config';
 import { Pool } from 'pg';
-import { EmailOutbox, createLeaseIssuer } from '@waitron-cloud/registration';
+import { EmailOutbox, createLeaseIssuer, createLeaseTrust } from '@waitron-cloud/registration';
 import { accountHttpConfig, passwordScreeningFromEnv } from './config.ts';
 import { AccountRateLimiter } from './rate-limit.ts';
 import { loadPortalAssets } from './portal.ts';
@@ -52,8 +52,10 @@ try {
   if (!stopRequested) {
     const portalAssets = process.env.CLOUD_PORTAL_ASSETS_DIR ? await loadPortalAssets(process.env.CLOUD_PORTAL_ASSETS_DIR) : undefined;
     const leaseIssuer=process.env.CLOUD_INSTALLATION_ISSUER_KEY ? createLeaseIssuer(process.env.CLOUD_INSTALLATION_ISSUER_KEY) : undefined;
+    if(process.env.CLOUD_INSTALLATION_TRUSTED_KEYS&&!leaseIssuer)throw new Error();
+    const leaseTrust=leaseIssuer?createLeaseTrust(leaseIssuer,process.env.CLOUD_INSTALLATION_TRUSTED_KEYS):undefined;
     captures=captureRuntime(process.env);
-    running = await startAccountServer({captures:captures?.options,pool, outbox, config, portalAssets, leaseIssuer, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    running = await startAccountServer({captures:captures?.options,pool, outbox, config, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
     console.log(JSON.stringify({status: 'listening', port: address.port}));

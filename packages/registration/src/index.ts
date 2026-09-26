@@ -258,7 +258,7 @@ export {PairingStore,type PairingView} from './pairing.ts';
 export {PairingError,verifyPairingProof,pairingPayload,type PairingClaims} from './pairing-proof.ts';
 
 export {InstallationStore,type InstallationView,type DesiredService} from './installations.ts';
-export {InstallationError,createLeaseIssuer,readMachineClaims,encodeMachine,verifyMachine,verifyLease,type MachineAction,type SignedEnvelope,type LeaseIssuer} from './installation-proof.ts';
+export {InstallationError,createLeaseIssuer,createLeaseTrust,readMachineClaims,encodeMachine,verifyMachine,verifyLease,type MachineAction,type SignedEnvelope,type LeaseIssuer} from './installation-proof.ts';
 
 export {MonitorWorker,monitorStatus} from './monitoring.ts';
 export type {ServiceAlert,ServiceAlertMailer,IncidentKind} from './service-alert.ts';
