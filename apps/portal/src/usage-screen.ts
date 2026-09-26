@@ -1,0 +1,36 @@
+import {html,nothing} from 'lit';
+import type {PortalApp} from './app.ts';
+import type {Locale} from './locale.ts';
+
+const maximumSafe=BigInt(Number.MAX_SAFE_INTEGER),units=['bytes','KiB','MiB','GiB','TiB'] as const;
+export function formatBytes(decimal:string,locale:Locale,byteLabel:string){
+ const value=BigInt(decimal),absolute=value<0n?-value:value,number=new Intl.NumberFormat(locale);
+ if(absolute>maximumSafe)return `${number.format(value)} ${byteLabel}`;
+ let divisor=1n,unit=0;
+ while(unit<units.length-1&&absolute>=divisor*1024n){divisor*=1024n;unit++;}
+ if(unit===0)return `${number.format(value)} ${byteLabel}`;
+ const sign=value<0n?'-':'',whole=absolute/divisor,tenth=((absolute%divisor)*10n+divisor/2n)/divisor;
+ const rounded=tenth===10n?whole+1n:whole,digit=tenth===10n?0n:tenth;
+ const decimalMark=new Intl.NumberFormat(locale).formatToParts(1.1).find(part=>part.type==='decimal')?.value??'.';
+ return `${sign}${number.format(rounded)}${digit?decimalMark+digit.toString():''} ${units[unit]}`;
+}
+
+export function usageScreen(app:PortalApp){
+ const usage=app.usage,c=app.copy,summary=usage.summary,disabled=usage.pending||!!usage.waiting;
+ if(!usage.organisationId)return nothing;
+ const bytes=(value:string)=>formatBytes(value,app.locale,c.usageBytes);
+ const refresh=()=>{usage.refresh();void usage.load();};
+ return html`<section class="usage" aria-label=${c.usageTitle}><h2>${c.usageTitle}</h2><p>${c.usageIntro}</p>
+  ${usage.error?html`<p role="alert">${c[usage.error]}</p>`:nothing}
+  ${!summary?html`<p role="status">${usage.pending?c.wait:c.usageUnavailable}</p>`:html`
+   ${summary.measuredThrough?html`<p>${c.usageMeasuredThrough}: <time datetime=${summary.measuredThrough}>${new Date(summary.measuredThrough).toLocaleString(app.locale)}</time>. ${c.usageMayLag}</p>`:html`<p role="status">${c.usagePending}</p>`}
+   ${summary.latestEventAt?html`<p>${c.usageLatestEvent}: <time datetime=${summary.latestEventAt}>${new Date(summary.latestEventAt).toLocaleString(app.locale)}</time></p>`:html`<p>${c.usageNoEvents}</p>`}
+   <div class="usage-groups">
+    <section aria-label=${c.usageStorage}><h3>${c.usageStorage}</h3><dl><dt>${c.usageStorageCurrent}</dt><dd>${bytes(summary.storage.currentBytes)}</dd><dt>${c.usageStorageAdded}</dt><dd>${bytes(summary.storage.addedBytes)}</dd><dt>${c.usageStorageRemoved}</dt><dd>${bytes(summary.storage.removedBytes)}</dd></dl></section>
+    <section aria-label=${c.usageTransfer}><h3>${c.usageTransfer}</h3><dl><dt>${c.usageUploaded}</dt><dd>${bytes(summary.transfer.uploadedBytes)}</dd><dt>${c.usageRestored}</dt><dd>${bytes(summary.transfer.restoredBytes)}</dd></dl></section>
+    <section aria-label=${c.usageOperations}><h3>${c.usageOperations}</h3><dl><dt>${c.usageInstallations}</dt><dd>${summary.operations.installationCompleted}</dd><dt>${c.usageProbes}</dt><dd>${summary.operations.monitoringProbes}</dd></dl></section>
+    <section aria-label=${c.usageMessages}><h3>${c.usageMessages}</h3><dl><dt>${c.usageSent}</dt><dd>${summary.messages.sent}</dd><dt>${c.usageFailed}</dt><dd>${summary.messages.failed}</dd><dt>${c.usageExpired}</dt><dd>${summary.messages.expired}</dd><dt>${c.usageCancelled}</dt><dd>${summary.messages.cancelled}</dd></dl></section>
+   </div><p class="help">${c.usageExclusions}</p><p class="help">${c.usageHistory}</p>`}
+  <wt-button .disabled=${disabled} @click=${refresh}>${c.usageRefresh}</wt-button>
+ </section>`;
+}

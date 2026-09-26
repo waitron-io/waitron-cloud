@@ -163,8 +163,11 @@ export class HistoryCleanup {
 
   async #registrationOperations(client: PoolClient, cutoff: string, limit: number, apply: boolean) {
     const requestBase = `COALESCE(r.completed_at,r.expires_at)<$1 AND (r.completed_at IS NOT NULL OR r.expires_at<=clock_timestamp())`;
+    const metered = `EXISTS(SELECT 1 FROM usage_events u WHERE u.event_type='operation.installation_completed'
+      AND u.source_kind='installation_operation' AND u.source_reference=o.installation_id::text||':'||o.operation_id::text)`;
     const eligibleRequests = await count(client, `SELECT count(*)::integer AS count FROM connection_requests r WHERE ${requestBase}`, [cutoff]);
-    const eligibleOperations = await count(client, 'SELECT count(*)::integer AS count FROM installation_operations WHERE created_at<$1', [cutoff]);
+    const eligibleOperations = await count(client, `SELECT count(*)::integer AS count FROM installation_operations o WHERE o.created_at<$1 AND ${metered}`, [cutoff]);
+    const blockedOperations = await count(client, `SELECT count(*)::integer AS count FROM installation_operations o WHERE o.created_at<$1 AND NOT ${metered}`, [cutoff]);
     let deleted = 0;
     if (apply) {
       const requests = await client.query(`WITH selected AS(SELECT r.installation_key,r.operation_id FROM connection_requests r
@@ -176,27 +179,30 @@ export class HistoryCleanup {
       deleted += requests.rowCount ?? 0;
       const remaining = limit - deleted;
       if (remaining > 0) {
-        const operations = await client.query(`WITH selected AS(SELECT installation_id,operation_id FROM installation_operations
-          WHERE created_at<$1 ORDER BY created_at,installation_id,operation_id LIMIT $2 FOR UPDATE SKIP LOCKED)
+        const operations = await client.query(`WITH selected AS(SELECT o.installation_id,o.operation_id FROM installation_operations o
+          WHERE o.created_at<$1 AND ${metered} ORDER BY o.created_at,o.installation_id,o.operation_id LIMIT $2 FOR UPDATE OF o SKIP LOCKED)
           DELETE FROM installation_operations o USING selected s
-          WHERE o.installation_id=s.installation_id AND o.operation_id=s.operation_id AND o.created_at<$1 RETURNING o.operation_id`, [cutoff, remaining]);
+          WHERE o.installation_id=s.installation_id AND o.operation_id=s.operation_id AND o.created_at<$1 AND ${metered} RETURNING o.operation_id`, [cutoff, remaining]);
         deleted += operations.rowCount ?? 0;
       }
     }
     const eligible = eligibleRequests + eligibleOperations;
-    return {cutoff, eligible, blocked: 0, deleted, hasMore: apply ? eligible > deleted : eligible > 0};
+    return {cutoff, eligible, blocked: blockedOperations, deleted, hasMore: apply ? eligible > deleted : eligible > 0};
   }
 
   async #emailDeliveries(client: PoolClient, cutoff: string, limit: number, apply: boolean) {
     const terminal = `e.status IN ('sent','expired','cancelled','failed') AND e.finished_at<$1`;
     const currentIncident = `EXISTS(SELECT 1 FROM service_alert_deliveries d JOIN venue_incidents i ON i.id=d.incident_id
       WHERE d.outbox_id=e.id AND i.status='open')`;
-    const eligible = await count(client, `SELECT count(*)::integer AS count FROM email_outbox e WHERE ${terminal} AND NOT ${currentIncident}`, [cutoff]);
-    const blocked = await count(client, `SELECT count(*)::integer AS count FROM email_outbox e WHERE ${terminal} AND ${currentIncident}`, [cutoff]);
+    const metered = `(NOT EXISTS(SELECT 1 FROM service_alert_deliveries d WHERE d.outbox_id=e.id)
+      OR EXISTS(SELECT 1 FROM usage_events u WHERE u.event_type='message.service_alert_'||e.status
+       AND u.source_kind='service_alert' AND u.source_reference=e.id::text))`;
+    const eligible = await count(client, `SELECT count(*)::integer AS count FROM email_outbox e WHERE ${terminal} AND NOT ${currentIncident} AND ${metered}`, [cutoff]);
+    const blocked = await count(client, `SELECT count(*)::integer AS count FROM email_outbox e WHERE ${terminal} AND (${currentIncident} OR NOT ${metered})`, [cutoff]);
     let deleted = 0;
     if (apply) {
       const alerts = await client.query<{id: string}>(`SELECT e.id FROM email_outbox e
-        JOIN service_alert_deliveries d ON d.outbox_id=e.id WHERE ${terminal} AND NOT ${currentIncident}
+        JOIN service_alert_deliveries d ON d.outbox_id=e.id WHERE ${terminal} AND NOT ${currentIncident} AND ${metered}
         ORDER BY e.finished_at,e.id LIMIT $2 FOR UPDATE OF e,d SKIP LOCKED`, [cutoff, limit]);
       const ids = alerts.rows.map(row => row.id);
       if (ids.length < limit) {
@@ -206,6 +212,8 @@ export class HistoryCleanup {
         ids.push(...plain.rows.map(row => row.id));
       }
       if (ids.length) {
+        // Selection locks the alert delivery and outbox row. Its usage event and terminal
+        // status cannot change before these dependent rows are removed.
         await client.query('DELETE FROM service_alert_deliveries WHERE outbox_id=ANY($1::uuid[])', [ids]);
         const result = await client.query(`DELETE FROM email_outbox e WHERE e.id=ANY($2::uuid[]) AND ${terminal}
           AND NOT ${currentIncident} RETURNING e.id`, [cutoff, ids]);
@@ -218,11 +226,13 @@ export class HistoryCleanup {
   async #recoveryHistory(client: PoolClient, cutoff: string, limit: number, apply: boolean) {
     const aged = `r.status='closed' AND r.expires_at<$1`;
     const incomplete = `EXISTS(SELECT 1 FROM installation_replacements x WHERE x.id=r.id AND x.completed_at IS NULL)`;
-    const eligible = await count(client, `SELECT count(*)::integer AS count FROM backup_recoveries r WHERE ${aged} AND NOT ${incomplete}`, [cutoff]);
-    const blocked = await count(client, `SELECT count(*)::integer AS count FROM backup_recoveries r WHERE ${aged} AND ${incomplete}`, [cutoff]);
+    const metered = `(r.restored_at IS NULL OR r.source_kind<>'snapshot' OR EXISTS(SELECT 1 FROM usage_events u
+      WHERE u.event_type='backup.restore_bytes' AND u.source_kind='backup_recovery' AND u.source_reference=r.id::text))`;
+    const eligible = await count(client, `SELECT count(*)::integer AS count FROM backup_recoveries r WHERE ${aged} AND NOT ${incomplete} AND ${metered}`, [cutoff]);
+    const blocked = await count(client, `SELECT count(*)::integer AS count FROM backup_recoveries r WHERE ${aged} AND (${incomplete} OR NOT ${metered})`, [cutoff]);
     let deleted = 0;
     if (apply) {
-      const selected = await client.query<{id: string}>(`SELECT r.id FROM backup_recoveries r WHERE ${aged} AND NOT ${incomplete}
+      const selected = await client.query<{id: string}>(`SELECT r.id FROM backup_recoveries r WHERE ${aged} AND NOT ${incomplete} AND ${metered}
         ORDER BY r.expires_at,r.id LIMIT $2 FOR UPDATE OF r SKIP LOCKED`, [cutoff, limit]);
       let ids = selected.rows.map(row => row.id);
       ids = await retainIdsWithLockedChildren(client, ids, 'backup_recovery_requests');
@@ -231,7 +241,7 @@ export class HistoryCleanup {
         await client.query('DELETE FROM backup_recovery_requests WHERE id=ANY($1::uuid[])', [ids]);
         await client.query('DELETE FROM installation_replacements WHERE id=ANY($1::uuid[]) AND completed_at IS NOT NULL', [ids]);
         const result = await client.query(`DELETE FROM backup_recoveries r WHERE r.id=ANY($2::uuid[]) AND ${aged}
-          AND NOT ${incomplete} RETURNING r.id`, [cutoff, ids]);
+          AND NOT ${incomplete} AND ${metered} RETURNING r.id`, [cutoff, ids]);
         deleted = result.rowCount ?? 0;
       }
     }
@@ -242,15 +252,18 @@ export class HistoryCleanup {
     const referenced = `(EXISTS(SELECT 1 FROM backup_recoveries r WHERE r.point_id=p.id)
       OR EXISTS(SELECT 1 FROM backup_jobs j WHERE j.target_id=p.id))`;
     const aged = `p.deleted_at<$1`;
+    const metered = `(p.kind<>'snapshot' OR (EXISTS(SELECT 1 FROM usage_events u WHERE u.event_type='backup.storage_added_bytes' AND u.source_kind='backup_point' AND u.source_reference=p.id::text)
+      AND EXISTS(SELECT 1 FROM usage_events u WHERE u.event_type='backup.upload_bytes' AND u.source_kind='backup_point' AND u.source_reference=p.id::text)
+      AND EXISTS(SELECT 1 FROM usage_events u WHERE u.event_type='backup.storage_removed_bytes' AND u.source_kind='backup_point' AND u.source_reference=p.id::text)))`;
     const eligible = await count(client, `SELECT count(*)::integer AS count FROM backup_points p
-      WHERE ${aged} AND NOT ${referenced}`, [cutoff]);
+      WHERE ${aged} AND NOT ${referenced} AND ${metered}`, [cutoff]);
     const blocked = await count(client, `SELECT count(*)::integer AS count FROM backup_points p
-      WHERE ${aged} AND ${referenced}`, [cutoff]);
+      WHERE ${aged} AND (${referenced} OR NOT ${metered})`, [cutoff]);
     let deleted = 0;
     if (apply) {
       const selected = await client.query<{id: string}>(`SELECT p.id FROM backup_points p
         JOIN backup_captures c ON c.id=p.id
-        WHERE ${aged} AND NOT ${referenced}
+        WHERE ${aged} AND NOT ${referenced} AND ${metered}
         ORDER BY p.deleted_at,p.id LIMIT $2 FOR UPDATE OF p,c SKIP LOCKED`, [cutoff, limit]);
       const ids = selected.rows.map(row => row.id);
       if (ids.length) {
@@ -258,7 +271,7 @@ export class HistoryCleanup {
           SELECT id FROM backup_verifications WHERE point_id=ANY($1::uuid[]) FOR UPDATE SKIP LOCKED)
           DELETE FROM backup_verifications v USING selected s WHERE v.id=s.id`, [ids]);
         const result = await client.query(`DELETE FROM backup_points p WHERE p.id=ANY($2::uuid[]) AND ${aged}
-          AND NOT ${referenced}
+          AND NOT ${referenced} AND ${metered}
           AND NOT EXISTS(SELECT 1 FROM backup_verifications v WHERE v.point_id=p.id)
           RETURNING p.id`, [cutoff, ids]);
         const removed = result.rows.map(row => row.id as string);

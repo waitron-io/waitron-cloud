@@ -1,5 +1,6 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
+import {setTimeout as delay} from "node:timers/promises";
 import {
   generateKeyPairSync,
   randomBytes,
@@ -252,10 +253,16 @@ test("owner-authorised replacement is durable, target-bound and does not activat
   assert("point" in access);
   assert.equal(access.keys.recoveryKey, capture.keys.recoveryKey);
   assert.equal(access.point.id, point.id);
+  assert.equal((await db.pool.query("SELECT restored_at FROM backup_recoveries WHERE id=$1",[input.id])).rows[0].restored_at,null);
   const status = await recovery.status(owner.token, input.id);
   assert(!JSON.stringify(status).includes(capture.keys.recoveryKey));
   assert(!JSON.stringify(status).includes(capture.keys.streamKey));
   await recovery.target(input.id, "restored", proof("restored"));
+  const restoredAt=(await db.pool.query("SELECT restored_at FROM backup_recoveries WHERE id=$1",[input.id])).rows[0].restored_at;
+  assert.ok(restoredAt instanceof Date);
+  await delay(5);
+  await recovery.target(input.id, "restored", proof("restored"));
+  assert.deepEqual((await db.pool.query("SELECT restored_at FROM backup_recoveries WHERE id=$1",[input.id])).rows[0].restored_at,restoredAt);
   assert.equal(
     (await recovery.status(owner.token, input.id)).status,
     "restored",

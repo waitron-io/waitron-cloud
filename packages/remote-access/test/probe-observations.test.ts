@@ -12,6 +12,7 @@ import type {RemoteProbeResult} from '../src/probe.ts';
 const peerKey=()=>randomBytes(32).toString('base64');
 const installationKey=()=>generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url');
 let db:Awaited<ReturnType<typeof database>>;
+let nextSubnet=44;
 
 before(async()=>{db=await database();});
 after(async()=>db?.close());
@@ -22,7 +23,7 @@ async function placed(){
  const owner=await signup.complete(message.token,{password:'a long enough evidence password',organisationName:'Evidence',legalBusinessName:'Evidence SL',countryCode:'ES'});
  const input={operationId:randomUUID(),installationKey:installationKey(),localVenueId:randomUUID(),environment:'test' as const,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  const registrations=new RegistrationStore(db.pool);await registrations.start(input);await registrations.approveCloud(input,owner.accountId);await registrations.approveLocal(input,randomUUID());const installation=await registrations.complete(input);
- const remote=new RemoteAccessStore(db.pool),cell=randomUUID();await remote.createCell({id:cell,country:'ES',provider:'aws',environment:'test',suffix:'evidence.example.test',subnet:44,publicKey:peerKey(),endpoint:'gateway.example.test:51820'});
+ const remote=new RemoteAccessStore(db.pool),cell=randomUUID(),suffix=`evidence-${randomUUID()}.example.test`,subnet=nextSubnet++;await remote.createCell({id:cell,country:'ES',provider:'aws',environment:'test',suffix,subnet,publicKey:peerKey(),endpoint:'gateway.example.test:51820'});
  const placement=await remote.provision(installation.installationId,cell,peerKey());
  return {...installation,...placement,revision:1};
 }
@@ -37,11 +38,15 @@ function result(target:Awaited<ReturnType<typeof placed>>,checkedAt:string,statu
 test('probe evidence survives restart and rejects older, replaced and revoked route results',async()=>{
  const target=await placed(),first='2026-09-25T10:00:00.000Z',older='2026-09-25T09:59:59.000Z',newer='2026-09-25T10:00:01.000Z';
  const store=new RemoteProbeObservationStore(db.pool);assert.equal(await store.record(result(target,first,'healthy')),true);
+ assert.equal((await db.pool.query("SELECT count(*) FROM usage_events WHERE source_kind='monitoring_probe' AND source_reference LIKE $1",[`${target.installationId}:%`])).rows[0].count,'2');
+ assert.equal(await store.record(result(target,first,'healthy')),false);
+ assert.equal((await db.pool.query("SELECT count(*) FROM usage_events WHERE source_kind='monitoring_probe' AND source_reference LIKE $1",[`${target.installationId}:%`])).rows[0].count,'2');
  assert.equal(await new RemoteProbeObservationStore(db.pool).record(result(target,newer,'failed')),true);
  const afterRestart=await db.pool.query("SELECT service,status,checked_at,last_success_at,last_failure_at,last_failure,certificate_not_after FROM remote_probe_observations WHERE installation_id=$1 ORDER BY service",[target.installationId]);
  assert.deepEqual(afterRestart.rows.map(row=>[row.service,row.status,row.checked_at.toISOString(),row.last_success_at.toISOString(),row.last_failure_at.toISOString(),row.last_failure,row.certificate_not_after.toISOString()]),[
   ['public','failed',newer,first,newer,'timeout','2026-12-01T00:00:00.000Z'],['staff','failed',newer,first,newer,'timeout','2026-12-01T00:00:00.000Z']]);
  assert.equal(await store.record(result(target,older,'healthy')),false);
+ assert.equal((await db.pool.query("SELECT count(*) FROM usage_events WHERE source_kind='monitoring_probe' AND source_reference LIKE $1",[`${target.installationId}:%`])).rows[0].count,'4');
 
  const healthy=result(target,'2026-09-25T10:00:03.000Z','healthy');
  const simultaneous=[{...healthy,public:{...healthy.public,elapsedMs:15001}},result(target,'2026-09-25T10:00:02.000Z','failed')];
@@ -69,4 +74,18 @@ test('probe evidence survives restart and rejects older, replaced and revoked ro
   await delay(50);assert.equal(settled,false);await blocker.query('COMMIT');committed=true;assert.equal(await pending,false);
  }finally{if(!committed)await blocker.query('ROLLBACK');blocker.release();}
  assert.deepEqual((await db.pool.query("SELECT DISTINCT status,checked_at FROM remote_probe_observations WHERE installation_id=$1",[target.installationId])).rows.map(row=>[row.status,row.checked_at.toISOString()]),[['failed','2026-09-25T10:00:04.000Z']]);
+});
+
+test('a probe usage write failure rolls back the observation and the same report retries once',async()=>{
+ const target=await placed(),checkedAt='2026-09-25T11:00:00.000Z',store=new RemoteProbeObservationStore(db.pool);
+ await db.pool.query(`ALTER TABLE usage_events ADD CONSTRAINT fixture_reject_probe
+  CHECK(event_type<>'operation.monitoring_probe' OR source_reference NOT LIKE '${target.installationId}:%')`);
+ try{
+  await assert.rejects(store.record(result(target,checkedAt,'healthy')),/fixture_reject_probe/);
+  assert.equal((await db.pool.query('SELECT count(*) FROM remote_probe_observations WHERE installation_id=$1',[target.installationId])).rows[0].count,'0');
+  assert.equal((await db.pool.query("SELECT count(*) FROM usage_events WHERE source_kind='monitoring_probe' AND source_reference LIKE $1",[`${target.installationId}:%`])).rows[0].count,'0');
+ }finally{await db.pool.query('ALTER TABLE usage_events DROP CONSTRAINT fixture_reject_probe');}
+ assert.equal(await store.record(result(target,checkedAt,'healthy')),true);
+ assert.equal((await db.pool.query('SELECT count(*) FROM remote_probe_observations WHERE installation_id=$1',[target.installationId])).rows[0].count,'2');
+ assert.equal((await db.pool.query("SELECT count(*) FROM usage_events WHERE source_kind='monitoring_probe' AND source_reference LIKE $1",[`${target.installationId}:%`])).rows[0].count,'2');
 });

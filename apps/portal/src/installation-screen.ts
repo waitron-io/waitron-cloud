@@ -3,6 +3,7 @@ import {alertScreen,monitoringScreen} from './alert-screen.ts';
 import {backupScreen} from './backup-screen.ts';
 import {html,nothing} from 'lit';
 import type {PortalApp} from './app.ts';
+import {usageScreen} from './usage-screen.ts';
 export function installationScreen(app:PortalApp){
  const c=app.copy,controller=app.installations,disabled=controller.pending||!!controller.waiting;
  const date=(v:string|null)=>v?html`<time datetime=${v}>${new Date(v).toLocaleString(app.locale)}</time>`:c.neverContacted;
@@ -13,6 +14,7 @@ export function installationScreen(app:PortalApp){
   ${controller.error?html`<p role="alert">${c[controller.error]}</p>`:nothing}
   ${!controller.loaded?html`<p role="status">${c.wait}</p>`:!controller.installations.length&&!controller.error?html`<p>${c.noInstallations}</p>`:nothing}
   ${controller.organisations.length>1?html`<div class="business-choice"><label for="venue-organisation">${c.chooseOrganisation}</label><select id="venue-organisation" .value=${controller.selectedOrganisation??''} ?disabled=${controller.pending} @change=${(e:Event)=>controller.selectOrganisation((e.target as HTMLSelectElement).value)}>${controller.organisations.map(o=>html`<option value=${o.id}>${o.name}</option>`)}</select></div>`:controller.organisations.length?html`<p>${controller.organisations[0]!.name}</p>`:nothing}
+  ${usageScreen(app)}
   ${controller.visible.map(i=>html`<article class="installation"><h3>${i.overview?.businessName??i.legalBusinessId} · ${i.venueId.slice(0,8)}</h3><p>${i.environment==='test'?c.pairTest:c.pairProduction}${i.overview?.countryCode?html` · ${i.overview.countryCode}`:nothing}</p>
     <dl><dt>${c.pairVenue}</dt><dd class="venue-id">${i.venueId}</dd></dl>
     <p role="status">${i.revokedAt?c.accessStopped:!i.lastContactAt?c.accessPending:!i.leaseExpiresAt||Date.parse(i.leaseExpiresAt)<=Date.now()||Date.parse(i.lastContactAt)<Date.now()-300000?c.accessStale:c.accessActive}</p>

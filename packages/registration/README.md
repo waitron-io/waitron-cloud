@@ -156,6 +156,22 @@ credentials. The [customer guide](../../docs/security-audit.md) documents the HT
 and its limits. The transient history-cleanup command never deletes these rows; audit
 retention and account deletion require a separate policy.
 
+## Usage metering
+
+Migration `025_usage_metering.sql` adds an immutable, organisation-scoped usage ledger.
+`recordUsageEvent` makes retries idempotent by fixed event type, source kind and source
+reference. `UsageReconciler.runOnce()` fills events from durable snapshot, recovery,
+installation-operation and service-alert sources in one bounded transaction. Accepted
+monitoring probes write their events atomically with the observation because their source
+row is overwritten in place.
+
+Run `pnpm usage:reconcile --once` with `DATABASE_URL` for one pass, or use
+`pnpm usage:reconcile --status` to inspect source freshness. Scheduling is the surrounding
+deployment's responsibility. Reconcile before transient-history cleanup so the guarded
+source records can become eligible for deletion. The
+[usage metering guide](../../docs/usage-metering.md) defines the recorded units, exclusions,
+failure behavior and owner summary. These measurements do not implement billing or limits.
+
 ## State and completion
 
 `start(binding)` records the binding after an organisation and legal business have
