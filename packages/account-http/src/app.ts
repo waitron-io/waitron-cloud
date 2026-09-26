@@ -1,4 +1,5 @@
 import {replacementResponse} from './replacement.ts';
+import {diagnosticsResponse} from './diagnostics.ts';
 import {usageResponse} from './usage.ts';
 import {securityAuditResponse} from './security-audit.ts';
 import {accountSessionResponse} from './account-sessions.ts';
@@ -91,6 +92,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     }
     const ip = clientAddress(c.env?.incoming?.socket.remoteAddress ?? '', c.req.header('x-forwarded-for'), config.trustedProxyIps);
     await consume([{scope: 'all-ip', subject: ip, limit: 120, windowSeconds: 60}]);
+    if(c.req.path.startsWith('/api/account/diagnostics/'))return diagnosticsResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/usage/'))return usageResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/security-audit/'))return securityAuditResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path==='/api/account/sessions'||c.req.path.startsWith('/api/account/sessions/'))return accountSessionResponse(c,{pool,origin:config.portalOrigin,secure});
