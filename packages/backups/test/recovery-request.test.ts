@@ -33,7 +33,10 @@ test('matching code creates exactly one owner-bound grant; target metadata conta
  const input={pointId:f.point.id,oldServerUnavailable:true,acceptDataLoss:true};
  const [approved,concurrent]=await Promise.all([f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,input),new RecoveryRequests(db.secondPool,f.vault,origin).approve(t.id,t.code,f.session.token,f.session.csrfToken,input)]);assert.deepEqual(approved,concurrent);
  assert.equal(approved.state,'approved');assert.equal(approved.operationId,t.id);
+ const event=(await db.pool.query("SELECT * FROM security_audit_events WHERE event_type='recovery.approved' AND source_id=$1",[t.id])).rows[0];
+ assert.equal(event.organisation_id,f.owner.organisationId);assert.equal(event.venue_id,f.installed.venueId);assert.equal(event.actor_kind,'account');assert.equal(event.actor_id,f.owner.accountId);assert.equal(event.subject_id,t.id);
  assert.deepEqual(await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,input),approved);
+ assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='recovery.approved' AND source_id=$1",[t.id])).rows[0].count,'1');
  assert.equal((await f.requests.machine('status',t.proof('status'))).operationId,t.id);
  const info=await f.recovery.target(t.id,'info',t.recovery('info'));assert('point' in info);assert.equal(info.point.id,f.point.id);assert(!('keys' in info));assert(!('location' in info));
  assert(!JSON.stringify(approved).includes(f.capture.keys.recoveryKey));
@@ -53,6 +56,7 @@ test('proof namespace, matching attempts, expiry and fresh-key bindings fail clo
  const fresh=target();await f.requests.machine('start',fresh.proof('start'));const id=fresh.id;fresh.id=randomUUID();await assert.rejects(f.requests.machine('start',fresh.proof('start')),/target_not_fresh/);fresh.id=id;
  await assert.rejects(f.requests.approve(fresh.id,fresh.code,f.session.token,f.session.csrfToken,{pointId:f.point.id,oldServerUnavailable:false,acceptDataLoss:true}),/confirmation_required/);
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_recoveries WHERE id=$1',[fresh.id])).rows[0].count,'0');
+ assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='recovery.approved' AND source_id=$1",[fresh.id])).rows[0].count,'0');
 });
 test('HTTP gives the proven target one-object read authority, never browser keys; cancellation and owner loss during provider wait refuse the grant',async()=>{
  const f=await fixture(),t=target(),scopes:unknown[]=[];let lifetime=900000;let revoke:()=>Promise<void>=async()=>{};
@@ -87,6 +91,7 @@ for(const deadline of ['request','session'])test(`approval rolls back if ${deadl
   const until=Date.now()+1500;let waited=false;while(Date.now()<until){if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE '%FOR UPDATE OF l%'",[db.schema])).rowCount){waited=true;break;}await new Promise(r=>setTimeout(r,10));}assert(waited,'approval must reach the venue lock');
   await new Promise(r=>setTimeout(r,1100));await blocker.query('COMMIT');await assertion;
   assert.equal((await db.pool.query('SELECT count(*) FROM backup_recoveries WHERE id=$1',[t.id])).rows[0].count,'0');assert.equal((await db.pool.query('SELECT operation_id FROM backup_recovery_requests WHERE id=$1',[t.id])).rows[0].operation_id,null);
+  assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='recovery.approved' AND source_id=$1",[t.id])).rows[0].count,'0');
  }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
 });
 test('incorrect codes cannot lock an already approved owner out of cancellation',async()=>{

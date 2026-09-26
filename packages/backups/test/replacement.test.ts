@@ -49,7 +49,10 @@ test('restored replacement preserves venue and history, retires old authority, a
  const confirmations={oldInstallationId:f.installed.installationId,oldServerUnavailable:true,confirmReplacement:true};
  const result=await f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirmations);
  assert.equal(result.state,'complete');assert.equal(result.registration.venueId,f.installed.venueId);assert.notEqual(result.registration.installationId,f.installed.installationId);
+ const event=(await db.pool.query("SELECT * FROM security_audit_events WHERE event_type='replacement.approved' AND source_id=$1",[f.t.id])).rows[0];
+ assert.equal(event.organisation_id,f.owner.organisationId);assert.equal(event.venue_id,f.installed.venueId);assert.equal(event.actor_kind,'account');assert.equal(event.actor_id,f.owner.accountId);assert.equal(event.subject_id,f.t.id);
  assert.deepEqual(await f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirmations),result);
+ assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='replacement.approved' AND source_id=$1",[f.t.id])).rows[0].count,'1');
  assert.deepEqual(await f.store.machine('status',f.envelope('status')),result);
  const rows=(await db.pool.query('SELECT * FROM installations WHERE venue_id=$1',[f.installed.venueId])).rows;
  assert.equal(rows.length,2);const old=rows.find(r=>r.id===f.installed.installationId);assert(old.revoked_at);assert.equal(old.superseded_by,result.registration.installationId);
@@ -83,6 +86,7 @@ test('completion rechecks the verified snapshot and rolls all authority changes 
  const f=await ready();await f.store.machine('prepare',f.envelope('prepare'));await db.pool.query("UPDATE backup_points SET verification='failed' WHERE id=$1",[f.point.id]);
  await assert.rejects(f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f)),/unavailable/);
  assert.equal((await db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[f.installed.installationId])).rows[0].revoked_at,null);
+ assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='replacement.approved' AND source_id=$1",[f.t.id])).rows[0].count,'0');
 });
 test('fresh remote peer replaces only this venue while preserving hostnames, address and history',async()=>{
  const f=await ready(),other=await fixture(),remote=new RemoteAccessStore(db.pool),cell=randomUUID();await remote.createCell({id:cell,country:'ES',provider:'aws',environment:'test',suffix:'replacement.test',subnet:42,publicKey:randomBytes(32).toString('base64'),endpoint:'gateway.test:51820'});

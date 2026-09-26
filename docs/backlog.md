@@ -299,7 +299,12 @@ mobile notifications separately.
   production; the code accepts an active key plus retained older keys. A send timeout
   or crash after provider acceptance may duplicate an email. Terminal delivery metadata
   has an explicit cutoff category in the cleanup command; choose its production cutoff.
-  Security audit events remain outside transient cleanup. The HTTP adapter applies
+  Immutable customer security events now cover pairing approvals, installation credential
+  renewals/revocations and recovery/replacement approvals in the protected action's
+  transaction. Current organisation owners can export stable cursor pages through the
+  exact session/Origin/CSRF-checked API; the fixed event shape stores no request payloads.
+  This operational trail is not a complete compliance archive. Audit retention and
+  account-deletion handling remain separate from transient cleanup. The HTTP adapter applies
   a 300 ms response floor to login/email requests, but deployment timing and load
   measurements must still assess account/cooldown differences under contention.
   Its rate key must be shared across instances; rotation starts new allowances.
@@ -330,7 +335,8 @@ mobile notifications separately.
   and explicit links between distinct Cloud and local identities; local till staff
   need no Cloud account. Support one Cloud login managing several authorised venues
   and separate platform permissions. Implement the agreed support approval and expiry policy.
-  Define revocation, audit and emergency authorisation. Review
+  Define emergency authorisation and the platform-role audit events not covered by the
+  customer security trail. Review
   database and module dependencies, and establish how security fixes reach both codebases.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
   services, usage accounting, trials, failed payment and cancellation.
@@ -365,7 +371,8 @@ mobile notifications separately.
   Before public exposure, choose exact retention cutoffs for installation operation
   results and pairing requests, and define revocation-audit retention separately.
   The cleanup command handles completed/expired pairing and registration results in
-  bounded chunks but enables no category automatically. Add approval audit records,
+  bounded chunks but enables no category automatically. Pairing approvals, credential
+  renewals and revocations now have immutable customer audit events. Choose their retention,
   coordinate issuer rotation/trust rollout, and measure per-IP denial-of-service behavior
   for venues sharing NAT and known request IDs. The
   short code has an unkeyed digest, so review database-disclosure protection before
@@ -497,8 +504,10 @@ mobile notifications separately.
   Real snapshots now exclude source Cloud credentials and staff TLS keys; the managed
   recovery path discards old backup settings through a persisted managed-restore marker.
   The local proof now exercises the actual cold-restore entry point, including its module hooks.
-  Before production, choose the recovery-request/result cutoff, account-deletion handling and
-  audit exports. Closed expired recovery history now has a separate cleanup category that
+  Owner-approved recovery and replacement now append immutable customer audit events and
+  current owners can export them in stable pages. Before production, choose the
+  recovery-request/result cutoff, audit retention and account-deletion handling. Closed
+  expired recovery history now has a separate cleanup category that
   preserves active operations and incomplete replacements. A bounded two-instance run admitted exactly 10 of 12 concurrent fresh-key
   recovery starts behind one address. Guesses using unrelated UUIDs left the target's
   budget untouched; five concurrent wrong codes against a known UUID serialized to five,

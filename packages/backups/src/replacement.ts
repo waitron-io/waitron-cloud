@@ -1,7 +1,7 @@
 import {randomUUID,verify} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {transaction} from '@waitron-cloud/registration';
+import {recordSecurityAuditEvent,transaction} from '@waitron-cloud/registration';
 import {decode,publicKey,type Proof} from './recovery.ts';
 import {backupFail,lockVenue,uuid,uniqueViolation} from './catalogue.ts';
 import type {BackupKeyVault} from './keys.ts';
@@ -115,7 +115,8 @@ export class ReplacementStore {
    await client.query("UPDATE venue_incidents SET status='suppressed',revision=revision+1,changed_at=clock_timestamp() WHERE venue_id=$1 AND kind='disconnected' AND status='open'",[r.venue_id]);
    const result={...view(r,p),state:'complete',registration:{venueId:r.venue_id,installationId,organisationId:r.organisation_id,legalBusinessId:r.legal_business_id}};
    await client.query('UPDATE installation_replacements SET result=$2,completed_at=clock_timestamp() WHERE id=$1',[id,result]);
-   await current(client,id);await resolveSession(client,token,{csrfToken:csrf,touch:false});return result;
+   await current(client,id);await resolveSession(client,token,{csrfToken:csrf,touch:false});
+   await recordSecurityAuditEvent(client,{organisationId:r.organisation_id,venueId:r.venue_id,type:'replacement.approved',actorKind:'account',actorId:r.account_id,subjectKind:'replacement',subjectId:id,sourceId:id});return result;
   }).catch(error=>{if(['installations_public_key_key','remote_placements_peer_public_key_key','installation_replacements_completed_old_key'].some(name=>uniqueViolation(error,name)))backupFail('conflict');throw error;});
  }
 }

@@ -1,7 +1,7 @@
 import {createHash,timingSafeEqual,verify} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {transaction} from '@waitron-cloud/registration';
+import {recordSecurityAuditEvent,transaction} from '@waitron-cloud/registration';
 import {BackupRecovery,decode,publicKey,type Proof,type RecoveryApprovalInput} from './recovery.ts';
 import {backupFail,uuid,uniqueViolation} from './catalogue.ts';
 import type {BackupKeyVault} from './keys.ts';
@@ -43,9 +43,12 @@ export class RecoveryRequests {
    if(typeof code!=='string'||!/^\d{8}$/.test(code)||!timingSafeEqual(Buffer.from(digest(code),'hex'),Buffer.from(row.code_hash,'hex'))){if(!row.operation_id)await client.query('UPDATE backup_recovery_requests SET failed_codes=LEAST(5,failed_codes+1) WHERE id=$1',[id]);return null;}
    const recovery=new BackupRecovery(this.pool,this.vault,this.origin,client);
    if(input){
-    await recovery.start(token,csrf,{...input,id,mode:'failure',targetPublicKey:row.public_key});
+    const operation=await recovery.start(token,csrf,{...input,id,mode:'failure',targetPublicKey:row.public_key});
     await available(client,row);
     await client.query('UPDATE backup_recovery_requests SET account_id=$2,operation_id=id WHERE id=$1',[id,session.accountId]);row.account_id=session.accountId;row.operation_id=id;
+    const venue=(await client.query<{organisation_id:string}>('SELECT organisation_id FROM venues WHERE id=$1',[operation.venueId])).rows[0];
+    if(!venue)backupFail('unavailable');
+    await recordSecurityAuditEvent(client,{organisationId:venue.organisation_id,venueId:operation.venueId,type:'recovery.approved',actorKind:'account',actorId:session.accountId,subjectKind:'recovery',subjectId:id,sourceId:id});
    }
    const operation=row.operation_id?await recovery.status(token,row.operation_id):null;
    await resolveSession(client,token,{csrfToken:csrf,touch:false});await available(client,row);return {...view(row),operation};

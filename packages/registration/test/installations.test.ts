@@ -31,11 +31,14 @@ beforeEach(async()=>{
   session=await transaction(db.pool,c=>login(c,{email:'owner@example.test',password}));a=await installation();b=await installation();
 });
 test('durable renewal is scoped and replayed once across independent workers',async()=>{
-  const proof=request(),[one,two]=await Promise.all([store.execute('renew',proof),other.execute('renew',proof)]);
+  const operationId=randomUUID(),proof=request(a,'renew',undefined,{},operationId),[one,two]=await Promise.all([store.execute('renew',proof),other.execute('renew',proof)]);
   assert.deepEqual(one,two);assert.ok(one.lease);assert.equal(one.installationId,a.installationId);
   assert.equal(one.revision,0);assert.deepEqual(one.services.map(s=>[s.state,s.health]),Array(3).fill(['unconfigured','unknown']));
   assert.deepEqual(await new InstallationStore(db.pool,issuer,origin).execute('renew',proof),one);
   assert.equal((await db.pool.query('SELECT count(*) FROM installation_operations')).rows[0].count,'1');
+  const event=(await db.pool.query("SELECT * FROM security_audit_events WHERE event_type='installation.credentials_renewed'")).rows[0];
+  assert.equal(event.organisation_id,owner.organisationId);assert.equal(event.venue_id,a.venueId);assert.equal(event.actor_kind,'installation');assert.equal(event.actor_id,a.installationId);assert.equal(event.subject_id,a.installationId);assert.equal(event.source_id,operationId);
+  assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='installation.credentials_renewed'")).rows[0].count,'1');
   const twoVenue=await store.execute('renew',request(b));assert.notDeepEqual(one.lease,twoVenue.lease);
   assert.equal((await config(a,one.lease)).venueId,a.venueId);
   await assert.rejects(config(b,one.lease),/invalid_proof/);await assert.rejects(config(a),/invalid_proof/);
@@ -66,6 +69,7 @@ test('owner revocation serializes with renewal, persists and preserves the other
   const pending=assert.rejects(store.execute('renew',request()),/revoked/);
   await blocker.query('COMMIT');blocker.release();await revoke;await pending;
   const audit=(await db.pool.query('SELECT * FROM installation_revocations WHERE installation_id=$1',[a.installationId])).rows[0];assert.equal(audit.actor_kind,'account');assert.equal(audit.actor_id,owner.accountId);assert.equal(audit.reason,'user_requested');assert.ok(audit.result.revokedAt);
+  const security=(await db.pool.query("SELECT * FROM security_audit_events WHERE event_type='installation.revoked'")).rows[0];assert.equal(security.actor_kind,'account');assert.equal(security.actor_id,owner.accountId);assert.equal(security.subject_id,a.installationId);assert.equal(security.source_id,a.installationId);
   await assert.rejects(store.execute('renew',proof),/revoked/);await assert.rejects(config(a),/revoked/);
   assert.equal((await db.pool.query('SELECT count(*) FROM venues')).rows[0].count,'2');
   assert.equal((await db.pool.query('SELECT count(*) FROM installation_services')).rows[0].count,'6');
@@ -77,6 +81,8 @@ test('machine revoke recovers its committed reply but cannot revive a revoked ke
   const proof=request(a,'revoke');const one=await store.execute('revoke',proof);assert.ok(one.revokedAt);
   assert.deepEqual(await other.execute('revoke',proof),one);
   const audit=(await db.pool.query('SELECT * FROM installation_revocations')).rows[0];assert.equal(audit.actor_kind,'installation');assert.equal(audit.actor_id,a.installationId);assert.deepEqual(audit.result,one);await assert.rejects(other.execute('renew',request()),/revoked/);
+  const security=(await db.pool.query("SELECT * FROM security_audit_events WHERE event_type='installation.revoked'")).rows[0];assert.equal(security.actor_kind,'installation');assert.equal(security.actor_id,a.installationId);assert.equal(security.source_id,a.installationId);
+  assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='installation.revoked'")).rows[0].count,'1');
   await assert.rejects(store.configure(a.installationId,0,[]),/revoked/);
 });
 test('account access uses customer membership and ownership, CSRF and current sessions',async()=>{
@@ -100,6 +106,7 @@ test('request freshness and owner session expiry are checked after installation 
   const expired=assert.rejects(store.revokeWithSession(session.token,session.csrfToken,a.installationId),/session_expired/);
   try{await waitForLock();await new Promise(r=>setTimeout(r,300));}finally{await blocker.query('COMMIT');blocker.release();}await expired;
   assert.equal((await db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[a.installationId])).rows[0].revoked_at,null);
+  assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='installation.revoked'")).rows[0].count,'0');
 });
 
 test('operation identity survives lease renewal while every replay authenticates current bindings',async()=>{

@@ -10,6 +10,7 @@ export { createSmtpAccountMailer, type SmtpAccountMailConfig } from './smtp-mail
 export { EmailDeliveryError, type EmailDeliveryContext, type EmailDeliveryReceipt } from './email-delivery.ts';
 export { createLocalAccountMailer } from './local-mailer.ts';
 export { LocalPasswordCorpus, type PasswordScreeningProvider, type PasswordScreeningResult } from './compromised-passwords.ts';
+export {SecurityAuditError,SecurityAuditStore,recordSecurityAuditEvent,type SecurityAuditActorKind,type SecurityAuditEvent,type SecurityAuditEventType,type SecurityAuditInput,type SecurityAuditPage,type SecurityAuditSubjectKind} from './security-audit.ts';
 
 export interface ConnectionBinding {
   operationId: string;

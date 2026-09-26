@@ -34,12 +34,18 @@ test('two approvals create one installation; independent workers recover lost re
   await assert.rejects(store.complete(completion(a)),/approval_required/);
   assert.equal((await store.inspect(a.requestId,a.code,session.token,session.csrfToken)).localVenueId,a.localVenueId);
   assert.equal((await approve(a)).state,'awaiting_local');
+  const cloudEvent=(await db.pool.query("SELECT id,actor_kind,actor_id,subject_id,source_id FROM security_audit_events WHERE event_type='pairing.cloud_approved'")).rows[0];
+  assert.equal(cloudEvent.actor_kind,'account');assert.equal(cloudEvent.actor_id,owner.accountId);assert.equal(cloudEvent.subject_id,a.requestId);assert.equal(cloudEvent.source_id,a.requestId);
+  await approve(a);assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='pairing.cloud_approved'")).rows[0].count,'1');
   assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');
   const [one,two]=await Promise.all([store.complete(completion(a)),other.complete(completion(a))]);assert.deepEqual(one,two);
   assert.equal(one.state,'complete');assert.ok(one.registration?.installationId);
   assert.equal((await store.status(status(b))).state,'awaiting_cloud');
   assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'1');
   assert.equal((await db.pool.query("SELECT count(*) FROM installation_services WHERE state='unconfigured'")).rows[0].count,'3');
+  const localEvent=(await db.pool.query("SELECT id,venue_id,actor_kind,actor_id,subject_id,source_id FROM security_audit_events WHERE event_type='pairing.local_approved'")).rows[0];
+  assert.equal(localEvent.venue_id,one.registration?.venueId);assert.equal(localEvent.actor_kind,'local_authority');assert.equal(localEvent.actor_id,a.requestId);assert.equal(localEvent.subject_id,a.requestId);assert.equal(localEvent.source_id,a.requestId);
+  await store.complete(completion(a));assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='pairing.local_approved'")).rows[0].count,'1');
 });
 test('binding cannot change key, venue, environment, code or selected business',async()=>{
   const a=machine();await store.start(a);
@@ -67,6 +73,7 @@ test('permission is rechecked at local completion and all writes roll back',asyn
   await assert.rejects(store.complete(completion(a)),/permission_denied/);
   assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');
   assert.equal((await db.pool.query('SELECT count(*) FROM connection_requests')).rows[0].count,'0');
+  assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='pairing.local_approved'")).rows[0].count,'0');
 });
 test('expired unfinished requests refuse all changes, while completed retries never revive revoked installations',async()=>{
   const a=machine(),b=machine();await store.start(a);await approve(a);const done=await store.complete(completion(a));await store.start(b);await approve(b);
@@ -112,7 +119,7 @@ test('migrations upgrade a seven-migration schema without changing its existing 
     await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venue,org,biz,randomUUID()]);
     await pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'existing-key')",[installation,venue]);
     const previous=(await pool.query('SELECT id,venue_id,public_key,revoked_at FROM installations')).rows;await migrate(pool);await migrate(pool);
-    assert.deepEqual((await pool.query('SELECT id,venue_id,public_key,revoked_at FROM installations')).rows,previous);assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'21');
+    assert.deepEqual((await pool.query('SELECT id,venue_id,public_key,revoked_at FROM installations')).rows,previous);assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'22');
     assert.match((await pool.query("SELECT id::text FROM cloud_sessions WHERE token_hash=$1",['a'.repeat(64)])).rows[0].id,/^[0-9a-f-]{36}$/);
     assert.equal((await pool.query('SELECT count(*) FROM pairing_requests')).rows[0].count,'0');
   }finally{await pool.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();}
@@ -168,6 +175,7 @@ test('pairing expiry while Cloud approval waits on membership leaves its approva
   const pending=unavailable(approve(a));
   try{await waitForLock();await new Promise(r=>setTimeout(r,350));}finally{await blocker.query('COMMIT');blocker.release();}
   await pending;assert.equal((await db.pool.query('SELECT cloud_account_id FROM pairing_requests')).rows[0].cloud_account_id,null);
+  assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='pairing.cloud_approved'")).rows[0].count,'0');
 });
 test('the passive business read rechecks session expiry after a table maintenance lock',async()=>{
   const blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('LOCK TABLE legal_businesses IN ACCESS EXCLUSIVE MODE');
