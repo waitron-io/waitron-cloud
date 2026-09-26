@@ -79,11 +79,20 @@ test('logout failures remain visible until a successful retry confirms sign-out'
     const page=await f.browser.newPage();page.setDefaultTimeout(3000);let attempts=0;
     await page.route('**/api/account/session',route=>route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+600_000).toISOString()}}));
     await page.route('**/api/account/session/activity',route=>route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+600_000).toISOString()}}));
+    await page.route('**/api/account/sessions',route=>route.fulfill({json:{sessions:[{id:'12345678-1234-4234-8234-123456789abc',createdAt:'2026-01-01T00:00:00.000Z',lastUsedAt:'2026-01-01T00:01:00.000Z',expiresAt:'2027-01-01T00:00:00.000Z',current:true}]}}));
+    await page.route('**/api/account/passkeys',route=>route.fulfill({json:{passkeys:[]}}));
+    await page.route('**/api/account/alerts',route=>route.fulfill({json:{enabled:false,locale:'en'}}));
+    await page.route('**/api/account/installations',route=>route.fulfill({json:{installations:[]}}));
     await page.route('**/api/account/logout',route=>{attempts++;return route.fulfill(attempts===1?{status:503,json:{error:'temporarily_unavailable'}}:{status:204});});
     await page.goto(`${f.origin}/account`);await page.getByText('You are signed in to Waitron Cloud.').waitFor();
-    await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.getByText('We could not sign you out. Try again.').waitFor();
+    const signOut=page.getByRole('button',{name:'Sign out',exact:true});
+    const [failedLogout]=await Promise.all([page.waitForResponse('**/api/account/logout'),signOut.click()]);
+    assert.equal(failedLogout.status(),503);
+    await page.getByText('We could not sign you out. Try again.').waitFor();
     assert.equal(await page.getByText('You have signed out.').count(),0);assert.equal(attempts,1);
-    await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.getByText('You have signed out.').waitFor();assert.equal(attempts,2);
+    const [successfulLogout]=await Promise.all([page.waitForResponse('**/api/account/logout'),signOut.click()]);
+    assert.equal(successfulLogout.status(),204);
+    await page.getByText('You have signed out.').waitFor();assert.equal(attempts,2);
   } finally {await f.close();}
 });
 test('email requests have the same accepted screen and real invalid links offer recovery',async()=>{
