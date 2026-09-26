@@ -74,3 +74,19 @@ test('owner pages are passive, tenant-scoped and stable when timestamps tie',asy
  await pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[owner]);
  await assert.rejects(store.page(token,{organisationId:organisation,limit:2}),/permission_denied/);
 });
+
+test('an in-progress owner page serializes with ownership removal',async()=>{
+ await transaction(pool,client=>recordSecurityAuditEvent(client,input()));
+ const blocker=await admin.connect();await blocker.query('BEGIN');await blocker.query(`LOCK TABLE ${schema}.security_audit_events IN ACCESS EXCLUSIVE MODE`);
+ const page=store.page(token,{organisationId:organisation,limit:2});
+ const waitFor=async(pattern:string)=>{for(let n=0;n<100;n++){const waiting=await admin.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE $2",[schema,pattern]);if(waiting.rowCount)return;await new Promise(resolve=>setTimeout(resolve,10));}throw new Error('request did not reach lock');};
+ try{
+  await waitFor('SELECT * FROM security_audit_events%');
+  const remove=pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[owner,organisation]);
+  await waitFor('UPDATE organisation_memberships SET is_owner=false%');
+  assert.equal((await admin.query(`SELECT is_owner FROM ${schema}.organisation_memberships WHERE account_id=$1 AND organisation_id=$2`,[owner,organisation])).rows[0].is_owner,true);
+  await blocker.query('COMMIT');
+  assert.equal((await page).events.length,1);await remove;
+ }finally{await blocker.query('ROLLBACK').catch(()=>{});blocker.release();}
+ await assert.rejects(store.page(token,{organisationId:organisation,limit:2}),/permission_denied/);
+});
