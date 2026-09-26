@@ -5,7 +5,7 @@ import { after, before, beforeEach, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
 import { RegistrationStore, type ConnectionBinding } from '../src/index.ts';
-import { migrate } from '../src/migrate.ts';
+import { migrate, migrationNames } from '../src/migrate.ts';
 import { MonitorWorker } from '../src/monitoring.ts';
 import { EmailOutbox } from '../src/email-outbox.ts';
 
@@ -61,7 +61,7 @@ beforeEach(async () => {
 
 test('migration remains repeatable after concurrent initial application', async () => {
   await migrate(pool);
-  assert.equal(await count('schema_migrations'), 22);
+  assert.equal(await count('schema_migrations'), migrationNames.length);
 });
 
 test('both approvals create one link with all services unconfigured', async () => {
