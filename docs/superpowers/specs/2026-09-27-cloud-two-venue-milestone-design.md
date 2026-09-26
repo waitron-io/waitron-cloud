@@ -25,9 +25,9 @@ Reuse the three landed proof components instead of creating new product machiner
 - the managed-backup proof owns stream observation, continuous cold restore,
   retained-snapshot fallback and owner-confirmed server replacement.
 
-A top-level runner executes these components under one PostgreSQL/Mailpit fixture and
-validates each receipt before publishing the milestone receipt. Each component may use
-its own disposable PostgreSQL schema and Waitron state directories. The receipt calls
+A top-level proof command starts one PostgreSQL/Mailpit fixture, then its runner executes
+these components and validates each receipt before publishing the milestone receipt. Each
+component may use its own disposable PostgreSQL schema and Waitron state directories. The receipt calls
 them phases, not one persistent production deployment, and never equates their random
 installation identifiers.
 

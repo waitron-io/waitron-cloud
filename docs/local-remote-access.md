@@ -342,9 +342,10 @@ Gateway replacement and certificate reload may interrupt remote connections. In 
 its old kernel session was not available in the replacement gateway, so it reconnected at
 the normal WireGuard rekey window. The clean 2026-09-27 complete-milestone run replaced the
 same local gateway in 14,967 ms and published encrypted snapshots for both venues before
-and after replacement. The timing depends on rekey state, so neither result is a production
-availability target. Define a launch target and test an explicit peer-side rekey strategy
-before promising faster recovery. LAN access remains independent. Live provider DNS and
+and after replacement while its peers were freshly established. The timing depends on rekey
+state, so neither result is a production availability target. Define a launch target and
+test an explicit peer-side rekey strategy before promising faster recovery. LAN access
+remains independent. Live provider DNS and
 ACME credentials, production key storage, CSR/chain transport, appliance installation,
 automatic customer appliance setup and deployment hardening still need their own
 implementation and validation before customers can subscribe. The local account portal

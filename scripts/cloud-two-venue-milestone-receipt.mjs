@@ -8,6 +8,7 @@ import {randomUUID} from 'node:crypto';
 import {verifyBackupTransferReceipt} from './verify-backup-transfer-receipt.mjs';
 import {verifyManagedRecoveryReceipt} from './verify-managed-recovery-receipt.mjs';
 import {verifyRemoteMilestoneEvidence,verifyTwoVenueMilestoneReceipt} from './verify-two-venue-milestone-receipt.mjs';
+import {repositoryRoot} from './milestone-proof-helpers.mjs';
 
 const checks=['real-postgresql','real-waitron','real-wireguard-haproxy','real-seaweedfs-litestream','no-production-resources'];
 
@@ -27,7 +28,7 @@ export function composeMilestoneReceipt(transferValue,remoteValue,managedValue){
 }
 
 async function run(script,environment){
- const child=spawn(process.execPath,[script],{cwd:resolve(new URL('..',import.meta.url).pathname),env:{...process.env,...environment},stdio:'inherit'});
+ const child=spawn(process.execPath,[script],{cwd:repositoryRoot(import.meta.url),env:{...process.env,...environment},stdio:'inherit'});
  const code=await new Promise((done,fail)=>{child.once('error',fail);child.once('exit',value=>done(value??1));});
  if(code!==0)throw new Error(`${script} exited ${code}`);
 }

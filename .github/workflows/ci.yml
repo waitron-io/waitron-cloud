@@ -27,4 +27,5 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: pnpm --filter @waitron-cloud/ui-smoke exec playwright install --with-deps chromium
       - run: pnpm typecheck
+      - run: pnpm test:two-venue-milestone-receipt
       - run: pnpm test

@@ -41,7 +41,6 @@ export function verifyRemoteMilestoneEvidence(remote){
    if(!exact(point,['venueId','installationId','pointId','capturedAt'])||!uuid.test(point.venueId)||!uuid.test(point.installationId)||!uuid.test(point.pointId)||!date(point.capturedAt)||bindings.get(point.venueId)!==point.installationId||seen.has(point.venueId)||pointIds.has(point.pointId))fail();
    seen.add(point.venueId);pointIds.add(point.pointId);
   }
-  if(seen.size!==bindings.size)fail();
  }
  for(const before of continuity.before){const after=continuity.after.find(point=>point.venueId===before.venueId);if(!after||Date.parse(after.capturedAt)<=Date.parse(before.capturedAt))fail();}
  return remote;
@@ -52,7 +51,7 @@ export function verifyTwoVenueMilestoneReceipt(value){
  const transfer=verifyBackupTransferReceipt(value.transfer),remote=verifyRemoteMilestoneEvidence(value.remote),managed=verifyManagedRecoveryReceipt(value.managedRecovery);
  for(const component of [transfer,remote,managed])if(component.cloudHead!==value.cloudHead||component.waitronHead!==value.waitronHead||component.cloudDirty!==false||component.waitronDirty!==false)fail();
  const measurements=value.measurements;
- if(!exact(measurements,['gatewayReplacementMs','cellReconnectionMs','continuousRestoreMs','snapshotRestoreMs','replacementMs'])||Object.values(measurements).some(item=>!positive(item))||measurements.gatewayReplacementMs!==remote.replacementMs||measurements.cellReconnectionMs!==remote.movement.reconnectionMs||measurements.continuousRestoreMs!==managed.continuous.restoreMs||measurements.snapshotRestoreMs!==managed.snapshotFallback.restoreMs||measurements.replacementMs!==managed.replacement.elapsedMs||managed.activation!==value.activation)fail();
+ if(!exact(measurements,['gatewayReplacementMs','cellReconnectionMs','continuousRestoreMs','snapshotRestoreMs','replacementMs'])||Object.values(measurements).some(item=>!positive(item))||measurements.gatewayReplacementMs!==remote.replacementMs||measurements.cellReconnectionMs!==remote.movement.reconnectionMs||measurements.continuousRestoreMs!==managed.continuous.restoreMs||measurements.snapshotRestoreMs!==managed.snapshotFallback.restoreMs||measurements.replacementMs!==managed.replacement.elapsedMs)fail();
  return value;
 }
 

@@ -35,8 +35,8 @@ strict validators:
 docker build -t waitron-cloud-local-remote:dev -f deploy/local-remote/Dockerfile .
 WAITRON_CHECKOUT=/absolute/path/to/waitron \
   CLOUD_MILESTONE_RECEIPT=/tmp/cloud-two-venue-milestone.json \
-  node scripts/test-postgres.mjs exec pnpm proof:two-venue-milestone
-node scripts/verify-two-venue-milestone-receipt.mjs \
+  pnpm proof:two-venue-milestone
+pnpm verify:two-venue-milestone \
   /tmp/cloud-two-venue-milestone.json
 ```
 
