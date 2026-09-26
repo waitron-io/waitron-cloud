@@ -107,6 +107,8 @@ The guided recovery path below remains limited to local test venues.
 The caller supplies a persistent 32-byte master key outside PostgreSQL; key versions
 are encrypted and authenticated against their venue and version. Losing this master
 key loses access to those backups. Rotation retains old versions; deletion is absent.
+Use the read-only [managed-key check and recovery drill](managed-key-operations.md)
+before restarting workers from a restored Cloud database or considering key retirement.
 
 The catalogue separates upload completion from a trusted worker's verified restore
 of the exact digest. Owner-authorised catalogue reads return snapshot capture times and
@@ -179,7 +181,9 @@ Scheduled capture with durable local archive spooling is implemented for test in
 Customer recovery now has a matching-code account flow for verified test snapshots.
 The local worker schedules verification, retention
 and abandoned-upload cleanup; the customer catalogue is paginated. Define cancellation/deletion,
-operator master-key backup and rotation, and production verifier isolation. Run the
+production master-key custody and rewrapping, and production verifier isolation. The
+local managed-key drill now proves backup of the external key can reopen every retained
+version after restart; it does not choose a vault provider or add an in-place rewrap. Run the
 same provider tests against the selected Spain-region store before any deployment;
 this local result does not establish AWS or Google behavior. Production still needs
 dynamic writer and reader credential delivery, rotation and revocation; verified

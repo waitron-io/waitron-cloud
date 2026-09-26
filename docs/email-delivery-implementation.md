@@ -128,7 +128,9 @@ link if an older request was never delivered.
 To rotate keys, first make the new key available to every worker while retaining the
 old one, then change the backend's active key ID. Keep each old key until no pending
 or processing rows reference it, including when restoring an older database backup.
-You can check pending key references with this read-only query in your Cloud database:
+Run the [managed-key check](managed-key-operations.md) to validate the configured key
+ring against live ciphertext and get a dry-run retirement result. The underlying
+read-only query for pending references is:
 
 ```sql
 SELECT key_id, count(*) AS pending_messages
@@ -138,8 +140,8 @@ GROUP BY key_id;
 ```
 
 This query reports identifiers, never key material. `mail:status` reports overall
-counts; it does not replace this key-specific check. Old database backups may still
-need a key even after the current queue has drained.
+counts; it does not replace the authenticated key check. Old database backups may
+still need a key even after the current queue has drained.
 
 Missing keys and failed authentication of ciphertext produce `payload_unavailable`
 and use the normal retry limit. Repair configuration before those retries expire;
