@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import {createHash,generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
 import {after,before,test} from 'node:test';
+import {crypto as acmeCrypto} from 'acme-client';
+import forge from 'node-forge';
 import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
 import {database} from '../../account-http/test/fixtures.ts';
 import {RemoteAccessStore} from '../src/placement.ts';
@@ -38,7 +40,28 @@ test('scheduling projects stable route and certificate targets for active placem
 async function onePlacement(subnet:number){
  await db.pool.query('TRUNCATE remote_configuration_jobs');
  const cell={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:`reconcile-${subnet}.example.test`,subnet,publicKey:peerKey(),endpoint:`gateway-${subnet}.reconcile.example.test:51820`};
- await placements.createCell(cell);const current=await installation();await placements.provision(current.installationId,cell.id,peerKey());return {...current,cell};
+ await placements.createCell(cell);const current=await installation(),placed=await placements.provision(current.installationId,cell.id,peerKey());return {...current,cell,placement:placed};
+}
+
+async function csrAndCertificate(hostname:string,days=90){
+ const [keyBytes,csrBytes]=await acmeCrypto.createCsr({commonName:hostname,altNames:[hostname]}),key=keyBytes.toString(),csr=csrBytes.toString();
+ return {key,csr,certificate:certificateFor(key,csr,hostname,days)};
+}
+function certificateFor(key:string,csr:string,hostname:string,days:number){
+ const request=forge.pki.certificationRequestFromPem(csr);
+ const certificate=forge.pki.createCertificate();certificate.publicKey=request.publicKey!;certificate.serialNumber=randomBytes(8).toString('hex');certificate.setSubject([{name:'commonName',value:hostname}]);certificate.setIssuer(certificate.subject.attributes);
+ certificate.validity.notBefore=new Date(Date.now()-90*86400000);certificate.validity.notAfter=new Date(Date.now()+days*86400000);certificate.setExtensions([{name:'subjectAltName',altNames:[{type:2,value:hostname}]}]);certificate.sign(forge.pki.privateKeyFromPem(key));
+ return forge.pki.certificateToPem(certificate);
+}
+
+function memoryArtifacts(target:{installationId:string;placement:{staffHostname:string;publicHostname:string}}){
+ const csrs=new Map<string,string>(),certificates=new Map<string,string>(),publications:string[]=[];
+ return {csrs,certificates,publications,adapter:{
+  async readCsr(installationId:string,kind:'staff'|'public'){const value=csrs.get(`${installationId}:${kind}`);if(!value)throw new Error('missing_csr');return value;},
+  async readCertificate(installationId:string,kind:'staff'|'public'){return certificates.get(`${installationId}:${kind}`);},
+  async publishCertificate(installationId:string,kind:'staff'|'public',value:string){publications.push(`${installationId}:${kind}`);certificates.set(`${installationId}:${kind}`,value);},
+  async publishManifest(){throw new Error('unexpected_route');},
+ },target};
 }
 
 test('duplicate workers claim one target and an expired lease cannot acknowledge over its replacement',async()=>{
@@ -87,4 +110,54 @@ test('changed desired state resets a parked target and revocation disables certi
  assert.deepEqual(certificates.rows,[{enabled:false},{enabled:false}]);
  const routeAfter=(await db.pool.query("SELECT desired_digest FROM remote_configuration_jobs WHERE kind='route' AND target_id=$1",[current.cell.id])).rows[0].desired_digest;
  assert.notEqual(routeAfter,routeBefore);assert.equal(routeAfter,createHash('sha256').update('[]').digest('hex'));
+});
+
+test('a hostname change during issuance fences the late chain and retains prior material',async()=>{
+ const current=await onePlacement(45),memory=memoryArtifacts(current),material=await csrAndCertificate(current.placement.staffHostname),prior='usable-prior-chain';
+ memory.csrs.set(`${current.installationId}:staff`,material.csr);memory.certificates.set(`${current.installationId}:staff`,prior);
+ let entered!:()=>void,release!:()=>void;const started=new Promise<void>(resolve=>{entered=resolve;}),gate=new Promise<void>(resolve=>{release=resolve;});
+ const worker=new RemoteConfigurationReconciler(db.pool,{artifacts:memory.adapter,issueCertificate:async()=>{entered();await gate;return material.certificate;}});await worker.schedule();
+ await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'certificate_staff' OR target_id<>$1",[current.installationId]);
+ const running=worker.runOnce();await started;
+ await db.pool.query("UPDATE remote_hostnames SET hostname='changed.reconcile.example.test' WHERE venue_id=$1 AND kind='staff'",[current.venueId]);
+ await db.pool.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[current.installationId]);
+ release();await running;
+ assert.deepEqual(memory.publications,[]);assert.equal(memory.certificates.get(`${current.installationId}:staff`),prior);
+ const job=(await db.pool.query("SELECT status,last_error,applied_digest FROM remote_configuration_jobs WHERE kind='certificate_staff' AND target_id=$1",[current.installationId])).rows[0];
+ assert.deepEqual(job,{status:'pending',last_error:'reconcile_failed',applied_digest:null});
+});
+
+test('a revision-only change during issuance fences the late chain',async()=>{
+ const current=await onePlacement(48),memory=memoryArtifacts(current),material=await csrAndCertificate(current.placement.staffHostname,1),renewed=certificateFor(material.key,material.csr,current.placement.staffHostname,90);
+ memory.csrs.set(`${current.installationId}:staff`,material.csr);memory.certificates.set(`${current.installationId}:staff`,material.certificate);
+ let entered!:()=>void,release!:()=>void;const started=new Promise<void>(resolve=>{entered=resolve;}),gate=new Promise<void>(resolve=>{release=resolve;});
+ const worker=new RemoteConfigurationReconciler(db.pool,{artifacts:memory.adapter,issueCertificate:async()=>{entered();await gate;return renewed;}});await worker.schedule();
+ await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'certificate_staff' OR target_id<>$1",[current.installationId]);
+ const running=worker.runOnce();await started;await db.pool.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[current.installationId]);release();await running;
+ assert.deepEqual(memory.publications,[]);assert.equal(memory.certificates.get(`${current.installationId}:staff`),material.certificate);
+});
+
+test('certificate checks skip usable material, renew expiring material and retain it on issuer failure',async()=>{
+ const current=await onePlacement(46),memory=memoryArtifacts(current),usable=await csrAndCertificate(current.placement.staffHostname,90),expiring=await csrAndCertificate(current.placement.publicHostname,1),renewed=certificateFor(expiring.key,expiring.csr,current.placement.publicHostname,90);
+ memory.csrs.set(`${current.installationId}:staff`,usable.csr);memory.certificates.set(`${current.installationId}:staff`,usable.certificate);
+ memory.csrs.set(`${current.installationId}:public`,expiring.csr);memory.certificates.set(`${current.installationId}:public`,expiring.certificate);
+ let issues=0;const worker=new RemoteConfigurationReconciler(db.pool,{artifacts:memory.adapter,issueCertificate:async target=>{issues++;assert.equal(target.kind,'public');return renewed;}});await worker.schedule();
+ await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind='route' OR target_id<>$1",[current.installationId]);
+ assert.equal(await worker.runOnce(),true);assert.equal(await worker.runOnce(),true);assert.equal(issues,1);assert.deepEqual(memory.publications,[`${current.installationId}:public`]);
+ memory.certificates.set(`${current.installationId}:public`,expiring.certificate);await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_public' AND target_id=$1",[current.installationId]);
+ const failed=new RemoteConfigurationReconciler(db.pool,{artifacts:memory.adapter,issueCertificate:async()=>{throw new Error('provider secret');}});await failed.runOnce();
+ assert.equal(memory.certificates.get(`${current.installationId}:public`),expiring.certificate);assert.deepEqual(memory.publications,[`${current.installationId}:public`]);
+});
+
+test('a changed CSR or expired claim cannot publish a completed issuance',async()=>{
+ const current=await onePlacement(47),memory=memoryArtifacts(current),original=await csrAndCertificate(current.placement.staffHostname,1),changed=await csrAndCertificate(current.placement.staffHostname,1),renewed=certificateFor(original.key,original.csr,current.placement.staffHostname,90);
+ memory.csrs.set(`${current.installationId}:staff`,original.csr);memory.certificates.set(`${current.installationId}:staff`,original.certificate);
+ let release!:()=>void,entered!:()=>void;let gate=new Promise<void>(resolve=>{release=resolve;}),started=new Promise<void>(resolve=>{entered=resolve;});
+ let worker=new RemoteConfigurationReconciler(db.pool,{artifacts:memory.adapter,issueCertificate:async()=>{entered();await gate;return renewed;}});await worker.schedule();
+ await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'certificate_staff' OR target_id<>$1",[current.installationId]);
+ let running=worker.runOnce();await started;memory.csrs.set(`${current.installationId}:staff`,changed.csr);release();await running;assert.deepEqual(memory.publications,[]);
+ memory.csrs.set(`${current.installationId}:staff`,original.csr);await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_staff' AND target_id=$1",[current.installationId]);
+ gate=new Promise<void>(resolve=>{release=resolve;});started=new Promise<void>(resolve=>{entered=resolve;});worker=new RemoteConfigurationReconciler(db.pool,{artifacts:memory.adapter,issueCertificate:async()=>{entered();await gate;return renewed;}});
+ running=worker.runOnce();await started;await db.pool.query("UPDATE remote_configuration_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE kind='certificate_staff' AND target_id=$1",[current.installationId]);release();await running;
+ assert.deepEqual(memory.publications,[]);assert.equal(memory.certificates.get(`${current.installationId}:staff`),original.certificate);
 });

@@ -1,16 +1,31 @@
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {transaction} from '@waitron-cloud/registration';
+import {RemoteAccessStore,type CertificateAuthorization} from './placement.ts';
+import {certificateNeedsRenewal} from './renewal.ts';
 
 export type RemoteConfigurationKind='route'|'certificate_staff'|'certificate_public';
 export interface RemoteConfigurationJob {
  kind:RemoteConfigurationKind;targetId:string;desiredDigest:string;claimId:string;attempts:number;
 }
 interface ExecuteContext {signal:AbortSignal;isCurrent:()=>Promise<boolean>}
-interface ReconcilerOptions {execute?:(job:RemoteConfigurationJob,context:ExecuteContext)=>Promise<void>}
+export interface ReconcilerArtifacts {
+ readCsr:(installationId:string,kind:'staff'|'public')=>Promise<string>;
+ readCertificate:(installationId:string,kind:'staff'|'public')=>Promise<string|undefined>;
+ publishCertificate:(installationId:string,kind:'staff'|'public',certificate:string)=>Promise<void>;
+ publishManifest:(cellId:string,envelope:string)=>Promise<void>;
+}
+export interface CertificateIssueTarget extends CertificateAuthorization {installationId:string;kind:'staff'|'public';csr:string;signal:AbortSignal}
+interface ReconcilerOptions {
+ execute?:(job:RemoteConfigurationJob,context:ExecuteContext)=>Promise<void>;
+ artifacts?:ReconcilerArtifacts;
+ issueCertificate?:(target:CertificateIssueTarget)=>Promise<string>;
+ now?:()=>number;
+}
 interface DesiredTarget {kind:RemoteConfigurationKind;targetId:string;digest:string}
 
 const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const certificateDigest=(installationId:string,kind:'staff'|'public',value:CertificateAuthorization)=>digest({installationId,kind,revision:value.revision,hostname:value.hostname,dnsName:value.dnsName});
 const rowJob=(row:Record<string,unknown>):RemoteConfigurationJob=>({kind:row.kind as RemoteConfigurationKind,targetId:String(row.target_id),desiredDigest:String(row.desired_digest),claimId:String(row.claim_id),attempts:Number(row.attempts)});
 
 async function desiredTargets(client:PoolClient):Promise<DesiredTarget[]>{
@@ -40,15 +55,16 @@ async function desiredTargets(client:PoolClient):Promise<DesiredTarget[]>{
  for(const row of certificates){
   for(const kind of ['staff','public'] as const){
    const hostname=row[`${kind}_hostname`],dnsName=`_acme-challenge.${kind==='staff'?'staff-':''}v-${row.venue_id}.${row.suffix}`;
-   targets.push({kind:`certificate_${kind}`,targetId:row.id,digest:digest({installationId:row.id,kind,revision:Number(row.configuration_revision),hostname,dnsName})});
+   targets.push({kind:`certificate_${kind}`,targetId:row.id,digest:certificateDigest(row.id,kind,{revision:Number(row.configuration_revision),hostname,dnsName})});
   }
  }
  return targets;
 }
 
 export class RemoteConfigurationReconciler {
- readonly #pool:Pool;readonly #execute:NonNullable<ReconcilerOptions['execute']>;
- constructor(pool:Pool,options:ReconcilerOptions={}){this.#pool=pool;this.#execute=options.execute??(async()=>{throw new Error('reconciler_not_configured');});}
+ readonly #pool:Pool;readonly #execute:ReconcilerOptions['execute'];readonly #artifacts:ReconcilerArtifacts|undefined;
+ readonly #issueCertificate:ReconcilerOptions['issueCertificate'];readonly #now:()=>number;readonly #store:RemoteAccessStore;
+ constructor(pool:Pool,options:ReconcilerOptions={}){this.#pool=pool;this.#store=new RemoteAccessStore(pool);this.#execute=options.execute;this.#artifacts=options.artifacts;this.#issueCertificate=options.issueCertificate;this.#now=options.now??Date.now;}
  async schedule():Promise<number>{return transaction(this.#pool,async client=>{
   await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext('remote_configuration_schedule'))");
   const desired=await desiredTargets(client),keys=new Set(desired.map(target=>`${target.kind}:${target.targetId}`));let changed=0;
@@ -88,13 +104,36 @@ export class RemoteConfigurationReconciler {
   if(!claimed)return false;
   if(signal.aborted){await this.#release(claimed,true);return true;}
   try{
-   await this.#execute(claimed,{signal,isCurrent:()=>this.#current(claimed)});
-   const interval=claimed.kind==='route'?'5 minutes':'1 day';
-   await this.#pool.query(`UPDATE remote_configuration_jobs SET status='pending',applied_digest=desired_digest,available_at=clock_timestamp()+$5::interval,
-    claim_id=NULL,lease_until=NULL,attempts=0,last_error=NULL,last_success_at=clock_timestamp(),updated_at=clock_timestamp()
-    WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4 AND enabled AND status='running' AND lease_until>clock_timestamp()`,[claimed.kind,claimed.targetId,claimed.desiredDigest,claimed.claimId,interval]);
+   if(this.#execute){await this.#execute(claimed,{signal,isCurrent:()=>this.#current(claimed)});await this.#complete(claimed,async()=>{});}
+   else if(claimed.kind==='certificate_staff'||claimed.kind==='certificate_public')await this.#certificate(claimed,signal);
+   else throw new Error('reconciler_not_configured');
   }catch{await this.#release(claimed,false);}
   return true;
+ }
+ async #certificate(job:RemoteConfigurationJob,signal:AbortSignal){
+  if(!this.#artifacts||!this.#issueCertificate)throw new Error('reconciler_not_configured');
+  const kind=job.kind==='certificate_staff'?'staff':'public',csr=await this.#artifacts.readCsr(job.targetId,kind);
+  const authority=await this.#store.authorizeCertificate(job.targetId,kind,csr);
+  if(certificateDigest(job.targetId,kind,authority)!==job.desiredDigest)throw new Error('stale_configuration');
+  const existing=await this.#artifacts.readCertificate(job.targetId,kind);
+  if(existing&&!certificateNeedsRenewal(existing,csr,authority.hostname,this.#now())){await this.#complete(job,async()=>{});return;}
+  const certificate=await this.#issueCertificate({...authority,installationId:job.targetId,kind,csr,signal});
+  if(certificateNeedsRenewal(certificate,csr,authority.hostname,this.#now()))throw new Error('invalid_certificate');
+  await this.#complete(job,async()=>{
+   const latestCsr=await this.#artifacts!.readCsr(job.targetId,kind);if(latestCsr!==csr)throw new Error('csr_changed');
+   await this.#store.publishAuthorizedCertificate(job.targetId,kind,csr,authority,()=>this.#artifacts!.publishCertificate(job.targetId,kind,certificate));
+  });
+ }
+ async #complete(job:RemoteConfigurationJob,action:()=>Promise<void>){
+  const interval=job.kind==='route'?'5 minutes':'1 day';
+  return transaction(this.#pool,async client=>{
+   const live=(await client.query(`SELECT 1 FROM remote_configuration_jobs WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4
+    AND enabled AND status='running' AND lease_until>clock_timestamp() FOR UPDATE`,[job.kind,job.targetId,job.desiredDigest,job.claimId])).rows[0];
+   if(!live)throw new Error('stale_claim');await action();
+   await client.query(`UPDATE remote_configuration_jobs SET status='pending',applied_digest=desired_digest,available_at=clock_timestamp()+$5::interval,
+    claim_id=NULL,lease_until=NULL,attempts=0,last_error=NULL,last_success_at=clock_timestamp(),updated_at=clock_timestamp()
+    WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4`,[job.kind,job.targetId,job.desiredDigest,job.claimId,interval]);
+  });
  }
  async #release(job:RemoteConfigurationJob,cancelled:boolean){
   const attempts=job.attempts,status=!cancelled&&attempts>=8?'failed':'pending';
