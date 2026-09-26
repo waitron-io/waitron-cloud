@@ -443,8 +443,12 @@ mobile notifications separately.
   storage contract now covers venue-scoped access, live key rotation, issued-credential
   expiry, versioning, interrupted uploads and concurrent conditional create/replace.
   Repeat those checks with provider-native credentials against each selected live store.
-- **Operations.** Customer and operator portals, health checks, incidents, audit,
-  budgets, quotas, staged releases, maintenance and recovery controls.
+- **Operations.** The [local operations status](operations-status.md) now combines
+  control API liveness/readiness, queued work, monitoring, gateway, snapshot and usage
+  evidence into versioned JSON, readiness exit states and low-cardinality Prometheus
+  metrics. It reveals fixed component codes without tenant, provider or raw failure
+  details. Customer and operator portals, audit, budgets, quotas, staged releases,
+  maintenance and recovery controls remain broader work.
   Customer portal login and account recovery must work when the venue server is
   unavailable, so customers can manage services and recovery independently.
 - **Self-service journeys.** Define completion and failure paths for setup, account
@@ -454,7 +458,10 @@ mobile notifications separately.
   Account security is now self-service: the portal shows active management sessions and
   passkey last use, identifies the current session, and lets you revoke a session without
   staff access. It refreshes the list after every attempt so a lost successful reply does
-  not encourage a second write.
+  not encourage a second write. Owners can now download a versioned diagnostic for one
+  installation. It reports redacted access, service, monitoring, remote-check and backup
+  evidence without account, provider, hostname, configuration, credential or raw-error
+  data. Stale health is shown as unknown and the permission is rechecked before release.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
   The [local monitor](local-monitoring.md) now records missing contact, stale snapshots
@@ -488,9 +495,12 @@ mobile notifications separately.
   queued the bounded incident fan-out in 24 ms and reduced delivery backlog lag from
   1,558 ms to 477 ms. A 103-recipient PostgreSQL test enforces two inserts per table.
   Locked venues, restart completion and shutdown fencing remained intact. These are local
-  measurements, not capacity promises. Next: choose the terminal-delivery cutoff, repeat
-  the receipt in the selected deployment environment, and add escalation/quiet periods
-  and rollout pause criteria.
+  measurements, not capacity promises. The aggregate operations command now surfaces
+  the current worker queues and evidence projections through JSON, a readiness exit code
+  and bounded-label Prometheus metrics. It does not schedule collection or alerting.
+  Next: choose the terminal-delivery cutoff, repeat the receipt and aggregate checks in
+  the selected deployment environment, and add external representative checks,
+  escalation/quiet periods and rollout pause criteria.
 - **Usage metering.** Cloud now records immutable organisation-scoped events for
   snapshot storage and transfer, completed installation operations, accepted monitoring
   probes and terminal administrative alert outcomes. Bounded reconciliation repairs
