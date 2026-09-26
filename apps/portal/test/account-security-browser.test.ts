@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {randomBytes, randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {hashSecret} from '@waitron-cloud/identity';
-import {startPortalFixture} from './fixtures.ts';
+import {addVirtualAuthenticator, startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 
 const password = 'A real account security password';
@@ -106,18 +106,21 @@ test('sign out remains available while a passkey prompt is open', async () => {
         {headers: {origin: f.origin}, data: {email: account.email, password}});
       assert.equal(login.status(), 200);
       const page = await context.newPage(); page.setDefaultTimeout(5000);
+      const authenticator = await addVirtualAuthenticator(context, page);
       const c = translations.en;
-      await page.goto(`${f.origin}/account`);
-      await page.locator('input[name=passkeyPassword]').fill(password);
-      const options = page.waitForResponse('**/passkeys/registration/options');
-      await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
-      assert.equal((await options).status(), 200);
-      const revokeCurrent = page.getByRole('button', {name: c.sessionSignOut, exact: true});
-      const signOut = page.getByRole('button', {name: c.signout, exact: true});
-      assert.equal(await revokeCurrent.isDisabled(), false);
-      assert.equal(await signOut.isDisabled(), false);
-      await signOut.click();
-      await page.getByRole('heading', {name: c.login, exact: true}).waitFor();
+      try {
+        await page.goto(`${f.origin}/account`);
+        await page.locator('input[name=passkeyPassword]').fill(password);
+        const options = page.waitForResponse('**/passkeys/registration/options');
+        await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
+        assert.equal((await options).status(), 200);
+        const revokeCurrent = page.getByRole('button', {name: c.sessionSignOut, exact: true});
+        const signOut = page.getByRole('button', {name: c.signout, exact: true});
+        assert.equal(await revokeCurrent.isDisabled(), false);
+        assert.equal(await signOut.isDisabled(), false);
+        await signOut.click();
+        await page.getByRole('heading', {name: c.login, exact: true}).waitFor();
+      } finally { await authenticator.close(); }
     } finally { await context.close(); }
   } finally { await f.close(); }
 });
