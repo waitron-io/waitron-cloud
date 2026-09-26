@@ -26,13 +26,36 @@ WAITRON_CHECKOUT=/absolute/path/to/waitron \
   node scripts/test-postgres.mjs exec node scripts/test-local-backups.mjs
 ```
 
+To run the complete two-venue milestone, build the local gateway image first, then
+run all three phases through one command. The command writes the final receipt only
+after the transfer, remote-access and managed-recovery receipts have all passed their
+strict validators:
+
+```sh
+docker build -t waitron-cloud-local-remote:dev -f deploy/local-remote/Dockerfile .
+WAITRON_CHECKOUT=/absolute/path/to/waitron \
+  CLOUD_MILESTONE_RECEIPT=/tmp/cloud-two-venue-milestone.json \
+  node scripts/test-postgres.mjs exec pnpm proof:two-venue-milestone
+node scripts/verify-two-venue-milestone-receipt.mjs \
+  /tmp/cloud-two-venue-milestone.json
+```
+
+Use clean Cloud and Waitron checkouts when the receipt is release evidence. A clean
+2026-09-27 run at Cloud `6a7fac4` and Waitron `8dea39b` moved 4 MiB, replaced the
+gateway in 14,967 ms, reconnected a moved venue in 1,570 ms, restored continuous
+data in 1,743 ms, restored a retained snapshot in 1,432 ms and completed managed
+replacement in 8,346 ms. These are measurements from one local Docker run, not
+production service objectives.
+
 The runners own their temporary databases, files, servers and containers and remove
 those resources on exit. Downloaded, digest-checked binaries stay in the temporary
 binary cache. SeaweedFS 4.47 listens on loopback with verified HTTPS; its temporary
 OIDC issuer gives scoped credentials through its security-token service. macOS runs
 Litestream in a disposable pinned Linux container with the private CA mounted,
 without modifying your system trust settings. This needs Docker Desktop's
-`host.docker.internal` bridge. Native Linux uses the pinned Linux binary.
+`host.docker.internal` bridge. Native Linux uses the pinned Linux binary. The complete
+runner also removes its private component-receipt directory on success or failure; the
+file named by `CLOUD_MILESTONE_RECEIPT` is the only receipt it keeps.
 
 ## What the checks establish
 
@@ -130,11 +153,14 @@ Cloud registration does not change Waitron's trading or fiscal activation rules.
 Production replacement and planned final-write handover remain separate work. The local
 proof restores continuous data but deliberately records `activation: not-performed`.
 
-The managed-recovery JSON receipt records exact repository heads, dirty flags, checks and stream
-restore timings. A dirty receipt is useful during development; use clean heads for
-release evidence. Its checks now require the real Waitron restore and verifier-process
-isolation phases; removing that evidence makes the receipt invalid. Timings measure the
-local fixture, not a production recovery target.
+The managed-recovery JSON receipt records exact repository heads, dirty flags,
+continuous and snapshot restore timings, total replacement time, one-way digests of
+the old and new recovery authorities, route preservation and a fresh post-replacement
+snapshot restore. A dirty receipt is useful during development; use clean heads for
+release evidence. Its checks require the real Waitron restore and verifier-process
+isolation phases. The validator also refuses reused recovery authority, live old
+authority or any claim that activation happened. Timings measure the local fixture,
+not a production recovery target.
 
 The transfer-budget JSON receipt separately records the exact fixture byte count,
 configured chunk and deadline limits, measured rates, retry counts, lifecycle outcomes
@@ -216,14 +242,16 @@ changes routing or enrols the replacement. Complete the replacement's local chec
 before trading. Production activation and planned handover still depend on the Waitron
 contract described below.
 
-## Still required for the complete milestone
+## Still required before production
 
-The local runner now exercises Waitron's stream supervisor, signed pointer, sealed
-recovery kit and cold database restore. It does not activate the target or prove that a
-planned source stopped at a final write. Production replacement still needs
-final-write and quiescence evidence, fresh installation enrolment, retirement of the
-old credentials and explicit Waitron activation. Recording a `planned` mode or an
-owner's confirmation does not establish those conditions.
+The complete local runner now proves backup continuity across a real local gateway
+replacement and restores a fresh snapshot published by the replacement. It exercises
+Waitron's stream supervisor, signed pointer, sealed recovery kit and cold database
+restore. It does not activate the target or prove that a planned source stopped at a
+final write. Production replacement still needs final-write and quiescence evidence,
+automatic tunnel and certificate installation, retirement of every old provider and
+deployment credential, and explicit Waitron activation. Recording a `planned` mode or
+an owner's confirmation does not establish those conditions.
 
 The installation-authenticated capture/renewal adapter and Waitron client are implemented.
 Scheduled capture with durable local archive spooling is implemented for test installations.
@@ -236,11 +264,11 @@ every retained
 version after restart; it does not choose a vault provider or add an in-place rewrap. Run the
 same provider tests against the selected Spain-region store before any deployment;
 this local result does not establish AWS or Google behavior. Production still needs
-dynamic writer and reader credential delivery and revocation, plus the same scoped
-rotation, expiry, versioning, interruption and conditional-write checks against each
-selected provider; measured continuous retention;
-monitoring and scheduling; and the planned final-write handover. Continuous backup
-during gateway replacement and target activation remain unproved.
+dynamic writer and reader credential delivery and revocation, live DNS and ACME,
+production secret custody and deployment, plus the same scoped rotation, expiry,
+versioning, interruption and conditional-write checks against each selected provider.
+It also needs measured continuous retention, monitoring and scheduling, management-
+database recovery, the planned final-write handover and target activation.
 
 ## Run background maintenance locally
 

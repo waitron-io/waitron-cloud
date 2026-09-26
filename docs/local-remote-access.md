@@ -25,6 +25,12 @@ WAITRON_CHECKOUT=/absolute/path/to/waitron \
   node scripts/test-postgres.mjs exec node scripts/test-local-remote.mjs
 ```
 
+For release evidence, run this remote proof together with transfer and managed
+recovery through the complete milestone command documented in
+[the backup proof](local-backups.md#run-the-proof). That command rejects dirty or
+mismatched Cloud and Waitron heads and writes one receipt only after all three phases
+pass.
+
 The runner starts PostgreSQL, a real ACME test certificate authority and DNS
 validation server, two gateway cells, two tunnel peers and a LAN DNS resolver. It pairs two
 actual Waitron SQLite servers using authenticated manager requests. Staff keys are
@@ -248,10 +254,12 @@ The reconciler preserves route and certificate state across a move, but live pub
 changes and production appliance automation remain separate deployment work.
 
 Two 2026-09-26 local two-cell runs applied the destination route and reconnected a fresh
-peer in 1,321 ms and 1,486 ms; the second receipt names clean head `e4f9356`. They kept the original staff/public hostnames and certificate fingerprints,
-removed the cancelled stage, removed the committed route from the source, and kept the
-other venue reachable only through that source. This is one local Docker measurement, not
-a production recovery-time promise. Repeat it with the selected gateway deployment,
+peer in 1,321 ms and 1,486 ms; the second receipt names clean head `e4f9356`. A clean
+complete-milestone run on 2026-09-27 reconnected it in 1,570 ms. They kept the original
+staff/public hostnames and certificate fingerprints, removed the cancelled stage, removed
+the committed route from the source, and kept the other venue reachable only through that
+source. This is one local Docker measurement, not a production recovery-time promise.
+Repeat it with the selected gateway deployment,
 provider network, live DNS/certificate adapters and appliance configuration path before
 setting an objective.
 
@@ -330,11 +338,12 @@ ECH is not configured: an unrecognized outer ClientHello name cannot route.
 A failed apply retries the exact persisted configuration without extending its expiry.
 A dead HAProxy child restarts from still-valid authority; it cannot restart after expiry.
 Gateway replacement and certificate reload may interrupt remote connections. In repeated
-2026-09-25 local proofs, a mature unchanged WireGuard peer recovered after about 111 seconds: its
-old kernel session was not available in the replacement gateway, so it reconnected at the
-normal WireGuard rekey window. The runner allows up to three minutes to measure this case.
-The earlier sub-minute result covered freshly established peers and is not a production
-availability target. Define a launch target and test any explicit peer-side rekey strategy
+2026-09-25 local proofs, a mature unchanged WireGuard peer recovered after about 111 seconds:
+its old kernel session was not available in the replacement gateway, so it reconnected at
+the normal WireGuard rekey window. The clean 2026-09-27 complete-milestone run replaced the
+same local gateway in 14,967 ms and published encrypted snapshots for both venues before
+and after replacement. The timing depends on rekey state, so neither result is a production
+availability target. Define a launch target and test an explicit peer-side rekey strategy
 before promising faster recovery. LAN access remains independent. Live provider DNS and
 ACME credentials, production key storage, CSR/chain transport, appliance installation,
 automatic customer appliance setup and deployment hardening still need their own
