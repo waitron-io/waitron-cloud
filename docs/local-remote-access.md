@@ -170,8 +170,8 @@ address. If the commit reply is lost, retry `move-commit`; do not create a new o
 Certificate copying, public DNS reconciliation and production appliance automation remain
 separate deployment work.
 
-The 2026-09-26 local two-cell run applied the destination route and reconnected a fresh
-peer in 1,321 ms. It kept the original staff/public hostnames and certificate fingerprints,
+Two 2026-09-26 local two-cell runs applied the destination route and reconnected a fresh
+peer in 1,321 ms and 1,486 ms; the second receipt names clean head `e4f9356`. They kept the original staff/public hostnames and certificate fingerprints,
 removed the cancelled stage, removed the committed route from the source, and kept the
 other venue reachable only through that source. This is one local Docker measurement, not
 a production recovery-time promise. Repeat it with the selected gateway deployment,
