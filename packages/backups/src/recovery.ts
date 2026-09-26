@@ -300,7 +300,7 @@ export class BackupRecovery {
        :{source:snapshotSource(row),point:p!,operationExpiresAt:row.expires_at.toISOString() as string};
       if (action === "restored")
         await client.query(
-          "UPDATE backup_recoveries SET status='restored' WHERE id=$1",
+          "UPDATE backup_recoveries SET status='restored',restored_at=COALESCE(restored_at,clock_timestamp()) WHERE id=$1",
           [id],
         );
       const keys = await pointKeys(client,this.#vault,row.venue_id,continuous?stream!.key_version:p!.keyVersion);

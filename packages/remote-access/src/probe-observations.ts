@@ -1,5 +1,5 @@
 import type {Pool,PoolClient} from 'pg';
-import {transaction} from '@waitron-cloud/registration';
+import {recordUsageEvent,transaction} from '@waitron-cloud/registration';
 import type {ProbeFailure,ProbeServiceResult,RemoteProbeResult} from './probe.ts';
 
 const failures=new Set<ProbeFailure>(['dns','address_forbidden','timeout','tls','challenge','http','response_limit','cancelled']);
@@ -13,7 +13,7 @@ function validate(result:RemoteProbeResult){
   else{date(service.certificate.notBefore);date(service.certificate.notAfter);if(!/^(?:[0-9A-F]{2}:)*[0-9A-F]{2}$/.test(service.certificate.fingerprint256))throw new Error('invalid_probe_result');}
  }
 }
-async function write(client:PoolClient,result:RemoteProbeResult,service:'public'|'staff',value:ProbeServiceResult){
+async function write(client:PoolClient,result:RemoteProbeResult,organisationId:string,service:'public'|'staff',value:ProbeServiceResult){
  const hostname=service==='public'?result.publicHostname:result.staffHostname,checkedAt=date(value.checkedAt),healthy=value.status==='healthy';
  const certificate=healthy?value.certificate:undefined,failure=healthy?null:value.failure;
  const recorded=await client.query(`INSERT INTO remote_probe_observations
@@ -33,7 +33,10 @@ async function write(client:PoolClient,result:RemoteProbeResult,service:'public'
    result.installationId,result.venueId,service,result.revision,hostname,value.status,checkedAt,value.elapsedMs,failure,
    certificate?date(certificate.notBefore):null,certificate?date(certificate.notAfter):null,certificate?.fingerprint256??null,
    healthy?checkedAt:null,healthy?null:checkedAt,healthy?null:value.failure]);
- return (recorded.rowCount??0)>0;
+ if(!recorded.rowCount)return false;
+ await recordUsageEvent(client,{organisationId,venueId:result.venueId,type:'operation.monitoring_probe',quantity:1n,
+  sourceKind:'monitoring_probe',sourceReference:`${result.installationId}:${service}:${value.checkedAt}`,occurredAt:value.checkedAt});
+ return true;
 }
 
 export class RemoteProbeObservationStore {
@@ -45,13 +48,15 @@ export class RemoteProbeObservationStore {
    const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
    if([result.checkedAt,result.public.checkedAt,result.staff.checkedAt].some(value=>date(value).getTime()>now.getTime()+60000))throw new Error('invalid_probe_result');
    // Configuration, hostname changes and revocation take this installation lock exclusively.
-   const current=(await client.query(`SELECT i.configuration_revision,s.hostname AS staff_hostname,u.hostname AS public_hostname
+   const current=(await client.query(`SELECT i.configuration_revision,v.organisation_id,s.hostname AS staff_hostname,u.hostname AS public_hostname
     FROM installations i JOIN remote_placements p ON p.installation_id=i.id AND p.venue_id=i.venue_id
+    JOIN venues v ON v.id=i.venue_id
     JOIN remote_hostnames s ON s.venue_id=i.venue_id AND s.kind='staff'
     JOIN remote_hostnames u ON u.venue_id=i.venue_id AND u.kind='public'
     WHERE i.id=$1 AND i.venue_id=$2 AND i.revoked_at IS NULL AND i.superseded_by IS NULL FOR SHARE OF i`,[result.installationId,result.venueId])).rows[0];
    if(!current||Number(current.configuration_revision)!==result.revision||current.staff_hostname!==result.staffHostname||current.public_hostname!==result.publicHostname)return false;
-   const [publicWritten,staffWritten]=await Promise.all([write(client,result,'public',result.public),write(client,result,'staff',result.staff)]);
+   const publicWritten=await write(client,result,current.organisation_id,'public',result.public);
+   const staffWritten=await write(client,result,current.organisation_id,'staff',result.staff);
    return publicWritten||staffWritten;
   });}catch(error){
    // A placement change can hold the installation lock past this worker's statement bound.
