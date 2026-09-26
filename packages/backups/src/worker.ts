@@ -3,7 +3,8 @@ import type {Pool,PoolClient} from 'pg';
 import {transaction} from '@waitron-cloud/registration';
 import type {BackupCatalogue,BackupPoint} from './catalogue.ts';
 import type {BackupKeys} from './keys.ts';
-export type RestoreVerifier=(bytes:Buffer,keys:BackupKeys,point:BackupPoint,signal:AbortSignal)=>Promise<unknown>;
+import type {ReplayableObject} from './object-transfer.ts';
+export type RestoreVerifier=(source:ReplayableObject,keys:BackupKeys,point:BackupPoint,signal:AbortSignal)=>Promise<unknown>;
 interface Job {id:string;kind:'verify'|'retention'|'incoming';venue_id:string;target_id:string;claim_id:string;attempts:number;}
 export class BackupWorker {
  readonly #pool:Pool;readonly #catalogue:BackupCatalogue;readonly #restore:RestoreVerifier;
@@ -39,7 +40,7 @@ export class BackupWorker {
    if(job.kind==='verify'){
     const available=await this.#pool.query("SELECT 1 FROM backup_points WHERE id=$1 AND venue_id=$2 AND kind='snapshot' AND NOT deleting AND deleted_at IS NULL",[job.target_id,job.venue_id]);
     if(!available.rowCount){await this.#finish(job,true);return true;}
-    await this.#catalogue.verify(job.target_id,'local-waitron-worker',async(bytes,keys,point)=>{await this.#restore(bytes,keys,point,signal);},client=>this.#fence(client,job));
+    await this.#catalogue.verify(job.target_id,'local-waitron-worker',async(source,keys,point)=>{await this.#restore(source,keys,point,signal);},client=>this.#fence(client,job));
    }else if(job.kind==='retention')await this.#catalogue.cleanupOne(job.venue_id,new Date(),client=>this.#fence(client,job));
    else await this.#catalogue.cleanupCapture(job.venue_id,client=>this.#fence(client,job));
    await this.#finish(job);

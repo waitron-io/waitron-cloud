@@ -246,8 +246,10 @@ test("a restarted worker and backup catalogue use retained keys after rotation",
 
   const restartedCatalogue = new BackupCatalogue(db.pool, new BackupKeyVault(master), storage);
   let restored = "";
-  await restartedCatalogue.verify(point.id, "managed-key-drill", async (bytes) => {
-    restored = bytes.toString();
+  await restartedCatalogue.verify(point.id, "managed-key-drill", async (source) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of source.open()) chunks.push(Buffer.from(chunk));
+    restored = Buffer.concat(chunks, source.receipt.size).toString();
   });
   assert.equal(restored, `managed key archive ${point.id}`);
   await assert.rejects(

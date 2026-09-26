@@ -6,26 +6,54 @@ import { database } from "../../account-http/test/fixtures.ts";
 import { BackupKeyVault } from "../src/keys.ts";
 import { BackupCatalogue } from "../src/catalogue.ts";
 import { receipt } from "../src/storage.ts";
+import {
+  bufferObject,
+  type ReplayableObject,
+} from "../src/object-transfer.ts";
 let db: Awaited<ReturnType<typeof database>>,
   store: BackupCatalogue,
   other: BackupCatalogue;
 let a: { installationId: string; venueId: string }, b: typeof a;
 const vault = new BackupKeyVault(randomBytes(32)),
   objects = new Map<string, Buffer>();
-let failDelete = false;
+let failDelete = false,
+  stages = 0,
+  disposals = 0;
+async function bytes(source: ReplayableObject) {
+  const chunks: Buffer[] = [];
+  for await (const chunk of source.open()) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks, source.receipt.size);
+}
 const storage = (location: { bucket: string }) => ({
-  async read(key: string) {
-    const bytes = objects.get(location.bucket + "/" + key);
-    if (!bytes) throw Error("NoSuchKey");
-    return bytes;
+  async stage(key: string) {
+    const stored = objects.get(location.bucket + "/" + key);
+    if (!stored) throw Error("NoSuchKey");
+    const source = bufferObject(stored);
+    let disposed = false;
+    stages++;
+    return {
+      ...source,
+      async dispose() {
+        if (disposed) return;
+        disposed = true;
+        disposals++;
+      },
+    };
   },
-  async put(key: string, bytes: Uint8Array) {
+  async putStaged(key: string, source: ReplayableObject) {
+    const value = await bytes(source);
     const k = location.bucket + "/" + key,
       prior = objects.get(k);
-    if (prior && receipt(prior).digest !== receipt(bytes).digest)
+    if (prior && receipt(prior).digest !== source.receipt.digest)
       throw Error("backup.object_conflict");
-    objects.set(k, Buffer.from(bytes));
-    return receipt(bytes);
+    objects.set(k, value);
+    return source.receipt;
+  },
+  async read() {
+    throw Error("legacy buffered read used");
+  },
+  async put() {
+    throw Error("legacy buffered put used");
   },
   async remove(key: string) {
     if (failDelete) throw Error("store offline");
@@ -41,6 +69,8 @@ after(async () => db?.close());
 beforeEach(async () => {
   objects.clear();
   failDelete = false;
+  stages = 0;
+  disposals = 0;
   await db.pool.query(
     "TRUNCATE signup_requests,email_outbox,organisations,cloud_accounts CASCADE",
   );
@@ -144,6 +174,8 @@ test("capture retries survive worker restart and key rotation without exposing a
 });
 test("publication verifies bytes, is immutable and starts unverified", async () => {
   const item = await capture();
+  assert.equal(stages, 1);
+  assert.equal(disposals, 1);
   assert.equal(item.point.verification, "pending");
   assert.equal(item.point.kind, "snapshot");
   assert.deepEqual(
@@ -185,14 +217,15 @@ test("successful restore verification protects a point; altered storage fails ve
   await store.verify(
     old.point.id,
     "waitron-test",
-    async (bytes, keys, point) => {
-      assert.deepEqual(bytes, old.bytes);
+    async (source, keys, point) => {
+      assert.deepEqual(await bytes(source), old.bytes);
       assert.equal(keys.recoveryKey, old.reservation.keys.recoveryKey);
-      assert.equal(point.digest, receipt(bytes).digest);
+      assert.equal(point.digest, source.receipt.digest);
       observed = true;
     },
   );
   assert(observed);
+  assert.equal(stages, disposals);
   await store.rotate(a.installationId);
   await store.verify(old.point.id, "waitron-retry", async (_, keys) =>
     assert.equal(keys.recoveryKey, old.reservation.keys.recoveryKey),
@@ -204,6 +237,7 @@ test("successful restore verification protects a point; altered storage fails ve
     }),
     /backup.verification_failed/,
   );
+  assert.equal(stages, disposals);
   assert.equal(await store.cleanupOne(a.venueId), bad.point.id);
   assert.equal(await store.cleanupOne(a.venueId), null);
   objects.set("venue-a/" + old.point.objectKey, Buffer.from("altered"));
@@ -285,6 +319,7 @@ test("verification releases the venue while restoring and refuses a point delete
     await result;
   }
   assert.match(String(await result), /backup.unavailable/);
+  assert.equal(stages, disposals);
   assert.equal(
     (
       await db.pool.query(
@@ -397,4 +432,5 @@ for(const change of ['expire','remove'] as const)test('publication final check r
   if(++checks===2)await client.query(change==='expire'?'UPDATE backup_captures SET expired_at=clock_timestamp() WHERE id=$1':'DELETE FROM backup_captures WHERE id=$1',[reservation.id]);
  }),change==='expire'?/^Error: backup.capture_expired$/:/^Error: backup.unavailable$/);
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_points')).rows[0].count,'0');
+ assert.equal(stages,disposals);
 });
