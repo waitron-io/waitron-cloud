@@ -16,8 +16,8 @@ test('account and venue changes discard delayed setup replies',async()=>{
  const next=c.open(other);finish({ok:true,value:view});await next;assert.equal(c.view,undefined);assert.equal(c.error,'unavailable');
 });
 test('apply requires the reviewed name and revision; uncertain writes reconcile without replay',async()=>{
- const calls:{path:string;body?:Record<string,string>}[]=[];let changed=false;
- const c=new RemoteController(()=>{},async<T>(path:string,body?:Record<string,string>):Promise<ApiResult<T>>=>{
+ const calls:{path:string;body?:Record<string,unknown>}[]=[];let changed=false;
+ const c=new RemoteController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
   calls.push({path,body});if(path.endsWith('/dns'))return {ok:true,value:dns as T};
   if(path.endsWith('/apply')){changed=true;return {ok:false,status:0,code:'network_error',retryAfterMs:0};}
   return {ok:true,value:(changed?{...view,revision:2,names:{...view.names,staff:{...view.names.staff,current:dns.hostname}}}:view) as T};

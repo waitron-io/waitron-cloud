@@ -4,6 +4,7 @@ import {AlertController} from './alert-controller.ts';
 import {BackupController} from './backup-controller.ts';
 import {InstallationController} from './installation-controller.ts';
 import { PairingController } from './pairing-controller.ts';
+import {PasskeyController} from './passkey-controller.ts';
 import { render } from 'lit';
 import { accountRequest } from './api.ts';
 import { captureLink, type CapturedLink } from './links.ts';
@@ -33,6 +34,7 @@ export class PortalApp {
   recovery: RecoveryController;
   remote: RemoteController;
   alerts: AlertController;
+  passkeys: PasskeyController;
   #route = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
   constructor(root: HTMLElement) {
@@ -41,6 +43,8 @@ export class PortalApp {
     let saved: string | null = null;
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
     this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
+    this.passkeys = new PasskeyController(() => this.draw());
+    void this.passkeys.checkSupport();
     this.alerts = new AlertController(() => this.draw());
     this.remote = new RemoteController(() => this.draw());
     this.recovery = new RecoveryController(() => this.draw());
@@ -62,7 +66,7 @@ export class PortalApp {
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); });
     document.addEventListener('pointerdown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.remote.account(undefined); this.alerts.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.remote.account(undefined); this.alerts.account(undefined); this.passkeys.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -71,6 +75,8 @@ export class PortalApp {
   #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
+    this.passkeys.account(state.kind === 'authenticated' ? state.accountId : undefined);
+    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.passkeys.loaded) void this.passkeys.load();
     this.recovery.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.alerts.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.alerts.loaded) void this.alerts.load();
@@ -118,7 +124,7 @@ export class PortalApp {
     return c.login;
   }
   navigate(path: string, push = true) {
-    this.#route++; this.path = path;
+    this.#route++; this.path = path; this.passkeys.fence();
     if (push) history.pushState(null, '', path);
     this.link = this.#capture();
     if (this.link.recoveryId || this.link.invalid) this.recovery.open(this.link.recoveryId);
@@ -136,6 +142,8 @@ export class PortalApp {
     event.preventDefault(); this.navigate(path);
   }
   readFields() {
+    const passkeyPassword=this.root.querySelector('wt-input[name="passkeyPassword"]')?.shadowRoot?.querySelector('input')?.value;
+    if(passkeyPassword!==undefined)this.passkeys.password=passkeyPassword;
     const recoveryCode=this.root.querySelector('wt-input[name="recoveryCode"]')?.shadowRoot?.querySelector('input')?.value;if(recoveryCode!==undefined)this.recovery.code=recoveryCode;
     const code = this.root.querySelector('wt-input[name="pairingCode"]')?.shadowRoot?.querySelector('input')?.value;
     if (code !== undefined) this.pairing.code = code;
@@ -213,6 +221,25 @@ export class PortalApp {
         : result.status >= 500 ? (path.endsWith('/complete') && result.code !== 'temporarily_unavailable' ? 'uncertain' : 'unavailable') : 'invalid';
     }
     this.draw(); if (this.error || Object.keys(this.errors).length) this.#focusErrors(); else this.focusHeading();
+  }
+  async signInWithPasskey() {
+    const route = this.#route;
+    const result = await this.passkeys.signIn();
+    if (route !== this.#route || !result) return;
+    this.session.dispose(); this.session = this.#session();
+    if (result === 'authenticated') { this.navigate(this.recovery.requestId ? '/recover' : this.pairing.requestId ? '/connect' : '/account'); return; }
+    await this.session.check();
+    if (route === this.#route && this.session.state.kind !== 'authenticated') this.draw();
+  }
+  async addPasskey() {
+    this.readFields();
+    if (!this.passkeys.password) { this.passkeys.error = 'requiredPassword'; this.draw(); return; }
+    await this.passkeys.enroll(this.passkeys.password);
+  }
+  async removePasskey(id: string) {
+    this.readFields();
+    if (!this.passkeys.password) { this.passkeys.error = 'requiredPassword'; this.draw(); return; }
+    await this.passkeys.remove(id, this.passkeys.password);
   }
   get logoutWaiting() { return Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)); }
   async logout() {

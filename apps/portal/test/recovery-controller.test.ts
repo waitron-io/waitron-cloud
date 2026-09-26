@@ -16,8 +16,8 @@ test('replacement view requires a restored operation and matching request, point
  assert(!validRecoveryView({...approved,replacement}));assert(!validRecoveryView({...pending,replacement}));
 });
 test('owner replacement uses a fresh confirmation bound to the displayed installation',async()=>{
- const calls:{path:string;body:Record<string,string>|undefined}[]=[];const ready={...approved,operation:{...approved.operation,status:'restored'},replacement};
- const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,string>):Promise<ApiResult<T>>=>{calls.push({path,body});return {ok:true,value:ready as T};});
+ const calls:{path:string;body:Record<string,unknown>|undefined}[]=[];const ready={...approved,operation:{...approved.operation,status:'restored'},replacement};
+ const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{calls.push({path,body});return {ok:true,value:ready as T};});
  c.open(id);c.account('owner');c.code='12345678';await c.inspect();await c.replace();assert.equal(calls.length,1);
  c.confirmReplacement=true;await c.replace();assert.equal(calls[1]?.path,'/recovery/replace');assert.deepEqual(calls[1]?.body,{requestId:id,code:'12345678',oldInstallationId:replacement.oldInstallationId,oldServerUnavailable:'true',confirmReplacement:'true'});
 });
@@ -48,15 +48,15 @@ test('lost approval replies reconcile by inspection without another grant; confi
  c.choose(venueId,id);assert.equal(c.stopped,false);assert.equal(c.acceptLoss,false);
 });
 test('continuous approval is the default source shape and reconciles an uncertain write',async()=>{
- const calls:{path:string;body:Record<string,string>|undefined}[]=[];let granted=false;
- const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,string>):Promise<ApiResult<T>>=>{calls.push({path,body});if(path.endsWith('/approve')){granted=true;return {ok:false,status:0,code:'network_error',retryAfterMs:0};}return {ok:true,value:(granted?continuousApproved:pending) as T};});
+ const calls:{path:string;body:Record<string,unknown>|undefined}[]=[];let granted=false;
+ const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{calls.push({path,body});if(path.endsWith('/approve')){granted=true;return {ok:false,status:0,code:'network_error',retryAfterMs:0};}return {ok:true,value:(granted?continuousApproved:pending) as T};});
  c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.chooseContinuous(venueId);c.stopped=true;c.acceptLoss=true;await c.approve();
  assert.equal(c.view?.operation?.source.kind,'continuous');assert.equal(c.uncertain,false);
  assert.deepEqual(calls[1],{path:'/recovery/approve',body:{requestId:id,code:'12345678',source:'continuous',venueId,oldServerUnavailable:'true',acceptDataLoss:'true'}});
 });
 test('snapshot fallback approval names its source and selected point explicitly',async()=>{
- const calls:{path:string;body:Record<string,string>|undefined}[]=[];
- const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,string>):Promise<ApiResult<T>>=>{calls.push({path,body});return {ok:true,value:(path.endsWith('/approve')?approved:pending) as T};});
+ const calls:{path:string;body:Record<string,unknown>|undefined}[]=[];
+ const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{calls.push({path,body});return {ok:true,value:(path.endsWith('/approve')?approved:pending) as T};});
  c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;await c.approve();
  assert.deepEqual(calls[1],{path:'/recovery/approve',body:{requestId:id,code:'12345678',source:'snapshot',pointId,oldServerUnavailable:'true',acceptDataLoss:'true'}});
 });

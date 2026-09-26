@@ -39,3 +39,26 @@ test('pairing reads validate named businesses and writes carry CSRF and bound vi
   response={...view,state:'awaiting_local',organisationId:org,legalBusinessId:business,organisationName:'Café Sol',legalBusinessName:'Sol SL'};
   assert.equal((await accountRequest('/pairing/approve',{})).ok,true);
 });
+
+test('passkey requests validate nested ceremony replies and carry CSRF only for account management', async t => {
+  const priorLocation=Object.getOwnPropertyDescriptor(globalThis,'location'),priorDocument=Object.getOwnPropertyDescriptor(globalThis,'document');
+  Object.defineProperty(globalThis,'location',{configurable:true,value:{protocol:'https:'}});
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{cookie:'__Host-cloud_csrf=browser-proof'}});
+  t.after(()=>{for(const [key,prior] of [['location',priorLocation],['document',priorDocument]] as const) {if(prior)Object.defineProperty(globalThis,key,prior);else Reflect.deleteProperty(globalThis,key);}});
+  const ceremonyId='12345678-1234-4234-8234-123456789abc';
+  let response:unknown={ceremonyId,options:{challenge:'challenge',rpId:'cloud.example.test',userVerification:'required'}};
+  const requests:RequestInit[]=[];
+  t.mock.method(globalThis,'fetch',async(_url:unknown,init?:RequestInit)=>{requests.push(init!);return Response.json(response);});
+  assert.equal((await accountRequest('/passkeys/authentication/options',{})).ok,true);
+  assert.equal((requests.at(-1)?.headers as Record<string,string>)['X-CSRF-Token'],undefined);
+  response={ceremonyId,options:{challenge:'challenge'}};
+  assert.equal((await accountRequest('/passkeys/registration/options',{password:'secret'})).ok,false);
+  response={ceremonyId,options:{challenge:'challenge',rp:{id:'cloud.example.test',name:'Waitron Cloud'},user:{id:'user',name:'owner@example.test',displayName:'owner@example.test'},pubKeyCredParams:[{type:'public-key',alg:-7}]}};
+  assert.equal((await accountRequest('/passkeys/registration/options',{password:'secret'})).ok,true);
+  assert.equal((requests.at(-1)?.headers as Record<string,string>)['X-CSRF-Token'],'browser-proof');
+  response={id:ceremonyId,createdAt:new Date().toISOString()};
+  assert.equal((await accountRequest('/passkeys/registration/verify',{ceremonyId,response:{id:'credential'}})).ok,true);
+  assert.deepEqual(JSON.parse(String(requests.at(-1)?.body)),{ceremonyId,response:{id:'credential'}});
+  response={passkeys:[{id:ceremonyId,createdAt:'not-a-date'}]};
+  assert.equal((await accountRequest('/passkeys')).ok,false);
+});

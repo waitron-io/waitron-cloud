@@ -34,3 +34,12 @@ button:disabled { cursor: default; opacity: .6; }
 .remote-setup { overflow-wrap: anywhere; margin-block: 1rem; }
 .remote-setup details { margin-block: 1rem; }
 .remote-setup summary { cursor: pointer; }
+
+.separator { align-items: center; display: flex; gap: .75rem; margin: 1.25rem 0; }
+.separator::before, .separator::after { background: var(--wt-color-border); content: ""; flex: 1; height: 1px; }
+.passkey-signin wt-button { width: 100%; }
+.passkeys { border-block-start: 1px solid var(--wt-color-border); margin-block-start: 1.5rem; padding-block-start: .5rem; }
+.passkeys h2 { font-size: 1.25rem; }
+.passkey-list { list-style: none; margin: 1rem 0; padding: 0; }
+.passkey-list li { align-items: center; display: flex; gap: 1rem; justify-content: space-between; margin: .75rem 0; }
+.passkey-list span { min-width: 0; }

@@ -353,6 +353,23 @@ implementation decisions shared with Waitron's on-prem integration.
 
 Sharing authentication code does not itself grant either customer or staff permissions.
 
+Customers can optionally add a passkey after signing in and confirming their current
+password. A passkey is a WebAuthn credential held by the customer's device or password
+manager. It lets the customer sign in without entering an email address, but it does not
+replace the account password or email recovery.
+
+Cloud accepts only the exact configured portal origin and uses its hostname as the
+WebAuthn relying-party ID. Registration requires a discoverable credential and user
+verification. Each registration or sign-in challenge lasts five minutes and can be
+completed once. These boundaries prevent a challenge created for another site, session
+or account from becoming authority in Cloud.
+
+Customers can remove their own passkeys after another current-password check. Password
+reset ends existing sessions but keeps passkeys, because access to an email account alone
+must not silently remove a possession factor. Account-security controls for active
+sessions and passkey last-use details remain follow-up work, as does the retention policy
+for consumed challenge history.
+
 Confirmed reuse source: Waitron's identity module at tag `pre-sqlite-migration`,
 pinned to commit `c9d80c59a30ab1ae7a4acc0a6999e6a342de924e`. Its
 [package manifest](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/package.json)

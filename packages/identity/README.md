@@ -21,6 +21,12 @@ When updating account lifecycle operations, acquire the account lock before lock
 its credential or session rows. Callers own their transaction and PostgreSQL pool,
 including handling idle-connection errors.
 
+`requireCurrentPassword` proves fresh account authority without creating a session. It
+derives the submitted password before taking account and credential locks, then rechecks
+the hash after those locks so a concurrent password change cannot authorise stale input.
+`createSession` is the shared session-issuance boundary for password and verified passkey
+sign-in. It rechecks that the account is enabled before it stores hashed session values.
+
 `requirePlatformPermission` checks an explicit platform permission after resolving
 the session. Organisation membership grants no platform access. Platform permissions
 grant no customer organisation access. The exact platform role catalogue, MFA policy

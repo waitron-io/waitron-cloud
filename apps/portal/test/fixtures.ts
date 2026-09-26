@@ -3,18 +3,33 @@ import {generateKeyPairSync} from 'node:crypto';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
 import type {IncomingMessage,ServerResponse} from 'node:http';
-import { chromium, type Browser } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { database } from '../../../packages/account-http/test/fixtures.ts';
 import { startAccountServer } from '@waitron-cloud/account-http';
 import { loadPortalAssets } from '../../../packages/account-http/src/portal.ts';
 import { EmailWorker, createLocalAccountMailer, createLeaseIssuer } from '@waitron-cloud/registration';
+
+export async function addVirtualAuthenticator(context: BrowserContext, page: Page) {
+  const session = await context.newCDPSession(page);
+  await session.send('WebAuthn.enable');
+  const {authenticatorId} = await session.send('WebAuthn.addVirtualAuthenticator', {options: {
+    protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true,
+    isUserVerified: true, automaticPresenceSimulation: true,
+  }});
+  return {authenticatorId, async close() {
+    await session.send('WebAuthn.removeVirtualAuthenticator', {authenticatorId}).catch(() => undefined);
+    await session.send('WebAuthn.disable').catch(() => undefined);
+    await session.detach().catch(() => undefined);
+  }};
+}
 export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?:(name:string)=>Promise<string[]>) {
   const db = await database();
   const reserved = createServer();
   await new Promise<void>(resolve => reserved.listen(0, '127.0.0.1', resolve));
   const address = reserved.address(); assert.ok(address && typeof address !== 'string');
   await new Promise<void>(resolve => reserved.close(() => resolve()));
-  const origin = `http://127.0.0.1:${address.port}`;
+  // WebAuthn requires an RP ID that is a domain; localhost remains a secure-context exception.
+  const origin = `http://localhost:${address.port}`;
   let running: Awaited<ReturnType<typeof startAccountServer>> | undefined;
   let browser: Browser | undefined;
   try {

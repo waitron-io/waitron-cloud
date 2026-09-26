@@ -39,6 +39,27 @@ export async function login(client: PoolClient, input: {email: string; password:
   const credentials = await client.query('SELECT password_hash FROM cloud_credentials WHERE account_id = $1 AND email = $2 FOR SHARE', [accountId, email]);
   // A password or account change during derivation/lock contention must invalidate this attempt.
   if (credentials.rows[0]?.password_hash !== passwordHash) throw new IdentityError('credentials_invalid');
+  return createSession(client, accountId);
+}
+
+export async function requireCurrentPassword(client: PoolClient, accountId: string, password: string): Promise<void> {
+  if (typeof accountId !== 'string' || typeof password !== 'string' || Buffer.byteLength(password) > 1024) {
+    throw new IdentityError('credentials_invalid');
+  }
+  const lookup = await client.query('SELECT password_hash FROM cloud_credentials WHERE account_id = $1', [accountId]);
+  const passwordHash: string | undefined = lookup.rows[0]?.password_hash ?? undefined;
+  const usable = passwordHash !== undefined && isSecretHash(passwordHash);
+  const correct = await verifySecret(password, usable ? passwordHash! : DUMMY_PASSWORD_HASH);
+  if (!usable || !correct) throw new IdentityError('credentials_invalid');
+  const account = await client.query('SELECT id FROM cloud_accounts WHERE id = $1 AND disabled_at IS NULL FOR SHARE', [accountId]);
+  if (!account.rowCount) throw new IdentityError('credentials_invalid');
+  const credentials = await client.query('SELECT password_hash FROM cloud_credentials WHERE account_id = $1 FOR SHARE', [accountId]);
+  if (credentials.rows[0]?.password_hash !== passwordHash) throw new IdentityError('credentials_invalid');
+}
+
+export async function createSession(client: PoolClient, accountId: string): Promise<SessionCredentials> {
+  const account = await client.query('SELECT id FROM cloud_accounts WHERE id = $1 AND disabled_at IS NULL FOR SHARE', [accountId]);
+  if (!account.rowCount) throw new IdentityError('credentials_invalid');
   const token = randomBytes(32).toString('base64url');
   const csrfToken = randomBytes(32).toString('base64url');
   await client.query('INSERT INTO cloud_sessions (token_hash, csrf_hash, account_id) VALUES ($1, $2, $3)',

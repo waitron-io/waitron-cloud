@@ -247,6 +247,9 @@ export class RegistrationStore {
 
 export { transaction } from './transaction.ts';
 export { normaliseEmail } from './account-input.ts';
+export { PasskeyError, PasskeyStore } from './passkeys.ts';
+export type { PasskeyAuthenticationOptions, PasskeyCeremonyAdapter, PasskeyRegistrationOptions, PasskeySummary } from './passkeys.ts';
+export type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server';
 
 export type { AccountLocale, AccountNotification } from './account-input.ts';
 export {PairingStore,type PairingView} from './pairing.ts';

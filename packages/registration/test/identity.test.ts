@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import crypto, { createHash, randomUUID } from 'node:crypto';
 import { after, before, beforeEach, mock, test } from 'node:test';
 import { Pool } from 'pg';
-import { hashSecret, login, resolveSession, endSession, requirePlatformPermission, withPassiveRead } from '@waitron-cloud/identity';
+import { createSession, hashSecret, login, requireCurrentPassword, resolveSession, endSession, requirePlatformPermission, withPassiveRead } from '@waitron-cloud/identity';
 import { transaction } from '../src/transaction.ts';
 import { migrate } from '../src/migrate.ts';
 import { RegistrationStore } from '../src/index.ts';
@@ -52,6 +52,86 @@ test('email login issues fresh tokens whose stored values are hashes', async () 
   assert.ok(rows.some(r => r.token_hash === digest(first.token) && r.csrf_hash === digest(first.csrfToken)));
   assert.ok(!JSON.stringify(rows).includes(first.token));
   assert.equal((await run(client => resolveSession(client, first.token))).accountId, accountId);
+});
+
+test('fresh account authority verifies the current password without issuing a session', async () => {
+  await run(client => requireCurrentPassword(client, accountId, 'venue-owner-password'));
+  for (const candidate of ['incorrect', 'é'.repeat(513)]) {
+    await expectCode(run(client => requireCurrentPassword(client, accountId, candidate)), 'credentials_invalid');
+  }
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count, '0');
+  await pool.query('UPDATE cloud_accounts SET disabled_at = clock_timestamp()');
+  await expectCode(run(client => requireCurrentPassword(client, accountId, 'venue-owner-password')), 'credentials_invalid');
+});
+
+test('fresh account authority rejects a password changed while it waits for the account lock', async () => {
+  const { setTimeout: delay } = await import('node:timers/promises');
+  const blocker = await pool.connect();
+  let completion: Promise<void> | undefined;
+  try {
+    await blocker.query('BEGIN');
+    await blocker.query('SELECT id FROM cloud_accounts WHERE id = $1 FOR UPDATE', [accountId]);
+    completion = expectCode(run(client => requireCurrentPassword(client, accountId, 'venue-owner-password')), 'credentials_invalid');
+    let blocked = false;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const { rows } = await admin.query(`SELECT 1 FROM pg_stat_activity WHERE query LIKE '%cloud_accounts%FOR SHARE%'
+        AND wait_event_type = 'Lock' AND application_name = $1`, [schema]);
+      if (rows.length) { blocked = true; break; }
+      await delay(20);
+    }
+    await blocker.query('UPDATE cloud_credentials SET password_hash = $1', [await hashSecret('replacement-password')]);
+    await blocker.query('COMMIT');
+    await completion;
+    assert.ok(blocked, 'fresh authority must recheck after acquiring the account lock');
+  } finally {
+    await blocker.query('ROLLBACK');
+    blocker.release();
+    await completion;
+  }
+});
+
+test('session creation checks current account state and stores only token hashes', async () => {
+  const created = await run(client => createSession(client, accountId));
+  assert.equal(created.accountId, accountId);
+  assert.match(created.token, /^[A-Za-z0-9_-]{43}$/);
+  const row = (await pool.query('SELECT token_hash, csrf_hash FROM cloud_sessions')).rows[0];
+  assert.equal(row.token_hash, digest(created.token));
+  assert.equal(row.csrf_hash, digest(created.csrfToken));
+  await pool.query('UPDATE cloud_accounts SET disabled_at = clock_timestamp()');
+  await expectCode(run(client => createSession(client, accountId)), 'credentials_invalid');
+});
+
+test('passkey schema enforces opaque handles, credential counters and bound ceremony lifetimes', async () => {
+  const secondAccount = randomUUID();
+  const session = await signIn();
+  await pool.query('INSERT INTO cloud_accounts (id) VALUES ($1)', [secondAccount]);
+  const handle = crypto.randomBytes(32);
+  await pool.query('INSERT INTO cloud_passkey_users (account_id, user_handle) VALUES ($1, $2)', [accountId, handle]);
+  await assert.rejects(pool.query('INSERT INTO cloud_passkey_users (account_id, user_handle) VALUES ($1, $2)', [secondAccount, handle]),
+    (error: unknown) => typeof error === 'object' && error !== null && 'code' in error && error.code === '23505');
+  const credentialId = crypto.randomBytes(32).toString('base64url');
+  await pool.query(`INSERT INTO cloud_passkeys
+    (id, account_id, credential_id, public_key, counter, transports, device_type, backed_up)
+    VALUES ($1, $2, $3, $4, 4294967295, $5, 'multiDevice', true)`,
+    [randomUUID(), accountId, credentialId, crypto.randomBytes(64), ['internal']]);
+  await assert.rejects(pool.query(`INSERT INTO cloud_passkeys
+    (id, account_id, credential_id, public_key, counter, transports, device_type, backed_up)
+    VALUES ($1, $2, $3, $4, 4294967296, $5, 'singleDevice', false)`,
+    [randomUUID(), accountId, crypto.randomBytes(32).toString('base64url'), crypto.randomBytes(64), []]),
+    (error: unknown) => typeof error === 'object' && error !== null && 'code' in error && error.code === '23514');
+  const now = new Date();
+  await pool.query(`INSERT INTO cloud_webauthn_ceremonies
+    (id, kind, challenge, account_id, session_token_hash, created_at, expires_at)
+    VALUES ($1, 'registration', $2, $3, $4, $5, $6)`,
+    [randomUUID(), crypto.randomBytes(32).toString('base64url'), accountId, digest(session.token), now, new Date(now.getTime() + 300_000)]);
+  await assert.rejects(pool.query(`INSERT INTO cloud_webauthn_ceremonies
+    (id, kind, challenge, created_at, expires_at) VALUES ($1, 'registration', $2, $3, $4)`,
+    [randomUUID(), crypto.randomBytes(32).toString('base64url'), now, new Date(now.getTime() + 300_000)]),
+    (error: unknown) => typeof error === 'object' && error !== null && 'code' in error && error.code === '23514');
+  await assert.rejects(pool.query(`INSERT INTO cloud_webauthn_ceremonies
+    (id, kind, challenge, created_at, expires_at) VALUES ($1, 'authentication', $2, $3, $4)`,
+    [randomUUID(), crypto.randomBytes(32).toString('base64url'), now, new Date(now.getTime() + 300_001)]),
+    (error: unknown) => typeof error === 'object' && error !== null && 'code' in error && error.code === '23514');
 });
 
 test('unknown, incorrect, disabled and missing-password logins fail generically and run the KDF', async () => {
