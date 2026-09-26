@@ -104,14 +104,15 @@ async function capture() {
 test("inventory blocks active and referenced keys without exposing key material", async () => {
   const oldPoint = await capture();
   await catalogue.rotate(installationId);
-  await catalogue.rotate(installationId);
   await db.pool.query(
     `INSERT INTO backup_managed_streams(venue_id,installation_id,requested_revision,
       configuration_revision,key_version,local_venue_id,source_node_id,
       pointer_signer_public_key,object_prefix,writer_reference,reader_reference)
-     VALUES($1,$2,0,1,1,$3,$4,'test-signer',$5,'test-writer','test-reader')`,
+     VALUES($1,$2,0,1,2,$3,$4,'test-signer',$5,'test-writer','test-reader')`,
     [venueId, installationId, randomUUID(), randomUUID(), `streams/${venueId}/`],
   );
+  await catalogue.rotate(installationId);
+  await catalogue.rotate(installationId);
   const firstOutbox = new EmailOutbox({ activeKeyId: "first", keys: emailKeys });
   await transaction(db.pool, (client) =>
     firstOutbox.enqueue(client, "password_changed", { email: "owner@example.test" }),
@@ -134,9 +135,10 @@ test("inventory blocks active and referenced keys without exposing key material"
       managedStreams: item.dependencies.managedStreams,
     })),
     [
-      { version: 1, active: false, validation: "verified", retirement: "blocked", captures: 1, points: 1, managedStreams: 1 },
-      { version: 2, active: false, validation: "verified", retirement: "eligible", captures: 0, points: 0, managedStreams: 0 },
-      { version: 3, active: true, validation: "verified", retirement: "blocked", captures: 0, points: 0, managedStreams: 0 },
+      { version: 1, active: false, validation: "verified", retirement: "blocked", captures: 1, points: 1, managedStreams: 0 },
+      { version: 2, active: false, validation: "verified", retirement: "blocked", captures: 0, points: 0, managedStreams: 1 },
+      { version: 3, active: false, validation: "verified", retirement: "eligible", captures: 0, points: 0, managedStreams: 0 },
+      { version: 4, active: true, validation: "verified", retirement: "blocked", captures: 0, points: 0, managedStreams: 0 },
     ],
   );
   assert.equal(report.backupKeys[0]?.venueId, venueId);
