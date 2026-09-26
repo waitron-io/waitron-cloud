@@ -19,7 +19,7 @@ export interface ReplayableObject {
   dispose(): Promise<void>;
 }
 
-interface StageOptions {
+export interface StageOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   temporaryRoot?: string;

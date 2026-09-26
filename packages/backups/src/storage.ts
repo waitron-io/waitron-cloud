@@ -1,5 +1,6 @@
 import { Agent } from "node:https";
 import { createHash, createPublicKey, sign, type KeyObject } from "node:crypto";
+import { Readable } from "node:stream";
 import {
   S3Client,
   GetObjectCommand,
@@ -11,6 +12,15 @@ import {
   STSClient,
   AssumeRoleWithWebIdentityCommand,
 } from "@aws-sdk/client-sts";
+import {
+  MAX_OBJECT_BYTES,
+  bufferObject,
+  stageReadable,
+  type ObjectReceipt,
+  type ReplayableObject,
+  type StageOptions,
+} from "./object-transfer.ts";
+export { receipt, type ObjectReceipt } from "./object-transfer.ts";
 export interface StorageLocation {
   endpoint: string;
   bucket: string;
@@ -150,17 +160,6 @@ export class StorageAuthority {
     }
   }
 }
-export interface ObjectReceipt {
-  digest: string;
-  size: number;
-}
-export function receipt(bytes: Uint8Array): ObjectReceipt {
-  return {
-    digest: createHash("sha256").update(bytes).digest("hex"),
-    size: bytes.length,
-  };
-}
-/** Local integration limits object memory to 512 MiB; larger backups need a streaming adapter. */
 export class BackupObjects {
   readonly #client: S3Client;
   readonly location: StorageLocation;
@@ -176,70 +175,110 @@ export class BackupObjects {
       region: location.region,
       credentials,
       forcePathStyle: true,
-      maxAttempts: 2,
+      maxAttempts: 1,
+      logger: streamingLogger,
       requestHandler: { httpsAgent: new Agent({ ca }) },
     };
     this.#client = new S3Client(options);
   }
-  async read(key: string, streamKey?: string): Promise<Buffer> {
-    const result = await this.#client.send(
-      new GetObjectCommand({
-        Bucket: this.location.bucket,
-        Key: key,
-        ...encryption(streamKey),
-      }),
-      { abortSignal: AbortSignal.timeout(30000) },
-    );
-    if (
-      !result.Body ||
-      !result.ContentLength ||
-      result.ContentLength > 512 * 1024 * 1024
-    )
-      throw new Error("backup.object_invalid");
-    const chunks: Buffer[] = [];
-    let size = 0;
-    for await (const chunk of result.Body as AsyncIterable<Uint8Array>) {
-      size += chunk.length;
-      if (size > 512 * 1024 * 1024) throw new Error("backup.object_invalid");
-      chunks.push(Buffer.from(chunk));
+  async stage(
+    key: string,
+    streamKey?: string,
+    options: StageOptions = {},
+  ): Promise<ReplayableObject> {
+    const operationSignal = abortSignal(options);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const result = await this.#client.send(
+          new GetObjectCommand({
+            Bucket: this.location.bucket,
+            Key: key,
+            ...encryption(streamKey),
+          }),
+          { abortSignal: operationSignal },
+        );
+        if (!result.Body) throw new Error("backup.object_invalid");
+        return await stageReadable(
+          Readable.from(result.Body as AsyncIterable<Uint8Array>),
+          result.ContentLength as number,
+          { ...options, signal: operationSignal },
+        );
+      } catch (error) {
+        if (operationSignal.aborted) throw new Error("backup.cancelled");
+        if (attempt === 0 && transient(error)) continue;
+        throw error;
+      }
     }
-    if (size !== result.ContentLength) throw new Error("backup.object_invalid");
-    return Buffer.concat(chunks);
+    throw new Error("backup.object_invalid");
+  }
+  async read(key: string, streamKey?: string): Promise<Buffer> {
+    const staged = await this.stage(key, streamKey);
+    const chunks: Buffer[] = [];
+    try {
+      for await (const chunk of staged.open()) chunks.push(Buffer.from(chunk));
+      return Buffer.concat(chunks, staged.receipt.size);
+    } finally {
+      await staged.dispose();
+    }
   }
   async put(
     key: string,
     bytes: Uint8Array,
     streamKey?: string,
   ): Promise<ObjectReceipt> {
-    if (bytes.length === 0 || bytes.length > 512 * 1024 * 1024)
+    return this.putStaged(key, bufferObject(bytes), streamKey);
+  }
+  async putStaged(
+    key: string,
+    source: ReplayableObject,
+    streamKey?: string,
+    options: StageOptions = {},
+  ): Promise<ObjectReceipt> {
+    const expected = source.receipt;
+    if (
+      !Number.isSafeInteger(expected.size) ||
+      expected.size < 1 ||
+      expected.size > MAX_OBJECT_BYTES ||
+      !/^[0-9a-f]{64}$/.test(expected.digest)
+    )
       throw new Error("backup.object_invalid");
-    const expected = receipt(bytes);
-    try {
-      const result = await this.#client.send(
-        new PutObjectCommand({
-          Bucket: this.location.bucket,
-          Key: key,
-          Body: bytes,
-          IfNoneMatch: "*",
-          ...encryption(streamKey),
-        }),
-        { abortSignal: AbortSignal.timeout(30000) },
-      );
-      if (streamKey && result.SSECustomerAlgorithm !== "AES256")
-        throw new Error("backup.encryption_unconfirmed");
-    } catch (error) {
-      if (!(
-        error &&
-        typeof error === "object" &&
-        "$metadata" in error &&
-        (error.$metadata as { httpStatusCode?: number }).httpStatusCode === 412
-      ))
+    const operationSignal = abortSignal(options);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const result = await this.#client.send(
+          new PutObjectCommand({
+            Bucket: this.location.bucket,
+            Key: key,
+            Body: source.open(),
+            ContentLength: expected.size,
+            IfNoneMatch: "*",
+            ...encryption(streamKey),
+          }),
+          { abortSignal: operationSignal },
+        );
+        if (streamKey && result.SSECustomerAlgorithm !== "AES256")
+          throw new Error("backup.encryption_unconfirmed");
+        return expected;
+      } catch (error) {
+        if (operationSignal.aborted) throw new Error("backup.cancelled");
+        if (status(error) === 412) {
+          const prior = await this.stage(key, streamKey, options);
+          try {
+            if (
+              prior.receipt.digest !== expected.digest ||
+              prior.receipt.size !== expected.size
+            )
+              throw new Error("backup.object_conflict");
+            return expected;
+          } finally {
+            await prior.dispose();
+          }
+        }
+        if (attempt === 0 && transient(error)) continue;
         throw error;
-      const prior = receipt(await this.read(key, streamKey));
-      if (prior.digest !== expected.digest || prior.size !== expected.size)
-        throw new Error("backup.object_conflict");
+      }
     }
-    return expected;
+    throw new Error("backup.object_invalid");
   }
   async remove(key: string): Promise<void> {
     await this.#client.send(
@@ -251,6 +290,40 @@ export class BackupObjects {
     this.#client.destroy();
   }
 }
+function status(error: unknown) {
+  return error && typeof error === "object" && "$metadata" in error
+    ? (error.$metadata as { httpStatusCode?: number }).httpStatusCode
+    : undefined;
+}
+function transient(error: unknown) {
+  const code = status(error);
+  return (
+    code === 408 ||
+    code === 429 ||
+    (code !== undefined && code >= 500) ||
+    (error !== null &&
+      typeof error === "object" &&
+      "$retryable" in error &&
+      Boolean(error.$retryable)) ||
+    (error instanceof Error &&
+      ["ECONNRESET", "ETIMEDOUT", "EPIPE"].includes(
+        (error as Error & { code?: string }).code ?? "",
+      ))
+  );
+}
+function abortSignal(options: StageOptions) {
+  const deadline = AbortSignal.timeout(options.timeoutMs ?? 30000);
+  return options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+}
+const streamingLogger = {
+  debug() {},
+  info() {},
+  warn(...values: unknown[]) {
+    if (values[0] !== "An error was encountered in a non-retryable streaming request.")
+      console.warn(...values);
+  },
+  error() {},
+};
 function encryption(key?: string) {
   if (key === undefined) return {};
   if (!/^[A-Za-z0-9+/]{43}=$/.test(key))
