@@ -18,6 +18,7 @@
     "test:cell-movement-receipt": "node --test scripts/verify-cell-movement-receipt.test.mjs",
     "verify:cell-movement": "node scripts/verify-cell-movement-receipt.mjs",
     "proof:remote-reconciler": "node scripts/test-postgres.mjs exec node scripts/remote-reconciler-receipt.mjs /tmp/cloud-remote-reconciler-receipt.json && node scripts/verify-remote-reconciler-receipt.mjs /tmp/cloud-remote-reconciler-receipt.json",
+    "proof:two-venue-milestone": "node scripts/cloud-two-venue-milestone-receipt.mjs",
     "test:remote-reconciler-receipt": "node --test scripts/verify-remote-reconciler-receipt.test.mjs",
     "verify:remote-reconciler": "node scripts/verify-remote-reconciler-receipt.mjs",
     "measure:worker-scheduling-baseline": "node scripts/test-postgres.mjs exec node scripts/worker-scheduling-receipt.mjs --baseline /tmp/cloud-worker-scheduling-baseline.json",

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {managedReceipt} from './managed-recovery-receipt.fixture.mjs';
 import {verifyTwoVenueMilestoneReceipt} from './verify-two-venue-milestone-receipt.mjs';
+import {composeMilestoneReceipt} from './cloud-two-venue-milestone-receipt.mjs';
 
 const cloudHead='a'.repeat(40),waitronHead='b'.repeat(40);
 const venueA='12345678-1234-4234-8234-123456789abc',venueB='22345678-1234-4234-8234-123456789abc';
@@ -37,6 +38,7 @@ export function milestoneReceipt(){const managed=managedReceipt();return {
 };}
 
 test('accepts complete clean evidence from the same Cloud and Waitron heads',()=>assert.deepEqual(verifyTwoVenueMilestoneReceipt(milestoneReceipt()),milestoneReceipt()));
+test('composes the three validated phases in order with their measured timings',()=>{const expected=milestoneReceipt();assert.deepEqual(composeMilestoneReceipt(expected.transfer,expected.remote,expected.managedRecovery),expected);});
 for(const [name,mutate] of [
  ['dirty Cloud head',r=>{r.cloudDirty=true;}],
  ['dirty Waitron head',r=>{r.waitronDirty=true;}],
