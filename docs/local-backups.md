@@ -50,8 +50,10 @@ without modifying your system trust settings. This needs Docker Desktop's
   checks, SQLite integrity checks, migrations and module restore hooks, including
   the fiscal module. That fixture
   never starts the restored server or its workers. It checks that ordinary Node
-  network connections are denied; this is a test guard, not a hardened sandbox for
-  hostile code (the TypeScript loader requires worker, child-process and addon access).
+  network connections, subprocesses, host-file reads and writes outside the private
+  restore directory are denied. The TypeScript loader retains worker-thread access;
+  the fixture therefore proves the boundaries used for trusted Waitron code, not a
+  hostile-code sandbox.
 - Actual source Cloud connection credentials and staff TLS keys stay out of the
   archive. A captured `backup.env` is discarded when restoring this managed test
   replacement, so it cannot resume an old destination. Customer-managed archive
@@ -96,7 +98,9 @@ proof restores continuous data but deliberately records `activation: not-perform
 
 The JSON receipt records exact repository heads, dirty flags, checks and stream
 restore timings. A dirty receipt is useful during development; use clean heads for
-release evidence. Timings measure the local fixture, not a production recovery target.
+release evidence. Its checks now require the real Waitron restore and verifier-process
+isolation phases; removing that evidence makes the receipt invalid. Timings measure the
+local fixture, not a production recovery target.
 
 ## Internal API and retained data
 
@@ -181,8 +185,9 @@ Scheduled capture with durable local archive spooling is implemented for test in
 Customer recovery now has a matching-code account flow for verified test snapshots.
 The local worker schedules verification, retention
 and abandoned-upload cleanup; the customer catalogue is paginated. Define cancellation/deletion,
-production master-key custody and rewrapping, and production verifier isolation. The
-local managed-key drill now proves backup of the external key can reopen every retained
+production master-key custody and rewrapping, and deployment container/VM resource quotas for the
+isolated verifier. The local managed-key drill now proves backup of the external key can reopen
+every retained
 version after restart; it does not choose a vault provider or add an in-place rewrap. Run the
 same provider tests against the selected Spain-region store before any deployment;
 this local result does not establish AWS or Google behavior. Production still needs
@@ -229,17 +234,26 @@ remain valid. Future authenticated grant issuers must enforce that same capture 
 
 Each verification imports Waitron's actual validation and restore hooks in a separate
 process, checks archive identity and capture time, and restores SQLite into a fresh
-private temporary directory. Keys travel through stdin, application secrets are not
-inherited, Node networking is denied and writes are limited to that directory. The
-child has a 512 MiB heap setting, a 30-second deadline and bounded output. Cancellation
-kills its process group; temporary restore files are removed afterward. The worker
-refuses runtimes without Node network permission support. Status and queue tests also
-run on the project's ordinary Node runtime.
+private temporary directory. Keys travel through stdin and application secrets are not
+inherited. The fixed Node policy reads only the installed Waitron checkout, its verifier
+entry point and the private restore directory; it writes only that directory and grants
+no network, subprocess or native-addon permission. The TypeScript loader keeps its
+worker-thread permission.
 
-These are trusted local-code controls. Native allocations, addons and child-process
-capabilities mean the heap setting is not a total memory limit or a hostile-code
-sandbox. Production needs container network/filesystem isolation and total CPU, memory
-and disk limits before this verifier can handle customer archives.
+The child has a 512 MiB V8 heap ceiling, a 25-second CPU limit, a 30-second wall deadline,
+a 512 MiB per-file limit, at most 128 open files and 64 KiB total output. Cancellation
+kills its process group and waits for close before the private directory is removed.
+Malformed archives produce a fixed failure code, oversized objects are refused at the
+512 MiB catalogue/storage boundary, and a worker restart retries the durable job without
+trusting the old result. The focused verifier tests exercise every boundary with real
+child processes; the two-venue runner exercises the same policy around Waitron's real
+restore hooks.
+
+These controls isolate trusted local Waitron code from the Cloud worker. They are not a
+hostile-code sandbox: the required loader worker can invalidate Node's permission model,
+native allocations are outside the V8 heap limit, and the per-file limit is not a total
+scratch-volume quota. Before deployment, run this process inside the selected container
+or virtual-machine boundary with a total memory limit and a quota-limited scratch volume.
 
 ## Reconnect after a test snapshot restore
 

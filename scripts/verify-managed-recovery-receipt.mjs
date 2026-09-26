@@ -6,7 +6,7 @@ const hash=/^[0-9a-f]{64}$/;
 const commit=/^[0-9a-f]{40}$/;
 const generation=/^gen-(0|[1-9][0-9]*)-([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})-([0-9]{8}T[0-9]{6}Z)$/;
 const requiredPhases=['provider-isolation','streams-observed','continuous-recovery','interrupted-retry','snapshot-fallback'];
-const requiredChecks=['real-seaweedfs','real-waitron','no-production-resources'];
+const requiredChecks=['real-seaweedfs','real-waitron','verifier-process-isolation','no-production-resources'];
 function exact(value,keys){return !!value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).sort().join(',')===[...keys].sort().join(',');}
 function date(value){return typeof value==='string'&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString()===value;}
 function fail(){throw new Error('managed recovery receipt is invalid');}

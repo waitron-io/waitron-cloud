@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
 import {createConnection} from 'node:net';
 import {mkdir,readFile,writeFile,rm,stat} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -12,6 +13,11 @@ const networkDenied=await new Promise(resolve=>{
 assert(networkDenied);
 let input='';for await(const chunk of process.stdin){input+=chunk;assert(Buffer.byteLength(input)<=65536);}
 const request=JSON.parse(input),root=request.root;
+const denied=async operation=>{try{await operation();return false;}catch(error){return error.code==='ERR_ACCESS_DENIED';}};
+const hostReadDenied=await denied(()=>readFile('/etc/hosts'));
+const outsideWriteDenied=await denied(()=>writeFile(join(root,'..','cloud-verify-forbidden'),'forbidden'));
+let childProcessDenied=false;try{const child=spawn(process.execPath,['-e',''],{stdio:'ignore'});child.kill();}catch(error){childProcessDenied=error.code==='ERR_ACCESS_DENIED';}
+assert(hostReadDenied&&outsideWriteDenied&&childProcessDenied);
 const load=name=>import(pathToFileURL(join(request.checkout,'apps/server/src',name)).href);
 const {validateArtifact,writeValidated}=await load('restore.ts');
 const {ALL_MODULES}=await load('modules.ts');
@@ -31,4 +37,4 @@ await writeValidated({...checked,secretEntries:checked.secretEntries.filter(e=>e
 assert.deepEqual([...hooks].sort(),ALL_MODULES.filter(m=>m.backup?.restore).map(m=>m.name).sort());
 const exists=async name=>{try{await stat(join(root,name));return true;}catch(e){if(e.code!=='ENOENT')throw e;return false;}};
 for(const name of ['backup.env','cloud-connection.json','cloud-staff.key'])assert.equal(await exists(name),false);
-console.log(JSON.stringify({networkDenied,integrityOk:true,hooks,cloudCredentialPresent:false,staffKeyPresent:false}));
+console.log(JSON.stringify({networkDenied,childProcessDenied,hostReadDenied,outsideWriteDenied,integrityOk:true,hooks,cloudCredentialPresent:false,staffKeyPresent:false}));
