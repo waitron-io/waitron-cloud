@@ -17,16 +17,10 @@ Waitron checkout that includes `apps/server/scripts/cloud-backup-fixture.ts`,
 ```sh
 pnpm portal:build
 pnpm --dir "$WAITRON_CHECKOUT" --filter @waitron/dashboard build
-node scripts/test-backup-storage.mjs
+node scripts/test-backup-storage.mjs > /tmp/cloud-storage-contracts.json
 WAITRON_CHECKOUT=/absolute/path/to/waitron \
   BACKUP_RECEIPT=/tmp/cloud-backup-receipt.json \
   node scripts/test-postgres.mjs exec node scripts/test-local-backups.mjs
-```
-
-For the real 15-minute storage-credential expiry check, run:
-
-```sh
-CHECK_STORAGE_EXPIRY=1 node scripts/test-backup-storage.mjs
 ```
 
 The runners own their temporary databases, files, servers and containers and remove
@@ -43,7 +37,16 @@ without modifying your system trust settings. This needs Docker Desktop's
   remove retained snapshots or cross a venue boundary. Restore credentials are read
   only. Each static local stream writer and reader is restricted to one venue prefix.
   Crossed reads, writes and listings fail, and a reader cannot write. The provider
-  refuses changed roles, expired identities and expired storage credentials.
+  refuses changed roles and expired identities. The storage-contract runner also issues
+  a real 12-second credential, waits for its expiry and proves that the provider refuses
+  another write. It rotates a separate venue-scoped writer through the live provider
+  configuration, proves that the replacement works and proves that the old key stops working.
+- SeaweedFS 4.47 accepts one writer in an eight-request create-only race and one writer
+  in an eight-request compare-and-swap replacement race. A stale entity tag receives
+  HTTP 412. With bucket versioning enabled, the three accepted writes remain as three
+  distinct versions, while refused writes add no version. These are provider-contract
+  checks. Cloud's retained-snapshot adapter uses create-only objects and does not expose
+  an unused replacement method.
 - The provider requires the correct SSE-C key for stream objects. Snapshots use
   Waitron's encrypted archive format and independent immutable retained objects.
 - Cloud downloads provider objects into mode-0600 private stages while computing
@@ -53,7 +56,9 @@ without modifying your system trust settings. This needs Docker Desktop's
   verifier's scratch directory. A 32 MiB SeaweedFS fixture on an Apple M5 Pro
   observed 5,975,936 bytes of peak ArrayBuffer growth and 26,968,064 bytes of RSS
   growth on 2026-09-26. These are local measurements, not provider or capacity
-  promises; each run prints its current receipt.
+  promises; each run prints its current receipt. An upload stream that fails after its
+  first chunk now aborts the provider request without crashing the Cloud process, and
+  the provider holds no partial object.
 - The independent verifier passes each real Waitron snapshot through compatibility
   checks, SQLite integrity checks, migrations and module restore hooks, including
   the fiscal module. That fixture
@@ -202,8 +207,9 @@ every retained
 version after restart; it does not choose a vault provider or add an in-place rewrap. Run the
 same provider tests against the selected Spain-region store before any deployment;
 this local result does not establish AWS or Google behavior. Production still needs
-dynamic writer and reader credential delivery, rotation and revocation; verified
-provider prefix and conditional-write semantics; measured continuous retention;
+dynamic writer and reader credential delivery and revocation, plus the same scoped
+rotation, expiry, versioning, interruption and conditional-write checks against each
+selected provider; measured continuous retention;
 monitoring and scheduling; and the planned final-write handover. Continuous backup
 during gateway replacement and target activation remain unproved.
 

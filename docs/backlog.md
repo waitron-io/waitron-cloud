@@ -403,7 +403,10 @@ mobile notifications separately.
   against an explicit recovery-time target. Define how established connections and
   backups continue during a portal outage, including credential expiry and revocation.
 - **Provider integration.** Storage, compute, email, notifications, jobs, keys and
-  telemetry, with AWS and Google implementations where needed.
+  telemetry, with AWS and Google implementations where needed. The local SeaweedFS
+  storage contract now covers venue-scoped access, live key rotation, issued-credential
+  expiry, versioning, interrupted uploads and concurrent conditional create/replace.
+  Repeat those checks with provider-native credentials against each selected live store.
 - **Operations.** Customer and operator portals, health checks, incidents, audit,
   budgets, quotas, staged releases, maintenance and recovery controls.
   Customer portal login and account recovery must work when the venue server is
@@ -579,8 +582,12 @@ The [ownership map](documentation-ownership.md) records what remains in Waitron.
 - **Cloud-only redundancy.** Choose the failure and recovery model for a hosted
   primary. The old backlog's managed-Postgres framing is historical; the current
   Waitron design targets SQLite and Litestream.
-- **Production object-store proof.** Run the conditional-write and recovery checks
-  against the actual AWS and Google storage targets selected. The existing
+- **Production object-store proof.** The executable local SeaweedFS 4.47 contract admits
+  exactly one writer in eight-way create-only and compare-and-swap races, refuses stale
+  replacements, retains accepted versions, isolates venue credentials, revokes a rotated
+  key, refuses an expired issued credential and commits no partial interrupted upload.
+  Run the same conditional-write, credential and recovery checks against the actual AWS
+  and Google storage targets selected. The existing
   [prototype results](https://github.com/clintongormley/waitron/blob/830cf71fe854c7aa0b0d8c95078d3fe49ca05a10/docs/research/2026-09-16-sqlite-failover-prototype.md)
   concern MinIO. They do not establish either production provider's behaviour.
 - **Promoted cloud generation and current pointer.** The local proof follows a signed

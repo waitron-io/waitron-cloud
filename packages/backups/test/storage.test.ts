@@ -182,6 +182,81 @@ test("staged uploads pass the exact length and reopen byte zero for a transient 
   assert.equal(opens, 2);
 });
 
+test("a staged upload source failure aborts the provider request before the error escapes the stream", async () => {
+  const bytes = Buffer.from("complete archive bytes"),
+    expected = bufferObject(bytes).receipt,
+    source = {
+      receipt: expected,
+      open() {
+        return Readable.from(
+          (async function* () {
+            yield bytes.subarray(0, 4);
+            throw new Error("fixture upload interrupted");
+          })(),
+        );
+      },
+      async dispose() {},
+    };
+  let requestAborted = false;
+  await fakeS3(async (command, options) => {
+    assert.equal(command.constructor.name, "PutObjectCommand");
+    for await (const _chunk of command.input.Body as Readable) {
+      // Consume the real request body so a late source failure reaches the adapter boundary.
+    }
+    requestAborted = options?.abortSignal?.aborted === true;
+    if (requestAborted)
+      throw Object.assign(new Error("provider request aborted"), {
+        name: "AbortError",
+      });
+    return { $metadata: { httpStatusCode: 200 } };
+  }, async () => {
+    const objects = new BackupObjects(location, credentials);
+    try {
+      await assert.rejects(
+        objects.putStaged("snapshots/interrupted", source),
+        /fixture upload interrupted/,
+      );
+    } finally {
+      objects.close();
+    }
+  });
+  assert.equal(requestAborted, true);
+});
+
+test("a provider success cannot hide a source failure after the final byte", async () => {
+  const bytes = Buffer.from("complete archive bytes"),
+    source = {
+      receipt: bufferObject(bytes).receipt,
+      open() {
+        return Readable.from(
+          (async function* () {
+            yield bytes;
+            throw new Error("fixture failed after the final byte");
+          })(),
+        );
+      },
+      async dispose() {},
+    };
+  await fakeS3(async (command, options) => {
+    const received: Buffer[] = [];
+    for await (const chunk of command.input.Body as Readable)
+      received.push(Buffer.from(chunk));
+    assert.deepEqual(Buffer.concat(received), bytes);
+    assert.equal(options?.abortSignal?.aborted, true);
+    return { $metadata: { httpStatusCode: 200 } };
+  }, async () => {
+    const objects = new BackupObjects(location, credentials);
+    try {
+      await assert.rejects(
+        objects.putStaged("snapshots/late-failure", source),
+        /fixture failed after the final byte/,
+      );
+    } finally {
+      objects.close();
+    }
+  });
+});
+
 test("staged downloads hash provider bytes and compose caller cancellation", async () => {
   const bytes = Buffer.from("downloaded encrypted archive");
   await fakeS3(async (command, options) => {

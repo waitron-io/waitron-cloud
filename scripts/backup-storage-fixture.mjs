@@ -66,7 +66,10 @@ async function binary(root) {
   execFileSync("tar", ["-xzf", archive, "-C", root]);
   return join(root, "weed");
 }
-export async function startBackupStorage() {
+export async function startBackupStorage(options = {}) {
+  const tokenDuration = options.tokenDuration ?? "15m";
+  if (!/^\d+[smh]$/.test(tokenDuration))
+    throw Error("Invalid local storage token duration");
   const root = await mkdtemp(join(tmpdir(), "cloud-backup-storage-"));
   let oidc, child, log, adminClient;
   const managed = new Map();
@@ -178,8 +181,8 @@ export async function startBackupStorage() {
       join(root, "sts.json"),
       JSON.stringify({
         sts: {
-          tokenDuration: "15m",
-          maxSessionLength: "15m",
+          tokenDuration,
+          maxSessionLength: tokenDuration,
           issuer: "cloud-local-sts",
           signingKey: randomBytes(32).toString("base64"),
         },
@@ -241,6 +244,15 @@ export async function startBackupStorage() {
       ];
     const writeIdentities = () =>
       writeFile(iamPath, JSON.stringify({ identities }), { mode: 0o600 });
+    const reloadIdentities = async () => {
+      await writeIdentities();
+      child.kill("SIGHUP");
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    };
+    const newCredentials = (prefix) => ({
+      accessKeyId: prefix + "-" + randomBytes(8).toString("hex"),
+      secretAccessKey: randomBytes(32).toString("base64url"),
+    });
     await writeIdentities();
     const ports = [];
     for (let i = 0; i < 7; i++) ports.push(await freePort());
@@ -338,9 +350,7 @@ export async function startBackupStorage() {
             actions: [`Read:${scope}`, `List:${scope}`],
           },
         );
-        await writeIdentities();
-        child.kill("SIGHUP");
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        await reloadIdentities();
         const provision = {
           writerReference: `managed:${input.venueId}:writer`,
           readerReference: `managed:${input.venueId}:reader`,
@@ -425,6 +435,36 @@ export async function startBackupStorage() {
       managedStreams,
       agent,
       stop,
+      async createCredentials(name, actions) {
+        if (identities.some((identity) => identity.name === name))
+          throw Error("storage identity already exists");
+        const credentials = newCredentials(name);
+        identities.push({
+          name,
+          credentials: [
+            {
+              accessKey: credentials.accessKeyId,
+              secretKey: credentials.secretAccessKey,
+            },
+          ],
+          actions: [...actions],
+        });
+        await reloadIdentities();
+        return credentials;
+      },
+      async rotateCredentials(name) {
+        const identity = identities.find((candidate) => candidate.name === name);
+        if (!identity) throw Error("storage identity not found");
+        const credentials = newCredentials(name);
+        identity.credentials = [
+          {
+            accessKey: credentials.accessKeyId,
+            secretKey: credentials.secretAccessKey,
+          },
+        ];
+        await reloadIdentities();
+        return credentials;
+      },
       async bucket(name) {
         await adminClient.send(new CreateBucketCommand({ Bucket: name }));
         return { endpoint, bucket: name, region: "local" };

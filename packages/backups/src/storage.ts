@@ -252,29 +252,40 @@ export class BackupObjects {
       throw new Error("backup.object_invalid");
     const operationSignal = abortSignal(options);
     for (let attempt = 0; attempt < 2; attempt++) {
+      const bodyController = new AbortController();
+      const requestSignal = AbortSignal.any([
+        operationSignal,
+        bodyController.signal,
+      ]);
+      let bodyError: unknown;
       try {
         const result = await this.#client.send(
           new PutObjectCommand({
             Bucket: this.location.bucket,
             Key: key,
-            Body: source.open(),
+            Body: guardedUploadBody(source.open(), (error) => {
+              bodyError = error;
+              bodyController.abort(error);
+            }),
             ContentLength: expected.size,
             IfNoneMatch: "*",
             ...encryption(streamKey),
           }),
-          { abortSignal: operationSignal },
+          { abortSignal: requestSignal },
         );
+        if (bodyError !== undefined) throw bodyError;
         if (streamKey && result.SSECustomerAlgorithm !== "AES256")
           throw new Error("backup.encryption_unconfirmed");
         return expected;
       } catch (error) {
+        if (bodyError !== undefined) throw bodyError;
         if (operationSignal.aborted) throw new Error("backup.cancelled");
         if (status(error) === 412) {
           const prior = await this.#stage(
             key,
             streamKey,
             options,
-            operationSignal,
+            requestSignal,
           );
           try {
             if (
@@ -311,6 +322,21 @@ export class BackupObjects {
   close() {
     this.#client.destroy();
   }
+}
+function guardedUploadBody(
+  source: Readable,
+  failed: (error: unknown) => void,
+): Readable {
+  return Readable.from(
+    (async function* () {
+      try {
+        for await (const chunk of source) yield chunk;
+      } catch (error) {
+        // A source failure must abort the request before any SDK wrapper can emit it unhandled.
+        failed(error);
+      }
+    })(),
+  );
 }
 function status(error: unknown) {
   return error && typeof error === "object" && "$metadata" in error
