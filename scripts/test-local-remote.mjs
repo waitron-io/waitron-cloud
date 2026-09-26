@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
-import {mkdtemp,readFile,writeFile,mkdir,rm,rename} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,mkdir,rm,rename,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {createRequire} from 'node:module';
@@ -17,6 +17,10 @@ import {RemoteProbeStore} from '../packages/remote-access/src/probe-targets.ts';
 import {RemoteProbeObservationStore} from '../packages/remote-access/src/probe-observations.ts';
 import {probeTarget} from '../packages/remote-access/src/probe.ts';
 import {signManifest} from '../packages/remote-access/src/manifest.ts';
+import {BackupKeyVault} from '../packages/backups/src/keys.ts';
+import {BackupObjects,receipt as backupReceipt} from '../packages/backups/src/storage.ts';
+import {BackupCatalogue} from '../packages/backups/src/catalogue.ts';
+import {startBackupStorage} from './backup-storage-fixture.mjs';
 import {startAcme,docker,waitFor} from './remote-fixtures.mjs';
 const waitron=resolve(process.env.WAITRON_CHECKOUT??'');
 assert.ok(process.env.WAITRON_CHECKOUT,'Set WAITRON_CHECKOUT');
@@ -24,8 +28,10 @@ const require=createRequire(join(waitron,'apps/server/package.json'));
 const acmeRequire=createRequire(new URL('../packages/remote-access/package.json',import.meta.url));
 const {crypto:acmeCrypto}=acmeRequire('acme-client');
 const root=await mkdtemp(join(tmpdir(),'cloud-remote-')),name='cloud-remote-'+randomUUID();
-const owned=new Set(),children=[],roots=[],checks=[];
-let f,acme,network=false,gatewayPort,gatewayIp,targetGatewayPort,targetGatewayIp;
+const owned=new Set(),children=[],roots=[],checks=[],backupObjectClients=[],backupClients=new Map();
+let f,acme,s3,catalogue,network=false,gatewayPort,gatewayIp,targetGatewayPort,targetGatewayIp;
+const backupVault=new BackupKeyVault(randomBytes(32));
+const backupObjects=location=>{if(!backupClients.has(location.bucket)){const client=new BackupObjects(location,s3.admin,s3.ca);backupClients.set(location.bucket,client);backupObjectClients.push(client);}return backupClients.get(location.bucket);};
 const cellId=randomUUID(),targetCellId=randomUUID(),issuer=generateKeyPairSync('ed25519');
 const wgKey=()=>{const key=generateKeyPairSync('x25519');return {privateKey:key.privateKey.export({format:'der',type:'pkcs8'}).subarray(-32).toString('base64'),publicKey:key.publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64')};};
 const gatewayKey=wgKey(),targetGatewayKey=wgKey();
@@ -33,12 +39,22 @@ checks.push=(...values)=>{for(const value of values)console.log('PASS:',value);r
 const input=join(root,'input'),state=join(root,'state'),targetInput=join(root,'target-input'),targetState=join(root,'target-state');
 async function launch(venueRoot){
  await rm(join(venueRoot,'ready.json'),{force:true});
- const child=spawn(process.execPath,['--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-integration-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,CLOUD_TEST_ROOT:venueRoot,CLOUD_TEST_ORIGIN:f.origin,CLOUD_TEST_EXTERNAL:'1'},stdio:['ignore','pipe','pipe','ipc']});
+ const child=spawn(process.execPath,['--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-integration-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,CLOUD_TEST_ROOT:venueRoot,CLOUD_TEST_ORIGIN:f.origin,CLOUD_TEST_EXTERNAL:'1',CLOUD_TEST_BACKUP_STATE:'1'},stdio:['ignore','pipe','pipe','ipc']});
  let output='';for(const stream of [child.stdout,child.stderr])stream.on('data',v=>output=(output+v).slice(-16000));
  const running={child,done:new Promise(resolve=>child.once('exit',resolve))};children.push(running);
  return waitFor(async()=>{if(child.exitCode!==null)throw Error(output);try{return {...running,...JSON.parse(await readFile(join(venueRoot,'ready.json'),'utf8'))};}catch(error){if(error.code==='ENOENT')return false;throw error;}},30000);
 }
 async function stop(running){if(running.child.exitCode!==null)return;running.child.kill('SIGTERM');const timeout=setTimeout(()=>running.child.kill('SIGKILL'),5000);try{assert.equal(await running.done,0);}finally{clearTimeout(timeout);}}
+async function captureClient(dir,command,input){
+ const child=spawn(process.execPath,['--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-capture-client-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,CLOUD_TEST_ROOT:dir},stdio:['pipe','pipe','pipe']});
+ let output='',error='';child.stdout.on('data',value=>output+=value);child.stderr.on('data',value=>error=(error+value).slice(-16000));child.stdin.end(JSON.stringify({command,...input}));const timer=setTimeout(()=>child.kill('SIGKILL'),45000);
+ try{const code=await new Promise(resolve=>child.once('exit',resolve));assert.equal(code,0,'Waitron capture client failed: '+error);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
+}
+async function backupWorker(dir,input){
+ const child=spawn(process.execPath,['--permission','--allow-fs-read=*','--allow-fs-write='+(await realpath(dir)),'--allow-worker','--allow-child-process','--allow-addons','--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-backup-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,TSX_DISABLE_CACHE:'1',CLOUD_TEST_ROOT:dir},stdio:['pipe','pipe','pipe']});
+ let output='',error='';child.stdout.on('data',value=>output+=value);child.stderr.on('data',value=>error=(error+value).slice(-16000));child.stdin.end(JSON.stringify({command:'capture',...input}));const timer=setTimeout(()=>child.kill('SIGKILL'),30000);
+ try{const code=await new Promise(resolve=>child.once('exit',resolve));assert.equal(code,0,'Waitron backup worker failed: '+error);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
+}
 function ipc(server,value){return new Promise((resolve,reject)=>{const reply=value=>{clearTimeout(timer);if(value.error)reject(Error(value.error));else resolve(value);};const timer=setTimeout(()=>{server.child.off('message',reply);reject(Error('IPC timeout'));},10000);server.child.once('message',reply);server.child.send(value);});}
 async function secret(path,value){await writeFile(path,value,{mode:0o600});}
 async function publish(manifest){await secret(join(input,'manifest.new'),JSON.stringify(signManifest(manifest,issuer.privateKey)));await rename(join(input,'manifest.new'),join(input,'manifest.json'));}
@@ -74,9 +90,23 @@ async function solve(host,transport=remote){
  const proof=await page.evaluate(({source,challenge})=>new Promise((resolve,reject)=>{const url=URL.createObjectURL(new Blob([source],{type:'application/javascript'})),worker=new Worker(url);const timer=setTimeout(()=>{worker.terminate();URL.revokeObjectURL(url);reject(Error('worker timeout'));},30000);worker.onerror=error=>{clearTimeout(timer);worker.terminate();URL.revokeObjectURL(url);reject(Error(error.message));};worker.onmessage=({data})=>{clearTimeout(timer);worker.terminate();URL.revokeObjectURL(url);resolve(data);};worker.postMessage(challenge);}),{source:worker.text,challenge});await page.close();
  const answer=await transport(host,'/_cloud/solve',{body:proof});assert.equal(answer.status,204);return answer.headers['set-cookie'][0].split(';')[0];
 }
+async function captureVenue(venue){
+ await stop(venue.server);
+ try{
+  const id=randomUUID(),grant=await captureClient(venue.root,'reserve',{id}),captured=await backupWorker(venue.root,{recoveryKey:grant.recoveryKey}),bytes=await readFile(join(venue.root,'captured.backup.enc'));
+  await captureClient(venue.root,'upload',{grant,ca:s3.ca});
+  const point=await captureClient(venue.root,'publish',{id,metadata:{...backupReceipt(bytes),capturedAt:captured.manifest.createdAt,retention:'daily',sourceNodeId:captured.sourceNodeId,modules:captured.manifest.modules}});
+  assert.equal(point.installationId,venue.placement.installationId);assert.equal(point.venueId,venue.placement.venueId);
+  return {venueId:point.venueId,installationId:point.installationId,pointId:point.id,capturedAt:point.capturedAt};
+ }finally{
+  venue.server=await launch(venue.root);
+  await waitFor(async()=>{try{return (await remote(venue.placement.staffHostname)).status===200;}catch{return false;}},30000);
+ }
+}
+async function captureBoth(venues){const points=[];for(const venue of venues)points.push(await captureVenue(venue));return points;}
 try{
  await mkdir(input);await mkdir(state);await mkdir(join(input,'public-certs'));await mkdir(targetInput);await mkdir(targetState);await mkdir(join(targetInput,'public-certs'));
- f=await startPortalFixture();acme=await startAcme();
+ s3=await startBackupStorage();f=await startPortalFixture({vault:backupVault,objects:backupObjects,grant:(location,scope)=>s3.authority.grant(location,scope,s3.ca),managedStreams:s3.managedStreams});catalogue=new BackupCatalogue(f.db.pool,backupVault,backupObjects);acme=await startAcme();
  const signup=new SignupStore(f.db.pool,f.db.outbox),email=`remote-${randomUUID()}@example.test`,password='Local remote integration password';
  await signup.request(email);const mail=f.db.outbox.open((await f.db.pool.query('SELECT * FROM email_outbox')).rows[0]);
  const owner=await signup.complete(mail.token,{password,organisationName:'Remote test',legalBusinessName:'Remote test SL',countryCode:'ES'});
@@ -89,13 +119,14 @@ try{
  const accountKeyFile=join(root,'account.key');await secret(accountKeyFile,await acmeCrypto.createPrivateKey());
  const venues=[];
  for(let n=0;n<2;n++){
-  const venueRoot=await mkdtemp(join(tmpdir(),'cloud-integration-'));roots.push(venueRoot);let server=await launch(venueRoot);
-  const context=await f.browser.newContext();const post=async(path,data={})=>{const result=await context.request.post(server.origin+path,{headers:{origin:server.origin},data});assert.equal(result.status(),200,await result.text());return result.json();};
+  const venueRoot=await mkdtemp(join(tmpdir(),'cloud-integration-backup-'));roots.push(venueRoot);let server=await launch(venueRoot);
+  const context=await f.browser.newContext({ignoreHTTPSErrors:true});const post=async(path,data={})=>{const result=await context.request.post(server.origin+path,{headers:{origin:server.origin},data});assert.equal(result.status(),200,await result.text());return result.json();};
   await post('/management-api/session',{email:'owner@example.test',password:'Local integration password'});
   const pairing=await post('/management-api/cloud/start');
   await new PairingStore(f.db.pool).approve(pairing.requestId,pairing.code,owner.organisationId,owner.legalBusinessId,session.token,session.csrfToken);
   await post('/management-api/cloud/check');
   const paired=await post('/management-api/cloud/complete',{requestId:pairing.requestId,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId});
+  const location=await s3.bucket('remote-venue-'+n);await catalogue.provision(paired.registration.installationId,location);
   const key=wgKey(),placement=JSON.parse(await operator('provision',{installationId:paired.registration.installationId,cellId,peerPublicKey:key.publicKey}));
   const csr=(await ipc(server,{csrHostname:placement.staffHostname})).csr;
   const csrFile=join(root,`venue-${n}.csr`);await secret(csrFile,csr);
@@ -105,7 +136,7 @@ try{
   const publicCsrFile=join(root,`public-${n}.csr`);await secret(publicCsrFile,publicCsr);
   const publicCertificate=await acme.issue({operator:{databaseUrl:databaseUrl.toString(),installationId:placement.installationId,kind:'public'},hostname:placement.publicHostname,csrFile:publicCsrFile,accountKeyFile,output:join(root,`public-${n}.crt`)});
   const publicMaterial=Buffer.concat([publicKey,Buffer.from(publicCertificate)]);await secret(join(input,'public-certs',`venue-${n}.pem`),publicMaterial);await secret(join(targetInput,'public-certs',`venue-${n}.pem`),publicMaterial);
-  venues.push({root:venueRoot,server,key,placement,certificate});await context.close();
+  venues.push({root:venueRoot,server,key,placement,certificate,location});await context.close();
  }
  checks.push('two real SQLite Waitron servers paired through authenticated manager APIs');
  await secret(join(input,'issuer.pem'),issuer.publicKey.export({type:'spki',format:'pem'}));await secret(join(input,'wireguard.key'),gatewayKey.privateKey);await secret(join(input,'bot.key'),randomBytes(32));await secret(join(input,'venue-ca.pem'),acme.certificateRoot);
@@ -152,7 +183,7 @@ try{
  const unknown='unknown.remote.example.test',rejectedProbe=await probeTarget({...probeTargets[0],publicHostname:unknown},{ca:acme.certificateRoot,connect:hostname=>({address:'127.0.0.1',family:4,port:gatewayPort})});assert.equal(rejectedProbe.public.status,'failed');
  checks.push('Cloud functional probes solve the real public challenge and verify staff TLS for two isolated placements; unknown SNI is refused');
  for(const [index,venue] of venues.entries()){const view=(await f.db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[venue.placement.installationId])).rows[0];await installations.configure(venue.placement.installationId,Number(view.configuration_revision),[{service:'remote_access',state:'ready',configuration:{version:1,...venue.placement}}]);assert.equal((await remote(venue.placement.staffHostname,'/management-api/cloud/refresh',{body:{},headers:{cookie:cookies[index],origin:'https://'+venue.placement.staffHostname}})).status,200);const report=await ipc(venue.server,{report:[{service:'remote_access',health:'healthy',failure:null}]});assert.equal(report.status.installation.services.find(s=>s.service==='remote_access').health,'healthy');}
- const observationStore=new RemoteProbeObservationStore(f.db.pool),monitor=new MonitorWorker(f.db.pool,f.db.outbox),monitoringTargets=await new RemoteProbeStore(f.db.pool).targets();assert.equal(monitoringTargets.length,2);
+ const observationStore=new RemoteProbeObservationStore(f.db.pool),monitor=new MonitorWorker(f.db.pool,f.db.outbox,{certificateWarningDays:1}),monitoringTargets=await new RemoteProbeStore(f.db.pool).targets();assert.equal(monitoringTargets.length,2);
  const probeAndRecord=async(options={})=>{await delay(2);const results=await Promise.all(monitoringTargets.map(target=>probeTarget(target,{ca:acme.certificateRoot,connect:fixtureConnect,...options})));for(const result of results)assert.equal(await observationStore.record(result),true);return results;};
  const resultFor=(values,venue)=>values.find(value=>value.installationId===venue.placement.installationId);
  const routeEvidence=values=>values.map(result=>({installationId:result.installationId,staffHostname:result.staffHostname,publicHostname:result.publicHostname,publicFingerprint:result.public.certificate.fingerprint256,staffFingerprint:result.staff.certificate.fingerprint256})).sort((a,b)=>a.installationId.localeCompare(b.installationId));
@@ -165,7 +196,7 @@ try{
  const mailCount=async(subject)=>{const response=await fetch(process.env.MAILPIT_TEST_URL+'/api/v1/messages?limit=200');assert.equal(response.status,200);const list=await response.json();assert.equal(Number(list.total),list.messages.length,'Mailpit receipt query did not include the complete mailbox');return list.messages.filter(message=>message.Subject===subject&&message.To.some(recipient=>recipient.Address===email)).length;};
  const openingSubject='Waitron Cloud: a venue needs attention',recoverySubject='Waitron Cloud: venue check recovered',phases=[],phase=async(name,started)=>{const incidents=await openIncidents();phases.push({name,elapsedMs:Date.now()-started,openIncidents:incidents.length});return incidents;};let duplicateMail=0,deduplicationChecks=0;
  let started=Date.now(),results=await probeAndRecord();assert(results.every(result=>result.public.status==='healthy'&&result.staff.status==='healthy'));assert.equal(await monitor.schedule(),2);assert.equal(await runMonitor(),2);
- let incidents=await phase('baseline',started);assert.equal(incidents.some(row=>row.kind.includes('route_failed')||row.kind.includes('probe_stale')),false);const baselineCertificateIncidents=incidents.filter(row=>row.kind.endsWith('_certificate_expiring')).length;await f.drainMail();const baselineOpenings=await mailCount(openingSubject),baselineRecoveries=await mailCount(recoverySubject);
+ let incidents=await phase('baseline',started);assert.equal(incidents.some(row=>row.kind.includes('route_failed')||row.kind.includes('probe_stale')),false);const baselineCertificateIncidents=incidents.filter(row=>row.kind.endsWith('_certificate_expiring')).length;assert.equal(baselineCertificateIncidents,0);await f.drainMail();const baselineOpenings=await mailCount(openingSubject),baselineRecoveries=await mailCount(recoverySubject);
 
  started=Date.now();docker('rm','-f',venues[0].peer);owned.delete(venues[0].peer);results=await probeAndRecord();const venueAFailure=resultFor(results,venues[0]),venueBHealthy=resultFor(results,venues[1]);assert.equal(venueAFailure.public.status,'failed');assert.equal(venueAFailure.staff.status,'failed');assert.equal(venueBHealthy.public.status,'healthy');assert.equal(venueBHealthy.staff.status,'healthy');await runMonitor();
  incidents=await phase('route_outage',started);const venueARoutes=incidents.filter(row=>row.venue_id===venues[0].placement.venueId&&row.kind.endsWith('_route_failed')),venueBRoutes=incidents.filter(row=>row.venue_id===venues[1].placement.venueId&&row.kind.endsWith('_route_failed')),routeFailureLimitedToVenueA=venueARoutes.length===2&&venueBRoutes.length===0;assert.deepEqual(venueARoutes.map(row=>row.kind).sort(),['public_route_failed','staff_route_failed']);assert.equal(routeFailureLimitedToVenueA,true);
@@ -179,8 +210,12 @@ try{
 
  started=Date.now();const invalidTarget=monitoringTargets.find(target=>target.installationId===venues[1].placement.installationId);assert.ok(invalidTarget);const invalidTrust=await probeTarget(invalidTarget,{ca:venues[0].certificate,connect:fixtureConnect});assert.equal(invalidTrust.public.status,'failed');assert.equal(invalidTrust.staff.status,'failed');assert.equal(invalidTrust.public.failure,'tls');assert.equal(invalidTrust.staff.failure,'tls');assert.doesNotMatch(JSON.stringify(invalidTrust),/127\.0\.0\.1|ECONN|self.signed/i);await phase('invalid_trust',started);
 
- const beforeGatewayEvidence=routeEvidence(results);started=Date.now();docker('rm','-f',name+'-gateway');owned.delete(name+'-gateway');results=await probeAndRecord();assert(results.every(result=>result.public.status==='failed'&&result.staff.status==='failed'));await runMonitor();incidents=await phase('gateway_outage',started);assert.equal(incidents.filter(row=>row.kind.endsWith('_route_failed')).length,4);await f.drainMail();
+ const beforeBackups=await captureBoth(venues),beforeGatewayEvidence=routeEvidence(results);started=Date.now();docker('rm','-f',name+'-gateway');owned.delete(name+'-gateway');results=await probeAndRecord();assert(results.every(result=>result.public.status==='failed'&&result.staff.status==='failed'));await runMonitor();incidents=await phase('gateway_outage',started);assert.equal(incidents.filter(row=>row.kind.endsWith('_route_failed')).length,4);await f.drainMail();
  const replacedAt=Date.now();startGateway();try{await waitFor(async()=>{for(const venue of venues)if((await remote(venue.placement.staffHostname)).status!==200)return false;return true;},180000);}catch(error){const status=await readFile(join(state,'status.json'),'utf8').catch(readError=>String(readError)),wireguard=docker('exec',name+'-gateway','wg','show'),peers=venues.map((venue,index)=>`peer-${index} public=${venue.key.publicKey}\n${docker('exec',venue.peer,'wg','show')}`).join('\n');throw new Error(`replacement gateway unavailable; status=${status}; wireguard=${wireguard}; peers=${peers}`,{cause:error});}const replacementMs=Date.now()-replacedAt;results=await probeAndRecord();assert(results.every(result=>result.public.status==='healthy'&&result.staff.status==='healthy'));assert.deepEqual(routeEvidence(results),beforeGatewayEvidence);await runMonitor();incidents=await phase('gateway_recovery',replacedAt);assert.equal(incidents.some(row=>row.kind.endsWith('_route_failed')),false);await f.drainMail();checks.push('monitor detects and recovers one-route and whole-gateway failures while preserving other-venue isolation, stable certificates and fresh control contact');
+ const afterBackups=await captureBoth(venues),routesRecovered=(await Promise.all(venues.map(venue=>remote(venue.placement.staffHostname)))).every(response=>response.status===200),venueSeparationPreserved=(await remote(venues[1].placement.staffHostname,'/management-api/cloud/status',{headers:{cookie:cookies[0]}})).status===401;
+ assert.equal(routesRecovered,true);assert.equal(venueSeparationPreserved,true);
+ const backupContinuity={version:1,before:beforeBackups,after:afterBackups,gatewayReplaced:true,routesRecovered,venueSeparationPreserved};
+ checks.push('encrypted venue-scoped snapshots publish before and after real gateway replacement');
 
  started=Date.now();const furthestExpiry=Math.max(...results.flatMap(result=>[result.public,result.staff]).filter(service=>service.status==='healthy').map(service=>new Date(service.certificate.notAfter).getTime())),warningDays=Math.ceil((furthestExpiry-Date.now())/86400000)+1;assert.ok(warningDays>=1&&warningDays<=3650);const warningMonitor=new MonitorWorker(f.db.pool,f.db.outbox,{certificateWarningDays:warningDays});await runMonitor(warningMonitor);incidents=await phase('certificate_warning',started);const warningIncidents=incidents.filter(row=>row.kind.endsWith('_certificate_expiring')).length;assert.equal(warningIncidents,4);assert.ok(warningIncidents>baselineCertificateIncidents);await f.drainMail();
  const contacts=await f.db.pool.query("SELECT id,last_contact_at>clock_timestamp()-interval '15 minutes' AS fresh FROM installations WHERE id=ANY($1::uuid[]) ORDER BY id",[venues.map(venue=>venue.placement.installationId)]),controlContactStayedFresh=contacts.rows.every(row=>row.fresh);assert.equal(controlContactStayedFresh,true);
@@ -229,7 +264,7 @@ try{
  assert.equal(lan,'LAN HTTPS trusted');checks.push('fresh DNS client uses venue LAN override with gateway authority expired');
 
  docker('rm','-f',name+'-gateway');owned.delete(name+'-gateway');await secret(join(state,'accepted.json'),'{broken');startGateway();await waitFor(()=>docker('inspect','--format','{{.State.Running}}',name+'-gateway')==='false');assert.notEqual(docker('inspect','--format','{{.State.ExitCode}}',name+'-gateway'),'0');checks.push('corrupt gateway cache refuses startup');
- const receipt={cloudHead:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),cloudDirty:execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim()!=='',waitronDirty:execFileSync('git',['-C',waitron,'status','--porcelain'],{encoding:'utf8'}).trim()!=='',waitronHead:execFileSync('git',['-C',waitron,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),checks,replacementMs,revocationMs,functionalProbes,monitoring,movement};
+ const receipt={version:2,cloudHead:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),cloudDirty:execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim()!=='',waitronDirty:execFileSync('git',['-C',waitron,'status','--porcelain'],{encoding:'utf8'}).trim()!=='',waitronHead:execFileSync('git',['-C',waitron,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),checks,replacementMs,revocationMs,functionalProbes,monitoring,movement,backupContinuity};
  if(process.env.REMOTE_RECEIPT)await secret(process.env.REMOTE_RECEIPT,JSON.stringify(receipt,null,2));console.log(JSON.stringify(receipt,null,2));
 }catch(error){for(const container of owned){try{console.error(container,docker('logs','--tail','30',container));}catch{}}throw error;}
-finally{for(const container of [...owned].reverse())docker('rm','-f',container);if(network)docker('network','rm',name);for(const child of children)await stop(child);await acme?.close();await f?.close();for(const venueRoot of roots)await rm(venueRoot,{recursive:true,force:true});await rm(root,{recursive:true,force:true});}
+finally{for(const container of [...owned].reverse())docker('rm','-f',container);if(network)docker('network','rm',name);for(const child of children)await stop(child);for(const client of backupObjectClients)client.close();await s3?.stop();await acme?.close();await f?.close();for(const venueRoot of roots)await rm(venueRoot,{recursive:true,force:true});await rm(root,{recursive:true,force:true});}

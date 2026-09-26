@@ -20,7 +20,7 @@ function date(value){return typeof value==='string'&&Number.isFinite(Date.parse(
 function positive(value){return typeof value==='number'&&Number.isFinite(value)&&value>0;}
 function fail(){throw new Error('two-venue milestone receipt is invalid');}
 
-function verifyRemote(remote){
+export function verifyRemoteMilestoneEvidence(remote){
  if(!exact(remote,['version','cloudHead','cloudDirty','waitronHead','waitronDirty','checks','replacementMs','revocationMs','functionalProbes','monitoring','movement','backupContinuity'])||remote.version!==2||!commit.test(remote.cloudHead)||!commit.test(remote.waitronHead)||typeof remote.cloudDirty!=='boolean'||typeof remote.waitronDirty!=='boolean'||!positive(remote.replacementMs)||!positive(remote.revocationMs)||!Array.isArray(remote.checks)||requiredRemoteChecks.some(check=>!remote.checks.includes(check)))fail();
  if(!Array.isArray(remote.functionalProbes)||remote.functionalProbes.length!==2)fail();
  const bindings=new Map();
@@ -49,7 +49,7 @@ function verifyRemote(remote){
 
 export function verifyTwoVenueMilestoneReceipt(value){
  if(!exact(value,['version','cloudHead','waitronHead','cloudDirty','waitronDirty','phases','transfer','remote','managedRecovery','measurements','activation','checks'])||value.version!==1||!commit.test(value.cloudHead)||!commit.test(value.waitronHead)||value.cloudDirty!==false||value.waitronDirty!==false||JSON.stringify(value.phases)!==JSON.stringify(requiredPhases)||JSON.stringify(value.checks)!==JSON.stringify(requiredChecks)||value.activation!=='not-performed')fail();
- const transfer=verifyBackupTransferReceipt(value.transfer),remote=verifyRemote(value.remote),managed=verifyManagedRecoveryReceipt(value.managedRecovery);
+ const transfer=verifyBackupTransferReceipt(value.transfer),remote=verifyRemoteMilestoneEvidence(value.remote),managed=verifyManagedRecoveryReceipt(value.managedRecovery);
  for(const component of [transfer,remote,managed])if(component.cloudHead!==value.cloudHead||component.waitronHead!==value.waitronHead||component.cloudDirty!==false||component.waitronDirty!==false)fail();
  const measurements=value.measurements;
  if(!exact(measurements,['gatewayReplacementMs','cellReconnectionMs','continuousRestoreMs','snapshotRestoreMs','replacementMs'])||Object.values(measurements).some(item=>!positive(item))||measurements.gatewayReplacementMs!==remote.replacementMs||measurements.cellReconnectionMs!==remote.movement.reconnectionMs||measurements.continuousRestoreMs!==managed.continuous.restoreMs||measurements.snapshotRestoreMs!==managed.snapshotFallback.restoreMs||measurements.replacementMs!==managed.replacement.elapsedMs||managed.activation!==value.activation)fail();
