@@ -42,7 +42,7 @@ pnpm account:serve
 ```
 
 If you export `DATABASE_URL` in your shell, `pnpm db:migrate` applies the same migrations.
-The server refuses startup without migrations `007_account_http.sql` through `015_backup_recovery_requests.sql`; it never applies
+The server refuses startup without migrations `007_account_http.sql` through `020_account_security_controls.sql`; it never applies
 migrations itself. Its default listener is `127.0.0.1:3000`.
 
 In another terminal, from the same directory:
@@ -100,6 +100,8 @@ parameters remain rejected, so tokens belong only in completion bodies.
 | POST `/login` | `{"email":"owner@example.test","password":"a long unique password"}` | 200 `{"accountId":"<uuid>"}`, with session and CSRF cookies |
 | GET `/session` | No body; session cookie | 200 `{"accountId":"<uuid>","expiresAt":"<ISO timestamp>"}` |
 | POST `/session/activity` | `{}`, session cookie and `X-CSRF-Token` | 200 `{"accountId":"<uuid>","expiresAt":"<ISO timestamp>"}` |
+| GET `/sessions` | No body; session cookie | 200 with this account's live session IDs, creation, last-use and expiry times, and current-session marker |
+| POST `/sessions/revoke` | `{"id":"<session uuid>"}`, session cookie and `X-CSRF-Token` | 204 after an account-scoped revocation attempt; clears cookies when you revoke the current session |
 | POST `/logout` | `{}`, session cookie and `X-CSRF-Token` | 204, clearing both cookies |
 | POST `/password-reset/request` | `{"email":"owner@example.test"}` | 202 `{"status":"accepted"}` |
 | POST `/password-reset/complete` | `{"token":"<emailed token>","password":"a different long password"}` | 200 `{"status":"completed"}` |
@@ -116,7 +118,7 @@ Use the six requests in two pairs plus the account list:
 | --- | --- | --- |
 | POST `/passkeys/authentication/options` | Exact `Origin` | Ceremony ID and browser request options |
 | POST `/passkeys/authentication/verify` | Exact `Origin` and authenticator response | Account ID plus session and CSRF cookies |
-| GET `/passkeys` | Live session | Account-scoped passkey row IDs and enrolment dates |
+| GET `/passkeys` | Live session | Account-scoped passkey row IDs, enrolment dates and nullable last-use times |
 | POST `/passkeys/registration/options` | Live session, CSRF and current password | Ceremony ID and browser creation options |
 | POST `/passkeys/registration/verify` | Same live session and CSRF | New passkey row ID and enrolment date |
 | POST `/passkeys/remove` | Live session, CSRF and current password | 204 after an account-scoped removal attempt |
@@ -164,6 +166,13 @@ GET `/session` does not extend the idle deadline. Send explicit activity when th
 person is using the portal. Activity extends the 30-minute idle lifetime within the
 12-hour absolute lifetime. Logout without a live session still clears the cookies;
 a live session requires its CSRF proof. Background polling cannot keep it alive.
+
+GET `/sessions` is passive too. It lists only unended sessions whose idle and absolute
+deadlines are still live. POST `/sessions/revoke` accepts an opaque session UUID, not a
+token hash. It checks the acting session and CSRF proof before and after any target-row
+wait. Repeating a successful request, naming an ended row or naming another account's
+row returns the same 204 response. Reload the list after an uncertain response instead
+of replaying the write; the portal does this automatically.
 
 ## Limits and errors
 
@@ -260,7 +269,8 @@ These commands use disposable PostgreSQL and Mailpit containers. Tests complete 
 account journey through captured email, exercise shared counters across connections,
 and send real slow, oversized and interrupted HTTP requests. API tests inspect HTTPS
 cookie attributes and use explicit Cookie headers. The portal suite adds real browser
-cookie/session journeys over loopback HTTP, phone layouts, both themes and accessibility.
+cookie/session journeys over loopback HTTP, active-session revocation with lost-reply
+recovery, English and Spanish phone/desktop layouts, both themes and accessibility.
 Production TLS ingress and browser cookie behavior at the deployed HTTPS origin still
 need deployment verification.
 

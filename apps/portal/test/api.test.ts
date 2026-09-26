@@ -56,9 +56,27 @@ test('passkey requests validate nested ceremony replies and carry CSRF only for 
   response={ceremonyId,options:{challenge:'challenge',rp:{id:'cloud.example.test',name:'Waitron Cloud'},user:{id:'user',name:'owner@example.test',displayName:'owner@example.test'},pubKeyCredParams:[{type:'public-key',alg:-7}]}};
   assert.equal((await accountRequest('/passkeys/registration/options',{password:'secret'})).ok,true);
   assert.equal((requests.at(-1)?.headers as Record<string,string>)['X-CSRF-Token'],'browser-proof');
-  response={id:ceremonyId,createdAt:new Date().toISOString()};
+  response={id:ceremonyId,createdAt:new Date().toISOString(),lastUsedAt:null};
   assert.equal((await accountRequest('/passkeys/registration/verify',{ceremonyId,response:{id:'credential'}})).ok,true);
   assert.deepEqual(JSON.parse(String(requests.at(-1)?.body)),{ceremonyId,response:{id:'credential'}});
-  response={passkeys:[{id:ceremonyId,createdAt:'not-a-date'}]};
+  response={passkeys:[{id:ceremonyId,createdAt:'not-a-date',lastUsedAt:null}]};
   assert.equal((await accountRequest('/passkeys')).ok,false);
+});
+
+test('account security requests validate session summaries and send CSRF on revoke', async t => {
+  const priorLocation=Object.getOwnPropertyDescriptor(globalThis,'location'),priorDocument=Object.getOwnPropertyDescriptor(globalThis,'document');
+  Object.defineProperty(globalThis,'location',{configurable:true,value:{protocol:'https:'}});
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{cookie:'__Host-cloud_csrf=browser-proof'}});
+  t.after(()=>{for(const [key,prior] of [['location',priorLocation],['document',priorDocument]] as const) {if(prior)Object.defineProperty(globalThis,key,prior);else Reflect.deleteProperty(globalThis,key);}});
+  const id='12345678-1234-4234-8234-123456789abc';
+  const summary={id,createdAt:'2026-09-26T00:00:00.000Z',lastUsedAt:'2026-09-26T00:20:00.000Z',expiresAt:'2026-09-26T00:50:00.000Z',current:true};
+  let response=new Response(JSON.stringify({sessions:[summary]}),{headers:{'content-type':'application/json'}});
+  let options:RequestInit|undefined;
+  t.mock.method(globalThis,'fetch',async(_url:unknown,init?:RequestInit)=>{options=init;return response;});
+  assert.equal((await accountRequest('/sessions')).ok,true);
+  response=Response.json({sessions:[{...summary,current:'yes'}]});
+  assert.equal((await accountRequest('/sessions')).ok,false);
+  response=new Response(null,{status:204});
+  assert.equal((await accountRequest('/sessions/revoke',{id})).ok,true);
+  assert.equal((options?.headers as Record<string,string>)['X-CSRF-Token'],'browser-proof');
 });

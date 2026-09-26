@@ -1,4 +1,5 @@
 import {replacementResponse} from './replacement.ts';
+import {accountSessionResponse} from './account-sessions.ts';
 import {passkeyResponse} from './passkeys.ts';
 import {recoveryResponse} from './recovery.ts';
 import {remoteAccessResponse,type RemoteResolver} from './remote-access.ts';
@@ -77,6 +78,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if (url.search) throw new AccountHttpError(400, 'invalid_input');
     const ip = clientAddress(c.env?.incoming?.socket.remoteAddress ?? '', c.req.header('x-forwarded-for'), config.trustedProxyIps);
     await consume([{scope: 'all-ip', subject: ip, limit: 120, windowSeconds: 60}]);
+    if(c.req.path==='/api/account/sessions'||c.req.path.startsWith('/api/account/sessions/'))return accountSessionResponse(c,{pool,origin:config.portalOrigin,secure});
     if(c.req.path==='/api/account/passkeys'||c.req.path.startsWith('/api/account/passkeys/'))return passkeyResponse(c,{pool,store:passkeys,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path.startsWith('/api/replacement/'))return replacementResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures,consume});
     if(c.req.path.startsWith('/api/recovery/')||c.req.path.startsWith('/api/account/recovery/'))return recoveryResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures,consume});

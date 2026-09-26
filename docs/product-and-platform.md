@@ -366,9 +366,12 @@ or account from becoming authority in Cloud.
 
 Customers can remove their own passkeys after another current-password check. Password
 reset ends existing sessions but keeps passkeys, because access to an email account alone
-must not silently remove a possession factor. Account-security controls for active
-sessions and passkey last-use details remain follow-up work, as does the retention policy
-for consumed challenge history.
+must not silently remove a possession factor. The account page lists active sessions with
+their last-use and effective-expiry times, marks the current session and lets the customer
+revoke an account-scoped session. It also shows each passkey's nullable last-use time.
+These passive reads do not keep sessions alive, and uncertain revocation replies reconcile
+from the refreshed list. The retention policy for ended sessions and consumed challenge
+history remains follow-up work.
 
 Confirmed reuse source: Waitron's identity module at tag `pre-sqlite-migration`,
 pinned to commit `c9d80c59a30ab1ae7a4acc0a6999e6a342de924e`. Its

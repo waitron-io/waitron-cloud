@@ -249,9 +249,14 @@ mobile notifications separately.
   and email recovery remain available. Durable five-minute ceremonies are single-use,
   exact-origin and exact-RP checks are enforced, and a real Chromium virtual authenticator
   proves enrolment, sign-in, replay rejection, account isolation and removal in English
-  and Spanish. D10 still needs richer account-security controls, including session
-  management and passkey last-use details. D11 still needs the retention and cleanup
-  decision for WebAuthn ceremony history. Configure live email delivery, implement MFA,
+  and Spanish. The account page now lists only your live management sessions, marks the
+  current one and shows creation, last-use and effective-expiry times. You can revoke any
+  session with a CSRF-protected, account-scoped action; uncertain replies reconcile from
+  the passive list, and revoking the current session returns you to sign-in. Passkey rows
+  show their nullable last-use time. English and Spanish Chromium checks cover phone and
+  desktop layouts, stale authority, concurrent logout/revocation, account isolation and
+  lost replies. D11 still needs the retention and cleanup decision for ended/expired
+  sessions and WebAuthn ceremony history. Configure live email delivery, implement MFA,
   and define the platform role catalogue before public use. Shared login/request limits, secure
   cookies and Origin/CSRF checks are implemented in the account API. Validate ingress
   bot controls, trusted proxy settings and browser behaviour before deployment. Define
@@ -396,6 +401,10 @@ mobile notifications separately.
   and billing changes, diagnostics, restore and cancellation. Verify customers can
   complete routine flows without staff, including recovery from interrupted operations.
   Give exceptional failures useful diagnostics for investigation under the support policy.
+  Account security is now self-service: the portal shows active management sessions and
+  passkey last use, identifies the current session, and lets you revoke a session without
+  staff access. It refreshes the list after every attempt so a lost successful reply does
+  not encourage a second write.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
   The [local monitor](local-monitoring.md) now records missing contact, stale snapshots

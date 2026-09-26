@@ -21,6 +21,15 @@ When updating account lifecycle operations, acquire the account lock before lock
 its credential or session rows. Callers own their transaction and PostgreSQL pool,
 including handling idle-connection errors.
 
+`listAccountSessions` returns only the live sessions for the authenticated account.
+Each row has an opaque UUID, its creation and last-use times, its effective expiry and
+a current-session marker. The read never extends activity and never exposes a token
+hash. `revokeAccountSession` requires the acting session's CSRF proof and accepts one
+of those UUIDs. Missing, ended and other-account IDs are the same idempotent no-op.
+Revocations for one account are serialised and the actor is checked again after a
+target-row wait, so two sessions cannot deadlock by revoking each other and stale
+authority cannot commit.
+
 `requireCurrentPassword` proves fresh account authority without creating a session. It
 derives the submitted password before taking account and credential locks, then rechecks
 the hash after those locks so a concurrent password change cannot authorise stale input.

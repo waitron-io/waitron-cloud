@@ -9,6 +9,14 @@ const DUMMY_PASSWORD_HASH = await hashSecret('cloud-login-timing-dummy');
 const passiveRead = new AsyncLocalStorage<boolean>();
 export interface SessionCredentials { token: string; csrfToken: string; accountId: string; }
 export interface Session { accountId: string; expiresAt: string; }
+export interface AccountSessionSummary {
+  id: string;
+  createdAt: string;
+  lastUsedAt: string;
+  expiresAt: string;
+  current: boolean;
+}
+export interface AccountSessionRevocation { revoked: boolean; current: boolean; }
 export class IdentityError extends Error {
   readonly code: 'credentials_invalid' | 'session_unavailable' | 'session_expired' | 'csrf_invalid' | 'permission_denied';
   constructor(code: IdentityError['code']) {
@@ -101,6 +109,47 @@ export async function endSession(client: PoolClient, token: string): Promise<boo
   if (!isToken(token)) return false;
   const { rowCount } = await client.query('UPDATE cloud_sessions SET ended_at = clock_timestamp() WHERE token_hash = $1 AND ended_at IS NULL', [digest(token)]);
   return rowCount === 1;
+}
+
+export async function listAccountSessions(client: PoolClient, token: string): Promise<AccountSessionSummary[]> {
+  const session = await resolveSession(client, token, {touch: false});
+  const tokenHash = digest(token);
+  const {rows} = await client.query(`WITH moment AS (SELECT clock_timestamp() AS now)
+    SELECT id, created_at, last_seen_at,
+      LEAST(last_seen_at + interval '30 minutes', absolute_expires_at) AS expires_at,
+      token_hash = $2 AS current
+    FROM cloud_sessions CROSS JOIN moment
+    WHERE account_id = $1 AND ended_at IS NULL
+      AND last_seen_at + interval '30 minutes' > moment.now
+      AND absolute_expires_at > moment.now
+    ORDER BY (token_hash = $2) DESC, last_seen_at DESC, id`, [session.accountId, tokenHash]);
+  return rows.map(row => ({id: row.id, createdAt: row.created_at.toISOString(),
+    lastUsedAt: row.last_seen_at.toISOString(), expiresAt: row.expires_at.toISOString(), current: row.current}));
+}
+
+export async function revokeAccountSession(client: PoolClient, token: string, csrfToken: string,
+  id: string): Promise<AccountSessionRevocation> {
+  if (!isToken(token)) throw new IdentityError('session_unavailable');
+  const tokenHash = digest(token);
+  const candidate = (await client.query('SELECT account_id FROM cloud_sessions WHERE token_hash = $1', [tokenHash])).rows[0];
+  if (!candidate) throw new IdentityError('session_unavailable');
+  // One account-level turn prevents two sessions from locking each other in opposite order.
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [candidate.account_id]);
+  const actor = await resolveSession(client, token, {csrfToken, touch: false});
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    return {revoked: false, current: false};
+  }
+  const target = (await client.query(`WITH moment AS (SELECT clock_timestamp() AS now)
+    SELECT token_hash FROM cloud_sessions CROSS JOIN moment
+    WHERE id = $1 AND account_id = $2 AND ended_at IS NULL
+      AND last_seen_at + interval '30 minutes' > moment.now
+      AND absolute_expires_at > moment.now
+    FOR UPDATE OF cloud_sessions`, [id, actor.accountId])).rows[0];
+  if (!target) return {revoked: false, current: false};
+  // A target-row wait must not let expired or revoked acting authority commit a change.
+  await resolveSession(client, token, {csrfToken, touch: false});
+  const result = await client.query('UPDATE cloud_sessions SET ended_at = clock_timestamp() WHERE id = $1 AND ended_at IS NULL', [id]);
+  return {revoked: result.rowCount === 1, current: target.token_hash === tokenHash};
 }
 
 export async function requirePlatformPermission(client: PoolClient, token: string, permission: string, options: {csrfToken?: string} = {}): Promise<Session> {

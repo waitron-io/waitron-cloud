@@ -40,7 +40,7 @@ const simpleWebAuthn: PasskeyCeremonyAdapter = {
   verifyAuthentication: verifyAuthenticationResponse,
 };
 
-export interface PasskeySummary { id: string; createdAt: string; }
+export interface PasskeySummary { id: string; createdAt: string; lastUsedAt: string | null; }
 export interface PasskeyRegistrationOptions { ceremonyId: string; options: PublicKeyCredentialCreationOptionsJSON; }
 export interface PasskeyAuthenticationOptions { ceremonyId: string; options: PublicKeyCredentialRequestOptionsJSON; }
 export class PasskeyError extends Error {
@@ -119,7 +119,7 @@ export class PasskeyStore {
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING created_at`,
         [id, ceremony.accountId, credential.id, Buffer.from(credential.publicKey), credential.counter,
           credential.transports ?? [], credentialDeviceType, credentialBackedUp]);
-        return {id, createdAt: inserted.rows[0].created_at.toISOString()};
+        return {id, createdAt: inserted.rows[0].created_at.toISOString(), lastUsedAt: null};
       });
     } catch (error) {
       if (isPgCode(error, '23505') || error instanceof PasskeyError) throw new PasskeyError();
@@ -179,9 +179,10 @@ export class PasskeyStore {
   async list(token: string): Promise<PasskeySummary[]> {
     return transaction(this.#pool, async client => {
       const session = await resolveSession(client, token, {touch: false});
-      const rows = (await client.query(`SELECT id, created_at FROM cloud_passkeys WHERE account_id = $1
+      const rows = (await client.query(`SELECT id, created_at, last_used_at FROM cloud_passkeys WHERE account_id = $1
         ORDER BY created_at, id`, [session.accountId])).rows;
-      return rows.map(row => ({id: row.id, createdAt: row.created_at.toISOString()}));
+      return rows.map(row => ({id: row.id, createdAt: row.created_at.toISOString(),
+        lastUsedAt: row.last_used_at?.toISOString() ?? null}));
     });
   }
 

@@ -18,13 +18,15 @@ export function passkeyAccountScreen(app: PortalApp) {
   const c = app.copy;
   const message = app.passkeys.error ?? app.passkeys.notice;
   const date = new Intl.DateTimeFormat(app.locale, {dateStyle: 'medium'});
+  const dateTime = new Intl.DateTimeFormat(app.locale, {dateStyle: 'medium', timeStyle: 'short'});
   return html`<section class="passkeys" aria-labelledby="passkeys-heading">
-    <h2 id="passkeys-heading">${c.passkeys}</h2>
+    <h3 id="passkeys-heading">${c.passkeys}</h3>
     <p>${c.passkeyIntro}</p>
     ${message ? html`<p role=${app.passkeys.error ? 'alert' : 'status'}>${c[message]}</p>` : nothing}
     ${app.passkeys.loaded && !app.passkeys.passkeys.length ? html`<p>${c.passkeyNone}</p>` : nothing}
     ${app.passkeys.passkeys.length ? html`<ul class="passkey-list">${app.passkeys.passkeys.map(passkey => html`<li>
-      <span>${c.passkeyCreated} ${date.format(new Date(passkey.createdAt))}</span>
+      <span class="security-details"><span><span class="security-label">${c.passkeyCreated}</span> ${date.format(new Date(passkey.createdAt))}</span>
+        <span><span class="security-label">${c.passkeyLastUsed}</span> ${passkey.lastUsedAt ? dateTime.format(new Date(passkey.lastUsedAt)) : c.passkeyNeverUsed}</span></span>
       <wt-button .disabled=${app.passkeys.pending} @click=${() => {void app.removePasskey(passkey.id);}}>${c.passkeyRemove}</wt-button>
     </li>`)}</ul>` : nothing}
     ${app.passkeys.supported === false ? html`<p class="help" role="status">${c.passkeyUnsupported}</p>` : nothing}

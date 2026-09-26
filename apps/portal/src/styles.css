@@ -38,8 +38,17 @@ button:disabled { cursor: default; opacity: .6; }
 .separator { align-items: center; display: flex; gap: .75rem; margin: 1.25rem 0; }
 .separator::before, .separator::after { background: var(--wt-color-border); content: ""; flex: 1; height: 1px; }
 .passkey-signin wt-button { width: 100%; }
-.passkeys { border-block-start: 1px solid var(--wt-color-border); margin-block-start: 1.5rem; padding-block-start: .5rem; }
-.passkeys h2 { font-size: 1.25rem; }
-.passkey-list { list-style: none; margin: 1rem 0; padding: 0; }
-.passkey-list li { align-items: center; display: flex; gap: 1rem; justify-content: space-between; margin: .75rem 0; }
+.account-security { border-block-start: 1px solid var(--wt-color-border); margin-block-start: 1.5rem; padding-block-start: .5rem; }
+.account-security h2 { font-size: 1.25rem; }
+.account-security h3 { font-size: 1.05rem; }
+.sessions, .passkeys { margin-block-start: 1.25rem; }
+.passkeys { border-block-start: 1px solid var(--wt-color-border); padding-block-start: .5rem; }
+.session-list, .passkey-list { list-style: none; margin: 1rem 0; padding: 0; }
+.session-list li, .passkey-list li { align-items: center; display: flex; gap: 1rem; justify-content: space-between; margin: .75rem 0; }
+.security-details { display: grid; gap: .2rem; min-width: 0; }
+.security-label { color: var(--wt-color-text-muted); font-size: .85rem; }
 .passkey-list span { min-width: 0; }
+@media (max-width: 480px) {
+  .session-list li, .passkey-list li { align-items: stretch; flex-direction: column; }
+  .session-list wt-button, .passkey-list wt-button { align-self: start; }
+}
