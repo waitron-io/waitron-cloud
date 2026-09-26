@@ -10,7 +10,8 @@ import {issueCertificate,type DnsChallengeProvider} from './certificates.ts';
 import {certificateNeedsRenewal} from './renewal.ts';
 // This CLI is an operator boundary: its input files and DNS module must be trusted local files.
 const [command,file]=process.argv.slice(2);
-if(!file||!['cell','provision','dns','hostname','export','certificate'].includes(command??''))throw new Error('Usage: operator-cli.ts cell|provision|dns|hostname|export|certificate trusted-input.json');
+const commands=['cell','provision','move-stage','move-ready','move-commit','move-cancel','dns','hostname','export','certificate'];
+if(!file||!commands.includes(command??''))throw new Error(`Usage: operator-cli.ts ${commands.join('|')} trusted-input.json`);
 if(!process.env.DATABASE_URL)throw new Error('DATABASE_URL required');
 const config=JSON.parse(await readFile(file,'utf8'));
 const pool=new Pool({connectionString:process.env.DATABASE_URL}),store=new RemoteAccessStore(pool);
@@ -21,6 +22,10 @@ let stopping=false;for(const signal of ['SIGTERM','SIGINT'])process.once(signal,
 try{
  if(command==='cell')await store.createCell(config);
  if(command==='provision')console.log(JSON.stringify(await store.provision(config.installationId,config.cellId,config.peerPublicKey,config.port??443)));
+ if(command==='move-stage')console.log(JSON.stringify(await store.stageMove(config)));
+ if(command==='move-ready')console.log(JSON.stringify(await store.markMoveReady(config.operationId,config.expectedRevision,config.sequence)));
+ if(command==='move-commit')console.log(JSON.stringify(await store.completeMove(config.operationId,config.expectedRevision)));
+ if(command==='move-cancel')console.log(JSON.stringify(await store.cancelMove(config.operationId,config.expectedRevision)));
  if(command==='dns')console.log(JSON.stringify(await store.hostnameInstructions(config.installationId,config.kind,config.hostname)));
  if(command==='hostname')console.log(JSON.stringify(await store.setHostname(config.installationId,config.kind,config.hostname,config.expectedRevision)));
  if(command==='export'){

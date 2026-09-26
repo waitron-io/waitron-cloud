@@ -5,7 +5,7 @@ import {Pool} from 'pg';
 import {execFileSync} from 'node:child_process';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
-import {migrate} from '../src/migrate.ts';
+import {migrate,migrationNames} from '../src/migrate.ts';
 import {login} from '@waitron-cloud/identity';
 import {database} from '../../account-http/test/fixtures.ts';
 import {RegistrationStore,SignupStore,transaction} from '../src/index.ts';
@@ -119,7 +119,7 @@ test('migrations upgrade a seven-migration schema without changing its existing 
     await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venue,org,biz,randomUUID()]);
     await pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'existing-key')",[installation,venue]);
     const previous=(await pool.query('SELECT id,venue_id,public_key,revoked_at FROM installations')).rows;await migrate(pool);await migrate(pool);
-    assert.deepEqual((await pool.query('SELECT id,venue_id,public_key,revoked_at FROM installations')).rows,previous);assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'22');
+    assert.deepEqual((await pool.query('SELECT id,venue_id,public_key,revoked_at FROM installations')).rows,previous);assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,String(migrationNames.length));
     assert.match((await pool.query("SELECT id::text FROM cloud_sessions WHERE token_hash=$1",['a'.repeat(64)])).rows[0].id,/^[0-9a-f-]{36}$/);
     assert.equal((await pool.query('SELECT count(*) FROM pairing_requests')).rows[0].count,'0');
   }finally{await pool.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();}
