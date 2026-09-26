@@ -36,9 +36,9 @@ test('trusted CLI arguments, once and status are strict and redact configuration
 test('a missing exact route mapping fails only that target with a redacted code',async()=>{
  const configured=await fixture(),store=new RemoteAccessStore(db.pool),unmapped=randomUUID();
  await store.createCell({id:unmapped,country:'ES',provider:'aws',environment:'test',suffix:`cell-${unmapped}.example.test`,subnet:++subnet,publicKey:peerKey(),endpoint:`gateway-${unmapped}.example.test:51820`});
- const result=run(configured.configFile,'--once');assert.equal(result.status,0,result.stderr);
+ const results=[run(configured.configFile,'--once'),run(configured.configFile,'--once')];for(const result of results)assert.equal(result.status,0,result.stderr);
  const row=(await db.pool.query("SELECT status,last_error FROM remote_configuration_jobs WHERE kind='route' AND target_id=$1",[unmapped])).rows[0];assert.deepEqual(row,{status:'pending',last_error:'reconcile_failed'});
- assert.doesNotMatch(result.stdout+result.stderr,/mapping|ENOENT|private|\/Users\//);
+ assert.doesNotMatch(results.map(result=>result.stdout+result.stderr).join(''),/mapping|ENOENT|private|\/Users\//);
 });
 
 test('continuous mode exits cleanly on SIGTERM',async()=>{
