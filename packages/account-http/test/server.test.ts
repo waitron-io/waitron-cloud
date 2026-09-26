@@ -86,19 +86,23 @@ test('stalled bodies expire, aborted clients release slots, and admission is bou
     assert.equal(await queued(), 0); assert.equal((await send(running.port).result).status, 401);
   } finally {for (const item of pending) item.abort(); await running.close();}
 });
-test('liveness remains available while database-backed readiness fills admission',async()=>{
- const running=await host(),locker=await db.secondPool.connect(),blocked:ReturnType<typeof health>[]=[];
+test('one slow readiness probe cannot fill admission and liveness remains available',async()=>{
+ const running=await host(),locker=await db.secondPool.connect(),probes:ReturnType<typeof health>[]=[];
+ let ordinaryStatus=0,liveStatus=0;let results:{status:number;body:string}[]=[];
  try{
   await locker.query('BEGIN');await locker.query('LOCK TABLE schema_migrations IN ACCESS EXCLUSIVE MODE');
-  for(let index=0;index<8;index++)blocked.push(health(running.port,'/api/health/ready'));
-  await until(async()=>Number((await db.secondPool.query("SELECT count(*)::integer AS count FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT count(*)::integer AS count FROM schema_migrations%'",[db.schema])).rows[0].count)===8);
+  for(let index=0;index<8;index++)probes.push(health(running.port,'/api/health/ready'));
+  await until(async()=>Number((await db.secondPool.query("SELECT count(*)::integer AS count FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT count(*)::integer AS count FROM schema_migrations%'",[db.schema])).rows[0].count)>=1);
+  ordinaryStatus=(await send(running.port).result).status;
   const live=await health(running.port,'/api/health/live').result;
-  assert.equal(live.status,200);assert.deepEqual(JSON.parse(live.body),{status:'live'});
+  liveStatus=live.status;assert.deepEqual(JSON.parse(live.body),{status:'live'});
  }finally{
   await locker.query('ROLLBACK');locker.release();
-  for(const item of blocked)await item.result;
+  results=await Promise.all(probes.map(item=>item.result));
   await running.close();
  }
+ assert.equal(ordinaryStatus,401);assert.equal(liveStatus,200);
+ assert.deepEqual(results.map(result=>result.status).sort(),[200,503,503,503,503,503,503,503]);
 });
 test('header size and receive deadlines are enforced over raw TCP', async () => {
   const running = await host();

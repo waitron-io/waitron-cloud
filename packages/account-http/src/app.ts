@@ -82,15 +82,20 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     const url = new URL(c.req.url);
     if (url.host !== origin.host || (c.req.header('host') && c.req.header('host') !== origin.host)) throw new AccountHttpError(403, 'forbidden');
     if (url.search) throw new AccountHttpError(400, 'invalid_input');
-    if(c.req.path==='/api/health/live'||c.req.path==='/api/health/ready'){
+    const health=c.req.path==='/api/health/live'||c.req.path==='/api/health/ready';
+    if(health){
       if(c.req.method!=='GET')throw new AccountHttpError(405,'method_not_allowed');
       if(c.req.path==='/api/health/live')return c.json({status:'live'});
+    }
+    const ip = clientAddress(c.env?.incoming?.socket.remoteAddress ?? '', c.req.header('x-forwarded-for'), config.trustedProxyIps);
+    if(health){
+      try{await consume([{scope:'all-ip',subject:ip,limit:120,windowSeconds:60}]);}
+      catch(error){if(error instanceof AccountHttpError)throw error;return c.json({status:'unavailable'},503);}
       try{
         const installed=await pool.query<{count:number}>('SELECT count(*)::integer AS count FROM schema_migrations WHERE name=ANY($1::text[])',[migrationNames]);
         return installed.rows[0]?.count===migrationNames.length?c.json({status:'ready'}):c.json({status:'unavailable'},503);
       }catch{return c.json({status:'unavailable'},503);}
     }
-    const ip = clientAddress(c.env?.incoming?.socket.remoteAddress ?? '', c.req.header('x-forwarded-for'), config.trustedProxyIps);
     await consume([{scope: 'all-ip', subject: ip, limit: 120, windowSeconds: 60}]);
     if(c.req.path.startsWith('/api/account/diagnostics/'))return diagnosticsResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/usage/'))return usageResponse(c,{pool,origin:config.portalOrigin,secure,consume});

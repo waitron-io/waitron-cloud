@@ -60,6 +60,19 @@ test('historical terminal email failures remain counted without degrading curren
  }finally{await server.close();}
 });
 
+test('open incidents remain degraded when their configured targets disappear',async()=>{
+ const target=await configuredVenue();
+ await db.pool.query("INSERT INTO venue_incidents(venue_id,kind,status,revision) VALUES($1,'disconnected','open',1)",[target.venue]);
+ await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[target.installation]);
+ const server=await healthy();try{
+  const snapshot=await operationsStatus(db.pool,{controlApiUrl:server.url});
+  assert.equal(snapshot.components.monitoring.venues,0);
+  assert.equal(snapshot.components.monitoring.incidents,1);
+  assert.equal(snapshot.components.monitoring.state,'degraded');
+  assert.equal(snapshot.components.monitoring.code,'incidents_open');
+ }finally{await server.close();}
+});
+
 async function configuredVenue(){
  const organisation=randomUUID(),business=randomUUID(),venue=randomUUID(),installation=randomUUID(),cell=randomUUID();
  await db.pool.query('INSERT INTO organisations(id,name) VALUES($1,$2)',[organisation,'Private operator fixture']);

@@ -78,8 +78,10 @@ scrubbed completion page requires reopening the email or requesting another link
 The API also exposes two unauthenticated, non-cacheable health routes. GET
 `/api/health/live` returns `200 {"status":"live"}` without querying PostgreSQL. GET
 `/api/health/ready` checks the database and every migration known to the running server,
-then returns `200 {"status":"ready"}` or `503 {"status":"unavailable"}`. Both responses
-have a fixed shape and omit database details. See the
+then returns `200 {"status":"ready"}` or `503 {"status":"unavailable"}`. Readiness
+shares the API's client-IP allowance, and each process admits only one readiness query at
+a time; excess probes receive the normal 429 or 503 response. Liveness remains outside
+database admission and rate counters. Health responses omit database details. See the
 [operations status guide](../../docs/operations-status.md) for the aggregate operator
 check and Prometheus export.
 
@@ -238,7 +240,7 @@ PostgreSQL counters apply across all API instances and survive restarts:
 
 | Scope | Allowance |
 | --- | --- |
-| API routes, per client IP | 120 per minute |
+| API routes except liveness, per client IP | 120 per minute |
 | Login, per IP / normalised email | 10 per minute / 30 per 15 minutes |
 | Each signup/reset email-request route, per IP | 10 per 15 minutes |
 | Each signup/reset completion route, per IP and token | 10 per 15 minutes |

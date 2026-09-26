@@ -15,7 +15,7 @@ function unavailable(request?: Request, portal = false) {
 }
 export async function startAccountServer(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig; host?: string; port?: number; portalAssets?: PortalAssets;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider}): Promise<{server: Server; close(): Promise<void>}> {
   const app = createAccountApp(options);
-  let active = 0; let stopping = false; let closing: Promise<void> | undefined;
+  let active = 0;let readinessActive=0; let stopping = false; let closing: Promise<void> | undefined;
   const listener = getRequestListener(async (request, bindings) => {
     const url = new URL(request.url);
     const portalRequest = !!options.portalAssets && !url.pathname.startsWith('/api/');
@@ -27,10 +27,11 @@ export async function startAccountServer(options: {pool: Pool; outbox: EmailOutb
     if (stopping) return unavailable(request, portalRequest);
     if (portalRequest) return portalResponse(request, options.portalAssets!);
     if (url.pathname === '/api/health/live') return app.fetch(request, bindings);
-    if (active >= 8) return unavailable();
-    active++;
+    const readiness=url.pathname==='/api/health/ready';
+    if (active >= 8||(readiness&&readinessActive>=1)) return unavailable();
+    active++;if(readiness)readinessActive++;
     try {return await app.fetch(request, bindings);}
-    finally {active--;}
+    finally {active--;if(readiness)readinessActive--;}
   }, {overrideGlobalObjects: false, errorHandler: () => unavailable()});
   const server = createServer({maxHeaderSize: 8192, headersTimeout: 5000, requestTimeout: 5000, connectionsCheckingInterval: 1000}, listener);
   server.maxConnections = 200;

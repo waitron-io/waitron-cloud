@@ -99,7 +99,7 @@ export async function operationsStatus(pool:Pool,options:OperationsStatusOptions
  ]);
  const incidentCount=Number((await pool.query("SELECT count(*)::integer AS count FROM venue_incidents WHERE status='open'")).rows[0]?.count??0);
  const controlElapsed=Math.max(live.elapsedMs,ready.elapsedMs),controlApi={state:live.ok&&ready.ok?'ready' as const:'unready' as const,code:live.ok&&ready.ok?'ready':'unavailable',live:live.ok,ready:ready.ok,elapsedMs:Number.isFinite(controlElapsed)?controlElapsed:null};
- const m=monitor.rows[0],monitoring=m.venues===0?{state:'ready' as const,code:'no_targets'}:m.due||m.unknown||incidentCount?{state:'degraded' as const,code:m.unknown?'evidence_stale':m.due?'checks_due':'incidents_open'}:{state:'ready' as const,code:'current'};
+ const m=monitor.rows[0],monitoring=incidentCount?{state:'degraded' as const,code:'incidents_open'}:m.venues===0?{state:'ready' as const,code:'no_targets'}:m.due||m.unknown?{state:'degraded' as const,code:m.unknown?'evidence_stale':'checks_due'}:{state:'ready' as const,code:'current'};
  const emailCounts:QueueCounts={pending:0,processing:0,sent:0,expired:0,cancelled:0,failed:0};let backlogged=0,oldestPendingAt:string|null=null;
  for(const row of email.rows){emailCounts[row.status as keyof QueueCounts]=row.count;backlogged+=row.backlogged;if(row.oldest&&(!oldestPendingAt||row.oldest.toISOString()<oldestPendingAt))oldestPendingAt=row.oldest.toISOString();}
  const emailState=email.rows.length===0?{state:'ready' as const,code:'empty'}:backlogged?{state:'degraded' as const,code:'delivery_backlog'}:{state:'ready' as const,code:'current'};

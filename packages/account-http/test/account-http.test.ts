@@ -128,6 +128,7 @@ test('health routes separate process liveness from migration-backed readiness', 
   assert.equal(live.status, 200); assert.deepEqual(await live.json(), {status: 'live'}); protectedHeaders(live);
   const ready = await request('', undefined, {url: `${origin}/api/health/ready`});
   assert.equal(ready.status, 200); assert.deepEqual(await ready.json(), {status: 'ready'}); protectedHeaders(ready);
+  assert.equal((await db.pool.query('SELECT sum(attempts)::integer AS attempts FROM account_rate_limits')).rows[0].attempts, 1);
   for (const path of ['/api/health/live', '/api/health/ready']) {
     assert.equal((await request('', {}, {url: `${origin}${path}`, method: 'POST'})).status, 405);
     assert.equal((await request('', undefined, {url: `${origin}${path}?private=1`})).status, 400);

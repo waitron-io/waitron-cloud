@@ -79,3 +79,25 @@ test('owner permission lost while the authority read waits is refused',async()=>
   assert.equal((await pending).status,403);
  }finally{await locker.query('ROLLBACK').catch(()=>{});locker.release();}
 });
+
+test('owner permission lost after diagnostic reads begin is refused by the final recheck',async()=>{
+ const blocker=await db.secondPool.connect();let pending:Promise<Response>|undefined,revoke:Promise<unknown>|undefined;
+ try{
+  await blocker.query('BEGIN');await blocker.query('LOCK TABLE venue_incidents IN ACCESS EXCLUSIVE MODE');
+  pending=Promise.resolve(call({installationId:installation}));
+  const deadline=Date.now()+5000;let waiting=false;
+  while(Date.now()<deadline){
+   waiting=(await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT kind,opened_at,changed_at FROM venue_incidents%'",[db.schema])).rowCount!>0;
+   if(waiting)break;await delay(20);
+  }
+  assert.equal(waiting,true);
+  let revoked=false;revoke=db.secondPool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[owner,organisation]).then(()=>{revoked=true;});
+  await delay(100);assert.equal(revoked,true,'the diagnostic retained the membership lock before its final authority check');
+  await blocker.query('COMMIT');await revoke;
+  assert.equal((await pending).status,403);
+ }finally{
+  await blocker.query('ROLLBACK').catch(()=>{});blocker.release();
+  if(pending)await pending.catch(()=>{});
+  if(revoke)await revoke.catch(()=>{});
+ }
+});

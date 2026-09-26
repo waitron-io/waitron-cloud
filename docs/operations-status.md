@@ -127,8 +127,12 @@ unavailable.
 
 `GET /api/health/ready` checks PostgreSQL and every migration known to the running
 server. It returns `200 {"status":"ready"}` or
-`503 {"status":"unavailable"}`. Neither route returns migration names, database errors
-or tenant data. Use liveness for process replacement and readiness for traffic admission.
+`503 {"status":"unavailable"}`. It shares the API's 120-request-per-minute client-IP
+allowance, and each process admits at most one readiness query at a time. Excess probes
+receive the normal 429 or 503 response. Neither route returns migration names, database
+errors or tenant data. Use liveness for process replacement and readiness for traffic
+admission, and keep both behind the deployment ingress rather than exposing the Node
+listener directly.
 
 ## Download a customer diagnostic
 
