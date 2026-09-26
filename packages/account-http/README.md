@@ -362,8 +362,12 @@ node --input-type=module -e 'import {generateKeyPairSync} from "node:crypto"; co
 
 Keep this key across API restarts and use the same key on every API instance. Omitting
 it leaves pairing available but makes installation routes return 503. Rotation needs
-a coordinated trust-key rollout; this implementation accepts only the current issuer.
-Do not replace the key casually: outstanding leases would stop being accepted.
+a coordinated trust-key rollout. Set `CLOUD_INSTALLATION_TRUSTED_KEYS` to a JSON array
+of additional Ed25519 public keys in unpadded base64url form. The active issuer is
+always trusted. Add the new public key first, switch every signer while both public
+keys remain trusted, restart every API instance, wait until the last possible one-hour
+old lease expires, and only then remove the old public key. See
+[the outage and rotation drill](../../docs/control-plane-outages.md).
 
 Machine POSTs to `/api/installations/renew`, `/configuration`, `/report` and `/revoke`
 carry the signed envelope defined in the

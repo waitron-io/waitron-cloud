@@ -373,8 +373,12 @@ mobile notifications separately.
   results and pairing requests, and define revocation-audit retention separately.
   The cleanup command handles completed/expired pairing and registration results in
   bounded chunks but enables no category automatically. Pairing approvals, credential
-  renewals and revocations now have immutable customer audit events. Choose their retention,
-  coordinate issuer rotation/trust rollout, and measure per-IP denial-of-service behavior
+  renewals and revocations now have immutable customer audit events. Installation lease
+  consumers now accept an operator-configured overlap of old and new issuer public keys,
+  while new leases use only the active private key. The local control-plane outage drill
+  proves overlap, cutover, expiry-before-removal and revoked-lease refusal without logging
+  keys. Choose audit retention, rehearse the coordinated rotation in the selected deployment,
+  and measure per-IP denial-of-service behavior
   for venues sharing NAT and known request IDs. The
   short code has an unkeyed digest, so review database-disclosure protection before
   launch and retain explicit local business confirmation.
@@ -402,6 +406,12 @@ mobile notifications separately.
   Place venues independently, preserve their addresses on movement and test replacement
   against an explicit recovery-time target. Define how established connections and
   backups continue during a portal outage, including credential expiry and revocation.
+  The [local control-plane outage drill](control-plane-outages.md) now stops the real account
+  API process while a gateway HTTP route and TLS SeaweedFS transfer continue under their
+  existing signed authority. It proves that cached gateway restart does not extend expiry,
+  expired storage credentials are refused, recovery restores management access and a fresh
+  manifest removes a revoked route. Repeat the drill with the selected deployment database,
+  gateway reconciler and provider-native storage before setting an availability promise.
 - **Provider integration.** Storage, compute, email, notifications, jobs, keys and
   telemetry, with AWS and Google implementations where needed. The local SeaweedFS
   storage contract now covers venue-scoped access, live key rotation, issued-credential

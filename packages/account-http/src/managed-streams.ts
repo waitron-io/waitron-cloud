@@ -1,6 +1,6 @@
 import type {Context} from 'hono';
 import type {Pool,PoolClient} from 'pg';
-import {InstallationError,InstallationStore,readMachineClaims,verifyLease,verifyMachine,type LeaseIssuer} from '@waitron-cloud/registration';
+import {createLeaseTrust,InstallationError,InstallationStore,readMachineClaims,verifyLease,verifyMachine,type LeaseIssuer} from '@waitron-cloud/registration';
 import {ManagedStreams,type ManagedStreamInput,type ManagedStreamAuthority} from '@waitron-cloud/backups/managed-streams';
 import type {BackupKeyVault} from '@waitron-cloud/backups/keys';
 import {readAccountBody} from './request.ts';
@@ -20,9 +20,9 @@ function body(action:StreamAction,text:string):{revision:number;input:ManagedStr
 }
 async function revision(pool:Pool,installationId:string){const row=(await pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[installationId])).rows[0];if(!row)throw new InstallationError('unavailable');return Number(row.configuration_revision);}
 export class ManagedStreamMachines{
- readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #streams:ManagedStreams;
- constructor(pool:Pool,issuer:LeaseIssuer,origin:string,vault:BackupKeyVault,authority:ManagedStreamAuthority){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#streams=new ManagedStreams(pool,vault,authority);}
- async authenticate(action:StreamAction,envelope:unknown){return new InstallationStore(this.#pool,this.#issuer,this.#origin).authenticate(action,envelope);}
+ readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;readonly #streams:ManagedStreams;
+ constructor(pool:Pool,issuer:LeaseIssuer,origin:string,vault:BackupKeyVault,authority:ManagedStreamAuthority,trusted=createLeaseTrust(issuer)){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;this.#streams=new ManagedStreams(pool,vault,authority);}
+ async authenticate(action:StreamAction,envelope:unknown){return new InstallationStore(this.#pool,this.#issuer,this.#origin,this.#trusted).authenticate(action,envelope);}
  async execute(action:StreamAction,envelope:unknown){
   const routing=readMachineClaims(envelope),parsed=body(action,routing.body);
   const fence=async(client:PoolClient)=>{
@@ -32,7 +32,7 @@ export class ManagedStreamMachines{
    if(row.revoked_at||row.superseded_by)throw new InstallationError('revoked');
    let encoded:unknown;try{encoded=JSON.parse(claims.lease);}catch{throw new InstallationError('invalid_proof');}
    if(JSON.stringify(encoded)!==claims.lease)throw new InstallationError('invalid_proof');
-   const lease=verifyLease(encoded,new Map([[this.#issuer.keyId,this.#issuer.publicKey]]),this.#origin,now);
+   const lease=verifyLease(encoded,this.#trusted,this.#origin,now);
    if(lease.installationId!==row.id||lease.venueId!==row.venue_id||lease.environment!==row.environment||lease.publicKey!==row.public_key)throw new InstallationError('invalid_proof');
   };
   if(action==='backup-stream-configure')return this.#streams.configure(routing.installationId,parsed!.revision,parsed!.input,fence);

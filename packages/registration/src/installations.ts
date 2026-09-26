@@ -3,7 +3,7 @@ import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
 import {isPairingUuid} from './pairing-proof.ts';
-import {InstallationError,readMachineClaims,verifyMachine,verifyLease,type LeaseIssuer,type MachineAction,type SignedEnvelope} from './installation-proof.ts';
+import {createLeaseTrust,InstallationError,readMachineClaims,verifyMachine,verifyLease,type LeaseIssuer,type MachineAction,type SignedEnvelope} from './installation-proof.ts';
 import {recordSecurityAuditEvent,securityAuditSourceId,type SecurityAuditActorKind} from './security-audit.ts';
 const names=['continuous_backup','remote_access','retained_snapshots'] as const;
 type Service=typeof names[number];
@@ -60,8 +60,8 @@ async function view(client:PoolClient,id:string):Promise<InstallationView> {
 }
 /** Machine proofs are checked against the stored key while holding the same lock as revocation. */
 export class InstallationStore {
-  readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;
-  constructor(pool:Pool,issuer:LeaseIssuer,origin:string){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;}
+  readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;
+  constructor(pool:Pool,issuer:LeaseIssuer,origin:string,trusted=createLeaseTrust(issuer)){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;}
   /** Preliminary authentication protects the per-installation rate allowance; execute rechecks under lock. */
   async authenticate(action:MachineAction,envelope:unknown) {
     const routing=readMachineClaims(envelope);
@@ -83,7 +83,7 @@ export class InstallationStore {
       else {
         let lease:unknown;try{lease=JSON.parse(c.lease);}catch{return fail('invalid_proof');}
         if(JSON.stringify(lease)!==c.lease)fail('invalid_proof');
-        const claims=verifyLease(lease,new Map([[this.#issuer.keyId,this.#issuer.publicKey]]),this.#origin,now);
+        const claims=verifyLease(lease,this.#trusted,this.#origin,now);
         if(claims.installationId!==row.id||claims.venueId!==row.venue_id||claims.environment!==row.environment||claims.publicKey!==row.public_key)fail('invalid_proof');
       }
       if(prior)return prior.result;
