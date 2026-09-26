@@ -41,6 +41,8 @@ All account routes live under `/api/account`. POST bodies must be JSON objects.
 | POST `/login` | `email`, `password` | 200, account ID; session and CSRF cookies |
 | GET `/session` | Session cookie | 200, account ID and expiry; no idle extension |
 | POST `/session/activity` | Session cookie and CSRF header | 200, refreshed expiry, bounded by the existing absolute lifetime |
+| GET `/sessions` | Session cookie | 200, account-scoped live session summaries; no idle extension |
+| POST `/sessions/revoke` | Session cookie, CSRF header and session row UUID | 204, idempotent account-scoped revocation |
 | POST `/logout` | Session cookie and CSRF header | 204, end the session and clear both cookies |
 | POST `/password-reset/request` | `email` | 202, `{ status: "accepted" }` |
 | POST `/password-reset/complete` | `token`, `password` | 200, `{ status: "completed" }`; no session |

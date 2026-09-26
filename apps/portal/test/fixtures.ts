@@ -66,6 +66,15 @@ export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?
         };
         server.prependListener('request',hook);
       },
+      loseAccountReply(path: string) {
+        const server=running!.server;
+        const hook: Parameters<typeof server.prependListener>[1] = (request, response) => {
+          if(request.url!==`/api/account${path}`)return;
+          server.removeListener('request',hook);
+          response.end=()=>{request.socket.destroy();return response;};
+        };
+        server.prependListener('request',hook);
+      },
       async drainMail() { while (await worker.runOnce()) {} },
       async close() { await browser?.close(); await running?.close(); await db.close(); },
     };

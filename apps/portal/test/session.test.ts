@@ -13,6 +13,7 @@ test('passive reads do not renew; real activity is throttled and late activity c
       if (path.endsWith('/alerts')) { await route.fulfill({json:{enabled:false,locale:'en'}}); return; }
       if (path.endsWith('/installations')) { await route.fulfill({json:{installations:[]}}); return; }
       if (path.endsWith('/passkeys')) { await route.fulfill({json:{passkeys:[]}}); return; }
+      if (path.endsWith('/sessions')) { await route.fulfill({json:{sessions:[{id:'12345678-1234-4234-8234-123456789abc',createdAt:'2030-01-01T11:00:00Z',lastUsedAt:'2030-01-01T12:00:00Z',expiresAt:'2030-01-01T12:30:00Z',current:true}]}}); return; }
       if (path.endsWith('/logout')) { await route.fulfill({status:204}); return; }
       // Request events precede handler work; delay the mock to exercise that gap.
       if (path.endsWith('/activity')) { await new Promise(resolve=>setTimeout(resolve,50)); activities++; await new Promise<void>(resolve => {release=resolve;entered();}); }
@@ -49,6 +50,7 @@ test('expiry and visibility rechecks do not renew, and 401 fences a delayed acti
       if(route.request().url().endsWith('/alerts')) {await route.fulfill({json:{enabled:false,locale:'en'}});return;}
       if(route.request().url().endsWith('/installations')) {await route.fulfill({json:{installations:[]}});return;}
       if(route.request().url().endsWith('/passkeys')) {await route.fulfill({json:{passkeys:[]}});return;}
+      if(route.request().url().endsWith('/sessions')) {await route.fulfill({json:{sessions:[{id:'12345678-1234-4234-8234-123456789abc',createdAt:'2030-01-01T11:00:00Z',lastUsedAt:'2030-01-01T12:00:00Z',expiresAt:'2030-01-01T12:30:00Z',current:true}]}});return;}
       if(route.request().url().endsWith('/activity')) {activity++;await new Promise<void>(resolve=>{release=resolve;});await route.fulfill({json:{accountId:'old',expiresAt:'2030-01-01T12:30:00Z'}});return;}
       reads++;await route.fulfill(reads===1?{json:{accountId:'old',expiresAt:'2030-01-01T12:00:10Z'}}:{status:401,json:{error:'unauthenticated'}});
     });

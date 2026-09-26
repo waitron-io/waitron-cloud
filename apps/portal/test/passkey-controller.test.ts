@@ -5,6 +5,7 @@ import type {ApiResult} from '../src/api.ts';
 
 const id = '12345678-1234-4234-8234-123456789abc';
 const createdAt = '2026-09-26T00:00:00.000Z';
+const lastUsedAt = null;
 const registrationOptions = {ceremonyId: id, options: {challenge: 'register', rp: {name: 'Waitron Cloud', id: 'cloud.example.test'},
   user: {id: 'user', name: 'owner@example.test', displayName: 'owner@example.test'}, pubKeyCredParams: [{type: 'public-key', alg: -7}]}};
 const authenticationOptions = {ceremonyId: id, options: {challenge: 'authenticate', rpId: 'cloud.example.test'}};
@@ -73,7 +74,7 @@ test('enrolment requires the current password, refreshes the list, and fences ac
     if (path.endsWith('/registration/options')) return wrongPassword
       ? {ok: false, status: 403, code: 'credentials_invalid', retryAfterMs: 0}
       : {ok: true, value: registrationOptions as T};
-    return {ok: true, value: {id, createdAt} as T};
+    return {ok: true, value: {id, createdAt, lastUsedAt} as T};
   };
   const controller = new PasskeyController(() => {}, request, browser());
   controller.account('owner');
@@ -86,14 +87,14 @@ test('enrolment requires the current password, refreshes the list, and fences ac
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(calls.at(-2), {path: '/passkeys/registration/verify', body: {ceremonyId: id, response: registrationResponse}});
   controller.account('different');
-  finishList?.({ok: true, value: {passkeys: [{id, createdAt}]}});
+  finishList?.({ok: true, value: {passkeys: [{id, createdAt, lastUsedAt}]}});
   await enrolling;
   assert.deepEqual(controller.passkeys, []);
   assert.equal(controller.pending, false);
 });
 
 test('lost remove replies are reconciled by reloading the list', async () => {
-  let list = [{id, createdAt}];
+  let list = [{id, createdAt, lastUsedAt}];
   const request = async <T>(path: string): Promise<ApiResult<T>> => {
     if (path === '/passkeys') return {ok: true, value: {passkeys: list} as T};
     list = [];

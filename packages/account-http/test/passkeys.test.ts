@@ -100,7 +100,8 @@ test('HTTP passkey journey enrols, lists, authenticates once and removes with fr
   assert.ok(Number.isFinite(Date.parse(created.createdAt)));
   const list = await request('/passkeys', undefined, {headers: {cookie: session.header}});
   assert.equal(list.status, 200);
-  assert.deepEqual((await list.json() as {passkeys: {id: string}[]}).passkeys.map(item => item.id), [created.id]);
+  assert.deepEqual((await list.json() as {passkeys: {id: string; lastUsedAt: string | null}[]}).passkeys,
+    [{...created, lastUsedAt: null}]);
 
   const authOptions = await request('/passkeys/authentication/options', {});
   assert.equal(authOptions.status, 200);
@@ -111,6 +112,10 @@ test('HTTP passkey journey enrols, lists, authenticates once and removes with fr
   assert.equal(signedIn.status, 200);
   assert.deepEqual(await signedIn.json(), {accountId: owner.accountId});
   assert.equal(signedIn.headers.getSetCookie().length, 2);
+  const usedList = (await (await request('/passkeys', undefined, {headers: {cookie: session.header}})).json()) as
+    {passkeys: {lastUsedAt: string | null}[]};
+  const used = usedList.passkeys[0]?.lastUsedAt;
+  assert.ok(used && Number.isFinite(Date.parse(used)));
   const replay = await request('/passkeys/authentication/verify', {ceremonyId: authentication.ceremonyId,
     response: authenticationResponse(response.id, registration.options.user.id)});
   assert.equal(replay.status, 401);

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import crypto, { createHash, randomUUID } from 'node:crypto';
 import { after, before, beforeEach, mock, test } from 'node:test';
 import { Pool } from 'pg';
-import { createSession, hashSecret, login, requireCurrentPassword, resolveSession, endSession, requirePlatformPermission, withPassiveRead } from '@waitron-cloud/identity';
+import { createSession, endSession, hashSecret, IdentityError, listAccountSessions, login, requireCurrentPassword,
+  requirePlatformPermission, resolveSession, revokeAccountSession, withPassiveRead } from '@waitron-cloud/identity';
 import { transaction } from '../src/transaction.ts';
 import { migrate } from '../src/migrate.ts';
 import { RegistrationStore } from '../src/index.ts';
@@ -229,6 +230,117 @@ test('passive reads do not extend idle expiry while human activity does', async 
   assert.equal(passive.expiresAt, before.expiresAt);
   const active = await run(client => resolveSession(client, session.token));
   assert.ok(Date.parse(active.expiresAt) > Date.parse(before.expiresAt) + 9 * 60_000);
+});
+
+test('account session summaries are passive, account-scoped and identify the current live session', async () => {
+  const current = await signIn();
+  const other = await signIn();
+  const ended = await signIn();
+  const expired = await signIn();
+  await run(client => endSession(client, ended.token));
+  await pool.query("UPDATE cloud_sessions SET last_seen_at = clock_timestamp() - interval '31 minutes' WHERE token_hash = $1", [digest(expired.token)]);
+  await pool.query("UPDATE cloud_sessions SET last_seen_at = clock_timestamp() - interval '1 minute', absolute_expires_at = clock_timestamp() + interval '10 minutes' WHERE token_hash = $1", [digest(current.token)]);
+  await pool.query("UPDATE cloud_sessions SET last_seen_at = clock_timestamp() - interval '5 minutes', absolute_expires_at = clock_timestamp() + interval '10 hours' WHERE token_hash = $1", [digest(other.token)]);
+  const foreignAccount = randomUUID();
+  await pool.query('INSERT INTO cloud_accounts (id) VALUES ($1)', [foreignAccount]);
+  await pool.query('INSERT INTO cloud_credentials (account_id, email, password_hash) VALUES ($1, $2, $3)',
+    [foreignAccount, 'other@example.test', await hashSecret('other-account-password')]);
+  const foreign = await run(client => login(client, {email: 'other@example.test', password: 'other-account-password'}));
+  const before = (await pool.query(`SELECT id, token_hash, created_at, last_seen_at, absolute_expires_at
+    FROM cloud_sessions ORDER BY token_hash`)).rows;
+
+  const sessions = await run(client => listAccountSessions(client, current.token));
+  const resolvedCurrent = await run(client => resolveSession(client, current.token, {touch: false}));
+
+  assert.equal(sessions.length, 2);
+  const currentSummary = sessions.find(session => session.current);
+  const otherSummary = sessions.find(session => !session.current);
+  assert.ok(currentSummary && otherSummary);
+  assert.match(currentSummary.id, /^[0-9a-f-]{36}$/);
+  assert.notEqual(currentSummary.id, current.token);
+  assert.notEqual(currentSummary.id, digest(current.token));
+  const expectedCurrent = before.find(row => row.token_hash === digest(current.token));
+  const expectedOther = before.find(row => row.token_hash === digest(other.token));
+  const excludedIds = before.filter(row => [digest(ended.token), digest(expired.token), digest(foreign.token)].includes(row.token_hash))
+    .map(row => row.id);
+  const expectedExpiry = (row: typeof expectedCurrent) => new Date(Math.min(
+    row.last_seen_at.getTime() + 30 * 60_000, row.absolute_expires_at.getTime())).toISOString();
+  assert.deepEqual(currentSummary, {id: expectedCurrent.id, createdAt: expectedCurrent.created_at.toISOString(),
+    lastUsedAt: expectedCurrent.last_seen_at.toISOString(), expiresAt: expectedExpiry(expectedCurrent), current: true});
+  assert.deepEqual(otherSummary, {id: expectedOther.id, createdAt: expectedOther.created_at.toISOString(),
+    lastUsedAt: expectedOther.last_seen_at.toISOString(), expiresAt: expectedExpiry(expectedOther), current: false});
+  assert.equal(currentSummary.expiresAt, resolvedCurrent.expiresAt);
+  assert.ok(!sessions.some(session => excludedIds.includes(session.id)));
+  const after = (await pool.query('SELECT token_hash, last_seen_at FROM cloud_sessions ORDER BY token_hash')).rows;
+  assert.deepEqual(after, before.map(({token_hash, last_seen_at}) => ({token_hash, last_seen_at})));
+});
+
+test('account session revocation is idempotent, account-scoped and can end the current session', async () => {
+  const current = await signIn();
+  const target = await signIn();
+  const foreignAccount = randomUUID();
+  await pool.query('INSERT INTO cloud_accounts (id) VALUES ($1)', [foreignAccount]);
+  await pool.query('INSERT INTO cloud_credentials (account_id, email, password_hash) VALUES ($1, $2, $3)',
+    [foreignAccount, 'foreign@example.test', await hashSecret('foreign-account-password')]);
+  const foreign = await run(client => login(client, {email: 'foreign@example.test', password: 'foreign-account-password'}));
+  const ids = new Map((await pool.query('SELECT token_hash, id FROM cloud_sessions')).rows.map(row => [row.token_hash, row.id]));
+
+  assert.deepEqual(await run(client => revokeAccountSession(client, current.token, current.csrfToken, ids.get(digest(target.token)))),
+    {revoked: true, current: false});
+  await expectCode(run(client => resolveSession(client, target.token)), 'session_unavailable');
+  assert.deepEqual(await run(client => revokeAccountSession(client, current.token, current.csrfToken, ids.get(digest(target.token)))),
+    {revoked: false, current: false});
+  assert.deepEqual(await run(client => revokeAccountSession(client, current.token, current.csrfToken, ids.get(digest(foreign.token)))),
+    {revoked: false, current: false});
+  assert.equal((await run(client => resolveSession(client, foreign.token))).accountId, foreignAccount);
+  assert.deepEqual(await run(client => revokeAccountSession(client, current.token, current.csrfToken, ids.get(digest(current.token)))),
+    {revoked: true, current: true});
+  await expectCode(run(client => resolveSession(client, current.token)), 'session_unavailable');
+});
+
+test('two sessions revoking each other serialize without deadlock or stale authority', async () => {
+  for (let iteration = 0; iteration < 30; iteration++) {
+    const first = await run(client => createSession(client, accountId));
+    const second = await run(client => createSession(client, accountId));
+    const ids = new Map((await pool.query('SELECT token_hash, id FROM cloud_sessions')).rows.map(row => [row.token_hash, row.id]));
+    const results = await Promise.allSettled([
+      run(client => revokeAccountSession(client, first.token, first.csrfToken, ids.get(digest(second.token)))),
+      run(client => revokeAccountSession(client, second.token, second.csrfToken, ids.get(digest(first.token)))),
+    ]);
+    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+    assert.equal(results.filter(result => result.status === 'rejected'
+      && result.reason instanceof IdentityError && result.reason.code === 'session_unavailable').length, 1);
+  }
+});
+
+test('session revocation rechecks authority after waiting for the target row', async () => {
+  const {setTimeout: delay} = await import('node:timers/promises');
+  const current = await signIn();
+  const target = await signIn();
+  const targetId = (await pool.query('SELECT id FROM cloud_sessions WHERE token_hash = $1', [digest(target.token)])).rows[0].id;
+  await pool.query("UPDATE cloud_sessions SET absolute_expires_at = clock_timestamp() + interval '1 second' WHERE token_hash = $1", [digest(current.token)]);
+  const blocker = await pool.connect();
+  let completion: Promise<void> | undefined;
+  try {
+    await blocker.query('BEGIN');
+    await blocker.query('SELECT id FROM cloud_sessions WHERE id = $1 FOR UPDATE', [targetId]);
+    completion = expectCode(run(client => revokeAccountSession(client, current.token, current.csrfToken, targetId)), 'session_expired');
+    let blocked = false;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const {rows} = await admin.query("SELECT 1 FROM pg_stat_activity WHERE application_name = $1 AND wait_event_type = 'Lock'", [schema]);
+      if (rows.length) { blocked = true; break; }
+      await delay(20);
+    }
+    await delay(1100);
+    await blocker.query('COMMIT');
+    await completion;
+    assert.ok(blocked, 'revocation must wait for the target row before rechecking the actor');
+    assert.equal((await pool.query('SELECT ended_at FROM cloud_sessions WHERE id = $1', [targetId])).rows[0].ended_at, null);
+  } finally {
+    await blocker.query('ROLLBACK');
+    blocker.release();
+    await completion;
+  }
 });
 
 test('idle expiry and absolute expiry reject sessions without reviving them', async () => {

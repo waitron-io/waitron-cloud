@@ -173,6 +173,12 @@ const en = {
   passkeyPasswordInvalid:'Your current password is incorrect.', passkeyUnavailable:'Passkeys are temporarily unavailable. Try again.',
   passkeySignInUncertain:'We could not confirm the passkey sign-in. We will check your session before you retry.',
   passkeyChangeUncertain:'We could not confirm the passkey change. Review the refreshed list before trying again.',
+  accountSecurity:'Account security', accountSecurityIntro:'Review the browsers signed in to your account and the passkeys you can use to sign in.',
+  activeSessions:'Active sessions', sessionsIntro:'A session ends after 30 minutes without activity or after 12 hours, whichever comes first.',
+  currentSession:'This session', otherSession:'Another session', sessionSignedIn:'Signed in', sessionLastUsed:'Last used', sessionExpires:'Expires',
+  sessionRevoke:'Revoke session', sessionSignOut:'Sign out this session', sessionRevoked:'The session was revoked.',
+  sessionRevokeUncertain:'We could not confirm the revocation. Review the refreshed session list before trying again.',
+  passkeyLastUsed:'Last used', passkeyNeverUsed:'Never used',
 };
 export type Copy = typeof en;
 const es: Copy = {
@@ -341,5 +347,11 @@ const es: Copy = {
   passkeyPasswordInvalid:'Tu contraseña actual no es correcta.', passkeyUnavailable:'Las llaves de acceso no están disponibles temporalmente. Vuelve a intentarlo.',
   passkeySignInUncertain:'No hemos podido confirmar el inicio con la llave de acceso. Comprobaremos tu sesión antes de que vuelvas a intentarlo.',
   passkeyChangeUncertain:'No hemos podido confirmar el cambio. Revisa la lista actualizada antes de volver a intentarlo.',
+  accountSecurity:'Seguridad de la cuenta', accountSecurityIntro:'Revisa los navegadores que han iniciado sesión en tu cuenta y las llaves de acceso que puedes usar.',
+  activeSessions:'Sesiones activas', sessionsIntro:'Una sesión termina tras 30 minutos sin actividad o después de 12 horas, lo que ocurra primero.',
+  currentSession:'Esta sesión', otherSession:'Otra sesión', sessionSignedIn:'Inicio de sesión', sessionLastUsed:'Último uso', sessionExpires:'Caduca',
+  sessionRevoke:'Revocar sesión', sessionSignOut:'Cerrar esta sesión', sessionRevoked:'La sesión se ha revocado.',
+  sessionRevokeUncertain:'No hemos podido confirmar la revocación. Revisa la lista actualizada antes de volver a intentarlo.',
+  passkeyLastUsed:'Último uso', passkeyNeverUsed:'Nunca se ha usado',
 };
 export const translations: Record<Locale, Copy> = {en, es};

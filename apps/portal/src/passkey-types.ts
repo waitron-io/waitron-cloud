@@ -1,6 +1,6 @@
 import type {PublicKeyCredentialCreationOptionsJSON, PublicKeyCredentialRequestOptionsJSON} from '@simplewebauthn/browser';
 
-export type PasskeySummary = {id: string; createdAt: string};
+export type PasskeySummary = {id: string; createdAt: string; lastUsedAt: string | null};
 export type RegistrationOptions = {ceremonyId: string; options: PublicKeyCredentialCreationOptionsJSON};
 export type AuthenticationOptions = {ceremonyId: string; options: PublicKeyCredentialRequestOptionsJSON};
 
@@ -10,7 +10,8 @@ const encoded = (value: unknown) => typeof value === 'string' && value.length > 
 
 export function validPasskeySummary(value: unknown): value is PasskeySummary {
   return object(value) && typeof value.id === 'string' && UUID.test(value.id)
-    && typeof value.createdAt === 'string' && Number.isFinite(Date.parse(value.createdAt));
+    && typeof value.createdAt === 'string' && Number.isFinite(Date.parse(value.createdAt))
+    && (value.lastUsedAt === null || (typeof value.lastUsedAt === 'string' && Number.isFinite(Date.parse(value.lastUsedAt))));
 }
 
 export function validPasskeyList(value: unknown): value is {passkeys: PasskeySummary[]} {

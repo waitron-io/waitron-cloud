@@ -5,6 +5,7 @@ import {BackupController} from './backup-controller.ts';
 import {InstallationController} from './installation-controller.ts';
 import { PairingController } from './pairing-controller.ts';
 import {PasskeyController} from './passkey-controller.ts';
+import {AccountSecurityController} from './account-security-controller.ts';
 import { render } from 'lit';
 import { accountRequest } from './api.ts';
 import { captureLink, type CapturedLink } from './links.ts';
@@ -35,6 +36,7 @@ export class PortalApp {
   remote: RemoteController;
   alerts: AlertController;
   passkeys: PasskeyController;
+  security: AccountSecurityController;
   #route = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
   constructor(root: HTMLElement) {
@@ -44,6 +46,7 @@ export class PortalApp {
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
     this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
     this.passkeys = new PasskeyController(() => this.draw());
+    this.security = new AccountSecurityController(() => this.draw(), () => {void this.session.check();});
     void this.passkeys.checkSupport();
     this.alerts = new AlertController(() => this.draw());
     this.remote = new RemoteController(() => this.draw());
@@ -66,7 +69,7 @@ export class PortalApp {
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); });
     document.addEventListener('pointerdown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.remote.account(undefined); this.alerts.account(undefined); this.passkeys.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.remote.account(undefined); this.alerts.account(undefined); this.passkeys.account(undefined); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -75,6 +78,8 @@ export class PortalApp {
   #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
+    this.security.account(state.kind === 'authenticated' ? state.accountId : undefined);
+    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.security.loaded) void this.security.load();
     this.passkeys.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.passkeys.loaded) void this.passkeys.load();
     this.recovery.account(state.kind === 'authenticated' ? state.accountId : undefined);
@@ -124,7 +129,7 @@ export class PortalApp {
     return c.login;
   }
   navigate(path: string, push = true) {
-    this.#route++; this.path = path; this.passkeys.fence();
+    this.#route++; this.path = path; this.passkeys.fence(); this.security.fence();
     if (push) history.pushState(null, '', path);
     this.link = this.#capture();
     if (this.link.recoveryId || this.link.invalid) this.recovery.open(this.link.recoveryId);
@@ -241,9 +246,10 @@ export class PortalApp {
     if (!this.passkeys.password) { this.passkeys.error = 'requiredPassword'; this.draw(); return; }
     await this.passkeys.remove(id, this.passkeys.password);
   }
+  async revokeSession(id: string) { await this.security.revoke(id); }
   get logoutWaiting() { return Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)); }
   async logout() {
-    if (this.pending || this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending) return;
+    if (this.pending || this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending) return;
     this.pending = true; this.error = undefined; this.draw();
     const route = this.#route;
     const success = await this.session.logout();

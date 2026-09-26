@@ -105,12 +105,15 @@ test('migrations upgrade a seven-migration schema without changing its existing 
     for(const name of ['001_registration.sql','002_identity.sql','003_signup.sql','004_password_recovery.sql','005_email_outbox.sql','006_email_transport.sql','007_account_http.sql']){
       const sql=await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');await pool.query(sql);await pool.query('INSERT INTO schema_migrations(name,digest) VALUES($1,$2)',[name,createHash('sha256').update(sql).digest('hex')]);
     }
-    const org=randomUUID(),biz=randomUUID(),venue=randomUUID(),installation=randomUUID();
+    const org=randomUUID(),biz=randomUUID(),venue=randomUUID(),installation=randomUUID(),account=randomUUID();
+    await pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[account]);
+    await pool.query('INSERT INTO cloud_sessions(token_hash,csrf_hash,account_id) VALUES($1,$2,$3)',['a'.repeat(64),'b'.repeat(64),account]);
     await pool.query('INSERT INTO organisations(id) VALUES($1)',[org]);await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[biz,org]);
     await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venue,org,biz,randomUUID()]);
     await pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'existing-key')",[installation,venue]);
     const previous=(await pool.query('SELECT id,venue_id,public_key,revoked_at FROM installations')).rows;await migrate(pool);await migrate(pool);
-    assert.deepEqual((await pool.query('SELECT id,venue_id,public_key,revoked_at FROM installations')).rows,previous);assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'19');
+    assert.deepEqual((await pool.query('SELECT id,venue_id,public_key,revoked_at FROM installations')).rows,previous);assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'20');
+    assert.match((await pool.query("SELECT id::text FROM cloud_sessions WHERE token_hash=$1",['a'.repeat(64)])).rows[0].id,/^[0-9a-f-]{36}$/);
     assert.equal((await pool.query('SELECT count(*) FROM pairing_requests')).rows[0].count,'0');
   }finally{await pool.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();}
 });
