@@ -6,7 +6,8 @@
   "scripts": {
     "typecheck": "tsc -p ../../tsconfig.json",
     "test": "node --test --test-timeout=30000 test/*.test.ts",
-    "db:migrate": "node src/migrate-cli.ts"
+    "db:migrate": "node src/migrate-cli.ts",
+    "history:cleanup": "node src/history-cleanup-cli.ts"
   },
   "dependencies": {
     "@simplewebauthn/server": "14.0.3",

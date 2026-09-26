@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
+import {execFile} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
+import {mkdtemp, rm, writeFile} from 'node:fs/promises';
 import {after, before, beforeEach, test} from 'node:test';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {promisify} from 'node:util';
 import {Pool} from 'pg';
 import {HistoryCleanup, parseHistoryCleanupPolicy} from '../src/history-cleanup.ts';
 import {migrate} from '../src/migrate.ts';
@@ -13,6 +18,7 @@ const admin = new Pool({connectionString: url});
 const pool = new Pool({connectionString: url, options, application_name: `${schema}_cleanup`});
 const otherPool = new Pool({connectionString: url, options, application_name: `${schema}_worker`});
 const cleanup = new HistoryCleanup(pool);
+const execute = promisify(execFile);
 const accountId = randomUUID(), organisationId = randomUUID(), businessId = randomUUID();
 const venueId = randomUUID(), installationId = randomUUID();
 const old = '2020-01-01T00:00:00.000Z', cutoff = '2025-01-01T00:00:00.000Z';
@@ -43,6 +49,12 @@ beforeEach(async () => {
 
 async function count(table: string) {
   return Number((await pool.query(`SELECT count(*) FROM ${table}`)).rows[0].count);
+}
+
+function cliDatabaseUrl() {
+  const databaseUrl = new URL(url!);
+  databaseUrl.searchParams.set('options', `-c search_path=${schema} -c statement_timeout=10000`);
+  return databaseUrl.href;
 }
 
 test('history cleanup policy accepts only explicit timezone-bearing category cutoffs', () => {
@@ -238,4 +250,60 @@ test('backup cleanup preserves work and references while chunks resume across wo
   assert.equal((await pool.query('SELECT count(*) FROM backup_captures WHERE id=ANY($1::uuid[])', [[pointA, recoveredPoint]])).rows[0].count, '0');
   assert.equal((await pool.query('SELECT count(*) FROM backup_points WHERE id=ANY($1::uuid[])', [[protectedPoint, blockedPoint]])).rows[0].count, '2');
   assert.equal((await pool.query("SELECT count(*) FROM backup_jobs WHERE status IN('pending','running','failed')")).rows[0].count, '2');
+});
+
+test('history cleanup CLI defaults to dry-run and fails closed without exposing policy contents', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'cloud-history-policy-'));
+  const policyPath = join(directory, 'policy.json');
+  const malformedPath = join(directory, 'private-policy.json');
+  const secret = 'private-retention-decision';
+  const run = (args: string[]) => execute(process.execPath, ['src/history-cleanup-cli.ts', ...args], {
+    cwd: new URL('..', import.meta.url).pathname,
+    env: {...process.env, DATABASE_URL: cliDatabaseUrl()},
+    encoding: 'utf8',
+    timeout: 10000,
+  });
+  try {
+    await writeFile(policyPath, JSON.stringify({cutoffs: {emailDeliveries: cutoff}, chunkSize: 1}));
+    await writeFile(malformedPath, `{not-json:${secret}}`);
+    await pool.query(`INSERT INTO email_outbox(id,kind,status,created_at,expires_at,available_at,finished_at)
+      VALUES($1,'password_changed','sent',$2,$2,$2,$2)`, [randomUUID(), old]);
+    const dry = await run(['--policy', policyPath]);
+    const dryReport = JSON.parse(dry.stdout);
+    assert.equal(dry.stderr, '');
+    assert.equal(dryReport.schemaVersion, 1);
+    assert.equal(dryReport.mode, 'dry-run');
+    assert.equal(dryReport.categories.emailDeliveries.deleted, 0);
+    assert.equal(await count('email_outbox'), 1);
+
+    const applied = await run(['--policy', policyPath, '--apply']);
+    assert.equal(JSON.parse(applied.stdout).categories.emailDeliveries.deleted, 1);
+    assert.equal(await count('email_outbox'), 0);
+
+    for (const args of [['--policy', malformedPath], ['--policy', join(directory, 'missing.json')]]) {
+      await assert.rejects(run(args), error => {
+        assert.equal(typeof error, 'object');
+        const result = error as {stdout: string; stderr: string};
+        assert.equal(result.stdout, '');
+        assert.equal(result.stderr, 'History cleanup failed; check database, migrations and policy\n');
+        assert.ok(!result.stderr.includes(secret));
+        return true;
+      });
+    }
+
+    const migration = await pool.query("DELETE FROM schema_migrations WHERE name='021_history_cleanup.sql' RETURNING *");
+    try {
+      await assert.rejects(run(['--policy', policyPath]), (error: unknown) => {
+        const result = error as {stdout: string; stderr: string};
+        assert.equal(result.stdout, '');
+        assert.equal(result.stderr, 'History cleanup failed; check database, migrations and policy\n');
+        return true;
+      });
+    } finally {
+      await pool.query('INSERT INTO schema_migrations(name,digest,applied_at) VALUES($1,$2,$3)',
+        [migration.rows[0].name, migration.rows[0].digest, migration.rows[0].applied_at]);
+    }
+  } finally {
+    await rm(directory, {recursive: true, force: true});
+  }
 });

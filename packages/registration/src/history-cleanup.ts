@@ -1,4 +1,5 @@
 import type {Pool, PoolClient, QueryResult} from 'pg';
+import {IDLE_TIMEOUT_MS} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
 
 export const historyCleanupCategories = [
@@ -87,18 +88,18 @@ export class HistoryCleanup {
     switch (category) {
       case 'sessions': return this.#simple(client, cutoff, limit, apply, {
         eligible: `SELECT count(*)::integer AS count FROM cloud_sessions s
-          WHERE (s.ended_at<$1 OR (s.ended_at IS NULL AND LEAST(s.last_seen_at+interval '30 minutes',s.absolute_expires_at)<$1))
+          WHERE (s.ended_at<$1 OR (s.ended_at IS NULL AND LEAST(s.last_seen_at+(${IDLE_TIMEOUT_MS}*interval '1 millisecond'),s.absolute_expires_at)<$1))
           AND NOT EXISTS(SELECT 1 FROM cloud_webauthn_ceremonies c WHERE c.session_token_hash=s.token_hash)`,
         blocked: `SELECT count(*)::integer AS count FROM cloud_sessions s
-          WHERE (s.ended_at<$1 OR (s.ended_at IS NULL AND LEAST(s.last_seen_at+interval '30 minutes',s.absolute_expires_at)<$1))
+          WHERE (s.ended_at<$1 OR (s.ended_at IS NULL AND LEAST(s.last_seen_at+(${IDLE_TIMEOUT_MS}*interval '1 millisecond'),s.absolute_expires_at)<$1))
           AND EXISTS(SELECT 1 FROM cloud_webauthn_ceremonies c WHERE c.session_token_hash=s.token_hash)`,
         apply: `WITH selected AS(SELECT s.token_hash FROM cloud_sessions s
-          WHERE (s.ended_at<$1 OR (s.ended_at IS NULL AND LEAST(s.last_seen_at+interval '30 minutes',s.absolute_expires_at)<$1))
+          WHERE (s.ended_at<$1 OR (s.ended_at IS NULL AND LEAST(s.last_seen_at+(${IDLE_TIMEOUT_MS}*interval '1 millisecond'),s.absolute_expires_at)<$1))
           AND NOT EXISTS(SELECT 1 FROM cloud_webauthn_ceremonies c WHERE c.session_token_hash=s.token_hash)
-          ORDER BY COALESCE(s.ended_at,LEAST(s.last_seen_at+interval '30 minutes',s.absolute_expires_at)),s.token_hash
+          ORDER BY COALESCE(s.ended_at,LEAST(s.last_seen_at+(${IDLE_TIMEOUT_MS}*interval '1 millisecond'),s.absolute_expires_at)),s.token_hash
           LIMIT $2 FOR UPDATE OF s SKIP LOCKED)
           DELETE FROM cloud_sessions s USING selected x WHERE s.token_hash=x.token_hash
-          AND (s.ended_at<$1 OR (s.ended_at IS NULL AND LEAST(s.last_seen_at+interval '30 minutes',s.absolute_expires_at)<$1))
+          AND (s.ended_at<$1 OR (s.ended_at IS NULL AND LEAST(s.last_seen_at+(${IDLE_TIMEOUT_MS}*interval '1 millisecond'),s.absolute_expires_at)<$1))
           AND NOT EXISTS(SELECT 1 FROM cloud_webauthn_ceremonies c WHERE c.session_token_hash=s.token_hash) RETURNING s.token_hash`,
       });
       case 'signupRequests': return this.#requestCategory(client, 'signup_requests', cutoff, limit, apply);
@@ -223,25 +224,23 @@ export class HistoryCleanup {
   }
 
   async #backupTombstones(client: PoolClient, cutoff: string, limit: number, apply: boolean) {
-    const protectedPoint = `p.id=(SELECT q.id FROM backup_points q WHERE q.venue_id=p.venue_id AND q.kind='snapshot'
-      AND NOT q.deleting AND q.deleted_at IS NULL AND q.verification='verified' ORDER BY q.captured_at DESC,q.id DESC LIMIT 1)`;
     const referenced = `EXISTS(SELECT 1 FROM backup_recoveries r WHERE r.point_id=p.id)`;
     const aged = `p.deleted_at<$1`;
     const eligible = await count(client, `SELECT count(*)::integer AS count FROM backup_points p
-      WHERE ${aged} AND NOT ${referenced} AND NOT ${protectedPoint}`, [cutoff]);
+      WHERE ${aged} AND NOT ${referenced}`, [cutoff]);
     const blocked = await count(client, `SELECT count(*)::integer AS count FROM backup_points p
-      WHERE ${aged} AND (${referenced} OR ${protectedPoint})`, [cutoff]);
+      WHERE ${aged} AND ${referenced}`, [cutoff]);
     let deleted = 0;
     if (apply) {
       const selected = await client.query<{id: string}>(`SELECT p.id FROM backup_points p
-        WHERE ${aged} AND NOT ${referenced} AND NOT ${protectedPoint}
+        WHERE ${aged} AND NOT ${referenced}
         ORDER BY p.deleted_at,p.id LIMIT $2 FOR UPDATE OF p SKIP LOCKED`, [cutoff, limit]);
       const ids = selected.rows.map(row => row.id);
       if (ids.length) {
         await client.query('DELETE FROM backup_verifications WHERE point_id=ANY($1::uuid[])', [ids]);
         await client.query("DELETE FROM backup_jobs WHERE kind='verify' AND status='completed' AND target_id=ANY($1::uuid[])", [ids]);
         const result = await client.query(`DELETE FROM backup_points p WHERE p.id=ANY($2::uuid[]) AND ${aged}
-          AND NOT ${referenced} AND NOT ${protectedPoint} RETURNING p.id`, [cutoff, ids]);
+          AND NOT ${referenced} RETURNING p.id`, [cutoff, ids]);
         const removed = result.rows.map(row => row.id as string);
         deleted = removed.length;
         if (removed.length) await client.query(`DELETE FROM backup_captures c WHERE c.id=ANY($2::uuid[])

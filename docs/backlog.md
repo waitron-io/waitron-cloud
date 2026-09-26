@@ -255,14 +255,16 @@ mobile notifications separately.
   the passive list, and revoking the current session returns you to sign-in. Passkey rows
   show their nullable last-use time. English and Spanish Chromium checks cover phone and
   desktop layouts, stale authority, concurrent logout/revocation, account isolation and
-  lost replies. D11 still needs the retention and cleanup decision for ended/expired
-  sessions and WebAuthn ceremony history. Configure live email delivery, implement MFA,
+  lost replies. The [bounded history cleanup command](history-cleanup.md) now previews and
+  removes ended/expired sessions and consumed/expired WebAuthn ceremonies only after an
+  operator supplies exact cutoffs; no retention period or automatic deletion is enabled.
+  Configure live email delivery, implement MFA,
   and define the platform role catalogue before public use. Shared login/request limits, secure
   cookies and Origin/CSRF checks are implemented in the account API. Validate ingress
-  bot controls, trusted proxy settings and browser behaviour before deployment. Define
-  session, signup-request and password-reset-request retention and cleanup, including
-  reset records for unknown addresses, and measure them against the
-  expected deployment size. Signup and password-reset completion now use an optional
+  bot controls, trusted proxy settings and browser behaviour before deployment. Choose
+  legal and operational cutoffs for sessions, signup requests and password-reset requests,
+  including reset records for unknown addresses, and measure the dry-run counts against
+  the expected deployment size before applying them. Signup and password-reset completion now use an optional
   screening interface with a one-second failure deadline. Packaged production-server
   startup requires an explicitly supplied local
   SHA-256 corpus; compromised passwords are rejected in English and Spanish without
@@ -295,8 +297,9 @@ mobile notifications separately.
   provider before public use.
   Provision separately held encryption keys and document rotation/restore before
   production; the code accepts an active key plus retained older keys. A send timeout
-  or crash after provider acceptance may duplicate an email. Define retention/cleanup
-  for terminal delivery metadata and security audit events. The HTTP adapter applies
+  or crash after provider acceptance may duplicate an email. Terminal delivery metadata
+  has an explicit cutoff category in the cleanup command; choose its production cutoff.
+  Security audit events remain outside transient cleanup. The HTTP adapter applies
   a 300 ms response floor to login/email requests, but deployment timing and load
   measurements must still assess account/cooldown differences under contention.
   Its rate key must be shared across instances; rotation starts new allowances.
@@ -359,12 +362,12 @@ mobile notifications separately.
   signed-in local Waitron and Cloud. The [pairing contract](superpowers/specs/2026-09-23-venue-pairing-design.md) fixes
   proof format, expiry, attempt limits and binding. Local tests refuse swapped installation
   proofs and recheck manager permission and serving-primary status after network waits. Installation history now retains superseded rows with one current installation per venue. Replacement binds the restored local venue and source node to the approved snapshot, uses fresh keys and has separate local-manager and Cloud-owner confirmation. Ordinary pairing refuses an unrelated installation, including a revoked current one. Expand diagnostics and planned-handover support before production rollout.
-  Before public exposure, define retention and cleanup for installation operation
-  results and revocation audits, coordinate issuer rotation/trust rollout, and measure
-  per-IP limits for venues sharing NAT. Current operation results are retained without
-  automatic deletion. Add pairing-request retention/cleanup and approval audit
-  records, and measure denial-of-service behavior for known request IDs. Completed
-  pairing rows reference accounts; define their cleanup before account deletion. The
+  Before public exposure, choose exact retention cutoffs for installation operation
+  results and pairing requests, and define revocation-audit retention separately.
+  The cleanup command handles completed/expired pairing and registration results in
+  bounded chunks but enables no category automatically. Add approval audit records,
+  coordinate issuer rotation/trust rollout, and measure per-IP denial-of-service behavior
+  for venues sharing NAT and known request IDs. The
   short code has an unkeyed digest, so review database-disclosure protection before
   launch and retain explicit local business confirmation.
   Terminated database connections and lost replies have regression tests; actual
@@ -429,8 +432,10 @@ mobile notifications separately.
   separate redacted public/staff evidence and certificate warnings in English and Spanish.
   Opted-in owners receive bilingual remote
   incident and recovery messages; delivery rechecks route authority, and opt-out or
-  revocation suppresses queued mail. Next: add incident/delivery-history retention,
-  deployment-scale scheduling and recipient fan-out measurements, escalation/quiet
+  revocation suppresses queued mail. Current incident and observation tables are bounded
+  current-state projections; terminal delivery links follow the explicit cleanup cutoff.
+  Next: choose that cutoff, measure deployment-scale scheduling and recipient fan-out,
+  add escalation/quiet
   periods and rollout pause criteria.
 - **Usage metering.** Attribute lookups/API calls, reports, storage, transfers,
   messages and compute to customers and services. Show consumption and allowances,
@@ -457,7 +462,10 @@ mobile notifications separately.
   acknowledged storage object waits until capture expiry before recapture. Next: measure
   production uplink budgets, spool disk use and shutdown latency during local database/encryption
   work, stream archive assembly and object I/O beyond the current 512 MiB bound,
-  tombstone/job-history retention, master-key operations and production verifier isolation.
+  master-key operations and production verifier isolation. The history cleanup command
+  now removes completed jobs and already-deleted tombstone metadata in bounded chunks
+  after exact operator cutoffs; pending/running/failed jobs, current points, protected
+  snapshots and recovery references remain. Choose the production cutoffs before use.
   Measure scheduling sweeps at the intended deployment scale and tune their cadence
   separately from job polling; the local concurrency proof covers only small fixtures.
   The local two-venue proof now exercises Waitron's stream, sealed recovery kit and
@@ -489,8 +497,9 @@ mobile notifications separately.
   Real snapshots now exclude source Cloud credentials and staff TLS keys; the managed
   recovery path discards old backup settings through a persisted managed-restore marker.
   The local proof now exercises the actual cold-restore entry point, including its module hooks.
-  Before production, define recovery-request/result retention, account-deletion handling and
-  audit exports. A bounded two-instance run admitted exactly 10 of 12 concurrent fresh-key
+  Before production, choose the recovery-request/result cutoff, account-deletion handling and
+  audit exports. Closed expired recovery history now has a separate cleanup category that
+  preserves active operations and incomplete replacements. A bounded two-instance run admitted exactly 10 of 12 concurrent fresh-key
   recovery starts behind one address. Guesses using unrelated UUIDs left the target's
   budget untouched; five concurrent wrong codes against a known UUID serialized to five,
   closed the pending request and refused its later correct code. Treat that availability
