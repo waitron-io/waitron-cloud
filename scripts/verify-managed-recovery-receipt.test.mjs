@@ -15,7 +15,7 @@ function receipt(){return {
  isolation:{crossVenueReadDenied:true,crossVenueWriteDenied:true,crossVenueListDenied:true,readerWriteDenied:true,otherVenueGenerationUnchanged:true},
  continuous:{venueId:venueA,sourceHead:head,restoredHead:head,approvedGeneration:generationA,restoredGeneration:generationA,recoverableAt:'2026-09-25T21:00:00.000Z',pointerWrittenAt:'2026-09-25T21:00:00.000Z',retry:{interrupted:true,cleanTarget:true,succeeded:true}},
  snapshotFallback:{venueId:venueB,pointId:'52345678-1234-4234-8234-123456789abc',continuousDeleted:true,restoreSucceeded:true},
- activation:'not-performed',checks:['real-seaweedfs','real-waitron','no-production-resources'],
+ activation:'not-performed',checks:['real-seaweedfs','real-waitron','verifier-process-isolation','no-production-resources'],
 };}
 
 test('accepts the complete measured receipt',()=>assert.deepEqual(verifyManagedRecoveryReceipt(receipt()),receipt()));
@@ -28,5 +28,6 @@ for(const [name,mutate] of [
  ['cross-venue access success',r=>{r.isolation.crossVenueReadDenied=false;}],
  ['snapshot fallback from the continuous venue',r=>{r.snapshotFallback.venueId=venueA;}],
  ['absent retry evidence',r=>{r.continuous.retry.interrupted=false;}],
+ ['absent verifier isolation evidence',r=>{r.checks.splice(2,1);}],
  ['activation claim',r=>{r.activation='performed';}],
 ] )test(`rejects ${name}`,()=>{const changed=receipt();mutate(changed);assert.throws(()=>verifyManagedRecoveryReceipt(changed));});

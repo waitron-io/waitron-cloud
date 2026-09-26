@@ -5,7 +5,10 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {runNodeVerifier} from './verify-process.ts';
 import type {RestoreVerifier} from './worker.ts';
-export async function createWaitronVerifier(checkout:string):Promise<RestoreVerifier>{
+interface WaitronVerifierOptions {temporaryRoot?:string;}
+// tsx probes a case-inverted checkout path to detect case sensitivity; grant only that alias.
+const swapCase=(value:string)=>value.replace(/[a-z]/gi,letter=>letter===letter.toLowerCase()?letter.toUpperCase():letter.toLowerCase());
+export async function createWaitronVerifier(checkout:string,options:WaitronVerifierOptions={}):Promise<RestoreVerifier>{
  let root:string,tsx:string;
  try{
   if(!process.allowedNodeEnvironmentFlags.has('--allow-net'))throw Error();
@@ -14,11 +17,12 @@ export async function createWaitronVerifier(checkout:string):Promise<RestoreVeri
   tsx=createRequire(join(root,'apps/server/package.json')).resolve('tsx');
  }catch{throw Error('backup.verifier_configuration');}
  return async(bytes,keys,point,signal)=>{
-  const temporary=await realpath(await mkdtemp(join(tmpdir(),'cloud-verify-')));
+  const temporaryRoot=await realpath(options.temporaryRoot??tmpdir()),temporary=await realpath(await mkdtemp(join(temporaryRoot,'cloud-verify-'))),child=fileURLToPath(new URL('./waitron-verify-child.mjs',import.meta.url));
   try{
    await writeFile(join(temporary,'input.backup.enc'),bytes,{mode:0o600});
-   return await runNodeVerifier(['--permission','--allow-fs-read=*','--allow-fs-write='+temporary,'--allow-worker','--allow-child-process','--allow-addons','--import',tsx,fileURLToPath(new URL('./waitron-verify-child.mjs',import.meta.url))],{
-    cwd:join(root,'apps/server'),signal,input:{checkout:root,root:temporary,recoveryKey:keys.recoveryKey,sourceNodeId:point.sourceNodeId,modules:point.modules,capturedAt:point.capturedAt},
+   return await runNodeVerifier(['--import',tsx,child],{
+    cwd:join(root,'apps/server'),signal,readablePaths:[join(root,'**'),join(swapCase(root),'**'),temporary,child],writablePaths:[temporary],allowWorker:true,
+    input:{checkout:root,root:temporary,recoveryKey:keys.recoveryKey,sourceNodeId:point.sourceNodeId,modules:point.modules,capturedAt:point.capturedAt},
    });
   }finally{await rm(temporary,{recursive:true,force:true});}
  };

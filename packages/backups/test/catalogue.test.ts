@@ -158,6 +158,13 @@ test("publication verifies bytes, is immutable and starts unverified", async () 
     /backup.conflict/,
   );
   await assert.rejects(
+    store.publish(a.installationId, item.reservation.id, {
+      ...item.metadata,
+      size: 512 * 1024 * 1024 + 1,
+    }),
+    /backup.invalid_metadata/,
+  );
+  await assert.rejects(
     store.publish(b.installationId, item.reservation.id, item.metadata),
     /backup.unavailable/,
   );

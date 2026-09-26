@@ -7,7 +7,7 @@ milestone exposes only `/public/availability`. It does not publish menus or book
 
 ## Run the proof
 
-Use Docker with Linux WireGuard support, Node 24 or later, pnpm, and a Waitron
+Use Docker with Linux WireGuard support, Node 26 or later, pnpm, and a Waitron
 checkout containing the Cloud certificate adapter. Install both repositories with
 `pnpm install --frozen-lockfile`, then build Waitron's dashboard:
 

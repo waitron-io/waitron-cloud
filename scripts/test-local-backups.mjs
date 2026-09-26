@@ -482,6 +482,10 @@ try {
     const queue = new BackupWorker(f.db.pool, catalogue, async (...args) => {
       const checked = await restore(...args);
       assert(checked.networkDenied);
+      assert(checked.childProcessDenied);
+      assert(checked.addonDenied);
+      assert(checked.hostReadDenied);
+      assert(checked.outsideWriteDenied);
       assert(checked.integrityOk);
       assert(checked.hooks.includes("fiscal-verifactu"));
       assert.equal(checked.cloudCredentialPresent, false);
@@ -505,7 +509,7 @@ try {
     snapshots.push({ venue, reservation, point, captured, bytes, result,streamKey:internal.keys.streamKey });
   }
   record(
-    "both encrypted snapshots restored by Waitron with integrity/schema checks, module hooks and network permission denied",
+    "both encrypted snapshots restored by Waitron with integrity/schema checks and module hooks while network, subprocess, native-addon, host-read and outside-write permissions were denied",
   );
   for (const item of snapshots) await stop(item.venue.server);
   for (const item of snapshots) {
@@ -1090,7 +1094,7 @@ try {
     continuous:{venueId:continuousEntry.snapshot.venue.registration.venueId,sourceHead:continuousEntry.sourceHead,restoredHead,approvedGeneration:continuousEntry.pointer.body.generation,restoredGeneration:continuousEntry.pointer.body.generation,recoverableAt:continuousEntry.observed.recoverableAt,pointerWrittenAt:continuousEntry.pointer.body.writtenAt,retry:{interrupted:true,cleanTarget:true,succeeded:true}},
     snapshotFallback:{venueId:fallbackEntry.snapshot.venue.registration.venueId,pointId:fallbackEntry.snapshot.point.id,continuousDeleted:true,restoreSucceeded:true},
     activation:'not-performed',
-    checks:['real-seaweedfs','real-waitron','no-production-resources'],
+    checks:['real-seaweedfs','real-waitron','verifier-process-isolation','no-production-resources'],
   };
   verifyManagedRecoveryReceipt(result);
   if (process.env.BACKUP_RECEIPT)

@@ -477,7 +477,13 @@ mobile notifications separately.
   acknowledged storage object waits until capture expiry before recapture. Next: measure
   production uplink budgets, spool disk use and shutdown latency during local database/encryption
   work, stream archive assembly and object I/O beyond the current 512 MiB bound,
-  production master-key custody/rewrapping and production verifier isolation. A read-only
+  production master-key custody/rewrapping and deployment-level verifier containment. The
+  local verifier now denies network, subprocesses, native addons, host reads and outside
+  writes; bounds CPU, wall time, V8 heap, file size, descriptors and output; reaps its process
+  group and cleans its private restore directory. Its TypeScript-loader worker permission,
+  native allocations and lack of a total scratch-volume quota mean this is not a hostile-code
+  sandbox: the selected deployment still needs a container or virtual-machine memory limit and
+  quota-limited scratch volume. A read-only
   dependency inventory and local drill now prove active-key rotation, old snapshot restore,
   worker restart and wrong/missing-key refusal without exposing secrets or deleting keys.
   The history cleanup command
