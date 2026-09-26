@@ -434,3 +434,19 @@ test('open and worker reject authenticated encrypted payloads with an invalid lo
     assert.equal((await row()).last_error,'payload_unavailable');assert.equal(delivered.length,0);
   }
 });
+
+test('service alert batches preserve input order and reject invalid input atomically',async()=>{
+  const incidentId=randomUUID(),venueId=randomUUID();
+  const messages=[
+    {email:'first@example.test',locale:'en' as const,incidentId,revision:1,venueId,issue:'disconnected' as const,state:'open' as const},
+    {email:'second@example.test',locale:'es' as const,incidentId,revision:1,venueId,issue:'disconnected' as const,state:'open' as const},
+  ];
+  const ids=await transaction(pool,client=>outbox.enqueueServiceAlerts(client,messages));
+  assert.equal(ids.length,2);assert.notEqual(ids[0],ids[1]);
+  const records=(await pool.query('SELECT * FROM email_outbox WHERE id=ANY($1::uuid[])',[ids])).rows;
+  assert.deepEqual(ids.map(id=>outbox.open(records.find(record=>record.id===id))),messages);
+  assert(records.every(record=>!record.payload.includes(Buffer.from('@example.test'))));
+  await assert.rejects(transaction(pool,client=>outbox.enqueueServiceAlerts(client,[messages[0]!,{...messages[1]!,email:'INVALID'}])),/Invalid queued email/);
+  await assert.rejects(transaction(pool,client=>outbox.enqueueServiceAlerts(client,Array.from({length:101},()=>messages[0]!))),/Invalid queued email/);
+  assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'2');
+});

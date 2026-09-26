@@ -13,8 +13,9 @@ Save password-change notifications with the password and session changes too.
   Bind ciphertext to the message ID, kind and key ID. Keep keys outside PostgreSQL;
   retain old keys until their pending messages finish. Never silently generate a key
   at application startup. Verification tables continue to store token hashes only.
-- A worker claims one due row at a time using a database lock that skips rows another
-  worker is claiming. Commit a 60-second lease before sending; increment attempts at
+- Each claim handles one due row using a database lock that skips rows another worker
+  is claiming. The continuous command opens at most four claims at once. Commit a
+  60-second lease before sending; increment attempts at
   claim time so crashes count. Reclaim abandoned work after the lease expires, and
   fence completion by the claim ID so an old worker cannot overwrite its replacement.
 - Try at most eight times, delaying retries by 30 seconds, then doubling up to 15
@@ -69,8 +70,9 @@ pnpm mail:up
 pnpm mail:worker
 ```
 
-The worker polls once a second when idle and finishes its current attempt on SIGINT
-or SIGTERM. Development defaults to the local Mailpit adapter, which refuses production mode. Production requires explicit
+The worker polls once a second when idle and finishes its active claims on SIGINT or
+SIGTERM. It claims at most four messages at once and starts no new batch after the
+signal. Development defaults to the local Mailpit adapter, which refuses production mode. Production requires explicit
 SMTP configuration; see the [production guide](production-email-implementation.md).
 You can process at most one due message with `pnpm mail:worker --once`, or print a
 JSON summary with `pnpm mail:status`. Status needs only `DATABASE_URL`, without
@@ -99,6 +101,11 @@ instead. Use `status = 'failed'` to find exhausted retries and permanent rejecti
 but erase the recipient and token ciphertext. Accepted production sends also retain
 `transport` and a stable `message_id` for investigation. A repeated ID does not
 guarantee provider deduplication.
+
+Service-incident fan-out encrypts and inserts messages in groups of at most 100, then
+inserts their authority records with the same bound. All groups share the incident
+transaction. A failed insert therefore leaves neither a partial recipient list nor a
+committed incident transition. Delivery still claims and checks each recipient separately.
 
 ## Use it from the account backend
 

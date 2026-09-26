@@ -37,16 +37,33 @@ export class EmailOutbox {
     this.#active = config.activeKeyId;
   }
 
+  async enqueueServiceAlerts(client:PoolClient,messages:readonly ServiceAlert[]):Promise<string[]>{
+    if(!Array.isArray(messages)||messages.length<1||messages.length>100)throw new Error('Invalid queued email');
+    const expiresAt:Date=(await client.query("SELECT clock_timestamp()+interval '1 day' AS expiry")).rows[0].expiry;
+    const rows=messages.map(message=>{
+      if(normaliseEmail(message?.email)!==message?.email||(message.locale!==undefined&&!validLocale(message.locale))||!validServiceAlert(message))throw new Error('Invalid queued email');
+      const id=randomUUID(),nonce=randomBytes(12),content:ServiceAlert={email:message.email,locale:message.locale,incidentId:message.incidentId,revision:message.revision,venueId:message.venueId,issue:message.issue,state:message.state,...(message.checkedAt?{checkedAt:message.checkedAt}:{}),...(message.certificateNotAfter?{certificateNotAfter:message.certificateNotAfter}:{})};
+      if(content.locale===undefined)delete content.locale;
+      const cipher=createCipheriv('aes-256-gcm',this.#keys.get(this.#active)!,nonce);cipher.setAAD(aad(id,'service_alert',this.#active));
+      const encrypted=Buffer.concat([cipher.update(JSON.stringify(content),'utf8'),cipher.final()]);
+      return{id,payload:Buffer.concat([nonce,cipher.getAuthTag(),encrypted])};
+    });
+    const parameters:unknown[]=[];
+    const values=rows.map((row,index)=>{
+      const offset=index*4;parameters.push(row.id,this.#active,row.payload,expiresAt);
+      return`($${offset+1},'service_alert',NULL,$${offset+2},$${offset+3},$${offset+4})`;
+    });
+    await client.query(`INSERT INTO email_outbox(id,kind,token_hash,key_id,payload,expires_at) VALUES ${values.join(',')}`,parameters);
+    return rows.map(row=>row.id);
+  }
+
   async enqueue(client: PoolClient, kind: EmailKind, message: AccountEmail | AccountNotification | ServiceAlert): Promise<string> {
     if (!['verification', 'password_reset', 'password_changed', 'service_alert'].includes(kind) || normaliseEmail(message.email) !== message.email || (message.locale !== undefined && !validLocale(message.locale))) throw new Error('Invalid queued email');
+    if(kind==='service_alert')return (await this.enqueueServiceAlerts(client,[message as ServiceAlert]))[0]!;
     let tokenHash: string | null = null;
     let expiresAt: Date;
     let content: AccountEmail | AccountNotification | ServiceAlert = {email: message.email};
-    if (kind === 'service_alert') {
-      if(!validServiceAlert(message))throw new Error('Invalid queued email');
-      expiresAt=(await client.query("SELECT clock_timestamp()+interval '1 day' AS expiry")).rows[0].expiry;
-      content={email:message.email,incidentId:message.incidentId,revision:message.revision,venueId:message.venueId,issue:message.issue,state:message.state,...(message.checkedAt?{checkedAt:message.checkedAt}:{}),...(message.certificateNotAfter?{certificateNotAfter:message.certificateNotAfter}:{})};
-    } else if (kind === 'password_changed') {
+    if (kind === 'password_changed') {
       expiresAt = (await client.query("SELECT clock_timestamp() + interval '7 days' AS expiry")).rows[0].expiry;
     } else {
       if (!('token' in message) || !/^[A-Za-z0-9_-]{43}$/.test(message.token) || !Number.isFinite(Date.parse(message.expiresAt))) throw new Error('Invalid queued email');

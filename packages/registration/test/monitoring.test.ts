@@ -261,6 +261,66 @@ test('changing email language preserves the queued alert and renders the current
  await monitor.schedule();await contact(901);await monitor.runOnce();await db.pool.query("UPDATE account_alert_preferences SET locale='es'");await deliver();
  assert.equal(sent.length,1);assert.equal((sent[0] as {locale:string}).locale,'es');assert.equal((await alerts())[0].status,'sent');
 });
+test('many-owner alert fan-out uses bounded statements and remains atomic across restart',async()=>{
+ const emails=['monitor@example.test'];
+ for(let n=1;n<=102;n++)emails.push(`monitor-owner-${n}@example.test`);
+ await db.pool.query('CREATE TABLE fixture_alert_accounts(n integer PRIMARY KEY,id uuid NOT NULL UNIQUE DEFAULT gen_random_uuid())');
+ await db.pool.query('INSERT INTO fixture_alert_accounts(n) SELECT generate_series(1,102)');
+ await db.pool.query('INSERT INTO cloud_accounts(id) SELECT id FROM fixture_alert_accounts');
+ await db.pool.query("INSERT INTO cloud_credentials(account_id,email,email_verified_at) SELECT id,'monitor-owner-'||n||'@example.test',clock_timestamp() FROM fixture_alert_accounts");
+ await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) SELECT id,$1,true FROM fixture_alert_accounts',[owner.organisationId]);
+ await db.pool.query("INSERT INTO account_alert_preferences(account_id,enabled,locale) SELECT id,true,'en' FROM fixture_alert_accounts");
+ await db.pool.query(`CREATE TABLE fixture_alert_statement_counts(name text PRIMARY KEY,calls integer NOT NULL DEFAULT 0);
+  INSERT INTO fixture_alert_statement_counts(name) VALUES('outbox'),('deliveries');
+  CREATE FUNCTION fixture_count_alert_statement() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN UPDATE fixture_alert_statement_counts SET calls=calls+1 WHERE name=TG_ARGV[0];RETURN NULL;END$$;
+  CREATE TRIGGER fixture_count_alert_outbox AFTER INSERT ON email_outbox FOR EACH STATEMENT EXECUTE FUNCTION fixture_count_alert_statement('outbox');
+  CREATE TRIGGER fixture_count_alert_deliveries AFTER INSERT ON service_alert_deliveries FOR EACH STATEMENT EXECUTE FUNCTION fixture_count_alert_statement('deliveries')`);
+ try{
+  await monitor.schedule();await contact(901);await monitor.runOnce();
+  let rows=await alerts();assert.equal(rows.length,emails.length);
+  const statements=await db.pool.query('SELECT name,calls FROM fixture_alert_statement_counts ORDER BY name');
+  assert.deepEqual(statements.rows.map(row=>[row.name,row.calls]),[['deliveries',2],['outbox',2]]);
+  for(const row of rows)for(const email of [emails[0]!,emails.at(-1)!])assert(!row.payload.includes(Buffer.from(email)));
+  const restarted=new MonitorWorker(db.secondPool,db.outbox);await due();await restarted.runOnce();assert.equal((await alerts()).length,emails.length);
+  const worker=new EmailWorker(db.pool,db.outbox,{async sendVerification(){},async sendPasswordReset(){},async sendPasswordChanged(){},async sendServiceAlert(message:unknown){sent.push(message);}});
+  while(await worker.runOnce()){}assert.equal(sent.length,emails.length);
+  await db.pool.query('ALTER TABLE service_alert_deliveries ADD CONSTRAINT fixture_reject_recovery CHECK(revision<>2)');
+  await contact(0);await assert.rejects(restarted.runOnce(),/check constraint/);
+  rows=await alerts();assert.equal(rows.length,emails.length);
+  const incident=(await db.pool.query("SELECT status,revision FROM venue_incidents WHERE kind='disconnected'")).rows[0];assert.deepEqual(incident,{status:'open',revision:1});
+ }finally{
+  await db.pool.query('ALTER TABLE service_alert_deliveries DROP CONSTRAINT IF EXISTS fixture_reject_recovery');
+  await db.pool.query('DROP TRIGGER IF EXISTS fixture_count_alert_outbox ON email_outbox;DROP TRIGGER IF EXISTS fixture_count_alert_deliveries ON service_alert_deliveries;DROP FUNCTION IF EXISTS fixture_count_alert_statement();DROP TABLE IF EXISTS fixture_alert_statement_counts');
+  await db.pool.query('DROP TABLE IF EXISTS fixture_alert_accounts');
+ }
+});
+test('four slow monitor claims have enough database connections to finish one batch',async()=>{
+ for(let n=0;n<3;n++){
+  const r=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+  await r.start(binding);await r.approveCloud(binding,owner.accountId);await r.approveLocal(binding,randomUUID());const added=await r.complete(binding);
+  await db.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[added.installationId]);
+ }
+ await monitor.schedule();
+ await db.pool.query(`CREATE FUNCTION fixture_slow_monitor_batch() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN PERFORM pg_sleep(5.5);RETURN NEW;END$$;
+  CREATE TRIGGER fixture_slow_monitor_batch BEFORE UPDATE ON venue_monitors FOR EACH ROW EXECUTE FUNCTION fixture_slow_monitor_batch()`);
+ const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+db.schema);
+ const child=spawn(process.execPath,['packages/registration/src/monitor-cli.ts'],{cwd:new URL('../../../',import.meta.url),env:{PATH:process.env.PATH,DATABASE_URL:url.href,CLOUD_EMAIL_KEYS:JSON.stringify(db.keys),CLOUD_EMAIL_ACTIVE_KEY_ID:'test'},stdio:['ignore','ignore','pipe']});
+ let errors='';child.stderr.on('data',value=>{errors+=String(value);});const exited=new Promise<number|null>(resolve=>child.once('exit',resolve));
+ try{
+  let checked=0;
+  for(let n=0;n<140;n++){
+   checked=Number((await db.pool.query('SELECT count(*) FROM venue_monitors WHERE checked_at IS NOT NULL')).rows[0].count);
+   if(checked===4||errors.includes('retrying')||child.exitCode!==null)break;
+   await delay(50);
+  }
+  assert.equal(errors.includes('retrying'),false,errors);
+  assert.equal(checked,4);
+  assert.equal(child.exitCode,null);
+ }finally{
+  child.kill('SIGTERM');const timer=setTimeout(()=>child.kill('SIGKILL'),3000);try{await exited;}finally{clearTimeout(timer);}
+  await db.pool.query('DROP TRIGGER IF EXISTS fixture_slow_monitor_batch ON venue_monitors;DROP FUNCTION IF EXISTS fixture_slow_monitor_batch()');
+ }
+});
 test('continuous monitoring skips locked installations and survives a failed observation',async()=>{
  const r=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await r.start(binding);await r.approveCloud(binding,owner.accountId);await r.approveLocal(binding,randomUUID());const other=await r.complete(binding);
