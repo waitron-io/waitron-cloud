@@ -481,9 +481,14 @@ mobile notifications separately.
   SeaweedFS fixture on an Apple M5 Pro observed 5,975,936 bytes of peak ArrayBuffer growth and
   26,968,064 bytes of RSS growth. Archive assembly in Waitron still uses its existing format and
   the end-to-end 512 MiB archive limit remains unchanged. Confirmed uploads retry publication without resending; loss of an
-  acknowledged storage object waits until capture expiry before recapture. Next: measure
-  production uplink budgets, spool disk use and shutdown latency during local database/encryption
-  work, stream Waitron archive assembly/restoration before reconsidering the current 512 MiB bound,
+  acknowledged storage object waits until capture expiry before recapture. A reproducible
+  4 MiB controlled-HTTPS receipt now measures throttled upload/download retries, 120 ms
+  deadline cancellation, partial-stage cleanup, missing objects, one-copy publication replay,
+  credential renewal with one durable archive and shutdown through a controlled Waitron archive
+  wait. Cloud download cancellation now releases its durable verification claim without recording
+  failure or consuming a retry. These are local boundary measurements, not production timeout or
+  bandwidth targets. Next: measure deployment uplink bandwidth, spool volume and real database/
+  encryption shutdown latency, stream Waitron archive assembly/restoration before reconsidering the current 512 MiB bound,
   production master-key custody/rewrapping and deployment-level verifier containment. The
   local verifier now denies network, subprocesses, native addons, host reads and outside
   writes; bounds CPU, wall time, V8 heap, file size, descriptors and output; reaps its process

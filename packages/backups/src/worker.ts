@@ -4,6 +4,7 @@ import {transaction} from '@waitron-cloud/registration';
 import type {BackupCatalogue,BackupPoint} from './catalogue.ts';
 import type {BackupKeys} from './keys.ts';
 import type {ReplayableObject} from './object-transfer.ts';
+import {isBackupCancellation} from './cancellation.ts';
 export type RestoreVerifier=(source:ReplayableObject,keys:BackupKeys,point:BackupPoint,signal:AbortSignal)=>Promise<unknown>;
 interface Job {id:string;kind:'verify'|'retention'|'incoming';venue_id:string;target_id:string;claim_id:string;attempts:number;}
 export class BackupWorker {
@@ -40,11 +41,17 @@ export class BackupWorker {
    if(job.kind==='verify'){
     const available=await this.#pool.query("SELECT 1 FROM backup_points WHERE id=$1 AND venue_id=$2 AND kind='snapshot' AND NOT deleting AND deleted_at IS NULL",[job.target_id,job.venue_id]);
     if(!available.rowCount){await this.#finish(job,true);return true;}
-    await this.#catalogue.verify(job.target_id,'local-waitron-worker',async(source,keys,point)=>{await this.#restore(source,keys,point,signal);},client=>this.#fence(client,job));
+    await this.#catalogue.verify(job.target_id,'local-waitron-worker',async(source,keys,point)=>{await this.#restore(source,keys,point,signal);},client=>this.#fence(client,job),signal);
    }else if(job.kind==='retention')await this.#catalogue.cleanupOne(job.venue_id,new Date(),client=>this.#fence(client,job));
    else await this.#catalogue.cleanupCapture(job.venue_id,client=>this.#fence(client,job));
    await this.#finish(job);
   }catch(error){
+   if(isBackupCancellation(error,signal)){
+    // Shutdown hands back retry budget; runs still counts the work that was claimed.
+    await this.#pool.query(`UPDATE backup_jobs SET status='pending',attempts=GREATEST(0,attempts-1),available_at=clock_timestamp(),claim_id=NULL,lease_until=NULL
+     WHERE id=$1 AND claim_id=$2 AND status='running'`,[job.id,job.claim_id]);
+    return true;
+   }
    const code=error instanceof Error&&error.message==='backup.verification_failed'?'verification_failed':error instanceof Error&&error.message==='backup.key_unavailable'?'key_unavailable':'operation_failed';
    // A late failure still backs off unless another worker has replaced this claim.
    await this.#pool.query(`UPDATE backup_jobs SET failures=failures+1,last_error=$3,status=CASE WHEN attempts>=8 THEN 'failed' ELSE 'pending' END,

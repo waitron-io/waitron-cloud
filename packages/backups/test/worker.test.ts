@@ -53,6 +53,38 @@ test('failed verification backs off, survives worker restart and succeeds on ret
  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'verified');
  job=(await db.pool.query("SELECT * FROM backup_jobs WHERE kind='verify'")).rows[0];assert.equal(job.attempts,0);assert.equal(Number(job.failures),1);
 });
+test('shutdown cancels a snapshot download without recording a failure or consuming a retry',async()=>{
+ const point=await snapshot();await only('verify');
+ let entered!:()=>void,stageSignal:AbortSignal|undefined;
+ const started=new Promise<void>(resolve=>{entered=resolve;});
+ const cancellingCatalogue=new BackupCatalogue(db.pool,vault,()=>({
+  async stage(_key:string,_streamKey?:string,options?:{signal?:AbortSignal}){
+   stageSignal=options?.signal;entered();
+   if(!stageSignal)throw Error('missing shutdown signal');
+   await new Promise<never>((_resolve,reject)=>stageSignal!.addEventListener('abort',()=>reject(Error('backup.cancelled')),{once:true}));
+   throw Error('unreachable');
+  },
+  async putStaged(){throw Error('unused');},
+  async remove(){throw Error('unused');},
+ }));
+ const cancellingWorker=new BackupWorker(db.pool,cancellingCatalogue,async()=>assert.fail('restore must not start')),
+  controller=new AbortController(),running=cancellingWorker.runOnce(controller.signal);
+ await started;controller.abort();await running;
+ assert.equal(stageSignal?.aborted,true);
+ const job=(await db.pool.query("SELECT status,attempts,runs,failures,last_error,claim_id,lease_until FROM backup_jobs WHERE kind='verify' AND target_id=$1",[point.id])).rows[0];
+ assert.deepEqual(job,{status:'pending',attempts:0,runs:'1',failures:'0',last_error:null,claim_id:null,lease_until:null});
+ assert.equal((await db.pool.query('SELECT count(*) FROM backup_verifications WHERE point_id=$1',[point.id])).rows[0].count,'0');
+ assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'pending');
+});
+test('shutdown does not erase a real verification failure',async()=>{
+ const point=await snapshot();await only('verify');const controller=new AbortController();
+ const failingWorker=new BackupWorker(db.pool,catalogue,async()=>{controller.abort();throw Error('corrupt archive');});
+ assert.equal(await failingWorker.runOnce(controller.signal),true);
+ const job=(await db.pool.query("SELECT status,attempts,failures,last_error FROM backup_jobs WHERE kind='verify' AND target_id=$1",[point.id])).rows[0];
+ assert.equal(job.status,'pending');assert.equal(job.attempts,1);assert.equal(job.failures,'1');assert.equal(job.last_error,'verification_failed');
+ assert.deepEqual((await db.pool.query('SELECT outcome FROM backup_verifications WHERE point_id=$1',[point.id])).rows.map(row=>row.outcome),['failed']);
+ assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'failed');
+});
 test('abandoned captures expire, cannot be reused and clean orphan objects after restart',async()=>{
  const capture=await catalogue.reserveCapture(venue.installationId,randomUUID());objects.set(capture.incomingKey,Buffer.from('abandoned'));objects.set('snapshots/'+capture.id,Buffer.from('uncommitted'));
  await db.pool.query("UPDATE backup_captures SET created_at=clock_timestamp()-interval '25 hours' WHERE id=$1",[capture.id]);
