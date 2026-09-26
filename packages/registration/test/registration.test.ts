@@ -61,7 +61,7 @@ beforeEach(async () => {
 
 test('migration remains repeatable after concurrent initial application', async () => {
   await migrate(pool);
-  assert.equal(await count('schema_migrations'), 20);
+  assert.equal(await count('schema_migrations'), 21);
 });
 
 test('both approvals create one link with all services unconfigured', async () => {
