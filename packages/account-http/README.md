@@ -42,7 +42,7 @@ pnpm account:serve
 ```
 
 If you export `DATABASE_URL` in your shell, `pnpm db:migrate` applies the same migrations.
-The server refuses startup without migrations `007_account_http.sql` through `022_security_audit.sql`; it never applies
+The server refuses startup without migrations `007_account_http.sql` through `023_remote_cell_moves.sql`; it never applies
 migrations itself. Its default listener is `127.0.0.1:3000`.
 Migration 020 assigns a distinct random ID to every existing session, so PostgreSQL rewrites and
 exclusively locks `cloud_sessions` while it runs. Schedule that migration before starting the new

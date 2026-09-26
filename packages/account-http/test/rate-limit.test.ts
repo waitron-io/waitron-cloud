@@ -3,7 +3,7 @@ import { after, before, beforeEach, test } from 'node:test';
 import { Pool } from 'pg';
 import { AccountRateLimiter } from '../src/rate-limit.ts';
 import { database } from './fixtures.ts';
-import { migrate } from '../../registration/src/migrate.ts';
+import { migrate, migrationNames } from '../../registration/src/migrate.ts';
 let db: Awaited<ReturnType<typeof database>>;
 let limiter: AccountRateLimiter;
 before(async () => {db = await database(); limiter = new AccountRateLimiter(db.pool, db.rateKey);});
@@ -50,7 +50,7 @@ test('cleanup is bounded and never removes live windows; migration reruns are ha
   assert.equal(await limiter.prune(), 1000); assert.equal(await limiter.prune(), 5); assert.equal(await limiter.prune(), 0);
   assert.equal((await db.pool.query('SELECT count(*) FROM account_rate_limits')).rows[0].count, '1');
   await migrate(db.pool);
-  assert.equal((await db.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '22');
+  assert.equal((await db.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, String(migrationNames.length));
 });
 test('database failure cannot grant allowance', async () => {
   const closed = new Pool({connectionString: process.env.TEST_DATABASE_URL}); await closed.end();
