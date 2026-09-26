@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {generateKeyPairSync,randomBytes,randomUUID,X509Certificate} from 'node:crypto';
+import {createRequire} from 'node:module';
 import {mkdtemp,mkdir,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
-import {crypto as acmeCrypto} from 'acme-client';
 import {RegistrationStore,SignupStore} from '../packages/registration/src/index.ts';
 import {database} from '../packages/account-http/test/fixtures.ts';
 import {RemoteAccessStore} from '../packages/remote-access/src/placement.ts';
@@ -14,6 +14,7 @@ import {verifyManifest} from '../packages/remote-access/src/manifest.ts';
 import {startAcme} from './remote-fixtures.mjs';
 import {verifyRemoteReconcilerReceipt} from './verify-remote-reconciler-receipt.mjs';
 
+const require=createRequire(new URL('../packages/remote-access/package.json',import.meta.url)),{crypto:acmeCrypto}=require('acme-client');
 const waitron=resolve(process.env.WAITRON_CHECKOUT??'');assert.ok(process.env.WAITRON_CHECKOUT,'Set WAITRON_CHECKOUT to a clean Waitron checkout');
 const receiptFile=resolve(process.argv[2]??'/tmp/cloud-remote-reconciler-receipt.json'),cloud=resolve(new URL('..',import.meta.url).pathname);
 const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8'}).trim(),waitronHead=git(waitron,'rev-parse','HEAD');
