@@ -90,8 +90,9 @@ A concurrent configuration change requires refreshing and reviewing again. If th
 reply is lost, the portal reads the current settings instead of resending the change.
 
 Changing a name returns the service to setup pending and can interrupt access until its
-certificate and venue settings are updated. The local operator commands below still
-perform gateway assignment and certificate issuance/installation. This screen does not
+certificate and venue settings are updated. The local reconciler below can publish the
+updated gateway route and issue a matching certificate after an operator changes the
+trusted mapping. This screen does not
 activate a live subscription or install a tunnel on a customer appliance. Once fresh
 service observations confirm the selected configuration, the addresses become links.
 That confirmation expires with the observation or connection lease, even on an open page.
@@ -133,6 +134,78 @@ marker and accepted configuration. Missing or corrupt established state needs op
 recovery; do not delete the marker to make an old export acceptable.
 Keep the signing key outside the gateway; mount only its public key.
 
+## Reconcile routes and certificates
+
+Use the durable reconciler after migrations have run and placements have been assigned.
+It projects current PostgreSQL state into signed, expiring gateway manifests and checks
+public and staff certificates for renewal. Its leases survive a process restart, prevent
+two workers from completing the same claim and retry failures with a bounded backoff.
+After eight consecutive failures, a target is parked until its desired state changes or
+the target is disabled and enabled again.
+
+Create a trusted JSON file with these explicit mappings:
+
+```json
+{
+  "routes": [
+    {
+      "cellId": "00000000-0000-4000-8000-000000000001",
+      "output": "/absolute/gateway/input/manifest.json",
+      "signingKeyFile": "/absolute/operator-keys/cell.pem"
+    }
+  ],
+  "certificates": [
+    {
+      "installationId": "00000000-0000-4000-8000-000000000002",
+      "kind": "staff",
+      "csrFile": "/absolute/exchange/staff.csr",
+      "output": "/absolute/exchange/staff.crt"
+    }
+  ],
+  "acme": {
+    "directoryUrl": "https://acme.example/directory",
+    "email": "operations@example.com",
+    "accountKeyFile": "/absolute/operator-keys/acme.pem",
+    "dnsModule": "/absolute/adapters/dns.mjs"
+  }
+}
+```
+
+List every public and staff certificate target separately. The DNS module exports a
+default object with async `present(name, value)` and `remove(name, value)` methods. All
+paths must be absolute. A missing route or certificate mapping fails only that target;
+the worker does not infer a path or reuse another cell's key.
+
+Run one scheduling and work pass, inspect redacted status, or leave the worker running:
+
+```sh
+DATABASE_URL=postgres://... pnpm remote:reconcile /absolute/reconciler.json --once
+DATABASE_URL=postgres://... pnpm remote:reconcile /absolute/reconciler.json --status
+DATABASE_URL=postgres://... pnpm remote:reconcile /absolute/reconciler.json
+```
+
+Certificate publication rechecks the current hostname, ACME delegation name,
+configuration revision and claim lease after ACME completes. A stale result is refused.
+Files are replaced atomically, so a failed issuance or write keeps the prior usable chain
+or manifest. Cloud reads the staff CSR and returns only the chain; the private key remains
+in Waitron. Transporting that CSR and chain between a production appliance and Cloud is
+not implemented by this local filesystem adapter.
+
+Run the local reconciliation receipt against clean Cloud and Waitron checkouts:
+
+```sh
+WAITRON_CHECKOUT=/absolute/path/to/waitron \
+  node scripts/test-postgres.mjs exec \
+  node scripts/remote-reconciler-receipt.mjs /tmp/cloud-remote-reconciler-receipt.json
+pnpm verify:remote-reconciler -- /tmp/cloud-remote-reconciler-receipt.json
+```
+
+The receipt uses PostgreSQL plus the local Pebble and DNS fixtures. It proves signed
+two-venue route publication, restart and duplicate-worker recovery, initial public and
+staff issuance, renewal after CSR-key changes, Waitron's existing staff install command,
+retention after failed renewal, and hostname and expired-lease fences. It creates no live
+DNS record or certificate.
+
 The local image runs `src/gateway-cli.ts` with `NET_ADMIN` inside its isolated network
 namespace. Mount `/input` read-only and `/state` writable. Input holds `manifest.json`,
 `issuer.pem`, `wireguard.key`, a 32-byte `bot.key`, and `public-certs/*.pem` containing
@@ -167,15 +240,15 @@ Exact retries return the durable stage, readiness, cancellation or completed res
 A competing move, changed installation revision, revocation or mismatched operation input
 fails without changing the active placement. Cancellation never reuses an uncertain tunnel
 address. If the commit reply is lost, retry `move-commit`; do not create a new operation.
-Certificate copying, public DNS reconciliation and production appliance automation remain
-separate deployment work.
+The reconciler preserves route and certificate state across a move, but live public DNS
+changes and production appliance automation remain separate deployment work.
 
 Two 2026-09-26 local two-cell runs applied the destination route and reconnected a fresh
 peer in 1,321 ms and 1,486 ms; the second receipt names clean head `e4f9356`. They kept the original staff/public hostnames and certificate fingerprints,
 removed the cancelled stage, removed the committed route from the source, and kept the
 other venue reachable only through that source. This is one local Docker measurement, not
 a production recovery-time promise. Repeat it with the selected gateway deployment,
-provider network, DNS/certificate reconciler and appliance configuration path before
+provider network, live DNS/certificate adapters and appliance configuration path before
 setting an objective.
 
 ## Issue and renew certificates
@@ -258,9 +331,9 @@ old kernel session was not available in the replacement gateway, so it reconnect
 normal WireGuard rekey window. The runner allows up to three minutes to measure this case.
 The earlier sub-minute result covered freshly established peers and is not a production
 availability target. Define a launch target and test any explicit peer-side rekey strategy
-before promising faster recovery. LAN access remains independent. Production DNS, provider
-credentials, appliance installation, automatic customer appliance setup and deployment
-hardening still need their own
+before promising faster recovery. LAN access remains independent. Live provider DNS and
+ACME credentials, production key storage, CSR/chain transport, appliance installation,
+automatic customer appliance setup and deployment hardening still need their own
 implementation and validation before customers can subscribe. The local account portal
 and opt-in email queue now present redacted public/staff route incidents and recoveries;
 live sender and deployment proof remain separate launch work.
