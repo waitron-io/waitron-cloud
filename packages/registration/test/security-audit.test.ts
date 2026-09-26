@@ -75,13 +75,27 @@ test('owner pages are passive, tenant-scoped and stable when timestamps tie',asy
  await assert.rejects(store.page(token,{organisationId:organisation,limit:2}),/permission_denied/);
 });
 
+test('cursor preserves PostgreSQL precision across events in one millisecond',async()=>{
+ const rows=[
+  {id:randomUUID(),occurredAt:'2026-09-26T04:00:00.124000Z'},
+  {id:randomUUID(),occurredAt:'2026-09-26T04:00:00.123789Z'},
+  {id:randomUUID(),occurredAt:'2026-09-26T04:00:00.123456Z'},
+ ];
+ for(const row of rows)await pool.query(`INSERT INTO security_audit_events
+  (id,occurred_at,organisation_id,venue_id,event_type,actor_kind,actor_id,subject_kind,subject_id,source_id)
+  VALUES($1,$2,$3,$4,'installation.credentials_renewed','installation',$5,'installation',$5,$6)`,[row.id,row.occurredAt,organisation,venue,randomUUID(),randomUUID()]);
+ const returned:string[]=[];let cursor:string|undefined;
+ do{const page=await store.page(token,{organisationId:organisation,limit:1,...(cursor?{cursor}:{})});returned.push(...page.events.map(event=>event.id));cursor=page.nextCursor??undefined;}while(cursor);
+ assert.deepEqual(returned,rows.map(row=>row.id));
+});
+
 test('an in-progress owner page serializes with ownership removal',async()=>{
  await transaction(pool,client=>recordSecurityAuditEvent(client,input()));
  const blocker=await admin.connect();await blocker.query('BEGIN');await blocker.query(`LOCK TABLE ${schema}.security_audit_events IN ACCESS EXCLUSIVE MODE`);
  const page=store.page(token,{organisationId:organisation,limit:2});
  const waitFor=async(pattern:string)=>{for(let n=0;n<100;n++){const waiting=await admin.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE $2",[schema,pattern]);if(waiting.rowCount)return;await new Promise(resolve=>setTimeout(resolve,10));}throw new Error('request did not reach lock');};
  try{
-  await waitFor('SELECT * FROM security_audit_events%');
+  await waitFor('SELECT %FROM security_audit_events%');
   const remove=pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[owner,organisation]);
   await waitFor('UPDATE organisation_memberships SET is_owner=false%');
   assert.equal((await admin.query(`SELECT is_owner FROM ${schema}.organisation_memberships WHERE account_id=$1 AND organisation_id=$2`,[owner,organisation])).rows[0].is_owner,true);

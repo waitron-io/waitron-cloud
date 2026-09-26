@@ -109,7 +109,7 @@ export class PairingStore {
       const registration=new RegistrationStore(this.#pool,client);
       await registration.start(binding);await registration.approveLocal(binding,row.id);await registration.approveCloud(binding,row.cloud_account_id);
       const registered=await registration.complete(binding);
-      await recordSecurityAuditEvent(client,{organisationId:c.organisationId,venueId:registered.venueId,type:'pairing.local_approved',actorKind:'local_authority',actorId:row.id,subjectKind:'pairing_request',subjectId:row.id,sourceId:row.id});
+      await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:registered.venueId,type:'pairing.local_approved',actorKind:'local_authority',actorId:row.id,subjectKind:'pairing_request',subjectId:row.id,sourceId:row.id});
       await available(client,row);
       await client.query('UPDATE pairing_requests SET result=$2 WHERE id=$1',[row.id,registered]);row.result=registered;
       return view(client,row);

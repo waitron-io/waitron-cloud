@@ -37,7 +37,7 @@ test('durable renewal is scoped and replayed once across independent workers',as
   assert.deepEqual(await new InstallationStore(db.pool,issuer,origin).execute('renew',proof),one);
   assert.equal((await db.pool.query('SELECT count(*) FROM installation_operations')).rows[0].count,'1');
   const event=(await db.pool.query("SELECT * FROM security_audit_events WHERE event_type='installation.credentials_renewed'")).rows[0];
-  assert.equal(event.organisation_id,owner.organisationId);assert.equal(event.venue_id,a.venueId);assert.equal(event.actor_kind,'installation');assert.equal(event.actor_id,a.installationId);assert.equal(event.subject_id,a.installationId);assert.equal(event.source_id,operationId);
+  assert.equal(event.organisation_id,owner.organisationId);assert.equal(event.venue_id,a.venueId);assert.equal(event.actor_kind,'installation');assert.equal(event.actor_id,a.installationId);assert.equal(event.subject_id,a.installationId);assert.notEqual(event.source_id,operationId);
   assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='installation.credentials_renewed'")).rows[0].count,'1');
   const twoVenue=await store.execute('renew',request(b));assert.notDeepEqual(one.lease,twoVenue.lease);
   assert.equal((await config(a,one.lease)).venueId,a.venueId);
@@ -56,6 +56,14 @@ test('credential audit does not invert the installation and venue lock order',as
     }
   }finally{await blocker.query('COMMIT');blocker.release();}
   await pending;assert.equal(auditWaited,false,'audit insertion must not add a venue row lock after the installation lock');
+});
+test('credential audit scopes a machine operation ID to its installation',async()=>{
+  const operationId=randomUUID();
+  const first=await store.execute('renew',request(a,'renew',undefined,{},operationId));
+  const second=await store.execute('renew',request(b,'renew',undefined,{},operationId));
+  assert.equal(first.installationId,a.installationId);assert.equal(second.installationId,b.installationId);
+  assert.equal((await db.pool.query('SELECT count(*) FROM installation_operations WHERE operation_id=$1',[operationId])).rows[0].count,'2');
+  assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='installation.credentials_renewed'")).rows[0].count,'2');
 });
 test('reports cannot configure services, advance desired revision, roll back health, or hide stale health',async()=>{
   const initial=await store.execute('renew',request());assert.ok(initial.lease);const lease=initial.lease;

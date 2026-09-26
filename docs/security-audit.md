@@ -16,7 +16,7 @@ The first version records:
 
 Each event contains a stable event UUID, timestamp, organisation, optional venue, fixed event type, actor kind and UUID, and subject kind and UUID. A local approval's actor is labelled `local_authority`; its UUID is the existing verified receipt reference, not a claim that Cloud knows the local person's identity.
 
-The schema has no arbitrary details or payload field. Matching codes, session tokens, public keys, leases, storage credentials, recovery keys and raw errors therefore have nowhere to be copied. PostgreSQL rejects updates and deletes. Repeating a successful action returns the original event; reusing its source identity with different event fields fails closed.
+The schema has no arbitrary details or payload field. Matching codes, session tokens, public keys, leases, storage credentials, recovery keys and raw errors therefore have nowhere to be copied. PostgreSQL rejects row updates and row deletes. Repeating a successful action returns the original event; reusing its source identity with different event fields fails closed. Credential-renewal sources combine the installation and its installation-scoped operation ID, so another installation may use the same operation UUID safely.
 
 ## Read or export a page
 
@@ -57,7 +57,7 @@ The JSON response is the export. Cloud does not create a server-side file or ema
 
 ## Retention boundary
 
-The transient [history cleanup command](history-cleanup.md) never removes security audit events. No audit retention period or account-deletion rule is enabled. Choose those policies before production use, then implement them as a separate explicit lifecycle rather than adding audit rows to transient cleanup.
+The transient [history cleanup command](history-cleanup.md) never removes security audit events. Existing audit rows also prevent deletion of their referenced organisation or venue. No audit retention period or account-deletion rule is enabled. Choose those policies before production use, then implement them as a separate explicit lifecycle rather than adding audit rows to transient cleanup.
 
 ## Verify locally
 

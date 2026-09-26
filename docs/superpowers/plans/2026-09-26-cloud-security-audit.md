@@ -62,7 +62,7 @@ Expected: FAIL because `security-audit.ts`, migration 022 and the new exports do
 
 - [ ] **Step 3: Implement schema, typed writer and page store**
 
-Create the checked table, `(event_type, source_id)` unique constraint, organisation/time index, and update/delete rejection trigger. Implement exact UUID/kind inputs, `INSERT ... ON CONFLICT DO NOTHING`, locked read-back and field-for-field conflict verification. Encode cursors as canonical base64url JSON `[occurredAt,id]`, validate their exact shape, fetch `limit + 1`, and hold the `is_owner` membership with `FOR SHARE` while reading organisation-filtered rows.
+Create the checked table, `(event_type, source_id)` unique constraint, organisation/time index, and update/delete rejection trigger. Implement exact UUID/kind inputs, `INSERT ... ON CONFLICT DO NOTHING`, locked read-back and field-for-field conflict verification. Encode cursors as canonical base64url JSON `[occurredAt,id]` using the database timestamp's full precision, validate their exact shape, fetch `limit + 1`, and hold the `is_owner` membership with `FOR SHARE` while reading organisation-filtered rows.
 
 - [ ] **Step 4: Run the focused tests to verify GREEN**
 
@@ -84,7 +84,7 @@ Expected: PASS with 22 applied migrations and all writer, immutability, rollback
 
 - [ ] **Step 1: Write failing action-boundary tests**
 
-Extend the existing real-store tests. Pairing approval must add one `pairing.cloud_approved` row; completion must add one `pairing.local_approved` row; repeating either action must keep the original IDs. Renewal must add one `installation.credentials_renewed` row per operation ID. Account and machine revocation must each record the correct actor kind and exactly one row. Existing expiry, stale-session and permission-failure tests must assert no corresponding event remains.
+Extend the existing real-store tests. Pairing approval must add one `pairing.cloud_approved` row; completion must add one `pairing.local_approved` row; repeating either action must keep the original IDs. Renewal must add one `installation.credentials_renewed` row per installation-scoped operation ID, while allowing two installations to use the same operation UUID. Account and machine revocation must each record the correct actor kind and exactly one row. Existing expiry, stale-session and permission-failure tests must assert no corresponding event remains.
 
 - [ ] **Step 2: Run the focused tests to verify RED**
 

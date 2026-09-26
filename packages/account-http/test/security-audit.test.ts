@@ -8,8 +8,8 @@ import {createAccountApp} from '../src/app.ts';
 import {database} from './fixtures.ts';
 
 let db:Awaited<ReturnType<typeof database>>,app:ReturnType<typeof createAccountApp>;
-const origin='https://cloud.example.test',secretCode='87654321',secretToken='private-session-token',secretKey='private-public-key';
-let owner:string,member:string,organisation:string,foreignOrganisation:string,venue:string,session:{token:string;csrfToken:string},memberSession:{token:string;csrfToken:string};
+const origin='https://cloud.example.test';
+let owner:string,member:string,organisation:string,foreignOrganisation:string,venue:string,auditEventId:string,session:{token:string;csrfToken:string},memberSession:{token:string;csrfToken:string};
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
  await db.pool.query('TRUNCATE account_rate_limits,organisations,cloud_accounts CASCADE');
@@ -21,7 +21,7 @@ beforeEach(async()=>{
  await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test'),($5,$6,$7,$8,'test')",[venue,organisation,business,randomUUID(),foreignVenue,foreignOrganisation,foreignBusiness,randomUUID()]);
  await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,can_register_venues,is_owner) VALUES($1,$2,true,true),($3,$2,true,false)',[owner,organisation,member]);
  session=await transaction(db.pool,client=>createSession(client,owner));memberSession=await transaction(db.pool,client=>createSession(client,member));
- await transaction(db.pool,client=>recordSecurityAuditEvent(client,{organisationId:organisation,venueId:venue,type:'installation.revoked',actorKind:'account',actorId:owner,subjectKind:'installation',subjectId:randomUUID(),sourceId:randomUUID()}));
+ auditEventId=(await transaction(db.pool,client=>recordSecurityAuditEvent(client,{organisationId:organisation,venueId:venue,type:'installation.revoked',actorKind:'account',actorId:owner,subjectKind:'installation',subjectId:randomUUID(),sourceId:randomUUID()}))).id;
  await transaction(db.pool,client=>recordSecurityAuditEvent(client,{organisationId:foreignOrganisation,venueId:foreignVenue,type:'installation.credentials_renewed',actorKind:'installation',actorId:randomUUID(),subjectKind:'installation',subjectId:randomUUID(),sourceId:randomUUID()}));
  app=createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});
 });
@@ -29,10 +29,14 @@ function call(body:unknown,credentials=session,headers:Record<string,string>={},
  return app.request(origin+'/api/account/security-audit/read',{method,headers:{origin,'content-type':'application/json',cookie:'__Host-cloud_session='+credentials.token,'x-csrf-token':credentials.csrfToken,...headers},body:method==='POST'?JSON.stringify(body):undefined},{incoming:{socket:{remoteAddress:'192.0.2.44'}}} as HttpBindings);
 }
 test('owner receives a passive tenant-scoped page with no request secrets',async()=>{
- const response=await call({organisationId:organisation,limit:1});assert.equal(response.status,200,await response.clone().text());
- const body=await response.json() as {version:number;events:{organisationId:string;actorId:string}[];nextCursor:string|null};
- assert.equal(body.version,1);assert.equal(body.events.length,1);assert.equal(body.events[0]?.organisationId,organisation);assert.equal(body.events[0]?.actorId,owner);assert.equal(body.nextCursor,null);
- const encoded=JSON.stringify(body);for(const value of [secretCode,secretToken,secretKey,foreignOrganisation])assert.equal(encoded.includes(value),false);
+ const second=(await transaction(db.pool,client=>recordSecurityAuditEvent(client,{organisationId:organisation,venueId:venue,type:'installation.credentials_renewed',actorKind:'installation',actorId:randomUUID(),subjectKind:'installation',subjectId:randomUUID(),sourceId:randomUUID()}))).id;
+ const firstResponse=await call({organisationId:organisation,limit:1});assert.equal(firstResponse.status,200,await firstResponse.clone().text());
+ const first=await firstResponse.json() as {version:number;events:{id:string;organisationId:string}[];nextCursor:string|null};
+ assert.equal(first.version,1);assert.equal(first.events.length,1);assert.ok(first.nextCursor);assert.equal(first.events[0]?.organisationId,organisation);
+ const secondResponse=await call({organisationId:organisation,limit:1,cursor:first.nextCursor});assert.equal(secondResponse.status,200,await secondResponse.clone().text());
+ const last=await secondResponse.json() as typeof first;assert.equal(last.events.length,1);assert.equal(last.nextCursor,null);assert.equal(last.events[0]?.organisationId,organisation);
+ assert.deepEqual(new Set([...first.events,...last.events].map(event=>event.id)),new Set([auditEventId,second]));
+ const encoded=JSON.stringify([first,last]);for(const value of [session.token,session.csrfToken,foreignOrganisation])assert.equal(encoded.includes(value),false);
  assert.equal((await db.pool.query('SELECT last_seen_at FROM cloud_sessions WHERE account_id=$1',[owner])).rows[0].last_seen_at.getTime(),(await db.pool.query('SELECT created_at FROM cloud_sessions WHERE account_id=$1',[owner])).rows[0].created_at.getTime());
 });
 test('route requires exact method, origin, session, CSRF, input and current ownership',async()=>{

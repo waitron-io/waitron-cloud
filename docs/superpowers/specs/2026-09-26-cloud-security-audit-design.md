@@ -21,14 +21,14 @@ The first event types are:
 
 - `pairing.cloud_approved`, with the Cloud account as actor and the pairing request as subject/source;
 - `pairing.local_approved`, with the existing local approval receipt as the local-authority reference and the pairing request as subject/source;
-- `installation.credentials_renewed`, with the installation as actor/subject and the machine operation as source;
+- `installation.credentials_renewed`, with the installation as actor/subject and a source UUID derived from both the installation and machine operation IDs;
 - `installation.revoked`, with either the Cloud account or installation actor, the installation as subject, and the installation as source because it can be revoked only once;
 - `recovery.approved`, with the Cloud account as actor, the recovery operation as subject/source; and
 - `replacement.approved`, with the Cloud account as actor, the replacement as subject/source.
 
 The local approval receipt identifies an existing verified approval, not a named human. The API labels it `local_authority`; it must not suggest Cloud knows the local person's identity.
 
-There is no free-form details or payload column. This prevents a future caller from accidentally copying matching codes, public keys, leases, credentials, recovery keys or other request bodies into the audit trail. Fixed database checks constrain event, actor and subject kinds. A unique `(event_type, source_id)` key makes a repeated successful operation return the original event rather than append another row. A mismatched retry for the same key fails instead of rewriting history.
+There is no free-form details or payload column. This prevents a future caller from accidentally copying matching codes, public keys, leases, credentials, recovery keys or other request bodies into the audit trail. Fixed database checks constrain event, actor and subject kinds. A unique `(event_type, source_id)` key makes a repeated successful operation return the original event rather than append another row. A mismatched retry for the same key fails instead of rewriting history. Credential renewals derive that globally unique source from the installation and its installation-scoped operation ID, so two installations may legitimately use the same operation UUID.
 
 Database triggers reject `UPDATE` and `DELETE`. Security audit data is explicitly outside the transient history-cleanup command. A future retention or account-deletion policy must address this table separately.
 
@@ -42,7 +42,7 @@ Read-only status, inspection, failed confirmation, rejected code, stale permissi
 
 ## Owner read/export API
 
-`SecurityAuditStore.page(token, input)` provides the package boundary. Input is an organisation UUID, a limit from 1 through 100, and an optional opaque cursor returned by an earlier page. Rows are ordered newest first by `(occurred_at, id)`. The cursor carries that exact pair, so events with equal timestamps are stable and an append after page one cannot duplicate or skip older rows.
+`SecurityAuditStore.page(token, input)` provides the package boundary. Input is an organisation UUID, a limit from 1 through 100, and an optional opaque cursor returned by an earlier page. Rows are ordered newest first by `(occurred_at, id)`. The cursor carries that exact pair at PostgreSQL's full microsecond precision, so events with equal timestamps are stable and an append after page one cannot duplicate or skip older rows.
 
 The store resolves the session without extending activity, checks a current `is_owner` membership while holding it through the read transaction, reads only that organisation, then rechecks the session before returning. A former owner, disabled account, malformed cursor or foreign organisation receives no data. The response contains schema version 1, event objects and a next cursor only when another row exists.
 

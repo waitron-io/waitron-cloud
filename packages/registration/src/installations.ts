@@ -4,7 +4,7 @@ import {resolveSession} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
 import {isPairingUuid} from './pairing-proof.ts';
 import {InstallationError,readMachineClaims,verifyMachine,verifyLease,type LeaseIssuer,type MachineAction,type SignedEnvelope} from './installation-proof.ts';
-import {recordSecurityAuditEvent,type SecurityAuditActorKind} from './security-audit.ts';
+import {recordSecurityAuditEvent,securityAuditSourceId,type SecurityAuditActorKind} from './security-audit.ts';
 const names=['continuous_backup','remote_access','retained_snapshots'] as const;
 type Service=typeof names[number];
 type State='unconfigured'|'provisioning'|'ready'|'failed';
@@ -106,7 +106,7 @@ export class InstallationStore {
       if(action==='revoke')for(const s of result.services)s.configuration={};
       verifyMachine(envelope,row.public_key,this.#origin,action);
       if(action==='revoke')await client.query("INSERT INTO installation_revocations(installation_id,actor_kind,actor_id,reason,result) VALUES($1,'installation',$1,'user_requested',$2) ON CONFLICT DO NOTHING",[row.id,result]);
-      if(action==='renew')await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:row.venue_id,type:'installation.credentials_renewed',actorKind:'installation',actorId:row.id,subjectKind:'installation',subjectId:row.id,sourceId:c.operationId});
+      if(action==='renew')await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:row.venue_id,type:'installation.credentials_renewed',actorKind:'installation',actorId:row.id,subjectKind:'installation',subjectId:row.id,sourceId:securityAuditSourceId('installation.credentials_renewed',row.id,c.operationId)});
       if(action==='revoke')await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:row.venue_id,type:'installation.revoked',actorKind:'installation',actorId:row.id,subjectKind:'installation',subjectId:row.id,sourceId:row.id});
       await client.query('INSERT INTO installation_operations(installation_id,operation_id,digest,result) VALUES($1,$2,$3,$4)',[row.id,c.operationId,digest,result]);
       return result;

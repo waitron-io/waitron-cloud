@@ -146,6 +146,8 @@ Pairing Cloud/local approvals, installation credential renewals and revocations,
 backup recovery/replacement approvals append fixed-shape events inside the transaction
 that changes authority. Repeated successful operations keep one stable event ID; an
 event conflict or insert failure rolls the protected action back.
+Credential-renewal event sources combine the installation with its installation-scoped
+operation ID, so separate installations may reuse the same operation UUID.
 
 `SecurityAuditStore.page` passively resolves the session, requires current organisation
 ownership and returns a newest-first cursor page. The table deliberately has no arbitrary
