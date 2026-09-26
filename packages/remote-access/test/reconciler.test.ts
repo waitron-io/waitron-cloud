@@ -66,16 +66,18 @@ function memoryArtifacts(target:{installationId:string;placement:{staffHostname:
 }
 
 test('duplicate workers claim one target and an expired lease cannot acknowledge over its replacement',async()=>{
- const current=await onePlacement(42);let entered!:()=>void,release!:()=>void,executions=0;
+ const current=await onePlacement(42);let entered!:()=>void,release!:()=>void,replacementEntered!:()=>void,releaseReplacement!:()=>void,executions=0;
  const started=new Promise<void>(resolve=>{entered=resolve;}),gate=new Promise<void>(resolve=>{release=resolve;});
+ const replacementStarted=new Promise<void>(resolve=>{replacementEntered=resolve;}),replacementGate=new Promise<void>(resolve=>{releaseReplacement=resolve;});
  const first=new RemoteConfigurationReconciler(db.pool,{execute:async()=>{executions++;entered();await gate;}});await first.schedule();
  await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'route' OR target_id<>$1",[current.cell.id]);
  const old=first.runOnce();await started;
  const duplicate=await new RemoteConfigurationReconciler(db.pool,{execute:async()=>{executions++;}}).runOnce();
  assert.equal(duplicate,false);assert.equal(executions,1);
  await db.pool.query("UPDATE remote_configuration_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE kind='route' AND target_id=$1",[current.cell.id]);
- assert.equal(await new RemoteConfigurationReconciler(db.pool,{execute:async(_job,{isCurrent})=>{assert.equal(await isCurrent(),true);executions++;}}).runOnce(),true);
- release();await old;
+ const replacement=new RemoteConfigurationReconciler(db.pool,{execute:async(_job,{isCurrent})=>{assert.equal(await isCurrent(),true);executions++;replacementEntered();await replacementGate;}}).runOnce();await replacementStarted;
+ release();await old;const duringReplacement=(await db.pool.query("SELECT status,runs,attempts,applied_digest=desired_digest AS applied FROM remote_configuration_jobs WHERE kind='route' AND target_id=$1",[current.cell.id])).rows[0];assert.deepEqual(duringReplacement,{status:'running',runs:'2',attempts:2,applied:null});
+ releaseReplacement();assert.equal(await replacement,true);
  const row=(await db.pool.query("SELECT status,runs,attempts,applied_digest=desired_digest AS applied FROM remote_configuration_jobs WHERE kind='route' AND target_id=$1",[current.cell.id])).rows[0];
  assert.deepEqual(row,{status:'pending',runs:'2',attempts:0,applied:true});assert.equal(executions,2);
 });
