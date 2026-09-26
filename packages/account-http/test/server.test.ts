@@ -7,6 +7,7 @@ import { once } from 'node:events';
 import { generateKeyPairSync } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startAccountServer } from '../src/server.ts';
+import {migrationNames} from '@waitron-cloud/registration';
 import { database } from './fixtures.ts';
 let db: Awaited<ReturnType<typeof database>>;
 before(async () => {db = await database();});
@@ -36,6 +37,16 @@ function send(port: number, path = '/session', body?: string, headers: Record<st
   // Aborted clients are deliberate fixtures; consume their rejection even before awaiting it.
   void result.catch(() => {});
   return {result, abort() {req.destroy();}};
+}
+function health(port:number,path:'/api/health/live'|'/api/health/ready'){
+ let req:ClientRequest;
+ const result=new Promise<{status:number;body:string}>((resolve,reject)=>{
+  req=request({host:'127.0.0.1',port,path,headers:{host:'localhost'}},response=>{
+   let body='';response.on('data',chunk=>{body+=chunk;});response.on('end',()=>resolve({status:response.statusCode!,body}));response.on('error',reject);
+  });
+  req.on('error',reject);req.end();
+ });
+ void result.catch(()=>{});return {result,abort(){req.destroy();}};
 }
 async function until(check: () => Promise<boolean>, ms = 5000) {
   const deadline = Date.now() + ms;
@@ -74,6 +85,24 @@ test('stalled bodies expire, aborted clients release slots, and admission is bou
     assert.equal((await pending[1]!.result).status, 408);
     assert.equal(await queued(), 0); assert.equal((await send(running.port).result).status, 401);
   } finally {for (const item of pending) item.abort(); await running.close();}
+});
+test('one slow readiness probe cannot fill admission and liveness remains available',async()=>{
+ const running=await host(),locker=await db.secondPool.connect(),probes:ReturnType<typeof health>[]=[];
+ let ordinaryStatus=0,liveStatus=0;let results:{status:number;body:string}[]=[];
+ try{
+  await locker.query('BEGIN');await locker.query('LOCK TABLE schema_migrations IN ACCESS EXCLUSIVE MODE');
+  for(let index=0;index<8;index++)probes.push(health(running.port,'/api/health/ready'));
+  await until(async()=>Number((await db.secondPool.query("SELECT count(*)::integer AS count FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT count(*)::integer AS count FROM schema_migrations%'",[db.schema])).rows[0].count)>=1);
+  ordinaryStatus=(await send(running.port).result).status;
+  const live=await health(running.port,'/api/health/live').result;
+  liveStatus=live.status;assert.deepEqual(JSON.parse(live.body),{status:'live'});
+ }finally{
+  await locker.query('ROLLBACK');locker.release();
+  results=await Promise.all(probes.map(item=>item.result));
+  await running.close();
+ }
+ assert.equal(ordinaryStatus,401);assert.equal(liveStatus,200);
+ assert.deepEqual(results.map(result=>result.status).sort(),[200,503,503,503,503,503,503,503]);
 });
 test('header size and receive deadlines are enforced over raw TCP', async () => {
   const running = await host();
@@ -123,7 +152,7 @@ test('CLI fails closed with fixed diagnostics for invalid settings and absent mi
     assert.equal(outcome.code, 1); assert.equal(outcome.stdout, '');
     assert.equal(outcome.stderr, 'Account server failed; check database, migrations and configuration\n');
   }
-  for (const migration of ['007_account_http.sql','008_pairing.sql','009_installation_lifecycle.sql','010_remote_access.sql','011_managed_backups.sql','012_backup_jobs.sql','013_service_monitoring.sql','014_remote_hostname_changes.sql','015_backup_recovery_requests.sql','016_server_replacement.sql','017_remote_probe_observations.sql','018_managed_continuous_recovery.sql','019_passkeys.sql','020_account_security_controls.sql','021_history_cleanup.sql','022_security_audit.sql','023_remote_cell_moves.sql']) {
+  for (const migration of migrationNames.slice(6)) {
   const saved = await db.pool.query('DELETE FROM schema_migrations WHERE name = $1 RETURNING *', [migration]);
   try {assert.equal((await cli().exited).code, 1); assert.equal((await db.pool.query('SELECT count(*) FROM schema_migrations WHERE name = $1', [migration])).rows[0].count, '0');}
   finally {await db.pool.query('INSERT INTO schema_migrations(name, digest) VALUES ($1, $2)', [saved.rows[0].name, saved.rows[0].digest]);}

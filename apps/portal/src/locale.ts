@@ -126,6 +126,9 @@ const en = {
   usageExclusions:"Continuous backup stream bytes and account email are not included.",
   usageHistory:"Restored snapshot bytes include receipts recorded after usage metering was installed. Earlier restores are not included.",
   usageRefresh:"Refresh measured usage",usageUnavailable:"Measured usage is temporarily unavailable.",usageBytes:"bytes",
+  diagnosticDownload:"Download diagnostic report",
+  diagnosticHelp:"Download a redacted report of this venue’s current Cloud status to share when troubleshooting.",
+  diagnosticUnavailable:"The diagnostic report is temporarily unavailable. Retry or refresh the status.",
 
   viewSnapshots:'View snapshots', snapshotHistory:'Snapshot history', chooseSnapshot:'Choose a snapshot', noSnapshots:'No snapshots have been stored for this venue.',
   snapshotPurpose:'Continuous backups normally provide the newest recovery point. Snapshots are point-in-time archives and a fallback if continuous data is lost.', recoveryUnavailable:'To restore a snapshot, open the Cloud recovery link from the replacement server’s setup screen.',
@@ -315,6 +318,9 @@ const es: Copy = {
   usageExclusions:"No se incluyen los bytes del flujo de copia continua ni el correo de la cuenta.",
   usageHistory:"Los bytes de instantáneas restauradas incluyen los recibos registrados después de instalar la medición de uso. No se incluyen las restauraciones anteriores.",
   usageRefresh:"Actualizar uso medido",usageUnavailable:"El uso medido no está disponible temporalmente.",usageBytes:"bytes",
+  diagnosticDownload:"Descargar informe de diagnóstico",
+  diagnosticHelp:"Descarga un informe sin datos sensibles sobre el estado actual de Cloud de este local para compartirlo al investigar un problema.",
+  diagnosticUnavailable:"El informe de diagnóstico no está disponible temporalmente. Reinténtalo o actualiza el estado.",
 
   viewSnapshots:'Ver instantáneas', snapshotHistory:'Historial de instantáneas', chooseSnapshot:'Elige una instantánea', noSnapshots:'No se han guardado instantáneas de este local.',
   snapshotPurpose:'Las copias continuas suelen ofrecer el punto de recuperación más reciente. Las instantáneas son archivos de un momento concreto y una alternativa si se pierden los datos continuos.', recoveryUnavailable:'Para restaurar una instantánea, abre el enlace de recuperación de Cloud desde la configuración del servidor de sustitución.',

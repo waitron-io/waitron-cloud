@@ -15,13 +15,19 @@ for(const locale of ['en','es'] as const) for(const colorScheme of ['light','dar
       await page.route('**/api/account/usage/read',route=>route.fulfill({json:{version:1,organisationId:id,storage:{currentBytes:'0',addedBytes:'0',removedBytes:'0'},transfer:{uploadedBytes:'0',restoredBytes:'0'},operations:{installationCompleted:'0',monitoringProbes:'0'},messages:{sent:'0',failed:'0',expired:'0',cancelled:'0'},latestEventAt:null,measuredThrough:null}}));
       for(const route of ['/login','/signup','/signup#token='+'a'.repeat(43),'/forgot-password','/reset-password#token='+'b'.repeat(43),'/reset-password','/account']) {
         await page.goto(f.origin+route);await page.locator('wt-card').waitFor();
-        if(route==='/account') {await page.getByText(translations[locale].accountIntro).waitFor();await page.getByRole('heading',{name:translations[locale].usageTitle,exact:true}).waitFor();}
+        if(route==='/account') {await page.getByText(translations[locale].accountIntro).waitFor();await page.getByRole('heading',{name:translations[locale].usageTitle,exact:true}).waitFor();await page.getByRole('button',{name:translations[locale].diagnosticDownload,exact:true}).waitFor();}
         await page.evaluate(axe.source);
         const violations=await page.evaluate(async()=> (await window.axe.run(document)).violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})));
         assert.deepEqual(violations,[],route);
         assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),route);
         assert.equal(await page.locator('html').getAttribute('lang'),locale);
         if(route.startsWith('/signup#')) await page.screenshot({path:new URL(`../dist/preview-${locale}-${colorScheme}.png`,import.meta.url).pathname,fullPage:true});
+        if(route==='/account'){
+          await page.screenshot({path:new URL(`../dist/diagnostics-${locale}-${colorScheme}-phone.png`,import.meta.url).pathname,fullPage:true});
+          await page.setViewportSize({width:1280,height:800});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+          await page.screenshot({path:new URL(`../dist/diagnostics-${locale}-${colorScheme}-desktop.png`,import.meta.url).pathname,fullPage:true});
+          await page.setViewportSize({width:375,height:812});
+        }
       }
       await page.goto(`${f.origin}/login`);await page.getByRole('button',{name:translations[locale].login,exact:true}).click();
       await page.locator('input[name=email][aria-invalid=true]').waitFor();

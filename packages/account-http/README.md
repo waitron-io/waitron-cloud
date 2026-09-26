@@ -42,8 +42,8 @@ pnpm account:serve
 ```
 
 If you export `DATABASE_URL` in your shell, `pnpm db:migrate` applies the same migrations.
-The server refuses startup without migrations `007_account_http.sql` through `025_usage_metering.sql`; it never applies
-migrations itself. Its default listener is `127.0.0.1:3000`.
+The server refuses startup unless every migration known to the registration package is
+installed; it never applies migrations itself. Its default listener is `127.0.0.1:3000`.
 Migration 020 assigns a distinct random ID to every existing session, so PostgreSQL rewrites and
 exclusively locks `cloud_sessions` while it runs. Schedule that migration before starting the new
 server rather than treating it as an online metadata-only change.
@@ -74,6 +74,16 @@ Opening a link never completes signup or resets a password automatically. Previo
 issued query-token links still work on the two completion pages; their initial HTTP
 request contains the token, so do not log query strings at an ingress. Reloading a
 scrubbed completion page requires reopening the email or requesting another link.
+
+The API also exposes two unauthenticated, non-cacheable health routes. GET
+`/api/health/live` returns `200 {"status":"live"}` without querying PostgreSQL. GET
+`/api/health/ready` checks the database and every migration known to the running server,
+then returns `200 {"status":"ready"}` or `503 {"status":"unavailable"}`. Readiness
+shares the API's client-IP allowance, and each process admits only one readiness query at
+a time; excess probes receive the normal 429 or 503 response. Liveness remains outside
+database admission and rate counters. Health responses omit database details. See the
+[operations status guide](../../docs/operations-status.md) for the aggregate operator
+check and Prometheus export.
 
 ## Make an account request
 
@@ -113,6 +123,7 @@ parameters remain rejected, so tokens belong only in completion bodies.
 | POST `/password-reset/complete` | `{"token":"<emailed token>","password":"a different long password"}` | 200 `{"status":"completed"}` |
 | POST `/security-audit/read` | `{"organisationId":"<uuid>","limit":50,"cursor":"<optional next cursor>"}`, session cookie and `X-CSRF-Token` | 200 owner-scoped schema-v1 security event page |
 | POST `/usage/read` | `{"organisationId":"<uuid>"}`, session cookie and `X-CSRF-Token` | 200 owner-scoped schema-v1 decimal-string usage totals and measurement freshness |
+| POST `/diagnostics/read` | `{"installationId":"<uuid>"}`, session cookie and `X-CSRF-Token` | 200 owner-scoped schema-v1 redacted installation diagnostic |
 
 Passkeys are optional and use the same account sessions. Start a discoverable sign-in
 with `POST /passkeys/authentication/options {}`, then send the browser result and
@@ -196,6 +207,14 @@ completed source scan, not an event-time completeness boundary. See the
 [usage metering guide](../../docs/usage-metering.md) for event meanings, exclusions and
 the operator command.
 
+POST `/diagnostics/read` is passive and owner-only. It returns one installation's
+access dates, service status, monitoring evidence, open incident kinds and snapshot
+times. Evidence older than five minutes is reported as unknown. The response excludes
+account and organisation details, email addresses, hostnames, provider details,
+credentials, configuration and raw errors. The portal downloads the JSON with a
+timestamped filename. See the [operations status guide](../../docs/operations-status.md)
+for the full customer-facing redaction boundary.
+
 ## Limits and errors
 
 All responses disable caching and referrer forwarding, and set `nosniff`. Errors use
@@ -221,10 +240,11 @@ PostgreSQL counters apply across all API instances and survive restarts:
 
 | Scope | Allowance |
 | --- | --- |
-| API routes, per client IP | 120 per minute |
+| API routes except liveness, per client IP | 120 per minute |
 | Login, per IP / normalised email | 10 per minute / 30 per 15 minutes |
 | Each signup/reset email-request route, per IP | 10 per 15 minutes |
 | Each signup/reset completion route, per IP and token | 10 per 15 minutes |
+| Diagnostic export, per account | 30 per minute |
 
 Successes and failures both count once a request reaches a limit. Login checks the
 IP limit first; requests it refuses do not consume the email allowance. This prevents

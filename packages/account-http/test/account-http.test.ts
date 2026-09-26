@@ -123,6 +123,25 @@ test('strict request shape, authority and body bounds fail without exposing subm
   assert.equal((await request('/missing')).status, 404);
   assert.equal((await db.pool.query('SELECT count(*) FROM email_outbox')).rows[0].count, '0');
 });
+test('health routes separate process liveness from migration-backed readiness', async () => {
+  const live = await request('', undefined, {url: `${origin}/api/health/live`});
+  assert.equal(live.status, 200); assert.deepEqual(await live.json(), {status: 'live'}); protectedHeaders(live);
+  const ready = await request('', undefined, {url: `${origin}/api/health/ready`});
+  assert.equal(ready.status, 200); assert.deepEqual(await ready.json(), {status: 'ready'}); protectedHeaders(ready);
+  assert.equal((await db.pool.query('SELECT sum(attempts)::integer AS attempts FROM account_rate_limits')).rows[0].attempts, 1);
+  for (const path of ['/api/health/live', '/api/health/ready']) {
+    assert.equal((await request('', {}, {url: `${origin}${path}`, method: 'POST'})).status, 405);
+    assert.equal((await request('', undefined, {url: `${origin}${path}?private=1`})).status, 400);
+  }
+  const unavailable = createAccountApp({pool: {query: async () => {throw new Error('private database detail');}} as unknown as typeof db.pool,
+    outbox: db.outbox, config: config()});
+  const liveWithoutDatabase = await request('', undefined, {url: `${origin}/api/health/live`, target: unavailable});
+  assert.equal(liveWithoutDatabase.status, 200); assert.deepEqual(await liveWithoutDatabase.json(), {status: 'live'});
+  const notReady = await request('', undefined, {url: `${origin}/api/health/ready`, target: unavailable});
+  assert.equal(notReady.status, 503); const notReadyBody=await notReady.text();
+  assert.deepEqual(JSON.parse(notReadyBody), {status: 'unavailable'});
+  assert.equal(notReadyBody.includes('private database detail'), false); protectedHeaders(notReady);
+});
 test('HTTP signup accepts a 1024-byte password and rejects a longer password without consuming its token', async () => {
   const signup = new SignupStore(db.pool, db.outbox);
   const issue = async (email: string) => {
