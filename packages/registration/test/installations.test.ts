@@ -46,6 +46,17 @@ test('durable renewal is scoped and replayed once across independent workers',as
   const id=JSON.parse(Buffer.from(proof.payload,'base64url').toString())[4];
   await assert.rejects(store.execute('revoke',request(a,'revoke',undefined,{},id)),/conflict/);
 });
+test('credential audit does not invert the installation and venue lock order',async()=>{
+  const blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('SELECT 1 FROM venues WHERE id=$1 FOR NO KEY UPDATE',[a.venueId]);
+  const pending=store.execute('renew',request());let auditWaited=false;
+  try{
+    for(let n=0;n<50;n++){
+      const waiting=await db.pool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT organisation_id FROM venues%'",[db.schema]);
+      if(waiting.rowCount){auditWaited=true;break;}await new Promise(resolve=>setTimeout(resolve,10));
+    }
+  }finally{await blocker.query('COMMIT');blocker.release();}
+  await pending;assert.equal(auditWaited,false,'audit insertion must not add a venue row lock after the installation lock');
+});
 test('reports cannot configure services, advance desired revision, roll back health, or hide stale health',async()=>{
   const initial=await store.execute('renew',request());assert.ok(initial.lease);const lease=initial.lease;
   const observedAt=Date.now();const services=[{service:'remote_access',health:'healthy',failure:null}];

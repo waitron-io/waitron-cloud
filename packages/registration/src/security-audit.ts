@@ -35,7 +35,7 @@ interface Row {id:string;occurred_at:Date;organisation_id:string;venue_id:string
 function same(row:Row,input:SecurityAuditInput){return row.organisation_id===input.organisationId&&row.venue_id===input.venueId&&row.event_type===input.type&&row.actor_kind===input.actorKind&&row.actor_id===input.actorId&&row.subject_kind===input.subjectKind&&row.subject_id===input.subjectId&&row.source_id===input.sourceId;}
 export async function recordSecurityAuditEvent(client:PoolClient,input:SecurityAuditInput):Promise<{id:string;occurredAt:string}>{
  validate(input);
- if(input.venueId){const venue=(await client.query<{organisation_id:string}>('SELECT organisation_id FROM venues WHERE id=$1 FOR SHARE',[input.venueId])).rows[0];if(!venue||venue.organisation_id!==input.organisationId)throw new SecurityAuditError('security_audit_conflict');}
+ if(input.venueId){const venue=(await client.query<{organisation_id:string}>('SELECT organisation_id FROM venues WHERE id=$1',[input.venueId])).rows[0];if(!venue||venue.organisation_id!==input.organisationId)throw new SecurityAuditError('security_audit_conflict');}
  const inserted=await client.query<Row>(`INSERT INTO security_audit_events
   (organisation_id,venue_id,event_type,actor_kind,actor_id,subject_kind,subject_id,source_id)
   VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(event_type,source_id) DO NOTHING RETURNING *`,
