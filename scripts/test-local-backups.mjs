@@ -1,6 +1,7 @@
 import {RemoteAccessStore} from '../packages/remote-access/src/placement.ts';
 import assert from "node:assert/strict";
 import { request as httpsRequest } from "node:https";
+import { createWriteStream } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdtemp, readFile, writeFile, rm, realpath, chmod } from "node:fs/promises";
@@ -15,6 +16,7 @@ import {
   sign,
 } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
+import { pipeline } from "node:stream/promises";
 import { startPortalFixture } from "../apps/portal/test/fixtures.ts";
 import {
   SignupStore,
@@ -59,6 +61,11 @@ const objects = (l) => {
  if (!clients.has(l.bucket)) {const client=new BackupObjects(l,s3.admin,s3.ca);clients.set(l.bucket,client);objectClients.push(client);}
  return clients.get(l.bucket);
 };
+async function downloadObject(client,key,path){
+ const staged=await client.stage(key);
+ try{await pipeline(staged.open(),createWriteStream(path,{flags:'wx',mode:0o600}));return staged.receipt;}
+ finally{await staged.dispose();}
+}
 async function captureClient(dir,command,input){
  const child=spawn(process.execPath,['--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-capture-client-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,CLOUD_TEST_ROOT:dir},stdio:['pipe','pipe','pipe']});
  let output='',error='';child.stdout.on('data',v=>output+=v);child.stderr.on('data',v=>error=(error+v).slice(-16000));child.stdin.end(JSON.stringify({command,...input}));
@@ -471,7 +478,9 @@ try {
     await writeFile(join(venue.root,'captured.backup.enc'),changed,{mode:0o600});
     try{
       await captureClient(venue.root,'upload',{grant:reservation,ca:s3.ca});
-      assert.equal(receipt(await objects(venue.location).read(reservation.incomingKey)).digest,metadata.digest);
+      const stored=await objects(venue.location).stage(reservation.incomingKey);
+      try{assert.equal(stored.receipt.digest,metadata.digest);}
+      finally{await stored.dispose();}
       await assert.rejects(captureClient(venue.root,'publish',{id:reservation.id,metadata:{...metadata,...receipt(changed)}}));
       assert.equal((await f.db.pool.query('SELECT count(*) FROM backup_points WHERE id=$1',[reservation.id])).rows[0].count,'0');
     }finally{await writeFile(join(venue.root,'captured.backup.enc'),bytes,{mode:0o600});}
@@ -884,11 +893,7 @@ try {
     ),
     fallbackTarget = await root();
   try {
-    await writeFile(
-      join(fallbackTarget, "input.backup.enc"),
-      await fallbackReader.read(fallbackAccess.point.objectKey),
-      { mode: 0o600 },
-    );
+    await downloadObject(fallbackReader,fallbackAccess.point.objectKey,join(fallbackTarget,"input.backup.enc"));
   } finally {
     fallbackReader.close();
   }
@@ -952,11 +957,7 @@ try {
     reader = new BackupObjects(access.location, grant.credentials, s3.ca);
   const replacement = await root();
   try {
-    await writeFile(
-      join(replacement, "input.backup.enc"),
-      await reader.read(access.point.objectKey),
-      { mode: 0o600 },
-    );
+    await downloadObject(reader,access.point.objectKey,join(replacement,"input.backup.enc"));
   } finally {
     reader.close();
   }

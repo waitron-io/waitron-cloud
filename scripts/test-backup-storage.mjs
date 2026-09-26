@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
+import { Readable } from "node:stream";
 import { startBackupStorage } from "./backup-storage-fixture.mjs";
 import { BackupObjects, receipt } from "../packages/backups/src/storage.ts";
+import { stageReadable } from "../packages/backups/src/object-transfer.ts";
 const require = createRequire(
   new URL("../packages/backups/package.json", import.meta.url),
 );
@@ -30,6 +32,50 @@ try {
   await assert.rejects(
     objects.put("streams/gen-a/encrypted", Buffer.from("changed"), key),
     /backup.object_conflict/,
+  );
+  const largeSize = 32 * 1024 * 1024,
+    largeChunk = Buffer.alloc(64 * 1024, 0x64),
+    expectedLarge = {
+      digest: "be222b5d7bb1ea5b7fd408c2540b5e0ab79940821519d3ce059877409609cf88",
+      size: largeSize,
+    },
+    baselineMemory = process.memoryUsage();
+  let peakArrayBuffers = baselineMemory.arrayBuffers,
+    peakRss = baselineMemory.rss;
+  const sampler = setInterval(() => {
+    const usage = process.memoryUsage();
+    peakArrayBuffers = Math.max(peakArrayBuffers, usage.arrayBuffers);
+    peakRss = Math.max(peakRss, usage.rss);
+  }, 1);
+  const generated = await stageReadable(
+      Readable.from(
+        (async function* () {
+          for (let sent = 0; sent < largeSize; sent += largeChunk.length)
+            yield largeChunk;
+        })(),
+      ),
+      largeSize,
+    ),
+    largeKey = "snapshots/large-streamed-object";
+  try {
+    assert.deepEqual(generated.receipt, expectedLarge);
+    assert.deepEqual(await objects.putStaged(largeKey, generated), expectedLarge);
+    const downloaded = await objects.stage(largeKey);
+    try {
+      assert.deepEqual(downloaded.receipt, expectedLarge);
+    } finally {
+      await downloaded.dispose();
+    }
+  } finally {
+    clearInterval(sampler);
+    await generated.dispose();
+    await objects.remove(largeKey);
+  }
+  const arrayBufferGrowth = peakArrayBuffers - baselineMemory.arrayBuffers,
+    rssGrowth = peakRss - baselineMemory.rss;
+  assert(
+    arrayBufferGrowth < 16 * 1024 * 1024,
+    `streaming retained ${arrayBufferGrowth} bytes of ArrayBuffers`,
   );
   const capture = await store.authority.grant(
     a,
@@ -174,6 +220,9 @@ try {
       roleEscalationRefused: true,
       expiredIdentityRefused: true,
       credentialExpiresAt: capture.expiresAt,
+      streamedFixtureBytes: largeSize,
+      peakArrayBufferGrowthBytes: arrayBufferGrowth,
+      peakRssGrowthBytes: rssGrowth,
     }),
   );
 } finally {

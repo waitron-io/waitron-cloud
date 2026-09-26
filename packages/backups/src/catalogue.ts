@@ -4,18 +4,33 @@ import type { Pool, PoolClient } from "pg";
 import { transaction } from "@waitron-cloud/registration";
 import { BackupKeyVault, type BackupKeys } from "./keys.ts";
 import {
-  receipt,
   validateLocation,
   type ObjectReceipt,
   type StorageLocation,
 } from "./storage.ts";
+import { bufferObject, type ReplayableObject } from "./object-transfer.ts";
 export type MutationFence = (client:PoolClient)=>Promise<void>;
-export interface ObjectStore {
+interface StreamingObjectStore {
+  stage(key: string): Promise<ReplayableObject>;
+  putStaged(key: string, source: ReplayableObject): Promise<ObjectReceipt>;
+}
+interface BufferedObjectStore {
   read(key: string): Promise<Buffer>;
   put(key: string, bytes: Uint8Array): Promise<ObjectReceipt>;
-  remove(key: string): Promise<void>;
 }
+export type ObjectStore = (StreamingObjectStore | BufferedObjectStore) & {
+  remove(key: string): Promise<void>;
+};
 export type ObjectFactory = (location: StorageLocation) => ObjectStore;
+async function staged(objects:ObjectStore,key:string){
+  return 'stage' in objects?objects.stage(key):bufferObject(await objects.read(key));
+}
+async function putStaged(objects:ObjectStore,key:string,source:ReplayableObject){
+  if('putStaged' in objects)return objects.putStaged(key,source);
+  const chunks:Buffer[]=[];
+  for await(const chunk of source.open())chunks.push(Buffer.from(chunk));
+  return objects.put(key,Buffer.concat(chunks,source.receipt.size));
+}
 export interface PointMetadata extends ObjectReceipt {
   capturedAt: string;
   retention: "daily" | "monthly";
@@ -303,33 +318,36 @@ export class BackupCatalogue {
       }
       if(capture.expired)backupFail("capture_expired");
       const objects = this.#objects(location(l)),
-        bytes = await objects.read("incoming/" + id),
-        actual = receipt(bytes);
-      if (actual.digest !== m.digest || actual.size !== m.size)
-        backupFail("object_mismatch");
-      const objectKey = "snapshots/" + id;
-      await objects.put(objectKey, bytes);
-      await fence?.(client);
-      const finalCapture=(await client.query("SELECT expired_at IS NOT NULL OR created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1",[id])).rows[0];
-      if(!finalCapture)backupFail("unavailable");
-      if(finalCapture.expired)backupFail("capture_expired");
-      await client.query(
-        `INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules) VALUES($1,$2,$3,$4,'snapshot',$5,$6,$7,$8,$9,$10,$11)`,
-        [
-          id,
-          install.venue_id,
-          installationId,
-          capture.key_version,
-          objectKey,
-          m.digest,
-          m.size,
-          m.capturedAt,
-          m.retention,
-          m.sourceNodeId,
-          m.modules,
-        ],
-      );
-      return { point: (await point(client, id))!, location: location(l) };
+        source = await staged(objects,"incoming/" + id);
+      try {
+        if (source.receipt.digest !== m.digest || source.receipt.size !== m.size)
+          backupFail("object_mismatch");
+        const objectKey = "snapshots/" + id;
+        await putStaged(objects,objectKey, source);
+        await fence?.(client);
+        const finalCapture=(await client.query("SELECT expired_at IS NOT NULL OR created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1",[id])).rows[0];
+        if(!finalCapture)backupFail("unavailable");
+        if(finalCapture.expired)backupFail("capture_expired");
+        await client.query(
+          `INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules) VALUES($1,$2,$3,$4,'snapshot',$5,$6,$7,$8,$9,$10,$11)`,
+          [
+            id,
+            install.venue_id,
+            installationId,
+            capture.key_version,
+            objectKey,
+            m.digest,
+            m.size,
+            m.capturedAt,
+            m.retention,
+            m.sourceNodeId,
+            m.modules,
+          ],
+        );
+        return { point: (await point(client, id))!, location: location(l) };
+      } finally {
+        await source.dispose();
+      }
     });
     await this.#objects(published.location).remove("incoming/" + id);
     return published.point;
@@ -338,7 +356,7 @@ export class BackupCatalogue {
     id: string,
     verifier: string,
     restore: (
-      bytes: Buffer,
+      source: ReplayableObject,
       keys: BackupKeys,
       point: BackupPoint,
     ) => Promise<void>,
@@ -363,16 +381,18 @@ export class BackupCatalogue {
     });
     let outcome: "verified" | "failed" = "verified";
     try {
-      const bytes = await this.#objects(prepared.location).read(
-          prepared.point.objectKey,
-        ),
-        actual = receipt(bytes);
-      if (
-        actual.digest !== prepared.point.digest ||
-        actual.size !== prepared.point.size
-      )
-        backupFail("object_mismatch");
-      await restore(bytes, prepared.keys, prepared.point);
+      const objects=this.#objects(prepared.location),
+        source = await staged(objects,prepared.point.objectKey);
+      try {
+        if (
+          source.receipt.digest !== prepared.point.digest ||
+          source.receipt.size !== prepared.point.size
+        )
+          backupFail("object_mismatch");
+        await restore(source, prepared.keys, prepared.point);
+      } finally {
+        await source.dispose();
+      }
     } catch {
       outcome = "failed";
     }
