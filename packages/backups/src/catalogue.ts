@@ -9,6 +9,7 @@ import {
   type StorageLocation,
 } from "./storage.ts";
 import { bufferObject, type ReplayableObject, type StageOptions } from "./object-transfer.ts";
+import { isBackupCancellation } from "./cancellation.ts";
 export type MutationFence = (client:PoolClient)=>Promise<void>;
 interface StreamingObjectStore {
   stage(
@@ -405,7 +406,7 @@ export class BackupCatalogue {
         await source.dispose();
       }
     } catch (error) {
-      if (signal?.aborted) throw error;
+      if (isBackupCancellation(error, signal)) throw error;
       outcome = "failed";
     }
     await transaction(this.#pool, async (client) => {

@@ -4,6 +4,7 @@ import {transaction} from '@waitron-cloud/registration';
 import type {BackupCatalogue,BackupPoint} from './catalogue.ts';
 import type {BackupKeys} from './keys.ts';
 import type {ReplayableObject} from './object-transfer.ts';
+import {isBackupCancellation} from './cancellation.ts';
 export type RestoreVerifier=(source:ReplayableObject,keys:BackupKeys,point:BackupPoint,signal:AbortSignal)=>Promise<unknown>;
 interface Job {id:string;kind:'verify'|'retention'|'incoming';venue_id:string;target_id:string;claim_id:string;attempts:number;}
 export class BackupWorker {
@@ -45,7 +46,8 @@ export class BackupWorker {
    else await this.#catalogue.cleanupCapture(job.venue_id,client=>this.#fence(client,job));
    await this.#finish(job);
   }catch(error){
-   if(signal.aborted){
+   if(isBackupCancellation(error,signal)){
+    // Shutdown hands back retry budget; runs still counts the work that was claimed.
     await this.#pool.query(`UPDATE backup_jobs SET status='pending',attempts=GREATEST(0,attempts-1),available_at=clock_timestamp(),claim_id=NULL,lease_until=NULL
      WHERE id=$1 AND claim_id=$2 AND status='running'`,[job.id,job.claim_id]);
     return true;

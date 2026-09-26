@@ -20,6 +20,9 @@ import { verifyBackupTransferReceipt } from "./verify-backup-transfer-receipt.mj
 
 const waitron = resolve(process.env.WAITRON_CHECKOUT ?? "");
 assert(process.env.WAITRON_CHECKOUT, "Set WAITRON_CHECKOUT");
+const databaseUrl = new URL(process.env.TEST_DATABASE_URL ?? "postgres://invalid");
+assert.equal(databaseUrl.hostname, "127.0.0.1", "receipt PostgreSQL must be loopback-only");
+assert.equal(databaseUrl.pathname, "/cloud_test", "receipt PostgreSQL must be the test database");
 const fixture = {
     bytes: 4 * 1024 * 1024,
     chunkBytes: 64 * 1024,
