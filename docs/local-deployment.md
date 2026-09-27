@@ -69,7 +69,8 @@ Stop the containers without deleting their volumes:
 pnpm local-stack:down
 ```
 
-Run `pnpm local-stack:up` again to rebuild and restart the same local identity and data.
+Keep `NODE_AUTH_TOKEN` exported and run `pnpm local-stack:up` again to rebuild and restart
+the same local identity and data.
 Bootstrap is idempotent, and migrations run before any database consumer starts.
 
 After changing or updating the Cloud source, use the explicit upgrade rehearsal:
@@ -132,7 +133,8 @@ pnpm verify:local-stack /tmp/waitron-cloud-local-stack-receipt.json
 ```
 
 The receipt records the source revision, bindings, image IDs, migration count, redacted
-configuration fingerprints, database and storage markers, phase timings and cleanup counts.
+configuration fingerprints, database and storage markers, phase timings and cleanup counts,
+including removal of the proof image tag.
 It contains no credentials. A clean run on 2026-09-27 applied 25 migrations and measured
 14,818 ms for installation, 8,661 ms for restart and 19,114 ms for rebuild and recreation.
 Those local timings describe that run only. They are not availability or capacity targets.

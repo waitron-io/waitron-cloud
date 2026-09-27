@@ -2,6 +2,7 @@ import {spawn} from 'node:child_process';
 import {readFile,stat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {isLocalStackConfig} from './bootstrap.mjs';
 
 const commands={
  migrate:['packages/registration/src/migrate-cli.ts'],account:['packages/account-http/src/server-cli.ts'],email:['packages/registration/src/email-worker-cli.ts'],
@@ -25,7 +26,7 @@ export function runtimeEnvironment(role,config){
 }
 export async function loadRuntime(directory){
  const path=join(directory,'runtime.json'),info=await stat(path);if((info.mode&0o777)!==0o600)throw new Error('local_stack.configuration_permissions');
- try{const value=JSON.parse(await readFile(path,'utf8'));if(value?.version!==1)throw Error();return value;}catch{throw new Error('local_stack.configuration_invalid');}
+ try{const value=JSON.parse(await readFile(path,'utf8'));if(!isLocalStackConfig(value))throw Error();return value;}catch{throw new Error('local_stack.configuration_invalid');}
 }
 export async function launch(role,directory=process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack'){
  if(!Object.hasOwn(commands,role))throw new Error('local_stack.role_invalid');

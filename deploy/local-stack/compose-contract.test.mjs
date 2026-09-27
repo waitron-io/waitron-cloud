@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import test from 'node:test';
+import {readFileSync} from 'node:fs';
 
 function configuration(){return JSON.parse(execFileSync('docker',['compose','--profile','backups','--profile','remote-reconciliation','config','--format','json'],{encoding:'utf8'}));}
 
@@ -39,4 +40,11 @@ test('Cloud image build carries the pinned storage release inputs',()=>{
  assert.equal(build.args.SEAWEED_VERSION,'4.47');
  assert.equal(build.args.SEAWEED_AMD64_SHA256,'31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d');
  assert.equal(build.args.SEAWEED_ARM64_SHA256,'ba5c9def9ff98f78becdf309a50a9f906922f6383a7c4c772d01ede3cc012e16');
+});
+
+test('legacy Mailpit port overrides and teardown remain service-scoped',()=>{
+ const env={...process.env,MAILPIT_SMTP_PORT:'1199',MAILPIT_UI_PORT:'8199'};delete env.LOCAL_STACK_MAILPIT_SMTP_PORT;delete env.LOCAL_STACK_MAILPIT_UI_PORT;
+ const value=JSON.parse(execFileSync('docker',['compose','config','--format','json'],{encoding:'utf8',env}));
+ assert.deepEqual(value.services.mailpit.ports.map(port=>port.published),['1199','8199']);
+ const scripts=JSON.parse(readFileSync('package.json','utf8')).scripts;assert.equal(scripts['mail:down'],'docker compose rm -s -f mailpit');
 });

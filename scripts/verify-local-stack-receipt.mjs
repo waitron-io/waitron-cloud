@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
+import {migrationNames} from '../packages/registration/src/migrate.ts';
 
 const healthy=['account','email-worker','gateway','gateway-manifest','mailpit','monitor-worker','postgres','remote-probe','storage'];
 const bindingKeys=['account:3000','gateway:443','gateway:51820','mailpit:1025','mailpit:8025','postgres:5432','storage:8333'];
@@ -10,7 +11,7 @@ function identity(value){keys(value,['gatewaySigningKey','storageCertificate']);
 function phase(value,name,upgrade=false){
  keys(value,['name','durationMs','imageId','migrationCount','healthyServices','identity','databaseMarker','storageObject',...(upgrade?['rebuilt','recreated']:[])]);
  assert.equal(value.name,name);assert(Number.isSafeInteger(value.durationMs)&&value.durationMs>=0&&value.durationMs<=3600000);assert.match(value.imageId,/^sha256:[0-9a-f]{64}$/);
- assert.equal(value.migrationCount,25);assert.deepEqual(value.healthyServices,healthy);identity(value.identity);assert.equal(value.databaseMarker,true);assert.equal(value.storageObject,true);
+ assert.equal(value.migrationCount,migrationNames.length);assert.deepEqual(value.healthyServices,healthy);identity(value.identity);assert.equal(value.databaseMarker,true);assert.equal(value.storageObject,true);
  if(upgrade){assert.equal(value.rebuilt,true);assert.equal(value.recreated,true);}
 }
 export function verifyLocalStackReceipt(value){
@@ -22,7 +23,7 @@ export function verifyLocalStackReceipt(value){
   keys(value.phases,['install','restart','upgrade']);phase(value.phases.install,'install');phase(value.phases.restart,'restart');phase(value.phases.upgrade,'upgrade',true);
   assert.deepEqual(value.phases.restart.identity,value.phases.install.identity);assert.deepEqual(value.phases.upgrade.identity,value.phases.install.identity);
   keys(value.rollback,['sameSchemaOnly','databaseRecoveryExcluded','incompatibleSchemaRollbackExcluded']);for(const item of Object.values(value.rollback))assert.equal(item,true);
-  keys(value.cleanup,['containers','networks','volumes']);assert.deepEqual(value.cleanup,{containers:0,networks:0,volumes:0});return true;
+  keys(value.cleanup,['containers','networks','volumes','images']);assert.deepEqual(value.cleanup,{containers:0,networks:0,volumes:0,images:0});return true;
  }catch{throw new Error('local_stack_receipt_invalid');}
 }
 

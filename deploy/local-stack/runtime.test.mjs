@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {mkdtemp,chmod,rm} from 'node:fs/promises';
+import {mkdtemp,chmod,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
@@ -32,4 +32,9 @@ test('runtime loader rejects group-readable private configuration',async()=>{
 
 test('runtime loader reads a valid bootstrap identity',async()=>{
  const {path,config}=await configured();assert.deepEqual(await loadRuntime(path),config);
+});
+
+test('runtime loader rejects versioned configuration with missing keys',async()=>{
+ const {path}=await configured();await writeFile(join(path,'runtime.json'),'{"version":1}',{mode:0o600});
+ await assert.rejects(loadRuntime(path),/local_stack\.configuration_invalid/);
 });

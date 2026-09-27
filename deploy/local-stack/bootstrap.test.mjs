@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import {createHash,createPublicKey} from 'node:crypto';
-import {mkdtemp,readFile,stat,writeFile,rm,mkdir} from 'node:fs/promises';
+import {mkdtemp,readFile,stat,writeFile,rm,mkdir,utimes} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
 import {verifyManifest} from '../../packages/remote-access/src/manifest.ts';
 import {bootstrap} from './bootstrap.mjs';
+import {claimLease} from './lease.mjs';
 
 const roots=[];
 test.afterEach(async()=>{await Promise.all(roots.splice(0).map(path=>rm(path,{recursive:true,force:true})));});
@@ -46,4 +47,29 @@ test('bootstrap refuses malformed existing state instead of replacing it',async(
  await writeFile(join(directory,'runtime.json'),'{"version":1}',{mode:0o600});
  await assert.rejects(bootstrap(directory),/local_stack\.configuration_invalid/);
  assert.equal(await readFile(join(directory,'runtime.json'),'utf8'),'{"version":1}');
+});
+
+test('bootstrap refuses incomplete existing state instead of replacing its identity',async()=>{
+ const directory=await root(),config=await bootstrap(directory);
+ await rm(join(directory,'postgres-password'));
+ await assert.rejects(bootstrap(directory),/local_stack\.configuration_invalid/);
+ assert.equal(JSON.parse(await readFile(join(directory,'runtime.json'),'utf8')).fingerprints.gatewaySigningKey,config.fingerprints.gatewaySigningKey);
+});
+
+test('bootstrap validates the gateway public certificate used by the gateway',async()=>{
+ const directory=await root();await bootstrap(directory);await rm(join(directory,'public-certs','default.pem'));
+ await assert.rejects(bootstrap(directory),/local_stack\.configuration_invalid/);
+});
+
+test('bootstrap reclaims a stale interrupted-process lock',async()=>{
+ const directory=await root(),lock=join(directory,'.bootstrap.lock');await writeFile(lock,'abandoned',{mode:0o600});
+ const old=new Date(Date.now()-60000);await utimes(lock,old,old);
+ assert.equal((await bootstrap(directory)).version,1);
+});
+
+test('a reclaimed lease prevents its previous owner from publishing',async()=>{
+ const directory=await root(),path=join(directory,'.lease'),first=await claimLease(path,{staleMs:10});
+ const old=new Date(Date.now()-60000);await utimes(path,old,old);const second=await claimLease(path,{staleMs:10});
+ await assert.rejects(first.assertOwned(),/local_stack\.lease_lost/);
+ await first.release();await second.release();
 });

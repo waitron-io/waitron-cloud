@@ -4,10 +4,11 @@ import {chmod,mkdir,open,readFile,rename,rm,stat,writeFile} from 'node:fs/promis
 import {join} from 'node:path';
 import {promisify} from 'node:util';
 import {signManifest} from '../../packages/remote-access/src/manifest.ts';
+import {claimLease} from './lease.mjs';
 
-const execute=promisify(execFile),files=['postgres-password','gateway-issuer.pem','gateway-signing-key.pem','gateway-wireguard.key','gateway-bot.key','gateway-manifest.json','gateway-sequence','storage-ca.pem','storage-cert.pem','storage-key.pem','storage-iam.json'];
+const execute=promisify(execFile),files=['postgres-password','gateway-issuer.pem','gateway-signing-key.pem','gateway-wireguard.key','gateway-bot.key','gateway-manifest.json','gateway-sequence','storage-ca.pem','storage-cert.pem','storage-key.pem','storage-iam.json','public-certs/default.pem'];
 const hex=bytes=>randomBytes(bytes).toString('hex'),fingerprint=value=>createHash('sha256').update(value).digest('hex');
-function valid(config){
+export function isLocalStackConfig(config){
  return config?.version===1&&typeof config.createdAt==='string'&&/^[0-9a-f]{64}$/.test(config.database?.password)
   &&config.email?.activeKeyId==='local-v1'&&/^[0-9a-f]{64}$/.test(config.email?.keys?.['local-v1'])
   &&/^[0-9a-f]{64}$/.test(config.http?.rateKey)&&/^[0-9a-f]{64}$/.test(config.backup?.masterKey)
@@ -18,14 +19,20 @@ function valid(config){
   &&/^[0-9a-f]{64}$/.test(config.fingerprints?.gatewaySigningKey)&&/^[0-9a-f]{64}$/.test(config.fingerprints?.storageCertificate);
 }
 async function readExisting(directory){
+ const runtime=join(directory,'runtime.json');
+ try{await stat(runtime);}catch(error){
+  if(error?.code!=='ENOENT')throw new Error('local_stack.configuration_invalid');
+  for(const name of files)try{await stat(join(directory,name));throw new Error('local_stack.configuration_invalid');}catch(cause){if(cause?.code!=='ENOENT')throw cause;}
+  return;
+ }
  try{
-  const path=join(directory,'runtime.json'),info=await stat(path);if((info.mode&0o777)!==0o600)throw Error();
-  const config=JSON.parse(await readFile(path,'utf8'));if(!valid(config))throw Error();
+  const info=await stat(runtime);if((info.mode&0o777)!==0o600)throw Error();
+  const config=JSON.parse(await readFile(runtime,'utf8'));if(!isLocalStackConfig(config))throw Error();
   for(const name of files)if(((await stat(join(directory,name))).mode&0o777)!==0o600)throw Error();
   if(fingerprint(await readFile(join(directory,'gateway-signing-key.pem')))!==config.fingerprints.gatewaySigningKey)throw Error();
   if(fingerprint(await readFile(join(directory,'storage-cert.pem')))!==config.fingerprints.storageCertificate)throw Error();
   return config;
- }catch(error){if(error?.code==='ENOENT')return;throw new Error('local_stack.configuration_invalid');}
+ }catch{throw new Error('local_stack.configuration_invalid');}
 }
 async function publish(directory,temporary,name,value){
  const path=join(temporary,name);await writeFile(path,value,{mode:0o600});await chmod(path,0o600);await rename(path,join(directory,name));
@@ -33,16 +40,14 @@ async function publish(directory,temporary,name,value){
 async function syncDirectory(directory){const handle=await open(directory,'r');try{await handle.sync();}finally{await handle.close();}}
 async function acquire(directory){
  const lock=join(directory,'.bootstrap.lock');
- for(let attempt=0;attempt<200;attempt++)try{await mkdir(lock,{mode:0o700});return lock;}catch(error){
-  if(error?.code!=='EEXIST')throw error;const existing=await readExisting(directory);if(existing)return null;await new Promise(resolve=>setTimeout(resolve,25));
- }
+ for(let attempt=0;attempt<200;attempt++){const lease=await claimLease(lock);if(lease)return lease;await new Promise(resolve=>setTimeout(resolve,25));}
  throw new Error('local_stack.bootstrap_busy');
 }
 
 export async function bootstrap(directory){
  await mkdir(directory,{recursive:true,mode:0o700});await chmod(directory,0o700);
  const initial=await readExisting(directory);if(initial)return initial;
- const lock=await acquire(directory);if(!lock){const existing=await readExisting(directory);if(existing)return existing;throw new Error('local_stack.bootstrap_busy');}
+ const lease=await acquire(directory);
  const temporary=join(directory,'.bootstrap-'+randomUUID());
  try{
   const afterLock=await readExisting(directory);if(afterLock)return afterLock;
@@ -59,7 +64,7 @@ export async function bootstrap(directory){
    'gateway-manifest.json':JSON.stringify(manifest),'gateway-sequence':'1\n','storage-ca.pem':cert,'storage-cert.pem':cert,'storage-key.pem':certKey,
    'storage-iam.json':JSON.stringify({identities:[{name:'local-stack',credentials:[{accessKey:storage.accessKeyId,secretKey:storage.secretAccessKey}],actions:['Admin','Read','Write','List','Tagging']}]})
   };
-  for(const [name,value] of Object.entries(values))await publish(directory,temporary,name,value);
+  for(const [name,value] of Object.entries(values)){await lease.assertOwned();await publish(directory,temporary,name,value);}
   const publicCertificates=join(directory,'public-certs');await mkdir(publicCertificates,{recursive:true,mode:0o700});await chmod(publicCertificates,0o700);
   await writeFile(join(publicCertificates,'default.pem'),Buffer.concat([certKey,cert]),{mode:0o600});await chmod(join(publicCertificates,'default.pem'),0o600);
   const config={version:1,createdAt:new Date(now).toISOString(),database:{user:'cloud',name:'cloud',password:databasePassword},
@@ -67,11 +72,13 @@ export async function bootstrap(directory){
    installation:{issuerKey:installation.privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')},
    storage:{endpoint:'https://storage:8333',region:'local',accessKeyId:storage.accessKeyId,secretAccessKey:storage.secretAccessKey},
    gateway:{cellId,subnet:61,routes:0},fingerprints:{gatewaySigningKey:fingerprint(privatePem),storageCertificate:fingerprint(cert)}};
-  await publish(directory,temporary,'runtime.json',JSON.stringify(config));await syncDirectory(directory);return config;
- }finally{await rm(temporary,{recursive:true,force:true});await rm(lock,{recursive:true,force:true});}
+  await lease.assertOwned();await publish(directory,temporary,'runtime.json',JSON.stringify(config));await syncDirectory(directory);return config;
+ }finally{await rm(temporary,{recursive:true,force:true});await lease.release();}
 }
 
 if(import.meta.url===`file://${process.argv[1]}`){
- try{await bootstrap(process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack');console.log(JSON.stringify({status:'ready'}));}
+ let stopping=false;const shutdown=()=>{stopping=true;};process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
+ try{await bootstrap(process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack');if(!stopping)console.log(JSON.stringify({status:'ready'}));else process.exitCode=143;}
  catch{console.error('Local stack bootstrap failed; inspect the private configuration volume');process.exitCode=1;}
+ finally{process.removeListener('SIGINT',shutdown);process.removeListener('SIGTERM',shutdown);}
 }

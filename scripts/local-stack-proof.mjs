@@ -39,13 +39,14 @@ async function phase(name,start,{writeMarkers=false,upgrade=false}={}){
 }
 function bindings(){const config=JSON.parse(composeOutput('config','--format','json'));return Object.entries(config.services).flatMap(([service,value])=>(value.ports??[]).map(port=>({service,target:Number(port.target),hostIp:port.host_ip}))).sort((a,b)=>`${a.service}:${a.target}`.localeCompare(`${b.service}:${b.target}`));}
 function resources(kind){const command={containers:['ps','-aq'],networks:['network','ls','-q'],volumes:['volume','ls','-q']}[kind];return run('docker',[...command,'--filter',`label=com.docker.compose.project=${project}`],{capture:true}).split('\n').filter(Boolean).length;}
+function proofImages(){try{run('docker',['image','inspect',`waitron-cloud-local-stack:${tag}`],{capture:true});return 1;}catch{return 0;}}
 let receipt,error;
 try{
  const installStart=Date.now();compose('build','bootstrap');compose('up','-d','--no-build');waitJobs();const install=await phase('install',installStart,{writeMarkers:true});
  const restartStart=Date.now();compose('stop');compose('start');waitJobs();const restart=await phase('restart',restartStart);
  const upgradeStart=Date.now();compose('build','bootstrap');compose('up','-d','--no-build','--force-recreate');waitJobs();const upgrade=await phase('upgrade',upgradeStart,{upgrade:true});
- receipt={schemaVersion:1,cloud:{head:run('git',['rev-parse','HEAD'],{capture:true}),dirty:run('git',['status','--porcelain'],{capture:true})!==''},project,startedAt,completedAt:'',bindings:bindings(),phases:{install,restart,upgrade},rollback:{sameSchemaOnly:true,databaseRecoveryExcluded:true,incompatibleSchemaRollbackExcluded:true},cleanup:{containers:-1,networks:-1,volumes:-1}};
+ receipt={schemaVersion:1,cloud:{head:run('git',['rev-parse','HEAD'],{capture:true}),dirty:run('git',['status','--porcelain'],{capture:true})!==''},project,startedAt,completedAt:'',bindings:bindings(),phases:{install,restart,upgrade},rollback:{sameSchemaOnly:true,databaseRecoveryExcluded:true,incompatibleSchemaRollbackExcluded:true},cleanup:{containers:-1,networks:-1,volumes:-1,images:-1}};
 }catch(cause){error=cause;try{compose('logs','--no-color');}catch{}}
-finally{try{compose('down','--volumes','--remove-orphans');}catch(cause){error??=cause;}}
-if(receipt){receipt.completedAt=new Date().toISOString();receipt.cleanup={containers:resources('containers'),networks:resources('networks'),volumes:resources('volumes')};await writeFile(output,JSON.stringify(receipt,null,2)+'\n');verifyLocalStackReceipt(receipt);console.log(`PASS: local stack lifecycle receipt ${output}`);}
+finally{try{compose('down','--volumes','--remove-orphans');}catch(cause){error??=cause;}try{if(proofImages())run('docker',['image','rm',`waitron-cloud-local-stack:${tag}`],{capture:true});}catch(cause){error??=cause;}}
+if(receipt){receipt.completedAt=new Date().toISOString();receipt.cleanup={containers:resources('containers'),networks:resources('networks'),volumes:resources('volumes'),images:proofImages()};await writeFile(output,JSON.stringify(receipt,null,2)+'\n');verifyLocalStackReceipt(receipt);console.log(`PASS: local stack lifecycle receipt ${output}`);}
 if(error)throw error;

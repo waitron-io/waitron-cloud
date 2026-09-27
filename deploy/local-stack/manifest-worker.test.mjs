@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {createPublicKey} from 'node:crypto';
-import {mkdtemp,readFile,rm,stat,writeFile} from 'node:fs/promises';
+import {mkdtemp,readFile,rm,stat,writeFile,utimes} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
@@ -34,6 +34,20 @@ test('manifest replacement remains complete while the next sequence is persisted
  const running=refreshManifest(directory,{now:Date.now()+1000,afterSequence:async()=>{reached();await gate;}});
  await paused;assert.equal(await readFile(join(directory,'gateway-manifest.json'),'utf8'),before);release();
  const result=await running;assert.equal(result.sequence,2);assert.equal((await manifest(directory,config,Date.now())).sequence,2);
+});
+
+test('refresh recovers a sequence reserved before an interrupted manifest write',async()=>{
+ const {directory,config}=await fixture(),now=Date.now()+1000;
+ await assert.rejects(refreshManifest(directory,{now,afterSequence:async()=>{throw new Error('crash');}}),/local_stack\.manifest_state_invalid/);
+ assert.equal(Number((await readFile(join(directory,'gateway-sequence'),'utf8')).trim()),2);
+ const recovered=await refreshManifest(directory,{now:now+1000});assert.equal(recovered.sequence,2);assert.equal((await manifest(directory,config,now+1000)).sequence,2);
+});
+
+test('refresh reclaims a stale lock and ignores a previous process temporary file',async()=>{
+ const {directory}=await fixture(),lock=join(directory,'.manifest.lock');await writeFile(lock,'abandoned',{mode:0o600});
+ const old=new Date(Date.now()-60000);await utimes(lock,old,old);
+ await writeFile(join(directory,`.gateway-manifest.json.${process.pid}.tmp`),'partial',{mode:0o600});
+ assert.equal((await refreshManifest(directory,{now:Date.now()+1000})).sequence,2);
 });
 
 test('worker exits cleanly when its refresh wait is aborted',async()=>{
