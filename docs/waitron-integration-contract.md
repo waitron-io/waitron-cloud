@@ -1,6 +1,6 @@
 # Waitron and Cloud integration contract
 
-Status: locally implemented through continuous cold restore, updated 2026-09-25. This translates the agreed
+Status: complete two-venue milestone proved locally, updated 2026-09-27. This translates the agreed
 [product requirements](product-and-platform.md) into responsibilities and exchanges.
 It does not declare endpoints implemented or replace Waitron's recovery rules.
 
@@ -13,7 +13,7 @@ capture/restore interfaces before wiring backup operations to Waitron. The older
 PostgreSQL source below remains a reference for historical contracts. Registration,
 permissions and service configuration can proceed against the current SQLite application.
 
-## Local implementation update, 2026-09-25
+## Local implementation update, 2026-09-27
 
 Pairing, lifecycle and the shared remote gateway now have executable local proofs.
 The [managed-backup proof](local-backups.md) adds actual Waitron SQLite streams and archives,
@@ -31,9 +31,18 @@ and matches the restored database head to its source. Deleting the other continu
 prefix leaves its neighbour unchanged and its verified snapshot still restores.
 Owner-confirmed test-snapshot replacement now preserves the
 venue and history, imports fresh installation credentials, retires old Cloud access
-and updates the remote placement. Local tunnel/certificate installation and trading
-activation remain outside this exchange;
-Cloud's recovery grant is not permission to trade. The historical source map below
+and updates the remote placement. The complete milestone runner composes the transfer,
+real remote-access and managed-recovery phases into one strict receipt. A clean run
+replaced the local gateway while both venues published encrypted snapshots before and
+afterward, preserved route and venue separation, refused the old recovery authority,
+used fresh recovery authority and restored a snapshot published by the replacement.
+Its measured gateway, cell-movement, continuous-restore, snapshot-restore and managed-
+replacement times are recorded in [the executable proof](local-backups.md#run-the-proof).
+
+This is local evidence. Live provider storage and DNS, production deployment and secret
+custody, automatic tunnel/certificate installation, management-database recovery and
+trading activation remain outside this exchange. Cloud's recovery grant is not
+permission to trade. The historical source map below
 remains useful for ownership but does not describe the current SQLite runtime.
 
 ## What already exists

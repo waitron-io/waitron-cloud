@@ -81,8 +81,23 @@ These remain local integrations. The customer snapshot catalogue and matching-co
 recovery approval screens are implemented for verified test snapshots. The replacement
 setup downloads and validates the selected archive, stages it and runs Waitron cold restore
 without copying keys or inheriting the old backup destination;
-installation-authenticated capture delivery, upload-credential renewal and scheduled snapshots with durable local retries are implemented locally. Owner-confirmed replacement now imports fresh Cloud credentials, retains installation history and updates remote placement. Two real Waitron venues now stream into separate provider-owned prefixes; Cloud verifies their signed pointers, freezes one generation and restores its exact database head after an interrupted attempt. Deleting the other stream leaves its neighbour unchanged and its verified snapshot fallback restores. Production replacement, planned final-write handover, automatic tunnel/certificate installation and activation remain open. The pairing runner still uses synthetic observations; only the
-separate remote runner proves a tunnel.
+installation-authenticated capture delivery, upload-credential renewal and scheduled
+snapshots with durable local retries are implemented locally. Owner-confirmed replacement
+now imports fresh Cloud credentials, retains installation history and updates remote
+placement. Two real Waitron venues now stream into separate provider-owned prefixes;
+Cloud verifies their signed pointers, freezes one generation and restores its exact
+database head after an interrupted attempt. Deleting the other stream leaves its
+neighbour unchanged and its verified snapshot fallback restores. The complete milestone
+runner now composes the transfer, real remote-access and managed-recovery phases and
+validates one strict receipt. Its clean 2026-09-27 run replaced the gateway in 14,967 ms,
+reconnected a moved venue in 1,570 ms, restored continuous data in 1,743 ms and a retained
+snapshot in 1,432 ms, completed managed replacement in 8,346 ms, refused the old recovery
+authority and restored a fresh post-replacement snapshot. The phases use separately
+isolated local fixtures; the receipt binds them to the same clean Cloud and Waitron heads
+rather than pretending that their disposable installation identifiers are shared. These
+are local measurements, not service objectives. Live provider and DNS checks, production
+deployment and secret custody, management-database recovery, planned final-write handover,
+automatic tunnel/certificate installation and activation remain open.
 The [registration plan](registration-implementation-plan.md) now sequences persistence,
 identity reuse, the bound approval exchange and a two-installation connection proof.
 The normal connection journey and PostgreSQL for Cloud management data are agreed.

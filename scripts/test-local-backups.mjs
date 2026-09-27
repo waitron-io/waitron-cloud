@@ -38,6 +38,7 @@ import {
 import { startBackupStorage } from "./backup-storage-fixture.mjs";
 import { localLitestreamBinary } from "./backup-stream-probe.mjs";
 import { verifyManagedRecoveryReceipt } from "./verify-managed-recovery-receipt.mjs";
+import {expectedOldAuthorityRefusal} from './milestone-proof-helpers.mjs';
 import { DatabaseSync } from "node:sqlite";
 const checkout = process.env.WAITRON_CHECKOUT;
 assert(checkout, "Set WAITRON_CHECKOUT");
@@ -69,8 +70,8 @@ async function downloadObject(client,key,path){
 async function captureClient(dir,command,input){
  const child=spawn(process.execPath,['--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-capture-client-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,CLOUD_TEST_ROOT:dir},stdio:['pipe','pipe','pipe']});
  let output='',error='';child.stdout.on('data',v=>output+=v);child.stderr.on('data',v=>error=(error+v).slice(-16000));child.stdin.end(JSON.stringify({command,...input}));
- const timer=setTimeout(()=>child.kill('SIGKILL'),45000);
- try{const code=await new Promise(r=>child.once('exit',r));assert.equal(code,0,'Waitron capture client failed: '+error);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
+ let timedOut=false;const timer=setTimeout(()=>{timedOut=true;child.kill('SIGKILL');},45000);
+ try{const {code,signal}=await new Promise(r=>child.once('exit',(code,signal)=>r({code,signal})));if(timedOut)throw Error('Waitron capture client timed out');assert.equal(code,0,`Waitron capture client failed: ${error}${signal?` (signal ${signal})`:''}`);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
 }
 async function recoveryClient(dir,command,input={}){
  const child=spawn(process.execPath,['--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-recovery-client-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,CLOUD_TEST_ROOT:dir},stdio:['pipe','pipe','pipe']});
@@ -810,12 +811,14 @@ try {
     );
   assert(interrupted.signal || interrupted.exit !== 0);
   await assert.rejects(readFile(join(continuousTarget, "venue", "venue.db")));
-  const retried = await restoreFromKit(
+  const continuousRestoreStarted = performance.now(),
+    retried = await restoreFromKit(
       continuousTarget,
       continuousAccess.recoveryKit,
       litestream,
       join(continuousEntry.snapshot.venue.root, "migrations"),
     ),
+    continuousRestoreMs = performance.now() - continuousRestoreStarted,
     restoredHead = databaseHead(join(continuousTarget, "venue", "venue.db"));
   assert.equal(retried.exit, 0, retried.output);
   assert.equal(restoredHead, continuousEntry.sourceHead);
@@ -897,12 +900,14 @@ try {
   } finally {
     fallbackReader.close();
   }
-  const fallbackRestored = await worker(fallbackTarget, "restore", {
-    recoveryKey: fallbackAccess.keys.recoveryKey,
-    sourceNodeId: fallbackAccess.point.sourceNodeId,
-    modules: fallbackAccess.point.modules,
-    expectedVenue: fallbackEntry.snapshot.captured.venueName,
-  });
+  const snapshotRestoreStarted = performance.now(),
+    fallbackRestored = await worker(fallbackTarget, "restore", {
+      recoveryKey: fallbackAccess.keys.recoveryKey,
+      sourceNodeId: fallbackAccess.point.sourceNodeId,
+      modules: fallbackAccess.point.modules,
+      expectedVenue: fallbackEntry.snapshot.captured.venueName,
+    }),
+    snapshotRestoreMs = performance.now() - snapshotRestoreStarted;
   assert(fallbackRestored.integrityOk);
   await recovery.target(fallbackId, "restored", fallbackProof("restored"));
   await recovery.close(session.token, session.csrfToken, fallbackId);
@@ -1026,7 +1031,7 @@ try {
   assert.equal((await f.db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'2');
   assert.equal((await f.db.pool.query('SELECT count(*) FROM installations WHERE revoked_at IS NOT NULL')).rows[0].count,'0');
   record('guided owner HTTP approval survives lost replies; fresh Waitron processes download, validate, stage and cold-restore the bound snapshot without copying keys or inheriting destinations');
-  const proposal=await recoveryClient(guided,'prepareReplacement',{expectedSourceNodeId:item.point.sourceNodeId});
+  const replacementStarted=performance.now(),proposal=await recoveryClient(guided,'prepareReplacement',{expectedSourceNodeId:item.point.sourceNodeId});
   assert.equal(proposal.state,'awaiting_owner');assert.equal(proposal.oldInstallationId,item.venue.registration.installationId);
   assert.equal((await ownerPost('inspect')).replacement.publicKey,proposal.publicKey);
   const confirmations={oldInstallationId:proposal.oldInstallationId,oldServerUnavailable:'true',confirmReplacement:'true'};
@@ -1038,19 +1043,20 @@ try {
   assert.equal((await f.db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'3');
   assert.equal((await f.db.pool.query('SELECT count(*) FROM installations WHERE superseded_by IS NULL')).rows[0].count,'2');
   assert.equal((await f.db.pool.query('SELECT installation_id FROM backup_points WHERE id=$1',[item.point.id])).rows[0].installation_id,item.venue.registration.installationId);
-  const routes=(await remote.manifest(cell)).routes,newRoute=routes.find(r=>r.venueId===item.venue.registration.venueId);
+  const routes=(await remote.manifest(cell)).routes,newRoute=routes.find(r=>r.venueId===item.venue.registration.venueId),neighbourRoute=routes.find(r=>r.venueId===neighbour.venueId);
   assert.equal(newRoute.installationId,connected.registration.installationId);assert.equal(newRoute.peerPublicKey,proposal.peerPublicKey);
   for(const name of ['staffHostname','publicHostname','address','port'])assert.equal(newRoute[name],oldPlacement[name]);
-  assert.equal(routes.find(r=>r.venueId===neighbour.venueId).peerPublicKey,neighbour.peerPublicKey);
+  assert.equal(neighbourRoute.peerPublicKey,neighbour.peerPublicKey);
   assert(!JSON.stringify(routes).includes(oldPlacement.peerPublicKey));
-  await assert.rejects(captureClient(item.venue.root,'reserve',{id:item.reservation.id}));
+  let oldAuthorityRefused=false;
+  await assert.rejects(captureClient(item.venue.root,'reserve',{id:item.reservation.id}),error=>(oldAuthorityRefused=expectedOldAuthorityRefusal(error)));
   const fresh=await captureClient(guided,'reserve',{stateSubdir:'state',id:randomUUID()});assert.equal(fresh.installationId,connected.registration.installationId);assert.notEqual(fresh.recoveryKey,item.reservation.recoveryKey);
   const captured=await worker(guided,'capture',{stateSubdir:'state',recoveryKey:fresh.recoveryKey});
   assert(!captured.entries.some(n=>n.includes('cloud-replacement')||n.includes('cloud-recovery')||n.includes('cloud-connection')));
   const freshBytes=await readFile(join(guided,'captured.backup.enc'));await captureClient(guided,'upload',{stateSubdir:'state',grant:fresh,ca:s3.ca});
   const freshPoint=await captureClient(guided,'publish',{stateSubdir:'state',id:fresh.id,metadata:{...receipt(freshBytes),capturedAt:captured.manifest.createdAt,retention:'daily',sourceNodeId:captured.sourceNodeId,modules:captured.manifest.modules}});
   assert.equal(freshPoint.installationId,connected.registration.installationId);
-  const freshTarget=await root();await writeFile(join(freshTarget,'input.backup.enc'),freshBytes,{mode:0o600});await worker(freshTarget,'restore',{recoveryKey:fresh.recoveryKey,sourceNodeId:freshPoint.sourceNodeId,modules:freshPoint.modules,expectedVenue:captured.venueName});
+  const freshTarget=await root();await writeFile(join(freshTarget,'input.backup.enc'),freshBytes,{mode:0o600});const freshRestored=await worker(freshTarget,'restore',{recoveryKey:fresh.recoveryKey,sourceNodeId:freshPoint.sourceNodeId,modules:freshPoint.modules,expectedVenue:captured.venueName}),replacementMs=performance.now()-replacementStarted;assert.equal(freshRestored.integrityOk,true);
   await ownerPost('close');assert.equal((await recoveryClient(guided,'statusReplacement',{expectedSourceNodeId:item.point.sourceNodeId})).state,'complete');
   record('owner-confirmed replacement survives lost replies and client restarts, preserves venue/history/remote routing, retires old authority and captures a restorable snapshot with fresh keys');
   const bad = await root();
@@ -1072,7 +1078,7 @@ try {
   await assert.rejects(captureClient(guided,'reserve',{stateSubdir:'state',id:fresh.id}));
   record('Cloud owner revocation refuses subsequent Waitron upload-credential renewal');
   const result = {
-    version:1,
+    version:2,
     cloudHead: execFileSync("git", ["rev-parse", "HEAD"], {
       encoding: "utf8",
     }).trim(),
@@ -1089,13 +1095,14 @@ try {
         cwd: waitron,
         encoding: "utf8",
       }).trim() !== "",
-    phases:['provider-isolation','streams-observed','continuous-recovery','interrupted-retry','snapshot-fallback'],
+    phases:['provider-isolation','streams-observed','continuous-recovery','interrupted-retry','snapshot-fallback','fresh-replacement'],
     venues:streamViews.map(entry=>({venueId:entry.snapshot.venue.registration.venueId,sourceHead:entry.sourceHead,observedGeneration:entry.pointer.body.generation,recoverableAt:entry.observed.recoverableAt,checkedAt:entry.observed.checkedAt})),
     isolation,
-    continuous:{venueId:continuousEntry.snapshot.venue.registration.venueId,sourceHead:continuousEntry.sourceHead,restoredHead,approvedGeneration:continuousEntry.pointer.body.generation,restoredGeneration:continuousEntry.pointer.body.generation,recoverableAt:continuousEntry.observed.recoverableAt,pointerWrittenAt:continuousEntry.pointer.body.writtenAt,retry:{interrupted:true,cleanTarget:true,succeeded:true}},
-    snapshotFallback:{venueId:fallbackEntry.snapshot.venue.registration.venueId,pointId:fallbackEntry.snapshot.point.id,continuousDeleted:true,restoreSucceeded:true},
+    continuous:{venueId:continuousEntry.snapshot.venue.registration.venueId,sourceHead:continuousEntry.sourceHead,restoredHead,approvedGeneration:continuousEntry.pointer.body.generation,restoredGeneration:continuousEntry.pointer.body.generation,recoverableAt:continuousEntry.observed.recoverableAt,pointerWrittenAt:continuousEntry.pointer.body.writtenAt,restoreMs:continuousRestoreMs,retry:{interrupted:true,cleanTarget:true,succeeded:true}},
+    snapshotFallback:{venueId:fallbackEntry.snapshot.venue.registration.venueId,pointId:fallbackEntry.snapshot.point.id,continuousDeleted:true,restoreSucceeded:true,restoreMs:snapshotRestoreMs},
+    replacement:{venueId:item.venue.registration.venueId,oldInstallationId:item.venue.registration.installationId,newInstallationId:connected.registration.installationId,elapsedMs:replacementMs,oldRecoveryKeyDigest:createHash('sha256').update(item.reservation.recoveryKey).digest('hex'),newRecoveryKeyDigest:createHash('sha256').update(fresh.recoveryKey).digest('hex'),oldAuthorityRefused,newAuthorityWorked:freshPoint.installationId===connected.registration.installationId,routePreserved:{staffHostname:newRoute.staffHostname===oldPlacement.staffHostname,publicHostname:newRoute.publicHostname===oldPlacement.publicHostname,address:newRoute.address===oldPlacement.address,port:newRoute.port===oldPlacement.port,neighbour:neighbourRoute.peerPublicKey===neighbour.peerPublicKey},freshSnapshotPointId:freshPoint.id,freshSnapshotRestored:freshRestored.integrityOk===true},
     activation:'not-performed',
-    checks:['real-seaweedfs','real-waitron','verifier-process-isolation','no-production-resources'],
+    checks:['real-seaweedfs','real-waitron','verifier-process-isolation','fresh-replacement-authority','no-production-resources'],
   };
   verifyManagedRecoveryReceipt(result);
   if (process.env.BACKUP_RECEIPT)
