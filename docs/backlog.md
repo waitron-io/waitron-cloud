@@ -96,7 +96,7 @@ authority and restored a fresh post-replacement snapshot. The phases use separat
 isolated local fixtures; the receipt binds them to the same clean Cloud and Waitron heads
 rather than pretending that their disposable installation identifiers are shared. These
 are local measurements, not service objectives. Live provider and DNS checks, production
-deployment and secret custody, management-database recovery, planned final-write handover,
+deployment and secret custody, provider-native management-database recovery, planned final-write handover,
 automatic tunnel/certificate installation and activation remain open.
 The [registration plan](registration-implementation-plan.md) now sequences persistence,
 identity reuse, the bound approval exchange and a two-installation connection proof.
@@ -415,8 +415,17 @@ mobile notifications separately.
   for venues sharing NAT and known request IDs. The
   short code has an unkeyed digest, so review database-disclosure protection before
   launch and retain explicit local business confirmation.
-  Terminated database connections and lost replies have regression tests; actual
-  database failover and recovery under deployment credentials still need proof.
+  Terminated database connections and lost replies have regression tests. The
+  [local management-database recovery drill](database-recovery.md) now uses separate
+  non-superuser migration and runtime logins plus a replication-only login. It takes a
+  physical PostgreSQL 18 base backup, waits for a streaming standby to replay the named
+  recovery point, stops the primary and promotes the standby. The clean 2026-09-27
+  receipt at Cloud `072b2c0` confirmed zero lag at that point, a 158 ms local promotion
+  and a 934 ms local outage on that run. It recovered the exact result and lease after a discarded
+  committed reply, reclaimed an interrupted worker message once, preserved both tenants
+  and rejected a crossed installation proof. These are fixture measurements, not service
+  objectives. Repeat the drill with the selected provider's deployment credentials,
+  backups, replication, routing, monitoring and realistic data volume before launch.
   Pairing and replacement now use venue locks compatible with monitoring's incident
   inserts. PostgreSQL race tests run the real monitor worker while a new pairing
   request waits on its installation lock: matching keys retain the existing link,
@@ -466,9 +475,13 @@ mobile notifications separately.
   durable workers, PostgreSQL, Mailpit, TLS object storage and empty-route gateway in one
   loopback-only Compose stack. Its executable receipt proves clean installation, restart,
   same-schema image recreation, 25 migrations, stable generated identity, retained database
-  and storage markers, and exact-project cleanup. Production deployment, provider selection,
-  public ingress, secret custody, scheduled reconciliation, database recovery and rollback
-  across incompatible schemas remain open. Customer and operator portals, audit, budgets,
+  and storage markers, and exact-project cleanup. The [database recovery drill](database-recovery.md)
+  separately proves a physical standby promotion under restricted local credentials, exact
+  operation replay, worker-claim recovery and tenant isolation, with zero owned resources
+  left after the run. Production deployment, provider selection, public ingress, secret
+  custody, scheduled reconciliation, provider-native database recovery, automated failover,
+  realistic recovery objectives and rollback across incompatible schemas remain open.
+  Customer and operator portals, audit, budgets,
   quotas, staged releases, maintenance and recovery controls remain broader work.
   Customer portal login and account recovery must work when the venue server is
   unavailable, so customers can manage services and recovery independently.
