@@ -156,6 +156,27 @@ credentials. The [customer guide](../../docs/security-audit.md) documents the HT
 and its limits. The transient history-cleanup command never deletes these rows; audit
 retention and account deletion require a separate policy.
 
+## Temporary support grants
+
+Migration `026_support_grants.sql` adds customer-approved, expiring grants for an
+existing platform account. `SupportGrantStore` keeps customer approval separate from
+platform eligibility. Its eligibility-permission and grantable-action configuration
+defaults to empty, so the core is disabled until both catalogues are explicitly
+supplied. Approval never creates a platform account or permission.
+
+`approve` requires a live owner session and CSRF token, an existing enabled platform
+account with one configured permission, a tenant-bound optional venue, configured
+actions and an explicit future expiry. `revoke` lets any current organisation owner
+end the grant early. `authorize` runs protected PostgreSQL work in one transaction and
+checks expiry, revocation, the original approver's ownership and platform eligibility
+before and after the callback. Keep external side effects outside that callback because
+PostgreSQL cannot roll them back.
+
+The three fixed audit events expose no reason, action parameters, callback result or
+session material. No HTTP route or production support action uses this primitive yet.
+See [temporary support grants](../../docs/temporary-support-grants.md) for the adapter
+example, errors and remaining platform-policy boundary.
+
 ## Usage metering
 
 Migration `025_usage_metering.sql` adds an immutable, organisation-scoped usage ledger.
