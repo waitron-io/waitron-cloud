@@ -15,7 +15,7 @@ const checks=['real-postgresql','real-waitron','real-wireguard-haproxy','real-se
 export function composeMilestoneReceipt(transferValue,remoteValue,managedValue){
  const transfer=verifyBackupTransferReceipt(transferValue),remote=verifyRemoteMilestoneEvidence(remoteValue),managedRecovery=verifyManagedRecoveryReceipt(managedValue);
  return verifyTwoVenueMilestoneReceipt({
-  version:1,
+  version:2,
   cloudHead:transfer.cloudHead,
   waitronHead:transfer.waitronHead,
   cloudDirty:transfer.cloudDirty||remote.cloudDirty||managedRecovery.cloudDirty,

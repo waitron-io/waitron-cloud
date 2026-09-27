@@ -47,7 +47,7 @@ export function verifyRemoteMilestoneEvidence(remote){
 }
 
 export function verifyTwoVenueMilestoneReceipt(value){
- if(!exact(value,['version','cloudHead','waitronHead','cloudDirty','waitronDirty','phases','transfer','remote','managedRecovery','measurements','activation','checks'])||value.version!==1||!commit.test(value.cloudHead)||!commit.test(value.waitronHead)||value.cloudDirty!==false||value.waitronDirty!==false||JSON.stringify(value.phases)!==JSON.stringify(requiredPhases)||JSON.stringify(value.checks)!==JSON.stringify(requiredChecks)||value.activation!=='not-performed')fail();
+ if(!exact(value,['version','cloudHead','waitronHead','cloudDirty','waitronDirty','phases','transfer','remote','managedRecovery','measurements','activation','checks'])||value.version!==2||!commit.test(value.cloudHead)||!commit.test(value.waitronHead)||value.cloudDirty!==false||value.waitronDirty!==false||JSON.stringify(value.phases)!==JSON.stringify(requiredPhases)||JSON.stringify(value.checks)!==JSON.stringify(requiredChecks)||value.activation!=='not-performed')fail();
  const transfer=verifyBackupTransferReceipt(value.transfer),remote=verifyRemoteMilestoneEvidence(value.remote),managed=verifyManagedRecoveryReceipt(value.managedRecovery);
  for(const component of [transfer,remote,managed])if(component.cloudHead!==value.cloudHead||component.waitronHead!==value.waitronHead||component.cloudDirty!==false||component.waitronDirty!==false)fail();
  const measurements=value.measurements;

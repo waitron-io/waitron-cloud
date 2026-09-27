@@ -19,7 +19,7 @@ export function managedReceipt(){return {
  continuous:{venueId:venueA,sourceHead:head,restoredHead:head,approvedGeneration:generationA,restoredGeneration:generationA,recoverableAt:'2026-09-25T21:00:00.000Z',pointerWrittenAt:'2026-09-25T21:00:00.000Z',restoreMs:732,retry:{interrupted:true,cleanTarget:true,succeeded:true}},
  snapshotFallback:{venueId:venueB,pointId:'72345678-1234-4234-8234-123456789abc',continuousDeleted:true,restoreSucceeded:true,restoreMs:418},
  boundaries:{
-  managedKeys:{snapshotKeyVersion:1,activeKeyVersion:2,restoredAfterRotation:true,recoveryKeyDistinctFromApplicationVault:true},
+  managedKeys:{snapshotKeyVersion:1,activeKeyVersion:2,rotatedAt:'2026-09-25T21:02:00.000Z',restoredAt:'2026-09-25T21:03:00.000Z',recoveryKeyAbsentFromApplicationVault:true},
   restoredArchive:{applicationVaultRestored:true,backupDestinationInherited:false,cloudAuthorityInherited:false,staffTlsInherited:false},
   nodeIdentity:{continuousSourceNodeId:nodeA,continuousRestoredNodeId:nodeA,snapshotSourceNodeId:nodeB,snapshotRestoredNodeId:nodeB,replacementInstallationFresh:true,replacementMachineAuthorityFresh:true},
  },

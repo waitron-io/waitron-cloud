@@ -40,6 +40,11 @@ pnpm verify:two-venue-milestone \
   /tmp/cloud-two-venue-milestone.json
 ```
 
+The combined milestone receipt is version 2 from D28 onward because it embeds the
+version 3 managed-recovery boundary evidence. Earlier version 1 milestone receipts
+remain historical results; the current verifier rejects them instead of silently
+treating their version 2 managed-recovery component as equivalent.
+
 Use clean Cloud and Waitron checkouts when the receipt is release evidence. A clean
 2026-09-27 run at Cloud `6a7fac4` and Waitron `8dea39b` moved 4 MiB, replaced the
 gateway in 14,967 ms, reconnected a moved venue in 1,570 ms, restored continuous
@@ -116,7 +121,7 @@ file named by `CLOUD_MILESTONE_RECEIPT` is the only receipt it keeps.
   replacement, so it cannot resume an old destination. Customer-managed archive
   restore behavior is unchanged.
 - The version 3 receipt makes the secret and identity boundaries explicit. The
-  application vault in `secrets.env` is different from the managed recovery key and
+  application vault file in `secrets.env` does not contain the managed recovery key and
   restores byte for byte. The receipt rejects inherited backup destinations, Cloud
   machine authority or staff TLS material. It also rejects either restore path if it
   changes the recovered local node ID, while requiring a fresh Cloud installation and

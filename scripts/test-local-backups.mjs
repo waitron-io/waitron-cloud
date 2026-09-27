@@ -957,6 +957,7 @@ try {
   const oldPlacement=await remote.provision(item.venue.registration.installationId,cell,randomBytes(32).toString('base64'));
   const neighbour=await remote.provision(snapshots[1].venue.registration.installationId,cell,randomBytes(32).toString('base64'));
   await catalogue.rotate(item.venue.registration.installationId);
+  const rotatedAt = new Date().toISOString();
   const activeKeyVersion = Number(
     (
       await f.db.pool.query(
@@ -1019,6 +1020,7 @@ try {
     expectedVenue: item.captured.venueName,
   });
   assert(restored.integrityOk);
+  const restoredAt = new Date().toISOString();
   await recovery.target(operationId, "restored", proof("restored"));
   assert.equal(
     (await recovery.status(session.token, operationId)).status,
@@ -1167,7 +1169,7 @@ try {
     continuous:{venueId:continuousEntry.snapshot.venue.registration.venueId,sourceHead:continuousEntry.sourceHead,restoredHead,approvedGeneration:continuousEntry.pointer.body.generation,restoredGeneration:continuousEntry.pointer.body.generation,recoverableAt:continuousEntry.observed.recoverableAt,pointerWrittenAt:continuousEntry.pointer.body.writtenAt,restoreMs:continuousRestoreMs,retry:{interrupted:true,cleanTarget:true,succeeded:true}},
     snapshotFallback:{venueId:fallbackEntry.snapshot.venue.registration.venueId,pointId:fallbackEntry.snapshot.point.id,continuousDeleted:true,restoreSucceeded:true,restoreMs:snapshotRestoreMs},
     boundaries:{
-      managedKeys:{snapshotKeyVersion:item.point.keyVersion,activeKeyVersion,restoredAfterRotation:true,recoveryKeyDistinctFromApplicationVault:!item.applicationVault.includes(item.reservation.recoveryKey)},
+      managedKeys:{snapshotKeyVersion:item.point.keyVersion,activeKeyVersion,rotatedAt,restoredAt,recoveryKeyAbsentFromApplicationVault:!item.applicationVault.includes(item.reservation.recoveryKey)},
       restoredArchive,
       nodeIdentity:{continuousSourceNodeId:continuousEntry.snapshot.point.sourceNodeId,continuousRestoredNodeId,snapshotSourceNodeId:fallbackEntry.snapshot.point.sourceNodeId,snapshotRestoredNodeId,replacementInstallationFresh:connected.registration.installationId!==item.venue.registration.installationId,replacementMachineAuthorityFresh:proposal.publicKey!==sourceCloudAuthority.publicKey},
     },

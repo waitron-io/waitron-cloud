@@ -6,7 +6,8 @@ import {installationA,managedReceipt,venueA,venueB} from './managed-recovery-rec
 test('accepts the complete measured version 3 receipt with explicit secret and identity boundaries',()=>assert.deepEqual(verifyManagedRecoveryReceipt(managedReceipt()),managedReceipt()));
 test('accepts dirty development evidence',()=>{const receipt=managedReceipt();receipt.cloudDirty=true;receipt.waitronDirty=true;assert.deepEqual(verifyManagedRecoveryReceipt(receipt),receipt);});
 for(const [name,mutate] of [
- ['version 2 evidence without explicit boundaries',r=>{r.version=2;delete r.boundaries;}],
+ ['version 2 evidence',r=>{r.version=2;}],
+ ['missing explicit boundaries',r=>{delete r.boundaries;}],
  ['missing phase',r=>r.phases.pop()],
  ['mismatched database heads',r=>{r.continuous.restoredHead='c'.repeat(64);}],
  ['invented recovery time',r=>{r.continuous.recoverableAt='2026-09-25T21:00:02.000Z';}],
@@ -18,8 +19,8 @@ for(const [name,mutate] of [
  ['zero continuous restore timing',r=>{r.continuous.restoreMs=0;}],
  ['zero snapshot restore timing',r=>{r.snapshotFallback.restoreMs=0;}],
  ['snapshot key not older than the active key',r=>{r.boundaries.managedKeys.activeKeyVersion=r.boundaries.managedKeys.snapshotKeyVersion;}],
- ['snapshot not restored after rotation',r=>{r.boundaries.managedKeys.restoredAfterRotation=false;}],
- ['recovery key confused with the application vault',r=>{r.boundaries.managedKeys.recoveryKeyDistinctFromApplicationVault=false;}],
+ ['snapshot restored before rotation',r=>{r.boundaries.managedKeys.restoredAt='2026-09-25T21:01:00.000Z';}],
+ ['recovery key present in the application vault file',r=>{r.boundaries.managedKeys.recoveryKeyAbsentFromApplicationVault=false;}],
  ['application vault missing after archive restore',r=>{r.boundaries.restoredArchive.applicationVaultRestored=false;}],
  ['backup destination inherited',r=>{r.boundaries.restoredArchive.backupDestinationInherited=true;}],
  ['Cloud machine authority inherited',r=>{r.boundaries.restoredArchive.cloudAuthorityInherited=true;}],
