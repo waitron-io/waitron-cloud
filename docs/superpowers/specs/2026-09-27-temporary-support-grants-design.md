@@ -41,7 +41,7 @@ Any enabled current organisation owner can revoke a grant. Revocation is idempot
 - the platform account is enabled and still has configured eligibility; and
 - the original approving account is enabled and still owns the organisation.
 
-The supplied callback receives the same PostgreSQL client and performs the protected work in that transaction. After the callback returns, the store repeats the wall-clock expiry, approver and platform-eligibility checks. A grant that expires or loses authority during a database wait rolls the callback back. The successful transaction appends one `support.accessed` security event keyed by the action operation UUID and grant. Callers must put all protected database effects inside the callback; the primitive does not make an external side effect reversible.
+The supplied callback receives the same PostgreSQL client and performs the protected work in that transaction. The store checks wall-clock expiry again immediately before entering the callback. After the callback returns, it repeats the wall-clock expiry, approver and platform-eligibility checks. Shared authority locks serialize an external authority removal after the current action; a removal performed by the callback itself is caught by the final checks and rolled back. The successful transaction appends one `support.accessed` security event keyed by the grant, action operation UUID, action and requested venue. Callers must put all protected database effects inside the callback; the primitive does not make an external side effect reversible.
 
 ## Customer audit and privacy
 
@@ -58,10 +58,10 @@ The platform actor uses a distinct `platform_account` kind so an export cannot p
 - Missing configuration, an unknown or disabled platform identity, absent eligibility, a foreign venue, a non-owner approver and a stale session all fail without a grant.
 - Expiry uses PostgreSQL wall time after lock waits. Transaction-start time cannot keep an expired grant alive.
 - Revocation, approver authority loss, platform eligibility loss and action removal deny later use.
-- Losing any of those conditions during the callback rolls back both the protected database work and audit event.
+- Removing authority inside the protected callback rolls back both its database work and audit event. An external removal waits for the transaction's shared locks, then denies later uses.
 - Grant and audit retries are idempotent. A conflicting retry never rewrites the earlier record.
 - Tenant, reason and action data never enter another organisation's export.
 
 ## Verification
 
-Real PostgreSQL tests cover disabled-by-default configuration, existing-identity eligibility, tenant and venue isolation, identical and conflicting approval retries, explicit expiry, early revocation, changed approver permission, removed platform eligibility, expiry during a lock wait, rollback of protected work, and one audit event for a retried successful use. Security-audit tests prove the new event shapes and redacted owner export. A disposable mutation removes the final authority recheck and must make the wait/permission test fail. Focused registration tests and affected typechecks are the local gate; Cloud CI owns the full workspace suite.
+Real PostgreSQL tests cover disabled-by-default configuration, existing-identity eligibility, organisation-wide and venue grants, tenant and venue isolation, identical and conflicting approval retries, explicit expiry, early revocation, changed approver permission, removed platform eligibility, expiry during lock waits, rollback of protected work, action-and-venue-specific audit identities and one audit event for an exact retried use. Security-audit tests prove the new event shapes and owner export fields. Disposable mutations remove each final authority recheck and must make its callback self-removal assertion fail. Focused registration tests and affected typechecks are the local gate; Cloud CI owns the full workspace suite.

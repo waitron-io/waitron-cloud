@@ -55,7 +55,7 @@ const diagnostic = await supportGrants.authorize({
 });
 ```
 
-The store checks the grant, action, tenant, expiry, revocation, platform eligibility and original customer approval before the callback. It repeats the time and authority checks afterward. If authority disappears or the grant expires during a database wait, the callback's writes roll back. External side effects cannot be rolled back, so do not put network calls or shell commands inside this boundary.
+The store checks the grant, action, tenant, expiry, revocation, platform eligibility and original customer approval before the callback. It checks database wall time again immediately before starting the callback, then repeats the time and authority checks afterward. The transaction holds shared locks on the authority rows: an external revocation waits for the current action to finish and denies later actions. If the callback itself removes authority, or the grant expires while the transaction is running, its writes roll back. External side effects cannot be rolled back, so do not put network calls or shell commands inside this boundary.
 
 An organisation-wide grant uses `venueId: null`. It can cover an organisation action or a venue that currently belongs to that organisation. A venue grant matches only its recorded venue.
 
@@ -71,8 +71,8 @@ Revocation is permanent and idempotent. It prevents later authorization. The fir
 
 ## Read errors and audit events
 
-`invalid_input` means the request shape, identifier, reason, expiry or action set is malformed. `not_configured` means the store has an empty eligibility or action configuration. `permission_denied` covers missing current customer or platform authority. `grant_unavailable` covers a missing or mismatched tenant binding without revealing another organisation's grant. `grant_expired` and `grant_revoked` describe terminal grant state. `grant_conflict` means the same approval UUID was reused with different content.
+`invalid_input` means the request shape, identifier, reason, expiry or action set is malformed. `not_configured` means the store has an empty eligibility or action configuration. `permission_denied` covers missing current customer or platform authority. `grant_unavailable` covers a missing or mismatched tenant binding without revealing another organisation's grant. `grant_expired` and `grant_revoked` describe terminal grant state. `grant_conflict` means the same approval UUID was reused with different content or an operation UUID collided with a different access audit record.
 
-Grant, revocation and successful access append `support.granted`, `support.revoked` and `support.accessed` to the immutable customer security audit. The export identifies the platform actor and grant UUID, but omits the customer's reason, action name, request parameters, callback result and session material.
+Grant, revocation and successful access append `support.granted`, `support.revoked` and `support.accessed` to the immutable customer security audit. A successful access retry is identified by the grant, operation UUID, action and requested venue, so reusing an operation UUID for a different authorised action does not suppress its event. The export identifies the platform actor and grant UUID, but omits the customer's reason, action name, request parameters, callback result and session material.
 
 The remaining work is policy and transport, not another grant store. Define platform roles, the eligible permission catalogue, customer approver rules and concrete actions. Design the separately authorised emergency route. If SSH support is offered, add its explicit server target and terminate active sessions on expiry or revocation.

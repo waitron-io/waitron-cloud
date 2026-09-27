@@ -5,8 +5,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {createSession,type SessionCredentials} from '@waitron-cloud/identity';
 import {Pool} from 'pg';
 import {migrate} from '../src/migrate.ts';
-import {securityAuditSourceId} from '../src/security-audit.ts';
-import {SupportGrantError,SupportGrantStore,type SupportGrantApproval,type SupportGrantAuthorization} from '../src/support-grants.ts';
+import {SupportGrantError,SupportGrantStore,supportAccessAuditSourceId,type SupportGrantApproval,type SupportGrantAuthorization} from '../src/support-grants.ts';
 import {transaction} from '../src/transaction.ts';
 
 const url=process.env.TEST_DATABASE_URL;
@@ -137,6 +136,20 @@ test('authorization commits protected work and one redacted access event across 
  assert.deepEqual(audit,[{actor_kind:'platform_account',actor_id:platform,subject_id:grant.id}]);
 });
 
+test('one operation identity records separate granted actions and organisation venues',async()=>{
+ const grant=await store.approve(ownerSession.token,ownerSession.csrfToken,approval({venueId:null})),operationId=randomUUID();
+ const secondBusiness=randomUUID(),secondVenue=randomUUID();
+ await pool.query("INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,'Second SL','ES')",[secondBusiness,organisation]);
+ await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[secondVenue,organisation,secondBusiness,randomUUID()]);
+ await store.authorize(authorization(grant.id,{venueId:venue,action:'customer.data.read',operationId}),marker(randomUUID(),'read first venue'));
+ await store.authorize(authorization(grant.id,{venueId:venue,action:'diagnostics.run',operationId}),marker(randomUUID(),'diagnose first venue'));
+ await store.authorize(authorization(grant.id,{venueId:secondVenue,action:'customer.data.read',operationId}),marker(randomUUID(),'read second venue'));
+ const events=(await pool.query("SELECT venue_id FROM security_audit_events WHERE event_type='support.accessed' ORDER BY venue_id NULLS FIRST")).rows;
+ assert.deepEqual(events.map(row=>row.venue_id).sort(),[venue,venue,secondVenue].sort());
+ assert.equal((await pool.query('SELECT count(*) FROM support_test_markers')).rows[0].count,'3');
+ await expectCode(store.authorize(authorization(grant.id,{venueId:foreignVenue,operationId:randomUUID()}),marker(randomUUID())),'grant_unavailable');
+});
+
 test('authorization rejects unconfigured actions and mismatched grant bindings without protected writes',async()=>{
  const grant=await store.approve(ownerSession.token,ownerSession.csrfToken,approval({actions:['customer.data.read']}));
  const narrowStore=new SupportGrantStore(pool,{eligibilityPermissions:['support.eligible'],grantableActions:['diagnostics.run']});
@@ -204,9 +217,38 @@ test('expiry during protected work rolls back its writes and access event',async
  assert.equal((await pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='support.accessed'")).rows[0].count,'0');
 });
 
+test('authority removed inside protected work is caught by final checks and rolled back',async()=>{
+ const membershipGrant=await store.approve(ownerSession.token,ownerSession.csrfToken,approval()),membershipOperation=randomUUID();
+ await expectCode(store.authorize(authorization(membershipGrant.id,{operationId:membershipOperation}),async client=>{
+  await client.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[owner,organisation]);
+  return marker(membershipOperation)(client);
+ }),'permission_denied');
+ assert.equal((await pool.query('SELECT is_owner FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2',[owner,organisation])).rows[0].is_owner,true);
+ const eligibilityGrant=await store.approve(ownerSession.token,ownerSession.csrfToken,approval()),eligibilityOperation=randomUUID();
+ await expectCode(store.authorize(authorization(eligibilityGrant.id,{operationId:eligibilityOperation}),async client=>{
+  await client.query('DELETE FROM platform_permissions WHERE account_id=$1',[platform]);
+  return marker(eligibilityOperation)(client);
+ }),'permission_denied');
+ assert.equal((await pool.query('SELECT count(*) FROM platform_permissions WHERE account_id=$1',[platform])).rows[0].count,'1');
+ assert.equal((await pool.query('SELECT count(*) FROM support_test_markers')).rows[0].count,'0');
+});
+
+test('expiry during the eligibility wait prevents the protected callback from starting',async()=>{
+ const grant=await store.approve(ownerSession.token,ownerSession.csrfToken,approval({expiresAt:new Date(Date.now()+800).toISOString()}));
+ const blocker=await admin.connect();await blocker.query('BEGIN');
+ await blocker.query(`SELECT account_id FROM ${schema}.platform_permissions WHERE account_id=$1 FOR UPDATE`,[platform]);
+ let started=false;
+ try{
+  const attempt=store.authorize(authorization(grant.id),async()=>{started=true;return 'late';});
+  await waitFor('SELECT a.id FROM cloud_accounts a JOIN platform_permissions%');await delay(900);await blocker.query('COMMIT');
+  await expectCode(attempt,'grant_expired');
+ }finally{await blocker.query('ROLLBACK').catch(()=>{});blocker.release();}
+ assert.equal(started,false);
+});
+
 test('an audit conflict wait past expiry rolls back protected work',async()=>{
  const grant=await store.approve(ownerSession.token,ownerSession.csrfToken,approval({expiresAt:new Date(Date.now()+800).toISOString()}));
- const operationId=randomUUID(),sourceId=securityAuditSourceId('support.accessed',grant.id,operationId);
+ const operationId=randomUUID(),sourceId=supportAccessAuditSourceId(authorization(grant.id,{operationId}));
  const blocker=await admin.connect();await blocker.query('BEGIN');
  await blocker.query(`INSERT INTO ${schema}.security_audit_events
   (organisation_id,venue_id,event_type,actor_kind,actor_id,subject_kind,subject_id,source_id)
@@ -218,4 +260,14 @@ test('an audit conflict wait past expiry rolls back protected work',async()=>{
  }finally{await blocker.query('ROLLBACK').catch(()=>{});blocker.release();}
  assert.equal((await pool.query('SELECT count(*) FROM support_test_markers')).rows[0].count,'0');
  assert.equal((await pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='support.accessed'")).rows[0].count,'1');
+});
+
+test('an access audit conflict uses the support-grant error contract and rolls back protected work',async()=>{
+ const grant=await store.approve(ownerSession.token,ownerSession.csrfToken,approval()),operationId=randomUUID();
+ const input=authorization(grant.id,{operationId}),sourceId=supportAccessAuditSourceId(input);
+ await pool.query(`INSERT INTO security_audit_events
+  (organisation_id,venue_id,event_type,actor_kind,actor_id,subject_kind,subject_id,source_id)
+  VALUES($1,$2,'support.accessed','platform_account',$3,'support_grant',$4,$5)`,[organisation,venue,randomUUID(),grant.id,sourceId]);
+ await expectCode(store.authorize(input,marker(operationId)),'grant_conflict');
+ assert.equal((await pool.query('SELECT count(*) FROM support_test_markers')).rows[0].count,'0');
 });

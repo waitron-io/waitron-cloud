@@ -118,7 +118,7 @@ Expected: FAIL because `authorize` does not exist.
 
 - [ ] **Step 3: Implement before-and-after enforcement**
 
-Lock the grant, compare every bound field, check current configuration, query wall-clock validity, lock the enabled platform account plus a configured permission, and lock the original approver's enabled owner membership. Run the callback, repeat wall-clock and both authority checks, record the idempotent access audit event using `securityAuditSourceId('support.accessed', grantId, operationId)`, and commit only when all checks remain true.
+Lock the grant, compare every bound field, check current configuration, query wall-clock validity, lock the enabled platform account plus a configured permission, and lock the original approver's enabled owner membership. Check wall time again immediately before running the callback, repeat wall-clock and both authority checks afterward, record the idempotent access audit event using a source identity bound to the grant, operation, action and requested venue, and commit only when all checks remain true.
 
 - [ ] **Step 4: Run focused tests and mutation controls**
 

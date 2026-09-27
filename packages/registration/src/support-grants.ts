@@ -1,6 +1,7 @@
+import {createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {IdentityError,resolveSession} from '@waitron-cloud/identity';
-import {recordSecurityAuditEvent,securityAuditSourceId} from './security-audit.ts';
+import {recordSecurityAuditEvent,SecurityAuditError} from './security-audit.ts';
 import {transaction} from './transaction.ts';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -47,6 +48,11 @@ function authorization(input:SupportGrantAuthorization):SupportGrantAuthorizatio
   ||input.venueId!==null&&(typeof input.venueId!=='string'||!uuid.test(input.venueId))
   ||typeof input.action!=='string'||!identifier.test(input.action))fail('invalid_input');
  return {...input};
+}
+export function supportAccessAuditSourceId(input:Pick<SupportGrantAuthorization,'grantId'|'operationId'|'action'|'venueId'>):string{
+ const bytes=createHash('sha256').update(['waitron-support-access-source-v1',input.grantId,input.operationId,input.action,input.venueId??'organisation'].join('\0')).digest().subarray(0,16);
+ bytes[6]=(bytes[6]!&0x0f)|0x50;bytes[8]=(bytes[8]!&0x3f)|0x80;const hex=bytes.toString('hex');
+ return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
 }
 function view(row:GrantRow):SupportGrant{return{
  id:row.id,organisationId:row.organisation_id,venueId:row.venue_id,platformAccountId:row.platform_account_id,
@@ -131,19 +137,26 @@ export class SupportGrantStore {
    if(!row||row.organisation_id!==requested.organisationId||row.platform_account_id!==requested.platformAccountId
     ||row.venue_id!==null&&row.venue_id!==requested.venueId||!row.actions.includes(requested.action))fail('grant_unavailable');
    if(row.revoked_at!==null)fail('grant_revoked');
-   if(row.venue_id===null)await venue(client,requested.venueId,row.organisation_id);
+   if(row.venue_id===null)try{await venue(client,requested.venueId,row.organisation_id);}catch(error){
+    if(error instanceof SupportGrantError&&error.code==='permission_denied')fail('grant_unavailable');throw error;
+   }
    const before:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
    if(row.expires_at.getTime()<=before.getTime())fail('grant_expired');
    await eligible(client,row.platform_account_id,this.#eligibilityPermissions);
    await owner(client,row.approved_by_account_id,row.organisation_id);
+   const ready:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
+   if(row.expires_at.getTime()<=ready.getTime())fail('grant_expired');
    const result=await protectedAction(client);
    const after:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
    if(row.expires_at.getTime()<=after.getTime())fail('grant_expired');
    await eligible(client,row.platform_account_id,this.#eligibilityPermissions);
    await owner(client,row.approved_by_account_id,row.organisation_id);
-   await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:requested.venueId,type:'support.accessed',actorKind:'platform_account',actorId:row.platform_account_id,subjectKind:'support_grant',subjectId:row.id,sourceId:securityAuditSourceId('support.accessed',row.id,requested.operationId)});
+   let auditConflict=false;
+   try{await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:requested.venueId,type:'support.accessed',actorKind:'platform_account',actorId:row.platform_account_id,subjectKind:'support_grant',subjectId:row.id,sourceId:supportAccessAuditSourceId(requested)});}
+   catch(error){if(error instanceof SecurityAuditError)auditConflict=true;else throw error;}
    const auditedAt:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
    if(row.expires_at.getTime()<=auditedAt.getTime())fail('grant_expired');
+   if(auditConflict)fail('grant_conflict');
    return result;
   });
  }
