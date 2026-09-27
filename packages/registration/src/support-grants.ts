@@ -88,6 +88,12 @@ export class SupportGrantStore {
   return transaction(this.#pool,async client=>{
    const actor=await session(client,token,csrfToken);await owner(client,actor.accountId,proposed.organisationId);
    await eligible(client,proposed.platformAccountId,this.#eligibilityPermissions);await venue(client,proposed.venueId,proposed.organisationId);
+   const prior=(await client.query<GrantRow>('SELECT * FROM support_grants WHERE id=$1 FOR SHARE',[proposed.id])).rows[0];
+   if(prior){
+    if(!same(prior,proposed,actor.accountId))fail('grant_conflict');
+    await recordSecurityAuditEvent(client,{organisationId:prior.organisation_id,venueId:prior.venue_id,type:'support.granted',actorKind:'account',actorId:actor.accountId,subjectKind:'support_grant',subjectId:prior.id,sourceId:prior.id});
+    await owner(client,actor.accountId,proposed.organisationId);await session(client,token,csrfToken);return view(prior);
+   }
    const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
    if(new Date(proposed.expiresAt).getTime()<=now.getTime())fail('invalid_input');
    const inserted=await client.query<GrantRow>(`INSERT INTO support_grants
@@ -136,6 +142,8 @@ export class SupportGrantStore {
    await eligible(client,row.platform_account_id,this.#eligibilityPermissions);
    await owner(client,row.approved_by_account_id,row.organisation_id);
    await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:requested.venueId,type:'support.accessed',actorKind:'platform_account',actorId:row.platform_account_id,subjectKind:'support_grant',subjectId:row.id,sourceId:securityAuditSourceId('support.accessed',row.id,requested.operationId)});
+   const auditedAt:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
+   if(row.expires_at.getTime()<=auditedAt.getTime())fail('grant_expired');
    return result;
   });
  }

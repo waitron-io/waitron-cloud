@@ -5,6 +5,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {createSession,type SessionCredentials} from '@waitron-cloud/identity';
 import {Pool} from 'pg';
 import {migrate} from '../src/migrate.ts';
+import {securityAuditSourceId} from '../src/security-audit.ts';
 import {SupportGrantError,SupportGrantStore,type SupportGrantApproval,type SupportGrantAuthorization} from '../src/support-grants.ts';
 import {transaction} from '../src/transaction.ts';
 
@@ -107,6 +108,15 @@ test('identical approval retries are stable and a changed retry conflicts',async
  assert.equal((await pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='support.granted'")).rows[0].count,'1');
 });
 
+test('an identical lost-reply approval retry returns the original grant after expiry',async()=>{
+ const input=approval({expiresAt:new Date(Date.now()+600).toISOString()});
+ const first=await store.approve(ownerSession.token,ownerSession.csrfToken,input);
+ await delay(700);
+ assert.deepEqual(await store.approve(ownerSession.token,ownerSession.csrfToken,input),first);
+ assert.equal((await pool.query('SELECT count(*) FROM support_grants')).rows[0].count,'1');
+ assert.equal((await pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='support.granted'")).rows[0].count,'1');
+});
+
 test('a current owner can revoke early once without exposing the grant to another tenant',async()=>{
  const input=approval(),created=await store.approve(ownerSession.token,ownerSession.csrfToken,input);
  await expectCode(store.revoke(memberSession.token,memberSession.csrfToken,input.id),'grant_unavailable');
@@ -192,4 +202,20 @@ test('expiry during protected work rolls back its writes and access event',async
  assert.equal(started,true);
  assert.equal((await pool.query('SELECT count(*) FROM support_test_markers')).rows[0].count,'0');
  assert.equal((await pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='support.accessed'")).rows[0].count,'0');
+});
+
+test('an audit conflict wait past expiry rolls back protected work',async()=>{
+ const grant=await store.approve(ownerSession.token,ownerSession.csrfToken,approval({expiresAt:new Date(Date.now()+800).toISOString()}));
+ const operationId=randomUUID(),sourceId=securityAuditSourceId('support.accessed',grant.id,operationId);
+ const blocker=await admin.connect();await blocker.query('BEGIN');
+ await blocker.query(`INSERT INTO ${schema}.security_audit_events
+  (organisation_id,venue_id,event_type,actor_kind,actor_id,subject_kind,subject_id,source_id)
+  VALUES($1,$2,'support.accessed','platform_account',$3,'support_grant',$4,$5)`,[organisation,venue,platform,grant.id,sourceId]);
+ try{
+  const attempt=store.authorize(authorization(grant.id,{operationId}),marker(operationId));
+  await waitFor('INSERT INTO security_audit_events%');await delay(900);await blocker.query('COMMIT');
+  await expectCode(attempt,'grant_expired');
+ }finally{await blocker.query('ROLLBACK').catch(()=>{});blocker.release();}
+ assert.equal((await pool.query('SELECT count(*) FROM support_test_markers')).rows[0].count,'0');
+ assert.equal((await pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='support.accessed'")).rows[0].count,'1');
 });
