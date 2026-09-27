@@ -11,6 +11,7 @@ test('local stack declares the complete gated service graph',()=>{
  assert.equal(services.postgres.image,'postgres:18-alpine');
  assert.equal(services.mailpit.image,'axllent/mailpit:v1.31.1');
  for(const name of ['postgres','mailpit','storage','account','gateway'])assert.ok(services[name].healthcheck?.test?.length,name);
+ assert.equal(services.account.healthcheck.test.at(-1),'http://localhost:3000/api/health/ready');
  assert.equal(services.migrate.depends_on.postgres.condition,'service_healthy');
  assert.equal(services.migrate.depends_on.bootstrap.condition,'service_completed_successfully');
  for(const name of ['account','email-worker','monitor-worker','usage-reconciler','remote-probe'])assert.equal(services[name].depends_on.migrate.condition,'service_completed_successfully',name);

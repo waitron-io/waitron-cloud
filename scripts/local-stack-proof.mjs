@@ -31,7 +31,7 @@ function identity(){return JSON.parse(composeOutput('exec','-T','account','node'
 function imageId(){return run('docker',['image','inspect',`waitron-cloud-local-stack:${tag}`,'--format','{{.Id}}'],{capture:true});}
 async function phase(name,start,{writeMarkers=false,upgrade=false}={}){
  const healthyServices=await waitForStack(),apiPort=commandEnvironment.LOCAL_STACK_ACCOUNT_PORT;
- for(const path of ['/api/health/live','/api/health/ready']){const response=await fetch(`http://127.0.0.1:${apiPort}${path}`,{signal:AbortSignal.timeout(3000)});if(!response.ok)throw new Error(`account health failed: ${path}`);}
+ for(const path of ['/api/health/live','/api/health/ready']){const response=await fetch(`http://127.0.0.1:${apiPort}${path}`,{headers:{host:'localhost:3000'},signal:AbortSignal.timeout(3000)});if(!response.ok)throw new Error(`account health failed: ${path}`);}
  const gateway=JSON.parse(composeOutput('exec','-T','gateway','node','-e',"console.log(require('fs').readFileSync('/state/status.json','utf8'))"));if(!gateway.ready||gateway.routes!==0)throw new Error('gateway not ready');
  const storageObject=storageMarker(writeMarkers?'put':'get'),database=databaseMarker(writeMarkers),value={name,durationMs:Date.now()-start,imageId:imageId(),migrationCount:migrationCount(),healthyServices,identity:identity(),databaseMarker:database,storageObject};
  return upgrade?{...value,rebuilt:true,recreated:true}:value;

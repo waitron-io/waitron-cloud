@@ -96,7 +96,7 @@ services:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3000/api/health/ready"]
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:3000/api/health/ready"]
       interval: 2s
       timeout: 2s
       retries: 30
