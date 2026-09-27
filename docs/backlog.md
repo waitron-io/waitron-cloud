@@ -21,14 +21,18 @@ No public cloud service is deployed. This file owns cloud product and platform w
 Waitron's backlog owns the on-prem application and its side of the integration.
 
 Start with the [product discussion](product-and-platform.md). The
+[launch evidence boundary](launch-evidence.md) separates the completed local milestone
+from the provider, policy and live tests still required before public exposure. The
 [inherited inventory](reference/2026-08-29-cloud-services-inventory.md) holds the wider
 candidate list and previous commercial reasoning. Remote access and backups are the
-agreed initial services. The first integration milestone is agreed; detailed
-implementation and release scope remain open.
+agreed initial services. The first integration milestone is complete locally; the
+production release scope remains open.
 
 ## First working milestone
 
-Use two test venues sharing one cell. Implement and verify in this order:
+The [combined local receipt](launch-evidence.md#read-the-local-evidence-narrowly)
+now verifies these steps with two test venues. Repeat them against the selected
+deployment before treating the milestone as launch evidence:
 
 1. Connect a venue through owner approval, assigned names and venue-scoped credentials.
 2. Prove public cloud inspection and staff TLS passthrough, including isolation between
@@ -123,9 +127,12 @@ remains a separate exchange requiring both Cloud and local administrator proof.
 
 ## Initial focus
 
-- Launch first in Spain on AWS. Verify the region and required services against the
-  residency policy before provisioning. Preserve support for other countries and
-  Google Cloud in the design; implement and validate those deployments later.
+- Launch first in Spain on AWS. AWS documents Europe (Spain) as `eu-south-2` and
+  lists candidate services for the initial architecture, but no Waitron account or
+  resource has been configured. Use the [launch evidence boundary](launch-evidence.md)
+  to select each service against the adopted residency policy before provisioning.
+  Preserve support for other countries and Google Cloud in the design; implement and
+  validate those deployments later.
 - Make routine customer journeys self-service, aiming to operate without a dedicated
   support team. Cover setup, account management, billing, troubleshooting, backup
   recovery and cancellation with clear status, actionable errors and safe retries.
@@ -222,12 +229,12 @@ mobile notifications separately.
 | --- | --- |
 | Customer model | Support an organisation with several legal businesses and tax identities across countries from the outset. A venue belongs to one organisation at a time. Focus signup on one owner with one venue or several venues in the same city; defer the ownership-transfer workflow. |
 | Cloud staff access | The disabled-by-default [temporary support grant core](temporary-support-grants.md) now records a current owner's approval for a named, separately eligible platform account, exact configured actions, an optional venue, explicit expiry and early revocation. Transactional enforcement rechecks expiry, the original approver and platform eligibility around protected database work, while fixed audit events omit reason and request data. No route or production action is configured. Define platform roles, eligible permission and action catalogues, customer approver policy and the separately authorised emergency route. Possible on-prem SSH support still requires explicit server approval, a limited period and active-session termination on expiry or revocation. |
-| Residency | Spain is the first deployment country. Define the country policy for operational data, backups, archives, analytics, identities, logs and messages; verify AWS service locations and actual obligations before making customer promises. |
+| Residency | Spain is the first deployment country. AWS documents the intended `eu-south-2` region, but region availability is not a residency promise. Define the policy for operational data, backups, archives, analytics, identities, logs, keys, messages and support access; map roles, providers, subprocessors, access locations, contracts and transfer safeguards before provisioning or making customer claims. See the [launch evidence boundary](launch-evidence.md). |
 | Cells | Venues are independently placed, with a shared gateway per cell and stable customer-facing addresses on movement. The local two-cell workflow now stages a revision-bound destination, cancels a failed apply without replacing the source, requires a tested destination manifest sequence before commit, preserves hostnames/certificates and publishes newer source/destination manifests. Two 2026-09-26 Docker runs reconnected the fresh destination peer in 1,321 ms and 1,486 ms; the second receipt names clean head `e4f9356`, while the other venue stayed source-only. These are not production targets. Define group size, availability-zone layout and recovery-time objective; repeat movement with the selected gateway deployment, provider network, DNS/certificate reconciler and appliance automation. Keep backups and portal recovery independent of gateway machines. |
-| Provider support | AWS is the first provider, deploying in Spain. Select and verify the required region and services. Keep Google Cloud as a future target and define the evidence needed to support it. Decide separately whether cross-provider failover is wanted. |
+| Provider support | AWS is the first provider and `eu-south-2` is the verified regional candidate. Select the exact RDS, S3, compute, ingress, DNS, certificate, key and monitoring configuration in the real account; SES currently has no Spain endpoint, so administrative email needs a separately approved relay. Keep Google Cloud Madrid (`europe-southwest1`) as a future target that must pass the same service-by-service gate. Decide separately whether cross-provider failover is wanted. |
 | Product packages | Remote access and backups are the initial paid services. Address lookup and transactional account email are planned free services for open-source Waitron with a Cloud login and per-user limits; mobile notifications remain a candidate. Define their release scope, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
 | Usage policy | Define lookup and other usage units, customer visibility, allowances and excess-use behaviour. Decide which measurements affect pricing and how retries, failed calls, cached results and batches count. |
-| Waitron boundary | Signup inside Waitron, distinct Cloud and local staff logins, explicit identity linking and an independent Cloud portal are agreed. Venue linking requires Cloud permission to add venues and local administrator approval; one person or different people may provide them. Define the approval exchange, ownership proof, already-linked venue handling, configuration, credentials, status and version compatibility. |
+| Waitron boundary | Signup inside Waitron, distinct Cloud and local staff logins, explicit identity linking and an independent Cloud portal are agreed. The signed matching-code exchange now requires live Cloud and local authority, binds one organisation per venue, handles retries and existing links, and issues renewable installation credentials. Keep the versioned contract and compatibility gates current; production configuration delivery, diagnostics and deployment remain open. |
 | Server lifecycle | One guided replacement flow covers planned upgrades and server failure, preserving venue, subscription and customer-facing addresses. Use fresh installation credentials, verify restored data before trading, retire old credentials and follow Waitron's activation rules. Specify final-backup handover, concurrent requests, interrupted replacement and a returning old server. Define connection and standalone revocation, including the latter's effects on subscriptions, retained backups and reconnection. |
 | Recovery promise | Specify tolerated data loss, recovery time and promotion authority for each service. Existing Waitron designs use human promotion; automation is not approved by this discussion. |
 | Backup recovery | Self-service restoration is agreed; staff intervention is an exceptional fallback. Use continuous backups for the latest recoverable version and retained snapshots for archives or missing continuous data. Start with daily snapshots for 30 days, monthly snapshots for 12 months and longer paid retention for selected snapshots. Preserve the last verified snapshot against automatic expiry while subscribed, marking it out of date when backups stop. Use Cloud-managed recovery without a saved owner key; validate the inherited hourly stream snapshot/30-day retention baseline and define verification, schedule details, extended-retention terms and prices, and independent storage/deletion controls. Test recovery with continuous data absent. |
@@ -374,20 +381,20 @@ mobile notifications separately.
   organisations that can contain several legal businesses across countries. Include Cloud staff logins
   and explicit links between distinct Cloud and local identities; local till staff
   need no Cloud account. Support one Cloud login managing several authorised venues
-  and separate platform permissions. Implement the agreed support approval and expiry policy.
-  Define emergency authorisation and the platform-role audit events not covered by the
-  customer security trail. Review
+  and separate platform permissions. The temporary support-grant core now implements
+  customer approval, configured eligibility, expiry, early revocation and redacted
+  immutable events, with every action disabled by default. Define the platform role and
+  action catalogues, emergency authorisation and the audit events not covered by the
+  customer security trail before enabling it. Review
   database and module dependencies, and establish how security fixes reach both codebases.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
   services, usage accounting, trials, failed payment and cancellation.
-- **Venue and node registration.** Implement the agreed signup from Waitron now that its
-  SQLite storage switch has landed. The Cloud account backend creates a new customer's organisation
-  and first legal business; connect it to the Waitron journey using confirmed details.
-  Require Cloud approval from someone permitted to add venues and local administrator
-  approval before linking. Start with one owner providing both approvals in a single
-  action. Preserve the policy allowing different approvers; design that workflow when
-  needed. Enforce one organisation per venue. Define handling
-  for existing links, machine identities, credential renewal, replacement and revocation.
+- **Venue and node registration.** The agreed Waitron signup and connection journey is
+  implemented locally. The Cloud account backend creates a new customer's organisation
+  and first legal business. Signed matching-code pairing requires current Cloud approval
+  to add venues and current local administrator approval, supports one person holding both
+  permissions, enforces one organisation per venue, and handles existing links, renewable
+  installation credentials, replacement and revocation.
   Keep venue identity stable across replacement and issue fresh installation credentials.
   Test that restoring data alone does not grant primary authority and that a returning
   old server follows Waitron's recovery rules. Cloud revocation alone does not establish

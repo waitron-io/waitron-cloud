@@ -28,8 +28,10 @@ across multiple availability zones. This should let operators upgrade a small gr
 contain failures and move groups between hosts. The proposed residency policy is to
 keep each country's customer data in that country. Spain is the confirmed first
 deployment country and AWS the first provider. Keep the design able to support other
-countries and Google Cloud later. Exact regions and service availability still need
-verification against the residency policy before provisioning.
+countries and Google Cloud later. AWS Europe (Spain) `eu-south-2` and Google Cloud
+Madrid `europe-southwest1` are documented regional candidates. The
+[launch evidence boundary](launch-evidence.md) records the current provider facts and
+the service, contract and live checks still required before provisioning.
 
 These are product requirements and proposed policies. They are not claims that every
 country imposes the same legal storage obligation.
@@ -141,7 +143,9 @@ implementation; registration can proceed independently of the storage engine lan
 Provide an assigned Waitron hostname, such as `venue.waitron.io`, or instructions
 for pointing your own domain to Cloud. The venue server must serve both local and
 internet users over trusted HTTPS, with automated Let's Encrypt certificates.
-The precise public, staff and local hostname layout remains to be designed.
+The local proof now keeps the public Cloud-terminated hostname separate from the
+staff passthrough hostname. The router-specific local override and bootstrap path
+remain deployment work.
 
 The proposed certificate flow keeps staff private keys on the venue server and uses
 DNS validation, with Cloud managing the validation records. Custom domains can
@@ -188,7 +192,8 @@ from the continuous Litestream backup. Retained snapshots serve as point-in-time
 archives and as a fallback if the continuous backup data disappears. A snapshot must
 remain restorable without the continuous backup data it is intended to protect against
 losing. Storage layout, deletion permissions and retention need to preserve that
-independence; the exact mechanism remains to be designed and tested.
+independence. The local proof now restores both paths independently with scoped
+storage authority; the selected provider must pass the same checks.
 
 Confirmed starting snapshot policy: take daily snapshots and retain them for 30 days,
 and retain monthly snapshots for 12 months. Offer longer paid retention for snapshots
@@ -560,6 +565,11 @@ services. Google Cloud remains a future deployment target; define the evidence n
 to support it before claiming compatibility. The first deployment does not settle
 cross-provider failover or the eventual cell and availability-zone layout.
 
+AWS documents Europe (Spain) as `eu-south-2`, with three stable Availability Zone
+IDs. Google documents Madrid as `europe-southwest1`, with three zones. These facts
+identify candidates only. Follow the [launch evidence gate](launch-evidence.md) before
+describing either provider as deployed or supported.
+
 Describe the capability in product code and put provider SDKs and resource identifiers
 behind a small integration layer. Provisioning will still need provider-specific
 implementations. Initial interpretation: a cell can run on either provider. Active
@@ -588,7 +598,7 @@ browser push, SMS or several of these.
 
 Provider service coverage must be checked country by country. For example, the
 [SES endpoint list](https://docs.aws.amazon.com/general/latest/gr/ses.html) checked on
-2026-09-22 does not list Spain. Prefer Spain for administrative email processing too.
+2026-09-27 does not list Spain. Prefer Spain for administrative email processing too.
 The [production email adapter](production-email-implementation.md) uses authenticated
 TLS SMTP so the relay can be chosen independently of compute. Acumbamail's terms
 place its servers in Madrid; verify the selected service's processing, retention and
@@ -624,7 +634,8 @@ and [registration plan](registration-implementation-plan.md) define the build sc
 
 The separate Cloud portal lets you manage services and recovery when your on-prem
 server is unavailable. Its login and account recovery must work independently of
-that server. The exact recovery operations remain to be designed.
+that server. Owner-approved continuous and verified-snapshot recovery are implemented
+locally. Production provider access, final-write handover and activation remain open.
 
 The proposed service lifecycle shows the country, terms and price before subscribing.
 Cloud provisions resources, reports progress and issues the box credentials scoped
@@ -633,8 +644,9 @@ a clear lifecycle.
 
 Payment success, account creation and resource provisioning can finish at different
 times. Model those states explicitly so retrying signup cannot charge twice or leave
-an unusable subscription. The ownership proof, identity-linking protocol and handling
-of a venue already connected to an organisation remain implementation decisions.
+an unusable subscription. The signed matching-code protocol now proves Cloud and local
+authority, binds the venue to one organisation and reconciles existing links. Checkout,
+subscription state and provider provisioning remain implementation work.
 
 ## Questions for the next discussion
 
@@ -647,9 +659,10 @@ of a venue already connected to an organisation remain implementation decisions.
   and movement? Venue placement is independent of organisation membership.
 - What availability promise does each service make? How much recent data can recovery
   lose, how long may it take, and who authorises promotion?
-- Which AWS services and region will the initial Spain deployment use, and do their
-  processing and storage locations meet the residency policy? What evidence is needed
-  before Google Cloud is called supported?
+- Which exact AWS service configurations, access paths and contracts will implement the
+  initial `eu-south-2` deployment, and do they meet the adopted residency policy? The
+  [launch evidence boundary](launch-evidence.md) defines what a future Google Cloud
+  deployment must prove before it is called supported.
 - Are services purchased individually, in bundles, or both? What happens to retained
   data and access after cancellation or failed payment?
 - What tests and costs validate the inherited proposal of hourly stream snapshots
