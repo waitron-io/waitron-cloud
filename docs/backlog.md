@@ -480,7 +480,7 @@ mobile notifications separately.
   details. The [reproducible local deployment](local-deployment.md) now packages the API,
   durable workers, PostgreSQL, Mailpit, TLS object storage and empty-route gateway in one
   loopback-only Compose stack. Its executable receipt proves clean installation, restart,
-  same-schema image recreation, 25 migrations, stable generated identity, retained database
+  same-schema image recreation, 26 migrations, stable generated identity, retained database
   and storage markers, and exact-project cleanup. The [database recovery drill](database-recovery.md)
   separately proves a physical standby promotion under restricted local credentials, exact
   operation replay, worker-claim recovery and tenant isolation, with zero owned resources
