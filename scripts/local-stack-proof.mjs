@@ -4,7 +4,7 @@ import {writeFile} from 'node:fs/promises';
 import {createServer} from 'node:net';
 import {resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
-import {requestAccountHealth} from './local-stack-compose.mjs';
+import {parseComposeServices,requestAccountHealth,stackReadiness} from './local-stack-compose.mjs';
 import {verifyLocalStackReceipt} from './verify-local-stack-receipt.mjs';
 
 const output=resolve(process.argv[2]??'/tmp/waitron-cloud-local-stack-receipt.json');
@@ -16,12 +16,12 @@ const compose=(...args)=>run('docker',['compose','-p',project,'--env-file','depl
 const composeOutput=(...args)=>run('docker',['compose','-p',project,'--env-file','deploy/local-stack/local.env',...args],{capture:true});
 async function port(){const server=createServer();await new Promise((accept,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',accept);});const value=server.address().port;await new Promise((accept,reject)=>server.close(error=>error?reject(error):accept()));return value;}
 for(const name of ['ACCOUNT','POSTGRES','MAILPIT_SMTP','MAILPIT_UI','STORAGE','GATEWAY_TLS','GATEWAY_WIREGUARD'])commandEnvironment[`LOCAL_STACK_${name}_PORT`]=String(await port());
-const required=['account','email-worker','gateway','gateway-manifest','mailpit','monitor-worker','postgres','remote-probe','storage'],healthServices=new Set(['account','gateway','mailpit','postgres','storage']);
-function services(){const text=composeOutput('ps','-a','--format','json').trim();if(!text)return[];return text.startsWith('[')?JSON.parse(text):text.split('\n').map(line=>JSON.parse(line));}
+const required=['account','email-worker','gateway','gateway-manifest','mailpit','monitor-worker','postgres','remote-probe','storage'];
+function services(){return parseComposeServices(composeOutput('ps','-a','--format','json'));}
 async function waitForStack(){
  const deadline=Date.now()+120000;let latest=[];
- while(Date.now()<deadline){latest=services();const byName=new Map(latest.map(item=>[item.Service,item]));const ready=required.every(name=>byName.get(name)?.State==='running'&&(!healthServices.has(name)||byName.get(name)?.Health==='healthy'));
-  if(ready)return [...required];const failed=latest.find(item=>item.State==='exited'&&![0,'0'].includes(item.ExitCode));if(failed)throw new Error(`local stack service failed: ${failed.Service}`);await delay(500);}
+ while(Date.now()<deadline){latest=services();const {ready,failed}=stackReadiness(latest);
+  if(ready)return [...required];if(failed)throw new Error(`local stack service failed: ${failed}`);await delay(500);}
  throw new Error('local stack health timeout');
 }
 function waitJobs(){compose('wait','bootstrap','migrate','usage-reconciler');}

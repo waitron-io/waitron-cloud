@@ -103,14 +103,14 @@
 - Produces: `pnpm proof:local-stack [receipt]` and `pnpm verify:local-stack <receipt>`.
 - Receipt schema version 1 records exact Cloud head/dirty state, project name, loopback bindings, image IDs, migration count, configuration fingerprints, database/storage persistence, phase timings and cleanup.
 
-- [ ] **Step 1: Write failing receipt-verifier tests** for a complete fixture and mutations covering missing health, public bindings, changed identity, missing marker/object, absent upgrade, dirty source and incomplete cleanup.
-- [ ] **Step 2: Run the verifier tests** and confirm failure because the verifier is absent.
-- [ ] **Step 3: Implement the strict verifier** with exact keys, safe integer/timestamp bounds and no secret-bearing fields.
-- [ ] **Step 4: Write the proof orchestrator** using a random Compose project and random loopback ports. In `finally`, run `docker compose down --volumes --remove-orphans` for that exact project.
-- [ ] **Step 5: Exercise clean install**: build, start with empty volumes, wait for healthy services, query API liveness/readiness, verify gateway status and storage TLS, count migrations, write a database marker and storage object.
-- [ ] **Step 6: Exercise restart**: stop/start the same project and prove marker, object and configuration fingerprints remain.
-- [ ] **Step 7: Exercise upgrade**: rebuild and force-recreate Cloud services, rerun migrations and prove the same evidence remains; record explicit rollback exclusions.
-- [ ] **Step 8: Run the verifier mutation suite and real proof**, retain the receipt path and timings, then commit with sign-off: `Prove local stack lifecycle`.
+- [x] **Step 1: Write failing receipt-verifier tests** for a complete fixture and mutations covering missing health, public bindings, changed identity, missing marker/object, absent upgrade, dirty source and incomplete cleanup.
+- [x] **Step 2: Run the verifier tests** and confirm failure because the verifier is absent.
+- [x] **Step 3: Implement the strict verifier** with exact keys, safe integer/timestamp bounds and no secret-bearing fields.
+- [x] **Step 4: Write the proof orchestrator** using a random Compose project and random loopback ports. In `finally`, run `docker compose down --volumes --remove-orphans` for that exact project.
+- [x] **Step 5: Exercise clean install**: build, start with empty volumes, wait for healthy services, query API liveness/readiness, verify gateway status and storage TLS, count migrations, write a database marker and storage object.
+- [x] **Step 6: Exercise restart**: stop/start the same project and prove marker, object and configuration fingerprints remain.
+- [x] **Step 7: Exercise upgrade**: rebuild and force-recreate Cloud services, rerun migrations and prove the same evidence remains; record explicit rollback exclusions.
+- [x] **Step 8: Run the verifier mutation suite and real proof**, retain the receipt path and timings, then commit with sign-off: `Prove local stack lifecycle`.
 
 ### Task 5: Operator guide and backlog reconciliation
 
