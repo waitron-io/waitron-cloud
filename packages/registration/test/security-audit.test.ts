@@ -46,6 +46,23 @@ test('writer returns one stable fixed-shape event and rejects a conflicting retr
  assert.equal((await pool.query('SELECT count(*) FROM security_audit_events')).rows[0].count,'1');
 });
 
+test('support lifecycle and access events export fixed redacted shapes',async()=>{
+ const grantId=randomUUID(),platformAccountId=randomUUID(),operationId=randomUUID();
+ const fixtureSecrets=['customer asked about terminal 4','support.customer.read','session-secret'];
+ const events=[
+  {organisationId:organisation,venueId:null,type:'support.granted',actorKind:'account',actorId:owner,subjectKind:'support_grant',subjectId:grantId,sourceId:grantId},
+  {organisationId:organisation,venueId:venue,type:'support.revoked',actorKind:'account',actorId:owner,subjectKind:'support_grant',subjectId:grantId,sourceId:grantId},
+  {organisationId:organisation,venueId:venue,type:'support.accessed',actorKind:'platform_account',actorId:platformAccountId,subjectKind:'support_grant',subjectId:grantId,sourceId:operationId},
+ ] as const;
+ for(const event of events)await transaction(pool,client=>recordSecurityAuditEvent(client,event));
+ const page=await store.page(token,{organisationId:organisation,limit:10});
+ assert.deepEqual(new Set(page.events.map(event=>event.type)),new Set(['support.granted','support.revoked','support.accessed']));
+ for(const event of page.events)assert.deepEqual(Object.keys(event).sort(),['actorId','actorKind','id','occurredAt','organisationId','subjectId','subjectKind','type','venueId']);
+ const exported=JSON.stringify(page);
+ for(const secret of fixtureSecrets)assert.equal(exported.includes(secret),false);
+ for(const forbidden of ['reason','actions','parameters','result'])assert.equal(exported.includes(`"${forbidden}"`),false);
+});
+
 test('audit insert rolls back with its protected action and rows reject mutation',async()=>{
  const rolled=input();
  await assert.rejects(transaction(pool,async client=>{await recordSecurityAuditEvent(client,rolled);throw new Error('action failed');}),/action failed/);

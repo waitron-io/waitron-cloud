@@ -3,9 +3,9 @@ import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
 
-export type SecurityAuditEventType='pairing.cloud_approved'|'pairing.local_approved'|'installation.credentials_renewed'|'installation.revoked'|'recovery.approved'|'replacement.approved';
-export type SecurityAuditActorKind='account'|'installation'|'local_authority';
-export type SecurityAuditSubjectKind='pairing_request'|'installation'|'recovery'|'replacement';
+export type SecurityAuditEventType='pairing.cloud_approved'|'pairing.local_approved'|'installation.credentials_renewed'|'installation.revoked'|'recovery.approved'|'replacement.approved'|'support.granted'|'support.revoked'|'support.accessed';
+export type SecurityAuditActorKind='account'|'installation'|'local_authority'|'platform_account';
+export type SecurityAuditSubjectKind='pairing_request'|'installation'|'recovery'|'replacement'|'support_grant';
 export interface SecurityAuditInput {
  organisationId:string;venueId:string|null;type:SecurityAuditEventType;actorKind:SecurityAuditActorKind;actorId:string;
  subjectKind:SecurityAuditSubjectKind;subjectId:string;sourceId:string;
@@ -17,13 +17,16 @@ export class SecurityAuditError extends Error {
  constructor(code:SecurityAuditError['code']){super(code);this.name='SecurityAuditError';this.code=code;}
 }
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const shapes:Record<SecurityAuditEventType,{actors:SecurityAuditActorKind[];subject:SecurityAuditSubjectKind;venue:boolean}>={
- 'pairing.cloud_approved':{actors:['account'],subject:'pairing_request',venue:false},
- 'pairing.local_approved':{actors:['local_authority'],subject:'pairing_request',venue:true},
- 'installation.credentials_renewed':{actors:['installation'],subject:'installation',venue:true},
- 'installation.revoked':{actors:['account','installation'],subject:'installation',venue:true},
- 'recovery.approved':{actors:['account'],subject:'recovery',venue:true},
- 'replacement.approved':{actors:['account'],subject:'replacement',venue:true},
+const shapes:Record<SecurityAuditEventType,{actors:SecurityAuditActorKind[];subject:SecurityAuditSubjectKind;venue:'required'|'forbidden'|'optional'}>={
+ 'pairing.cloud_approved':{actors:['account'],subject:'pairing_request',venue:'forbidden'},
+ 'pairing.local_approved':{actors:['local_authority'],subject:'pairing_request',venue:'required'},
+ 'installation.credentials_renewed':{actors:['installation'],subject:'installation',venue:'required'},
+ 'installation.revoked':{actors:['account','installation'],subject:'installation',venue:'required'},
+ 'recovery.approved':{actors:['account'],subject:'recovery',venue:'required'},
+ 'replacement.approved':{actors:['account'],subject:'replacement',venue:'required'},
+ 'support.granted':{actors:['account'],subject:'support_grant',venue:'optional'},
+ 'support.revoked':{actors:['account'],subject:'support_grant',venue:'optional'},
+ 'support.accessed':{actors:['platform_account'],subject:'support_grant',venue:'optional'},
 };
 function invalid():never{throw new SecurityAuditError('invalid_input');}
 export function securityAuditSourceId(type:SecurityAuditEventType,...ids:string[]):string{
@@ -36,7 +39,9 @@ function validate(input:SecurityAuditInput){
  if(!input||typeof input!=='object'||Object.keys(input).sort().join(',')!=='actorId,actorKind,organisationId,sourceId,subjectId,subjectKind,type,venueId')invalid();
  if(![input.organisationId,input.actorId,input.subjectId,input.sourceId].every(id=>typeof id==='string'&&uuid.test(id)))invalid();
  if(input.venueId!==null&&(typeof input.venueId!=='string'||!uuid.test(input.venueId)))invalid();
- const shape=shapes[input.type];if(!shape||!shape.actors.includes(input.actorKind)||shape.subject!==input.subjectKind||shape.venue!==(input.venueId!==null))invalid();
+ const shape=shapes[input.type],hasVenue=input.venueId!==null;
+ if(!shape||!shape.actors.includes(input.actorKind)||shape.subject!==input.subjectKind
+  ||shape.venue==='required'&&!hasVenue||shape.venue==='forbidden'&&hasVenue)invalid();
 }
 interface Row {id:string;occurred_at:Date;occurred_at_cursor:string;organisation_id:string;venue_id:string|null;event_type:SecurityAuditEventType;actor_kind:SecurityAuditActorKind;actor_id:string;subject_kind:SecurityAuditSubjectKind;subject_id:string;source_id:string}
 const cursorTimeSql=`to_char(occurred_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
