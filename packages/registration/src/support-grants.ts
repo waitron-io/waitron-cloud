@@ -1,6 +1,6 @@
 import type {Pool,PoolClient} from 'pg';
 import {IdentityError,resolveSession} from '@waitron-cloud/identity';
-import {recordSecurityAuditEvent} from './security-audit.ts';
+import {recordSecurityAuditEvent,securityAuditSourceId} from './security-audit.ts';
 import {transaction} from './transaction.ts';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -12,6 +12,9 @@ export interface SupportGrantApproval {
 }
 export interface SupportGrant extends SupportGrantApproval {
  approvedByAccountId:string;createdAt:string;revokedAt:string|null;revokedByAccountId:string|null;
+}
+export interface SupportGrantAuthorization {
+ grantId:string;platformAccountId:string;organisationId:string;venueId:string|null;action:string;operationId:string;
 }
 export class SupportGrantError extends Error {
  readonly code:'invalid_input'|'permission_denied'|'not_configured'|'grant_unavailable'|'grant_conflict'|'grant_expired'|'grant_revoked';
@@ -37,6 +40,13 @@ function approval(input:SupportGrantApproval,allowed:readonly string[]):SupportG
   ||typeof input.reason!=='string'||input.reason!==input.reason.trim()||input.reason.length<1||input.reason.length>500
   ||typeof input.expiresAt!=='string'||!Number.isFinite(Date.parse(input.expiresAt))||new Date(input.expiresAt).toISOString()!==input.expiresAt)fail('invalid_input');
  return {...input,actions:actions(input.actions,allowed)};
+}
+function authorization(input:SupportGrantAuthorization):SupportGrantAuthorization{
+ if(!input||typeof input!=='object'||Object.keys(input).sort().join(',')!=='action,grantId,operationId,organisationId,platformAccountId,venueId'
+  ||![input.grantId,input.operationId,input.organisationId,input.platformAccountId].every(value=>typeof value==='string'&&uuid.test(value))
+  ||input.venueId!==null&&(typeof input.venueId!=='string'||!uuid.test(input.venueId))
+  ||typeof input.action!=='string'||!identifier.test(input.action))fail('invalid_input');
+ return {...input};
 }
 function view(row:GrantRow):SupportGrant{return{
  id:row.id,organisationId:row.organisation_id,venueId:row.venue_id,platformAccountId:row.platform_account_id,
@@ -103,6 +113,30 @@ export class SupportGrantStore {
     await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:row.venue_id,type:'support.revoked',actorKind:'account',actorId:actor.accountId,subjectKind:'support_grant',subjectId:row.id,sourceId:row.id});
    }
    await owner(client,actor.accountId,row.organisation_id);await session(client,token,csrfToken);return view(row);
+  });
+ }
+
+ async authorize<T>(input:SupportGrantAuthorization,protectedAction:(client:PoolClient)=>Promise<T>):Promise<T>{
+  this.#requireConfigured();const requested=authorization(input);
+  if(typeof protectedAction!=='function')fail('invalid_input');
+  if(!this.#grantableActions.includes(requested.action))fail('permission_denied');
+  return transaction(this.#pool,async client=>{
+   const row=(await client.query<GrantRow>('SELECT * FROM support_grants WHERE id=$1 FOR SHARE',[requested.grantId])).rows[0];
+   if(!row||row.organisation_id!==requested.organisationId||row.platform_account_id!==requested.platformAccountId
+    ||row.venue_id!==null&&row.venue_id!==requested.venueId||!row.actions.includes(requested.action))fail('grant_unavailable');
+   if(row.revoked_at!==null)fail('grant_revoked');
+   if(row.venue_id===null)await venue(client,requested.venueId,row.organisation_id);
+   const before:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
+   if(row.expires_at.getTime()<=before.getTime())fail('grant_expired');
+   await eligible(client,row.platform_account_id,this.#eligibilityPermissions);
+   await owner(client,row.approved_by_account_id,row.organisation_id);
+   const result=await protectedAction(client);
+   const after:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
+   if(row.expires_at.getTime()<=after.getTime())fail('grant_expired');
+   await eligible(client,row.platform_account_id,this.#eligibilityPermissions);
+   await owner(client,row.approved_by_account_id,row.organisation_id);
+   await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:requested.venueId,type:'support.accessed',actorKind:'platform_account',actorId:row.platform_account_id,subjectKind:'support_grant',subjectId:row.id,sourceId:securityAuditSourceId('support.accessed',row.id,requested.operationId)});
+   return result;
   });
  }
 }
