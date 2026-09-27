@@ -138,21 +138,52 @@ because the tunnel connected successfully.
 | --- | --- |
 | Continuous replica | Waitron writes the Litestream replica directly to its assigned object-store scope. Cloud verifies Waitron's signed pointer and freezes that generation for recovery. Its `writtenAt` is the recoverable time; Cloud does not invent a time from an upload. The local SeaweedFS proof covers exact prefix isolation and recovery, while the selected production provider still needs the same conditional-write and recovery checks. |
 | Retained snapshot | Waitron creates a consistent, independently recoverable artifact using its manifest and module contributions. Cloud retains, catalogues and verifies it under the agreed daily/monthly policy. Do not expose a raw SQLite file as a complete server backup unless all required state is accounted for. |
-| Configuration and module-owned state | Waitron declares the exact captured contents and missing-optional-file rules. The inspected archive captures `backup.env` and `modules.json` when present. Restore must reconcile Cloud access settings with the new installation rather than reactivate obsolete credentials. |
-| Backup decryption and vault keys | Cloud-managed recovery delivers only the required key versions to the authorised target through a protected channel. Key references in catalogue metadata are not secret values. Keep old key versions usable while retained backups require them. Preserve customer-managed archive key custody. |
-| Machine and TLS keys | Issue fresh Cloud installation credentials. Do not copy retired machine credentials into an active target. Staff TLS keys retain the proposed venue-only custody; define fresh certificate provisioning separately from recovery of application secrets. |
+| Configuration and module-owned state | Waitron declares the exact captured contents and missing-optional-file rules. The current archive captures `backup.env` and `modules.json` when present. Managed archive restore discards `backup.env`, because a replacement must not resume the source destination. |
+| Backup decryption and application vault keys | Cloud-managed recovery delivers only the required backup-key version to the authorised target. The encrypted Waitron state currently carries `secrets.env`, which holds the application vault key. The version 3 local receipt proves that this vault state differs from the backup recovery key and survives both restore paths. Preserve customer-managed archive key custody. |
+| Machine and TLS keys | Issue fresh Cloud installation credentials. `cloud-connection.json` and the separate `cloud-staff.*` certificate files stay outside both the required and optional archive state. The local CA and server keys under `tls/` remain part of Waitron's recovery state; they are not the Cloud staff TLS key. |
 
-Waitron's [state-secret list](https://github.com/clintongormley/waitron/blob/4ce2db502173d87d14d2e1aad5dc92b19be38363/apps/server/src/state-secrets.ts)
-currently includes the vault key, trading identity and TLS CA/leaf files. Its
-[optional-state list](https://github.com/clintongormley/waitron/blob/4ce2db502173d87d14d2e1aad5dc92b19be38363/apps/server/src/backup-optional-state.ts)
-includes backup settings. Do not upload that archive unchanged under the managed
-Cloud policy until per-secret capture rules reconcile those contents with fresh
-installation credentials and venue-only staff TLS key custody.
+Waitron's current [state-secret list](https://github.com/waitron-io/waitron/blob/005f791c239aae9ac21cb5a8f52895c604889611/apps/server/src/state-secrets.ts)
+includes the application vault key, trading identity and local TLS CA/leaf files. Its
+[optional-state list](https://github.com/waitron-io/waitron/blob/005f791c239aae9ac21cb5a8f52895c604889611/apps/server/src/backup-optional-state.ts)
+includes backup settings. The managed restore consumer removes those settings before
+placement. Cloud machine authority and staff TLS files are not members of either list.
 
-The external vault-key marker described in the fiscal-certificate design is not a
-field in the inspected `BackupManifest` v1. Cloud must negotiate support with Waitron,
-not infer it from the hosting location. The existing on-prem-to-cloud vault
-re-encryption follow-up remains required for that restore target.
+The current stream and archive consumers both recover the source local node identity.
+Waitron's restore hooks then mint the fresh fiscal series and chain required by that
+recovery. This supersedes the older design split that expected a stream restore to
+claim a new local node. Cloud still registers the replacement as a new installation
+with a new machine key and tunnel key. A Cloud installation identity is not a Waitron
+node identity, and neither one authorises trading by itself.
+
+The version 3 managed-recovery receipt tests these boundaries with real Waitron
+consumers. It restores an older key-version snapshot after rotation, compares the
+application vault state byte for byte, proves both recovered local node IDs, and
+checks that the replacement does not inherit `backup.env`, Cloud machine authority
+or staff TLS material. The replacement then registers with a fresh installation and
+machine public key.
+
+### External vault archive compatibility dependency
+
+No archive extension is needed for the current managed path because its encrypted
+Waitron state contains the application vault key. A future hosted target that keeps
+that key in an external secrets service needs the named `external-vault-archive-v2`
+compatibility dependency before it can capture or restore an archive safely:
+
+1. Waitron versions the manifest and marks `secrets.env` as externally supplied.
+   The manifest carries only an opaque key reference and binding metadata, never key
+   bytes or provider credentials.
+2. Capture refuses an archive that both embeds `secrets.env` and declares it external.
+   Restore refuses an external declaration unless its resolver supplies the exact
+   venue-bound key before any database or identity placement.
+3. Cloud authorises delivery separately from archive decryption, rewraps the vault key
+   for the target installation and records the referenced version. Source Cloud
+   machine credentials and staff TLS keys remain excluded.
+4. Waitron keeps version 1 archives readable through their existing bundled-secret
+   path. An on-premises archive moves to an external-key target only through an
+   explicit re-encryption operation; ordinary download is not that operation.
+
+`BackupManifest` v1 has no external-secret declaration. Do not infer one from a hosting
+location or omit `secrets.env` without the versioned contract above.
 
 ## Recovery, verification and failure handling
 

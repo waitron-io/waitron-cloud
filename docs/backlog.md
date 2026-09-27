@@ -618,12 +618,16 @@ mobile notifications separately.
   The local key drill and two-venue recovery proof test rotation with retained snapshots
   and recovery after loss of the original server without an owner-held backup key. See the
   [existing-design reconciliation](documentation-ownership.md#backup-and-recovery-design-reconciliation).
-  Cloud registration credentials must respect Waitron's different node-identity rules
-  for stream and archive restores. Keep the on-prem-archive-to-cloud vault re-encryption
-  follow-up explicit; it is not proved by an ordinary backup download.
-  Real snapshots now exclude source Cloud credentials and staff TLS keys; the managed
-  recovery path discards old backup settings through a persisted managed-restore marker.
-  The local proof now exercises the actual cold-restore entry point, including its module hooks.
+  The version 3 recovery-boundary receipt now proves the landed consumers rather than
+  the older proposed identity split: both stream and archive restore recover the source
+  local node ID and run Waitron's restore hooks, while replacement registers a distinct
+  Cloud installation with fresh machine authority. It restores an older key-version
+  snapshot after rotation, restores the separate application vault state byte for byte,
+  and inherits no backup destination, Cloud credential or staff TLS material.
+  `BackupManifest` v1 needs no change for this managed path. A future hosted target with
+  an external application-vault key remains blocked on the named
+  `external-vault-archive-v2` compatibility contract and explicit on-premises re-encryption;
+  an ordinary backup download does not satisfy either requirement.
   Owner-approved recovery and replacement now append immutable customer audit events and
   current owners can export them in stable pages. Before production, choose the
   recovery-request/result cutoff, audit retention and account-deletion handling. Closed

@@ -3,10 +3,10 @@ import {test} from 'node:test';
 import {verifyManagedRecoveryReceipt} from './verify-managed-recovery-receipt.mjs';
 import {installationA,managedReceipt,venueA,venueB} from './managed-recovery-receipt.fixture.mjs';
 
-test('accepts the complete measured version 2 receipt',()=>assert.deepEqual(verifyManagedRecoveryReceipt(managedReceipt()),managedReceipt()));
+test('accepts the complete measured version 3 receipt with explicit secret and identity boundaries',()=>assert.deepEqual(verifyManagedRecoveryReceipt(managedReceipt()),managedReceipt()));
 test('accepts dirty development evidence',()=>{const receipt=managedReceipt();receipt.cloudDirty=true;receipt.waitronDirty=true;assert.deepEqual(verifyManagedRecoveryReceipt(receipt),receipt);});
 for(const [name,mutate] of [
- ['version 1 evidence',r=>{r.version=1;}],
+ ['version 2 evidence without explicit boundaries',r=>{r.version=2;delete r.boundaries;}],
  ['missing phase',r=>r.phases.pop()],
  ['mismatched database heads',r=>{r.continuous.restoredHead='c'.repeat(64);}],
  ['invented recovery time',r=>{r.continuous.recoverableAt='2026-09-25T21:00:02.000Z';}],
@@ -17,6 +17,17 @@ for(const [name,mutate] of [
  ['absent retry evidence',r=>{r.continuous.retry.interrupted=false;}],
  ['zero continuous restore timing',r=>{r.continuous.restoreMs=0;}],
  ['zero snapshot restore timing',r=>{r.snapshotFallback.restoreMs=0;}],
+ ['snapshot key not older than the active key',r=>{r.boundaries.managedKeys.activeKeyVersion=r.boundaries.managedKeys.snapshotKeyVersion;}],
+ ['snapshot not restored after rotation',r=>{r.boundaries.managedKeys.restoredAfterRotation=false;}],
+ ['recovery key confused with the application vault',r=>{r.boundaries.managedKeys.recoveryKeyDistinctFromApplicationVault=false;}],
+ ['application vault missing after archive restore',r=>{r.boundaries.restoredArchive.applicationVaultRestored=false;}],
+ ['backup destination inherited',r=>{r.boundaries.restoredArchive.backupDestinationInherited=true;}],
+ ['Cloud machine authority inherited',r=>{r.boundaries.restoredArchive.cloudAuthorityInherited=true;}],
+ ['staff TLS inherited',r=>{r.boundaries.restoredArchive.staffTlsInherited=true;}],
+ ['continuous restore changed the local node',r=>{r.boundaries.nodeIdentity.continuousRestoredNodeId='72345678-1234-4234-8234-123456789abc';}],
+ ['snapshot restore changed the local node',r=>{r.boundaries.nodeIdentity.snapshotRestoredNodeId='72345678-1234-4234-8234-123456789abc';}],
+ ['replacement reused the Cloud installation',r=>{r.boundaries.nodeIdentity.replacementInstallationFresh=false;}],
+ ['replacement reused machine authority',r=>{r.boundaries.nodeIdentity.replacementMachineAuthorityFresh=false;}],
  ['replacement for another venue',r=>{r.replacement.venueId=venueB;}],
  ['same replacement installation',r=>{r.replacement.newInstallationId=r.replacement.oldInstallationId;}],
  ['zero replacement timing',r=>{r.replacement.elapsedMs=0;}],
