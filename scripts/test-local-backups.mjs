@@ -4,7 +4,7 @@ import { request as httpsRequest } from "node:https";
 import { createWriteStream } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdtemp, readFile, writeFile, rm, realpath, chmod } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm, realpath, chmod, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -87,6 +87,22 @@ async function root() {
   const dir = await mkdtemp(join(tmpdir(), "cloud-integration-backup-"));
   roots.push(dir);
   return dir;
+}
+async function exists(path) {
+  try {
+    await stat(path);
+    return true;
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
+}
+async function envValue(path, name) {
+  const line = (await readFile(path, "utf8"))
+    .split("\n")
+    .find((candidate) => candidate.startsWith(name + "="));
+  assert(line, `${name} missing from ${path}`);
+  return line.slice(name.length + 1);
 }
 const shellSingle = (value) => `'${value.replaceAll("'", `'"'"'`)}'`;
 async function trustedLitestream(realBinary) {
@@ -385,7 +401,7 @@ try {
             res.on("data", (v) => (text += v));
             res.on("end", () => {
               try {
-                assert.equal(res.statusCode, 200, text);
+                assert.equal(res.statusCode, 200, `${text}\n${server.logs()}`);
                 if (res.headers["set-cookie"])
                   cookie = res.headers["set-cookie"]
                     .map((c) => c.split(";")[0])
@@ -463,11 +479,14 @@ try {
     const captured = await worker(venue.root, "capture", {
       recoveryKey: reservation.recoveryKey,
     });
+    const applicationVault = await readFile(join(venue.root, "secrets.env"), "utf8");
     assert(captured.networkDenied);
     assert(captured.entries.includes("secrets/backup.env"));
+    assert(captured.entries.includes("secrets/secrets.env"));
+    assert(!applicationVault.includes(reservation.recoveryKey));
     assert(
       !captured.entries.some(
-        (n) => n.includes("cloud-connection") || n.includes("cloud-staff.key"),
+        (n) => n.includes("cloud-connection") || n.includes("cloud-staff"),
       ),
     );
     const bytes = await readFile(join(venue.root, "captured.backup.enc"));
@@ -516,7 +535,7 @@ try {
     const target = await root();
     await writeFile(join(target,'input.backup.enc'),bytes,{mode:0o600});
     await worker(target,'restore',{recoveryKey:reservation.recoveryKey,sourceNodeId:point.sourceNodeId,modules:point.modules,expectedVenue:captured.venueName});
-    snapshots.push({ venue, reservation, point, captured, bytes, result,streamKey:internal.keys.streamKey });
+    snapshots.push({ venue, reservation, point, captured, bytes, result,streamKey:internal.keys.streamKey,applicationVault });
   }
   record(
     "both encrypted snapshots restored by Waitron with integrity/schema checks and module hooks while network, subprocess, native-addon, host-read and outside-write permissions were denied",
@@ -820,8 +839,17 @@ try {
     ),
     continuousRestoreMs = performance.now() - continuousRestoreStarted,
     restoredHead = databaseHead(join(continuousTarget, "venue", "venue.db"));
+  const continuousRestoredNodeId = await envValue(
+    join(continuousTarget, "state", "trading.env"),
+    "WAITRON_TILL_NODE_ID",
+  );
   assert.equal(retried.exit, 0, retried.output);
   assert.equal(restoredHead, continuousEntry.sourceHead);
+  assert.equal(continuousRestoredNodeId, continuousEntry.snapshot.point.sourceNodeId);
+  assert.equal(
+    await readFile(join(continuousTarget, "state", "secrets.env"), "utf8"),
+    continuousEntry.snapshot.applicationVault,
+  );
   await recovery.target(continuousId, "restored", continuousProof("restored"));
   await recovery.close(session.token, session.csrfToken, continuousId);
   record(
@@ -908,7 +936,16 @@ try {
       expectedVenue: fallbackEntry.snapshot.captured.venueName,
     }),
     snapshotRestoreMs = performance.now() - snapshotRestoreStarted;
+  const snapshotRestoredNodeId = await envValue(
+    join(fallbackTarget, "trading.env"),
+    "WAITRON_TILL_NODE_ID",
+  );
   assert(fallbackRestored.integrityOk);
+  assert.equal(snapshotRestoredNodeId, fallbackEntry.snapshot.point.sourceNodeId);
+  assert.equal(
+    await readFile(join(fallbackTarget, "secrets.env"), "utf8"),
+    fallbackEntry.snapshot.applicationVault,
+  );
   await recovery.target(fallbackId, "restored", fallbackProof("restored"));
   await recovery.close(session.token, session.csrfToken, fallbackId);
   record(
@@ -920,6 +957,16 @@ try {
   const oldPlacement=await remote.provision(item.venue.registration.installationId,cell,randomBytes(32).toString('base64'));
   const neighbour=await remote.provision(snapshots[1].venue.registration.installationId,cell,randomBytes(32).toString('base64'));
   await catalogue.rotate(item.venue.registration.installationId);
+  const rotatedAt = new Date().toISOString();
+  const activeKeyVersion = Number(
+    (
+      await f.db.pool.query(
+        "SELECT active_key_version FROM backup_locations WHERE venue_id=$1",
+        [item.venue.registration.venueId],
+      )
+    ).rows[0].active_key_version,
+  );
+  assert(activeKeyVersion > item.point.keyVersion);
   const renewed=await captureClient(item.venue.root,'reserve',{id:item.reservation.id});
   assert.equal(renewed.recoveryKey,item.reservation.recoveryKey);
   record('Waitron signed HTTP capture, scoped upload retries, changed-byte publication refusal, publication retries and credential renewal after key rotation');
@@ -973,6 +1020,7 @@ try {
     expectedVenue: item.captured.venueName,
   });
   assert(restored.integrityOk);
+  const restoredAt = new Date().toISOString();
   await recovery.target(operationId, "restored", proof("restored"));
   assert.equal(
     (await recovery.status(session.token, operationId)).status,
@@ -1025,6 +1073,22 @@ try {
   assert.equal((await recovery.status(session.token,request.requestId)).status,'pending','Staging must not report completed restore');
   const completed=await recoveryClient(guided,'restore',{expectedPointId:item.point.id,expectedVenue:item.captured.venueName,expectedSourceNodeId:item.point.sourceNodeId,expectedModules:item.point.modules});
   assert.equal(completed.restored,true);
+  const restoredArchive = {
+    applicationVaultRestored:
+      (await readFile(join(guided, "state", "secrets.env"), "utf8")) ===
+      item.applicationVault,
+    backupDestinationInherited: await exists(join(guided, "state", "backup.env")),
+    cloudAuthorityInherited: await exists(join(guided, "state", "cloud-connection.json")),
+    staffTlsInherited:
+      (await exists(join(guided, "state", "cloud-staff.key"))) ||
+      (await exists(join(guided, "state", "cloud-staff.crt"))),
+  };
+  assert.deepEqual(restoredArchive, {
+    applicationVaultRestored: true,
+    backupDestinationInherited: false,
+    cloudAuthorityInherited: false,
+    staffTlsInherited: false,
+  });
   assert.equal((await recovery.status(session.token,request.requestId)).status,'pending','Only a subsequent report acknowledges the completed local restore');
   await recoveryClient(guided,'report');
   assert.equal((await recovery.status(session.token,request.requestId)).status,'restored');
@@ -1033,6 +1097,10 @@ try {
   record('guided owner HTTP approval survives lost replies; fresh Waitron processes download, validate, stage and cold-restore the bound snapshot without copying keys or inheriting destinations');
   const replacementStarted=performance.now(),proposal=await recoveryClient(guided,'prepareReplacement',{expectedSourceNodeId:item.point.sourceNodeId});
   assert.equal(proposal.state,'awaiting_owner');assert.equal(proposal.oldInstallationId,item.venue.registration.installationId);
+  const sourceCloudAuthority = JSON.parse(
+    await readFile(join(item.venue.root, "cloud-connection.json"), "utf8"),
+  );
+  assert.notEqual(proposal.publicKey, sourceCloudAuthority.publicKey);
   assert.equal((await ownerPost('inspect')).replacement.publicKey,proposal.publicKey);
   const confirmations={oldInstallationId:proposal.oldInstallationId,oldServerUnavailable:'true',confirmReplacement:'true'};
   // Discard confirmation's reply and restart the real client before importing the durable result.
@@ -1078,7 +1146,7 @@ try {
   await assert.rejects(captureClient(guided,'reserve',{stateSubdir:'state',id:fresh.id}));
   record('Cloud owner revocation refuses subsequent Waitron upload-credential renewal');
   const result = {
-    version:2,
+    version:3,
     cloudHead: execFileSync("git", ["rev-parse", "HEAD"], {
       encoding: "utf8",
     }).trim(),
@@ -1100,6 +1168,11 @@ try {
     isolation,
     continuous:{venueId:continuousEntry.snapshot.venue.registration.venueId,sourceHead:continuousEntry.sourceHead,restoredHead,approvedGeneration:continuousEntry.pointer.body.generation,restoredGeneration:continuousEntry.pointer.body.generation,recoverableAt:continuousEntry.observed.recoverableAt,pointerWrittenAt:continuousEntry.pointer.body.writtenAt,restoreMs:continuousRestoreMs,retry:{interrupted:true,cleanTarget:true,succeeded:true}},
     snapshotFallback:{venueId:fallbackEntry.snapshot.venue.registration.venueId,pointId:fallbackEntry.snapshot.point.id,continuousDeleted:true,restoreSucceeded:true,restoreMs:snapshotRestoreMs},
+    boundaries:{
+      managedKeys:{snapshotKeyVersion:item.point.keyVersion,activeKeyVersion,rotatedAt,restoredAt,recoveryKeyAbsentFromApplicationVault:!item.applicationVault.includes(item.reservation.recoveryKey)},
+      restoredArchive,
+      nodeIdentity:{continuousSourceNodeId:continuousEntry.snapshot.point.sourceNodeId,continuousRestoredNodeId,snapshotSourceNodeId:fallbackEntry.snapshot.point.sourceNodeId,snapshotRestoredNodeId,replacementInstallationFresh:connected.registration.installationId!==item.venue.registration.installationId,replacementMachineAuthorityFresh:proposal.publicKey!==sourceCloudAuthority.publicKey},
+    },
     replacement:{venueId:item.venue.registration.venueId,oldInstallationId:item.venue.registration.installationId,newInstallationId:connected.registration.installationId,elapsedMs:replacementMs,oldRecoveryKeyDigest:createHash('sha256').update(item.reservation.recoveryKey).digest('hex'),newRecoveryKeyDigest:createHash('sha256').update(fresh.recoveryKey).digest('hex'),oldAuthorityRefused,newAuthorityWorked:freshPoint.installationId===connected.registration.installationId,routePreserved:{staffHostname:newRoute.staffHostname===oldPlacement.staffHostname,publicHostname:newRoute.publicHostname===oldPlacement.publicHostname,address:newRoute.address===oldPlacement.address,port:newRoute.port===oldPlacement.port,neighbour:neighbourRoute.peerPublicKey===neighbour.peerPublicKey},freshSnapshotPointId:freshPoint.id,freshSnapshotRestored:freshRestored.integrityOk===true},
     activation:'not-performed',
     checks:['real-seaweedfs','real-waitron','verifier-process-isolation','fresh-replacement-authority','no-production-resources'],

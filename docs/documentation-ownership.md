@@ -70,9 +70,10 @@ extra copies remain optional.
 
 Cloud-managed recovery now covers the stream and managed snapshots without a
 separately saved owner key. It must preserve the distinction between backup decryption,
-application vault access and permission to activate a server. Waitron's topology
-section 7.5 gives different node-identity rules for stream and archive restores;
-fresh Cloud registration credentials must respect those rules. Its point-in-time
+application vault access and permission to activate a server. The topology's original
+section 7.5 split is superseded by the landed consumers: both restore paths recover the
+source local node identity and run Waitron's restore hooks, while Cloud registers a
+replacement as a distinct installation with fresh credentials. Its point-in-time
 inspection path must not become an in-place rollback of a live ledger.
 
 The [integration contract](waitron-integration-contract.md) now maps inspected interfaces,

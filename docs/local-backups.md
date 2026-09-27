@@ -40,6 +40,11 @@ pnpm verify:two-venue-milestone \
   /tmp/cloud-two-venue-milestone.json
 ```
 
+The combined milestone receipt is version 2 from D28 onward because it embeds the
+version 3 managed-recovery boundary evidence. Earlier version 1 milestone receipts
+remain historical results; the current verifier rejects them instead of silently
+treating their version 2 managed-recovery component as equivalent.
+
 Use clean Cloud and Waitron checkouts when the receipt is release evidence. A clean
 2026-09-27 run at Cloud `6a7fac4` and Waitron `8dea39b` moved 4 MiB, replaced the
 gateway in 14,967 ms, reconnected a moved venue in 1,570 ms, restored continuous
@@ -115,6 +120,12 @@ file named by `CLOUD_MILESTONE_RECEIPT` is the only receipt it keeps.
   archive. A captured `backup.env` is discarded when restoring this managed test
   replacement, so it cannot resume an old destination. Customer-managed archive
   restore behavior is unchanged.
+- The version 3 receipt makes the secret and identity boundaries explicit. The
+  application vault file in `secrets.env` does not contain the managed recovery key and
+  restores byte for byte. The receipt rejects inherited backup destinations, Cloud
+  machine authority or staff TLS material. It also rejects either restore path if it
+  changes the recovered local node ID, while requiring a fresh Cloud installation and
+  machine public key for the replacement.
 - After stopping the source servers, a disposable process runs Waitron's production
   snapshot worker, exits after upload and resumes from the same encrypted file in a
   fresh process. No new archive is created; the published monthly snapshot restores
@@ -259,9 +270,10 @@ Customer recovery now has a matching-code account flow for verified test snapsho
 The local worker schedules verification, retention
 and abandoned-upload cleanup; the customer catalogue is paginated. Define cancellation/deletion,
 production master-key custody and rewrapping, and deployment container/VM resource quotas for the
-isolated verifier. The local managed-key drill now proves backup of the external key can reopen
-every retained
-version after restart; it does not choose a vault provider or add an in-place rewrap. Run the
+isolated verifier. The local managed-key drill now proves backup of the Cloud master key can
+reopen every retained backup-key version after restart. The real recovery receipt separately
+restores an older key-version snapshot after rotation. Neither proof chooses a vault provider
+or adds an in-place rewrap. Run the
 same provider tests against the selected Spain-region store before any deployment;
 this local result does not establish AWS or Google behavior. Production still needs
 dynamic writer and reader credential delivery and revocation, live DNS and ACME,
@@ -269,6 +281,10 @@ production secret custody and deployment, plus the same scoped rotation, expiry,
 versioning, interruption and conditional-write checks against each selected provider.
 It also needs measured continuous retention, monitoring and scheduling, management-
 database recovery, the planned final-write handover and target activation.
+The current managed archive contains the application vault key inside Waitron's encrypted
+state. A hosted target that keeps that key externally remains blocked on the
+`external-vault-archive-v2` compatibility contract in the
+[integration contract](waitron-integration-contract.md#external-vault-archive-compatibility-dependency).
 
 ## Run background maintenance locally
 

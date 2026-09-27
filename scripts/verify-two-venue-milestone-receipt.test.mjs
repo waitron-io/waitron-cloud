@@ -30,7 +30,7 @@ function remoteReceipt(){return {
  backupContinuity:{version:1,before:[point(venueA,installationA,'a2345678-1234-4234-8234-123456789abc','2026-09-27T00:01:00.000Z'),point(venueB,installationB,'b2345678-1234-4234-8234-123456789abc','2026-09-27T00:01:01.000Z')],after:[point(venueA,installationA,'c2345678-1234-4234-8234-123456789abc','2026-09-27T00:02:00.000Z'),point(venueB,installationB,'d2345678-1234-4234-8234-123456789abc','2026-09-27T00:02:01.000Z')],gatewayReplaced:true,routesRecovered:true,venueSeparationPreserved:true},
 };}
 export function milestoneReceipt(){const managed=managedReceipt();return {
- version:1,cloudHead,waitronHead,cloudDirty:false,waitronDirty:false,
+ version:2,cloudHead,waitronHead,cloudDirty:false,waitronDirty:false,
  phases:['backup-transfer','remote-access','managed-recovery'],
  transfer:transferReceipt(),remote:remoteReceipt(),managedRecovery:managed,
  measurements:{gatewayReplacementMs:1317,cellReconnectionMs:1486,continuousRestoreMs:732,snapshotRestoreMs:418,replacementMs:593},
@@ -40,6 +40,7 @@ export function milestoneReceipt(){const managed=managedReceipt();return {
 test('accepts complete clean evidence from the same Cloud and Waitron heads',()=>assert.deepEqual(verifyTwoVenueMilestoneReceipt(milestoneReceipt()),milestoneReceipt()));
 test('composes the three validated phases in order with their measured timings',()=>{const expected=milestoneReceipt();assert.deepEqual(composeMilestoneReceipt(expected.transfer,expected.remote,expected.managedRecovery),expected);});
 for(const [name,mutate] of [
+ ['legacy top-level version',r=>{r.version=1;}],
  ['dirty Cloud head',r=>{r.cloudDirty=true;}],
  ['dirty Waitron head',r=>{r.waitronDirty=true;}],
  ['mismatched component Cloud head',r=>{r.remote.cloudHead='c'.repeat(40);}],
