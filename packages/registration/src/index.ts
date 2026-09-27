@@ -11,6 +11,7 @@ export { EmailDeliveryError, type EmailDeliveryContext, type EmailDeliveryReceip
 export { createLocalAccountMailer } from './local-mailer.ts';
 export { LocalPasswordCorpus, type PasswordScreeningProvider, type PasswordScreeningResult } from './compromised-passwords.ts';
 export {SecurityAuditError,SecurityAuditStore,recordSecurityAuditEvent,type SecurityAuditActorKind,type SecurityAuditEvent,type SecurityAuditEventType,type SecurityAuditInput,type SecurityAuditPage,type SecurityAuditSubjectKind} from './security-audit.ts';
+export {SupportGrantError,SupportGrantStore,type SupportGrant,type SupportGrantApproval,type SupportGrantConfig} from './support-grants.ts';
 export {recordUsageEvent,UsageError,UsageReconciler,UsageStore,usageEventTypes,usageReconciliationSourceNames,usageSourceKinds,type UsageEventInput,type UsageEventReceipt,type UsageEventType,type UsageReconciliationResult,type UsageReconciliationSource,type UsageReconciliationStatus,type UsageSourceKind,type UsageSummary} from './usage-metering.ts';
 export {migrationNames} from './migrate.ts';
 export {runWorkerLoop} from './worker-loop.ts';
