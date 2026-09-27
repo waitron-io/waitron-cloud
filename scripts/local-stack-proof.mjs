@@ -10,7 +10,7 @@ const output=resolve(process.argv[2]??'/tmp/waitron-cloud-local-stack-receipt.js
 if(process.argv.length>3||!process.env.NODE_AUTH_TOKEN)throw new Error('Set NODE_AUTH_TOKEN to a package-read token before running the local stack proof');
 const id=randomUUID().slice(0,8),project=`waitron-cloud-proof-${id}`,tag=`proof-${id}`,startedAt=new Date().toISOString();
 const commandEnvironment={...process.env,LOCAL_STACK_IMAGE_TAG:tag};
-function run(command,args,{capture=false,timeout=600000,env=commandEnvironment}={}){return execFileSync(command,args,{cwd:process.cwd(),env,encoding:'utf8',timeout,stdio:capture?['ignore','pipe','pipe']:'inherit'}).trim();}
+function run(command,args,{capture=false,timeout=600000,env=commandEnvironment}={}){const result=execFileSync(command,args,{cwd:process.cwd(),env,encoding:'utf8',timeout,stdio:capture?['ignore','pipe','pipe']:'inherit'});return result?.trim()??'';}
 const compose=(...args)=>run('docker',['compose','-p',project,'--env-file','deploy/local-stack/local.env',...args]);
 const composeOutput=(...args)=>run('docker',['compose','-p',project,'--env-file','deploy/local-stack/local.env',...args],{capture:true});
 async function port(){const server=createServer();await new Promise((accept,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',accept);});const value=server.address().port;await new Promise((accept,reject)=>server.close(error=>error?reject(error):accept()));return value;}
