@@ -64,13 +64,13 @@
 - Consumes: Task 1's bootstrap files and runtime roles.
 - Produces: Compose services `postgres`, `mailpit`, `bootstrap`, `migrate`, `storage`, `account`, `email-worker`, `monitor-worker`, `usage-reconciler`, `remote-probe`, `gateway-manifest` and `gateway`; opt-in `backup-worker` and `remote-reconciler` profiles.
 
-- [ ] **Step 1: Write the failing Compose contract test** that loads `docker compose config --format json` and asserts loopback bindings, health/dependency gates, pinned images/download digests, private configuration volume use, migration completion and profile boundaries.
-- [ ] **Step 2: Run the contract test** and confirm the existing Mailpit-only Compose file fails the service assertions.
-- [ ] **Step 3: Add the multi-stage image** with Node 26, pnpm 9.15, portal assets, gateway tools and architecture-specific SHA-256 verification for SeaweedFS 4.47.
-- [ ] **Step 4: Expand Compose minimally** using the Task 1 launcher, named state volumes, bounded stop periods and loopback-only published ports. Add root lifecycle scripts without embedding shell secrets.
-- [ ] **Step 5: Run `docker compose config --quiet` and the contract test** and confirm both pass.
-- [ ] **Step 6: Build the Cloud image** and run its bootstrap and migration entry points against disposable volumes.
-- [ ] **Step 7: Commit with sign-off:** `Package the local Cloud Compose stack`.
+- [x] **Step 1: Write the failing Compose contract test** that loads `docker compose config --format json` and asserts loopback bindings, health/dependency gates, pinned images/download digests, private configuration volume use, migration completion and profile boundaries.
+- [x] **Step 2: Run the contract test** and confirm the existing Mailpit-only Compose file fails the service assertions.
+- [x] **Step 3: Add the multi-stage image** with Node 26, pnpm 9.15, portal assets, gateway tools and architecture-specific SHA-256 verification for SeaweedFS 4.47.
+- [x] **Step 4: Expand Compose minimally** using the Task 1 launcher, named state volumes, bounded stop periods and loopback-only published ports. Add root lifecycle scripts without embedding shell secrets.
+- [x] **Step 5: Run `docker compose config --quiet` and the contract test** and confirm both pass.
+- [x] **Step 6: Build the Cloud image** and run its bootstrap and migration entry points against disposable volumes.
+- [x] **Step 7: Commit with sign-off:** `Package the local Cloud Compose stack`.
 
 ### Task 3: Gateway authority refresh and stack health
 

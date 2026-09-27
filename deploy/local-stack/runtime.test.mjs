@@ -19,7 +19,7 @@ test('runtime roles receive only their explicit configuration',async()=>{
   usage:{DATABASE_URL:database},probe:{DATABASE_URL:database},
   backup:{DATABASE_URL:database,CLOUD_BACKUP_MASTER_KEY:config.backup.masterKey,CLOUD_BACKUP_ENDPOINT:'https://storage:8333',CLOUD_BACKUP_REGION:'local',CLOUD_BACKUP_ACCESS_KEY:config.storage.accessKeyId,CLOUD_BACKUP_SECRET_KEY:config.storage.secretAccessKey,CLOUD_BACKUP_CA_FILE:'/run/local-stack/storage-ca.pem',WAITRON_CHECKOUT:'/waitron'},
   gateway:{GATEWAY_STATE_DIR:'/state',GATEWAY_MANIFEST:'/run/local-stack/gateway-manifest.json',GATEWAY_CELL_ID:config.gateway.cellId,GATEWAY_TRUST_KEY:'/run/local-stack/gateway-issuer.pem',GATEWAY_WIREGUARD_KEY:'/run/local-stack/gateway-wireguard.key',GATEWAY_BOT_KEY:'/run/local-stack/gateway-bot.key',GATEWAY_SUBNET:'61'},
-  manifest:{LOCAL_STACK_CONFIG_DIR:'/run/local-stack'}
+  manifest:{LOCAL_STACK_CONFIG_DIR:'/run/local-stack'},reconcile:{DATABASE_URL:database}
  };
  for(const [role,value] of Object.entries(expected))assert.deepEqual(runtimeEnvironment(role,config),value,role);
  assert.throws(()=>runtimeEnvironment('shell',config),/local_stack\.role_invalid/);

@@ -22,7 +22,7 @@ test('bootstrap creates one private, valid local identity and signed empty gatew
  assert.match(config.backup.masterKey,/^[0-9a-f]{64}$/);
  assert.equal(config.storage.endpoint,'https://storage:8333');
  assert.equal(config.gateway.routes,0);
- const names=['runtime.json','gateway-issuer.pem','gateway-signing-key.pem','gateway-wireguard.key','gateway-bot.key','gateway-manifest.json','storage-ca.pem','storage-cert.pem','storage-key.pem','storage-iam.json'];
+ const names=['runtime.json','postgres-password','gateway-issuer.pem','gateway-signing-key.pem','gateway-wireguard.key','gateway-bot.key','gateway-manifest.json','storage-ca.pem','storage-cert.pem','storage-key.pem','storage-iam.json'];
  for(const name of names)assert.equal((await stat(join(directory,name))).mode&0o777,0o600,name);
  assert.equal((await stat(directory)).mode&0o777,0o700);
  const publicKey=createPublicKey(await readFile(join(directory,'gateway-issuer.pem')));
@@ -31,6 +31,7 @@ test('bootstrap creates one private, valid local identity and signed empty gatew
  assert.ok(manifest.expiresAt-Date.now()<=600000);
  assert.equal(digest(await readFile(join(directory,'gateway-signing-key.pem'))),config.fingerprints.gatewaySigningKey);
  assert.equal(digest(await readFile(join(directory,'storage-cert.pem'))),config.fingerprints.storageCertificate);
+ assert.equal((await readFile(join(directory,'postgres-password'),'utf8')).trim(),config.database.password);
 });
 
 test('concurrent bootstrap calls converge on one identity',async()=>{

@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {promisify} from 'node:util';
 import {signManifest} from '../../packages/remote-access/src/manifest.ts';
 
-const execute=promisify(execFile),files=['gateway-issuer.pem','gateway-signing-key.pem','gateway-wireguard.key','gateway-bot.key','gateway-manifest.json','storage-ca.pem','storage-cert.pem','storage-key.pem','storage-iam.json'];
+const execute=promisify(execFile),files=['postgres-password','gateway-issuer.pem','gateway-signing-key.pem','gateway-wireguard.key','gateway-bot.key','gateway-manifest.json','storage-ca.pem','storage-cert.pem','storage-key.pem','storage-iam.json'];
 const hex=bytes=>randomBytes(bytes).toString('hex'),fingerprint=value=>createHash('sha256').update(value).digest('hex');
 function valid(config){
  return config?.version===1&&typeof config.createdAt==='string'&&/^[0-9a-f]{64}$/.test(config.database?.password)
@@ -52,8 +52,9 @@ export async function bootstrap(directory){
   const manifest=signManifest({version:1,audience:'waitron-cloud-gateway',cellId,sequence:1,issuedAt:now,expiresAt:now+540000,routes:[]},gateway.privateKey,now);
   const certificate=join(temporary,'certificate.pem'),certificateKey=join(temporary,'certificate-key.pem');
   await execute('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',certificateKey,'-out',certificate,'-days','30','-subj','/CN=storage','-addext','subjectAltName=DNS:storage,DNS:localhost,IP:127.0.0.1','-addext','basicConstraints=critical,CA:TRUE'],{timeout:30000});
-  const cert=await readFile(certificate),certKey=await readFile(certificateKey),storage={accessKeyId:'local-'+hex(8),secretAccessKey:randomBytes(32).toString('base64url')};
+  const cert=await readFile(certificate),certKey=await readFile(certificateKey),storage={accessKeyId:'local-'+hex(8),secretAccessKey:randomBytes(32).toString('base64url')},databasePassword=hex(32);
   const values={
+   'postgres-password':databasePassword+'\n',
    'gateway-issuer.pem':publicPem,'gateway-signing-key.pem':privatePem,'gateway-wireguard.key':randomBytes(32).toString('base64')+'\n','gateway-bot.key':randomBytes(32),
    'gateway-manifest.json':JSON.stringify(manifest),'storage-ca.pem':cert,'storage-cert.pem':cert,'storage-key.pem':certKey,
    'storage-iam.json':JSON.stringify({identities:[{name:'local-stack',credentials:[{accessKey:storage.accessKeyId,secretKey:storage.secretAccessKey}],actions:['Admin','Read','Write','List','Tagging']}]})
@@ -61,7 +62,7 @@ export async function bootstrap(directory){
   for(const [name,value] of Object.entries(values))await publish(directory,temporary,name,value);
   const publicCertificates=join(directory,'public-certs');await mkdir(publicCertificates,{recursive:true,mode:0o700});await chmod(publicCertificates,0o700);
   await writeFile(join(publicCertificates,'default.pem'),Buffer.concat([certKey,cert]),{mode:0o600});await chmod(join(publicCertificates,'default.pem'),0o600);
-  const config={version:1,createdAt:new Date(now).toISOString(),database:{user:'cloud',name:'cloud',password:hex(32)},
+  const config={version:1,createdAt:new Date(now).toISOString(),database:{user:'cloud',name:'cloud',password:databasePassword},
    email:{activeKeyId:'local-v1',keys:{'local-v1':hex(32)}},http:{rateKey:hex(32)},backup:{masterKey:hex(32)},
    installation:{issuerKey:installation.privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')},
    storage:{endpoint:'https://storage:8333',region:'local',accessKeyId:storage.accessKeyId,secretAccessKey:storage.secretAccessKey},

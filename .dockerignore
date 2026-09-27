@@ -1,6 +1,10 @@
 .git
-**/node_modules
-**/dist
+.github
 .superpowers
+.local-stack
+node_modules
+coverage
+**/dist
 .env
+.env.*
 *.log
