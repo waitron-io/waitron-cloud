@@ -28,4 +28,5 @@ jobs:
       - run: pnpm --filter @waitron-cloud/ui-smoke exec playwright install --with-deps chromium
       - run: pnpm typecheck
       - run: pnpm test:two-venue-milestone-receipt
+      - run: pnpm test:local-stack
       - run: pnpm test

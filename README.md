@@ -24,6 +24,11 @@ pnpm --filter @waitron-cloud/ui-smoke exec playwright install chromium
 
 Run `pnpm test:ui` for the shared UI browser smoke test on its own.
 
+To run the implemented control plane as one loopback-only Compose deployment, follow the
+[local Cloud deployment guide](docs/local-deployment.md). It builds the API, workers,
+PostgreSQL, Mailpit, object storage and an empty-route gateway, then waits for migrations and
+health before returning. The stack is a local deployment rehearsal, not a public service.
+
 Check types and run the package tests against a disposable PostgreSQL container
 (requires Docker):
 

@@ -8,6 +8,12 @@ Use the operations status command to answer two questions without opening tenant
 The command reads current PostgreSQL projections and probes the account API. It does not
 change service state, run workers or repair a failure.
 
+If you use the complete local Compose deployment, start with
+`pnpm local-stack:status`. That command reports container and health state without printing
+the generated database password. The aggregate command on this page is a separate inspection
+surface for a deployment whose database URL is available to the operator. See the
+[local deployment guide](local-deployment.md) for startup, restart, upgrade and reset.
+
 ## Configure the check
 
 Set the management database and the origin of the account API:

@@ -1,9 +1,221 @@
 name: waitron-cloud
+
+x-cloud: &cloud
+  image: waitron-cloud-local-stack:${LOCAL_STACK_IMAGE_TAG:-dev}
+  build:
+    context: .
+    dockerfile: deploy/local-stack/Dockerfile
+    args:
+      SEAWEED_VERSION: "4.47"
+      SEAWEED_AMD64_SHA256: 31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d
+      SEAWEED_ARM64_SHA256: ba5c9def9ff98f78becdf309a50a9f906922f6383a7c4c772d01ede3cc012e16
+    secrets:
+      - npm_token
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:mode=0700
+  volumes:
+    - local-stack-config:/run/local-stack:ro
+
 services:
+  bootstrap:
+    <<: *cloud
+    command: ["node", "deploy/local-stack/bootstrap.mjs"]
+    restart: "no"
+    volumes:
+      - local-stack-config:/run/local-stack
+
+  postgres:
+    image: postgres:18-alpine
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_USER: cloud
+      POSTGRES_DB: cloud
+      POSTGRES_PASSWORD_FILE: /run/local-stack/postgres-password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloud -d cloud"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "127.0.0.1:${LOCAL_STACK_POSTGRES_PORT:-55432}:5432"
+    stop_grace_period: 10s
+    volumes:
+      - local-stack-config:/run/local-stack:ro
+      - local-stack-postgres:/var/lib/postgresql
+
   mailpit:
     image: axllent/mailpit:v1.31.1
     environment:
       MP_MAX_MESSAGE_SIZE: 1
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
     ports:
-      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1125}:1025"
-      - "127.0.0.1:${MAILPIT_UI_PORT:-8125}:8025"
+      - "127.0.0.1:${LOCAL_STACK_MAILPIT_SMTP_PORT:-${MAILPIT_SMTP_PORT:-1125}}:1025"
+      - "127.0.0.1:${LOCAL_STACK_MAILPIT_UI_PORT:-${MAILPIT_UI_PORT:-8125}}:8025"
+    stop_grace_period: 5s
+
+  migrate:
+    <<: *cloud
+    command: ["node", "deploy/local-stack/runtime.mjs", "migrate"]
+    restart: "no"
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+
+  storage:
+    <<: *cloud
+    command: ["weed", "mini", "-dir=/data", "-ip=storage", "-ip.bind=0.0.0.0", "-master.port=9333", "-master.port.grpc=19333", "-volume.port=8080", "-volume.port.grpc=18080", "-filer.port=8888", "-filer.port.grpc=18888", "-s3.port=8333", "-s3.cert.file=/run/local-stack/storage-cert.pem", "-s3.key.file=/run/local-stack/storage-key.pem", "-s3.config=/run/local-stack/storage-iam.json", "-admin.ui=false", "-webdav=false", "-s3.port.iceberg=0", "-s3.port.lance=0"]
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "openssl s_client -connect 127.0.0.1:8333 -CAfile /run/local-stack/storage-ca.pem -verify_return_error </dev/null >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    ports:
+      - "127.0.0.1:${LOCAL_STACK_STORAGE_PORT:-8333}:8333"
+    stop_grace_period: 10s
+    volumes:
+      - local-stack-config:/run/local-stack:ro
+      - local-stack-storage:/data
+
+  account:
+    <<: *cloud
+    command: ["node", "deploy/local-stack/runtime.mjs", "account"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:3000/api/health/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "127.0.0.1:${LOCAL_STACK_ACCOUNT_PORT:-3000}:3000"
+    restart: unless-stopped
+    stop_grace_period: 12s
+
+  email-worker:
+    <<: *cloud
+    command: ["node", "deploy/local-stack/runtime.mjs", "email"]
+    depends_on:
+      mailpit:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    network_mode: service:mailpit
+    restart: unless-stopped
+    stop_grace_period: 10s
+
+  monitor-worker:
+    <<: *cloud
+    command: ["node", "deploy/local-stack/runtime.mjs", "monitor"]
+    depends_on:
+      mailpit:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    network_mode: service:mailpit
+    restart: unless-stopped
+    stop_grace_period: 10s
+
+  usage-reconciler:
+    <<: *cloud
+    command: ["node", "deploy/local-stack/runtime.mjs", "usage"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  remote-probe:
+    <<: *cloud
+    command: ["node", "deploy/local-stack/runtime.mjs", "probe"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    stop_grace_period: 10s
+
+  gateway-manifest:
+    <<: *cloud
+    command: ["node", "deploy/local-stack/runtime.mjs", "manifest"]
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    stop_grace_period: 5s
+    volumes:
+      - local-stack-config:/run/local-stack
+
+  gateway:
+    <<: *cloud
+    command: ["node", "deploy/local-stack/runtime.mjs", "gateway"]
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+      gateway-manifest:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=JSON.parse(require('fs').readFileSync('/state/status.json'));process.exit(s.ready&&s.routes===0?0:1)"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "127.0.0.1:${LOCAL_STACK_GATEWAY_TLS_PORT:-8443}:443"
+      - "127.0.0.1:${LOCAL_STACK_GATEWAY_WIREGUARD_PORT:-51820}:51820/udp"
+    restart: unless-stopped
+    stop_grace_period: 10s
+    volumes:
+      - local-stack-config:/run/local-stack:ro
+      - local-stack-config:/input:ro
+      - local-stack-gateway:/state
+
+  backup-worker:
+    <<: *cloud
+    profiles: [backups]
+    command: ["node", "deploy/local-stack/runtime.mjs", "backup"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      storage:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 15s
+    volumes:
+      - local-stack-config:/run/local-stack:ro
+      - ${WAITRON_CHECKOUT:-./.local-stack/missing-waitron}:/waitron:ro
+
+  remote-reconciler:
+    <<: *cloud
+    profiles: [remote-reconciliation]
+    command: ["node", "deploy/local-stack/runtime.mjs", "reconcile"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    stop_grace_period: 10s
+    volumes:
+      - local-stack-config:/run/local-stack:ro
+      - ${LOCAL_STACK_RECONCILER_DIR:-./.local-stack/reconciler}:/run/reconciler:ro
+
+volumes:
+  local-stack-config:
+  local-stack-postgres:
+  local-stack-storage:
+  local-stack-gateway:
+
+secrets:
+  npm_token:
+    environment: NODE_AUTH_TOKEN
