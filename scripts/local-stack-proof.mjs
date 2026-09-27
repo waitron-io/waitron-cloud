@@ -16,7 +16,7 @@ const composeOutput=(...args)=>run('docker',['compose','-p',project,'--env-file'
 async function port(){const server=createServer();await new Promise((accept,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',accept);});const value=server.address().port;await new Promise((accept,reject)=>server.close(error=>error?reject(error):accept()));return value;}
 for(const name of ['ACCOUNT','POSTGRES','MAILPIT_SMTP','MAILPIT_UI','STORAGE','GATEWAY_TLS','GATEWAY_WIREGUARD'])commandEnvironment[`LOCAL_STACK_${name}_PORT`]=String(await port());
 const required=['account','email-worker','gateway','gateway-manifest','mailpit','monitor-worker','postgres','remote-probe','storage'],healthServices=new Set(['account','gateway','mailpit','postgres','storage']);
-function services(){const text=composeOutput('ps','-a','--format','json');return JSON.parse(text);}
+function services(){const text=composeOutput('ps','-a','--format','json').trim();if(!text)return[];return text.startsWith('[')?JSON.parse(text):text.split('\n').map(line=>JSON.parse(line));}
 async function waitForStack(){
  const deadline=Date.now()+120000;let latest=[];
  while(Date.now()<deadline){latest=services();const byName=new Map(latest.map(item=>[item.Service,item]));const ready=required.every(name=>byName.get(name)?.State==='running'&&(!healthServices.has(name)||byName.get(name)?.Health==='healthy'));
