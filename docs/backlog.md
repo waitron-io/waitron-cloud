@@ -399,11 +399,12 @@ mobile notifications separately.
   Test that restoring data alone does not grant primary authority and that a returning
   old server follows Waitron's recovery rules. Cloud revocation alone does not establish
   that an offline server has stopped trading.
-  Implement the shared replacement flow for planned upgrades and failure recovery.
-  Verify the final backup after stopping writes during a planned handover. For failure
-  recovery, show the recovery point and potential data loss, and require confirmation
-  that the old server is taken out of service under Waitron's recovery rules. Preserve
-  venue, subscription and addresses; test interrupted activation and route changes.
+  The shared replacement flow for planned upgrades and failure recovery is implemented
+  locally. Add the final-backup handover after stopping writes during a planned move.
+  For failure recovery, show the recovery point and potential data loss, and require
+  confirmation that the old server is taken out of service under Waitron's recovery
+  rules. Preserve venue, subscription and addresses; test interrupted activation and
+  route changes.
   Registration persistence now records bound approvals and results with transactional
   completion, expiry, retries, permission rechecks and separate service states. Real
   PostgreSQL tests cover concurrent workers and process restart. The Cloud pairing verifier and HTTP exchange now bind Ed25519 installation proof,
@@ -626,8 +627,9 @@ mobile notifications separately.
   Carry forward the existing topology's proposed hourly stream snapshots and 30-day
   stream retention as a baseline to validate. Productionise the implemented internal Cloud-managed recovery-key
   custody and authorised delivery, respecting the existing external vault-key design.
-  Implement the integration contract's mapped backup contents, manifests, module
-  restore hooks and per-secret handling after checking the incoming SQLite interfaces.
+  The local integration now uses the contract's mapped backup contents, manifests,
+  module restore hooks and per-secret handling against the landed SQLite interfaces;
+  repeat those boundaries with the selected provider.
   The local key drill and two-venue recovery proof test rotation with retained snapshots
   and recovery after loss of the original server without an owner-held backup key. See the
   [existing-design reconciliation](documentation-ownership.md#backup-and-recovery-design-reconciliation).
@@ -688,7 +690,8 @@ The [ownership map](documentation-ownership.md) records what remains in Waitron.
 
 - **Cloud provisioning and trial onboarding.** Own the service that creates a
   customer's resources and supplies configuration and credentials to Waitron, plus
-  the hosted trial entry path. The integration contract remains unsettled.
+  the hosted trial entry path. The local integration contract is mapped and proved;
+  provider provisioning, the paid lifecycle and the hosted trial remain open.
 - **Cloud-only redundancy.** Choose the failure and recovery model for a hosted
   primary. The old backlog's managed-Postgres framing is historical; the current
   Waitron design targets SQLite and Litestream.
