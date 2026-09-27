@@ -421,7 +421,7 @@ mobile notifications separately.
   physical PostgreSQL 18 base backup, waits for a streaming standby to replay the named
   recovery point, stops the primary and promotes the standby. The clean 2026-09-27
   receipt at Cloud `072b2c0` confirmed zero lag at that point, a 158 ms local promotion
-  and a 934 ms local outage. It recovered the exact result and lease after a discarded
+  and a 934 ms local outage on that run. It recovered the exact result and lease after a discarded
   committed reply, reclaimed an interrupted worker message once, preserved both tenants
   and rejected a crossed installation proof. These are fixture measurements, not service
   objectives. Repeat the drill with the selected provider's deployment credentials,

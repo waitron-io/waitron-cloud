@@ -67,7 +67,7 @@ Run: `git add package.json scripts/verify-database-recovery-receipt.mjs scripts/
 
 **Files:**
 - Create: `scripts/database-recovery-receipt.mjs`
-- Create: `scripts/database-recovery-fixture.ts`
+- Create: `scripts/database-recovery-fixture.mjs`
 - Test: `scripts/verify-database-recovery-receipt.test.mjs`
 
 **Interfaces:**
@@ -102,7 +102,7 @@ Expected: both commands pass.
 
 - [ ] **Step 6: Commit**
 
-Run: `git add scripts/database-recovery-receipt.mjs scripts/database-recovery-fixture.ts scripts/verify-database-recovery-receipt.test.mjs && git commit -s -m "test: exercise database recovery"`
+Run: `git add scripts/database-recovery-receipt.mjs scripts/database-recovery-fixture.mjs scripts/verify-database-recovery-receipt.test.mjs && git commit -s -m "test: exercise database recovery"`
 
 ### Task 3: Operator guidance and backlog
 

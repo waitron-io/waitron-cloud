@@ -8,6 +8,7 @@ function exact(value,keys){
 }
 function iso(value){assert.equal(new Date(value).toISOString(),value);return Date.parse(value);}
 function nonNegative(value){assert(Number.isFinite(value)&&value>=0);}
+function lsn(value){assert.match(value,/^[0-9A-F]+\/[0-9A-F]+$/i);const [high,low]=value.split('/');return(BigInt(`0x${high}`)<<32n)+BigInt(`0x${low}`);}
 function role(value,name,extra){
  exact(value,['name','superuser','createDatabase','createRole',...Object.keys(extra)]);
  assert.equal(value.name,name);assert.equal(value.superuser,false);assert.equal(value.createDatabase,false);assert.equal(value.createRole,false);
@@ -30,14 +31,15 @@ export function verifyDatabaseRecoveryReceipt(receipt){
   assert.equal(new Set(Object.values(receipt.roles).map(value=>value.name)).size,3);
   exact(receipt.recovery,['baseBackupAt','primaryStoppedAt','promotedAt','recoveredAt','primaryLsn','replayLsn','confirmedLagBytes','databaseUnavailableDuringOutage','postBackupWriteRecovered','promotionMs','outageMs']);
   const backup=iso(receipt.recovery.baseBackupAt),stopped=iso(receipt.recovery.primaryStoppedAt),promoted=iso(receipt.recovery.promotedAt),recovered=iso(receipt.recovery.recoveredAt);
-  assert(backup<=stopped&&stopped<=promoted&&promoted<=recovered);
-  assert.match(receipt.recovery.primaryLsn,/^[0-9A-F]+\/[0-9A-F]+$/i);assert.match(receipt.recovery.replayLsn,/^[0-9A-F]+\/[0-9A-F]+$/i);
+  assert(backup<stopped&&stopped<promoted&&promoted<recovered);
+  assert(lsn(receipt.recovery.replayLsn)>=lsn(receipt.recovery.primaryLsn));
   assert.equal(receipt.recovery.confirmedLagBytes,0);assert.equal(receipt.recovery.databaseUnavailableDuringOutage,true);assert.equal(receipt.recovery.postBackupWriteRecovered,true);
-  nonNegative(receipt.recovery.promotionMs);nonNegative(receipt.recovery.outageMs);
-  exact(receipt.operation,['responseDropped','durableResultDigest','retryResultDigest','singleDurableResult','leaseUsable','changedActionRejected']);
+  nonNegative(receipt.recovery.promotionMs);nonNegative(receipt.recovery.outageMs);assert(receipt.recovery.promotionMs>0);assert(receipt.recovery.outageMs>0);
+  exact(receipt.operation,['discardedBackendStatus','callerReceivedBytes','durableResultDigest','retryResultDigest','singleDurableResult','leaseUsable','changedActionRejected']);
+  assert.equal(receipt.operation.discardedBackendStatus,200);assert.equal(receipt.operation.callerReceivedBytes,0);
   assert.match(receipt.operation.durableResultDigest,/^[0-9a-f]{64}$/);assert.equal(receipt.operation.retryResultDigest,receipt.operation.durableResultDigest);
-  for(const field of ['responseDropped','singleDurableResult','leaseUsable','changedActionRejected'])assert.equal(receipt.operation[field],true);
-  exact(receipt.worker,['claimInterrupted','claimRecovered','deliveredOnce']);for(const value of Object.values(receipt.worker))assert.equal(value,true);
+  for(const field of ['singleDurableResult','leaseUsable','changedActionRejected'])assert.equal(receipt.operation[field],true);
+  exact(receipt.worker,['statusAtInterruption','leaseLiveAtInterruption','claimRecovered','deliveredOnce']);assert.equal(receipt.worker.statusAtInterruption,'processing');for(const field of ['leaseLiveAtInterruption','claimRecovered','deliveredOnce'])assert.equal(receipt.worker[field],true);
   exact(receipt.isolation,['firstOwnConfiguration','secondOwnConfiguration','crossTenantRejected']);for(const value of Object.values(receipt.isolation))assert.equal(value,true);
   exact(receipt.cleanup,['containers','volumes','networks']);for(const value of Object.values(receipt.cleanup))assert.equal(value,0);
   return receipt;
