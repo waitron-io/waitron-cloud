@@ -11,7 +11,7 @@ test('local stack start builds, starts, gates jobs and waits for health',async()
   {args:['wait','bootstrap','migrate','usage-reconciler'],options:undefined},
   {args:['ps','-a','--format','json'],options:{capture:true}},
   {ready:true},
-  {args:['ps'],options:undefined}
+  {args:['ps','-a'],options:undefined}
  ]);
 });
 

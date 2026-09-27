@@ -126,11 +126,11 @@
 - Consumes: the exact commands and observed receipt from Tasks 1-4.
 - Produces: a cold-start operator path, profile prerequisites, health/status commands, upgrade/reset steps and explicit production/rollback limitations.
 
-- [ ] **Step 1: Document exact lifecycle commands** and every loopback port, volume, generated-secret boundary, opt-in profile prerequisite and recovery/reset effect.
-- [ ] **Step 2: Record measured proof output** without availability or capacity promises; distinguish same-schema recreate from database recovery and incompatible-schema rollback.
-- [ ] **Step 3: Update the Operations/deployment-readiness backlog entry** to mark the reproducible local stack complete and name remaining production deployment, secret custody, provider, scheduling and database-recovery work.
-- [ ] **Step 4: Run link/command searches, Compose config, focused tests, the receipt verifier and workspace typecheck**; mark completed plan checkboxes.
-- [ ] **Step 5: Commit with sign-off:** `Document the reproducible local deployment`.
+- [x] **Step 1: Document exact lifecycle commands** and every loopback port, volume, generated-secret boundary, opt-in profile prerequisite and recovery/reset effect.
+- [x] **Step 2: Record measured proof output** without availability or capacity promises; distinguish same-schema recreate from database recovery and incompatible-schema rollback.
+- [x] **Step 3: Update the Operations/deployment-readiness backlog entry** to mark the reproducible local stack complete and name remaining production deployment, secret custody, provider, scheduling and database-recovery work.
+- [x] **Step 4: Run link/command searches, Compose config, focused tests, the receipt verifier and workspace typecheck**; mark completed plan checkboxes.
+- [x] **Step 5: Commit with sign-off:** `Document the reproducible local deployment`.
 
 ### Task 6: Finish and land
 

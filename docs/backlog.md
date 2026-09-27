@@ -1,6 +1,6 @@
 # Waitron Cloud backlog
 
-Updated 2026-09-25. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-09-27. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
@@ -462,8 +462,14 @@ mobile notifications separately.
   control API liveness/readiness, queued work, monitoring, gateway, snapshot and usage
   evidence into versioned JSON, readiness exit states and low-cardinality Prometheus
   metrics. It reveals fixed component codes without tenant, provider or raw failure
-  details. Customer and operator portals, audit, budgets, quotas, staged releases,
-  maintenance and recovery controls remain broader work.
+  details. The [reproducible local deployment](local-deployment.md) now packages the API,
+  durable workers, PostgreSQL, Mailpit, TLS object storage and empty-route gateway in one
+  loopback-only Compose stack. Its executable receipt proves clean installation, restart,
+  same-schema image recreation, 25 migrations, stable generated identity, retained database
+  and storage markers, and exact-project cleanup. Production deployment, provider selection,
+  public ingress, secret custody, scheduled reconciliation, database recovery and rollback
+  across incompatible schemas remain open. Customer and operator portals, audit, budgets,
+  quotas, staged releases, maintenance and recovery controls remain broader work.
   Customer portal login and account recovery must work when the venue server is
   unavailable, so customers can manage services and recovery independently.
 - **Self-service journeys.** Define completion and failure paths for setup, account

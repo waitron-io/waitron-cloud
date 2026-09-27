@@ -32,7 +32,7 @@
     "operations:status": "node --env-file-if-exists=.env packages/operations/src/cli.ts",
     "local-stack:up": "node scripts/local-stack-lifecycle.mjs up",
     "local-stack:upgrade": "node scripts/local-stack-lifecycle.mjs upgrade",
-    "local-stack:status": "docker compose --env-file deploy/local-stack/local.env ps",
+    "local-stack:status": "docker compose --env-file deploy/local-stack/local.env ps -a",
     "local-stack:down": "docker compose --env-file deploy/local-stack/local.env down --remove-orphans",
     "local-stack:reset": "docker compose --env-file deploy/local-stack/local.env down --volumes --remove-orphans",
     "test:packages": "pnpm -r --workspace-concurrency=1 test",

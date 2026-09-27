@@ -14,7 +14,7 @@ export async function startLocalStack(mode,{run=runDocker,waitForReady=waitForLo
  run(['up','-d','--no-build',...(mode==='upgrade'?['--force-recreate']:[])]);
  run(['wait','bootstrap','migrate','usage-reconciler']);
  await waitForReady(()=>run(['ps','-a','--format','json'],{capture:true}));
- run(['ps']);
+ run(['ps','-a']);
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
