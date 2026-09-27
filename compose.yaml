@@ -179,6 +179,7 @@ services:
     stop_grace_period: 10s
     volumes:
       - local-stack-config:/run/local-stack:ro
+      - local-stack-config:/input:ro
       - local-stack-gateway:/state
 
   backup-worker:

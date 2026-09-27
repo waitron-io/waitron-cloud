@@ -84,12 +84,12 @@
 - Consumes: bootstrap's cell ID, Ed25519 private key and gateway manifest path.
 - Produces: monotonically increasing, atomically replaced, at-most-ten-minute empty-route manifests and a redacted status record.
 
-- [ ] **Step 1: Write failing fake-clock tests** for initial sequence, pre-expiry refresh, restart monotonicity, stale state refusal, atomic publication and abort shutdown.
-- [ ] **Step 2: Run the focused test** and confirm failure because the worker is absent.
-- [ ] **Step 3: Implement the smallest refresher** using the existing `signManifest`, a persisted sequence file and an abortable timer.
-- [ ] **Step 4: Run focused tests**, then start the gateway services and assert `status.json` reports `ready: true` with zero routes.
-- [ ] **Step 5: Restart only the manifest worker and gateway**, then assert the sequence increases and the gateway reuses its persistent accepted cache.
-- [ ] **Step 6: Commit with sign-off:** `Keep the local gateway authority current`.
+- [x] **Step 1: Write failing fake-clock tests** for initial sequence, pre-expiry refresh, restart monotonicity, stale state refusal, atomic publication and abort shutdown.
+- [x] **Step 2: Run the focused test** and confirm failure because the worker is absent.
+- [x] **Step 3: Implement the smallest refresher** using the existing `signManifest`, a persisted sequence file and an abortable timer.
+- [x] **Step 4: Run focused tests**, then start the gateway services and assert `status.json` reports `ready: true` with zero routes.
+- [x] **Step 5: Restart only the manifest worker and gateway**, then assert the sequence increases and the gateway reuses its persistent accepted cache.
+- [x] **Step 6: Commit with sign-off:** `Keep the local gateway authority current`.
 
 ### Task 4: Executable clean-install, restart and upgrade proof
 

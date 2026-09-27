@@ -22,7 +22,7 @@ test('bootstrap creates one private, valid local identity and signed empty gatew
  assert.match(config.backup.masterKey,/^[0-9a-f]{64}$/);
  assert.equal(config.storage.endpoint,'https://storage:8333');
  assert.equal(config.gateway.routes,0);
- const names=['runtime.json','postgres-password','gateway-issuer.pem','gateway-signing-key.pem','gateway-wireguard.key','gateway-bot.key','gateway-manifest.json','storage-ca.pem','storage-cert.pem','storage-key.pem','storage-iam.json'];
+ const names=['runtime.json','postgres-password','gateway-issuer.pem','gateway-signing-key.pem','gateway-wireguard.key','gateway-bot.key','gateway-manifest.json','gateway-sequence','storage-ca.pem','storage-cert.pem','storage-key.pem','storage-iam.json'];
  for(const name of names)assert.equal((await stat(join(directory,name))).mode&0o777,0o600,name);
  assert.equal((await stat(directory)).mode&0o777,0o700);
  const publicKey=createPublicKey(await readFile(join(directory,'gateway-issuer.pem')));

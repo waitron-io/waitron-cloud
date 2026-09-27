@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {promisify} from 'node:util';
 import {signManifest} from '../../packages/remote-access/src/manifest.ts';
 
-const execute=promisify(execFile),files=['postgres-password','gateway-issuer.pem','gateway-signing-key.pem','gateway-wireguard.key','gateway-bot.key','gateway-manifest.json','storage-ca.pem','storage-cert.pem','storage-key.pem','storage-iam.json'];
+const execute=promisify(execFile),files=['postgres-password','gateway-issuer.pem','gateway-signing-key.pem','gateway-wireguard.key','gateway-bot.key','gateway-manifest.json','gateway-sequence','storage-ca.pem','storage-cert.pem','storage-key.pem','storage-iam.json'];
 const hex=bytes=>randomBytes(bytes).toString('hex'),fingerprint=value=>createHash('sha256').update(value).digest('hex');
 function valid(config){
  return config?.version===1&&typeof config.createdAt==='string'&&/^[0-9a-f]{64}$/.test(config.database?.password)
@@ -56,7 +56,7 @@ export async function bootstrap(directory){
   const values={
    'postgres-password':databasePassword+'\n',
    'gateway-issuer.pem':publicPem,'gateway-signing-key.pem':privatePem,'gateway-wireguard.key':randomBytes(32).toString('base64')+'\n','gateway-bot.key':randomBytes(32),
-   'gateway-manifest.json':JSON.stringify(manifest),'storage-ca.pem':cert,'storage-cert.pem':cert,'storage-key.pem':certKey,
+   'gateway-manifest.json':JSON.stringify(manifest),'gateway-sequence':'1\n','storage-ca.pem':cert,'storage-cert.pem':cert,'storage-key.pem':certKey,
    'storage-iam.json':JSON.stringify({identities:[{name:'local-stack',credentials:[{accessKey:storage.accessKeyId,secretKey:storage.secretAccessKey}],actions:['Admin','Read','Write','List','Tagging']}]})
   };
   for(const [name,value] of Object.entries(values))await publish(directory,temporary,name,value);

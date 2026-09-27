@@ -29,6 +29,7 @@ test('all host ports stay on loopback and private configuration is volume-mounte
  assert.equal(services.bootstrap.restart,'no');assert.equal(services.migrate.restart,'no');
  assert.equal(services.account.stop_grace_period,'12s');assert.equal(services.gateway.stop_grace_period,'10s');
  assert.ok(services.postgres.volumes.some(volume=>volume.target==='/var/lib/postgresql'&&volume.type==='volume'));
+ assert.ok(services.gateway.volumes.some(volume=>volume.target==='/input'&&volume.type==='volume'&&volume.read_only===true));
 });
 
 test('Cloud image build carries the pinned storage release inputs',()=>{
