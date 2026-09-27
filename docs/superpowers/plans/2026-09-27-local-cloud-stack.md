@@ -42,13 +42,13 @@
 - Produces: `bootstrap(configDir, dependencies?)`, which creates version-1 `runtime.json`, gateway inputs and storage TLS/IAM files without replacing an existing valid configuration.
 - Produces: `runtimeEnvironment(role, config)`, which returns the exact environment allowlist for `migrate`, `account`, `email`, `monitor`, `usage`, `probe`, `backup`, `gateway` or `manifest`.
 
-- [ ] **Step 1: Write failing bootstrap tests** for first creation, `0600` files, `0700` directories, idempotent fingerprints, concurrent calls, a valid Ed25519 empty-route manifest and rejection of malformed pre-existing state.
-- [ ] **Step 2: Run `node --test deploy/local-stack/bootstrap.test.mjs`** and confirm failure because the module is absent.
-- [ ] **Step 3: Implement minimal atomic bootstrap** with same-directory temporary files, exclusive creation, directory sync, random keys, OpenSSL-generated local certificates and versioned JSON validation.
-- [ ] **Step 4: Run the bootstrap tests** and confirm all pass without logging secret values.
-- [ ] **Step 5: Write failing runtime tests** that reject unknown roles and unsafe permissions, and prove each role receives only its required variables.
-- [ ] **Step 6: Implement the runtime allowlist and `spawn` launcher**, preserving signals and exit status while redacting configuration failures.
-- [ ] **Step 7: Run both test files and `pnpm typecheck`**, then commit with sign-off: `Add local stack configuration boundary`.
+- [x] **Step 1: Write failing bootstrap tests** for first creation, `0600` files, `0700` directories, idempotent fingerprints, concurrent calls, a valid Ed25519 empty-route manifest and rejection of malformed pre-existing state.
+- [x] **Step 2: Run `node --test deploy/local-stack/bootstrap.test.mjs`** and confirm failure because the module is absent.
+- [x] **Step 3: Implement minimal atomic bootstrap** with same-directory temporary files, exclusive creation, directory sync, random keys, OpenSSL-generated local certificates and versioned JSON validation.
+- [x] **Step 4: Run the bootstrap tests** and confirm all pass without logging secret values.
+- [x] **Step 5: Write failing runtime tests** that reject unknown roles and unsafe permissions, and prove each role receives only its required variables.
+- [x] **Step 6: Implement the runtime allowlist and `spawn` launcher**, preserving signals and exit status while redacting configuration failures.
+- [x] **Step 7: Run both test files and `pnpm typecheck`**, then commit with sign-off: `Add local stack configuration boundary`.
 
 ### Task 2: Immutable image and Compose dependency graph
 
