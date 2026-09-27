@@ -221,7 +221,7 @@ mobile notifications separately.
 | Decision | Next step |
 | --- | --- |
 | Customer model | Support an organisation with several legal businesses and tax identities across countries from the outset. A venue belongs to one organisation at a time. Focus signup on one owner with one venue or several venues in the same city; defer the ownership-transfer workflow. |
-| Cloud staff access | Customer-approved, time-limited support access and an explicitly authorised, audited emergency route are agreed. Define platform roles, eligible approvers, grant scope and enforcement. Possible on-prem SSH support requires separate, explicit customer approval for a limited period. |
+| Cloud staff access | The disabled-by-default [temporary support grant core](temporary-support-grants.md) now records a current owner's approval for a named, separately eligible platform account, exact configured actions, an optional venue, explicit expiry and early revocation. Transactional enforcement rechecks expiry, the original approver and platform eligibility around protected database work, while fixed audit events omit reason and request data. No route or production action is configured. Define platform roles, eligible permission and action catalogues, customer approver policy and the separately authorised emergency route. Possible on-prem SSH support still requires explicit server approval, a limited period and active-session termination on expiry or revocation. |
 | Residency | Spain is the first deployment country. Define the country policy for operational data, backups, archives, analytics, identities, logs and messages; verify AWS service locations and actual obligations before making customer promises. |
 | Cells | Venues are independently placed, with a shared gateway per cell and stable customer-facing addresses on movement. The local two-cell workflow now stages a revision-bound destination, cancels a failed apply without replacing the source, requires a tested destination manifest sequence before commit, preserves hostnames/certificates and publishes newer source/destination manifests. Two 2026-09-26 Docker runs reconnected the fresh destination peer in 1,321 ms and 1,486 ms; the second receipt names clean head `e4f9356`, while the other venue stayed source-only. These are not production targets. Define group size, availability-zone layout and recovery-time objective; repeat movement with the selected gateway deployment, provider network, DNS/certificate reconciler and appliance automation. Keep backups and portal recovery independent of gateway machines. |
 | Provider support | AWS is the first provider, deploying in Spain. Select and verify the required region and services. Keep Google Cloud as a future target and define the evidence needed to support it. Decide separately whether cross-provider failover is wanted. |
@@ -282,8 +282,14 @@ mobile notifications separately.
   lost replies. The [bounded history cleanup command](history-cleanup.md) now previews and
   removes ended/expired sessions and consumed/expired WebAuthn ceremonies only after an
   operator supplies exact cutoffs; no retention period or automatic deletion is enabled.
+  The disabled-by-default temporary support grant core reuses these separate customer
+  memberships and platform permissions. It accepts only configured eligibility permissions
+  and actions, binds an optional venue, expires and revokes grants, rechecks authority around
+  protected PostgreSQL work and appends redacted immutable audit events. No HTTP route or
+  production action is configured. Define the platform role, eligibility and action catalogues,
+  customer approver policy, emergency route and any SSH session-termination contract before use.
   Configure live email delivery, implement MFA,
-  and define the platform role catalogue before public use. Shared login/request limits, secure
+  and define the wider platform role catalogue before public use. Shared login/request limits, secure
   cookies and Origin/CSRF checks are implemented in the account API. A local streaming
   reverse-proxy test now exercises two real account instances with overwritten client
   addresses, shared PostgreSQL rate limits, HTTPS cookie attributes, Origin/CSRF,
