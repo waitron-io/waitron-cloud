@@ -12,7 +12,6 @@ export async function startLocalStack(mode,{run=runDocker,waitForReady=waitForLo
  if(!['up','upgrade'].includes(mode))throw new Error('local_stack.lifecycle_mode');
  run(['build','bootstrap']);
  run(['up','-d','--no-build',...(mode==='upgrade'?['--force-recreate']:[])]);
- run(['wait','bootstrap','migrate','usage-reconciler']);
  await waitForReady(()=>run(['ps','-a','--format','json'],{capture:true}));
  run(['ps','-a']);
 }

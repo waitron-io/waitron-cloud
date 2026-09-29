@@ -135,7 +135,11 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-    restart: "no"
+    environment:
+      CLOUD_USAGE_INTERVAL_MS: ${CLOUD_USAGE_INTERVAL_MS:-60000}
+      CLOUD_USAGE_BATCH_SIZE: ${CLOUD_USAGE_BATCH_SIZE:-100}
+    restart: unless-stopped
+    stop_grace_period: 15s
 
   remote-probe:
     <<: *cloud

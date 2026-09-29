@@ -50,6 +50,8 @@ It serialises workers with a database advisory transaction lock. Each source has
 
 History cleanup must not remove an installation operation, terminal alert delivery, restored recovery or backup tombstone while its required usage event is missing. This keeps the durable source available for reconciliation without extending the customer's service authority.
 
+> 2026-09-29: [Scheduled usage reconciliation](2026-09-29-scheduled-usage-design.md) adds a local watch worker; the one-pass/status interfaces remain.
+
 The CLI runs one bounded pass by default and can print status. Deployment scheduling remains an operations decision; this change documents the command but does not deploy a worker or create live resources.
 
 ## Owner totals and freshness

@@ -42,11 +42,43 @@ DATABASE_URL=postgresql://cloud:replace-password@localhost:5432/cloud \
 
 Each source reports its last attempted pass and its last proven caught-up time. The customer summary uses the oldest caught-up time only after all four durable sources have completed a pass. Until then, `measuredThrough` is `null` and the portal labels the totals as incomplete. Despite its schema name, this value is scan freshness, not an event-time completeness boundary. A transaction can start before a scan, commit afterwards and contain activity whose occurrence time is older than the scan. That event appears during a later pass.
 
-The command performs one pass and exits. Your deployment scheduler must run it repeatedly. This repository does not create that schedule or any live infrastructure.
+`--once` performs one pass and exits. To keep reconciling, run the worker:
+
+```sh
+DATABASE_URL=postgresql://cloud:replace-password@localhost:5432/cloud \
+  pnpm usage:reconcile --watch
+```
+
+The worker runs a pass immediately, then waits 60 seconds after each completed pass.
+It uses the same delay after a failure or a busy database lock, so retries cannot spin
+continuously. Each source contributes at most 100 missing events per pass. More work
+waits for the next pass. Separate workers use the existing database lock; a worker
+that does not acquire it reports `acquired: false` and waits.
+
+Set `CLOUD_USAGE_INTERVAL_MS` to a whole number from 1000 to 240000 and
+`CLOUD_USAGE_BATCH_SIZE` to a whole number from 1 to 1000 to change these bounds.
+Invalid settings refuse startup. These settings apply to `--watch`; `--once` keeps
+its 100-event-per-source pass. PostgreSQL bounds each CLI transaction to ten seconds.
+On SIGINT or SIGTERM, the worker stops waiting immediately or lets its active pass
+commit or roll back before closing its connections. A pass that exceeds the deadline
+rolls back and retries after the configured delay.
+
+The [local deployment](local-deployment.md) runs this worker automatically. Its
+`usage-reconciler` service restarts unless you explicitly stop it. This does not
+create a production deployment.
 
 ## Retry failures safely
 
-One database transaction covers a pass. If any event write fails, the pass records neither partial events nor a newer reconciliation time. Run the same command again after correcting the failure.
+One database transaction covers a pass. If any event write fails, the pass records neither partial events nor a newer reconciliation time. In one-shot mode, run the same command again after correcting the failure. The watch
+worker retries automatically and logs a fixed message without the database error's
+potentially private details.
+
+The existing [operations status](operations-status.md) reports usage as `unknown`
+until every source has caught up, then `current` or `stale`. A failed pass leaves the
+last successful freshness receipt unchanged, so repeated failures become `stale`
+after the configured threshold (300 seconds by default). It does not record an
+immediate durable failure flag. Keep the interval below that threshold, allowing
+room for pass runtime and backlog catch-up.
 
 A retry with the same type, source kind and source reference returns the existing event. A service-alert source reference can have only one terminal outcome, and the database prevents a terminal outbox status from changing. Reusing a key with a different organisation, venue, quantity, outcome or occurrence time is a conflict and stops the transaction. Treat that as source corruption to investigate. Do not discard or rewrite the earlier event.
 

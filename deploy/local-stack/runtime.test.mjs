@@ -38,3 +38,10 @@ test('runtime loader rejects versioned configuration with missing keys',async()=
  const {path}=await configured();await writeFile(join(path,'runtime.json'),'{"version":1}',{mode:0o600});
  await assert.rejects(loadRuntime(path),/local_stack\.configuration_invalid/);
 });
+
+test('usage runtime passes explicit schedule settings without passing unrelated secrets',async()=>{
+ const {config}=await configured();
+ const env=runtimeEnvironment('usage',config,{CLOUD_USAGE_INTERVAL_MS:'1200',CLOUD_USAGE_BATCH_SIZE:'3',PRIVATE_VALUE:'do-not-forward'});
+ assert.deepEqual(Object.keys(env).sort(),['CLOUD_USAGE_BATCH_SIZE','CLOUD_USAGE_INTERVAL_MS','DATABASE_URL']);
+ assert.equal(env.CLOUD_USAGE_INTERVAL_MS,'1200');assert.equal(env.CLOUD_USAGE_BATCH_SIZE,'3');
+});

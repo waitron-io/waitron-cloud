@@ -1,6 +1,6 @@
 # Waitron Cloud backlog
 
-Updated 2026-09-27. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-09-29. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
@@ -493,7 +493,7 @@ mobile notifications separately.
   separately proves a physical standby promotion under restricted local credentials, exact
   operation replay, worker-claim recovery and tenant isolation, with zero owned resources
   left after the run. Production deployment, provider selection, public ingress, secret
-  custody, scheduled reconciliation, provider-native database recovery, automated failover,
+  custody, provider-native database recovery, automated failover,
   realistic recovery objectives and rollback across incompatible schemas remain open.
   Customer and operator portals, audit, budgets,
   quotas, staged releases, maintenance and recovery controls remain broader work.
@@ -557,7 +557,16 @@ mobile notifications separately.
   exact decimal precision, show measurement freshness in English and Spanish and state
   that continuous-stream bytes and account identity mail are excluded. PostgreSQL and
   browser tests prove retry rollback, tenant isolation and fresh/incomplete views. This is
-  observational only. Next: schedule reconciliation in the chosen deployment, add
+  observational only. A bounded watch worker now runs in the local deployment, retries
+  failed passes and exposes stalled progress through existing operations freshness.
+  PostgreSQL CLI tests cover competing workers, rollback/interruption, restart catch-up,
+  tenant totals and shutdown. A clean local Compose proof on 2026-09-29 recorded two
+  organisations automatically, reported all four sources stale after stopping, and
+  caught up a third organisation after restart; its project containers, volumes and
+  network were removed. This proves local scheduling, not a production freshness
+  objective. Shutdown with an active pass was tested through CLI processes; the Compose
+  lifecycle receipt covers normal service stops, not a blocked transaction at stop.
+  Production deployment and monitoring remain open. Next: add
   attributable lookup/API, report and compute units when those services exist, measure
   provider costs, then define allowances, excess-use and metering-outage policy before
   connecting any total to billing or enforcement.
@@ -675,7 +684,7 @@ mobile notifications separately.
 | Address lookup (free) | Implement geographic address lookup and completion for open-source Waitron with a Cloud login and per-user limits; see [free services](#free-services-for-open-source-waitron). Validate provider coverage, address quality and costs. |
 | Messaging | Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
 | Automated upgrades | Treat cloud services, cloud-hosted Waitron and on-prem installations separately; choose rollout groups, compatibility, maintenance windows, pause and recovery behaviour. |
-| Monitoring | External venue and remote-route health, backup staleness, customer incidents and bilingual email alerts are implemented locally. Accepted public/staff probes now emit retry-safe organisation usage events and the portal shows their measured total. Add filing/device signals, broader functional checks and performance evidence. Schedule reconciliation and define cost, allowance and limit policy before using measurements for enforcement. |
+| Monitoring | External venue and remote-route health, backup staleness, customer incidents and bilingual email alerts are implemented locally. Accepted public/staff probes now emit retry-safe organisation usage events and the portal shows their measured total. Add filing/device signals, broader functional checks and performance evidence. The local deployment now schedules usage reconciliation; define production operations, cost, allowance and limit policy before using measurements for enforcement. |
 
 Further candidates remain in the complete inventory: loyalty and gift cards,
 e-receipts, opening-hours publishing, accounting/delivery connectors, AI-assisted
