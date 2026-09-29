@@ -31,7 +31,7 @@ Implementation and validation, inline under the campaign authorisation:
 - [x] Run a two-installation Pebble/DNS proof using Waitron's unchanged CSR/install
   command. Check key/hostname matching and retained chain after failures, with all
   temporary state and owned containers removed. Document precise proof limits.
-- [ ] Update the wire contract, remote-access guide and backlog. Run focused suites,
+- [x] Update the wire contract, remote-access guide and backlog. Run focused suites,
   migration guards and typecheck; delete critical guards in a disposable candidate.
 - [ ] Finish with one Claude security/run-it review, triage, normal push and exact-head
   CI. Land under the shared lock and record exact-merge CI.
