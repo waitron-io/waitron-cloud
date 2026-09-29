@@ -78,8 +78,25 @@ The proof builds the local image and starts only bootstrap, PostgreSQL, migratio
 and the usage worker. With a one-second interval and one event per source per pass,
 it checks automatic reconciliation for separate organisations, stops the worker,
 observes stale operations evidence at a two-second threshold, then restarts it to
-catch up pending work. It removes that project's containers, volumes, network and
-image. These short settings are for the proof; they are not production targets.
+catch up pending work. It then holds a PostgreSQL row lock on the final reconciliation
+source, after earlier event writes have begun, and stops the service through Compose.
+The version 2 receipt includes the observed lock, stop duration, container exit code,
+unchanged event and freshness snapshots, and restart catch-up for two organisations.
+A later pass must keep exactly one event for each installation, bound to its own
+organisation and venue. An exit forced by Compose fails the proof even if it fits
+the stop time limit.
+
+The 2026-09-29 local run stopped the blocked service in 9,657 ms with
+exit code 0, within its 15,000 ms grace period. Restart caught up both new organisations
+in 5,003 ms, including Compose startup. All three previously committed events
+survived, the blocked pass published nothing, and a subsequent pass kept five events
+across five organisations. Extending both database deadlines to sixty seconds in a
+disposable copy made the proof fail on exit code 137 after Compose forced the stop.
+These measurements describe this local run, not a production shutdown guarantee.
+
+The proof removes that project's containers, volumes, network and image on success
+or failure, and checks for leftover resources. These short settings are for the proof;
+they are not production targets.
 
 ## Stop, restart and upgrade
 

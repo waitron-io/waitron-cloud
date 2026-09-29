@@ -590,8 +590,13 @@ mobile notifications separately.
   organisations automatically, reported all four sources stale after stopping, and
   caught up a third organisation after restart; its project containers, volumes and
   network were removed. This proves local scheduling, not a production freshness
-  objective. Shutdown with an active pass was tested through CLI processes; the Compose
-  lifecycle receipt covers normal service stops, not a blocked transaction at stop.
+  objective. The extended Compose proof now holds the final source's PostgreSQL row
+  lock and stops the service with earlier writes still uncommitted. On 2026-09-29,
+  it exited normally in 9,657 ms within the 15,000 ms Compose grace period, left
+  committed events and every source timestamp unchanged, then caught up two new
+  organisations without duplicates. The ten-second transaction deadline remains;
+  extending both database deadlines in a disposable copy made Compose kill the
+  worker (exit 137), which the proof rejected. Project cleanup was empty.
   Production deployment and monitoring remain open. Next: add
   attributable lookup/API, report and compute units when those services exist, measure
   provider costs, then define allowances, excess-use and metering-outage policy before
