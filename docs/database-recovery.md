@@ -46,6 +46,20 @@ The operation section proves more than row survival. A TCP proxy discards a succ
 
 The worker section starts a real email worker, waits for it to claim an encrypted notification and interrupts it with the primary. The promoted database retains that claim. Once its deliberately shortened test lease expires, the packaged worker reclaims it and Mailpit receives exactly one message.
 
+## Latest local run
+
+On 29 September 2026, a clean checkout at
+`d930291e266a43e546d72d08a960da97f32e2e4c` passed the physical drill with the
+release's 27 migrations. It recorded zero lag at the named recovery point, a
+152 ms promotion and a 723 ms outage. The lost-reply retry returned the stored
+operation result, the interrupted worker delivered its message once, and both tenant
+isolation checks passed. Cleanup reported zero containers, volumes and networks.
+
+These measurements describe that local PostgreSQL 18 run. Keep the original
+27 September promotion receipt as historical evidence; neither run establishes a
+production recovery target. Use the commands above to generate and verify a fresh
+receipt for your selected release.
+
 ## Keep secrets outside the database recovery
 
 PostgreSQL contains encrypted mail payloads and signed operation results, but it does not supply their application keys. The runner generates the email encryption key, installation issuer key and HTTP rate key separately, then supplies them again when it restarts the services against the promoted database.
