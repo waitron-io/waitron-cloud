@@ -52,7 +52,7 @@ export class BackupWorker {
      WHERE id=$1 AND claim_id=$2 AND status='running'`,[job.id,job.claim_id]);
     return true;
    }
-   const code=error instanceof Error&&error.message==='backup.verification_failed'?'verification_failed':error instanceof Error&&error.message==='backup.key_unavailable'?'key_unavailable':'operation_failed';
+   const code=error instanceof Error&&error.message==='backup.verification_unavailable'?'verification_unavailable':error instanceof Error&&error.message==='backup.verification_failed'?'verification_failed':error instanceof Error&&error.message==='backup.key_unavailable'?'key_unavailable':'operation_failed';
    // A late failure still backs off unless another worker has replaced this claim.
    await this.#pool.query(`UPDATE backup_jobs SET failures=failures+1,last_error=$3,status=CASE WHEN attempts>=8 THEN 'failed' ELSE 'pending' END,
     available_at=clock_timestamp()+LEAST(900,30*power(2,attempts-1))*interval '1 second',claim_id=NULL,lease_until=NULL

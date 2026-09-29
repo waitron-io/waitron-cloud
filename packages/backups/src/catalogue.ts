@@ -394,7 +394,10 @@ export class BackupCatalogue {
     let outcome: "verified" | "failed" = "verified";
     try {
       const objects=this.#objects(prepared.location),
-        source = await staged(objects,prepared.point.objectKey,signal);
+        source = await staged(objects,prepared.point.objectKey,signal).catch(error=>{
+          if(isBackupCancellation(error,signal))throw error;
+          backupFail("verification_unavailable");
+        });
       try {
         if (
           source.receipt.digest !== prepared.point.digest ||
@@ -403,10 +406,14 @@ export class BackupCatalogue {
           backupFail("object_mismatch");
         await restore(source, prepared.keys, prepared.point);
       } finally {
-        await source.dispose();
+        await source.dispose().catch(()=>backupFail("verification_unavailable"));
       }
     } catch (error) {
       if (isBackupCancellation(error, signal)) throw error;
+      // Infrastructure uncertainty must not replace an archive verdict or create a failed-copy alert.
+      if(error instanceof Error && ["backup.verification_unavailable","backup.verifier_container",
+        "backup.verifier_cleanup","backup.verifier_configuration","backup.verifier_input",
+        "backup.verifier_output"].includes(error.message))backupFail("verification_unavailable");
       outcome = "failed";
     }
     await transaction(this.#pool, async (client) => {

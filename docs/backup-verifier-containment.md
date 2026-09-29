@@ -38,9 +38,26 @@ that a snapshot of that size fits this verifier configuration.
 Memory exhaustion or a full scratch volume refuses verification with
 `backup.verifier_resource`. A deadline is reported as `backup.verifier_timeout`, not as
 proof of a memory boundary. The scratch diagnostic is advisory: child error text can also produce a resource code.
-Both resource and ordinary failures remain failed verifications. Archive output and error
-details are not returned in diagnostics.
-The database worker keeps its existing bounded retry and cancellation rules.
+A completed restore refusal, including resource and deadline limits, remains a failed
+verification. It means that this copy did not restore within the configured limits, not
+necessarily that its bytes are corrupt. Archive output and error details are not returned
+in diagnostics.
+
+A failed download, Docker connection or start, container cleanup, configuration, input
+transfer or result protocol leaves the snapshot's last verification state unchanged.
+The worker records `verification_unavailable` and retries the same snapshot. It does not
+write a `backup_verifications` row or turn an uncertain copy into a failed-copy alert.
+A new copy stays pending; an older verified fallback keeps its verdict and protection.
+Custom restore adapters must use the fixed `backup.verifier_*` infrastructure codes;
+an ordinary restore exception still means a completed refusal under that interface.
+
+Retries keep the existing eight-attempt budget and exponential delay from 30 seconds to
+15 minutes. An exhausted job appears as parked in operations status. Once you restore the
+service, use `pnpm backup:worker --retry-failed` to retry parked jobs. Cancellation returns
+the claim without spending an attempt. If PostgreSQL goes away before the result can be
+committed, the worker cannot release its claim immediately; another pass can reclaim it
+after the existing 120-second lease expires. The snapshot receives no invented verdict.
+Apply migration 029 before starting this worker so the job table accepts the new code.
 
 Cancellation removes the container and waits for its local attach process to exit. A
 30-second watchdog inside the container also ends work if the parent is killed. Startup and each new restore
@@ -52,10 +69,10 @@ distinct worker owners. Use a different
 owner value for each worker slot. An abandoned container retains its scratch until removal;
 the next restore or startup after its deadline reclaims it. You can also remove that exact
 owned container explicitly. Cleanup failure
-is an error, never successful verification. This is not a daemon-outage recovery guarantee. Docker failures are ordinary verification
-errors under the current catalogue interface, so an infrastructure outage can mark a
-healthy snapshot failed. Separating infrastructure health from archive validity remains
-follow-up work.
+is an infrastructure error, never successful verification. If Docker is unreachable during
+cleanup, removal must wait for the daemon to recover and an owner-matching startup or
+restore to reclaim the expired container. The adapter bounds each Docker command to ten
+seconds; an unreachable host cannot promise immediate cleanup.
 
 ## Executed proof
 
@@ -78,6 +95,23 @@ verified a valid snapshot. Input staging exhaustion, interrupted upload, cancell
 worker kill/restart and simultaneous venue fixtures also ran. A PostgreSQL worker recorded
 three failed verifications (memory, scratch and wrong identity), then verified valid work
 without mixing the two venues.
+
+D37's executable outage proof runs with:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test --test-timeout=120000 test/verification-infrastructure.test.ts test/worker.test.ts
+```
+
+The local proof stops and restarts its own PostgreSQL container after a successful restore
+but before recording the result, then expires the lease in SQL and retries the same copy.
+The initial run recovered in 1.38 seconds; it does not measure the normal 120-second lease
+wait. A separate case points only the worker's Docker client at a missing socket, restores
+its connection, and verifies the same snapshot. The other organisation's malformed
+snapshot remains separate and gets a real failed result. The shared Docker daemon is never
+stopped. A Docker CLI fault wrapper also refuses `start` on a real created container and
+checks that it is removed. Injected fixed cleanup/configuration/input/output errors prove
+retry budgets and preservation of a previously verified fallback; they do not simulate a
+physical host crash. Existing container-death and expiry tests prove later reclamation.
 
 The real-restore proof used Waitron `00496fcd182a5c2c9189cc3faf0f8f22d3baf8ac` and image
 `sha256:f2ccb8b08b814f5130604984a89e198f3c91f64780320d5d219a8317ea987867` with 1024 MiB
