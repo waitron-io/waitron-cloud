@@ -48,8 +48,12 @@ transfer or result protocol leaves the snapshot's last verification state unchan
 The worker records `verification_unavailable` and retries the same snapshot. It does not
 write a `backup_verifications` row or turn an uncertain copy into a failed-copy alert.
 A new copy stays pending; an older verified fallback keeps its verdict and protection.
-Custom restore adapters must use the fixed `backup.verifier_*` infrastructure codes;
-an ordinary restore exception still means a completed refusal under that interface.
+Custom restore adapters must use `backup.verifier_*` codes for infrastructure failures.
+Only `backup.verifier_failed`, `backup.verifier_resource` and `backup.verifier_timeout`
+within that namespace mean completed refusals; an unfamiliar code stays uncertain.
+An ordinary restore exception still means a completed refusal under that interface.
+Stage cleanup cannot replace a primary refusal or cancellation. When the restore succeeds
+but its stage cleanup fails, the job retries as unavailable.
 
 Retries keep the existing eight-attempt budget and exponential delay from 30 seconds to
 15 minutes. An exhausted job appears as parked in operations status. Once you restore the

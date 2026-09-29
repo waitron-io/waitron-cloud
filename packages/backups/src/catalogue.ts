@@ -400,6 +400,7 @@ export class BackupCatalogue {
         if(isBackupCancellation(error,signal))throw error;
         backupFail("verification_unavailable");
       }
+      let restored=false;
       try {
         if (
           source.receipt.digest !== prepared.point.digest ||
@@ -407,15 +408,19 @@ export class BackupCatalogue {
         )
           backupFail("object_mismatch");
         await restore(source, prepared.keys, prepared.point);
+        restored=true;
       } finally {
-        await source.dispose().catch(()=>backupFail("verification_unavailable"));
+        try{await source.dispose();}catch{
+          // Cleanup cannot hide the primary refusal or cancellation already being thrown.
+          if(restored)backupFail("verification_unavailable");
+        }
       }
     } catch (error) {
       if (isBackupCancellation(error, signal)) throw error;
       // Infrastructure uncertainty must not replace an archive verdict or create a failed-copy alert.
-      if(error instanceof Error && ["backup.verification_unavailable","backup.verifier_container",
-        "backup.verifier_cleanup","backup.verifier_configuration","backup.verifier_input",
-        "backup.verifier_output"].includes(error.message))backupFail("verification_unavailable");
+      if(error instanceof Error && (error.message==="backup.verification_unavailable" ||
+        (error.message.startsWith("backup.verifier_") && !["backup.verifier_failed",
+          "backup.verifier_resource","backup.verifier_timeout"].includes(error.message))))backupFail("verification_unavailable");
       outcome = "failed";
     }
     await transaction(this.#pool, async (client) => {
