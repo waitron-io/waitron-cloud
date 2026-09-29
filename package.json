@@ -21,7 +21,7 @@
     "proof:two-venue-milestone": "node scripts/test-postgres.mjs exec node scripts/cloud-two-venue-milestone-receipt.mjs",
     "proof:local-stack": "node scripts/local-stack-proof.mjs",
     "verify:local-stack": "node scripts/verify-local-stack-receipt.mjs",
-    "test:local-stack": "node --test deploy/local-stack/*.test.mjs scripts/local-stack-compose.test.mjs scripts/local-stack-lifecycle.test.mjs scripts/verify-local-stack-receipt.test.mjs scripts/scheduled-usage-proof.test.mjs",
+    "test:local-stack": "node --test deploy/local-stack/*.test.mjs scripts/local-stack-compose.test.mjs scripts/local-stack-lifecycle.test.mjs scripts/verify-local-stack-receipt.test.mjs scripts/scheduled-usage-proof.test.mjs scripts/verify-schema-upgrade-receipt.test.mjs scripts/schema-upgrade-fixture.test.mjs",
     "proof:database-recovery": "node scripts/database-recovery-receipt.mjs",
     "verify:database-recovery": "node scripts/verify-database-recovery-receipt.mjs",
     "test:database-recovery-receipt": "node --check scripts/database-recovery-fixture.mjs && node --check scripts/database-recovery-receipt.mjs && node --test scripts/verify-database-recovery-receipt.test.mjs",
@@ -55,7 +55,9 @@
     "monitor:status": "node --env-file-if-exists=.env packages/registration/src/monitor-cli.ts --status",
     "remote:probe": "node --env-file-if-exists=.env packages/remote-access/src/probe-cli.ts",
     "remote:reconcile": "node --env-file-if-exists=.env packages/remote-access/src/reconciler-cli.ts",
-    "proof:scheduled-usage": "node scripts/scheduled-usage-proof.mjs"
+    "proof:scheduled-usage": "node scripts/scheduled-usage-proof.mjs",
+    "proof:schema-upgrade": "node scripts/schema-upgrade-receipt.mjs",
+    "verify:schema-upgrade": "node scripts/verify-schema-upgrade-receipt.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

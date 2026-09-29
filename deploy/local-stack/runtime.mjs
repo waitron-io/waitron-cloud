@@ -1,8 +1,27 @@
+import {createHash} from 'node:crypto';
+import {createRequire} from 'node:module';
 import {spawn} from 'node:child_process';
 import {readFile,stat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {isLocalStackConfig} from './bootstrap.mjs';
+
+// Compare the selected release's complete ledger, including SQL content, before any
+// packaged database consumer starts. Historical binaries need this deployment gate too.
+export async function checkConsumerSchema(pool,root){
+ const {migrationNames}=await import(pathToFileURL(join(root,'packages/registration/src/migrate.ts')).href);
+ const rows=(await pool.query('SELECT name,digest FROM schema_migrations ORDER BY name')).rows;
+ if(rows.length!==migrationNames.length)throw new Error('schema_incompatible');
+ for(const name of migrationNames){
+  const digest=createHash('sha256').update(await readFile(join(root,'packages/registration/migrations',name))).digest('hex');
+  if(!rows.some(row=>row.name===name&&row.digest===digest))throw new Error('schema_incompatible');
+ }
+}
+export async function checkConsumerDatabase(databaseUrl,root){
+ const {Pool}=createRequire(new URL('../../packages/registration/package.json',import.meta.url))('pg');
+ const pool=new Pool({connectionString:databaseUrl,connectionTimeoutMillis:5000,statement_timeout:10000});
+ try{await checkConsumerSchema(pool,root);}finally{await pool.end();}
+}
 
 const commands={
  migrate:['packages/registration/src/migrate-cli.ts'],account:['packages/account-http/src/server-cli.ts'],email:['packages/registration/src/email-worker-cli.ts'],
@@ -30,7 +49,9 @@ export async function loadRuntime(directory){
 }
 export async function launch(role,directory=process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack'){
  if(!Object.hasOwn(commands,role))throw new Error('local_stack.role_invalid');
- const config=await loadRuntime(directory),[script,...args]=commands[role],child=spawn(process.execPath,[script,...args],{cwd:'/app',stdio:'inherit',env:{PATH:process.env.PATH,HOME:'/tmp',...runtimeEnvironment(role,config,process.env)}});
+ const config=await loadRuntime(directory),[script,...args]=commands[role];
+ if(role!=='migrate'&&runtimeEnvironment(role,config).DATABASE_URL)await checkConsumerDatabase(databaseUrl(config),'/app');
+ const child=spawn(process.execPath,[script,...args],{cwd:'/app',stdio:'inherit',env:{PATH:process.env.PATH,HOME:'/tmp',...runtimeEnvironment(role,config,process.env)}});
  const forward=signal=>child.kill(signal);process.once('SIGINT',forward);process.once('SIGTERM',forward);
  try{return await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',(code,signal)=>resolve(code??(signal?1:0)));});}
  finally{process.removeListener('SIGINT',forward);process.removeListener('SIGTERM',forward);}
