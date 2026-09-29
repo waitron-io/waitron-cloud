@@ -49,3 +49,29 @@ Do the same in production: recover the database and the secret store as separate
 Repeat this drill with the selected managed PostgreSQL service and its real backup, replication, routing and credential model. Define who or what detects failure and authorizes promotion. Measure realistic data volumes and failure modes before setting recovery-point or recovery-time objectives.
 
 You also need provider-native monitoring, tested secret custody and rotation, and a rollback procedure for releases whose schema cannot run on the previous application version. This local drill deliberately does not choose those policies or automate failover.
+
+## Recover an old release after a schema upgrade
+
+An upgraded database may contain values the old application cannot read. Recover the
+old version into a separate database from its pre-upgrade backup, with that version's
+external keys. Preserve the upgraded database for investigation and a later forward
+recovery. Do not try to repair compatibility by deleting migration ledger rows.
+
+Run the [schema upgrade rehearsal](local-deployment.md#rehearse-a-schema-changing-upgrade):
+
+```sh
+pnpm proof:schema-upgrade /tmp/cloud-schema-upgrade-receipt.json
+pnpm verify:schema-upgrade /tmp/cloud-schema-upgrade-receipt.json
+```
+
+For the pinned 26-to-27 migration pair, it stops consumers, takes `pg_dump -Fc`, upgrades
+the original database, then restores the dump with `pg_restore --exit-on-error` into a
+fresh PostgreSQL container. It starts the old account server and email worker with the
+retained email and installation keys, proves retries and tenant isolation, and checks
+that the original upgraded fixture did not change. The backup does not contain these
+external keys. The proof explicitly refuses decryption with a wrong email key.
+
+This recovers the named pre-upgrade point. Writes accepted after that backup are absent
+from the restored old version. The local proof does not switch production traffic or
+choose whether losing those writes is acceptable. Define that decision, your provider's
+backup procedure and secret recovery before using an old-release recovery in production.

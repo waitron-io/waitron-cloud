@@ -499,7 +499,14 @@ mobile notifications separately.
   operation replay, worker-claim recovery and tenant isolation, with zero owned resources
   left after the run. Production deployment, provider selection, public ingress, secret
   custody, provider-native database recovery, automated failover,
-  realistic recovery objectives and rollback across incompatible schemas remain open.
+  realistic recovery objectives and provider-specific recovery across incompatible schemas
+  remain open. The [schema upgrade rehearsal](local-deployment.md#rehearse-a-schema-changing-upgrade)
+  now covers pinned revisions 9a56d012 (26 migrations) to eafd97ad (27), interrupted
+  migration rollback/retry, stopped-consumer schema gates, identity/tenant checks, pending
+  mail and completed-operation retries, and isolated recovery of the old version from its
+  pre-upgrade logical backup with matching external keys. The original upgraded fixture is
+  preserved. Historical binaries require the current deployment gate; no online upgrade,
+  downgrade migration, post-backup-write recovery or production traffic switch is proved.
   Customer and operator portals, audit, budgets,
   quotas, staged releases, maintenance and recovery controls remain broader work.
   Customer portal login and account recovery must work when the venue server is

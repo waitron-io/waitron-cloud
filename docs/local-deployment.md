@@ -101,9 +101,21 @@ pnpm install --frozen-lockfile
 pnpm local-stack:upgrade
 ```
 
-This rebuilds the shared image, force-recreates the containers and reruns migrations while
-preserving the four volumes. It proves the same-schema recreate path. It does not prove that
-you can downgrade across incompatible migrations or recover PostgreSQL from a backup.
+This rebuilds the shared image, stops the existing containers, then force-recreates them
+and reruns migrations while preserving the four volumes. Stopping first matters: Compose
+startup dependencies do not stop an old worker while a new migration runs. Allow downtime
+for this procedure; it does not support a rolling upgrade with mixed application versions.
+
+Every PostgreSQL consumer launched by the packaged runtime checks the complete migration
+ledger against its release's SQL names and content digests before starting. A missing,
+changed or extra migration refuses startup. Migrations also refuse a database with unknown
+migration names. Run the required forward migration and data conversion before admitting
+traffic. For the 26-to-27 transition, follow the [pairing-key upgrade](pairing-code-keys.md#upgrade-existing-requests-without-losing-approval), including its separate key and conversion step.
+
+The original lifecycle receipt proves same-schema recreation. The separate
+[schema upgrade rehearsal](#rehearse-a-schema-changing-upgrade) covers one pinned forward
+upgrade and recovery of the old release from its own backup. Neither supports running old
+code against an upgraded database as a downgrade.
 
 Reset only when you intend to lose all local Cloud state:
 
@@ -185,3 +197,45 @@ For a database created before keyed pairing-code storage, follow the
 [pairing-key upgrade](pairing-code-keys.md#upgrade-existing-requests-without-losing-approval)
 before restarting account workers. New local stacks create the independent key in
 the private runtime configuration; existing volumes keep their current identity.
+
+## Rehearse a schema-changing upgrade
+
+Run the version-pair proof from a clean checkout with Docker running and access to the
+private packages in the pnpm store or through your configured package token:
+
+```sh
+pnpm proof:schema-upgrade /tmp/cloud-schema-upgrade-receipt.json
+pnpm verify:schema-upgrade /tmp/cloud-schema-upgrade-receipt.json
+```
+
+You get a version-1 receipt naming the proof driver's revision and both application
+revisions: `9a56d0122bf6872a0200735a7b1e3a23ad4f825c` has 26 migrations;
+`eafd97ad5ac51563e91c821d4c957ef996e5d3fb` has 27. Their SQL and application commands
+come from independent history checkouts with locked dependencies. The receipt also names
+the ledger digests, timings, individual checks and resource cleanup counts.
+
+The proof starts two organisations and installations on the old version, retains a
+pending encrypted email and pairing request, and takes a logical PostgreSQL backup.
+With old consumers stopped, it interrupts the real pairing-schema migration at a database
+lock, checks rollback, retries migration and converts the old pairing verifier with its
+separate key. New account traffic then proves identity, completed-operation retries and
+tenant isolation; the email worker delivers the retained message exactly once.
+
+The current deployment gate refuses new consumers on the old or interrupted schema and
+old consumers on the new schema. Historical binaries did not contain that gate. The proof
+runs them through `deploy/local-stack/schema-consumer.mjs` from the current checkout;
+it does not claim that invoking their old CLI directly has the same protection.
+The packaged current runtime applies the same check to account, email, monitor, usage,
+probe, backup and reconciliation roles. Storage and gateway roles do not use PostgreSQL.
+
+The second half restores the old backup into a separate PostgreSQL container and starts
+the old application with matching external keys. A wrong email key cannot decrypt its
+pending message. The restored installation retries and tenant checks pass while the
+original upgraded database stays unchanged. See [the recovery boundary](database-recovery.md#recover-an-old-release-after-a-schema-upgrade).
+
+On 2026-09-29 one local run measured 1,768 ms for the interrupted-and-retried upgrade and
+1,757 ms for recovery. Those phases exclude checkout and dependency setup. The proof
+uses real host Node processes, PostgreSQL 18 and Mailpit; container packaging remains
+covered by the separate lifecycle proof. It covers this version pair only, with stopped
+consumers. Provider backups, online migration, production traffic routing, capacity and
+recovery objectives still need deployment-specific evidence.

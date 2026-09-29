@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync,spawn} from 'node:child_process';
 import {createPrivateKey,generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
+import {existsSync} from 'node:fs';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {request as httpRequest} from 'node:http';
 import {createRequire} from 'node:module';
@@ -169,7 +170,8 @@ finally{
  for(const name of containers)try{docker('rm','-f','-v',name);}catch{}
  await rm(root,{recursive:true,force:true});
 }
-const exists=(kind,name)=>{try{docker(kind,'inspect',name);return true;}catch{return false;}};
-const cleanup={containers:containers.filter(name=>exists('container',name)).length,volumes:volumes.filter(name=>exists('volume',name)).length,checkouts:0};
+const remainingContainers=new Set(docker('ps','-a','--format','{{.Names}}').split('\n'));
+const remainingVolumes=new Set(docker('volume','ls','--format','{{.Name}}').split('\n'));
+const cleanup={containers:containers.filter(name=>remainingContainers.has(name)).length,volumes:volumes.filter(name=>remainingVolumes.has(name)).length,checkouts:Number(existsSync(root))};
 if(failure)throw new Error(`Schema upgrade proof failed; cleanup ${JSON.stringify(cleanup)}`,{cause:failure});
 receipt.cleanup=cleanup;verifySchemaUpgradeReceipt(receipt);await writeFile(output,JSON.stringify(receipt,null,2)+'\n',{mode:0o600});console.log(JSON.stringify({output,checks,timings,cleanup}));
