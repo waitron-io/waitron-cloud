@@ -30,7 +30,7 @@ export class StaffCertificateExchange {
    if(!row)throw new InstallationError('invalid_proof');
    const claims=verifyMachine(envelope,row.public_key,this.#origin,action);
    if(row.revoked_at)throw new InstallationError('revoked');
-   if(!row.hostname||row.state==='unconfigured')throw new InstallationError('permission_denied');
+   if(row.environment!=='test'||!row.hostname||row.state==='unconfigured')throw new InstallationError('permission_denied');
    let encodedLease:unknown;try{encodedLease=JSON.parse(claims.lease);}catch{throw new InstallationError('invalid_proof');}
    if(JSON.stringify(encodedLease)!==claims.lease)throw new InstallationError('invalid_proof');
    const lease=verifyLease(encodedLease,this.#trusted,this.#origin);

@@ -58,3 +58,14 @@ for(const fence of ['claim expiry','shutdown'])test(`${fence} while waiting for 
   assert.equal((await f.db.pool.query('SELECT certificate FROM staff_certificate_exchange WHERE installation_id=$1',[a.installationId])).rows[0].certificate,null);
  }finally{release();await blocker.query('ROLLBACK');blocker.release();await running;}
 });
+
+test('reusing a replaced ID with a new CSR never exposes the retained old-key chain',async()=>{
+ const {a,id}=await setup(),other=await f.venue(),initial=chain(a);
+ const worker=new RemoteConfigurationReconciler(f.db.pool,{staffExchange:true,issueCertificate:async()=>initial});await select(worker,a.installationId);await worker.runOnce();
+ const second=randomUUID();assert.equal((await f.request(submit,a.proof(submit,{...a.body,previousRequestId:id},second,a.lease))).status,200);
+ const newCsr=forge.pki.createCertificationRequest();newCsr.publicKey=forge.pki.certificationRequestFromPem(other.body.csr).publicKey!;newCsr.setSubject([{name:'commonName',value:a.body.hostname}]);newCsr.setAttributes([{name:'extensionRequest',extensions:[{name:'subjectAltName',altNames:[{type:2,value:a.body.hostname}]}]}]);newCsr.sign(forge.pki.privateKeyFromPem(other.privateKey),forge.md.sha256.create());
+ const body={...a.body,csr:forge.pki.certificationRequestToPem(newCsr),previousRequestId:second};
+ const response=await f.request(submit,a.proof(submit,body,id,a.lease));assert.equal(response.status,200);const pending=await response.json();assert.equal(pending.state,'pending');assert.equal('certificate'in pending,false);
+ const statusReply=await(await read(a,id)).json();assert.equal(statusReply.state,'pending');assert.equal('certificate'in statusReply,false);
+ const next=chain({...a,body,privateKey:other.privateKey}),reissuer=new RemoteConfigurationReconciler(f.db.pool,{staffExchange:true,issueCertificate:async()=>next});await select(reissuer,a.installationId);await reissuer.runOnce();assert.equal((await(await read(a,id)).json()).certificate,next);
+});

@@ -11,6 +11,8 @@ operation ID identifies the submission. One PostgreSQL row per installation boun
 storage. An exact retry reads that row without rescheduling; conflicting reuse or an
 outdated predecessor fails. Status never returns a superseded or stale chain.
 
+The API is disabled unless CLOUD_STAFF_CERTIFICATES=1, requires its issuer, and
+accepts test installations only, matching the local integration boundary.
 The existing installation proof, live lease, placement, CSR hostname/key validation
 and revocation lock remain authoritative. Customer input cannot select filesystem
 paths, provider modules, credentials, tenant IDs or cells. The optional database

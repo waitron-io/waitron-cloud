@@ -76,7 +76,7 @@ publishes signed routes and renews public/staff certificates through explicit fi
 DNS and ACME adapters. Its receipt covers duplicate workers, expired-lease restart,
 bounded failure, failed-renewal retention and hostname/lease fences; focused filesystem
 tests cover atomic replacement while Waitron keeps the staff private key.
-The version 1 signed installation exchange now carries staff CSRs and chains through
+An explicitly enabled, test-installation-only version 1 signed exchange now carries staff CSRs and chains through
 PostgreSQL without shared files. An opt-in reconciler mode fences replacement, revision,
 revocation and expired claims; the two-installation local proof uses Pebble and
 Waitron's unchanged CSR/install CLI. Live provider DNS, production key storage/deployment

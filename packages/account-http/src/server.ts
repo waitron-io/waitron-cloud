@@ -13,7 +13,7 @@ function unavailable(request?: Request, portal = false) {
     ...securityHeaders, 'Retry-After': '1',
   }});
 }
-export async function startAccountServer(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig; host?: string; port?: number; portalAssets?: PortalAssets;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider}): Promise<{server: Server; close(): Promise<void>}> {
+export async function startAccountServer(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig; host?: string; port?: number; portalAssets?: PortalAssets;staffCertificates?:boolean;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider}): Promise<{server: Server; close(): Promise<void>}> {
   const app = createAccountApp(options);
   let active = 0;let readinessActive=0; let stopping = false; let closing: Promise<void> | undefined;
   const listener = getRequestListener(async (request, bindings) => {

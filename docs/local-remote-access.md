@@ -227,7 +227,11 @@ customer appliance. Neither component changes the host's network interfaces.
 ## Exchange staff certificates without shared files
 
 Use the [version 1 machine exchange](waitron-integration-contract.md#staff-certificate-exchange-version-1)
-when the appliance cannot share the reconciler filesystem. Add `"staffExchange": true`
+when a test installation cannot share the reconciler filesystem. Set
+`CLOUD_STAFF_CERTIFICATES=1` on the account service (also forwarded by the local
+Compose account service); the default is disabled and returns 503. This opt-in
+requires the installation issuer and currently refuses production installations.
+Enable it together with the database staff worker. Add `"staffExchange": true`
 to the trusted reconciler JSON and remove every `kind: "staff"` entry from its
 `certificates` array. Public certificate files, route mappings, DNS adapter and ACME
 credentials keep their existing configuration. Staff requests arrive through the

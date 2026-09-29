@@ -5,9 +5,9 @@ import {SignupStore,RegistrationStore,InstallationStore,createLeaseIssuer,encode
 import {database} from '../../account-http/test/fixtures.ts';
 import {createAccountApp} from '../../account-http/src/app.ts';
 import {RemoteAccessStore} from '../src/placement.ts';
-export async function staffExchangeFixture(){
+export async function staffExchangeFixture(staffCertificates=true){
  const db=await database(),origin='https://cloud.example.test',issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
- const app=createAccountApp({pool:db.pool,outbox:db.outbox,leaseIssuer:issuer,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});
+ const app=createAccountApp({staffCertificates,pool:db.pool,outbox:db.outbox,leaseIssuer:issuer,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});
  const store=new RemoteAccessStore(db.pool),cellId=randomUUID();
  await store.createCell({id:cellId,country:'ES',provider:'aws',environment:'test',suffix:'exchange.example.test',subnet:52,publicKey:randomBytes(32).toString('base64'),endpoint:'gateway.example.test:51820'});
  async function venue(){

@@ -23,6 +23,8 @@ const stop = () => {
 process.once('SIGINT', stop); process.once('SIGTERM', stop);
 try {
   if (process.argv.length !== 2 || !process.env.DATABASE_URL || !process.env.CLOUD_EMAIL_ACTIVE_KEY_ID || !process.env.CLOUD_EMAIL_KEYS) throw new Error();
+  const staffFlag=process.env.CLOUD_STAFF_CERTIFICATES??'0';if(!['0','1'].includes(staffFlag))throw new Error();
+  const staffCertificates=staffFlag==='1';
   const config = accountHttpConfig(process.env);
   const passwordScreening = await passwordScreeningFromEnv(process.env);
   const portText = process.env.CLOUD_HTTP_PORT ?? '3000';
@@ -37,7 +39,7 @@ try {
     if(process.env.CLOUD_INSTALLATION_TRUSTED_KEYS&&!leaseIssuer)throw new Error();
     const leaseTrust=leaseIssuer?createLeaseTrust(leaseIssuer,process.env.CLOUD_INSTALLATION_TRUSTED_KEYS):undefined;
     captures=captureRuntime(process.env);
-    running = await startAccountServer({captures:captures?.options,pool, outbox, config, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    running = await startAccountServer({staffCertificates,captures:captures?.options,pool, outbox, config, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
     console.log(JSON.stringify({status: 'listening', port: address.port}));

@@ -60,15 +60,16 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
+export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;staffCertificates?:boolean;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
   const config = validateConfig(options.config);
+  if(options.staffCertificates&&!options.leaseIssuer)throw Error('staff_certificate.installation_issuer_required');
   if(options.captures&&!options.leaseIssuer)throw Error('backup.installation_issuer_required');
   const {pool, outbox} = options;
   const recoveryCodeKeys=options.recoveryCodeKeys===undefined?(recoveryCodeKeysFromEnv(process.env)??null):options.recoveryCodeKeys;
   const pairingCodeKeys=options.pairingCodeKeys===undefined?(pairingCodeKeysFromEnv(process.env)??null):options.pairingCodeKeys;
   const origin = new URL(config.portalOrigin); const secure = origin.protocol === 'https:';
   const captures=options.captures&&options.leaseIssuer?new BackupCaptures(pool,options.leaseIssuer,config.portalOrigin,options.captures,options.leaseTrust):undefined;
-  const staffExchange=options.leaseIssuer?new StaffCertificateExchange(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust):undefined;
+  const staffExchange=options.staffCertificates&&options.leaseIssuer?new StaffCertificateExchange(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust):undefined;
   const streams=options.captures?.managedStreams&&options.leaseIssuer?new ManagedStreamMachines(pool,options.leaseIssuer,config.portalOrigin,options.captures.vault,options.captures.managedStreams,options.leaseTrust):undefined;
   const limiter = new AccountRateLimiter(pool, config.rateKey);
   const signup = new SignupStore(pool, outbox, options.passwordScreening); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);

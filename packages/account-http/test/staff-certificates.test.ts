@@ -53,3 +53,13 @@ test('simultaneous replacements serialize on their predecessor and stale issued 
  const proof=a.proof(status,{version:1,requestId:id},randomUUID(),a.lease),values=JSON.parse(Buffer.from(proof.payload,'base64url').toString());values[5]-=120000;
  assert.equal((await f.request(status,{...proof,payload:Buffer.from(JSON.stringify(values)).toString('base64url')})).status,401);
 });
+
+test('exchange is disabled unless the account service explicitly enables it',async()=>{
+ const disabled=await staffExchangeFixture(false);
+ try{const a=await disabled.venue();assert.equal((await disabled.request(submit,a.proof(submit,a.body,randomUUID(),a.lease))).status,503);assert.equal((await disabled.db.pool.query('SELECT count(*)::integer AS n FROM staff_certificate_exchange')).rows[0].n,0);}finally{await disabled.close();}
+});
+test('local exchange refuses a production installation even with its matching live lease',async()=>{
+ const a=await f.venue();await f.db.pool.query("UPDATE venues SET environment='production' WHERE id=$1",[a.venueId]);const c=JSON.parse(Buffer.from(a.lease.payload,'base64url').toString());
+ const lease=f.issuer.issue({origin:f.origin,leaseId:c[3],installationId:a.installationId,venueId:a.venueId,environment:'production',publicKey:c[7],issuedAt:Date.now(),expiresAt:Date.now()+3600000});
+ assert.equal((await f.request(submit,a.proof(submit,a.body,randomUUID(),lease))).status,403);
+});

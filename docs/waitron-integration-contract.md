@@ -240,6 +240,9 @@ do not replace them with a Cloud-only implementation of the engine.
 ## Staff certificate exchange, version 1
 
 You can send a staff CSR to Cloud without sharing the appliance's TLS private key.
+The account server exposes this local integration only when
+`CLOUD_STAFF_CERTIFICATES=1`; it also requires an installation issuer and refuses
+production-environment installations. Enable the database staff worker with it.
 Both endpoints use the existing `waitron-cloud-machine-v1` signed envelope and a
 current control lease. POST to `/api/installations/staff-certificate-submit` or
 `/api/installations/staff-certificate-status`; the signed action is the final path
@@ -270,8 +273,11 @@ current state, so a retry may already contain the finished chain.
 
 Cloud keeps one request row per installation. For a later request, set
 `previousRequestId` to the ID you are replacing and choose a new operation ID.
-Only one concurrent replacement wins. Reusing an ID with different input, sending
-an old predecessor, or reading a superseded ID returns HTTP 409 `conflict`. A retry
+Only one concurrent replacement wins. Reusing the current ID with different input, colliding with another installation's
+current ID, sending an old predecessor, or reading a superseded ID returns HTTP 409
+`conflict`. Always generate a fresh UUID for new work. Cloud keeps no historical
+ID ledger: deliberately reusing a superseded ID with the current predecessor is
+a new request, and the retained chain must still match its current CSR key. A retry
 of a superseded submission cannot restore it. Keep the old installed chain while a
 new request is pending; Cloud also retains its previous chain internally until a
 validated replacement commits, but does not return it for the new request.
@@ -295,8 +301,10 @@ state is `ready`:
 
 Every read checks the stored installation key, lease binding, revocation, placement,
 hostname and configuration revision again. Another installation cannot read this
-request even if it knows its ID. Invalid input is HTTP 400; invalid proof or lease is
-401; revoked or unconfigured authority is 403; stale configuration is 409. Pending
+request even if it knows its ID. Invalid action-body fields are HTTP 400. Malformed or oversized signed envelopes,
+bodies beyond the existing 4096-character signed-body limit, and invalid proofs or
+leases are 401. If the envelope is too large, reduce it; renewing a lease cannot fix
+its size. Revoked, production-environment or unconfigured authority is 403; stale configuration is 409. Pending
 includes work waiting, retrying or parked after the reconciler's eight failures.
 Use operator reconciler status to distinguish these states; do not poll without a
 backoff. A fresh predecessor-bound request can retry a parked target.
