@@ -1,6 +1,6 @@
 # Waitron Cloud backlog
 
-Updated 2026-09-27. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-09-29. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
@@ -564,7 +564,9 @@ mobile notifications separately.
   organisations automatically, reported all four sources stale after stopping, and
   caught up a third organisation after restart; its project containers, volumes and
   network were removed. This proves local scheduling, not a production freshness
-  objective. Production deployment and monitoring remain open. Next: add
+  objective. Shutdown with an active pass was tested through CLI processes; the Compose
+  lifecycle receipt covers normal service stops, not a blocked transaction at stop.
+  Production deployment and monitoring remain open. Next: add
   attributable lookup/API, report and compute units when those services exist, measure
   provider costs, then define allowances, excess-use and metering-outage policy before
   connecting any total to billing or enforcement.

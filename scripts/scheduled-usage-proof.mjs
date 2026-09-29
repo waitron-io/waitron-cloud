@@ -36,6 +36,6 @@ const cleanup={};
 for(const [kind,args] of Object.entries({containers:['ps','-aq'],volumes:['volume','ls','-q'],networks:['network','ls','-q']})){
  cleanup[kind]=run([...args,'--filter',`label=com.docker.compose.project=${project}`],true).split('\n').filter(Boolean).length;
 }
+if(error)throw new Error(`Scheduled usage proof failed; cleanup: ${JSON.stringify(cleanup)}`,{cause:error});
 assert.deepEqual(cleanup,{containers:0,volumes:0,networks:0});
-if(error)throw error;
 receipt.cleanup=cleanup;await writeFile(output,JSON.stringify(receipt,null,2)+'\n');console.log(`PASS scheduled usage proof: ${output}`);

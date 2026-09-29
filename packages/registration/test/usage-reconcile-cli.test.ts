@@ -160,3 +160,15 @@ test('the transaction deadline covers cumulative statements, each shorter than t
   assert.equal(await count(),0);assert.equal(child.output(),'');assert.match(child.error(),/retrying/);
  }finally{await pool.query('DROP TRIGGER usage_slow ON usage_reconciliation_sources');await pool.query('DROP FUNCTION usage_slow()');}
 });
+
+test('watch survives loss of its idle database connection and reconciles newly committed work',async()=>{
+ await seed();const child=worker(['--watch'],{PGAPPNAME:schema});
+ try{
+  await until(()=>child.passes().length>=1,child);assert.equal(await count(),1);
+  const terminated=await admin.query("SELECT pg_terminate_backend(pid) AS terminated FROM pg_stat_activity WHERE application_name=$1",[schema]);
+  assert.ok(terminated.rowCount!>0);assert.ok(terminated.rows.every(row=>row.terminated));
+  await until(()=>child.error().includes('connection failed'),child);
+  await seed(second.installation);await until(async()=>await count()===2,child);
+  assert.doesNotMatch(child.error(),/postgres:\/\//);
+ }finally{await stop(child);}
+});

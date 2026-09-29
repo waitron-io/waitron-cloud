@@ -41,7 +41,8 @@ test('stack readiness separates healthy long-running services from successful jo
 test('stack readiness refuses an exited usage worker even after a successful pass',()=>{
  const names=['account','email-worker','gateway','gateway-manifest','mailpit','monitor-worker','postgres','remote-probe','storage'];
  const services=names.map(Service=>({Service,State:'running',Health:'healthy'}));
- services.push({Service:'usage-reconciler',State:'exited',Health:''});
+ services.push({Service:'bootstrap',State:'exited',Health:'',ExitCode:0},{Service:'migrate',State:'exited',Health:'',ExitCode:0});
+ services.push({Service:'usage-reconciler',State:'exited',Health:'',ExitCode:0});
  assert.equal(stackReadiness(services).ready,false);
 });
 
@@ -53,4 +54,8 @@ test('stack readiness requires successful bootstrap and migration, including alr
  assert.equal(stackReadiness(services).ready,false);
  services.at(-1).State='exited';assert.equal(stackReadiness(services).ready,true);
  services.at(-1).ExitCode=1;assert.deepEqual(stackReadiness(services),{ready:false,failed:'migrate'});
+});
+
+test('stack readiness names a restarting usage worker despite Compose reporting exit code zero',()=>{
+ assert.deepEqual(stackReadiness([{Service:'usage-reconciler',State:'restarting',ExitCode:0}]),{ready:false,failed:'usage-reconciler'});
 });

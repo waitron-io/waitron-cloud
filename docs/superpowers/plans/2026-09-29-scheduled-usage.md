@@ -49,3 +49,10 @@ restart and recreation in 9557/9089/18958 ms, with zero owned resources left.
 The usage proof at `b3d7f7610cdd1d47f00e1adb60704086e0d362cd` recorded two
 organisations automatically, held pending work while stopped with four stale sources,
 and recorded a third organisation after restart. Both receipts named clean trees.
+
+The 504-second Claude run-it review found no blocker and five improvement points.
+All were addressed: a cumulative deadline control, backend-loss regression, named
+startup refusal for a restarting worker, a discriminating readiness fixture, and
+preserving the original proof error when cleanup also fails. Driver deletion controls
+failed for the connection-error handler and required usage service. Final focused
+checks: 22 PostgreSQL/loop tests, 44 deployment checks and package typechecking passed.
