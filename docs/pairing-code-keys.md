@@ -96,4 +96,4 @@ The PostgreSQL pairing tests exercise storage, concurrency, expiry, restart,
 rotation and upgrade; HTTP tests cover refusals and secret-free responses/audit
 events. This protects against database-only disclosure. It does not protect a
 compromised account worker that can read the external keys. Backup-recovery request
-codes use a separate store and are outside this pairing change.
+codes use their own [independent key map and upgrade](recovery-code-keys.md).

@@ -58,7 +58,7 @@ try {
   if (!mailReady) throw new Error('Test Mailpit did not become ready within 30 seconds');
   child = spawn('pnpm', process.argv.length > 2 ? process.argv.slice(2) : ['test:packages'], {
     stdio: 'inherit',
-    env: { ...process.env, CLOUD_PAIRING_ACTIVE_KEY_ID: 'test', CLOUD_PAIRING_KEYS: JSON.stringify({test:randomBytes(32).toString('hex')}), TEST_DATABASE_URL: `postgres://postgres:${password}@127.0.0.1:${port}/cloud_test`,
+    env: { ...process.env, CLOUD_RECOVERY_ACTIVE_KEY_ID: 'test', CLOUD_RECOVERY_KEYS: JSON.stringify({test:randomBytes(32).toString('hex')}), CLOUD_PAIRING_ACTIVE_KEY_ID: 'test', CLOUD_PAIRING_KEYS: JSON.stringify({test:randomBytes(32).toString('hex')}), TEST_DATABASE_URL: `postgres://postgres:${password}@127.0.0.1:${port}/cloud_test`,
       MAILPIT_TEST_URL: inboxUrl, MAILPIT_TEST_SMTP_PORT: smtpPort },
   });
   process.exitCode = await new Promise((resolve, reject) => {

@@ -1,3 +1,4 @@
+import type {RecoveryCodeKeys} from '@waitron-cloud/backups/recovery-codes';
 import {ReplacementStore} from '@waitron-cloud/backups/replacement';
 import type {Context} from 'hono';
 import type {Pool} from 'pg';
@@ -10,7 +11,7 @@ import {readSessionCookie} from './cookies.ts';
 import {readAccountBody} from './request.ts';
 import {AccountHttpError} from './errors.ts';
 import type {RateRule} from './rate-limit.ts';
-export async function recoveryResponse(c:Context,options:{pool:Pool;origin:string;ip:string;captures?:CaptureOptions;consume:(rules:RateRule[])=>Promise<void>}){
+export async function recoveryResponse(c:Context,options:{recoveryCodeKeys:RecoveryCodeKeys|null;pool:Pool;origin:string;ip:string;captures?:CaptureOptions;consume:(rules:RateRule[])=>Promise<void>}){
  const {pool,origin,captures,consume}=options;
  if(c.req.method!=='POST')throw new AccountHttpError(405,'method_not_allowed');
  if(!captures)throw new AccountHttpError(503,'temporarily_unavailable');
@@ -18,7 +19,7 @@ export async function recoveryResponse(c:Context,options:{pool:Pool;origin:strin
  if(!(owner?['inspect','approve','close','replace']:['start','status','info','read','restored']).includes(action))throw new AccountHttpError(404,'not_found');
  if(owner?c.req.header('origin')!==origin:c.req.header('origin')!==undefined)throw new AccountHttpError(403,'forbidden');
  const replacements=new ReplacementStore(pool,captures.vault,origin);
- const requests=new RecoveryRequests(pool,captures.vault,origin),recovery=new BackupRecovery(pool,captures.vault,origin);
+ const requests=new RecoveryRequests(pool,captures.vault,origin,options.recoveryCodeKeys),recovery=new BackupRecovery(pool,captures.vault,origin);
  try{
   if(owner){
    const token=readSessionCookie(c,new URL(origin).protocol==='https:')??'',csrf=c.req.header('x-csrf-token')??'';

@@ -25,6 +25,7 @@
     "./key-operations": "./src/key-operations.ts",
     "./keys": "./src/keys.ts",
     "./recovery": "./src/recovery.ts",
+    "./recovery-codes": "./src/recovery-codes.ts",
     "./recovery-request": "./src/recovery-request.ts",
     "./replacement": "./src/replacement.ts"
   }
