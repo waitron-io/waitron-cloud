@@ -393,11 +393,13 @@ export class BackupCatalogue {
     });
     let outcome: "verified" | "failed" = "verified";
     try {
-      const objects=this.#objects(prepared.location),
-        source = await staged(objects,prepared.point.objectKey,signal).catch(error=>{
-          if(isBackupCancellation(error,signal))throw error;
-          backupFail("verification_unavailable");
-        });
+      let source:ReplayableObject;
+      try{
+        source=await staged(this.#objects(prepared.location),prepared.point.objectKey,signal);
+      }catch(error){
+        if(isBackupCancellation(error,signal))throw error;
+        backupFail("verification_unavailable");
+      }
       try {
         if (
           source.receipt.digest !== prepared.point.digest ||

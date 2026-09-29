@@ -144,3 +144,10 @@ test('a Docker start refusal is infrastructure failure and removes the unstarted
   await assert.rejects(verify(source(0),keys,point(0),new AbortController().signal),/backup.verifier_container/);empty();
  }finally{process.env.PATH=oldPath;await rm(directory,{recursive:true,force:true});}
 });
+
+test('an external container kill is infrastructure uncertainty rather than an archive refusal',async()=>{
+ const verify=await createContainerWaitronVerifier({image,owner}),pending=verify(source(3),keys,point(3),new AbortController().signal);
+ const rejected=assert.rejects(pending,/backup.verifier_container/);let id='';
+ const deadline=Date.now()+10000;while(!id&&Date.now()<deadline){id=docker('ps','-q','--filter','label=cloud.backup-verifier.owner='+owner);if(!id)await delay(20);}
+ assert(id);docker('kill','--signal','KILL',id);await rejected;empty();
+});

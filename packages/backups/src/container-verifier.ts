@@ -66,6 +66,8 @@ export async function createContainerWaitronVerifier(options:ContainerVerifierOp
    // A created container or host start error has not completed an archive check.
    if(info.State.Status!=='exited'||info.State.Error||(info.State.ExitCode===0&&attachCode!==0))throw Error('backup.verifier_container');
    if(info.State.OOMKilled||info.State.ExitCode===73)throw Error('backup.verifier_resource',{cause:{oomKilled:info.State.OOMKilled,exitCode:info.State.ExitCode,memoryBytes:info.HostConfig.Memory,memorySwapBytes:info.HostConfig.MemorySwap,scratch:info.HostConfig.Tmpfs,network:info.HostConfig.NetworkMode,readOnly:info.HostConfig.ReadonlyRootfs,mounts:info.Mounts}});
+   // Only the entrypoint's documented exit codes attest a completed verifier outcome.
+   if(![0,1,74].includes(info.State.ExitCode))throw Error('backup.verifier_container');
    if(uploadFailed)throw Error('backup.verifier_input');
    if(info.State.ExitCode===74)throw Error('backup.verifier_timeout');
    if(info.State.ExitCode!==0)throw Error('backup.verifier_failed');

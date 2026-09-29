@@ -160,3 +160,12 @@ test('storage download outage creates no archive verdict and retries the same po
  await db.pool.query("UPDATE backup_jobs SET available_at=clock_timestamp() WHERE kind='verify'");assert.equal(await worker.runOnce(),true);
  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'verified');
 });
+
+test('a storage adapter that cannot start records no archive verdict',async()=>{
+ const point=await snapshot();await only('verify');
+ const unavailable=new BackupCatalogue(db.pool,vault,()=>{throw Error('private provider startup failure');});
+ assert.equal(await new BackupWorker(db.pool,unavailable,async()=>assert.fail('no storage')).runOnce(),true);
+ assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'pending');
+ assert.equal((await db.pool.query('SELECT count(*) FROM backup_verifications')).rows[0].count,'0');
+ assert.equal((await db.pool.query("SELECT last_error FROM backup_jobs WHERE kind='verify'")).rows[0].last_error,'verification_unavailable');
+});

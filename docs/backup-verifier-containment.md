@@ -109,7 +109,8 @@ wait. A separate case points only the worker's Docker client at a missing socket
 its connection, and verifies the same snapshot. The other organisation's malformed
 snapshot remains separate and gets a real failed result. The shared Docker daemon is never
 stopped. A Docker CLI fault wrapper also refuses `start` on a real created container and
-checks that it is removed. Injected fixed cleanup/configuration/input/output errors prove
+checks that it is removed. An external SIGKILL of a running container returns an
+infrastructure error and removes that container. Injected fixed cleanup/configuration/input/output errors prove
 retry budgets and preservation of a previously verified fallback; they do not simulate a
 physical host crash. Existing container-death and expiry tests prove later reclamation.
 
