@@ -91,6 +91,8 @@ services:
 
   account:
     <<: *cloud
+    environment:
+      CLOUD_STAFF_CERTIFICATES: ${CLOUD_STAFF_CERTIFICATES:-0}
     command: ["node", "deploy/local-stack/runtime.mjs", "account"]
     depends_on:
       migrate:

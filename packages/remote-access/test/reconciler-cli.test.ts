@@ -47,3 +47,10 @@ test('continuous mode exits cleanly on SIGTERM',async()=>{
  let ready=false;for(let attempt=0;attempt<50;attempt++){if((await db.pool.query("SELECT 1 FROM remote_configuration_jobs WHERE kind='route' AND target_id=$1",[value.cellId])).rowCount){ready=true;break;}if(child.exitCode!==null)break;await delay(100);}
  assert.equal(ready,true,output);child.kill('SIGTERM');const code=await new Promise(resolve=>child.once('exit',resolve));assert.equal(code,0,output);
 });
+
+test('database staff mode is explicit and cannot coexist with a staff file mapping',async()=>{
+ const value=await fixture(),config=JSON.parse(await readFile(value.configFile,'utf8'));
+ for(const staffExchange of ['yes',1,null]){await writeFile(value.configFile,JSON.stringify({...config,staffExchange}));assert.equal(run(value.configFile,'--status').status,1);}
+ await writeFile(value.configFile,JSON.stringify({...config,staffExchange:true}));assert.equal(run(value.configFile,'--status').status,0);
+ await writeFile(value.configFile,JSON.stringify({...config,staffExchange:true,certificates:[{installationId:randomUUID(),kind:'staff',csrFile:join(root,'staff.csr'),output:join(root,'staff.crt')}]}));assert.equal(run(value.configFile,'--status').status,1);
+});

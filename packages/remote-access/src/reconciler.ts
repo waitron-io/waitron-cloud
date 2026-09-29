@@ -1,3 +1,4 @@
+import {readStaffRequest,publishStaffCertificate,type StaffCertificateRequest} from './staff-exchange.ts';
 import {createHash,randomUUID,type KeyObject} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {transaction} from '@waitron-cloud/registration';
@@ -18,6 +19,7 @@ export interface ReconcilerArtifacts {
 }
 export interface CertificateIssueTarget extends CertificateAuthorization {installationId:string;kind:'staff'|'public';csr:string;signal:AbortSignal}
 interface ReconcilerOptions {
+ staffExchange?:boolean;
  execute?:(job:RemoteConfigurationJob,context:ExecuteContext)=>Promise<void>;
  artifacts?:ReconcilerArtifacts;
  issueCertificate?:(target:CertificateIssueTarget)=>Promise<string>;
@@ -31,7 +33,9 @@ const routeDigest=(routes:GatewayRoute[])=>digest([...routes].sort((a,b)=>a.venu
 const certificateDigest=(installationId:string,kind:'staff'|'public',value:CertificateAuthorization)=>digest({installationId,kind,revision:value.revision,hostname:value.hostname,dnsName:value.dnsName});
 const rowJob=(row:Record<string,unknown>):RemoteConfigurationJob=>({kind:row.kind as RemoteConfigurationKind,targetId:String(row.target_id),desiredDigest:String(row.desired_digest),claimId:String(row.claim_id),attempts:Number(row.attempts)});
 
-async function desiredTargets(client:PoolClient):Promise<DesiredTarget[]>{
+const staffDigest=(authorityDigest:string,request:StaffCertificateRequest)=>digest({authorityDigest,requestId:request.request_id,requestDigest:request.request_digest});
+
+async function desiredTargets(client:PoolClient,staffExchange:boolean):Promise<DesiredTarget[]>{
  const cells=(await client.query('SELECT id FROM remote_cells ORDER BY id')).rows;
  const targets:DesiredTarget[]=[];
  for(const cell of cells){
@@ -59,19 +63,21 @@ async function desiredTargets(client:PoolClient):Promise<DesiredTarget[]>{
  for(const row of certificates){
   for(const kind of ['staff','public'] as const){
    const hostname=row[`${kind}_hostname`],dnsName=`_acme-challenge.${kind==='staff'?'staff-':''}v-${row.venue_id}.${row.suffix}`;
-   targets.push({kind:`certificate_${kind}`,targetId:row.id,digest:certificateDigest(row.id,kind,{revision:Number(row.configuration_revision),hostname,dnsName})});
+   let desiredDigest=certificateDigest(row.id,kind,{revision:Number(row.configuration_revision),hostname,dnsName});
+   if(kind==='staff'&&staffExchange){const request=await readStaffRequest(client,row.id);if(!request||request.revision!==Number(row.configuration_revision)||request.hostname!==hostname)continue;desiredDigest=staffDigest(desiredDigest,request);}
+   targets.push({kind:`certificate_${kind}`,targetId:row.id,digest:desiredDigest});
   }
  }
  return targets;
 }
 
 export class RemoteConfigurationReconciler {
- readonly #pool:Pool;readonly #execute:ReconcilerOptions['execute'];readonly #artifacts:ReconcilerArtifacts|undefined;
+ readonly #staffExchange:boolean;readonly #pool:Pool;readonly #execute:ReconcilerOptions['execute'];readonly #artifacts:ReconcilerArtifacts|undefined;
  readonly #issueCertificate:ReconcilerOptions['issueCertificate'];readonly #signingKeyForCell:ReconcilerOptions['signingKeyForCell'];readonly #now:()=>number;readonly #store:RemoteAccessStore;
- constructor(pool:Pool,options:ReconcilerOptions={}){this.#pool=pool;this.#store=new RemoteAccessStore(pool);this.#execute=options.execute;this.#artifacts=options.artifacts;this.#issueCertificate=options.issueCertificate;this.#signingKeyForCell=options.signingKeyForCell;this.#now=options.now??Date.now;}
+ constructor(pool:Pool,options:ReconcilerOptions={}){this.#staffExchange=options.staffExchange??false;this.#pool=pool;this.#store=new RemoteAccessStore(pool);this.#execute=options.execute;this.#artifacts=options.artifacts;this.#issueCertificate=options.issueCertificate;this.#signingKeyForCell=options.signingKeyForCell;this.#now=options.now??Date.now;}
  async schedule():Promise<number>{return transaction(this.#pool,async client=>{
   await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext('remote_configuration_schedule'))");
-  const desired=await desiredTargets(client),keys=new Set(desired.map(target=>`${target.kind}:${target.targetId}`));let changed=0;
+  const desired=await desiredTargets(client,this.#staffExchange),keys=new Set(desired.map(target=>`${target.kind}:${target.targetId}`));let changed=0;
   const existing=(await client.query('SELECT kind,target_id FROM remote_configuration_jobs WHERE enabled')).rows;
   for(const row of existing)if(!keys.has(`${row.kind}:${row.target_id}`)){
    const result=await client.query(`UPDATE remote_configuration_jobs SET enabled=false,status='pending',claim_id=NULL,lease_until=NULL,attempts=0,last_error=NULL,updated_at=clock_timestamp()
@@ -93,8 +99,8 @@ export class RemoteConfigurationReconciler {
   }
   return changed;
  });}
- async #current(job:RemoteConfigurationJob):Promise<boolean>{
-  const row=(await this.#pool.query(`SELECT 1 FROM remote_configuration_jobs WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4
+ async #current(job:RemoteConfigurationJob,client:Pool|PoolClient=this.#pool):Promise<boolean>{
+  const row=(await client.query(`SELECT 1 FROM remote_configuration_jobs WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4
    AND enabled AND status='running' AND lease_until>clock_timestamp()`,[job.kind,job.targetId,job.desiredDigest,job.claimId])).rows[0];return !!row;
  }
  async runOnce(signal=new AbortController().signal):Promise<boolean>{
@@ -127,6 +133,7 @@ export class RemoteConfigurationReconciler {
   await this.#complete(job,()=>this.#artifacts!.publishManifest(job.targetId,envelope));
  }
  async #certificate(job:RemoteConfigurationJob,signal:AbortSignal){
+  if(job.kind==='certificate_staff'&&this.#staffExchange)return this.#staffCertificate(job,signal);
   if(!this.#artifacts||!this.#issueCertificate)throw new Error('reconciler_not_configured');
   const kind=job.kind==='certificate_staff'?'staff':'public',csr=await this.#artifacts.readCsr(job.targetId,kind);
   const authority=await this.#store.authorizeCertificate(job.targetId,kind,csr);
@@ -139,6 +146,22 @@ export class RemoteConfigurationReconciler {
   await this.#complete(job,async client=>{
    const latestCsr=await this.#artifacts!.readCsr(job.targetId,kind);if(latestCsr!==csr)throw new Error('csr_changed');
    await this.#store.publishAuthorizedCertificate(client,job.targetId,kind,csr,authority,()=>this.#artifacts!.publishCertificate(job.targetId,kind,certificate));
+  });
+ }
+ async #staffCertificate(job:RemoteConfigurationJob,signal:AbortSignal){
+  if(!this.#issueCertificate)throw new Error('reconciler_not_configured');
+  const request=await readStaffRequest(this.#pool,job.targetId);if(!request)throw new Error('missing_staff_request');
+  const authority=await this.#store.authorizeCertificate(job.targetId,'staff',request.csr);
+  if(request.revision!==authority.revision||request.hostname!==authority.hostname||staffDigest(certificateDigest(job.targetId,'staff',authority),request)!==job.desiredDigest)throw new Error('stale_configuration');
+  if(request.certificate_request_id===request.request_id&&request.certificate&&!certificateNeedsRenewal(request.certificate,request.csr,authority.hostname,this.#now())){await this.#complete(job,async()=>{});return;}
+  const certificate=await this.#issueCertificate({...authority,installationId:job.targetId,kind:'staff',csr:request.csr,signal});
+  signal.throwIfAborted();
+  await this.#complete(job,async client=>{
+   await this.#store.publishAuthorizedCertificate(client,job.targetId,'staff',request.csr,authority,async()=>{
+    // Taking the installation lock can outlive the claim or shutdown signal.
+    if(!await this.#current(job,client))throw new Error('stale_claim');
+    signal.throwIfAborted();await publishStaffCertificate(client,request,certificate);
+   });
   });
  }
  async #complete(job:RemoteConfigurationJob,action:(client:PoolClient)=>Promise<void>){

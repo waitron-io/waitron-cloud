@@ -236,3 +236,91 @@ failed verification, interrupted cleanup, gateway loss and a returning old serve
 The integration with Waitron's SQLite capture/restore interfaces and source-side
 networking work belong in Waitron;
 do not replace them with a Cloud-only implementation of the engine.
+
+## Staff certificate exchange, version 1
+
+You can send a staff CSR to Cloud without sharing the appliance's TLS private key.
+The account server exposes this local integration only when
+`CLOUD_STAFF_CERTIFICATES=1`; it also requires an installation issuer and refuses
+production-environment installations. Enable the database staff worker with it.
+Both endpoints use the existing `waitron-cloud-machine-v1` signed envelope and a
+current control lease. POST to `/api/installations/staff-certificate-submit` or
+`/api/installations/staff-certificate-status`; the signed action is the final path
+segment. Browser Origin headers are refused. Use HTTPS outside the loopback proof.
+The existing 60-second proof window, one-hour lease, bounded body and per-IP and
+per-installation limits apply. No provider credential or filesystem path is accepted.
+
+For submit, use a durable UUID as the envelope's operation ID and sign this exact
+JSON body (the envelope carries its JSON encoding as a string):
+
+```json
+{
+  "version": 1,
+  "hostname": "staff-v-00000000-0000-4000-8000-000000000001.example.test",
+  "revision": 2,
+  "csr": "-----BEGIN CERTIFICATE REQUEST-----\n...\n-----END CERTIFICATE REQUEST-----\n",
+  "previousRequestId": null
+}
+```
+
+Take hostname and revision from the current installation configuration. Generate the
+CSR with Waitron's `cloud-certificate.ts csr STATE_DIR HOSTNAME FILE` command. Its
+signature, RSA key size and single exact hostname must pass the existing Cloud CSR
+checks. Keep the full submit body and operation ID until you know the result. After
+a lost reply, sign that same body and ID with a fresh proof timestamp and live lease.
+This does not create another request or restart issuance. The reply reflects the
+current state, so a retry may already contain the finished chain.
+
+Cloud keeps one request row per installation. For a later request, set
+`previousRequestId` to the ID you are replacing and choose a new operation ID.
+Only one concurrent replacement wins. Reusing the current ID with different input, colliding with another installation's
+current ID, sending an old predecessor, or reading a superseded ID returns HTTP 409
+`conflict`. Always generate a fresh UUID for new work. Cloud keeps no historical
+ID ledger: deliberately reusing a superseded ID with the current predecessor is
+a new request, and the retained chain must still match its current CSR key. A retry
+of a superseded submission cannot restore it. Keep the old installed chain while a
+new request is pending; Cloud also retains its previous chain internally until a
+validated replacement commits, but does not return it for the new request.
+
+For status, sign `{"version":1,"requestId":"<submission UUID>"}` with a fresh
+operation ID. Both actions return this shape, with `certificate` present only when
+state is `ready`:
+
+```json
+{
+  "version": 1,
+  "installationId": "00000000-0000-4000-8000-000000000002",
+  "requestId": "00000000-0000-4000-8000-000000000003",
+  "hostname": "staff-v-00000000-0000-4000-8000-000000000001.example.test",
+  "revision": 2,
+  "csrDigest": "<SHA-256 hex of the submitted PEM bytes>",
+  "state": "ready",
+  "certificate": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n"
+}
+```
+
+Every read checks the stored installation key, lease binding, revocation, placement,
+hostname and configuration revision again. Another installation cannot read this
+request even if it knows its ID. Invalid action-body fields are HTTP 400. Malformed or oversized signed envelopes,
+bodies beyond the existing 4096-character signed-body limit, and invalid proofs or
+leases are 401. If the envelope is too large, reduce it; renewing a lease cannot fix
+its size. Revoked, production-environment or unconfigured authority is 403; stale configuration is 409. Pending
+includes work waiting, retrying or parked after the reconciler's eight failures.
+Use operator reconciler status to distinguish these states; do not poll without a
+backoff. A fresh predecessor-bound request can retry a parked target.
+
+Before installing, the appliance must compare installation ID, request ID, hostname,
+revision and CSR digest with its still-current local intent, then use the existing
+`cloud-certificate.ts install` command. That command checks hostname, validity and
+private-key matching and atomically replaces its certificate file. It does not
+establish trust in an arbitrary supplied issuer; obtain the chain through the
+trusted Cloud HTTPS origin. Cloud uses the configured ACME issuer and rechecks
+hostname, key and validity before publication. Issuance does not mean the appliance
+has installed or reloaded the chain.
+
+The Cloud exchange and optional database staff reconciler mode are implemented.
+The Waitron dependency is an adapter that persists pending request IDs, signs these
+two actions, renews its lease, polls with backoff, discards replies after local
+configuration/revocation/key changes, invokes the install command and reloads TLS.
+Its process scheduling and crash recovery are not supplied by this Cloud change.
+The local proof calls the existing Waitron commands explicitly.

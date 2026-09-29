@@ -85,3 +85,9 @@ test('existing local configuration is not regenerated when it lacks recovery key
  assert.deepEqual(await bootstrap(path),config);assert.deepEqual(await loadRuntime(path),config);
  assert.equal(runtimeEnvironment('account',config).CLOUD_RECOVERY_KEYS,undefined);
 });
+
+test('only account receives an explicitly enabled staff certificate exchange',async()=>{
+ const {config}=await configured();assert.equal(runtimeEnvironment('account',config).CLOUD_STAFF_CERTIFICATES,undefined);
+ assert.equal(runtimeEnvironment('account',config,{CLOUD_STAFF_CERTIFICATES:'1'}).CLOUD_STAFF_CERTIFICATES,'1');
+ for(const role of ['migrate','email','monitor','usage','probe','backup','gateway','manifest','reconcile'])assert.equal(runtimeEnvironment(role,config,{CLOUD_STAFF_CERTIFICATES:'1'}).CLOUD_STAFF_CERTIFICATES,undefined);
+});

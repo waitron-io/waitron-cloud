@@ -194,8 +194,8 @@ Certificate publication rechecks the current hostname, ACME delegation name,
 configuration revision and claim lease after ACME completes. A stale result is refused.
 Files are replaced atomically, so a failed issuance or write keeps the prior usable chain
 or manifest. Cloud reads the staff CSR and returns only the chain; the private key remains
-in Waitron. Transporting that CSR and chain between a production appliance and Cloud is
-not implemented by this local filesystem adapter.
+in Waitron. For an authenticated CSR/chain exchange without shared files, use the database staff
+mode below. Automatic production appliance scheduling remains a Waitron dependency.
 
 On shutdown, the worker refuses to publish a result completed after the signal and returns
 that claim without consuming retry budget. The current ACME client does not expose request
@@ -223,6 +223,47 @@ public-site chains and keys. Set `GATEWAY_CELL_ID`, `GATEWAY_SUBNET`, and, for a
 `GATEWAY_UPSTREAM_CA`. The runner is the executable example for container arguments.
 Its `peer-cli.ts` is a local bridge to `host.docker.internal`, not an installer for a
 customer appliance. Neither component changes the host's network interfaces.
+
+## Exchange staff certificates without shared files
+
+Use the [version 1 machine exchange](waitron-integration-contract.md#staff-certificate-exchange-version-1)
+when a test installation cannot share the reconciler filesystem. Set
+`CLOUD_STAFF_CERTIFICATES=1` on the account service (also forwarded by the local
+Compose account service); the default is disabled and returns 503. This opt-in
+requires the installation issuer and currently refuses production installations.
+Enable it together with the database staff worker. Add `"staffExchange": true`
+to the trusted reconciler JSON and remove every `kind: "staff"` entry from its
+`certificates` array. Public certificate files, route mappings, DNS adapter and ACME
+credentials keep their existing configuration. Staff requests arrive through the
+signed installation API and the worker reads and writes their bounded PostgreSQL
+rows. Run one consistent mode across all workers; do not mix database staff workers
+with filesystem staff workers against the same jobs.
+
+A new predecessor-bound request changes the worker's desired state, so it becomes
+due even if the preceding request is parked or scheduled for tomorrow. An exact
+submit retry does not reset work. Publication checks the job lease, current request,
+hostname, revision and revocation together. Failed issuance keeps the old chain;
+a result completed after replacement, revocation, configuration change or shutdown
+cannot replace it. A changed hostname requires a new CSR and request at the current
+revision. Installation replacement also requires the new installation's own proof,
+lease and request; it cannot read the old installation's chain.
+
+Run the local two-installation proof against an isolated Waitron checkout:
+
+```sh
+WAITRON_CHECKOUT=/absolute/path/to/waitron \
+  node scripts/test-postgres.mjs exec node scripts/staff-certificate-receipt.mjs \
+  /tmp/cloud-staff-certificate-receipt.json
+```
+
+The proof uses real PostgreSQL, signed requests over loopback HTTP, local Pebble/DNS
+issuance and Waitron's unchanged CSR/install CLI. It checks two separate owners,
+lost-reply retries, cross-tenant refusal, failed renewal retention, successful
+replacement, stale issuance and revocation. It verifies removal of its ACME
+containers/network, temporary state and database schema before writing the receipt.
+Loopback HTTP exercises the handler, not production transport security. The proof
+does not deploy a live provider, test appliance polling/TLS reload or make a
+production certificate-availability promise.
 
 ## Move a venue between existing cells
 

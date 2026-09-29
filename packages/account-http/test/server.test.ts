@@ -238,3 +238,14 @@ test('CLI identifies the missing installation issuer without logging backup secr
  const outcome=await cli({CLOUD_INSTALLATION_ISSUER_KEY:'',CLOUD_BACKUP_MASTER_KEY:randomBytes(32).toString('hex'),CLOUD_BACKUP_ENDPOINT:'https://store.test',CLOUD_BACKUP_REGION:'local',CLOUD_BACKUP_ACCESS_KEY:'operator-secret',CLOUD_BACKUP_SECRET_KEY:'private-secret',CLOUD_BACKUP_AUTHORITY:JSON.stringify({issuer:'https://issuer.test',audience:'backup',keyId:'test',privateKey:generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({type:'pkcs8',format:'pem'}).toString(),roles:{capture:'capture',stream:'stream',restore:'restore'}})}).exited;
  assert.equal(outcome.code,1);assert.equal(outcome.stdout,'');assert.equal(outcome.stderr,'Account server requires CLOUD_INSTALLATION_ISSUER_KEY when backup capture is configured\n');
 });
+
+test('staff exchange CLI requires explicit configuration and an installation issuer',async()=>{
+ for(const overrides of [{CLOUD_STAFF_CERTIFICATES:'yes'},{CLOUD_STAFF_CERTIFICATES:'1',CLOUD_INSTALLATION_ISSUER_KEY:''}]){
+  const running=cli(overrides);try{const result=await Promise.race([running.exited,delay(5000).then(()=>{throw Error('invalid staff configuration started a server');})]);assert.equal(result.code,1);assert.equal(result.stdout,'');}finally{if(running.child.exitCode===null)await running.stop();}
+ }
+ const key=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url');
+ for(const value of ['0','1']){const running=cli({CLOUD_STAFF_CERTIFICATES:value,CLOUD_INSTALLATION_ISSUER_KEY:key});try{const port=await running.ready();assert.equal((await health(port,'/api/health/ready').result).status,200);
+  const status=await new Promise<number>((resolve,reject)=>{const req=request({host:'127.0.0.1',port,path:'/api/installations/staff-certificate-status',method:'POST',headers:{host:'localhost','content-type':'application/json'}},res=>{res.resume();res.on('end',()=>resolve(res.statusCode!));});req.on('error',reject);req.end('{}');});
+  assert.equal(status,value==='1'?400:503);
+ }finally{assert.equal((await running.stop()).code,0);}}
+});
