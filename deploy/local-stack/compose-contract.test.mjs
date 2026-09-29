@@ -55,3 +55,11 @@ test('legacy Mailpit port overrides and teardown remain service-scoped',()=>{
  assert.equal(service.environment.CLOUD_USAGE_INTERVAL_MS,'60000');
  assert.equal(service.environment.CLOUD_USAGE_BATCH_SIZE,'100');
 });
+
+test('backup orchestration has Docker authority and an explicit bounded verifier image',()=>{
+ const service=configuration().services['backup-worker'];
+ assert.equal(service.environment.CLOUD_VERIFIER_IMAGE,'waitron-backup-verifier:local');
+ assert.equal(service.environment.CLOUD_VERIFIER_MEMORY_MIB,'1024');assert.equal(service.environment.CLOUD_VERIFIER_SCRATCH_MIB,'256');
+ assert.ok(service.volumes.some(volume=>volume.target==='/var/run/docker.sock'));
+ assert.ok(!service.volumes.some(volume=>volume.target==='/waitron'));
+});

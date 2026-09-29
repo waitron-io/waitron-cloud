@@ -29,7 +29,7 @@ export async function runNodeVerifier(args:string[],options:{input:unknown;timeo
    kill();closed=true;clearTimeout(timer);options.signal?.removeEventListener('abort',abort);
    const resourceSignal=signal==='SIGXCPU'||signal==='SIGXFSZ'||signal==='SIGKILL'||signal==='SIGABRT';
    // Node reports macOS file-limit failures as EFBIG and V8 heap exhaustion in stderr before exiting.
-   const resourceError=/\bEFBIG\b|heap out of memory|reached heap limit|ineffective mark-compacts near heap limit/i.test(errors);
+   const resourceError=/\b(?:EFBIG|ENOSPC)\b|heap out of memory|reached heap limit|ineffective mark-compacts near heap limit/i.test(errors);
    if(failure||code!==0){reject(Error(failure??(resourceSignal||resourceError?'backup.verifier_resource':'backup.verifier_failed')));return;}
    try{resolve(JSON.parse(output));}catch{reject(Error('backup.verifier_output'));}
   });

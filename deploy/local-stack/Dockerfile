@@ -6,7 +6,7 @@ ARG SEAWEED_AMD64_SHA256
 ARG SEAWEED_ARM64_SHA256
 ARG TARGETARCH
 
-RUN apk add --no-cache ca-certificates curl haproxy iproute2 iptables openssl tar wireguard-tools \
+RUN apk add --no-cache ca-certificates curl docker-cli haproxy iproute2 iptables openssl tar wireguard-tools \
  && case "$TARGETARCH" in \
       amd64) archive=linux_amd64.tar.gz; digest="$SEAWEED_AMD64_SHA256" ;; \
       arm64) archive=linux_arm64.tar.gz; digest="$SEAWEED_ARM64_SHA256" ;; \
