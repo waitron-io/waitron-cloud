@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {execFileSync,spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
-import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
+import {createReadStream} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -27,7 +28,7 @@ const empty=()=>assert.equal(docker('ps','-aq','--filter','label=cloud.backup-ve
 test('native memory and total scratch exhaustion refuse restoration; the parent verifies a later snapshot',async(t)=>{
  const verify=await createContainerWaitronVerifier({image,owner,memoryMiB:192,scratchMiB:16});
  for(const mode of [1,2]){
-  const start=Date.now();await assert.rejects(verify(source(mode),keys,point(mode),new AbortController().signal),(error:any)=>{assert.equal(error.message,'backup.verifier_resource');if(mode===1)assert.equal(error.cause.oomKilled,true);t.diagnostic(JSON.stringify({mode,...error.cause}));return true;});
+  const start=Date.now();await assert.rejects(verify(source(mode),keys,point(mode),new AbortController().signal),(error:any)=>{assert.equal(error.message,'backup.verifier_resource');assert.equal(error.cause.memoryBytes,201326592);assert.equal(error.cause.memorySwapBytes,201326592);assert.deepEqual(error.cause.mounts,[]);assert.equal(error.cause.readOnly,true);assert.equal(error.cause.network,'none');assert.match(error.cause.scratch['/scratch'],/size=16m/);if(mode===1)assert.equal(error.cause.oomKilled,true);t.diagnostic(JSON.stringify({mode,...error.cause}));return true;});
   assert(Date.now()-start<30000);empty();
  }
  const value=await verify(source(0),keys,point(0),new AbortController().signal) as any;
@@ -55,17 +56,18 @@ test('input scratch exhaustion is a resource refusal and a broken upload leaves 
  await assert.rejects(verify({receipt:receipt(data),open:()=>Readable.from((async function*(){yield data.subarray(0,10);throw Error('private upload error');})()),async dispose(){}},keys,point(0),new AbortController().signal),/backup.verifier_input/);empty();
 });
 
-test('restart reclaims exited owned containers and preserves live and foreign work',async()=>{
- const own=docker('create','--label','cloud.backup-verifier.deadline=0','--label','cloud.backup-verifier.owner='+owner,'--entrypoint','node',image,'-e',''),foreign=docker('create','--label','cloud.backup-verifier.owner=foreign-'+owner,'--entrypoint','node',image,'-e',''),live=docker('run','-d','--label','cloud.backup-verifier.owner='+owner,'--entrypoint','node',image,'-e','setTimeout(()=>{},20000)');
+test('restart reclaims expired owned work and preserves work within its deadline and foreign work',async()=>{
+ const own=docker('create','--label','cloud.backup-verifier.deadline=0','--label','cloud.backup-verifier.owner='+owner,'--entrypoint','node',image,'-e',''),foreign=docker('create','--label','cloud.backup-verifier.owner=foreign-'+owner,'--entrypoint','node',image,'-e',''),live=docker('run','-d','--label','cloud.backup-verifier.deadline='+String(Date.now()+60000),'--label','cloud.backup-verifier.owner='+owner,'--entrypoint','node',image,'-e','setTimeout(()=>{},20000)');
+ const expiredLive=docker('run','-d','--label','cloud.backup-verifier.deadline=0','--label','cloud.backup-verifier.owner='+owner,'--entrypoint','node',image,'-e','setInterval(()=>{},1000)');
  const recent=docker('create','--label','cloud.backup-verifier.deadline='+String(Date.now()+60000),'--label','cloud.backup-verifier.owner='+owner,'--entrypoint','node',image,'-e','');
  try{
   docker('start','-a',own);docker('start','-a',recent);
   await createContainerWaitronVerifier({image,owner});
-  assert.throws(()=>docker('inspect',own));
+  assert.throws(()=>docker('inspect',own));assert.throws(()=>docker('inspect',expiredLive));
   assert.equal(JSON.parse(docker('inspect',recent))[0].State.Status,'exited');
   assert.equal(JSON.parse(docker('inspect',live))[0].State.Running,true);
   assert.equal(JSON.parse(docker('inspect',foreign))[0].State.Status,'created');
- }finally{for(const id of [own,foreign,live,recent])try{docker('rm','-f',id);}catch{}}
+ }finally{for(const id of [own,foreign,live,recent,expiredLive])try{docker('rm','-f',id);}catch{}}
  empty();
 });
 
@@ -83,4 +85,36 @@ test('a killed worker leaves bounded work that the next startup reaps', {timeout
   await delay(Math.max(0,reclaimAt-Date.now()+50));
   await createContainerWaitronVerifier({image,owner});empty();
  }finally{child.kill('SIGKILL');await done;if(id)try{docker('rm','-f',id);}catch{}}
+});
+
+
+test('scratch refusal retains its resource reason with a file-backed streaming source',async()=>{
+ const verify=await createContainerWaitronVerifier({image,owner,memoryMiB:192,scratchMiB:1}),dir=await mkdtemp(join(tmpdir(),'container-stream-')),path=join(dir,'archive'),data=Buffer.alloc(4*1024*1024,1);
+ try{await writeFile(path,data);await assert.rejects(verify({receipt:receipt(data),open:()=>createReadStream(path),async dispose(){}},keys,point(0),new AbortController().signal),/backup.verifier_resource/);empty();}
+ finally{await rm(dir,{recursive:true,force:true});}
+});
+
+
+test('scratch exhaustion fills the bounded filesystem independently of child error text',async(t)=>{
+ const verify=await createContainerWaitronVerifier({image,owner,memoryMiB:192,scratchMiB:16}),stop=new AbortController(),pending=verify(source(6),keys,point(6),stop.signal),cancelled=assert.rejects(pending,/backup.verifier_cancelled/);
+ let capacity=0,free=-1;
+ try{
+  const deadline=Date.now()+10000;
+  while(Date.now()<deadline){
+   const id=docker('ps','-q','--filter','label=cloud.backup-verifier.owner='+owner);
+   if(id){const info=JSON.parse(docker('exec',id,'node','-e',`const fs=require('node:fs'),s=fs.statfsSync('/scratch');console.log(JSON.stringify({capacity:s.blocks*s.bsize,free:s.bavail*s.bsize}))`));capacity=info.capacity;free=info.free;if(free===0)break;}
+   await delay(50);
+  }
+  assert.equal(capacity,16777216);assert.equal(free,0);t.diagnostic(JSON.stringify({scratchCapacityBytes:capacity,scratchFreeBytes:free}));
+ }finally{stop.abort();await cancelled;}empty();
+});
+
+test('the verifier pins its image and refuses images with extra writable volumes',async()=>{
+ const alias=image+'-alias',volume=image+'-volume';
+ try{
+  docker('tag',image,alias);const verify=await createContainerWaitronVerifier({image:alias,owner});
+  docker('tag','node:26',alias);assert.equal((await verify(source(0),keys,point(0),new AbortController().signal) as any).integrityOk,true);empty();
+  execFileSync('docker',['build','-q','-t',volume,'-'],{input:`FROM ${image}\nVOLUME /extra\n`,encoding:'utf8',timeout:120000,stdio:['pipe','pipe','pipe']});
+  await assert.rejects(createContainerWaitronVerifier({image:volume,owner}),/backup.verifier_configuration/);empty();
+ }finally{for(const tag of [alias,volume])try{docker('image','rm',tag);}catch{}}
 });

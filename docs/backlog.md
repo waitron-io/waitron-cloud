@@ -609,7 +609,11 @@ mobile notifications separately.
   `00496fcd182a5c2c9189cc3faf0f8f22d3baf8ac` restore with 1024 MiB memory and 256 MiB scratch.
   See [the containment receipt and limits](backup-verifier-containment.md). Production
   host/kernel isolation, hostile native exploits, fleet sizing and large archives remain
-  unverified; the process-only development adapter still lacks these total-resource bounds. A read-only
+  unverified; the process-only development adapter still lacks these total-resource bounds.
+  D32 review follow-up: distinguish Docker/infrastructure failures from archive validity
+  in the catalogue and worker before production operation. The current interface marks
+  both as failed verification; next add a real PostgreSQL daemon-outage/recovery test
+  before changing that state meaning. A read-only
   dependency inventory and local drill now prove active-key rotation, old snapshot restore,
   worker restart and wrong/missing-key refusal without exposing secrets or deleting keys.
   The history cleanup command

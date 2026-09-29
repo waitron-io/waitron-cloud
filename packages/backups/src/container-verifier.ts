@@ -24,7 +24,7 @@ export async function createContainerWaitronVerifier(options:ContainerVerifierOp
  const expired=(await docker(['ps','-aq','--filter',`label=${label}=${owner}`])).split(/\s+/).filter(Boolean);
  for(const id of expired){
   const [info]=JSON.parse(await docker(['inspect',id]));
-  // A fresh instance must not reap another live pass; every pass has a 30-second deadline.
+  // An ownership deadline fences a pass even if its process is still alive; recent results remain readable.
   const deadline=Number(info.Config.Labels?.['cloud.backup-verifier.deadline']);
   if(Number.isFinite(deadline)&&deadline<Date.now())await removeContainer(id);
  }

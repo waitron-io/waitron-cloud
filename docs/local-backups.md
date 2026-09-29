@@ -289,8 +289,10 @@ state. A hosted target that keeps that key externally remains blocked on the
 ## Run background maintenance locally
 
 Apply migrations through `018_managed_continuous_recovery.sql`. Configure `DATABASE_URL`, a persistent
-64-hex-character `CLOUD_BACKUP_MASTER_KEY`, and `WAITRON_CHECKOUT` pointing to your
-installed Waitron checkout. Storage uses `CLOUD_BACKUP_ENDPOINT` (verified HTTPS),
+64-hex-character `CLOUD_BACKUP_MASTER_KEY`, a built `CLOUD_VERIFIER_IMAGE`, and a stable
+`CLOUD_VERIFIER_OWNER` unique to this worker slot. The worker needs the Docker CLI and
+access to your local Docker daemon. Build the image with the
+[container setup instructions](backup-verifier-containment.md#run-the-boundary-locally). Storage uses `CLOUD_BACKUP_ENDPOINT` (verified HTTPS),
 `CLOUD_BACKUP_REGION`, `CLOUD_BACKUP_ACCESS_KEY` and `CLOUD_BACKUP_SECRET_KEY`.
 Set `CLOUD_BACKUP_SESSION_TOKEN` when needed and `CLOUD_BACKUP_CA_FILE` for a private
 local CA. The worker refuses catalogue endpoints or regions that differ from these
