@@ -16,21 +16,36 @@ mid-pass, shutdown while busy, competing processes, invalid timing and deploymen
 
 ## Tasks
 
-- [ ] Add `packages/registration/test/usage-reconcile-cli.test.ts`: run real CLI children
+- [x] Add `packages/registration/test/usage-reconcile-cli.test.ts`: run real CLI children
   against an isolated migrated schema; expect automatic repeated passes, bounded batch
   counts, retries after rollback, restart recovery, lock exclusion, exact tenant totals,
   clean signal exit and sanitized invalid-config failures. Run via
   `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=30000 test/usage-reconcile-cli.test.ts`;
   observe missing watch mode fail before changing production code.
-- [ ] Extend `usage-reconcile-cli.ts` with explicit watch mode, validated settings,
+- [x] Extend `usage-reconcile-cli.ts` with explicit watch mode, validated settings,
   transaction deadline, signal lifecycle, shared loop and fixed retry delay. Run new
   tests plus `usage-metering.test.ts` and `worker-loop.test.ts`; typecheck. Commit signed off.
-- [ ] Add failing deployment checks, then wire Compose/runtime and update readiness,
+- [x] Add failing deployment checks, then wire Compose/runtime and update readiness,
   lifecycle/proof one-shot waits and their fixtures. Preserve all other assertions.
   Run `pnpm test:local-stack`.
-- [ ] Add and run a disposable scheduled-usage Compose proof, recording automatic
+- [x] Add and run a disposable scheduled-usage Compose proof, recording automatic
   event/freshness advance, stopped-worker staleness, restart catch-up and cleanup.
   Update usage/deployment docs and both backlog entries with the measured scope.
 - [ ] Finish: clean candidate, Claude run-it review, triage, normal push, exact-head CI.
   Land under the shared lock, refresh main dependencies, remove this worktree/branches,
   record exact-merge CI. Leave C55 parked until C54's overlap clears.
+
+## Validation receipts (2026-09-29)
+
+Watch CLI initially refused the new mode; then 20 usage/worker tests passed, with
+existing ledger assertions unchanged. The cumulative-statement deadline case passed
+in 10.27 s; removing the transaction deadline in a disposable clone let the same pass
+commit in 12.34 s and failed its zero-events assertion. Typechecking passed.
+
+All 42 local deployment checks passed. Compose 5.1.0's `wait` refused an already-exited
+successful disposable job; startup now checks recorded job exit states instead.
+The full-stack proof at `d1f639d323ae14e7831dd6892b0dc3c8efae0560` passed install,
+restart and recreation in 9557/9089/18958 ms, with zero owned resources left.
+The usage proof at `b3d7f7610cdd1d47f00e1adb60704086e0d362cd` recorded two
+organisations automatically, held pending work while stopped with four stale sources,
+and recorded a third organisation after restart. Both receipts named clean trees.

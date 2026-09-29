@@ -146,3 +146,17 @@ test('watch rejects invalid or unbounded settings before recording a pass',async
  }
  assert.ok((await new UsageReconciler(pool).status()).sources.every(item=>item.lastAttemptedAt===null));
 });
+
+test('the transaction deadline covers cumulative statements, each shorter than the statement timeout',async()=>{
+ await seed();
+ await pool.query("CREATE FUNCTION usage_slow() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source IN ('backup_points','backup_recoveries') THEN PERFORM pg_sleep(6); END IF; RETURN NEW; END $$");
+ await pool.query('CREATE TRIGGER usage_slow BEFORE UPDATE ON usage_reconciliation_sources FOR EACH ROW EXECUTE FUNCTION usage_slow()');
+ const child=worker(['--watch'],{PGAPPNAME:schema});
+ try{
+  await until(async()=>Number((await admin.query("SELECT count(*) FROM pg_stat_activity WHERE application_name=$1 AND wait_event='PgSleep'",[schema])).rows[0].count)>0,child);
+  child.process.kill('SIGTERM');
+  const timer=setTimeout(()=>child.process.kill('SIGKILL'),15000);
+  try{assert.deepEqual(await child.exited,{code:0,signal:null});}finally{clearTimeout(timer);}
+  assert.equal(await count(),0);assert.equal(child.output(),'');assert.match(child.error(),/retrying/);
+ }finally{await pool.query('DROP TRIGGER usage_slow ON usage_reconciliation_sources');await pool.query('DROP FUNCTION usage_slow()');}
+});

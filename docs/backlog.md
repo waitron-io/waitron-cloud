@@ -560,7 +560,11 @@ mobile notifications separately.
   observational only. A bounded watch worker now runs in the local deployment, retries
   failed passes and exposes stalled progress through existing operations freshness.
   PostgreSQL CLI tests cover competing workers, rollback/interruption, restart catch-up,
-  tenant totals and shutdown. Production deployment and monitoring remain open. Next: add
+  tenant totals and shutdown. A clean local Compose proof on 2026-09-29 recorded two
+  organisations automatically, reported all four sources stale after stopping, and
+  caught up a third organisation after restart; its project containers, volumes and
+  network were removed. This proves local scheduling, not a production freshness
+  objective. Production deployment and monitoring remain open. Next: add
   attributable lookup/API, report and compute units when those services exist, measure
   provider costs, then define allowances, excess-use and metering-outage policy before
   connecting any total to billing or enforcement.
