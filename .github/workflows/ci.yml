@@ -29,4 +29,5 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test:two-venue-milestone-receipt
       - run: pnpm test:local-stack
+      - run: pnpm test:database-recovery-receipt
       - run: pnpm test

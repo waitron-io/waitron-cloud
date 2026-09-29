@@ -6,15 +6,7 @@ The drill takes a physical base backup, starts it as a streaming standby, writes
 
 ## Run the drill
 
-The physical drill currently needs a maintenance fix: after migration 27 landed,
-its fixed count of 26 migrations causes an assertion at
-`scripts/database-recovery-receipt.mjs:84`, before promotion is exercised. This was
-reproduced on revision `eafd97ad5ac51563e91c821d4c957ef996e5d3fb`. The command below
-therefore does not currently produce a successful new physical-recovery receipt.
-The [separate schema-upgrade drill](#recover-an-old-release-after-a-schema-upgrade)
-passes its logical-backup recovery checks; it does not replace standby-promotion evidence.
-
-After correcting the count, start from a clean Cloud checkout with Docker running:
+Start from a clean Cloud checkout with Docker running:
 
 ```bash
 pnpm proof:database-recovery
@@ -25,6 +17,14 @@ The command writes `/tmp/waitron-cloud-database-recovery-receipt.json` and verif
 ```bash
 pnpm verify:database-recovery /tmp/waitron-cloud-database-recovery-receipt.json
 ```
+
+Before taking the backup, the drill checks that both the migration login and the
+runtime login can read the number of migrations listed by this release in
+`packages/registration/src/migrate.ts`. A missing or extra migration refuses the
+drill. The expected count follows the release manifest, so adding a migration does
+not require changing the drill's count. This count check does not compare migration
+names or SQL digests; the migration runner performs those checks when it applies
+the release.
 
 The verifier rejects a receipt from a dirty checkout. This matters because the commit in the receipt must name the code that performed the recovery. The runner still removes its exact Docker resources if an assertion fails.
 

@@ -507,12 +507,12 @@ mobile notifications separately.
   pre-upgrade logical backup with matching external keys. The original upgraded fixture is
   preserved. Historical binaries require the current deployment gate; no online upgrade,
   downgrade migration, post-backup-write recovery or production traffic switch is proved.
-  Follow-up found during D34: the older physical standby drill
-  (`scripts/database-recovery-receipt.mjs:84-85`) still pins the migration count to 26.
-  Running `node scripts/database-recovery-receipt.mjs` on unchanged main eafd97ad
-  fails at line 84 now that there are 27 migrations; its original promotion evidence
-  remains historical. Next: replace the stale count with the release manifest and rerun
-  that physical drill. This is separate from D34's passing logical-backup recovery.
+  **D35 done:** the physical standby drill reads its expected migration count from
+  the release manifest for both migration and runtime logins. Focused tests cover
+  complete manifests of different sizes, missing migrations and extra migrations.
+  The original 2026-09-27 promotion receipt above remains historical; the new drill
+  receipt is recorded in [database recovery](database-recovery.md). This remains
+  separate from D34's logical-backup recovery.
   Customer and operator portals, audit, budgets,
   quotas, staged releases, maintenance and recovery controls remain broader work.
   Customer portal login and account recovery must work when the venue server is
