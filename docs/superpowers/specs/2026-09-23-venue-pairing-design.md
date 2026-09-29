@@ -48,13 +48,14 @@ POST `/approve`. Inspect and approve require session, same origin and CSRF; body
 requestId/code, with organisationId/legalBusinessId additionally for approval. Business
 choices come only from the account's current permitted memberships. Code guessing is
 limited to five failures per request, durably across workers/IPs, plus account/IP rate
-limits. Store only the code digest. Do not return venue information before code proof.
+limits. Store only the versioned, request-bound keyed verifier described in
+[pairing-code keys](../../pairing-code-keys.md). Do not return venue information before code proof.
 Once approved, the selected business/account cannot change. Local completion rechecks
 Cloud permission before committing any registration.
 
 ## Persistence and transaction boundary
 
-Add `pairing_requests` with immutable machine binding, code digest, expiry, failed-code
+Add `pairing_requests` with immutable machine binding, keyed code verifier, expiry, failed-code
 count, approved account/organisation/business, and completed result. Row locks serialize
 approval/completion/retry. Reuse RegistrationStore inside the same PostgreSQL transaction
 so pairing and existing approval/venue/installation rows commit or roll back together.

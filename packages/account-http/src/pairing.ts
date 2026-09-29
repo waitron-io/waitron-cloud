@@ -1,13 +1,13 @@
 import type {Context} from 'hono';
 import type {Pool} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {PairingStore,transaction,verifyPairingProof} from '@waitron-cloud/registration';
+import {PairingStore,type PairingCodeKeys,transaction,verifyPairingProof} from '@waitron-cloud/registration';
 import {readAccountBody} from './request.ts';
 import {readSessionCookie} from './cookies.ts';
 import {AccountHttpError} from './errors.ts';
 import type {RateRule} from './rate-limit.ts';
-export async function pairingResponse(c:Context,options:{pool:Pool;origin:string;ip:string;consume:(rules:RateRule[])=>Promise<void>}):Promise<Response> {
-  const {pool,origin,ip,consume}=options;const store=new PairingStore(pool);const machine=c.req.path.startsWith('/api/pairing/');
+export async function pairingResponse(c:Context,options:{pool:Pool;pairingCodeKeys:PairingCodeKeys|null;origin:string;ip:string;consume:(rules:RateRule[])=>Promise<void>}):Promise<Response> {
+  const {pool,origin,ip,consume}=options;const store=new PairingStore(pool,options.pairingCodeKeys);const machine=c.req.path.startsWith('/api/pairing/');
   const action=c.req.path.slice((machine?'/api/pairing/':'/api/account/pairing/').length);
   if(!(machine?['start','status','complete']:['businesses','inspect','approve']).includes(action))throw new AccountHttpError(404,'not_found');
   if(c.req.method!==(action==='businesses'?'GET':'POST'))throw new AccountHttpError(405,'method_not_allowed');

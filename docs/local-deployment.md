@@ -180,3 +180,8 @@ DNS, secret management, database backup or failover, external monitoring, alert 
 worker sizing, high availability or rollback across incompatible schemas. Use it to validate
 packaging and lifecycle behavior before you choose those production controls. The remaining
 deployment work stays in the [Cloud backlog](backlog.md).
+
+For a database created before keyed pairing-code storage, follow the
+[pairing-key upgrade](pairing-code-keys.md#upgrade-existing-requests-without-losing-approval)
+before restarting account workers. New local stacks create the independent key in
+the private runtime configuration; existing volumes keep their current identity.

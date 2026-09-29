@@ -287,3 +287,7 @@ its caller then owns commit, rollback and release. Failed-code increments commit
 the refusal is returned. Neither code nor timestamp retries extend the pairing expiry.
 Tests cover separate workers and processes, contention expiry, permission loss, revoked
 results, and upgrade from the seven-migration schema with an existing installation.
+
+PairingStore requires separately supplied verification keys for code checks. See
+[pairing key configuration, upgrade and rotation](../../docs/pairing-code-keys.md).
+Signed status and completion keep their existing machine-proof and approval checks.

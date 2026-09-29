@@ -13,7 +13,7 @@ test('runtime roles receive only their explicit configuration',async()=>{
  const {config}=await configured(),database=`postgres://cloud:${config.database.password}@postgres:5432/cloud`;
  const expected={
   migrate:{DATABASE_URL:database},
-  account:{DATABASE_URL:database,CLOUD_EMAIL_ACTIVE_KEY_ID:'local-v1',CLOUD_EMAIL_KEYS:JSON.stringify(config.email.keys),CLOUD_PORTAL_ORIGIN:'http://localhost:3000',CLOUD_HTTP_RATE_KEY:config.http.rateKey,CLOUD_HTTP_HOST:'0.0.0.0',CLOUD_HTTP_PORT:'3000',CLOUD_PORTAL_ASSETS_DIR:'/app/apps/portal/dist',CLOUD_INSTALLATION_ISSUER_KEY:config.installation.issuerKey},
+  account:{DATABASE_URL:database,CLOUD_PAIRING_ACTIVE_KEY_ID:config.pairing.activeKeyId,CLOUD_PAIRING_KEYS:JSON.stringify(config.pairing.keys),CLOUD_EMAIL_ACTIVE_KEY_ID:'local-v1',CLOUD_EMAIL_KEYS:JSON.stringify(config.email.keys),CLOUD_PORTAL_ORIGIN:'http://localhost:3000',CLOUD_HTTP_RATE_KEY:config.http.rateKey,CLOUD_HTTP_HOST:'0.0.0.0',CLOUD_HTTP_PORT:'3000',CLOUD_PORTAL_ASSETS_DIR:'/app/apps/portal/dist',CLOUD_INSTALLATION_ISSUER_KEY:config.installation.issuerKey},
   email:{DATABASE_URL:database,CLOUD_EMAIL_ACTIVE_KEY_ID:'local-v1',CLOUD_EMAIL_KEYS:JSON.stringify(config.email.keys),CLOUD_PORTAL_ORIGIN:'http://localhost:3000',MAILPIT_SMTP_PORT:'1025',CLOUD_MAIL_TRANSPORT:'local'},
   monitor:{DATABASE_URL:database,CLOUD_EMAIL_ACTIVE_KEY_ID:'local-v1',CLOUD_EMAIL_KEYS:JSON.stringify(config.email.keys)},
   usage:{DATABASE_URL:database},probe:{DATABASE_URL:database},
@@ -51,4 +51,21 @@ test('backup runtime forwards only explicit container limits and ownership',asyn
  const env=runtimeEnvironment('backup',config,{CLOUD_VERIFIER_IMAGE:'local-verifier:proof',CLOUD_VERIFIER_OWNER:'proof-worker',CLOUD_VERIFIER_MEMORY_MIB:'512',CLOUD_VERIFIER_SCRATCH_MIB:'64',UNRELATED_SECRET:'private'});
  assert.equal(env.CLOUD_VERIFIER_IMAGE,'local-verifier:proof');assert.equal(env.CLOUD_VERIFIER_OWNER,'proof-worker');
  assert.equal(env.CLOUD_VERIFIER_MEMORY_MIB,'512');assert.equal(env.CLOUD_VERIFIER_SCRATCH_MIB,'64');assert.equal(env.UNRELATED_SECRET,undefined);
+});
+
+test('new local stacks persist an independent pairing key and expose it only to account workers',async()=>{
+ const {path,config}=await configured();assert.ok(config.pairing?.keys?.[config.pairing?.activeKeyId]);
+ assert.notEqual(config.pairing.keys[config.pairing.activeKeyId],config.email.keys[config.email.activeKeyId]);
+ assert.deepEqual((await bootstrap(path)).pairing,config.pairing);
+ const account=runtimeEnvironment('account',config);
+ assert.equal(account.CLOUD_PAIRING_ACTIVE_KEY_ID,config.pairing.activeKeyId);
+ assert.deepEqual(JSON.parse(account.CLOUD_PAIRING_KEYS),config.pairing.keys);
+ for(const role of ['migrate','email','monitor','usage','probe','backup','gateway','manifest','reconcile'])assert.equal(runtimeEnvironment(role,config).CLOUD_PAIRING_KEYS,undefined);
+});
+
+test('existing local configuration is not regenerated when it lacks pairing keys',async()=>{
+ const {path,config}=await configured();delete config.pairing;
+ await writeFile(join(path,'runtime.json'),JSON.stringify(config),{mode:0o600});
+ assert.deepEqual(await bootstrap(path),config);assert.deepEqual(await loadRuntime(path),config);
+ assert.equal(runtimeEnvironment('account',config).CLOUD_PAIRING_KEYS,undefined);
 });

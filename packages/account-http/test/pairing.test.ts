@@ -90,3 +90,39 @@ test('real sockets retain pairing state after server restart with portal assets 
     assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'2');
   }finally{await running.close();}
 });
+
+test('HTTP pairing requires an external key, preserves rotation overlap and never echoes secrets',async()=>{
+  const old={activeKeyId:'old',keys:{old:'a'.repeat(64)}};
+  app=createAccountApp({pool:db.pool,outbox:db.outbox,config:settings(),pairingCodeKeys:old});
+  const a=machine();assert.equal((await a.call('start')).status,200);
+  const hash=(await db.pool.query('SELECT code_hash FROM pairing_requests WHERE id=$1',[a.c.requestId])).rows[0].code_hash;
+  assert.match(hash,/^v1:old:/);
+  app=createAccountApp({pool:db.pool,outbox:db.outbox,config:settings(),pairingCodeKeys:null});
+  const refused=await browser('approve',choice(a));assert.equal(refused.status,503);
+  const text=await refused.text();assert.equal(text.includes(a.c.code),false);assert.equal(text.includes(old.keys.old),false);
+  assert.equal((await db.pool.query('SELECT failed_codes FROM pairing_requests')).rows[0].failed_codes,0);
+  assert.equal((await a.call('status')).status,200);
+  assert.equal((await machine().call('start')).status,503);
+  const wrong={activeKeyId:'old',keys:{old:'b'.repeat(64)}};
+  app=createAccountApp({pool:db.pool,outbox:db.outbox,config:settings(),pairingCodeKeys:wrong});
+  assert.equal((await browser('approve',choice(a))).status,400);
+  app=createAccountApp({pool:db.secondPool,outbox:db.outbox,config:settings(),pairingCodeKeys:{activeKeyId:'new',keys:{...old.keys,new:'c'.repeat(64)}}});
+  assert.equal((await a.call('start')).status,200);assert.equal((await browser('approve',choice(a))).status,200);
+  assert.equal((await a.call('complete')).status,200);
+  const dump=JSON.stringify((await db.pool.query('SELECT * FROM security_audit_events')).rows);
+  for(const secret of [a.c.code,old.keys.old,wrong.keys.old])assert.equal(dump.includes(secret),false);
+});
+
+test('HTTP code checks keep request separation, concurrent attempt limits and expiry',async()=>{
+ const a=machine(),b=machine();b.c.code='87654321';
+ assert.equal((await a.call('start')).status,200);assert.equal((await b.call('start')).status,200);
+ const guesses=await Promise.all(Array.from({length:8},()=>browser('inspect',{requestId:a.c.requestId,code:b.c.code})));
+ assert.equal(guesses.every(r=>r.status===400),true);
+ assert.equal((await db.pool.query('SELECT failed_codes FROM pairing_requests WHERE id=$1',[a.c.requestId])).rows[0].failed_codes,5);
+ assert.equal((await browser('approve',choice(a))).status,400);
+ assert.equal((await browser('approve',choice(b))).status,200);
+ await db.pool.query("UPDATE pairing_requests SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",[b.c.requestId]);
+ assert.equal((await b.call('complete')).status,400);assert.equal((await b.call('start')).status,400);
+ assert.equal((await browser('approve',choice(b))).status,400);
+ assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');
+});
