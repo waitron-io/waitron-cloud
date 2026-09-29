@@ -11,6 +11,8 @@ function runDocker(args,{capture=false}={}){
 export async function startLocalStack(mode,{run=runDocker,waitForReady=waitForLocalStack}={}){
  if(!['up','upgrade'].includes(mode))throw new Error('local_stack.lifecycle_mode');
  run(['build','bootstrap']);
+ // Schema changes require a stopped fleet; Compose dependencies do not stop old consumers.
+ if(mode==='upgrade')run(['stop']);
  run(['up','-d','--no-build',...(mode==='upgrade'?['--force-recreate']:[])]);
  await waitForReady(()=>run(['ps','-a','--format','json'],{capture:true}));
  run(['ps','-a']);

@@ -11,6 +11,8 @@ export async function migrate(pool: Pool): Promise<void> {
     await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
       name text PRIMARY KEY, digest text NOT NULL, applied_at timestamptz NOT NULL DEFAULT clock_timestamp()
     )`);
+    const unknown = await client.query('SELECT name FROM schema_migrations WHERE NOT (name = ANY($1::text[]))', [migrationNames]);
+    if (unknown.rowCount) throw new Error('schema_incompatible');
     for (const name of migrationNames) {
       const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
       const digest = createHash('sha256').update(sql).digest('hex');
