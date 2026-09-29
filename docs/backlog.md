@@ -426,9 +426,14 @@ mobile notifications separately.
   proves overlap, cutover, expiry-before-removal and revoked-lease refusal without logging
   keys. Choose audit retention, rehearse the coordinated rotation in the selected deployment,
   and measure per-IP denial-of-service behavior
-  for venues sharing NAT and known request IDs. The
-  short code has an unkeyed digest, so review database-disclosure protection before
-  launch and retain explicit local business confirmation.
+  for venues sharing NAT and known request IDs. Pairing codes now use versioned, request-bound keyed verifiers with an external
+  secret and an explicit legacy upgrade; see [key configuration and rotation](pairing-code-keys.md).
+  PostgreSQL/HTTP tests cover preserved approvals/history, restart, expiry, concurrent
+  guesses, request binding and key overlap/refusal. Local business confirmation stays
+  required. Old backups remain sensitive; no new retention policy is chosen.
+  **Open:** backup-recovery request codes in `packages/backups/src/recovery-request.ts`
+  still use a separate unkeyed SHA-256 digest. Trace its consumers and add a scoped
+  database-disclosure protection item before production; D33 changes pairing only.
   Terminated database connections and lost replies have regression tests. The
   [local management-database recovery drill](database-recovery.md) now uses separate
   non-superuser migration and runtime logins plus a replication-only login. It takes a

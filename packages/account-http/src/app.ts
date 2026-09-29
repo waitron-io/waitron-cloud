@@ -22,7 +22,7 @@ import type { HttpBindings } from '@hono/node-server';
 import type { Pool } from 'pg';
 import { setTimeout as delay } from 'node:timers/promises';
 import { endSession, IdentityError, login, resolveSession } from '@waitron-cloud/identity';
-import { EmailOutbox, PasskeyStore, PasswordRecoveryError, PasswordRecoveryStore, SignupError, SignupStore, normaliseEmail, transaction, type PasskeyCeremonyAdapter, type PasswordScreeningProvider } from '@waitron-cloud/registration';
+import { EmailOutbox, pairingCodeKeysFromEnv, type PairingCodeKeys, PasskeyStore, PasswordRecoveryError, PasswordRecoveryStore, SignupError, SignupStore, normaliseEmail, transaction, type PasskeyCeremonyAdapter, type PasswordScreeningProvider } from '@waitron-cloud/registration';
 import { type AccountHttpConfig, validateConfig } from './config.ts';
 import { AccountRateLimiter, type RateRule } from './rate-limit.ts';
 import { clientAddress } from './client-address.ts';
@@ -57,10 +57,11 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter}) {
+export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null}) {
   const config = validateConfig(options.config);
   if(options.captures&&!options.leaseIssuer)throw Error('backup.installation_issuer_required');
   const {pool, outbox} = options;
+  const pairingCodeKeys=options.pairingCodeKeys===undefined?(pairingCodeKeysFromEnv(process.env)??null):options.pairingCodeKeys;
   const origin = new URL(config.portalOrigin); const secure = origin.protocol === 'https:';
   const captures=options.captures&&options.leaseIssuer?new BackupCaptures(pool,options.leaseIssuer,config.portalOrigin,options.captures,options.leaseTrust):undefined;
   const streams=options.captures?.managedStreams&&options.leaseIssuer?new ManagedStreamMachines(pool,options.leaseIssuer,config.portalOrigin,options.captures.vault,options.captures.managedStreams,options.leaseTrust):undefined;
@@ -110,7 +111,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if(c.req.path==='/api/account/alerts')return alertPreferencesResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path.startsWith('/api/account/backups/'))return backupResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path.startsWith('/api/installations/')||c.req.path==='/api/account/installations'||c.req.path.startsWith('/api/account/installations/')) return installationResponse(c,{pool,issuer:options.leaseIssuer,trusted:options.leaseTrust,origin:config.portalOrigin,ip,consume});
-    if(c.req.path.startsWith('/api/pairing/')||c.req.path.startsWith('/api/account/pairing/')) return pairingResponse(c,{pool,origin:config.portalOrigin,ip,consume});
+    if(c.req.path.startsWith('/api/pairing/')||c.req.path.startsWith('/api/account/pairing/')) return pairingResponse(c,{pool,origin:config.portalOrigin,ip,consume,pairingCodeKeys});
     const path = c.req.path.startsWith('/api/account/') ? c.req.path.slice('/api/account'.length) : '';
     const fields = paths[path];
     if (path !== '/session' && !fields) throw new AccountHttpError(404, 'not_found');

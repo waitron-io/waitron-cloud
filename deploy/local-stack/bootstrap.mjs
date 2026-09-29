@@ -68,7 +68,7 @@ export async function bootstrap(directory){
   const publicCertificates=join(directory,'public-certs');await mkdir(publicCertificates,{recursive:true,mode:0o700});await chmod(publicCertificates,0o700);
   await writeFile(join(publicCertificates,'default.pem'),Buffer.concat([certKey,cert]),{mode:0o600});await chmod(join(publicCertificates,'default.pem'),0o600);
   const config={version:1,createdAt:new Date(now).toISOString(),database:{user:'cloud',name:'cloud',password:databasePassword},
-   email:{activeKeyId:'local-v1',keys:{'local-v1':hex(32)}},http:{rateKey:hex(32)},backup:{masterKey:hex(32)},
+   email:{activeKeyId:'local-v1',keys:{'local-v1':hex(32)}},pairing:{activeKeyId:'local-v1',keys:{'local-v1':hex(32)}},http:{rateKey:hex(32)},backup:{masterKey:hex(32)},
    installation:{issuerKey:installation.privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')},
    storage:{endpoint:'https://storage:8333',region:'local',accessKeyId:storage.accessKeyId,secretAccessKey:storage.secretAccessKey},
    gateway:{cellId,subnet:61,routes:0},fingerprints:{gatewaySigningKey:fingerprint(privatePem),storageCertificate:fingerprint(cert)}};

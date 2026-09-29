@@ -74,3 +74,7 @@ Replacement recovery will issue a fresh identity.
 Before public deployment, complete ingress controls and
 operation/pairing audit retention work in the backlog. This local proof does not establish an
 AWS deployment or a working remote-access/backup service.
+
+Pairing-code storage uses a separately held key. Configure it and upgrade existing
+requests with the [pairing key instructions](pairing-code-keys.md) before starting
+account workers against an older database. The pairing wire protocol is unchanged.

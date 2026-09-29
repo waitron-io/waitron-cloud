@@ -1,4 +1,4 @@
-import {createHash,timingSafeEqual} from 'node:crypto';
+import {PairingCodes,pairingCodeKeysFromEnv,type PairingCodeKeys} from './pairing-codes.ts';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
 import {RegistrationStore,type ConnectionBinding,type Registration} from './index.ts';
@@ -14,7 +14,6 @@ export interface PairingView {
   state:'awaiting_cloud'|'awaiting_local'|'complete';organisationId?:string;legalBusinessId?:string;
   organisationName?:string;legalBusinessName?:string;registration?:Registration;
 }
-const digest=(code:string)=>createHash('sha256').update(code).digest('hex');
 function machineBinding(row:Row,c:PairingClaims) {
   if(row.public_key!==c.publicKey||row.local_venue_id!==c.localVenueId||row.environment!==c.environment)throw new PairingError('binding_conflict');
 }
@@ -48,13 +47,14 @@ async function permission(client:PoolClient,account:string,org:string,business:s
 /** Machine entry points accept claims only after verifyPairingProof succeeds. */
 export class PairingStore {
   readonly #pool:Pool;
-  constructor(pool:Pool){this.#pool=pool;}
+  readonly #codes:PairingCodes;
+  constructor(pool:Pool,keys:PairingCodeKeys|null|undefined=pairingCodeKeysFromEnv(process.env)){this.#pool=pool;this.#codes=new PairingCodes(keys??undefined);}
   async start(c:PairingClaims):Promise<PairingView> {
     return transaction(this.#pool,async client=>{
       await client.query(`INSERT INTO pairing_requests(id,public_key,local_venue_id,environment,code_hash) VALUES($1,$2,$3,$4,$5)
-        ON CONFLICT(id) DO NOTHING`,[c.requestId,c.publicKey,c.localVenueId,c.environment,digest(c.code)]);
+        ON CONFLICT(id) DO NOTHING`,[c.requestId,c.publicKey,c.localVenueId,c.environment,this.#codes.protect({id:c.requestId,public_key:c.publicKey,local_venue_id:c.localVenueId,environment:c.environment},c.code)]);
       const row=await lock(client,c.requestId);machineBinding(row,c);
-      if(row.code_hash!==digest(c.code))throw new PairingError('binding_conflict');
+      if(!this.#codes.matches(row,row.code_hash,c.code))throw new PairingError('binding_conflict');
       await available(client,row);return view(client,row);
     });
   }
@@ -77,7 +77,8 @@ export class PairingStore {
       const row=await lock(client,id);const session=await resolveSession(client,token,{csrfToken:csrf,touch:false});
       if(row.failed_codes>=5)throw new PairingError('pairing_unavailable');
       await available(client,row);
-      if(typeof code!=='string'||!/^\d{8}$/.test(code)||!timingSafeEqual(Buffer.from(digest(code),'hex'),Buffer.from(row.code_hash,'hex'))) {
+      const codeMatches=this.#codes.matches(row,row.code_hash,typeof code==='string'?code:'');
+      if(typeof code!=='string'||!/^\d{8}$/.test(code)||!codeMatches) {
         await client.query('UPDATE pairing_requests SET failed_codes=LEAST(5,failed_codes+1) WHERE id=$1',[id]);
         return null;
       }

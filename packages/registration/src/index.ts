@@ -267,3 +267,5 @@ export {MonitorWorker,monitorStatus} from './monitoring.ts';
 export type {ServiceAlert,ServiceAlertMailer,IncidentKind} from './service-alert.ts';
 export {HistoryCleanup, historyCleanupCategories, parseHistoryCleanupPolicy} from './history-cleanup.ts';
 export type {HistoryCleanupCategory, HistoryCleanupCategoryReport, HistoryCleanupPolicy, HistoryCleanupReport} from './history-cleanup.ts';
+
+export {pairingCodeKeysFromEnv,upgradePairingCodes,type PairingCodeKeys} from './pairing-codes.ts';

@@ -188,3 +188,90 @@ test('a missing business name refuses approval instead of producing a blank loca
   const a=machine();await store.start(a);await db.pool.query('UPDATE legal_businesses SET name=NULL');
   await unavailable(approve(a));assert.equal((await db.pool.query('SELECT cloud_account_id FROM pairing_requests')).rows[0].cloud_account_id,null);
 });
+
+test('stored pairing verifiers are keyed and bound to the complete request',async()=>{
+  const a=machine(),b=machine();await store.start(a);await store.start(b);
+  const rows=(await db.pool.query('SELECT id,code_hash FROM pairing_requests ORDER BY id')).rows;
+  assert.notEqual(rows[0].code_hash,createHash('sha256').update(a.code).digest('hex'));
+  assert.notEqual(rows[0].code_hash,rows[1].code_hash);
+  assert.match(rows[0].code_hash,/^v1:[A-Za-z0-9_-]+:[a-f0-9]{64}$/);
+  await db.pool.query('UPDATE pairing_requests SET code_hash=$2 WHERE id=$1',[b.requestId,rows.find(r=>r.id===a.requestId).code_hash]);
+  await unavailable(approve(b));
+  assert.equal((await db.pool.query('SELECT cloud_account_id FROM pairing_requests WHERE id=$1',[b.requestId])).rows[0].cloud_account_id,null);
+});
+
+test('rotation overlap preserves retries and approval; missing and wrong keys fail closed',async()=>{
+  const old={activeKeyId:'old',keys:{old:'a'.repeat(64)}};
+  const rotated={activeKeyId:'new',keys:{...old.keys,new:'b'.repeat(64)}};
+  const original=new PairingStore(db.pool,old),overlap=new PairingStore(db.secondPool,rotated);
+  const a=machine(),b=machine();const started=await original.start(a);
+  assert.deepEqual(await overlap.start(a),started);await overlap.start(b);
+  const rows=(await db.pool.query('SELECT id,code_hash FROM pairing_requests')).rows;
+  assert.match(rows.find(r=>r.id===a.requestId).code_hash,/^v1:old:/);
+  assert.match(rows.find(r=>r.id===b.requestId).code_hash,/^v1:new:/);
+  const removed=new PairingStore(db.pool,{activeKeyId:'new',keys:{new:rotated.keys.new}});
+  await assert.rejects(approve(a,removed),/configuration unavailable/);
+  assert.equal((await db.pool.query('SELECT failed_codes FROM pairing_requests WHERE id=$1',[a.requestId])).rows[0].failed_codes,0);
+  const wrong=new PairingStore(db.pool,{activeKeyId:'old',keys:{old:'c'.repeat(64)}});
+  await unavailable(approve(a,wrong));await assert.rejects(wrong.start(a),/binding_conflict/);
+  await approve(a,overlap);const done=await overlap.complete(completion(a));
+  assert.deepEqual((await removed.complete(completion(a))).registration,done.registration);
+  assert.equal((await approve(b,removed)).state,'awaiting_local');
+});
+
+test('concurrent wrong guesses stop at five and cannot approve another request code',async()=>{
+  const a=machine(),b={...machine(),code:'87654321'};await store.start(a);await store.start(b);
+  const guesses=await Promise.allSettled(Array.from({length:12},(_,i)=>(i%2?store:other).inspect(a.requestId,b.code,session.token,session.csrfToken)));
+  assert.equal(guesses.filter(r=>r.status==='rejected').length,12);
+  assert.equal((await db.pool.query('SELECT failed_codes FROM pairing_requests WHERE id=$1',[a.requestId])).rows[0].failed_codes,5);
+  await unavailable(approve(a));assert.equal((await approve(b)).state,'awaiting_local');
+});
+
+test('legacy upgrade wraps pending, approved and completed rows without changing their history',async()=>{
+  const a=machine(),b=machine(),c=machine();for(const m of [a,b,c])await store.start(m);
+  await approve(b);await approve(c);await store.complete(completion(c));
+  await db.pool.query('UPDATE pairing_requests SET code_hash=$1',[createHash('sha256').update(a.code).digest('hex')]);
+  const before=(await db.pool.query('SELECT * FROM pairing_requests ORDER BY id')).rows;
+  await assert.rejects(approve(a),/configuration unavailable/);
+  const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options',`-c search_path=${db.schema}`);
+  const run=()=>JSON.parse(execFileSync(process.execPath,['src/pairing-codes-cli.ts','--once'],{encoding:'utf8',timeout:10000,env:{...process.env,DATABASE_URL:url.href}}));
+  assert.deepEqual(run(),{upgraded:3});assert.deepEqual(run(),{upgraded:0});
+  const after=(await db.pool.query('SELECT * FROM pairing_requests ORDER BY id')).rows;
+  for(let i=0;i<before.length;i++){assert.match(after[i].code_hash,/^v1:/);assert.deepEqual({...after[i],code_hash:null},{...before[i],code_hash:null});}
+  assert.deepEqual(await store.start(a),await store.status(status(a)));
+  await approve(a);assert.equal((await store.complete(completion(b))).state,'complete');
+  assert.deepEqual((await store.complete(completion(c))).registration,before.find(r=>r.id===c.requestId).result);
+});
+
+test('a missing key refuses malformed guesses without spending attempts',async()=>{
+ const a=machine();await store.start(a);const missing=new PairingStore(db.pool,null);
+ await assert.rejects(missing.inspect(a.requestId,'bad-code',session.token,session.csrfToken),/configuration unavailable/);
+ assert.equal((await db.pool.query('SELECT failed_codes FROM pairing_requests')).rows[0].failed_codes,0);
+});
+
+test('legacy upgrade waits for locked rows instead of reporting a false zero',async()=>{
+ const {upgradePairingCodes,pairingCodeKeysFromEnv}=await import('../src/pairing-codes.ts');
+ const a=machine();await store.start(a);
+ await db.pool.query('UPDATE pairing_requests SET code_hash=$1',[createHash('sha256').update(a.code).digest('hex')]);
+ const blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('SELECT id FROM pairing_requests FOR UPDATE');
+ const pending=upgradePairingCodes(db.pool,pairingCodeKeysFromEnv(process.env)!,1);
+ try{await waitForLock();}finally{await blocker.query('COMMIT');blocker.release();}
+ assert.equal(await pending,1);assert.equal(await upgradePairingCodes(db.pool,pairingCodeKeysFromEnv(process.env)!,1),0);
+});
+
+test('legacy upgrade is bounded and a failed pass leaves all rows retryable',async()=>{
+ const {upgradePairingCodes,pairingCodeKeysFromEnv}=await import('../src/pairing-codes.ts');
+ const keys=pairingCodeKeysFromEnv(process.env)!;const a=machine(),b=machine();await store.start(a);await store.start(b);
+ const legacy=createHash('sha256').update(a.code).digest('hex');await db.pool.query('UPDATE pairing_requests SET code_hash=$1',[legacy]);
+ const rows=(await db.pool.query('SELECT id FROM pairing_requests ORDER BY id')).rows;
+ await db.pool.query(`CREATE FUNCTION refuse_pairing_upgrade() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+   IF NEW.id='${rows[1].id}' THEN RAISE EXCEPTION 'upgrade probe'; END IF; RETURN NEW; END $$;
+   CREATE TRIGGER refuse_pairing_upgrade BEFORE UPDATE ON pairing_requests FOR EACH ROW EXECUTE FUNCTION refuse_pairing_upgrade()`);
+ try {await assert.rejects(upgradePairingCodes(db.pool,keys),/upgrade probe/);
+  assert.equal((await db.pool.query('SELECT count(*) FROM pairing_requests WHERE code_hash=$1',[legacy])).rows[0].count,'2');
+ }finally{await db.pool.query('DROP TRIGGER refuse_pairing_upgrade ON pairing_requests; DROP FUNCTION refuse_pairing_upgrade()');}
+ assert.equal(await upgradePairingCodes(db.pool,keys,1),1);
+ assert.equal((await db.pool.query('SELECT count(*) FROM pairing_requests WHERE code_hash=$1',[legacy])).rows[0].count,'1');
+ assert.equal(await upgradePairingCodes(db.pool,keys,1),1);assert.equal(await upgradePairingCodes(db.pool,keys,1),0);
+ assert.equal((await approve(a)).state,'awaiting_local');
+});
