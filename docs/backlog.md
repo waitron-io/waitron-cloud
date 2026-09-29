@@ -639,10 +639,15 @@ mobile notifications separately.
   stay unchanged. A controlled 31-second build delay reproduces the former setup timeout.
   Production host/kernel isolation, hostile native exploits, fleet sizing and large archives remain
   unverified; the process-only development adapter still lacks these total-resource bounds.
-  D32 review follow-up: distinguish Docker/infrastructure failures from archive validity
-  in the catalogue and worker before production operation. The current interface marks
-  both as failed verification; next add a real PostgreSQL daemon-outage/recovery test
-  before changing that state meaning. A read-only
+  D37 distinguishes bounded infrastructure failures from archive verdicts: failed staging,
+  Docker start/connection, cleanup and verifier protocol errors preserve the prior snapshot
+  state and retry with `verification_unavailable`. A real local PostgreSQL stop/restart,
+  worker-only Docker connection outage, start refusal and two-organisation valid/invalid
+  recovery tests pass. Eight-attempt exhaustion, explicit retry, cancellation, lease fencing
+  and verified fallback protection remain covered. See the containment guide for the exact
+  executed cases; shared-daemon loss during active cleanup, physical host crashes and
+  production recovery timings remain unmeasured.
+  A read-only
   dependency inventory and local drill now prove active-key rotation, old snapshot restore,
   worker restart and wrong/missing-key refusal without exposing secrets or deleting keys.
   The history cleanup command

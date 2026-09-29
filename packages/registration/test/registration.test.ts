@@ -61,10 +61,11 @@ beforeEach(async () => {
 
 test('migration remains repeatable after concurrent initial application', async () => {
   await migrate(pool);
-  assert.equal(migrationNames.length, 28);
-  assert.equal(migrationNames.at(-3), '026_support_grants.sql');
-  assert.equal(migrationNames.at(-2), '027_pairing_code_protection.sql');
-  assert.equal(migrationNames.at(-1), '028_recovery_code_protection.sql');
+  assert.equal(migrationNames.length, 29);
+  assert.equal(migrationNames.at(-4), '026_support_grants.sql');
+  assert.equal(migrationNames.at(-3), '027_pairing_code_protection.sql');
+  assert.equal(migrationNames.at(-2), '028_recovery_code_protection.sql');
+  assert.equal(migrationNames.at(-1), '029_backup_verification_unavailable.sql');
   assert.equal(await count('schema_migrations'), migrationNames.length);
 });
 

@@ -59,11 +59,15 @@ export async function createContainerWaitronVerifier(options:ContainerVerifierOp
     for(;;){const part=await iterator.next();if(part.done)return;yield part.value;}
    })()),attachedChild.stdin).catch(()=>{uploadFailed=true;});
    // Removing the container closes attach; the stream is then destroyed even if its source stalled.
-   await closed;input.destroy();await upload;
+   const attachCode=await closed;input.destroy();await upload;
    if(failure)throw Error(failure);
    const [info]=JSON.parse(await docker(['inspect',name]));
    if(failure)throw Error(failure);
+   // A created container or host start error has not completed an archive check.
+   if(info.State.Status!=='exited'||info.State.Error||(info.State.ExitCode===0&&attachCode!==0))throw Error('backup.verifier_container');
    if(info.State.OOMKilled||info.State.ExitCode===73)throw Error('backup.verifier_resource',{cause:{oomKilled:info.State.OOMKilled,exitCode:info.State.ExitCode,memoryBytes:info.HostConfig.Memory,memorySwapBytes:info.HostConfig.MemorySwap,scratch:info.HostConfig.Tmpfs,network:info.HostConfig.NetworkMode,readOnly:info.HostConfig.ReadonlyRootfs,mounts:info.Mounts}});
+   // Only the entrypoint's documented exit codes attest a completed verifier outcome.
+   if(![0,1,74].includes(info.State.ExitCode))throw Error('backup.verifier_container');
    if(uploadFailed)throw Error('backup.verifier_input');
    if(info.State.ExitCode===74)throw Error('backup.verifier_timeout');
    if(info.State.ExitCode!==0)throw Error('backup.verifier_failed');

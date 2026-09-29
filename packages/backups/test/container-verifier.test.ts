@@ -133,3 +133,21 @@ test('cancellation during result inspection cannot return a successful restore',
   stop.abort();await writeFile(release,'');await assert.rejects(pending,/backup.verifier_cancelled/);empty();
  }finally{await writeFile(release,'');stop.abort();await pending?.catch(()=>{});process.env.PATH=oldPath;await rm(directory,{recursive:true,force:true});}
 });
+
+test('a Docker start refusal is infrastructure failure and removes the unstarted container',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'container-start-')),oldPath=process.env.PATH,realDocker=execFileSync('which',['docker'],{encoding:'utf8'}).trim();
+ const wrapper=join(directory,'docker');
+ await writeFile(wrapper,`#!${process.execPath}\nconst cp=require('node:child_process'),args=process.argv.slice(2);if(args[0]==='start'){process.exit(125);}else{const r=cp.spawnSync(${JSON.stringify(realDocker)},args,{stdio:'inherit'});process.exit(r.status??1);}`);
+ await chmod(wrapper,0o700);process.env.PATH=directory+':'+oldPath;
+ try{
+  const verify=await createContainerWaitronVerifier({image,owner});
+  await assert.rejects(verify(source(0),keys,point(0),new AbortController().signal),/backup.verifier_container/);empty();
+ }finally{process.env.PATH=oldPath;await rm(directory,{recursive:true,force:true});}
+});
+
+test('an external container kill is infrastructure uncertainty rather than an archive refusal',async()=>{
+ const verify=await createContainerWaitronVerifier({image,owner}),pending=verify(source(3),keys,point(3),new AbortController().signal);
+ const rejected=assert.rejects(pending,/backup.verifier_container/);let id='';
+ const deadline=Date.now()+10000;while(!id&&Date.now()<deadline){id=docker('ps','-q','--filter','label=cloud.backup-verifier.owner='+owner);if(!id)await delay(20);}
+ assert(id);docker('kill','--signal','KILL',id);await rejected;empty();
+});

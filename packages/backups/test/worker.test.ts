@@ -1,4 +1,5 @@
 import {execFile} from 'node:child_process';
+import {Readable} from 'node:stream';
 import {promisify} from 'node:util';
 import {test,before,after,beforeEach} from 'node:test';
 import assert from 'node:assert/strict';
@@ -135,3 +136,54 @@ test('an expired verification records failure and backoff when its claim has not
  assert.equal(await worker.runOnce(),false);
  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'pending');
 });
+
+for(const code of ['backup.verifier_container','backup.verifier_cleanup','backup.verifier_configuration','backup.verifier_input','backup.verifier_output','backup.verifier_future_host_failure']){
+ test('infrastructure refusal '+code+' preserves the verified fallback and bounded retries',async()=>{
+  const point=await snapshot(60);await catalogue.verify(point.id,'prior-success',async()=>{});await only('verify');
+  restore=async()=>{throw Error(code);};
+  for(let n=0;n<8;n++){await db.pool.query("UPDATE backup_jobs SET available_at=clock_timestamp() WHERE kind='verify'");assert.equal(await worker.runOnce(),true);}
+  const job=(await db.pool.query("SELECT status,attempts,failures,last_error,claim_id,lease_until FROM backup_jobs WHERE kind='verify'")).rows[0];
+  assert.deepEqual(job,{status:'failed',attempts:8,failures:'8',last_error:'verification_unavailable',claim_id:null,lease_until:null});
+  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'verified');
+  assert.deepEqual((await db.pool.query('SELECT outcome FROM backup_verifications WHERE point_id=$1',[point.id])).rows.map(r=>r.outcome),['verified']);
+  assert.equal(await catalogue.cleanupOne(venue.venueId),null);
+  assert.equal(await worker.retryFailed(),1);restore=async()=>{};assert.equal(await worker.runOnce(),true);
+  assert.equal((await worker.status()).counts.failed,0);
+ });
+}
+test('storage download outage creates no archive verdict and retries the same point',async()=>{
+ const point=await snapshot();await only('verify');
+ const offline=new BackupCatalogue(db.pool,vault,()=>({...storage(),async read(){throw Error('private storage host unavailable');}}));
+ assert.equal(await new BackupWorker(db.pool,offline,async()=>assert.fail('no download')).runOnce(),true);
+ assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'pending');
+ assert.equal((await db.pool.query('SELECT count(*) FROM backup_verifications')).rows[0].count,'0');
+ assert.equal((await db.pool.query("SELECT last_error FROM backup_jobs WHERE kind='verify'")).rows[0].last_error,'verification_unavailable');
+ await db.pool.query("UPDATE backup_jobs SET available_at=clock_timestamp() WHERE kind='verify'");assert.equal(await worker.runOnce(),true);
+ assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'verified');
+});
+
+test('a storage adapter that cannot start records no archive verdict',async()=>{
+ const point=await snapshot();await only('verify');
+ const unavailable=new BackupCatalogue(db.pool,vault,()=>{throw Error('private provider startup failure');});
+ assert.equal(await new BackupWorker(db.pool,unavailable,async()=>assert.fail('no storage')).runOnce(),true);
+ assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'pending');
+ assert.equal((await db.pool.query('SELECT count(*) FROM backup_verifications')).rows[0].count,'0');
+ assert.equal((await db.pool.query("SELECT last_error FROM backup_jobs WHERE kind='verify'")).rows[0].last_error,'verification_unavailable');
+});
+
+for(const result of ['cancelled','invalid','success'] as const){
+ const cancelled=result==='cancelled';
+ test('stage cleanup failure after '+result+' keeps the correct retry and archive state',async()=>{
+  const point=await snapshot();await only('verify');const controller=new AbortController();let disposed=0;
+  const failingCleanup=new BackupCatalogue(db.pool,vault,()=>({
+   async stage(key:string){const body=objects.get(key)!;return {receipt:receipt(body),open:()=>Readable.from([body]),async dispose(){disposed++;throw Error('private scratch cleanup failure');}};},
+   async putStaged(){throw Error('unused');},async remove(){throw Error('unused');},
+  }));
+  const attempt=new BackupWorker(db.pool,failingCleanup,async()=>{if(result==='success')return;if(cancelled)controller.abort();throw Error(cancelled?'backup.verifier_cancelled':'corrupt archive');});
+  assert.equal(await attempt.runOnce(controller.signal),true);assert.equal(disposed,1);
+  const job=(await db.pool.query("SELECT attempts,last_error,claim_id,lease_until FROM backup_jobs WHERE kind='verify'")).rows[0];
+  assert.deepEqual(job,{attempts:cancelled?0:1,last_error:cancelled?null:result==='invalid'?'verification_failed':'verification_unavailable',claim_id:null,lease_until:null});
+  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,result==='invalid'?'failed':'pending');
+  assert.deepEqual((await db.pool.query('SELECT outcome FROM backup_verifications')).rows.map(row=>row.outcome),result==='invalid'?['failed']:[]);
+ });
+}
