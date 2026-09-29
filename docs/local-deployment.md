@@ -226,7 +226,7 @@ old consumers on the new schema. Historical binaries did not contain that gate. 
 runs them through `deploy/local-stack/schema-consumer.mjs` from the current checkout;
 it does not claim that invoking their old CLI directly has the same protection.
 The packaged current runtime applies the same check to account, email, monitor, usage,
-probe, backup and reconciliation roles. Storage and gateway roles do not use PostgreSQL.
+probe, backup and reconciliation roles. Storage, gateway and gateway-manifest roles do not use PostgreSQL.
 
 The second half restores the old backup into a separate PostgreSQL container and starts
 the old application with matching external keys. A wrong email key cannot decrypt its

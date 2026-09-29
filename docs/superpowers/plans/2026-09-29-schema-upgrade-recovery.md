@@ -40,7 +40,7 @@ migration or preservation of post-backup writes.
    Run migration/startup, interruption/retry, data/identity/isolation and separate recovery.
    Retain timings, revision/digest receipts and cleanup evidence outside the checkout.
 4. Prove the critical startup guard by deletion in a disposable copy, update deployment
-   and recovery docs and the ignored local backlog. Commit with sign-off, then finish-branch
+   and recovery docs and the tracked backlog. Commit with sign-off, then finish-branch
    with the Claude run-it seat, exact-head CI, locked landing and exact-merge CI.
 
 ## Review focus

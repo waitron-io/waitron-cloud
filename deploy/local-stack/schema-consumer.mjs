@@ -10,5 +10,5 @@ try{
  await checkConsumerDatabase(process.env.DATABASE_URL,process.cwd());
  child=spawn(process.execPath,process.argv.slice(2),{env:process.env,stdio:'inherit'});
  process.exitCode=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',code=>resolve(code??1));});
-}catch{console.error('Consumer refused: schema or configuration is incompatible');process.exitCode=1;}
+}catch(error){console.error(error?.message==='schema_incompatible'?'Consumer refused: schema_incompatible':'Consumer failed: check configuration and database');process.exitCode=1;}
 finally{process.removeListener('SIGTERM',forward);process.removeListener('SIGINT',forward);}

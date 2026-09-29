@@ -2,12 +2,18 @@ import {readFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 export function verifySchemaUpgradeReceipt(value){
  const demand=(ok,field)=>{if(!ok)throw new Error(`schema_upgrade_receipt: ${field}`);};
+ const exact=(object,keys)=>{demand(object&&typeof object==='object'&&!Array.isArray(object),'object');demand(JSON.stringify(Object.keys(object).sort())===JSON.stringify([...keys].sort()),'fields');};
+ exact(value,['schemaVersion','driver','releases','checks','timings','cleanup','limitations','measuredAt']);
+ exact(value.driver,['head','dirty']);exact(value.releases,['old','new']);
+ exact(value.timings,['upgradeMs','recoveryMs']);exact(value.cleanup,['containers','volumes','checkouts']);
+ demand(typeof value.measuredAt==='string'&&Number.isFinite(Date.parse(value.measuredAt))&&new Date(value.measuredAt).toISOString()===value.measuredAt,'measuredAt');
  demand(value?.schemaVersion===1,'version');
  const sha=/^[0-9a-f]{40}$/,digest=/^[0-9a-f]{64}$/;
  demand(sha.test(value.driver?.head)&&value.driver.dirty===false,'driver');
- for(const role of ['old','new']){const release=value.releases?.[role];demand(sha.test(release?.head)&&digest.test(release?.digest)&&Number.isInteger(release?.migrations)&&release.migrations>0,role);}
+ for(const role of ['old','new']){const release=value.releases?.[role];exact(release,['head','migrations','digest']);demand(sha.test(release?.head)&&digest.test(release?.digest)&&Number.isInteger(release?.migrations)&&release.migrations>0,role);}
  demand(value.releases.old.head!==value.releases.new.head&&value.releases.old.digest!==value.releases.new.digest&&value.releases.old.migrations<value.releases.new.migrations,'distinct schemas');
- for(const key of ['oldStarted','newRefusedOld','migrationInterrupted','rollbackComplete','newRefusedInterrupted','retryApplied','pairingUpgraded','oldRefusedNew','newStarted','identityPreserved','tenantsIsolated','completionRetry','pendingMailPreserved','mailDelivered','backupRestored','oldRecovered','wrongKeyRefused','upgradedUnchanged'])demand(value.checks?.[key]===true,key);
+ const checks=['oldStarted','newRefusedOld','migrationInterrupted','rollbackComplete','newRefusedInterrupted','retryApplied','pairingUpgraded','oldRefusedNew','newStarted','identityPreserved','tenantsIsolated','completionRetry','pendingMailPreserved','mailDelivered','backupRestored','oldRecovered','wrongKeyRefused','upgradedUnchanged'];
+ exact(value.checks,checks);for(const key of checks)demand(value.checks[key]===true,key);
  for(const key of ['upgradeMs','recoveryMs'])demand(Number.isFinite(value.timings?.[key])&&value.timings[key]>=0,key);
  for(const key of ['containers','volumes','checkouts'])demand(value.cleanup?.[key]===0,key);
  demand(Array.isArray(value.limitations)&&value.limitations.length>0&&value.limitations.every(item=>typeof item==='string'&&item.length>0),'limitations');

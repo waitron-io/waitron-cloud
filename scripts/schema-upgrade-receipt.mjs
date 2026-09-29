@@ -72,7 +72,7 @@ async function startAccount(root,url,refused=false){
  if(refused){
   await until(()=>handle.done,'refused consumer');
   assert.equal(handle.code,1);assert.equal(handle.stdout.includes('listening'),false);
-  assert.match(handle.stderr,/Consumer refused: schema or configuration is incompatible/);
+  assert.match(handle.stderr,/Consumer refused: schema_incompatible/);
   return true;
  }
  const port=await until(()=>{assert.equal(handle.done,false,'account unexpectedly exited');const line=handle.stdout.split('\n').find(line=>line.startsWith('{'));return line&&JSON.parse(line).port;},'account listening');
@@ -104,6 +104,7 @@ try{
  }
  const primary=await database(containers[0]);
  docker('run','-d','--name',containers[2],'-p','127.0.0.1::1025','-p','127.0.0.1::8025','axllent/mailpit:v1.31.1');
+ for(const mount of JSON.parse(docker('inspect',containers[2]))[0].Mounts)if(mount.Type==='volume')volumes.push(mount.Name);
  const smtp=docker('port',containers[2],'1025/tcp').split(':').at(-1),mailPort=docker('port',containers[2],'8025/tcp').split(':').at(-1);
  await until(async()=>{try{return(await fetch(`http://127.0.0.1:${mailPort}/api/v1/messages`)).ok;}catch{return false;}},'mailpit');
  node(old,['packages/registration/src/migrate-cli.ts'],environment(primary.url));

@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
 import test from 'node:test';
+import {spawnSync} from 'node:child_process';
 import * as runtime from './runtime.mjs';
 
 test('consumer schema validation refuses missing, future and changed migrations',async()=>{
@@ -20,4 +21,11 @@ test('consumer schema validation refuses missing, future and changed migrations'
   }
   await runtime.checkConsumerSchema({query:async()=>({rows:[expected]})},root);
  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('missing database configuration is not reported as schema incompatibility',()=>{
+ const result=spawnSync(process.execPath,['deploy/local-stack/schema-consumer.mjs','missing.ts'],{encoding:'utf8',env:{}});
+ assert.equal(result.status,1);
+ assert.match(result.stderr,/Consumer failed: check configuration and database/);
+ assert.doesNotMatch(result.stderr,/schema_incompatible/);
 });
