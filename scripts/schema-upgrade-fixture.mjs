@@ -3,7 +3,12 @@ import {createHash,generateKeyPairSync,randomUUID} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {join} from 'node:path';
 export const source=(root,path)=>import(pathToFileURL(join(root,path)).href);
-export const digest=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+function canonical(value){
+ if(Array.isArray(value))return value.map(canonical);
+ if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])]));
+ return value;
+}
+export const digest=value=>createHash('sha256').update(JSON.stringify(canonical(JSON.parse(JSON.stringify(value))))).digest('hex');
 export async function seed(root,pool,email){
  const {SignupStore,EmailOutbox,RegistrationStore,transaction}=await source(root,'packages/registration/src/index.ts');
  const {PairingStore}=await source(root,'packages/registration/src/pairing.ts');
