@@ -1,4 +1,5 @@
-import {createHash,timingSafeEqual,verify} from 'node:crypto';
+import {RecoveryCodes,recoveryCodeKeysFromEnv,type RecoveryCodeKeys} from './recovery-codes.ts';
+import {verify} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
 import {recordSecurityAuditEvent,transaction} from '@waitron-cloud/registration';
@@ -16,7 +17,6 @@ export function verifyRecoveryRequest(origin:string,action:Action,proof:Proof):C
   return {id:v[2],publicKey:v[4],code:v[5],issuedAt:v[6]};
  }catch{return backupFail('invalid_proof');}
 }
-const digest=(code:string)=>createHash('sha256').update(code).digest('hex');
 async function lock(client:PoolClient,id:string):Promise<Row>{
  if(!uuid(id))backupFail('unavailable');const row=(await client.query<Row>('SELECT * FROM backup_recovery_requests WHERE id=$1 FOR UPDATE',[id])).rows[0];if(!row)backupFail('unavailable');return row;
 }
@@ -24,23 +24,25 @@ async function available(client:PoolClient,row:Row){if(!row.operation_id&&(row.f
 function view(row:Row){return {requestId:row.id,state:row.operation_id?'approved' as const:'awaiting_owner' as const,expiresAt:row.expires_at.toISOString(),operationId:row.operation_id};}
 /** Request locks precede account, membership and venue locks; no recovery operation locks a request. */
 export class RecoveryRequests {
- readonly pool:Pool;readonly vault:BackupKeyVault;readonly origin:string;
- constructor(pool:Pool,vault:BackupKeyVault,origin:string){this.pool=pool;this.vault=vault;this.origin=origin;}
+ readonly pool:Pool;readonly vault:BackupKeyVault;readonly origin:string;readonly #codes:RecoveryCodes;
+ constructor(pool:Pool,vault:BackupKeyVault,origin:string,keys:RecoveryCodeKeys|null|undefined=recoveryCodeKeysFromEnv(process.env)){this.pool=pool;this.vault=vault;this.origin=origin;this.#codes=new RecoveryCodes(keys??undefined);}
  async machine(action:Action,proof:Proof){
   const c=verifyRecoveryRequest(this.origin,action,proof);
   return transaction(this.pool,async client=>{
    if(action==='start'){
     if((await client.query('SELECT 1 FROM installations WHERE public_key=$1 UNION ALL SELECT 1 FROM backup_recoveries WHERE target_public_key=$1 AND id<>$2',[c.publicKey,c.id])).rowCount)backupFail('target_not_fresh');
-    await client.query('INSERT INTO backup_recovery_requests(id,public_key,code_hash) VALUES($1,$2,$3) ON CONFLICT(id) DO NOTHING',[c.id,c.publicKey,digest(c.code)]);
+    await client.query('INSERT INTO backup_recovery_requests(id,public_key,code_hash) VALUES($1,$2,$3) ON CONFLICT(id) DO NOTHING',[c.id,c.publicKey,this.#codes.protect({id:c.id,public_key:c.publicKey},c.code)]);
    }
-   const row=await lock(client,c.id);if(row.public_key!==c.publicKey||row.code_hash!==digest(c.code))backupFail('conflict');await available(client,row);verifyRecoveryRequest(this.origin,action,proof);return view(row);
+   const row=await lock(client,c.id);if(row.public_key!==c.publicKey||!this.#codes.matches(row,row.code_hash,c.code))backupFail('conflict');await available(client,row);verifyRecoveryRequest(this.origin,action,proof);return view(row);
   }).catch(error=>{if(uniqueViolation(error,'backup_recovery_requests_public_key_key'))backupFail('target_not_fresh');throw error;});
  }
  async #browser(id:string,code:string,token:string,csrf:string,input?:RecoveryApprovalInput){
   const result=await transaction(this.pool,async client=>{
    const row=await lock(client,id),session=await resolveSession(client,token,{csrfToken:csrf,touch:false});await available(client,row);
    if(row.account_id&&row.account_id!==session.accountId)backupFail('permission_denied');
-   if(typeof code!=='string'||!/^\d{8}$/.test(code)||!timingSafeEqual(Buffer.from(digest(code),'hex'),Buffer.from(row.code_hash,'hex'))){if(!row.operation_id)await client.query('UPDATE backup_recovery_requests SET failed_codes=LEAST(5,failed_codes+1) WHERE id=$1',[id]);return null;}
+   // Check key availability even for malformed guesses, so an outage cannot spend attempts.
+   const matches=this.#codes.matches(row,row.code_hash,typeof code==='string'?code:'');
+   if(typeof code!=='string'||!/^\d{8}$/.test(code)||!matches){if(!row.operation_id)await client.query('UPDATE backup_recovery_requests SET failed_codes=LEAST(5,failed_codes+1) WHERE id=$1',[id]);return null;}
    const recovery=new BackupRecovery(this.pool,this.vault,this.origin,client);
    if(input){
     const operation=await recovery.start(token,csrf,{...input,id,mode:'failure',targetPublicKey:row.public_key});

@@ -111,6 +111,7 @@ ledger against its release's SQL names and content digests before starting. A mi
 changed or extra migration refuses startup. Migrations also refuse a database with unknown
 migration names. Run the required forward migration and data conversion before admitting
 traffic. For the 26-to-27 transition, follow the [pairing-key upgrade](pairing-code-keys.md#upgrade-existing-requests-without-losing-approval), including its separate key and conversion step.
+For the 27-to-28 transition, follow the [recovery-code upgrade](recovery-code-keys.md#upgrade-existing-requests-without-losing-their-history). Stop old account writers, add the independent recovery key map and convert existing rows before restarting.
 
 The original lifecycle receipt proves same-schema recreation. The separate
 [schema upgrade rehearsal](#rehearse-a-schema-changing-upgrade) covers one pinned forward

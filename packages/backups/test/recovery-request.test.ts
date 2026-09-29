@@ -156,3 +156,131 @@ test('machine limits follow the proven key across IPs and bound new requests per
  for(let n=0;n<10;n++){const next=target();assert.equal((await post('start',next.proof('start'),'203.0.113.89')).status,200);}
  const next=target();assert.equal((await post('start',next.proof('start'),'203.0.113.89')).status,429);
 });
+
+test('keyed recovery storage defeats database-only guesses and binds request identity',async()=>{
+ const f=await fixture(),a=target(),b=target();
+ await f.requests.machine('start',a.proof('start'));await f.requests.machine('start',b.proof('start'));
+ const rows=(await db.pool.query('SELECT * FROM backup_recovery_requests WHERE id=ANY($1::uuid[]) ORDER BY id',[[a.id,b.id]])).rows;
+ const {createHash}=await import('node:crypto');const plain=createHash('sha256').update(a.code).digest('hex');
+ for(const row of rows){assert.match(row.code_hash,/^v1:[A-Za-z0-9_-]{1,64}:[a-f0-9]{64}$/);assert(!JSON.stringify(row).includes(a.code));assert(!JSON.stringify(row).includes(plain));}
+ assert.notEqual(rows[0].code_hash,rows[1].code_hash);
+ const original=(await db.pool.query('SELECT code_hash FROM backup_recovery_requests WHERE id=$1',[a.id])).rows[0].code_hash;
+ await db.pool.query('UPDATE backup_recovery_requests SET code_hash=$2 WHERE id=$1',[b.id,original]);
+ await assert.rejects(f.requests.machine('status',b.proof('status')),/conflict/);
+ await assert.rejects(f.requests.inspect(b.id,b.code,f.session.token,f.session.csrfToken),/unavailable/);
+ const movedId=randomUUID();await db.pool.query('UPDATE backup_recovery_requests SET id=$2 WHERE id=$1',[a.id,movedId]);a.id=movedId;
+ await assert.rejects(f.requests.machine('status',a.proof('status')),/conflict/);
+ await assert.rejects(f.requests.inspect(a.id,a.code,f.session.token,f.session.csrfToken),/unavailable/);
+ a.id=a.id.toUpperCase() as typeof a.id;await assert.rejects(f.requests.machine('start',a.proof('start')),/invalid_proof/);
+});
+
+test('keyed recovery missing configuration refuses machine and browser checks without spending guesses',async()=>{
+ const f=await fixture(),t=target();await f.requests.machine('start',t.proof('start'));
+ const disabled=new RecoveryRequests(db.pool,f.vault,origin,null);
+ await assert.rejects(disabled.machine('status',t.proof('status')),/Recovery code configuration unavailable/);
+ await assert.rejects(disabled.machine('start',target().proof('start')),/Recovery code configuration unavailable/);
+ await assert.rejects(disabled.inspect(t.id,t.code,f.session.token,f.session.csrfToken),/Recovery code configuration unavailable/);
+ assert.equal((await db.pool.query('SELECT failed_codes FROM backup_recovery_requests WHERE id=$1',[t.id])).rows[0].failed_codes,0);
+});
+
+test('keyed recovery HTTP refuses missing keys without disclosing code or configuration',async()=>{
+ const f=await fixture(),t=target();await f.requests.machine('start',t.proof('start'));
+ const app=createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},recoveryCodeKeys:null,leaseIssuer:createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')),captures:{vault:f.vault,objects:()=>({async read(k){return f.objects.get(k)!;},async put(_k,b){return receipt(b);},async remove(){}}),async grant(){throw Error('unused');}}});
+ const response=await app.request(origin+'/api/recovery/status',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(t.proof('status'))},{incoming:{socket:{remoteAddress:'192.0.2.198'}}});
+ assert.equal(response.status,503);const body=await response.text();assert(!body.includes(t.code));assert(!body.includes('code_hash'));assert(!body.includes('CLOUD_RECOVERY'));
+});
+
+test('keyed recovery missing keys refuse malformed guesses without spending attempts',async()=>{
+ const f=await fixture(),t=target();await f.requests.machine('start',t.proof('start'));
+ const disabled=new RecoveryRequests(db.pool,f.vault,origin,null);
+ await assert.rejects(disabled.inspect(t.id,'malformed',f.session.token,f.session.csrfToken),/Recovery code configuration unavailable/);
+ assert.equal((await db.pool.query('SELECT failed_codes FROM backup_recovery_requests WHERE id=$1',[t.id])).rows[0].failed_codes,0);
+});
+
+test('keyed recovery upgrade command preserves pending and completed history',async()=>{
+ const f=await fixture(),a=target(),b=target(),c=target(),targets=[a,b,c];for(const t of targets)await f.requests.machine('start',t.proof('start'));
+ const input={pointId:f.point.id,oldServerUnavailable:true,acceptDataLoss:true};await f.requests.approve(b.id,b.code,f.session.token,f.session.csrfToken,input);await f.recovery.close(f.session.token,f.session.csrfToken,b.id);
+ await db.pool.query('UPDATE backup_recovery_requests SET failed_codes=2 WHERE id=$1',[a.id]);
+ await db.pool.query("UPDATE backup_recovery_requests SET expires_at=clock_timestamp()-interval '1 second' WHERE id=ANY($1::uuid[])",[[b.id,c.id]]);
+ const {createHash}=await import('node:crypto');const plain=createHash('sha256').update(a.code).digest('hex');
+ await db.pool.query('UPDATE backup_recovery_requests SET code_hash=$1 WHERE id=ANY($2::uuid[])',[plain,targets.map(t=>t.id)]);
+ const before=(await db.pool.query('SELECT * FROM backup_recovery_requests WHERE id=ANY($1::uuid[]) ORDER BY id',[targets.map(t=>t.id)])).rows;
+ await assert.rejects(f.requests.machine('status',a.proof('status')),/configuration unavailable/);await assert.rejects(f.requests.inspect(a.id,a.code,f.session.token,f.session.csrfToken),/configuration unavailable/);
+ const {execFileSync}=await import('node:child_process');const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options',`-c search_path=${db.schema}`);
+ const run=()=>JSON.parse(execFileSync(process.execPath,['src/recovery-codes-cli.ts','--once'],{encoding:'utf8',timeout:15000,env:{...process.env,DATABASE_URL:url.href}}));
+ assert.deepEqual(run(),{upgraded:3});assert.deepEqual(run(),{upgraded:0});
+ const after=(await db.pool.query('SELECT * FROM backup_recovery_requests WHERE id=ANY($1::uuid[]) ORDER BY id',[targets.map(t=>t.id)])).rows;
+ for(let i=0;i<before.length;i++){assert.match(after[i].code_hash,/^v1:/);assert.deepEqual({...after[i],code_hash:null},{...before[i],code_hash:null});}
+ assert.deepEqual(await f.requests.machine('start',a.proof('start')),await f.requests.machine('status',a.proof('status')));
+ assert.equal((await f.requests.inspect(b.id,b.code,f.session.token,f.session.csrfToken)).operationId,b.id);
+ assert.equal((await f.requests.approve(a.id,a.code,f.session.token,f.session.csrfToken,input)).operationId,a.id);
+ await assert.rejects(f.requests.inspect(c.id,c.code,f.session.token,f.session.csrfToken),/unavailable/);
+});
+
+test('keyed recovery rotation keeps retries and process restart bound to the original key',async()=>{
+ const f=await fixture(),a=target(),b=target(),old={activeKeyId:'old',keys:{old:'a'.repeat(64)}},rotated={activeKeyId:'new',keys:{...old.keys,new:'b'.repeat(64)}};
+ const first=new RecoveryRequests(db.pool,f.vault,origin,old),pending=await first.machine('start',a.proof('start'));
+ const overlap=new RecoveryRequests(db.secondPool,f.vault,origin,rotated);assert.deepEqual(await overlap.machine('start',a.proof('start')),pending);await overlap.machine('start',b.proof('start'));
+ assert.match((await db.pool.query('SELECT code_hash FROM backup_recovery_requests WHERE id=$1',[a.id])).rows[0].code_hash,/^v1:old:/);assert.match((await db.pool.query('SELECT code_hash FROM backup_recovery_requests WHERE id=$1',[b.id])).rows[0].code_hash,/^v1:new:/);
+ const {execFileSync}=await import('node:child_process');const restart=JSON.parse(execFileSync(process.execPath,['test/fixtures/recovery-request-restart.ts'],{encoding:'utf8',timeout:10000,input:JSON.stringify(a.proof('status')),env:{...process.env,RECOVERY_SCHEMA:db.schema,CLOUD_RECOVERY_ACTIVE_KEY_ID:rotated.activeKeyId,CLOUD_RECOVERY_KEYS:JSON.stringify(rotated.keys)}}));assert.deepEqual(restart,pending);
+ const removed=new RecoveryRequests(db.pool,f.vault,origin,{activeKeyId:'new',keys:{new:rotated.keys.new}});
+ await assert.rejects(removed.machine('status',a.proof('status')),/configuration unavailable/);await assert.rejects(removed.machine('start',a.proof('start')),/configuration unavailable/);await assert.rejects(removed.inspect(a.id,a.code,f.session.token,f.session.csrfToken),/configuration unavailable/);
+ assert.equal((await db.pool.query('SELECT failed_codes FROM backup_recovery_requests WHERE id=$1',[a.id])).rows[0].failed_codes,0);
+ const wrong=new RecoveryRequests(db.pool,f.vault,origin,{activeKeyId:'old',keys:{old:'c'.repeat(64)}});
+ await assert.rejects(wrong.machine('status',a.proof('status')),/conflict/);await assert.rejects(wrong.inspect(a.id,a.code,f.session.token,f.session.csrfToken),/unavailable/);
+ assert.equal((await db.pool.query('SELECT failed_codes FROM backup_recovery_requests WHERE id=$1',[a.id])).rows[0].failed_codes,1);
+ const approved=await overlap.approve(a.id,a.code,f.session.token,f.session.csrfToken,{pointId:f.point.id,oldServerUnavailable:true,acceptDataLoss:true});assert.equal(approved.operationId,a.id);
+ assert.equal((await removed.inspect(b.id,b.code,f.session.token,f.session.csrfToken)).state,'awaiting_owner');
+ assert.equal((await f.recovery.target(a.id,'info',a.recovery('info'))).source.kind,'snapshot');
+});
+
+test('keyed recovery concurrent guesses share exactly five attempts across workers',async()=>{
+ const f=await fixture(),a=target(),b=target();b.code='87654321';for(const t of [a,b])await f.requests.machine('start',t.proof('start'));
+ const other=new RecoveryRequests(db.secondPool,f.vault,origin);
+ const results=await Promise.allSettled(Array.from({length:12},(_,i)=>(i%2?f.requests:other).inspect(a.id,b.code,f.session.token,f.session.csrfToken)));
+ assert.equal(results.filter(r=>r.status==='rejected').length,12);assert.equal((await db.pool.query('SELECT failed_codes FROM backup_recovery_requests WHERE id=$1',[a.id])).rows[0].failed_codes,5);
+ await assert.rejects(f.requests.approve(a.id,a.code,f.session.token,f.session.csrfToken,{pointId:f.point.id,oldServerUnavailable:true,acceptDataLoss:true}),/unavailable/);
+ assert.equal((await other.inspect(b.id,b.code,f.session.token,f.session.csrfToken)).state,'awaiting_owner');
+});
+
+test('keyed recovery HTTP rotation, wrong keys and owner approval keep diagnostics secret-free',async context=>{
+ const f=await fixture(),t=target(),old={activeKeyId:'http-old',keys:{'http-old':'d'.repeat(64)}},rotated={activeKeyId:'http-new',keys:{...old.keys,'http-new':'e'.repeat(64)}};
+ const captured:string[]=[];for(const method of ['log','warn','error'] as const)context.mock.method(console,method,(...values:unknown[])=>{captured.push(JSON.stringify(values));});
+ const create=(keys:typeof old|typeof rotated|null)=>createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},recoveryCodeKeys:keys,leaseIssuer:createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')),captures:{vault:f.vault,objects:()=>({async read(k){return f.objects.get(k)!;},async put(_k,b){return receipt(b);},async remove(){}}),async grant(){throw Error('unused');}}});
+ let app=create(old);const bodies:string[]=[];
+ const post=async(action:string,owner=false,extra:Record<string,string>={})=>{
+  const response=await app.request(origin+(owner?'/api/account/recovery/':'/api/recovery/')+action,{method:'POST',headers:{'content-type':'application/json',...(owner?{origin,cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken}:{})},body:JSON.stringify(owner?{requestId:t.id,code:t.code,...extra}:t.proof(action as 'start'|'status'))},{incoming:{socket:{remoteAddress:'192.0.2.199'}}});bodies.push(await response.text());return response.status;
+ };
+ assert.equal(await post('start'),200);app=create(null);assert.equal(await post('status'),503);assert.equal(await post('inspect',true),503);
+ assert.equal((await db.pool.query('SELECT failed_codes FROM backup_recovery_requests WHERE id=$1',[t.id])).rows[0].failed_codes,0);
+ app=create({activeKeyId:'http-old',keys:{'http-old':'f'.repeat(64)}});assert.equal(await post('status'),409);assert.equal(await post('inspect',true),410);
+ assert.equal((await db.pool.query('SELECT failed_codes FROM backup_recovery_requests WHERE id=$1',[t.id])).rows[0].failed_codes,1);
+ app=create(rotated);assert.equal(await post('start'),200);assert.equal(await post('status'),200);assert.equal(await post('inspect',true),200);
+ assert.equal(await post('approve',true,{pointId:f.point.id,oldServerUnavailable:'true',acceptDataLoss:'true'}),200);
+ app=create(rotated);assert.equal(await post('status'),200);assert.equal(await post('approve',true,{pointId:f.point.id,oldServerUnavailable:'true',acceptDataLoss:'true'}),200);
+ const {createHash}=await import('node:crypto');await db.pool.query('UPDATE backup_recovery_requests SET code_hash=$2 WHERE id=$1',[t.id,createHash('sha256').update(t.code).digest('hex')]);
+ assert.equal(await post('status'),503);assert.equal(await post('inspect',true),503);assert.equal(await post('approve',true,{pointId:f.point.id,oldServerUnavailable:'true',acceptDataLoss:'true'}),503);
+ const {upgradeRecoveryCodes}=await import('../src/recovery-codes.ts');assert.equal(await upgradeRecoveryCodes(db.pool,rotated),1);assert.equal(await post('status'),200);assert.equal(await post('inspect',true),200);
+ const audit=(await db.pool.query('SELECT * FROM security_audit_events WHERE source_id=$1',[t.id])).rows;assert.equal(audit.length,1);
+ const stored=(await db.pool.query('SELECT code_hash FROM backup_recovery_requests WHERE id=$1',[t.id])).rows[0].code_hash;
+ const outputs=JSON.stringify({bodies,audit,captured});for(const secret of [t.code,...Object.values(rotated.keys),'f'.repeat(64),stored])assert(!outputs.includes(secret));assert.deepEqual(captured,[]);
+});
+
+test('keyed recovery upgrade waits for locks, rolls back a failed batch and resumes in bounded passes',async()=>{
+ const isolated=await database();const {upgradeRecoveryCodes,recoveryCodeKeysFromEnv}=await import('../src/recovery-codes.ts');
+ const keys=recoveryCodeKeysFromEnv(process.env)!;const {createHash}=await import('node:crypto');const legacy=createHash('sha256').update('12345678').digest('hex');
+ const ids=[randomUUID(),randomUUID()].sort();
+ try{
+  for(const id of ids)await isolated.pool.query('INSERT INTO backup_recovery_requests(id,public_key,code_hash) VALUES($1,$2,$3)',[id,randomUUID(),legacy]);
+  await isolated.pool.query(`CREATE FUNCTION refuse_recovery_upgrade() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.id='${ids[1]}' THEN RAISE EXCEPTION 'upgrade probe'; END IF; RETURN NEW; END $$;
+   CREATE TRIGGER refuse_recovery_upgrade BEFORE UPDATE ON backup_recovery_requests FOR EACH ROW EXECUTE FUNCTION refuse_recovery_upgrade()`);
+  try{await assert.rejects(upgradeRecoveryCodes(isolated.pool,keys),/upgrade probe/);assert.equal((await isolated.pool.query('SELECT count(*) FROM backup_recovery_requests WHERE code_hash=$1',[legacy])).rows[0].count,'2');}
+  finally{await isolated.pool.query('DROP TRIGGER refuse_recovery_upgrade ON backup_recovery_requests; DROP FUNCTION refuse_recovery_upgrade()');}
+  const blocker=await isolated.secondPool.connect();await blocker.query('BEGIN');await blocker.query('SELECT id FROM backup_recovery_requests FOR UPDATE');
+  const pending=upgradeRecoveryCodes(isolated.pool,keys,1);let locked=false;
+  try{for(let i=0;i<200;i++){if((await isolated.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE '%code_hash%'",[isolated.schema])).rowCount){locked=true;break;}await new Promise(r=>setTimeout(r,10));}assert(locked,'upgrade must wait for the legacy row lock');}
+  finally{await blocker.query('COMMIT');blocker.release();await pending;}
+  assert.equal(await upgradeRecoveryCodes(isolated.pool,keys,1),1);assert.equal(await upgradeRecoveryCodes(isolated.pool,keys,1),0);
+  for(const invalid of [0,1001,1.5])await assert.rejects(upgradeRecoveryCodes(isolated.pool,keys,invalid),/configuration unavailable/);
+ }finally{await isolated.close();}
+});

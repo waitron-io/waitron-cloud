@@ -431,9 +431,17 @@ mobile notifications separately.
   PostgreSQL/HTTP tests cover preserved approvals/history, restart, expiry, concurrent
   guesses, request binding and key overlap/refusal. Local business confirmation stays
   required. Old backups remain sensitive; no new retention policy is chosen.
-  **Open:** backup-recovery request codes in `packages/backups/src/recovery-request.ts`
-  still use a separate unkeyed SHA-256 digest. Trace its consumers and add a scoped
-  database-disclosure protection item before production; D33 changes pairing only.
+  Backup-recovery request codes now have their own independently configured,
+  request/machine-bound keyed verifier and explicit legacy upgrade; see
+  [recovery key configuration and rotation](recovery-code-keys.md). PostgreSQL/HTTP
+  tests cover storage, cross-request reuse, machine retry/status, owner approval,
+  five concurrent-guess limits, expiry, process restart, rotation, absent/wrong keys
+  and preserved pending/completed history. Upgrade rollback, bounded batches and
+  row-lock waits and the actual CLI lock timeout are exercised; HTTP/CLI/audit
+  checks disclose no code or secret. English/Spanish recovery browser tests pass.
+  Before production, provision the separate keys, execute the stopped-writer upgrade
+  and apply the existing retention policy to legacy backups. External proxy logging
+  and production secret custody remain deployment responsibilities.
   Terminated database connections and lost replies have regression tests. The
   [local management-database recovery drill](database-recovery.md) now uses separate
   non-superuser migration and runtime logins plus a replication-only login. It takes a
@@ -689,7 +697,8 @@ mobile notifications separately.
   budget untouched; five concurrent wrong codes against a known UUID serialized to five,
   closed the pending request and refused its later correct code. Treat that availability
   cost as an ingress/request-reissue decision, not a reason to raise the guess allowance
-  blindly. Review code-hash disclosure risks.
+  blindly. Recovery codes now use a separate external key, as described in
+  [the upgrade and rotation instructions](recovery-code-keys.md).
   Keep completion reports separate from activation, and test deployment-scale transfer
   interruption, expiry and cancellation against the selected provider. Restore verification is
   separate from upload freshness; production workers still need enforceable resource and
