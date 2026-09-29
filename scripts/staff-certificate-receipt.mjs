@@ -57,7 +57,11 @@ try{
  const [a,b]=venues;
  assert.equal((await exchange(b.a,'staff-certificate-status',{version:1,requestId:a.id})).status,409);
  await writeFile(a.certificateFile,b.initial);assert.throws(()=>command(a.state,'install',a.a.body.hostname,a.certificateFile));assert.equal(await readFile(join(a.state,'cloud-staff.crt'),'utf8'),a.initial);
- checks.push('cross-tenant status and wrong-host/key chain installation refused while prior chain stayed installed');
+ const wrongKeyCsr=join(root,'wrong-key.csr'),wrongKeyOutput=join(root,'wrong-key.crt');command(b.state,'csr',a.a.body.hostname,wrongKeyCsr);issues++;
+ const wrongKeyChain=await acme.issue({hostname:a.a.body.hostname,csrFile:wrongKeyCsr,output:wrongKeyOutput,accountKeyFile});
+ assert.equal(new X509Certificate(wrongKeyChain).checkHost(a.a.body.hostname),a.a.body.hostname);
+ assert.throws(()=>command(a.state,'install',a.a.body.hostname,wrongKeyOutput));assert.equal(await readFile(join(a.state,'cloud-staff.crt'),'utf8'),a.initial);
+ checks.push('cross-tenant status, wrong-host chain and separately same-host wrong-key chain installation refused while prior chain stayed installed');
  const next=randomUUID(),replacement={...a.a.body,previousRequestId:a.id};assert.equal((await exchange(a.a,'staff-certificate-submit',replacement,next)).status,200);
  await worker.schedule();await f.db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'certificate_staff'");
  await new RemoteConfigurationReconciler(f.db.pool,{staffExchange:true,issueCertificate:async()=>{throw Error('local DNS failure');}}).runOnce();

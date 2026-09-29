@@ -23,7 +23,7 @@ test('failed or wrong-key issuance keeps the stored chain and never returns it f
  const {a,id}=await setup(),b=await f.venue(),initial=chain(a),worker=new RemoteConfigurationReconciler(f.db.pool,{staffExchange:true,issueCertificate:async()=>initial});
  await select(worker,a.installationId);await worker.runOnce();assert.equal((await(await read(a,id)).json()).state,'ready');
  const next=randomUUID(),body={...a.body,previousRequestId:id};assert.equal((await f.request(submit,a.proof(submit,body,next,a.lease))).status,200);
- for(const issueCertificate of [async()=>{throw Error('dns failed');},async()=>chain(b)]){
+ for(const issueCertificate of [async()=>{throw Error('dns failed');},async()=>chain(b),async()=>chain({...b,body:{...b.body,hostname:a.body.hostname}})]){
   const bad=new RemoteConfigurationReconciler(f.db.pool,{staffExchange:true,issueCertificate});await select(bad,a.installationId);await bad.runOnce();
   const row=(await f.db.pool.query('SELECT certificate,certificate_request_id FROM staff_certificate_exchange WHERE installation_id=$1',[a.installationId])).rows[0];assert.equal(row.certificate,initial);assert.equal(row.certificate_request_id,id);
   const reply=await(await read(a,next)).json();assert.equal(reply.state,'pending');assert.equal('certificate' in reply,false);
