@@ -16,7 +16,7 @@ const observe=mode=>JSON.parse(capture('run','--rm','--no-deps','usage-reconcile
 async function until(check){const end=Date.now()+30000;while(Date.now()<end){const state=observe('status');if(check(state))return state;await delay(250);}throw new Error('usage proof timed out');}
 let receipt,error;
 try{
- compose('build','bootstrap');compose('up','-d','--no-build','usage-reconciler');compose('wait','bootstrap','migrate');
+ compose('build','bootstrap');compose('up','-d','--no-build','usage-reconciler');
  const initial=await until(state=>state.usage.code==='current');assert.equal(initial.events,0);
  observe('seed');observe('seed');
  const automatic=await until(state=>state.events===2&&state.usage.code==='current');assert.equal(automatic.organisations,2);

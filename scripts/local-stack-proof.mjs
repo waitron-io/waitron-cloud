@@ -24,7 +24,6 @@ async function waitForStack(){
   if(ready)return [...required];if(failed)throw new Error(`local stack service failed: ${failed}`);await delay(500);}
  throw new Error('local stack health timeout');
 }
-function waitJobs(){compose('wait','bootstrap','migrate');}
 function migrationCount(){return Number(composeOutput('exec','-T','postgres','psql','-U','cloud','-d','cloud','-Atc','SELECT count(*) FROM schema_migrations'));}
 function databaseMarker(write=false){const statement=write?'CREATE TABLE IF NOT EXISTS local_stack_proof(marker text PRIMARY KEY); INSERT INTO local_stack_proof VALUES (\'lifecycle-v1\') ON CONFLICT DO NOTHING; SELECT marker FROM local_stack_proof;':'SELECT marker FROM local_stack_proof;';return composeOutput('exec','-T','postgres','psql','-U','cloud','-d','cloud','-Atc',statement).split('\n').at(-1)==='lifecycle-v1';}
 function storageMarker(mode){return JSON.parse(composeOutput('exec','-T','account','node','deploy/local-stack/storage-marker.mjs',mode)).present===true;}
@@ -42,9 +41,9 @@ function resources(kind){const command={containers:['ps','-aq'],networks:['netwo
 function proofImages(){try{run('docker',['image','inspect',`waitron-cloud-local-stack:${tag}`],{capture:true});return 1;}catch{return 0;}}
 let receipt,error;
 try{
- const installStart=Date.now();compose('build','bootstrap');compose('up','-d','--no-build');waitJobs();const install=await phase('install',installStart,{writeMarkers:true});
- const restartStart=Date.now();compose('stop');compose('start');waitJobs();const restart=await phase('restart',restartStart);
- const upgradeStart=Date.now();compose('build','bootstrap');compose('up','-d','--no-build','--force-recreate');waitJobs();const upgrade=await phase('upgrade',upgradeStart,{upgrade:true});
+ const installStart=Date.now();compose('build','bootstrap');compose('up','-d','--no-build');const install=await phase('install',installStart,{writeMarkers:true});
+ const restartStart=Date.now();compose('stop');compose('start');const restart=await phase('restart',restartStart);
+ const upgradeStart=Date.now();compose('build','bootstrap');compose('up','-d','--no-build','--force-recreate');const upgrade=await phase('upgrade',upgradeStart,{upgrade:true});
  receipt={schemaVersion:1,cloud:{head:run('git',['rev-parse','HEAD'],{capture:true}),dirty:run('git',['status','--porcelain'],{capture:true})!==''},project,startedAt,completedAt:'',bindings:bindings(),phases:{install,restart,upgrade},rollback:{sameSchemaOnly:true,databaseRecoveryExcluded:true,incompatibleSchemaRollbackExcluded:true},cleanup:{containers:-1,networks:-1,volumes:-1,images:-1}};
 }catch(cause){error=cause;try{compose('logs','--no-color');}catch{}}
 finally{try{compose('down','--volumes','--remove-orphans');}catch(cause){error??=cause;}try{if(proofImages())run('docker',['image','rm',`waitron-cloud-local-stack:${tag}`],{capture:true});}catch(cause){error??=cause;}}

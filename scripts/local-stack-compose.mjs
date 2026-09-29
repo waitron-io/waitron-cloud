@@ -12,7 +12,8 @@ export function parseComposeServices(text){
 export function stackReadiness(services){
  const failed=services.find(item=>item.State==='exited'&&![0,'0'].includes(item.ExitCode))?.Service;
  const byName=new Map(services.map(item=>[item.Service,item]));
- const ready=required.every(name=>byName.get(name)?.State==='running'&&(!healthServices.has(name)||byName.get(name)?.Health==='healthy'));
+ const jobsReady=['bootstrap','migrate'].every(name=>byName.get(name)?.State==='exited'&&[0,'0'].includes(byName.get(name)?.ExitCode));
+ const ready=jobsReady&&required.every(name=>byName.get(name)?.State==='running'&&(!healthServices.has(name)||byName.get(name)?.Health==='healthy'));
  return {ready,failed};
 }
 

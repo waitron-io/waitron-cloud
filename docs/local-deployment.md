@@ -61,6 +61,26 @@ The `bootstrap` and `migrate` containers should show `Exited (0)` in status outp
 successful one-shot jobs, not failed services. The lifecycle command checks them separately
 from the healthy long-running containers for this reason.
 
+The `usage-reconciler` is a long-running worker. It reconciles immediately, then once
+per minute by default. Set `CLOUD_USAGE_INTERVAL_MS` and `CLOUD_USAGE_BATCH_SIZE` in
+the Compose environment to override the [bounded usage settings](usage-metering.md).
+The process running is a startup check; use operations status to check whether its
+scans are current. Repeated failures or stopping the service eventually make usage
+freshness stale.
+
+You can exercise this service in a disposable Compose project:
+
+```sh
+pnpm proof:scheduled-usage /tmp/cloud-scheduled-usage-receipt.json
+```
+
+The proof builds the local image and starts only bootstrap, PostgreSQL, migrations
+and the usage worker. With a one-second interval and one event per source per pass,
+it checks automatic reconciliation for separate organisations, stops the worker,
+observes stale operations evidence at a two-second threshold, then restarts it to
+catch up pending work. It removes that project's containers, volumes, network and
+image. These short settings are for the proof; they are not production targets.
+
 ## Stop, restart and upgrade
 
 Stop the containers without deleting their volumes:
