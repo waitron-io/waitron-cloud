@@ -48,7 +48,7 @@ remain; the runtime whole-shape fixture may gain only the new environment fields
   process restart work, absent/wrong keys refuse, concurrent wrong guesses stop at
   five, and legacy upgrade preserves pending and completed history. Exercise the
   upgrade CLI, rollback/resume, HTTP responses/audit and sanitized diagnostics.
-- [ ] Run existing recovery/replacement/continuous-recovery, abuse, history cleanup,
+- [x] Run existing recovery/replacement/continuous-recovery, abuse, history cleanup,
   migration and focused runtime tests. Delete critical guards in a disposable copy
   and observe failing tests. Run typecheck.
 - [ ] Document rollout, rotation and key retirement; narrow all related backlog

@@ -168,6 +168,9 @@ test('keyed recovery storage defeats database-only guesses and binds request ide
  await db.pool.query('UPDATE backup_recovery_requests SET code_hash=$2 WHERE id=$1',[b.id,original]);
  await assert.rejects(f.requests.machine('status',b.proof('status')),/conflict/);
  await assert.rejects(f.requests.inspect(b.id,b.code,f.session.token,f.session.csrfToken),/unavailable/);
+ const movedId=randomUUID();await db.pool.query('UPDATE backup_recovery_requests SET id=$2 WHERE id=$1',[a.id,movedId]);a.id=movedId;
+ await assert.rejects(f.requests.machine('status',a.proof('status')),/conflict/);
+ await assert.rejects(f.requests.inspect(a.id,a.code,f.session.token,f.session.csrfToken),/unavailable/);
  a.id=a.id.toUpperCase() as typeof a.id;await assert.rejects(f.requests.machine('start',a.proof('start')),/invalid_proof/);
 });
 
