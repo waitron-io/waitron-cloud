@@ -76,8 +76,12 @@ publishes signed routes and renews public/staff certificates through explicit fi
 DNS and ACME adapters. Its receipt covers duplicate workers, expired-lease restart,
 bounded failure, failed-renewal retention and hostname/lease fences; focused filesystem
 tests cover atomic replacement while Waitron keeps the staff private key.
-Live provider DNS, production key storage/deployment, CSR/chain transport and automatic
-appliance setup remain open. The [local backup proof](local-backups.md)
+The version 1 signed installation exchange now carries staff CSRs and chains through
+PostgreSQL without shared files. An opt-in reconciler mode fences replacement, revision,
+revocation and expired claims; the two-installation local proof uses Pebble and
+Waitron's unchanged CSR/install CLI. Live provider DNS, production key storage/deployment
+and automatic appliance setup remain open. Waitron still needs a durable exchange client,
+local stale-result checks, polling, lease renewal and TLS reload. The [local backup proof](local-backups.md)
 now provides encrypted scoped storage, protected key versions, an immutable snapshot catalogue,
 restore verification, retention and owner-bound recovery operations. Two real Waitron
 snapshots restore independently of deleted Litestream data, including after key rotation.
@@ -170,8 +174,10 @@ remains a separate exchange requiring both Cloud and local administrator proof.
 - Provide assigned or customer-owned hostnames and automatic Let's Encrypt certificates.
   The durable local reconciler now issues and renews both certificate kinds through the
   existing DNS/ACME adapter contract and publishes signed cell routes. Repeat this with
-  live provider DNS, production key storage and deployed workers; add automatic staff
-  CSR/chain transport without moving the private key out of Waitron.
+  live provider DNS, production key storage and deployed workers. The signed Cloud
+  CSR/chain transport and database staff reconciler are implemented locally; Waitron
+  still needs the durable client and automatic install/reload path described in the
+  integration contract. The private key remains in Waitron.
   Prefer local DNS overrides so the registered staff hostname and venue certificate
   work on both LAN and internet paths. Define router-specific setup, address stability,
   resolver recovery and initial bootstrap. Test fresh local connections without internet.

@@ -20,6 +20,7 @@
     "@types/pg": "^8.23.1"
   },
   "exports": {
+    "./staff-exchange": "./src/staff-exchange.ts",
     "./placement": "./src/placement.ts",
     "./manifest": "./src/manifest.ts",
     "./probe-targets": "./src/probe-targets.ts",
