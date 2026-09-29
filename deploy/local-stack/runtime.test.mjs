@@ -17,7 +17,7 @@ test('runtime roles receive only their explicit configuration',async()=>{
   email:{DATABASE_URL:database,CLOUD_EMAIL_ACTIVE_KEY_ID:'local-v1',CLOUD_EMAIL_KEYS:JSON.stringify(config.email.keys),CLOUD_PORTAL_ORIGIN:'http://localhost:3000',MAILPIT_SMTP_PORT:'1025',CLOUD_MAIL_TRANSPORT:'local'},
   monitor:{DATABASE_URL:database,CLOUD_EMAIL_ACTIVE_KEY_ID:'local-v1',CLOUD_EMAIL_KEYS:JSON.stringify(config.email.keys)},
   usage:{DATABASE_URL:database},probe:{DATABASE_URL:database},
-  backup:{DATABASE_URL:database,CLOUD_BACKUP_MASTER_KEY:config.backup.masterKey,CLOUD_BACKUP_ENDPOINT:'https://storage:8333',CLOUD_BACKUP_REGION:'local',CLOUD_BACKUP_ACCESS_KEY:config.storage.accessKeyId,CLOUD_BACKUP_SECRET_KEY:config.storage.secretAccessKey,CLOUD_BACKUP_CA_FILE:'/run/local-stack/storage-ca.pem',WAITRON_CHECKOUT:'/waitron'},
+  backup:{DATABASE_URL:database,CLOUD_BACKUP_MASTER_KEY:config.backup.masterKey,CLOUD_BACKUP_ENDPOINT:'https://storage:8333',CLOUD_BACKUP_REGION:'local',CLOUD_BACKUP_ACCESS_KEY:config.storage.accessKeyId,CLOUD_BACKUP_SECRET_KEY:config.storage.secretAccessKey,CLOUD_BACKUP_CA_FILE:'/run/local-stack/storage-ca.pem'},
   gateway:{GATEWAY_STATE_DIR:'/state',GATEWAY_MANIFEST:'/run/local-stack/gateway-manifest.json',GATEWAY_CELL_ID:config.gateway.cellId,GATEWAY_TRUST_KEY:'/run/local-stack/gateway-issuer.pem',GATEWAY_WIREGUARD_KEY:'/run/local-stack/gateway-wireguard.key',GATEWAY_BOT_KEY:'/run/local-stack/gateway-bot.key',GATEWAY_SUBNET:'61'},
   manifest:{LOCAL_STACK_CONFIG_DIR:'/run/local-stack'},reconcile:{DATABASE_URL:database}
  };
@@ -44,4 +44,11 @@ test('usage runtime passes explicit schedule settings without passing unrelated 
  const env=runtimeEnvironment('usage',config,{CLOUD_USAGE_INTERVAL_MS:'1200',CLOUD_USAGE_BATCH_SIZE:'3',PRIVATE_VALUE:'do-not-forward'});
  assert.deepEqual(Object.keys(env).sort(),['CLOUD_USAGE_BATCH_SIZE','CLOUD_USAGE_INTERVAL_MS','DATABASE_URL']);
  assert.equal(env.CLOUD_USAGE_INTERVAL_MS,'1200');assert.equal(env.CLOUD_USAGE_BATCH_SIZE,'3');
+});
+
+test('backup runtime forwards only explicit container limits and ownership',async()=>{
+ const {config}=await configured();
+ const env=runtimeEnvironment('backup',config,{CLOUD_VERIFIER_IMAGE:'local-verifier:proof',CLOUD_VERIFIER_OWNER:'proof-worker',CLOUD_VERIFIER_MEMORY_MIB:'512',CLOUD_VERIFIER_SCRATCH_MIB:'64',UNRELATED_SECRET:'private'});
+ assert.equal(env.CLOUD_VERIFIER_IMAGE,'local-verifier:proof');assert.equal(env.CLOUD_VERIFIER_OWNER,'proof-worker');
+ assert.equal(env.CLOUD_VERIFIER_MEMORY_MIB,'512');assert.equal(env.CLOUD_VERIFIER_SCRATCH_MIB,'64');assert.equal(env.UNRELATED_SECRET,undefined);
 });

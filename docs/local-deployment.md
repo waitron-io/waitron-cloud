@@ -118,14 +118,28 @@ creates a new local identity, an empty database and empty object storage.
 
 The default stack excludes two workers whose prerequisites cannot be generated safely.
 
-The backup worker needs an absolute path to a compatible Waitron checkout. The checkout is
-mounted read-only and its restore verifier runs against downloaded snapshots:
+The backup worker launches a disposable verifier for each snapshot. Build the verifier
+from a compatible committed Waitron revision, with a package-read token supplied through
+`NODE_AUTH_TOKEN` (the build uses a Docker secret):
 
 ```sh
 WAITRON_CHECKOUT=/absolute/path/to/waitron \
+  CLOUD_VERIFIER_IMAGE=waitron-backup-verifier:local \
+  node scripts/build-backup-verifier.mjs
+CLOUD_VERIFIER_IMAGE=waitron-backup-verifier:local \
   docker compose --env-file deploy/local-stack/local.env \
   --profile backups up -d backup-worker
 ```
+
+Rebuild the Cloud stack image after updating its worker code. The trusted worker has the
+Docker CLI and Docker socket; this grants it control of your local Docker daemon. The
+untrusted verifier receives neither the socket nor any host mount. It has no network,
+a read-only image, 1024 MiB total memory with swap disabled, and a 256 MiB scratch tmpfs.
+You can set `CLOUD_VERIFIER_MEMORY_MIB` (128–2048) and `CLOUD_VERIFIER_SCRATCH_MIB` (1–512).
+Scratch consumes the same memory budget; oversize restores fail instead of spilling to disk.
+Use this optional profile only on your disposable local deployment host. See
+[the verifier boundary and its proof](backup-verifier-containment.md) before interpreting
+these limits as evidence about another host or image.
 
 The remote-configuration reconciler needs a trusted directory containing `config.json`,
 route signing keys, certificate requests, an ACME account key and a DNS provider module.

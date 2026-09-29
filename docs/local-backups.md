@@ -340,11 +340,13 @@ process tests exercise the fixed permission and resource policy with real childr
 database suite covers object-size refusal, while the two-venue runner exercises the loader
 policy around Waitron's real restore hooks.
 
-These controls isolate trusted local Waitron code from the Cloud worker. They are not a
-hostile-code sandbox: the required loader worker can invalidate Node's permission model,
-native allocations are outside the V8 heap limit, and the per-file limit is not a total
-scratch-volume quota. Before deployment, run this process inside the selected container
-or virtual-machine boundary with a total memory limit and a quota-limited scratch volume.
+The process-only `createWaitronVerifier` adapter remains available to local development
+proofs. Its heap and per-file limits do not bound native memory or total scratch. The
+backup worker CLI now requires `CLOUD_VERIFIER_IMAGE` and `CLOUD_VERIFIER_OWNER` and runs
+this adapter inside a disposable container. There is no process-only fallback. Follow
+[the container setup and executed proof](backup-verifier-containment.md) for total memory,
+scratch, restart cleanup and deployment limits. `WAITRON_CHECKOUT` still selects the
+checkout for development proofs and image builds; the deployed worker uses the image.
 
 ## Reconnect after a test snapshot restore
 

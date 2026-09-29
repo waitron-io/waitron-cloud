@@ -600,13 +600,16 @@ mobile notifications separately.
   failure or consuming a retry. These are local boundary measurements, not production timeout or
   bandwidth targets. Next: measure deployment uplink bandwidth, spool volume and real database/
   encryption shutdown latency, stream Waitron archive assembly/restoration before reconsidering the current 512 MiB bound,
-  production master-key custody/rewrapping and deployment-level verifier containment. The
-  local verifier now denies network, subprocesses, native addons, host reads and outside
-  writes; bounds CPU, wall time, V8 heap, file size, descriptors and output; reaps its process
-  group and cleans its private restore directory. Its TypeScript-loader worker permission,
-  native allocations and lack of a total scratch-volume quota mean this is not a hostile-code
-  sandbox: the selected deployment still needs a container or virtual-machine memory limit and
-  quota-limited scratch volume. A read-only
+  production master-key custody/rewrapping and production-host verifier hardening. The
+  process verifier denies network, subprocesses, native addons, host reads and outside
+  writes. D32 adds a disposable container around the deployed verifier with total memory,
+  swap disabled, aggregate scratch, no network or host mounts, and ownership cleanup.
+  Real Docker fixtures exhaust native memory (192 MiB) and scratch (16 MiB); the parent
+  survives and verifies later work. Two real Waitron snapshots at revision
+  `00496fcd182a5c2c9189cc3faf0f8f22d3baf8ac` restore with 1024 MiB memory and 256 MiB scratch.
+  See [the containment receipt and limits](backup-verifier-containment.md). Production
+  host/kernel isolation, hostile native exploits, fleet sizing and large archives remain
+  unverified; the process-only development adapter still lacks these total-resource bounds. A read-only
   dependency inventory and local drill now prove active-key rotation, old snapshot restore,
   worker restart and wrong/missing-key refusal without exposing secrets or deleting keys.
   The history cleanup command

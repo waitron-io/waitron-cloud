@@ -199,7 +199,12 @@ services:
     stop_grace_period: 15s
     volumes:
       - local-stack-config:/run/local-stack:ro
-      - ${WAITRON_CHECKOUT:-./.local-stack/missing-waitron}:/waitron:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      CLOUD_VERIFIER_IMAGE: ${CLOUD_VERIFIER_IMAGE:-waitron-backup-verifier:local}
+      CLOUD_VERIFIER_OWNER: ${COMPOSE_PROJECT_NAME:-waitron-cloud}-backup
+      CLOUD_VERIFIER_MEMORY_MIB: ${CLOUD_VERIFIER_MEMORY_MIB:-1024}
+      CLOUD_VERIFIER_SCRATCH_MIB: ${CLOUD_VERIFIER_SCRATCH_MIB:-256}
 
   remote-reconciler:
     <<: *cloud
