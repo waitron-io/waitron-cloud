@@ -65,7 +65,12 @@ rolls back and retries after the configured delay.
 
 The [local deployment](local-deployment.md) runs this worker automatically. Its
 `usage-reconciler` service restarts unless you explicitly stop it. This does not
-create a production deployment.
+create a production deployment. Run `pnpm proof:scheduled-usage` to exercise its
+signal path with a transaction blocked by a real PostgreSQL row lock. The receipt
+compares committed events and all four source timestamps before and after the
+blocked stop, then checks that restart catches up two organisations without duplicates.
+Compose allows fifteen seconds to stop; the transaction deadline remains ten seconds.
+The proof requires a normal exit before that grace period expires.
 
 ## Retry failures safely
 
