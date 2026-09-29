@@ -15,11 +15,12 @@ import {receipt} from '../src/object-transfer.ts';
 const root=fileURLToPath(new URL('../../../',import.meta.url)),owner='test-'+randomUUID(),image='cloud-verifier-test:'+owner;
 const docker=(...args:string[])=>execFileSync('docker',args,{encoding:'utf8',timeout:120000,stdio:['pipe','pipe','pipe']}).trim();
 let bytes:Buffer;
+// Image preparation may consume the Docker command's two-minute budget before tests start.
 before(async()=>{
  docker('build','-q','-t',image,'-f',join(root,'packages/backups/test/container-fixture/Dockerfile'),root);
  const dir=await mkdtemp(join(tmpdir(),'container-snapshot-'));
  try{const path=join(dir,'data.db'),db=new DatabaseSync(path);db.exec('CREATE TABLE proof(value TEXT)');db.close();bytes=await readFile(path);}finally{await rm(dir,{recursive:true,force:true});}
-});
+},{timeout:150000});
 after(()=>{const ids=docker('ps','-aq','--filter','label=cloud.backup-verifier.owner='+owner).split(/\s+/).filter(Boolean);if(ids.length)docker('rm','-f',...ids);docker('image','rm',image);});
 const source=(mode:number)=>{const data=Buffer.concat([Buffer.from([mode]),bytes]);return {receipt:receipt(data),open:()=>Readable.from([data]),async dispose(){}};};
 const point=(mode:number)=>({sourceNodeId:'00000000-0000-4000-8000-'+String(mode).padStart(12,'0'),modules:{fake:1},capturedAt:'2026-09-26T00:00:00.000Z'} as never);
