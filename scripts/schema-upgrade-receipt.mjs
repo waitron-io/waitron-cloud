@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {execFileSync,spawn} from 'node:child_process';
 import {createPrivateKey,generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
+import {request as httpRequest} from 'node:http';
 import {createRequire} from 'node:module';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
@@ -57,6 +58,14 @@ async function database(name){
  return{url,pool};
 }
 const gate=join(driver,'deploy/local-stack/schema-consumer.mjs');
+function accountRequest(url,options={}){
+ return new Promise((resolve,reject)=>{
+  const request=httpRequest(url,{method:options.method??'GET',headers:{...options.headers,host:'127.0.0.1:3000'},timeout:10000},response=>{
+   const chunks=[];response.on('data',chunk=>chunks.push(chunk));response.on('end',()=>resolve(new Response(Buffer.concat(chunks),{status:response.statusCode})));response.on('error',reject);
+  });
+  request.on('error',reject);request.on('timeout',()=>request.destroy(new Error('account request timed out')));request.end(options.body);
+ });
+}
 async function startAccount(root,url,refused=false){
  const handle=child(root,[gate,'packages/account-http/src/server-cli.ts'],environment(url));
  if(refused){
@@ -66,7 +75,7 @@ async function startAccount(root,url,refused=false){
   return true;
  }
  const port=await until(()=>{assert.equal(handle.done,false,'account unexpectedly exited');const line=handle.stdout.split('\n').find(line=>line.startsWith('{'));return line&&JSON.parse(line).port;},'account listening');
- const response=await fetch(`http://127.0.0.1:${port}/api/health/ready`,{headers:{host:'127.0.0.1:3000'}});assert.equal(response.status,200);
+ const response=await accountRequest(`http://127.0.0.1:${port}/api/health/ready`,{headers:{host:'127.0.0.1:3000'}});assert.equal(response.status,200);
  return{handle,port};
 }
 async function tenantRequests(root,account,state){
@@ -74,7 +83,7 @@ async function tenantRequests(root,account,state){
  async function request(installation,action,operationId,lease=''){
   const bytes=encodeMachine({origin:'http://127.0.0.1:3000',action,installationId:installation.installationId,operationId,issuedAt:Date.now(),lease:lease?JSON.stringify(lease):'',body:'{}'});
   const privateKey=createPrivateKey({key:Buffer.from(installation.privateKey,'base64url'),format:'der',type:'pkcs8'});
-  return fetch(`http://127.0.0.1:${account.port}/api/installations/${action}`,{method:'POST',headers:{host:'127.0.0.1:3000','content-type':'application/json'},body:JSON.stringify({payload:bytes.toString('base64url'),signature:sign(null,bytes,privateKey).toString('base64url')}),signal:AbortSignal.timeout(10000)});
+  return accountRequest(`http://127.0.0.1:${account.port}/api/installations/${action}`,{method:'POST',headers:{host:'127.0.0.1:3000','content-type':'application/json'},body:JSON.stringify({payload:bytes.toString('base64url'),signature:sign(null,bytes,privateKey).toString('base64url')}),signal:AbortSignal.timeout(10000)});
  }
  for(const installation of state.installations){
   const operationId=installation.retryId??=randomUUID();
