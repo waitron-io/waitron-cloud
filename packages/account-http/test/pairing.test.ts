@@ -112,3 +112,17 @@ test('HTTP pairing requires an external key, preserves rotation overlap and neve
   const dump=JSON.stringify((await db.pool.query('SELECT * FROM security_audit_events')).rows);
   for(const secret of [a.c.code,old.keys.old,wrong.keys.old])assert.equal(dump.includes(secret),false);
 });
+
+test('HTTP code checks keep request separation, concurrent attempt limits and expiry',async()=>{
+ const a=machine(),b=machine();b.c.code='87654321';
+ assert.equal((await a.call('start')).status,200);assert.equal((await b.call('start')).status,200);
+ const guesses=await Promise.all(Array.from({length:8},()=>browser('inspect',{requestId:a.c.requestId,code:b.c.code})));
+ assert.equal(guesses.every(r=>r.status===400),true);
+ assert.equal((await db.pool.query('SELECT failed_codes FROM pairing_requests WHERE id=$1',[a.c.requestId])).rows[0].failed_codes,5);
+ assert.equal((await browser('approve',choice(a))).status,400);
+ assert.equal((await browser('approve',choice(b))).status,200);
+ await db.pool.query("UPDATE pairing_requests SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",[b.c.requestId]);
+ assert.equal((await b.call('complete')).status,400);assert.equal((await b.call('start')).status,400);
+ assert.equal((await browser('approve',choice(b))).status,400);
+ assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');
+});

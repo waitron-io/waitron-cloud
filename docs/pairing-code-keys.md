@@ -28,7 +28,10 @@ before retrying. Configuration errors never include the supplied key material.
 ## Upgrade existing requests without losing approval
 
 Stop all old account workers before upgrading. An old worker cannot read the new
-verifier format and must not create new unprotected rows. Apply migrations through
+verifier format and must not create new unprotected rows. The migration still accepts
+legacy hashes for upgrade, so a straggler old worker can write an unprotected row;
+new workers refuse its code checks until you stop the old worker and run another
+upgrade pass. Apply migrations through
 your normal migration login, then give the upgrade command your private key
 configuration and a database login allowed to update `pairing_requests`:
 

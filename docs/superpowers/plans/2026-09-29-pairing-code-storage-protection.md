@@ -24,13 +24,13 @@ Do not automatically rewrite keyed rows or silently invalidate pending approvals
 
 Implementation and verification (inline, owner-authorised campaign):
 
-- [ ] Add PostgreSQL red-first storage, request binding, wrong/missing keys,
+- [x] Add PostgreSQL red-first storage, request binding, wrong/missing keys,
   concurrent guesses, rotation and legacy upgrade tests; preserve existing cases.
-- [ ] Add the versioned code helper, constraint migration, explicit key injection,
+- [x] Add the versioned code helper, constraint migration, explicit key injection,
   bounded upgrade API/CLI and HTTP wiring. Trace all code_hash consumers first.
-- [ ] Add HTTP and configuration tests, local-stack secret wiring, and upgrade/
+- [x] Add HTTP and configuration tests, local-stack secret wiring, and upgrade/
   rotation documentation. Keep secret material out of responses and diagnostics.
-- [ ] Run focused PostgreSQL/HTTP suites and typecheck; prove critical guards by
+- [x] Run focused PostgreSQL/HTTP suites and typecheck; prove critical guards by
   mutation in a disposable checkout. Run Claude security/run-it review once.
 - [ ] Finish branch, inspect current-head CI, land under the shared lock, refresh
   main/install, clean only owned worktrees/branches, record exact-merge CI.

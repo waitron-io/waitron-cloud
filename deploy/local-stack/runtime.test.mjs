@@ -62,3 +62,10 @@ test('new local stacks persist an independent pairing key and expose it only to 
  assert.deepEqual(JSON.parse(account.CLOUD_PAIRING_KEYS),config.pairing.keys);
  for(const role of ['migrate','email','monitor','usage','probe','backup','gateway','manifest','reconcile'])assert.equal(runtimeEnvironment(role,config).CLOUD_PAIRING_KEYS,undefined);
 });
+
+test('existing local configuration is not regenerated when it lacks pairing keys',async()=>{
+ const {path,config}=await configured();delete config.pairing;
+ await writeFile(join(path,'runtime.json'),JSON.stringify(config),{mode:0o600});
+ assert.deepEqual(await bootstrap(path),config);assert.deepEqual(await loadRuntime(path),config);
+ assert.equal(runtimeEnvironment('account',config).CLOUD_PAIRING_KEYS,undefined);
+});
