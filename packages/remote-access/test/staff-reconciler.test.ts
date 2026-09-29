@@ -41,3 +41,20 @@ for(const change of ['replacement','revision','revocation','lease','shutdown'] a
  }finally{release();await running;}
  assert.equal((await f.db.pool.query('SELECT certificate FROM staff_certificate_exchange WHERE installation_id=$1',[a.installationId])).rows[0].certificate,null);
 });
+
+for(const fence of ['claim expiry','shutdown'])test(`${fence} while waiting for the installation lock refuses publication`,async()=>{
+ const {a}=await setup();let entered!:()=>void,release!:()=>void;const started=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);
+ const worker=new RemoteConfigurationReconciler(f.db.pool,{staffExchange:true,issueCertificate:async()=>{entered();await gate;return chain(a);}});await select(worker,a.installationId);
+ const stop=new AbortController(),running=worker.runOnce(stop.signal),blocker=await f.db.secondPool.connect();
+ try{
+  await started;await blocker.query('BEGIN');await blocker.query('SELECT 1 FROM installations WHERE id=$1 FOR UPDATE',[a.installationId]);
+  if(fence==='claim expiry')await f.db.pool.query("UPDATE remote_configuration_jobs SET lease_until=clock_timestamp()+interval '2 seconds' WHERE target_id=$1 AND kind='certificate_staff'",[a.installationId]);
+  release();
+  let waiting=false;for(let i=0;i<100;i++){const blocked=(await f.db.secondPool.query("SELECT count(*)::integer AS n FROM pg_stat_activity WHERE application_name=$1 AND cardinality(pg_blocking_pids(pid))>0",[f.db.schema])).rows[0].n;if(blocked>0){waiting=true;break;}await new Promise(r=>setTimeout(r,10));}
+  assert.equal(waiting,true,'publication must actually wait for the installation lock');
+  if(fence==='shutdown')stop.abort();
+  if(fence==='claim expiry')await f.db.secondPool.query("SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM lease_until-clock_timestamp()))+0.05) FROM remote_configuration_jobs WHERE kind='certificate_staff' AND target_id=$1",[a.installationId]);
+  await blocker.query('COMMIT');await running;
+  assert.equal((await f.db.pool.query('SELECT certificate FROM staff_certificate_exchange WHERE installation_id=$1',[a.installationId])).rows[0].certificate,null);
+ }finally{release();await blocker.query('ROLLBACK');blocker.release();await running;}
+});

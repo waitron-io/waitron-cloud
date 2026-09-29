@@ -99,8 +99,8 @@ export class RemoteConfigurationReconciler {
   }
   return changed;
  });}
- async #current(job:RemoteConfigurationJob):Promise<boolean>{
-  const row=(await this.#pool.query(`SELECT 1 FROM remote_configuration_jobs WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4
+ async #current(job:RemoteConfigurationJob,client:Pool|PoolClient=this.#pool):Promise<boolean>{
+  const row=(await client.query(`SELECT 1 FROM remote_configuration_jobs WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4
    AND enabled AND status='running' AND lease_until>clock_timestamp()`,[job.kind,job.targetId,job.desiredDigest,job.claimId])).rows[0];return !!row;
  }
  async runOnce(signal=new AbortController().signal):Promise<boolean>{
@@ -156,7 +156,13 @@ export class RemoteConfigurationReconciler {
   if(request.certificate_request_id===request.request_id&&request.certificate&&!certificateNeedsRenewal(request.certificate,request.csr,authority.hostname,this.#now())){await this.#complete(job,async()=>{});return;}
   const certificate=await this.#issueCertificate({...authority,installationId:job.targetId,kind:'staff',csr:request.csr,signal});
   signal.throwIfAborted();
-  await this.#complete(job,client=>this.#store.publishAuthorizedCertificate(client,job.targetId,'staff',request.csr,authority,()=>publishStaffCertificate(client,request,certificate)).then(()=>{}));
+  await this.#complete(job,async client=>{
+   await this.#store.publishAuthorizedCertificate(client,job.targetId,'staff',request.csr,authority,async()=>{
+    // Taking the installation lock can outlive the claim or shutdown signal.
+    if(!await this.#current(job,client))throw new Error('stale_claim');
+    signal.throwIfAborted();await publishStaffCertificate(client,request,certificate);
+   });
+  });
  }
  async #complete(job:RemoteConfigurationJob,action:(client:PoolClient)=>Promise<void>){
   const interval=job.kind==='route'?'5 minutes':'1 day';
