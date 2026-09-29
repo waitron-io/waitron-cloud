@@ -6,15 +6,7 @@ The drill takes a physical base backup, starts it as a streaming standby, writes
 
 ## Run the drill
 
-The physical drill currently needs a maintenance fix: after migration 27 landed,
-its fixed count of 26 migrations causes an assertion at
-`scripts/database-recovery-receipt.mjs:84`, before promotion is exercised. This was
-reproduced on revision `eafd97ad5ac51563e91c821d4c957ef996e5d3fb`. The command below
-therefore does not currently produce a successful new physical-recovery receipt.
-The [separate schema-upgrade drill](#recover-an-old-release-after-a-schema-upgrade)
-passes its logical-backup recovery checks; it does not replace standby-promotion evidence.
-
-After correcting the count, start from a clean Cloud checkout with Docker running:
+Start from a clean Cloud checkout with Docker running:
 
 ```bash
 pnpm proof:database-recovery
@@ -25,6 +17,14 @@ The command writes `/tmp/waitron-cloud-database-recovery-receipt.json` and verif
 ```bash
 pnpm verify:database-recovery /tmp/waitron-cloud-database-recovery-receipt.json
 ```
+
+Before taking the backup, the drill checks that both the migration login and the
+runtime login can read the number of migrations listed by this release in
+`packages/registration/src/migrate.ts`. A missing or extra migration refuses the
+drill. The expected count follows the release manifest, so adding a migration does
+not require changing the drill's count. This count check does not compare migration
+names or SQL digests; the migration runner performs those checks when it applies
+the release.
 
 The verifier rejects a receipt from a dirty checkout. This matters because the commit in the receipt must name the code that performed the recovery. The runner still removes its exact Docker resources if an assertion fails.
 
@@ -45,6 +45,20 @@ The runner creates three database logins:
 The operation section proves more than row survival. A TCP proxy discards a successful renewal response after the server commits it. After promotion, the caller retries the same operation ID and receives the exact stored lease result. A different action cannot reuse that ID. Both installations can read their own configuration, while a request signed by one installation for the other remains unauthorized.
 
 The worker section starts a real email worker, waits for it to claim an encrypted notification and interrupts it with the primary. The promoted database retains that claim. Once its deliberately shortened test lease expires, the packaged worker reclaims it and Mailpit receives exactly one message.
+
+## Latest local run
+
+On 29 September 2026, a clean checkout at
+`d930291e266a43e546d72d08a960da97f32e2e4c` passed the physical drill with the
+release's 27 migrations. It recorded zero lag at the named recovery point, a
+152 ms promotion and a 723 ms outage. The lost-reply retry returned the stored
+operation result, the interrupted worker delivered its message once, and both tenant
+isolation checks passed. Cleanup reported zero containers, volumes and networks.
+
+These measurements describe that local PostgreSQL 18 run. Keep the original
+27 September promotion receipt as historical evidence; neither run establishes a
+production recovery target. Use the commands above to generate and verify a fresh
+receipt for your selected release.
 
 ## Keep secrets outside the database recovery
 
