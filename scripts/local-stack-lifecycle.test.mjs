@@ -8,7 +8,7 @@ test('local stack start builds, starts, gates jobs and waits for health',async()
  assert.deepEqual(calls,[
   {args:['build','bootstrap'],options:undefined},
   {args:['up','-d','--no-build'],options:undefined},
-  {args:['wait','bootstrap','migrate','usage-reconciler'],options:undefined},
+  {args:['wait','bootstrap','migrate'],options:undefined},
   {args:['ps','-a','--format','json'],options:{capture:true}},
   {ready:true},
   {args:['ps','-a'],options:undefined}

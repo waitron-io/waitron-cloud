@@ -1,7 +1,7 @@
 import {get} from 'node:http';
 import {setTimeout as delay} from 'node:timers/promises';
 
-const required=['account','email-worker','gateway','gateway-manifest','mailpit','monitor-worker','postgres','remote-probe','storage'];
+const required=['account','email-worker','gateway','gateway-manifest','mailpit','monitor-worker','postgres','remote-probe','storage','usage-reconciler'];
 const healthServices=new Set(['account','gateway','mailpit','postgres','storage']);
 
 export function parseComposeServices(text){

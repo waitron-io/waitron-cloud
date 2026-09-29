@@ -54,7 +54,8 @@
     "monitor:worker": "node --env-file-if-exists=.env packages/registration/src/monitor-cli.ts",
     "monitor:status": "node --env-file-if-exists=.env packages/registration/src/monitor-cli.ts --status",
     "remote:probe": "node --env-file-if-exists=.env packages/remote-access/src/probe-cli.ts",
-    "remote:reconcile": "node --env-file-if-exists=.env packages/remote-access/src/reconciler-cli.ts"
+    "remote:reconcile": "node --env-file-if-exists=.env packages/remote-access/src/reconciler-cli.ts",
+    "proof:scheduled-usage": "node scripts/scheduled-usage-proof.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

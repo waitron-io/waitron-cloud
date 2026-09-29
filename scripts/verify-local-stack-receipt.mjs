@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 import {migrationNames} from '../packages/registration/src/migrate.ts';
 
-const healthy=['account','email-worker','gateway','gateway-manifest','mailpit','monitor-worker','postgres','remote-probe','storage'];
+const healthy=['account','email-worker','gateway','gateway-manifest','mailpit','monitor-worker','postgres','remote-probe','storage','usage-reconciler'];
 const bindingKeys=['account:3000','gateway:443','gateway:51820','mailpit:1025','mailpit:8025','postgres:5432','storage:8333'];
 function keys(value,expected){assert(value&&typeof value==='object'&&!Array.isArray(value));assert.deepEqual(Object.keys(value).sort(),[...expected].sort());}
 function iso(value){assert.equal(typeof value,'string');assert.equal(new Date(value).toISOString(),value);return Date.parse(value);}

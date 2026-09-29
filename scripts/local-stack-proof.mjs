@@ -16,7 +16,7 @@ const compose=(...args)=>run('docker',['compose','-p',project,'--env-file','depl
 const composeOutput=(...args)=>run('docker',['compose','-p',project,'--env-file','deploy/local-stack/local.env',...args],{capture:true});
 async function port(){const server=createServer();await new Promise((accept,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',accept);});const value=server.address().port;await new Promise((accept,reject)=>server.close(error=>error?reject(error):accept()));return value;}
 for(const name of ['ACCOUNT','POSTGRES','MAILPIT_SMTP','MAILPIT_UI','STORAGE','GATEWAY_TLS','GATEWAY_WIREGUARD'])commandEnvironment[`LOCAL_STACK_${name}_PORT`]=String(await port());
-const required=['account','email-worker','gateway','gateway-manifest','mailpit','monitor-worker','postgres','remote-probe','storage'];
+const required=['account','email-worker','gateway','gateway-manifest','mailpit','monitor-worker','postgres','remote-probe','storage','usage-reconciler'];
 function services(){return parseComposeServices(composeOutput('ps','-a','--format','json'));}
 async function waitForStack(){
  const deadline=Date.now()+120000;let latest=[];
@@ -24,7 +24,7 @@ async function waitForStack(){
   if(ready)return [...required];if(failed)throw new Error(`local stack service failed: ${failed}`);await delay(500);}
  throw new Error('local stack health timeout');
 }
-function waitJobs(){compose('wait','bootstrap','migrate','usage-reconciler');}
+function waitJobs(){compose('wait','bootstrap','migrate');}
 function migrationCount(){return Number(composeOutput('exec','-T','postgres','psql','-U','cloud','-d','cloud','-Atc','SELECT count(*) FROM schema_migrations'));}
 function databaseMarker(write=false){const statement=write?'CREATE TABLE IF NOT EXISTS local_stack_proof(marker text PRIMARY KEY); INSERT INTO local_stack_proof VALUES (\'lifecycle-v1\') ON CONFLICT DO NOTHING; SELECT marker FROM local_stack_proof;':'SELECT marker FROM local_stack_proof;';return composeOutput('exec','-T','postgres','psql','-U','cloud','-d','cloud','-Atc',statement).split('\n').at(-1)==='lifecycle-v1';}
 function storageMarker(mode){return JSON.parse(composeOutput('exec','-T','account','node','deploy/local-stack/storage-marker.mjs',mode)).present===true;}

@@ -48,3 +48,10 @@ test('legacy Mailpit port overrides and teardown remain service-scoped',()=>{
  assert.deepEqual(value.services.mailpit.ports.map(port=>port.published),['1199','8199']);
  const scripts=JSON.parse(readFileSync('package.json','utf8')).scripts;assert.equal(scripts['mail:down'],'docker compose rm -s -f mailpit');
 });
+
+ test('usage reconciliation is persistent and receives bounded schedule settings',()=>{
+ const service=configuration().services['usage-reconciler'];
+ assert.equal(service.restart,'unless-stopped');assert.equal(service.stop_grace_period,'15s');
+ assert.equal(service.environment.CLOUD_USAGE_INTERVAL_MS,'60000');
+ assert.equal(service.environment.CLOUD_USAGE_BATCH_SIZE,'100');
+});

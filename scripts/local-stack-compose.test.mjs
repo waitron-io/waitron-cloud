@@ -29,10 +29,17 @@ test('Compose status parser accepts newline-delimited service records',()=>{
 });
 
 test('stack readiness separates healthy long-running services from successful jobs',()=>{
- const longRunning=['account','email-worker','gateway','gateway-manifest','mailpit','monitor-worker','postgres','remote-probe','storage'];
+ const longRunning=['account','email-worker','gateway','gateway-manifest','mailpit','monitor-worker','postgres','remote-probe','storage','usage-reconciler'];
  const healthy=new Set(['account','gateway','mailpit','postgres','storage']);
  const services=longRunning.map(Service=>({Service,State:'running',Health:healthy.has(Service)?'healthy':''}));
  assert.deepEqual(stackReadiness(services),{ready:true,failed:undefined});
  services.find(({Service})=>Service==='account').Health='starting';assert.equal(stackReadiness(services).ready,false);
  services.push({Service:'migrate',State:'exited',Health:'',ExitCode:1});assert.equal(stackReadiness(services).failed,'migrate');
+});
+
+test('stack readiness refuses an exited usage worker even after a successful pass',()=>{
+ const names=['account','email-worker','gateway','gateway-manifest','mailpit','monitor-worker','postgres','remote-probe','storage'];
+ const services=names.map(Service=>({Service,State:'running',Health:'healthy'}));
+ services.push({Service:'usage-reconciler',State:'exited',Health:''});
+ assert.equal(stackReadiness(services).ready,false);
 });
