@@ -6,7 +6,15 @@ The drill takes a physical base backup, starts it as a streaming standby, writes
 
 ## Run the drill
 
-Start from a clean Cloud checkout with Docker running:
+The physical drill currently needs a maintenance fix: after migration 27 landed,
+its fixed count of 26 migrations causes an assertion at
+`scripts/database-recovery-receipt.mjs:84`, before promotion is exercised. This was
+reproduced on revision `eafd97ad5ac51563e91c821d4c957ef996e5d3fb`. The command below
+therefore does not currently produce a successful new physical-recovery receipt.
+The [separate schema-upgrade drill](#recover-an-old-release-after-a-schema-upgrade)
+passes its logical-backup recovery checks; it does not replace standby-promotion evidence.
+
+After correcting the count, start from a clean Cloud checkout with Docker running:
 
 ```bash
 pnpm proof:database-recovery
