@@ -40,6 +40,7 @@ export class RecoveryRequests {
   const result=await transaction(this.pool,async client=>{
    const row=await lock(client,id),session=await resolveSession(client,token,{csrfToken:csrf,touch:false});await available(client,row);
    if(row.account_id&&row.account_id!==session.accountId)backupFail('permission_denied');
+   // Check key availability even for malformed guesses, so an outage cannot spend attempts.
    const matches=this.#codes.matches(row,row.code_hash,typeof code==='string'?code:'');
    if(typeof code!=='string'||!/^\d{8}$/.test(code)||!matches){if(!row.operation_id)await client.query('UPDATE backup_recovery_requests SET failed_codes=LEAST(5,failed_codes+1) WHERE id=$1',[id]);return null;}
    const recovery=new BackupRecovery(this.pool,this.vault,this.origin,client);

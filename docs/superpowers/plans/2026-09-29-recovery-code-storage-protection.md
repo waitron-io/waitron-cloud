@@ -51,10 +51,12 @@ remain; the runtime whole-shape fixture may gain only the new environment fields
 - [x] Run existing recovery/replacement/continuous-recovery, abuse, history cleanup,
   migration and focused runtime tests. Delete critical guards in a disposable copy
   and observe failing tests. Run typecheck.
-- [ ] Document rollout, rotation and key retirement; narrow all related backlog
-  wording. Commit with sign-off; finish-branch with one Claude run-it review,
-  address findings, normal push and exact-head CI. Land under shared lock, refresh
-  main/install, clean owned worktree/branches, check exact-merge CI.
+- [x] Document rollout, rotation and key retirement; narrow all related backlog
+  wording. Complete the Claude run-it review and address its findings.
+
+Delivery follows finish-branch through normal push and exact-head CI, then
+land-branch under the shared lock, main/install refresh, owned worktree/branch
+cleanup and exact-merge CI read-back.
 
 ## Review focus
 

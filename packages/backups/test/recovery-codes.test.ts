@@ -39,3 +39,28 @@ test('migration upgrades the previous release with legacy request rows intact',a
   assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,String(migrationNames.length));
  }finally{await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();}
 });
+
+test('recovery verifier normalizes UUID case and accepts uppercase hexadecimal secrets',()=>{
+ const row={id:'abcdefab-cdef-abcd-efab-cdefabcdefab',public_key:binding.public_key},codes=new RecoveryCodes(config),stored=codes.protect(row,code);
+ assert(codes.matches({...row,id:row.id.toUpperCase()},stored,code));
+ assert(new RecoveryCodes({activeKeyId:'old',keys:{old:config.keys.old.toUpperCase()}}).matches(row,stored,code));
+});
+
+test('upgrade CLI bounds a held row lock and can resume without changing history',async()=>{
+ const {database}=await import('../../account-http/test/fixtures.ts');const db=await database();
+ const legacy=createHash('sha256').update(code).digest('hex'),id=randomUUID();
+ try{
+  await db.pool.query('INSERT INTO backup_recovery_requests(id,public_key,code_hash,failed_codes) VALUES($1,$2,$3,2)',[id,binding.public_key,legacy]);
+  const before=(await db.pool.query('SELECT * FROM backup_recovery_requests')).rows;
+  const blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('SELECT id FROM backup_recovery_requests FOR UPDATE');
+  const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options',`-c search_path=${db.schema}`);
+  const run=()=>spawnSync(process.execPath,['src/recovery-codes-cli.ts','--once'],{encoding:'utf8',timeout:15000,env:{...process.env,DATABASE_URL:url.href,CLOUD_RECOVERY_ACTIVE_KEY_ID:config.activeKeyId,CLOUD_RECOVERY_KEYS:JSON.stringify(config.keys)}});
+  try{
+   const started=Date.now(),result=run();assert.equal(result.status,1);assert.equal(result.signal,null);assert(Date.now()-started>=9000);
+   assert.equal(result.stdout,'');assert.equal(result.stderr.trim(),'Recovery code upgrade failed; check database, migrations and key configuration');
+  }finally{await blocker.query('ROLLBACK');blocker.release();}
+  assert.deepEqual((await db.pool.query('SELECT * FROM backup_recovery_requests')).rows,before);
+  const resumed=run();assert.equal(resumed.status,0);assert.equal(resumed.stderr,'');assert.deepEqual(JSON.parse(resumed.stdout),{upgraded:1});
+  const row=(await db.pool.query('SELECT * FROM backup_recovery_requests')).rows[0];assert(new RecoveryCodes(config).matches(row,row.code_hash,code));assert.deepEqual({...row,code_hash:legacy},before[0]);
+ }finally{await db.close();}
+});

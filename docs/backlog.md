@@ -437,7 +437,8 @@ mobile notifications separately.
   tests cover storage, cross-request reuse, machine retry/status, owner approval,
   five concurrent-guess limits, expiry, process restart, rotation, absent/wrong keys
   and preserved pending/completed history. Upgrade rollback, bounded batches and
-  row-lock waits are exercised; HTTP/CLI/audit checks disclose no code or secret.
+  row-lock waits and the actual CLI lock timeout are exercised; HTTP/CLI/audit
+  checks disclose no code or secret. English/Spanish recovery browser tests pass.
   Before production, provision the separate keys, execute the stopped-writer upgrade
   and apply the existing retention policy to legacy backups. External proxy logging
   and production secret custody remain deployment responsibilities.
