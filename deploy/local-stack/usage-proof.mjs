@@ -7,10 +7,10 @@ const {DATABASE_URL}=runtimeEnvironment('usage',await loadRuntime('/run/local-st
 const pool=new Pool({connectionString:DATABASE_URL,connectionTimeoutMillis:5000,statement_timeout:10000});
 try{
  if(process.argv[2]==='seed'){
-  await pool.query(`WITH organisation AS(INSERT INTO organisations DEFAULT VALUES RETURNING id),
-   business AS(INSERT INTO legal_businesses(organisation_id) SELECT id FROM organisation RETURNING id,organisation_id),
-   venue AS(INSERT INTO venues(organisation_id,legal_business_id,local_venue_id,environment) SELECT organisation_id,id,gen_random_uuid(),'test' FROM business RETURNING id),
-   installation AS(INSERT INTO installations(venue_id,public_key) SELECT id,gen_random_uuid()::text FROM venue RETURNING id)
+  await pool.query(`WITH organisation AS(INSERT INTO organisations(id) VALUES(gen_random_uuid()) RETURNING id),
+   business AS(INSERT INTO legal_businesses(id,organisation_id) SELECT gen_random_uuid(),id FROM organisation RETURNING id,organisation_id),
+   venue AS(INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) SELECT gen_random_uuid(),organisation_id,id,gen_random_uuid(),'test' FROM business RETURNING id),
+   installation AS(INSERT INTO installations(id,venue_id,public_key) SELECT gen_random_uuid(),id,gen_random_uuid()::text FROM venue RETURNING id)
    INSERT INTO installation_operations(installation_id,operation_id,digest,result) SELECT id,gen_random_uuid(),'usage-proof','{}' FROM installation`);
   console.log(JSON.stringify({seeded:true}));
  }else if(process.argv[2]==='status'){
