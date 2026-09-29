@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import {execFileSync,spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
-import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
-import {createReadStream} from 'node:fs';
+import {mkdtemp,readFile,rm,writeFile,chmod} from 'node:fs/promises';
+import {createReadStream,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -89,7 +89,7 @@ test('a killed worker leaves bounded work that the next startup reaps', {timeout
 
 
 test('scratch refusal retains its resource reason with a file-backed streaming source',async()=>{
- const verify=await createContainerWaitronVerifier({image,owner,memoryMiB:192,scratchMiB:1}),dir=await mkdtemp(join(tmpdir(),'container-stream-')),path=join(dir,'archive'),data=Buffer.alloc(4*1024*1024,1);
+ const verify=await createContainerWaitronVerifier({image,owner,memoryMiB:192,scratchMiB:1}),dir=await mkdtemp(join(tmpdir(),'container-stream-')),path=join(dir,'archive'),data=Buffer.alloc(64*1024*1024,1);
  try{await writeFile(path,data);await assert.rejects(verify({receipt:receipt(data),open:()=>createReadStream(path),async dispose(){}},keys,point(0),new AbortController().signal),/backup.verifier_resource/);empty();}
  finally{await rm(dir,{recursive:true,force:true});}
 });
@@ -113,8 +113,22 @@ test('the verifier pins its image and refuses images with extra writable volumes
  const alias=image+'-alias',volume=image+'-volume';
  try{
   docker('tag',image,alias);const verify=await createContainerWaitronVerifier({image:alias,owner});
-  docker('tag','node:26',alias);assert.equal((await verify(source(0),keys,point(0),new AbortController().signal) as any).integrityOk,true);empty();
-  execFileSync('docker',['build','-q','-t',volume,'-'],{input:`FROM ${image}\nVOLUME /extra\n`,encoding:'utf8',timeout:120000,stdio:['pipe','pipe','pipe']});
+  execFileSync('docker',['build','-q','-t',volume,'-'],{input:`FROM ${image}\nRUN rm /verifier/container-entry.mjs\nVOLUME /extra\n`,encoding:'utf8',timeout:120000,stdio:['pipe','pipe','pipe']});
+  docker('tag',volume,alias);assert.equal((await verify(source(0),keys,point(0),new AbortController().signal) as any).integrityOk,true);empty();
   await assert.rejects(createContainerWaitronVerifier({image:volume,owner}),/backup.verifier_configuration/);empty();
  }finally{for(const tag of [alias,volume])try{docker('image','rm',tag);}catch{}}
+});
+
+
+test('cancellation during result inspection cannot return a successful restore',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'container-inspect-')),entered=join(directory,'entered'),release=join(directory,'release'),oldPath=process.env.PATH,realDocker=execFileSync('which',['docker'],{encoding:'utf8'}).trim();
+ const wrapper=join(directory,'docker');
+ await writeFile(wrapper,`#!${process.execPath}\nconst fs=require('node:fs'),cp=require('node:child_process'),args=process.argv.slice(2);if(args[0]==='inspect'&&args[1].startsWith('cloud-verify-')){const out=cp.execFileSync(${JSON.stringify(realDocker)},args);fs.writeFileSync(${JSON.stringify(entered)},'');while(!fs.existsSync(${JSON.stringify(release)}))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);process.stdout.write(out);}else{const r=cp.spawnSync(${JSON.stringify(realDocker)},args,{stdio:'inherit'});process.exit(r.status??1);}`);
+ await chmod(wrapper,0o700);process.env.PATH=directory+':'+oldPath;
+ const stop=new AbortController();let pending:Promise<unknown>|undefined;
+ try{
+  const verify=await createContainerWaitronVerifier({image,owner});pending=verify(source(0),keys,point(0),stop.signal);
+  const deadline=Date.now()+10000;while(!existsSync(entered)&&Date.now()<deadline)await delay(10);assert(existsSync(entered));
+  stop.abort();await writeFile(release,'');await assert.rejects(pending,/backup.verifier_cancelled/);empty();
+ }finally{await writeFile(release,'');stop.abort();await pending?.catch(()=>{});process.env.PATH=oldPath;await rm(directory,{recursive:true,force:true});}
 });

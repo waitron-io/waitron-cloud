@@ -53,11 +53,16 @@ export async function createContainerWaitronVerifier(options:ContainerVerifierOp
    const closed=attached=new Promise<number|null>(resolve=>{attachedChild.once('error',()=>{stop('backup.verifier_container');resolve(null);});attachedChild.once('close',resolve);});
    const input=source.open();
    input.once('error',()=>stop('backup.verifier_input'));
-   const upload=pipeline(Readable.from((async function*(){yield header;yield* input;})()),attachedChild.stdin).catch(()=>{uploadFailed=true;});
+   // Do not delegate throw/return to the source iterator: a broken stdin pipe is not a source-read failure.
+   const upload=pipeline(Readable.from((async function*(){
+    yield header;const iterator=input.iterator({destroyOnReturn:false});
+    for(;;){const part=await iterator.next();if(part.done)return;yield part.value;}
+   })()),attachedChild.stdin).catch(()=>{uploadFailed=true;});
    // Removing the container closes attach; the stream is then destroyed even if its source stalled.
    await closed;input.destroy();await upload;
    if(failure)throw Error(failure);
    const [info]=JSON.parse(await docker(['inspect',name]));
+   if(failure)throw Error(failure);
    if(info.State.OOMKilled||info.State.ExitCode===73)throw Error('backup.verifier_resource',{cause:{oomKilled:info.State.OOMKilled,exitCode:info.State.ExitCode,memoryBytes:info.HostConfig.Memory,memorySwapBytes:info.HostConfig.MemorySwap,scratch:info.HostConfig.Tmpfs,network:info.HostConfig.NetworkMode,readOnly:info.HostConfig.ReadonlyRootfs,mounts:info.Mounts}});
    if(uploadFailed)throw Error('backup.verifier_input');
    if(info.State.ExitCode===74)throw Error('backup.verifier_timeout');
