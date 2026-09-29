@@ -612,8 +612,11 @@ mobile notifications separately.
   Real Docker fixtures exhaust native memory (192 MiB) and scratch (16 MiB); the parent
   survives and verifies later work. Two real Waitron snapshots at revision
   `00496fcd182a5c2c9189cc3faf0f8f22d3baf8ac` restore with 1024 MiB memory and 256 MiB scratch.
-  See [the containment receipt and limits](backup-verifier-containment.md). Production
-  host/kernel isolation, hostile native exploits, fleet sizing and large archives remain
+  See [the containment receipt and limits](backup-verifier-containment.md).
+  Container-test image preparation has a separate 150-second setup budget around its
+  120-second Docker command limit; individual test deadlines and containment assertions
+  stay unchanged. A controlled 31-second build delay reproduces the former setup timeout.
+  Production host/kernel isolation, hostile native exploits, fleet sizing and large archives remain
   unverified; the process-only development adapter still lacks these total-resource bounds.
   D32 review follow-up: distinguish Docker/infrastructure failures from archive validity
   in the catalogue and worker before production operation. The current interface marks
