@@ -655,7 +655,16 @@ notifications separately.
   credential renewal with one durable archive and shutdown through a controlled Waitron archive
   wait. Cloud download cancellation now releases its durable verification claim without recording
   failure or consuming a retry. These are local boundary measurements, not production timeout or
-  bandwidth targets. Next: measure deployment uplink bandwidth, spool volume and real database/
+  bandwidth targets. D44 adds a disk-backed two-venue TLS capacity profile at 32, 128
+  and 512 MiB per venue, with signed credential isolation, interrupted retries,
+  digest/length checks, cancellation and exact fixture cleanup. Its version 2 receipt
+  records per-size resource preflights/skips, transfer times and sampled process memory
+  and scratch/disk peaks. CI exercises the boundary cases at 1 MiB; larger runs stay
+  explicit. See [the capacity guide](local-backups.md#measure-local-transfer-capacity).
+  The [clean-commit measurement](receipts/backup-capacity-2026-09-30.json) ran all three
+  sizes; the guide records the observed times and resource peaks. Provider policies
+  and real Waitron archive assembly remain outside this fixture.
+  Next: measure deployment uplink bandwidth, spool volume and real database/
   encryption shutdown latency, stream Waitron archive assembly/restoration before reconsidering the current 512 MiB bound,
   production master-key custody/rewrapping and production-host verifier hardening. The
   process verifier denies network, subprocesses, native addons, host reads and outside

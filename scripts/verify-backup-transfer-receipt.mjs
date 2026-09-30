@@ -1,3 +1,4 @@
+import { verifyBackupCapacityReceipt } from "./verify-backup-capacity-receipt.mjs";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
@@ -20,6 +21,7 @@ function fail() {
 }
 
 export function verifyBackupTransferReceipt(value) {
+  if (value?.version === 2) return verifyBackupCapacityReceipt(value);
   if (
     !exact(value, [
       "version",
@@ -132,5 +134,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const receipt = verifyBackupTransferReceipt(
     JSON.parse(await readFile(process.argv[2], "utf8")),
   );
-  console.log(`verified backup transfer receipt for ${receipt.fixture.bytes} bytes`);
+  console.log(receipt.version === 2
+    ? `verified backup capacity receipt: ${receipt.fixtures.filter(f => f.status === "ran").length} sizes run`
+    : `verified backup transfer receipt for ${receipt.fixture.bytes} bytes`);
 }
