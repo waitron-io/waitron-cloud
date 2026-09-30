@@ -217,8 +217,14 @@ venue does not subscribe to remote access or backups.
   Cloud email transport is a starting point. The [version 1 relay contract](transactional-email-relay-contract.md)
   now scopes installation/account grants, fixed templates, encrypted admission,
   retry versus uncertain acceptance, abuse limits, metering and customer status.
-  The relay remains unimplemented and disabled: build the bounded Cloud slices and
-  separately queue Waitron's durable caller/status work before a joint local proof.
+  The disabled local-proof grant and account reservation core is implemented, with
+  PostgreSQL concurrency, revocation, rollover and process-restart tests. The trusted
+  origin-verifier boundary has synthetic evidence tests only; implement and prove
+  production domain/HTTPS verification before enablement. Signed admission, encrypted
+  queueing and the relay worker remain open. During signed admission, prove the
+  combined lock order against installation revocation/replacement; the core review
+  tested grant-level races but not those cross-module operations. Separately queue Waitron's durable
+  caller/status work before a joint local proof.
   Decide provider, processing location, account consent, allowance/debit policy and
   password-reset-limit behaviour before production. The source trace also found
   Waitron's profile-email catch logs raw exception text (`apps/server/src/me-api.ts`
@@ -232,8 +238,9 @@ venue does not subscribe to remote access or backups.
   periods and behaviour at the limit, including password-reset delivery. Settle how
   venue-generated requests count against an account and prevent multiple installations
   from bypassing its allowance. The relay contract proposes one unit per admitted
-  message and shared account reservations, not an implemented balance or an approved
-  allowance policy. Keep provider credentials in Cloud.
+  message. Shared account reservations now exist behind explicit local-only policy
+  configuration; no production allowance is approved. Policy-version changes require
+  a separately specified account upgrade path. Keep provider credentials in Cloud.
 
 Low operating cost is an assumption to validate against provider pricing and expected
 usage. Estimate costs and abuse exposure before setting allowances, and apply the
@@ -764,7 +771,7 @@ notifications separately.
 | Analytics and reports | Choose ingestion, supported source versions, country and cell placement, search/aggregation engine, scheduled reports and group reporting. Elasticsearch is a candidate. |
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |
 | Address lookup (free) | [Scope researched on 2026-09-30](address-lookup-scope.md); provider and implementation remain open. Resolve durable storage rights, Spain-first quality test, peak-day costs, account attribution and allowance policy before implementing lookup and completion for open-source Waitron. See [free services](#free-services-for-open-source-waitron). |
-| Messaging | The [version 1 on-prem relay contract](transactional-email-relay-contract.md) is scoped; Cloud grants/queue/routes, Waitron durable caller, joint proof and production decisions remain open. Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
+| Messaging | The [version 1 on-prem relay contract](transactional-email-relay-contract.md) has a disabled local-proof grant/reservation core; production origin verification, Cloud queue/routes/worker, Waitron durable caller, joint proof and production decisions remain open. Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
 | Automated upgrades | Treat cloud services, cloud-hosted Waitron and on-prem installations separately; choose rollout groups, compatibility, maintenance windows, pause and recovery behaviour. |
 | Monitoring | External venue and remote-route health, backup staleness, customer incidents and bilingual email alerts are implemented locally. Accepted public/staff probes now emit retry-safe organisation usage events and the portal shows their measured total. Add filing/device signals, broader functional checks and performance evidence. The local deployment now schedules usage reconciliation; define production operations, cost, allowance and limit policy before using measurements for enforcement. |
 
