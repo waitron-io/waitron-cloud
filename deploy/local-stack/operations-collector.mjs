@@ -67,6 +67,6 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
    return JSON.parse(stdout);
   };
   const {done}=await serveCollection({collect,intervalMs:Number(process.env.CLOUD_OPERATIONS_INTERVAL_MS??60000),signal:controller.signal});await done;
- }catch{console.error('Local operations collector failed; check local configuration');process.exitCode=1;}
+ }catch(error){console.error(error?.message==='invalid_collection_interval'?'Local operations collector failed; check CLOUD_OPERATIONS_INTERVAL_MS':'Local operations collector failed; check local configuration');process.exitCode=1;}
  finally{process.removeListener('SIGTERM',stop);process.removeListener('SIGINT',stop);}
 }

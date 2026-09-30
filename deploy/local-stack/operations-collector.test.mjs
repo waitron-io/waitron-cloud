@@ -85,3 +85,26 @@ test('an unfinished HTTP request cannot hold collection shutdown open',async()=>
   assert.equal(stopped,true,'stop must close an unfinished scrape connection');
  }finally{socket.destroy();controller.abort();await done;}
 });
+
+for(const [label,patch] of [
+ ['unknown state',{state:'unknown',ready:false}],
+ ['inconsistent readiness',{state:'ready',ready:false}],
+ ['invalid inspection time',{checkedAt:'not-a-date'}],
+])test(`a ${label} result suppresses the previous health sample`,async()=>{
+ const {createCollection}=await import('./operations-collector.mjs');
+ let next=snapshot();const collection=createCollection({collect:async()=>next});
+ await collection.poll();assert.equal(collection.status().snapshot.ready,true);
+ next={...snapshot(),...patch};await collection.poll();
+ assert.equal(collection.status().collection.state,'failed');assert.equal(collection.status().snapshot,null);
+ assert.doesNotMatch(collection.metrics(),/waitron_cloud_operations_ready /);
+});
+
+test('invalid collection intervals name the setting without starting inspection',async()=>{
+ const {execFile}=await import('node:child_process');const {promisify}=await import('node:util');
+ await assert.rejects(promisify(execFile)(process.execPath,[new URL('./operations-collector.mjs',import.meta.url).pathname],{
+  env:{PATH:process.env.PATH,CLOUD_OPERATIONS_INTERVAL_MS:'0'},timeout:3000,
+ }),error=>{
+  assert.equal(error.code,1);assert.equal(error.stdout,'');
+  assert.equal(error.stderr,'Local operations collector failed; check CLOUD_OPERATIONS_INTERVAL_MS\n');return true;
+ });
+});

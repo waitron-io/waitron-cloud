@@ -43,7 +43,7 @@ try{
  assert.doesNotMatch(await metrics(),/waitron_cloud_operations_ready /);
  compose('start','postgres');const recovered=await until(value=>value.snapshot?.ready===true);
  assert(Date.parse(recovered.collection.succeededAt)>Date.parse(schemaRecovered.collection.succeededAt));
- // The exact collector child environment must refuse a write, despite using the local runtime login.
+ // PostgreSQL's read-only transaction default must refuse a write for the local runtime login.
  const readonly=capture('exec','-T','-e','PGOPTIONS=-c default_transaction_read_only=on','operations-collector','node','--input-type=module','-e',
   `import {createRequire} from 'node:module';import {loadRuntime,runtimeEnvironment} from './deploy/local-stack/runtime.mjs';const {Pool}=createRequire(new URL('./packages/operations/package.json',import.meta.url))('pg');const {DATABASE_URL}=runtimeEnvironment('usage',await loadRuntime('/run/local-stack'));const pool=new Pool({connectionString:DATABASE_URL});try{await pool.query('UPDATE usage_reconciliation_sources SET caught_up_at=clock_timestamp()');throw Error('write accepted');}catch(error){if(error.code!=='25006')throw error;console.log('read_only_refused');}finally{await pool.end();}`);
  assert.equal(readonly,'read_only_refused');

@@ -149,7 +149,8 @@ the successful inspection. `current` means collection succeeded, even when that
 snapshot reports `degraded` or `unready`. Collection failures return HTTP 503 with
 `state: "failed"` and `snapshot: null`. Before the first result, the state is `pending`.
 If the last successful result ages beyond the interval plus the command deadline, the
-state becomes `stale` and its snapshot is suppressed. This bound describes the collection
+state becomes `stale` and its snapshot is suppressed. `pending` and `stale` also return
+HTTP 503; a completed degraded or unready inspection returns HTTP 200. This bound describes the collection
 schedule; it does not set an alert threshold or a service availability promise.
 
 `/metrics` remains available on a collection failure. It exports
