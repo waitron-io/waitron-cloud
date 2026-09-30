@@ -25,10 +25,13 @@ jobs:
       - name: Reproduce with bounded repeated worker tests
         run: |
           node scripts/test-postgres.mjs exec node --input-type=module -e '
-            import {spawnSync} from "node:child_process";
-            for(let run=1;run<=40;run++) {
-              console.log("DIAGNOSTIC RUN",run);
-              const result=spawnSync(process.execPath,["--test","--test-timeout=30000","test/container-worker.test.ts"],{cwd:"packages/backups",stdio:"inherit"});
-              if(result.status!==0){process.exitCode=result.status??1;break;}
+            import {spawn} from "node:child_process";
+            for(let batch=1;batch<=20;batch++) {
+              console.log("LOAD BATCH",batch);
+              const results=await Promise.all(Array.from({length:4},()=>new Promise(resolve=>{
+                const child=spawn(process.execPath,["--test","--test-timeout=30000","test/container-worker.test.ts"],{cwd:"packages/backups",stdio:"inherit"});
+                child.on("close",resolve);
+              })));
+              if(results.some(code=>code!==0)){process.exitCode=1;break;}
             }
           '
