@@ -763,6 +763,23 @@ notifications separately.
   network isolation, without activating a primary or contacting fiscal/payment services. Define the external-key format extension
   rather than assuming it exists in the inspected manifest v1.
 
+## Portal lost-reply test ordering
+
+- The remote-DNS journey waits until its fixture has dropped a successful apply
+  reply before starting the four-second saved-name assertion. Previously that UI
+  wait also timed the fixture's forwarding and fault injection. A controlled
+  4.5-second hold after the committed HTTP 200 reproduced the timeout while the
+  browser was still waiting for the reply; the same case passes after the explicit
+  injection acknowledgement. The English/Spanish journeys keep every existing
+  assertion, and the delayed-injection case guards the ordering. A separate
+  30-second fixture deadline fails with diagnostics if interception never completes,
+  so the browser and database can close even when the route does not match.
+- The failure in [CI 36738638444](https://github.com/waitron-io/waitron-cloud/actions/runs/36738638444)
+  predates these diagnostics, so you cannot attribute that historical failure to
+  this mechanism with certainty. The test records bounded request/status events,
+  injection stages and the setup screen if it fails again. Investigate any new
+  failure from that evidence; a passing repeat alone does not establish its cause.
+
 ## Initial services and future candidates
 
 | Service | Design work still needed |
