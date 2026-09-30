@@ -44,6 +44,7 @@ stack. Every published port remains bound to `127.0.0.1`.
 | Service | Default host address | Purpose |
 | --- | --- | --- |
 | Account API and portal | `127.0.0.1:3000` | Account UI, API and health |
+| Optional operations collector | `127.0.0.1:9091` | Current status and metrics when enabled |
 | PostgreSQL | `127.0.0.1:55432` | Local inspection and development |
 | Mailpit SMTP | `127.0.0.1:1125` | Captured outbound mail |
 | Mailpit UI | `127.0.0.1:8125` | Captured-mail browser |
@@ -97,6 +98,35 @@ These measurements describe this local run, not a production shutdown guarantee.
 The proof removes that project's containers, volumes, network and image on success
 or failure, and checks for leftover resources. These short settings are for the proof;
 they are not production targets.
+
+## Collect operations evidence
+
+Enable the optional collector when you want regularly refreshed status without running
+workers or opening tenant data. Follow [Collect status in the local deployment](operations-status.md#collect-status-in-the-local-deployment)
+for the commands, freshness fields and failure responses. The collector keeps its own
+network endpoint through account API restarts and preserves the API's localhost authority
+in its health requests. Set `COMPOSE_PROFILES=operations` for lifecycle commands if you want
+startup and upgrade to include this opt-in service; the ordinary stack readiness check
+still describes the core service set. Inspect `/status` separately for collection health.
+
+Run `pnpm proof:operations-collection /tmp/cloud-operations-collection-receipt.json`
+to create a separate disposable project. The rehearsal starts PostgreSQL, the account API
+and the collector, then changes usage evidence from missing to current and stale. It
+changes a migration digest, stops PostgreSQL, restores each dependency, restarts the
+collector, and checks that failed collection never exports the old health metrics.
+It also proves the collector's PostgreSQL settings refuse a write. No worker runs during
+this fixture, so collection itself cannot make the usage evidence fresh.
+
+The version 1 receipt records the observed states, collection times, bounded metric-label
+count, restart result and exact-project cleanup. The [2026-09-30 receipt](receipts/2026-09-30-operations-collection.json)
+ran on clean commit `8d50f22eb9e85dc47c2285e9562334040cd1821b` with a one-second
+collection interval. It observed 26 distinct metric label combinations across healthy
+and degraded samples, rejected the changed migration digest and database outage without
+exporting the previous readiness metric, recovered after each, and stopped with exit 0.
+The read-only write probe was refused. Cleanup found zero project containers, volumes
+and networks. These are local checks; they establish
+neither production capacity nor alert thresholds, incident escalation or an availability
+objective. The collector keeps no history and cannot report its own process failure.
 
 ## Stop, restart and upgrade
 

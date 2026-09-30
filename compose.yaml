@@ -143,6 +143,22 @@ services:
     restart: unless-stopped
     stop_grace_period: 15s
 
+  operations-collector:
+    <<: *cloud
+    profiles: [operations]
+    command: ["node", "deploy/local-stack/operations-collector.mjs"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      account:
+        condition: service_started
+    environment:
+      CLOUD_OPERATIONS_INTERVAL_MS: ${CLOUD_OPERATIONS_INTERVAL_MS:-60000}
+    ports:
+      - "127.0.0.1:${LOCAL_STACK_OPERATIONS_PORT:-9091}:9091"
+    restart: unless-stopped
+    stop_grace_period: 5s
+
   remote-probe:
     <<: *cloud
     command: ["node", "deploy/local-stack/runtime.mjs", "probe"]
