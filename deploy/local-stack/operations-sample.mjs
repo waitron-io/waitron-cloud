@@ -1,11 +1,18 @@
-import {checkConsumerDatabase,loadRuntime,runtimeEnvironment} from './runtime.mjs';
+import {createRequire} from 'node:module';
+import {checkConsumerSchema,loadRuntime,runtimeEnvironment} from './runtime.mjs';
+import {operationsStatus} from '../../packages/operations/src/status.ts';
 
-// Each new sample checks the complete release ledger before invoking the existing
-// status command. A failed inspection must never refresh the last healthy sample.
+const {Pool}=createRequire(new URL('../../packages/operations/package.json',import.meta.url))('pg');
+let pool;
+// The collector uses the status command's implementation and defaults. Its own
+// network keeps collection failures observable when the account process restarts.
 try{
  const {DATABASE_URL}=runtimeEnvironment('usage',await loadRuntime('/run/local-stack'));
- process.env.DATABASE_URL=DATABASE_URL;
- process.env.CLOUD_CONTROL_API_URL='http://localhost:3000';
- await checkConsumerDatabase(DATABASE_URL,process.cwd());
- await import('../../packages/operations/src/cli.ts');
+ pool=new Pool({connectionString:DATABASE_URL,max:5,connectionTimeoutMillis:5000,statement_timeout:10000,options:'-c default_transaction_read_only=on'});
+ pool.on('error',()=>{});
+ await checkConsumerSchema(pool,process.cwd());
+ const snapshot=await operationsStatus(pool,{controlApiUrl:'http://account:3000',
+  fetch:(url,options)=>fetch(url,{...options,headers:{...options.headers,host:'localhost:3000'}})});
+ process.stdout.write(JSON.stringify(snapshot)+'\n');
 }catch{console.error('Local operations inspection failed');process.exitCode=1;}
+finally{try{await pool?.end();}catch{process.exitCode=1;}}

@@ -11,9 +11,9 @@ test('operations collection is opt-in, loopback-only and has no writable mount o
  assert.ok(service,'the opt-in collector must exist');
  assert.equal(service.read_only,true);
  assert.equal(service.restart,'unless-stopped');
- assert.equal(service.network_mode,'service:account');
- assert(services.account.ports.every(port=>port.host_ip==='127.0.0.1'));
- assert(services.account.ports.some(port=>port.target===9091));
+ assert.equal(service.network_mode,undefined);
+ assert(service.ports.every(port=>port.host_ip==='127.0.0.1'));
+ assert(service.ports.some(port=>port.target===9091));
  assert(service.volumes.every(volume=>volume.read_only&&volume.target==='/run/local-stack'));
  assert.equal(service.depends_on.migrate.condition,'service_completed_successfully');
 });

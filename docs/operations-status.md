@@ -136,8 +136,8 @@ curl --fail http://127.0.0.1:9091/status
 curl --fail http://127.0.0.1:9091/metrics
 ```
 
-The collector invokes the existing status command immediately, then waits 60 seconds
-between completed inspections. It runs separately from the workers and does not schedule
+The collector runs the status command's existing inspection implementation and defaults
+immediately, then waits 60 seconds between completed inspections. It runs separately from the workers and does not schedule
 or repair their work. Each inspection checks the release's complete migration ledger,
 uses PostgreSQL's read-only transaction default, and has a 30-second process deadline.
 The local runtime login still has write privileges; this setting prevents accidental
@@ -164,10 +164,11 @@ must be treated as a scrape failure by the client; it cannot report its own disa
 Set `CLOUD_OPERATIONS_INTERVAL_MS` to an integer from 1,000 to 3,600,000 before creating
 the service to change the interval. The default is 60,000. A very short interval competes
 with other health probes for the existing account API rate allowance. Set
-`LOCAL_STACK_OPERATIONS_PORT` to change the loopback port. The port belongs to the account
-container because both processes share its network and health authority. Compose reserves
-that port even when the collector is disabled; no collector listener runs until you enable
-it. After recreating the account container, recreate the collector too.
+`LOCAL_STACK_OPERATIONS_PORT` to change the loopback port. The collector has its own
+network endpoint, so restarting the account API does not hide collection failures. Its
+local health requests connect to the account service with that service's required
+`localhost:3000` Host header. No listener or reserved host port exists when the optional
+collector is absent.
 
 The collector keeps only the current result in memory and starts with no sample after a
 restart. It does not retain a time series. You can stop it without stopping the workers:

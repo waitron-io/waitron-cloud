@@ -44,7 +44,7 @@ stack. Every published port remains bound to `127.0.0.1`.
 | Service | Default host address | Purpose |
 | --- | --- | --- |
 | Account API and portal | `127.0.0.1:3000` | Account UI, API and health |
-| Optional operations collector | `127.0.0.1:9091` | Current status and metrics; account container reserves the port |
+| Optional operations collector | `127.0.0.1:9091` | Current status and metrics when enabled |
 | PostgreSQL | `127.0.0.1:55432` | Local inspection and development |
 | Mailpit SMTP | `127.0.0.1:1125` | Captured outbound mail |
 | Mailpit UI | `127.0.0.1:8125` | Captured-mail browser |
@@ -103,9 +103,9 @@ they are not production targets.
 
 Enable the optional collector when you want regularly refreshed status without running
 workers or opening tenant data. Follow [Collect status in the local deployment](operations-status.md#collect-status-in-the-local-deployment)
-for the commands, freshness fields and failure responses. It uses the account container's
-network to preserve the API's localhost authority. Recreate the collector after recreating
-that container. Set `COMPOSE_PROFILES=operations` for lifecycle commands if you want
+for the commands, freshness fields and failure responses. The collector keeps its own
+network endpoint through account API restarts and preserves the API's localhost authority
+in its health requests. Set `COMPOSE_PROFILES=operations` for lifecycle commands if you want
 startup and upgrade to include this opt-in service; the ordinary stack readiness check
 still describes the core service set. Inspect `/status` separately for collection health.
 

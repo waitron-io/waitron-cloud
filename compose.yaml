@@ -104,7 +104,6 @@ services:
       retries: 30
     ports:
       - "127.0.0.1:${LOCAL_STACK_ACCOUNT_PORT:-3000}:3000"
-      - "127.0.0.1:${LOCAL_STACK_OPERATIONS_PORT:-9091}:9091"
     restart: unless-stopped
     stop_grace_period: 12s
 
@@ -155,7 +154,8 @@ services:
         condition: service_started
     environment:
       CLOUD_OPERATIONS_INTERVAL_MS: ${CLOUD_OPERATIONS_INTERVAL_MS:-60000}
-    network_mode: service:account
+    ports:
+      - "127.0.0.1:${LOCAL_STACK_OPERATIONS_PORT:-9091}:9091"
     restart: unless-stopped
     stop_grace_period: 5s
 

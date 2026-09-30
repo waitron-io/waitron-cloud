@@ -578,7 +578,7 @@ mobile notifications separately.
   measurements, not capacity promises. The aggregate operations command now surfaces
   the current worker queues and evidence projections through JSON, a readiness exit code
   and bounded-label Prometheus metrics. An opt-in local Compose collector now runs
-  that command on a bounded schedule, exports collection timestamps and failure,
+  the same inspection on a bounded schedule, exports collection timestamps and failure,
   and suppresses expired or failed samples. It checks the full migration ledger
   before each inspection and uses read-only transactions. Production collection,
   retained time series and alerting remain open.

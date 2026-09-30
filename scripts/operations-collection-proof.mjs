@@ -21,7 +21,7 @@ const fresh=()=>sql('UPDATE usage_reconciliation_sources SET last_attempted_at=c
 let receipt,error;
 try{
  compose('build','bootstrap');compose('up','-d','--no-build','operations-collector');
- origin=`http://${capture('port','account','9091')}`;
+ origin=`http://${capture('port','operations-collector','9091')}`;
  const initial=await until(value=>value.snapshot?.state==='degraded');
  fresh();const healthy=await until(value=>value.snapshot?.ready===true);assert.equal(healthy.http,200);
  const healthyMetrics=await metrics();assert.match(healthyMetrics,/waitron_cloud_operations_ready 1\n/);
