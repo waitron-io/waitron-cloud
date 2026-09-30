@@ -438,6 +438,17 @@ and rejection without upstream calls. Only this companion advances an injected
 clock; the Docker gateway uses wall-clock time. Run it and the receipt guards with
 `pnpm test:public-gateway-limits`.
 
+The [2026-09-30 receipt](receipts/public-gateway-limits-2026-09-30.json) records
+Cloud `c612d9f7e87ff37d7153d193d7c4fe964fcfd6fe` and Waitron
+`6cda93bae67467f81279c946f1842480b2fce9c5`, both clean. Each venue accepted all eight
+solved requests, with maximum latency of 22.1 ms for A and 16.5 ms for B. After A
+was disconnected, its request returned 503 in 5,007.5 ms while B accepted all four
+requests within 14.1 ms. The fresh-connection burst returned 31 challenges and
+refused 49 connections; its maximum latency was 68.4 ms. All owned gateway/ACME
+containers and networks, Waitron child processes and fixture directories were gone
+before the receipt was written. PostgreSQL and Mailpit belong to the outer runner,
+which removed them after the proof exited successfully.
+
 The current policy is shared: one source gets 120 gate requests per minute across
 all venues, and the gate has 64 upstream slots across all sources and venues.
 Challenge requests also spend that allowance. HAProxy separately permits at most
