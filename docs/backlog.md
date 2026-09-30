@@ -581,7 +581,10 @@ mobile notifications separately.
   the same inspection on a bounded schedule, exports collection timestamps and failure,
   and suppresses expired or failed samples. It checks the full migration ledger
   before each inspection and uses read-only transactions. Production collection,
-  retained time series and alerting remain open.
+  retained time series and alerting remain open. The 2026-09-30 local
+  [collection receipt](receipts/2026-09-30-operations-collection.json) proves healthy/degraded
+  changes, migration-digest refusal, database outage/recovery, restart and read-only
+  write refusal, with 26 label combinations and empty project cleanup.
   Next: choose the terminal-delivery cutoff, repeat the receipt and aggregate checks in
   the selected deployment environment, and add external representative checks,
   escalation/quiet periods and rollout pause criteria.

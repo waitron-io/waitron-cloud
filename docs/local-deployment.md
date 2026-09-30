@@ -118,7 +118,13 @@ It also proves the collector's PostgreSQL settings refuse a write. No worker run
 this fixture, so collection itself cannot make the usage evidence fresh.
 
 The version 1 receipt records the observed states, collection times, bounded metric-label
-count, restart result and exact-project cleanup. These are local checks; they establish
+count, restart result and exact-project cleanup. The [2026-09-30 receipt](receipts/2026-09-30-operations-collection.json)
+ran on clean commit `8d50f22eb9e85dc47c2285e9562334040cd1821b` with a one-second
+collection interval. It observed 26 distinct metric label combinations across healthy
+and degraded samples, rejected the changed migration digest and database outage without
+exporting the previous readiness metric, recovered after each, and stopped with exit 0.
+The read-only write probe was refused. Cleanup found zero project containers, volumes
+and networks. These are local checks; they establish
 neither production capacity nor alert thresholds, incident escalation or an availability
 objective. The collector keeps no history and cannot report its own process failure.
 

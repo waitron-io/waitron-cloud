@@ -45,7 +45,7 @@ test('failure and elapsed freshness suppress the previous healthy sample and rec
  fail=false;await collection.poll();assert.equal(collection.status().collection.state,'current');
 });
 
-test('overlapping polls are single-flight and incompatible output cannot replace status',async()=>{
+test('overlapping polls are single-flight and incompatible output cannot replace status',{timeout:1000},async()=>{
  const {createCollection}=await import('./operations-collector.mjs');
  let release,calls=0;
  const collection=createCollection({intervalMs:1000,collect:()=>{calls++;return new Promise(resolve=>{release=resolve;});}});

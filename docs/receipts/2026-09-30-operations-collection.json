@@ -1,0 +1,527 @@
+{
+  "version": 1,
+  "head": "8d50f22eb9e85dc47c2285e9562334040cd1821b",
+  "dirty": false,
+  "project": "cloud-operations-proof-21a5b1c7",
+  "intervalMs": 1000,
+  "initial": {
+    "http": 200,
+    "version": 1,
+    "collection": {
+      "state": "current",
+      "attemptedAt": "2026-09-30T01:51:33.201Z",
+      "succeededAt": "2026-09-30T01:51:33.308Z",
+      "expiresAt": "2026-09-30T01:52:04.308Z"
+    },
+    "snapshot": {
+      "version": 1,
+      "checkedAt": "2026-09-30T01:51:33.302Z",
+      "state": "degraded",
+      "ready": false,
+      "components": {
+        "controlApi": {
+          "state": "ready",
+          "code": "ready",
+          "live": true,
+          "ready": true,
+          "elapsedMs": 10
+        },
+        "monitoring": {
+          "state": "ready",
+          "code": "no_targets",
+          "venues": 0,
+          "due": 0,
+          "unknown": 0,
+          "incidents": 0,
+          "oldestCheckAt": null
+        },
+        "email": {
+          "state": "ready",
+          "code": "empty",
+          "counts": {
+            "pending": 0,
+            "processing": 0,
+            "sent": 0,
+            "expired": 0,
+            "cancelled": 0,
+            "failed": 0
+          },
+          "backlogged": 0,
+          "oldestPendingAt": null
+        },
+        "backups": {
+          "state": "ready",
+          "code": "no_jobs",
+          "counts": {
+            "pending": 0,
+            "running": 0,
+            "failed": 0,
+            "completed": 0
+          },
+          "due": 0,
+          "oldestDueAt": null
+        },
+        "remoteConfiguration": {
+          "state": "ready",
+          "code": "no_targets",
+          "enabled": 0,
+          "due": 0,
+          "running": 0,
+          "failed": 0,
+          "oldestDueAt": null
+        },
+        "gateways": {
+          "state": "ready",
+          "code": "no_targets",
+          "expected": 0,
+          "healthy": 0,
+          "failed": 0,
+          "stale": 0,
+          "missing": 0,
+          "oldestCheckAt": null
+        },
+        "storage": {
+          "state": "ready",
+          "code": "no_targets",
+          "expected": 0,
+          "healthy": 0,
+          "pending": 0,
+          "failed": 0,
+          "stale": 0,
+          "missing": 0,
+          "oldestVerifiedAt": null
+        },
+        "usage": {
+          "state": "degraded",
+          "code": "unknown",
+          "sources": 4,
+          "stale": 0,
+          "unknown": 4,
+          "oldestCaughtUpAt": null
+        }
+      }
+    }
+  },
+  "healthy": {
+    "http": 200,
+    "version": 1,
+    "collection": {
+      "state": "current",
+      "attemptedAt": "2026-09-30T01:51:34.319Z",
+      "succeededAt": "2026-09-30T01:51:34.426Z",
+      "expiresAt": "2026-09-30T01:52:05.426Z"
+    },
+    "snapshot": {
+      "version": 1,
+      "checkedAt": "2026-09-30T01:51:34.420Z",
+      "state": "ready",
+      "ready": true,
+      "components": {
+        "controlApi": {
+          "state": "ready",
+          "code": "ready",
+          "live": true,
+          "ready": true,
+          "elapsedMs": 8
+        },
+        "monitoring": {
+          "state": "ready",
+          "code": "no_targets",
+          "venues": 0,
+          "due": 0,
+          "unknown": 0,
+          "incidents": 0,
+          "oldestCheckAt": null
+        },
+        "email": {
+          "state": "ready",
+          "code": "empty",
+          "counts": {
+            "pending": 0,
+            "processing": 0,
+            "sent": 0,
+            "expired": 0,
+            "cancelled": 0,
+            "failed": 0
+          },
+          "backlogged": 0,
+          "oldestPendingAt": null
+        },
+        "backups": {
+          "state": "ready",
+          "code": "no_jobs",
+          "counts": {
+            "pending": 0,
+            "running": 0,
+            "failed": 0,
+            "completed": 0
+          },
+          "due": 0,
+          "oldestDueAt": null
+        },
+        "remoteConfiguration": {
+          "state": "ready",
+          "code": "no_targets",
+          "enabled": 0,
+          "due": 0,
+          "running": 0,
+          "failed": 0,
+          "oldestDueAt": null
+        },
+        "gateways": {
+          "state": "ready",
+          "code": "no_targets",
+          "expected": 0,
+          "healthy": 0,
+          "failed": 0,
+          "stale": 0,
+          "missing": 0,
+          "oldestCheckAt": null
+        },
+        "storage": {
+          "state": "ready",
+          "code": "no_targets",
+          "expected": 0,
+          "healthy": 0,
+          "pending": 0,
+          "failed": 0,
+          "stale": 0,
+          "missing": 0,
+          "oldestVerifiedAt": null
+        },
+        "usage": {
+          "state": "ready",
+          "code": "current",
+          "sources": 4,
+          "stale": 0,
+          "unknown": 0,
+          "oldestCaughtUpAt": "2026-09-30T01:51:33.793Z"
+        }
+      }
+    }
+  },
+  "degraded": {
+    "http": 200,
+    "version": 1,
+    "collection": {
+      "state": "current",
+      "attemptedAt": "2026-09-30T01:51:35.430Z",
+      "succeededAt": "2026-09-30T01:51:35.538Z",
+      "expiresAt": "2026-09-30T01:52:06.538Z"
+    },
+    "snapshot": {
+      "version": 1,
+      "checkedAt": "2026-09-30T01:51:35.532Z",
+      "state": "degraded",
+      "ready": false,
+      "components": {
+        "controlApi": {
+          "state": "ready",
+          "code": "ready",
+          "live": true,
+          "ready": true,
+          "elapsedMs": 7
+        },
+        "monitoring": {
+          "state": "ready",
+          "code": "no_targets",
+          "venues": 0,
+          "due": 0,
+          "unknown": 0,
+          "incidents": 0,
+          "oldestCheckAt": null
+        },
+        "email": {
+          "state": "ready",
+          "code": "empty",
+          "counts": {
+            "pending": 0,
+            "processing": 0,
+            "sent": 0,
+            "expired": 0,
+            "cancelled": 0,
+            "failed": 0
+          },
+          "backlogged": 0,
+          "oldestPendingAt": null
+        },
+        "backups": {
+          "state": "ready",
+          "code": "no_jobs",
+          "counts": {
+            "pending": 0,
+            "running": 0,
+            "failed": 0,
+            "completed": 0
+          },
+          "due": 0,
+          "oldestDueAt": null
+        },
+        "remoteConfiguration": {
+          "state": "ready",
+          "code": "no_targets",
+          "enabled": 0,
+          "due": 0,
+          "running": 0,
+          "failed": 0,
+          "oldestDueAt": null
+        },
+        "gateways": {
+          "state": "ready",
+          "code": "no_targets",
+          "expected": 0,
+          "healthy": 0,
+          "failed": 0,
+          "stale": 0,
+          "missing": 0,
+          "oldestCheckAt": null
+        },
+        "storage": {
+          "state": "ready",
+          "code": "no_targets",
+          "expected": 0,
+          "healthy": 0,
+          "pending": 0,
+          "failed": 0,
+          "stale": 0,
+          "missing": 0,
+          "oldestVerifiedAt": null
+        },
+        "usage": {
+          "state": "degraded",
+          "code": "stale",
+          "sources": 4,
+          "stale": 4,
+          "unknown": 0,
+          "oldestCaughtUpAt": "2026-09-30T01:41:34.799Z"
+        }
+      }
+    }
+  },
+  "incompatible": {
+    "http": 503,
+    "version": 1,
+    "collection": {
+      "state": "failed",
+      "attemptedAt": "2026-09-30T01:51:36.539Z",
+      "succeededAt": "2026-09-30T01:51:35.538Z",
+      "expiresAt": "2026-09-30T01:52:06.538Z"
+    },
+    "snapshot": null
+  },
+  "databaseLost": {
+    "http": 503,
+    "version": 1,
+    "collection": {
+      "state": "failed",
+      "attemptedAt": "2026-09-30T01:51:39.833Z",
+      "succeededAt": "2026-09-30T01:51:38.833Z",
+      "expiresAt": "2026-09-30T01:52:09.833Z"
+    },
+    "snapshot": null
+  },
+  "recovered": {
+    "http": 200,
+    "version": 1,
+    "collection": {
+      "state": "current",
+      "attemptedAt": "2026-09-30T01:51:42.046Z",
+      "succeededAt": "2026-09-30T01:51:42.148Z",
+      "expiresAt": "2026-09-30T01:52:13.148Z"
+    },
+    "snapshot": {
+      "version": 1,
+      "checkedAt": "2026-09-30T01:51:42.142Z",
+      "state": "ready",
+      "ready": true,
+      "components": {
+        "controlApi": {
+          "state": "ready",
+          "code": "ready",
+          "live": true,
+          "ready": true,
+          "elapsedMs": 12
+        },
+        "monitoring": {
+          "state": "ready",
+          "code": "no_targets",
+          "venues": 0,
+          "due": 0,
+          "unknown": 0,
+          "incidents": 0,
+          "oldestCheckAt": null
+        },
+        "email": {
+          "state": "ready",
+          "code": "empty",
+          "counts": {
+            "pending": 0,
+            "processing": 0,
+            "sent": 0,
+            "expired": 0,
+            "cancelled": 0,
+            "failed": 0
+          },
+          "backlogged": 0,
+          "oldestPendingAt": null
+        },
+        "backups": {
+          "state": "ready",
+          "code": "no_jobs",
+          "counts": {
+            "pending": 0,
+            "running": 0,
+            "failed": 0,
+            "completed": 0
+          },
+          "due": 0,
+          "oldestDueAt": null
+        },
+        "remoteConfiguration": {
+          "state": "ready",
+          "code": "no_targets",
+          "enabled": 0,
+          "due": 0,
+          "running": 0,
+          "failed": 0,
+          "oldestDueAt": null
+        },
+        "gateways": {
+          "state": "ready",
+          "code": "no_targets",
+          "expected": 0,
+          "healthy": 0,
+          "failed": 0,
+          "stale": 0,
+          "missing": 0,
+          "oldestCheckAt": null
+        },
+        "storage": {
+          "state": "ready",
+          "code": "no_targets",
+          "expected": 0,
+          "healthy": 0,
+          "pending": 0,
+          "failed": 0,
+          "stale": 0,
+          "missing": 0,
+          "oldestVerifiedAt": null
+        },
+        "usage": {
+          "state": "ready",
+          "code": "current",
+          "sources": 4,
+          "stale": 0,
+          "unknown": 0,
+          "oldestCaughtUpAt": "2026-09-30T01:51:38.214Z"
+        }
+      }
+    }
+  },
+  "restarted": {
+    "http": 200,
+    "version": 1,
+    "collection": {
+      "state": "current",
+      "attemptedAt": "2026-09-30T01:51:43.167Z",
+      "succeededAt": "2026-09-30T01:51:43.270Z",
+      "expiresAt": "2026-09-30T01:52:14.270Z"
+    },
+    "snapshot": {
+      "version": 1,
+      "checkedAt": "2026-09-30T01:51:43.263Z",
+      "state": "ready",
+      "ready": true,
+      "components": {
+        "controlApi": {
+          "state": "ready",
+          "code": "ready",
+          "live": true,
+          "ready": true,
+          "elapsedMs": 7
+        },
+        "monitoring": {
+          "state": "ready",
+          "code": "no_targets",
+          "venues": 0,
+          "due": 0,
+          "unknown": 0,
+          "incidents": 0,
+          "oldestCheckAt": null
+        },
+        "email": {
+          "state": "ready",
+          "code": "empty",
+          "counts": {
+            "pending": 0,
+            "processing": 0,
+            "sent": 0,
+            "expired": 0,
+            "cancelled": 0,
+            "failed": 0
+          },
+          "backlogged": 0,
+          "oldestPendingAt": null
+        },
+        "backups": {
+          "state": "ready",
+          "code": "no_jobs",
+          "counts": {
+            "pending": 0,
+            "running": 0,
+            "failed": 0,
+            "completed": 0
+          },
+          "due": 0,
+          "oldestDueAt": null
+        },
+        "remoteConfiguration": {
+          "state": "ready",
+          "code": "no_targets",
+          "enabled": 0,
+          "due": 0,
+          "running": 0,
+          "failed": 0,
+          "oldestDueAt": null
+        },
+        "gateways": {
+          "state": "ready",
+          "code": "no_targets",
+          "expected": 0,
+          "healthy": 0,
+          "failed": 0,
+          "stale": 0,
+          "missing": 0,
+          "oldestCheckAt": null
+        },
+        "storage": {
+          "state": "ready",
+          "code": "no_targets",
+          "expected": 0,
+          "healthy": 0,
+          "pending": 0,
+          "failed": 0,
+          "stale": 0,
+          "missing": 0,
+          "oldestVerifiedAt": null
+        },
+        "usage": {
+          "state": "ready",
+          "code": "current",
+          "sources": 4,
+          "stale": 0,
+          "unknown": 0,
+          "oldestCaughtUpAt": "2026-09-30T01:51:38.214Z"
+        }
+      }
+    }
+  },
+  "metricLabelSets": 26,
+  "readonly": "read_only_refused",
+  "stopExitCode": 0,
+  "cleanup": {
+    "containers": 0,
+    "volumes": 0,
+    "networks": 0
+  }
+}
