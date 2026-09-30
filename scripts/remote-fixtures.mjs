@@ -21,7 +21,7 @@ export async function startAcme(){
   const port=docker('port',name+'-ca','14000/tcp').split(':').at(-1),management=docker('port',name+'-ca','15000/tcp').split(':').at(-1);
   const get=path=>new Promise((resolve,reject)=>{const req=request({host:'localhost',family:4,port:path==='/dir'?port:management,path,ca,headers:{'User-Agent':'waitron-cloud-local-test'}},res=>{let body='';res.on('data',v=>body+=v);res.on('end',()=>res.statusCode===200?resolve(body):reject(Error('ACME status '+res.statusCode+': '+body.slice(0,1000))));});req.setTimeout(2000,()=>req.destroy(Error('ACME timeout')));req.on('error',reject);req.end();});
   await waitFor(()=>get('/dir'),5000);const certificateRoot=await get('/roots/0');
-  return {root,dnsUrl,certificateRoot,directoryUrl:`https://localhost:${port}/dir`,close,
+  return {root,name,dnsUrl,certificateRoot,directoryUrl:`https://localhost:${port}/dir`,close,
    async issue({hostname,csrFile,accountKeyFile,output,dnsName=`_acme-challenge.${hostname}`,omitDns=false,operator}){
     const file=join(root,randomUUID()+'.json');await writeFile(file,JSON.stringify({directoryUrl:`https://localhost:${port}/dir`,dnsUrl,hostname,csrFile,accountKeyFile,output,dnsName,omitDns}),{mode:0o600});
     let args=['scripts/remote-acme-worker.mjs',file];
