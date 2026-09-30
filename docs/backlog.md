@@ -661,7 +661,9 @@ notifications separately.
   records per-size resource preflights/skips, transfer times and sampled process memory
   and scratch/disk peaks. CI exercises the boundary cases at 1 MiB; larger runs stay
   explicit. See [the capacity guide](local-backups.md#measure-local-transfer-capacity).
-  Provider policies and real Waitron archive assembly remain outside this fixture.
+  The [clean-commit measurement](receipts/backup-capacity-2026-09-30.json) ran all three
+  sizes; the guide records the observed times and resource peaks. Provider policies
+  and real Waitron archive assembly remain outside this fixture.
   Next: measure deployment uplink bandwidth, spool volume and real database/
   encryption shutdown latency, stream Waitron archive assembly/restoration before reconsidering the current 512 MiB bound,
   production master-key custody/rewrapping and production-host verifier hardening. The

@@ -224,6 +224,17 @@ exact temporary directory, the runner checks the store's exact object list and
 empty partial/download directories. It then closes clients, requests and sockets
 and verifies that the directory is gone.
 
+The [2026-09-30 clean-commit receipt](receipts/backup-capacity-2026-09-30.json)
+records Cloud `e30c438b70667f5e33e3fcefa55a8636c210e5c4` on macOS arm64 with Node v26.7.0.
+All sizes ran. Times below are per-venue ranges from one run; memory and disk
+are the sampled combined-process/fixture peaks. MiB and GiB use powers of 1024.
+
+| MiB per venue | Upload ms | Download ms | Peak RSS MiB | Peak ArrayBuffer MiB | Scratch GiB | Allocated disk GiB |
+| --- | --- | --- | --- | --- | --- | --- |
+| 32 | 136.9–138.6 | 102.8–103.0 | 217.2 | 47.1 | 0.188 | 0.188 |
+| 128 | 437.2–438.4 | 352.1–352.2 | 221.6 | 54.7 | 0.750 | 0.750 |
+| 512 | 1685.2–1686.3 | 1371.7–1373.2 | 242.6 | 61.5 | 3.000 | 3.039 |
+
 This is a controlled object-store policy, not a provider implementation. Continue
 running the SeaweedFS credential and conditional-write contract above, and repeat
 both proofs against the selected provider before claiming provider isolation or

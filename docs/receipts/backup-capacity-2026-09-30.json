@@ -1,0 +1,194 @@
+{
+  "version": 2,
+  "cloudHead": "e30c438b70667f5e33e3fcefa55a8636c210e5c4",
+  "cloudDirty": false,
+  "profile": "controlled-tls-capacity",
+  "ceilingBytes": 536870912,
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v26.7.0",
+    "samplingMs": 20
+  },
+  "fixtures": [
+    {
+      "bytes": 33554432,
+      "status": "ran",
+      "preflight": {
+        "availableMemoryBytes": 24345083904,
+        "freeDiskBytes": 467408658432
+      },
+      "uploadOverlap": 2,
+      "downloadOverlap": 2,
+      "venues": [
+        {
+          "venue": "a",
+          "digest": "facb58ac139bf9fc0e1f8b1f147003236b1b69e84f3a4c94166fa66f18f89932",
+          "uploadedBytes": 33554432,
+          "uploadMs": 138.57241699999997,
+          "downloadedBytes": 33554432,
+          "downloadMs": 103.03366699999998
+        },
+        {
+          "venue": "b",
+          "digest": "e75f883f87d4a8c873d69e3823383a901b00a2dcff331e267c61134135c381ee",
+          "uploadedBytes": 33554432,
+          "uploadMs": 136.90545900000004,
+          "downloadedBytes": 33554432,
+          "downloadMs": 102.80700000000002
+        }
+      ],
+      "baseline": {
+        "rssBytes": 108232704,
+        "arrayBufferBytes": 171258
+      },
+      "peaks": {
+        "rssBytes": 227786752,
+        "arrayBufferBytes": 49396004,
+        "scratchBytes": 201329435,
+        "diskAllocatedBytes": 201334784
+      },
+      "failures": {
+        "crossedReadDenied": 2,
+        "crossedWriteDenied": 2,
+        "wrongSecretDenied": true,
+        "uploadAttempts": 2,
+        "interruptedUploadUnpublished": true,
+        "uploadRecovered": true,
+        "downloadAttempts": 2,
+        "downloadRecovered": true,
+        "uploadAbortMs": 0.358208999999988,
+        "cancelledUploadUnpublished": true,
+        "downloadAbortMs": 0.7686249999999291,
+        "cancelledDownloadStages": 0,
+        "wrongLengthRefused": true,
+        "wrongDigestRefused": true
+      },
+      "cleanup": {
+        "remainingFiles": 0,
+        "remainingBytes": 0
+      }
+    },
+    {
+      "bytes": 134217728,
+      "status": "ran",
+      "preflight": {
+        "availableMemoryBytes": 24305401856,
+        "freeDiskBytes": 467330912256
+      },
+      "uploadOverlap": 2,
+      "downloadOverlap": 2,
+      "venues": [
+        {
+          "venue": "a",
+          "digest": "3510b7e066e76c8f7c306693c97204824d0c8f92ae6fc8a4c0dd657abf424a1b",
+          "uploadedBytes": 134217728,
+          "uploadMs": 438.39937499999996,
+          "downloadedBytes": 134217728,
+          "downloadMs": 352.2112090000003
+        },
+        {
+          "venue": "b",
+          "digest": "df49fba879413714c1af6854d51b343ee3f39f93123c05a4389bff38ce464aaf",
+          "uploadedBytes": 134217728,
+          "uploadMs": 437.23254099999986,
+          "downloadedBytes": 134217728,
+          "downloadMs": 352.1245839999999
+        }
+      ],
+      "baseline": {
+        "rssBytes": 228048896,
+        "arrayBufferBytes": 371610
+      },
+      "peaks": {
+        "rssBytes": 232390656,
+        "arrayBufferBytes": 57352911,
+        "scratchBytes": 805309203,
+        "diskAllocatedBytes": 805314560
+      },
+      "failures": {
+        "crossedReadDenied": 2,
+        "crossedWriteDenied": 2,
+        "wrongSecretDenied": true,
+        "uploadAttempts": 2,
+        "interruptedUploadUnpublished": true,
+        "uploadRecovered": true,
+        "downloadAttempts": 2,
+        "downloadRecovered": true,
+        "uploadAbortMs": 0.31320899999991525,
+        "cancelledUploadUnpublished": true,
+        "downloadAbortMs": 0.5655409999999392,
+        "cancelledDownloadStages": 0,
+        "wrongLengthRefused": true,
+        "wrongDigestRefused": true
+      },
+      "cleanup": {
+        "remainingFiles": 0,
+        "remainingBytes": 0
+      }
+    },
+    {
+      "bytes": 536870912,
+      "status": "ran",
+      "preflight": {
+        "availableMemoryBytes": 24191352832,
+        "freeDiskBytes": 467062427648
+      },
+      "uploadOverlap": 2,
+      "downloadOverlap": 2,
+      "venues": [
+        {
+          "venue": "a",
+          "digest": "b9045a713caed5dff3d3b783e98d1ce5778d8bc331ee4119d707072312af06a7",
+          "uploadedBytes": 536870912,
+          "uploadMs": 1686.2642079999996,
+          "downloadedBytes": 536870912,
+          "downloadMs": 1373.169833
+        },
+        {
+          "venue": "b",
+          "digest": "13c310413e2f96c05265d8e01762d2910e105a168c290bc1f849b65f71b3d0b7",
+          "uploadedBytes": 536870912,
+          "uploadMs": 1685.2286249999997,
+          "downloadedBytes": 536870912,
+          "downloadMs": 1371.7327079999995
+        }
+      ],
+      "baseline": {
+        "rssBytes": 232390656,
+        "arrayBufferBytes": 4261800
+      },
+      "peaks": {
+        "rssBytes": 254345216,
+        "arrayBufferBytes": 64465687,
+        "scratchBytes": 3221228311,
+        "diskAllocatedBytes": 3263569920
+      },
+      "failures": {
+        "crossedReadDenied": 2,
+        "crossedWriteDenied": 2,
+        "wrongSecretDenied": true,
+        "uploadAttempts": 2,
+        "interruptedUploadUnpublished": true,
+        "uploadRecovered": true,
+        "downloadAttempts": 2,
+        "downloadRecovered": true,
+        "uploadAbortMs": 0.3202079999991838,
+        "cancelledUploadUnpublished": true,
+        "downloadAbortMs": 0.6554169999999431,
+        "cancelledDownloadStages": 0,
+        "wrongLengthRefused": true,
+        "wrongDigestRefused": true
+      },
+      "cleanup": {
+        "remainingFiles": 0,
+        "remainingBytes": 0
+      }
+    }
+  ],
+  "cleanup": {
+    "rootRemoved": true,
+    "sockets": 0,
+    "activeRequests": 0
+  }
+}
