@@ -28,16 +28,20 @@ candidate list and previous commercial reasoning. Remote access and backups are 
 agreed initial services. The first integration milestone is complete locally; the
 production release scope remains open.
 
-## Open portal browser investigation
+## Portal lost-reply test ordering
 
-- The English remote-DNS lost-reply journey timed out waiting for the saved-name
-  notice in [CI 36738638444](https://github.com/waitron-io/waitron-cloud/actions/runs/36738638444).
-  The cause remains unverified. The test now records bounded remote request/status
-  events, the injected reply-loss stages and the current setup screen on failure,
-  without request bodies or cookies. Existing assertions and deadlines are unchanged.
-  Local normal and slower-browser controls passed; they do not close this defect.
-  Lane D item D50 owns the reproduction and fix. Remove its temporary diagnostic
-  workflow before landing and require the portal suite on the fix's exact CI head.
+- The remote-DNS journey waits until its fixture has dropped a successful apply
+  reply before starting the four-second saved-name assertion. Previously that UI
+  wait also timed the fixture's forwarding and fault injection. A controlled
+  4.5-second hold after the committed HTTP 200 reproduced the timeout while the
+  browser was still waiting for the reply; the same case passes after the explicit
+  injection acknowledgement. The English/Spanish journeys keep every existing
+  assertion, and the delayed-injection case guards the ordering.
+- The failure in [CI 36738638444](https://github.com/waitron-io/waitron-cloud/actions/runs/36738638444)
+  predates these diagnostics, so you cannot attribute that historical failure to
+  this mechanism with certainty. The test records bounded request/status events,
+  injection stages and the setup screen if it fails again. Investigate any new
+  failure from that evidence; a passing repeat alone does not establish its cause.
 
 ## First working milestone
 

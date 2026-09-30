@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import axe from 'axe-core';
 import type {Page} from 'playwright';
 import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
 import {RemoteAccessStore} from '../../../packages/remote-access/src/placement.ts';
 import {startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
-for(const locale of ['en','es'] as const)test(`${locale} owner changes remote DNS at phone width and reconciles a lost reply`,async t=>{
+for(const {locale,replyDelayMs} of [{locale:'en',replyDelayMs:0},{locale:'es',replyDelayMs:0},{locale:'en',replyDelayMs:4500}] as const)test(`${locale} owner changes remote DNS at phone width and reconciles a lost reply${replyDelayMs?' after delayed fault injection':''}`,async t=>{
  let page:Page|undefined;const started=Date.now();const events:unknown[]=[];
  const record=(event:unknown)=>{if(events.length<60)events.push({afterMs:Date.now()-started,event});};
  let assigned='';const f=await startPortalFixture(undefined,async name=>[name.startsWith('_acme')?'_acme-challenge.'+assigned:assigned]);try{
@@ -28,8 +29,17 @@ for(const locale of ['en','es'] as const)test(`${locale} owner changes remote DN
   const confirm=page.getByRole('button',{name:locale==='en'?'Check DNS and use this name':'Comprobar DNS y usar este nombre',exact:true});await confirm.click();await section.getByText(locale==='en'?'Name saved. Access remains pending until the certificate and venue settings are ready.':'Nombre guardado. El acceso sigue pendiente hasta que el certificado y la configuración del local estén listos.',{exact:true}).waitFor();
   assert.equal((await f.db.pool.query("SELECT hostname FROM remote_hostnames WHERE venue_id=$1 AND kind='staff'",[v.venueId])).rows[0].hostname,'staff.cafe.example');
   await input.fill(assigned);await page.getByRole('button',{name:locale==='en'?'Review DNS settings':'Revisar DNS',exact:true}).click();
-  await page.route('**/api/account/remote-access/apply',async route=>{record('lost-reply fetch started');const response=await route.fetch();record({lostReplyStatus:response.status()});await route.abort('failed');record('lost-reply aborted');},{times:1});
-  await confirm.click();await section.getByText(locale==='en'?'Name saved. Access remains pending until the certificate and venue settings are ready.':'Nombre guardado. El acceso sigue pendiente hasta que el certificado y la configuración del local estén listos.',{exact:true}).waitFor();
+  // The UI deadline starts after the fixture drops the committed reply, not while it is still forwarding it.
+  let finishInjection!:(status:number)=>void;
+  const injectedStatus=new Promise<number>(resolve=>{finishInjection=resolve;});
+  await page.route('**/api/account/remote-access/apply',async route=>{
+   try{
+    record('lost-reply fetch started');const response=await route.fetch();record({lostReplyStatus:response.status()});
+    if(replyDelayMs)await delay(replyDelayMs);
+    await route.abort('failed');record('lost-reply aborted');finishInjection(response.status());
+   }catch(error){record({injectionError:error instanceof Error?error.name:'unknown'});finishInjection(0);}
+  },{times:1});
+  await confirm.click();assert.equal(await injectedStatus,200,'the lost reply must follow a successful committed apply');await section.getByText(locale==='en'?'Name saved. Access remains pending until the certificate and venue settings are ready.':'Nombre guardado. El acceso sigue pendiente hasta que el certificado y la configuración del local estén listos.',{exact:true}).waitFor();
   assert.equal((await f.db.pool.query('SELECT count(*) FROM remote_hostname_changes')).rows[0].count,'2');
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false');await section.getByRole('button',{name:c.refreshStatus,exact:true}).click();await section.getByRole('alert').waitFor();assert.equal(await input.count(),0);
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=true');await section.getByRole('button',{name:c.refreshStatus,exact:true}).click();await input.waitFor();
