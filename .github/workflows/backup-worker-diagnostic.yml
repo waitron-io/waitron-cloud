@@ -27,39 +27,17 @@ jobs:
           docker version
           uname -a
           docker info --format '{{.CgroupVersion}} {{.CgroupDriver}}'
-      - name: Capture normal package attachment, state and cleanup boundaries
+      - name: Capture package lifecycle events without wrapping Docker commands
         run: |
-          cat > /tmp/d48-boundary-probe.mjs <<'NODE'
+          cat > /tmp/d48-event-only-probe.mjs <<'NODE'
           import {spawn,execFileSync} from 'node:child_process';
-          import {mkdir,writeFile,chmod,appendFile} from 'node:fs/promises';
+          import {mkdir,writeFile,appendFile} from 'node:fs/promises';
           import {join,resolve} from 'node:path';
           import {createInterface} from 'node:readline';
           const directory=resolve(process.env.PROBE_OUTPUT??'/tmp/d48-boundary');
           await mkdir(directory,{recursive:true});
           const realDocker=execFileSync('which',['docker'],{encoding:'utf8'}).trim();
-          const trace=join(directory,'commands.jsonl'),eventsPath=join(directory,'events.jsonl');
-          const wrapper=`#!${process.execPath}
-          const {spawn}=require('node:child_process'),{appendFileSync}=require('node:fs');
-          const args=process.argv.slice(2),operation=args[0];
-          const name=args.find(arg=>/^cloud-verify-[a-f0-9-]+$/.test(arg));
-          const observe=name&&['start','inspect','rm'].includes(operation),began=Date.now();
-          let stdout='',stderr='';
-          const child=spawn(${JSON.stringify(realDocker)},args,{stdio:['inherit','pipe','pipe']});
-          child.stdout.on('data',chunk=>{process.stdout.write(chunk);if(observe&&stdout.length<65536)stdout+=chunk;});
-          child.stderr.on('data',chunk=>{process.stderr.write(chunk);if(observe&&stderr.length<65536)stderr+=chunk;});
-          const record=(extra)=>{if(observe)appendFileSync(${JSON.stringify(trace)},JSON.stringify({time:Date.now(),began,operation,name,...extra})+'\\n');};
-          child.on('error',error=>{record({spawnCode:error.code});process.exitCode=1;});
-          child.on('close',(code,signal)=>{
-           let state;
-           if(operation==='inspect'&&code===0){try{const info=JSON.parse(stdout)[0];state={status:info.State.Status,exitCode:info.State.ExitCode,oomKilled:info.State.OOMKilled,startError:Boolean(info.State.Error),startedAt:info.State.StartedAt,finishedAt:info.State.FinishedAt};}catch{state={parseFailed:true};}}
-           const stderrKinds=[];
-           for(const [kind,pattern] of [['missing',/No such container/i],['daemon',/Cannot connect|error during connect|connection refused/i],['attach',/attach|hijack/i],['eof',/\\bEOF\\b/],['reset',/connection reset|broken pipe/i],['runtime',/OCI runtime|failed to create task/i]])if(pattern.test(stderr))stderrKinds.push(kind);
-           record({code,signal,state,stderrBytes:Buffer.byteLength(stderr),stderrKinds});
-           process.exitCode=code??1;
-          });
-          for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>child.kill(signal));
-          `;
-          await writeFile(join(directory,'docker'),wrapper);await chmod(join(directory,'docker'),0o700);
+          const eventsPath=join(directory,'events.jsonl');
           let eventWrites=Promise.resolve(),eventCount=0,eventError;
           const events=spawn(realDocker,['events','--since',new Date().toISOString(),'--filter','label=cloud.backup-verifier.owner','--format','{{json .}}'],{stdio:['ignore','pipe','pipe']});
           const eventClosed=new Promise(resolve=>events.once('close',(code,signal)=>resolve({code,signal})));
@@ -74,23 +52,23 @@ jobs:
           let command;
           try{
            const args=process.argv.slice(2);if(!args.length)throw Error('Supply a diagnostic command');
-           command=spawn(args[0],args.slice(1),{stdio:'inherit',env:{...process.env,PATH:directory+':'+process.env.PATH}});
+           command=spawn(args[0],args.slice(1),{stdio:'inherit',env:process.env});
            const result=await new Promise((resolve,reject)=>{command.once('error',reject);command.once('close',(code,signal)=>resolve({code,signal}));});
            await writeFile(join(directory,'result.json'),JSON.stringify({result,eventCount,eventError}));
            process.exitCode=result.code??1;
           }finally{
            command?.kill('SIGTERM');events.kill('SIGTERM');const closed=await eventClosed;await eventWrites;
-           console.log(JSON.stringify({boundaryProbe:directory,eventCount,eventError,eventStreamClosed:closed}));
+           console.log(JSON.stringify({eventOnlyProbe:directory,eventCount,eventError,eventStreamClosed:closed}));
            if(eventError||!eventCount)process.exitCode=1;
           }
           NODE
           for attempt in 1 2 3; do
-            PROBE_OUTPUT=/tmp/d48-boundary/$attempt node /tmp/d48-boundary-probe.mjs node scripts/test-postgres.mjs exec pnpm --dir packages/backups test || exit $?
+            PROBE_OUTPUT=/tmp/d48-boundary/$attempt node /tmp/d48-event-only-probe.mjs node scripts/test-postgres.mjs exec pnpm --dir packages/backups test || exit $?
           done
       - name: Retain bounded Docker diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backup-worker-boundaries
+          name: backup-worker-events
           path: /tmp/d48-boundary/*/*.json*
           retention-days: 7
