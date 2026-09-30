@@ -708,6 +708,16 @@ notifications separately.
   and verified fallback protection remain covered. See the containment guide for the exact
   executed cases; shared-daemon loss during active cleanup, physical host crashes and
   production recovery timings remain unmeasured.
+  **Open: intermittent container-worker verdict.** [CI run 36702956368, attempt 1](https://github.com/waitron-io/waitron-cloud/actions/runs/36702956368/attempts/1)
+  expected a failed archive check but found it pending. Its cause remains unresolved:
+  local and Ubuntu probes have not reproduced it. [PR #99](https://github.com/waitron-io/waitron-cloud/pull/99)
+  adds verifier outcome, fixed Docker failure details and queued-job state to the
+  unchanged test assertion; a forced start refusal proves those diagnostics report
+  created state, attach exit 125 and `verification_unavailable`. This is diagnostic
+  coverage, not a fix. The temporary stress workflow is removed. On the next natural
+  failure, use those details to identify the failing boundary, reproduce it and fix
+  its cause while preserving D37's distinction between infrastructure uncertainty
+  and an invalid archive. Passing probes do not close this defect.
   D48 investigation follow-up: concurrent verifier calls with the same owner can fail
   infrastructure inspection during reclamation: one call lists a completed container
   while another removes it before the first can inspect it. A local two-caller,
