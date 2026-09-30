@@ -1,5 +1,6 @@
 import {createRequire} from 'node:module';
 import {checkConsumerSchema,loadRuntime,runtimeEnvironment} from './runtime.mjs';
+import {localHealthFetch} from './operations-health.mjs';
 import {operationsStatus} from '../../packages/operations/src/status.ts';
 
 const {Pool}=createRequire(new URL('../../packages/operations/package.json',import.meta.url))('pg');
@@ -12,7 +13,7 @@ try{
  pool.on('error',()=>{});
  await checkConsumerSchema(pool,process.cwd());
  const snapshot=await operationsStatus(pool,{controlApiUrl:'http://account:3000',
-  fetch:(url,options)=>fetch(url,{...options,headers:{...options.headers,host:'localhost:3000'}})});
+  fetch:localHealthFetch});
  process.stdout.write(JSON.stringify(snapshot)+'\n');
 }catch{console.error('Local operations inspection failed');process.exitCode=1;}
 finally{try{await pool?.end();}catch{process.exitCode=1;}}
