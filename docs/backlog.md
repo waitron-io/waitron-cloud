@@ -214,8 +214,16 @@ venue does not subscribe to remote access or backups.
 - **Transactional email.** Offer managed SMTP delivery for password resets and other
   account administration emails from on-prem Waitron. Scope the relay to these
   messages, authenticate requests and handle delivery failures and abuse. The existing
-  Cloud email transport is a starting point; serving connected Waitron installations
-  still needs implementation.
+  Cloud email transport is a starting point. The [version 1 relay contract](transactional-email-relay-contract.md)
+  now scopes installation/account grants, fixed templates, encrypted admission,
+  retry versus uncertain acceptance, abuse limits, metering and customer status.
+  The relay remains unimplemented and disabled: build the bounded Cloud slices and
+  separately queue Waitron's durable caller/status work before a joint local proof.
+  Decide provider, processing location, account consent, allowance/debit policy and
+  password-reset-limit behaviour before production. The source trace also found
+  Waitron's profile-email catch logs raw exception text (`apps/server/src/me-api.ts`
+  at `0fbcde001`); actual secret exposure is unverified. The Waitron caller item must
+  use bounded diagnostics and test secret-bearing exceptions before integration.
 - **Mobile notifications (candidate).** Consider a free allowance for mobile phone
   notifications. Choose the delivery channel and validate its costs before committing
   to inclusion; push notifications and SMS need separate cost estimates.
@@ -223,7 +231,9 @@ venue does not subscribe to remote access or backups.
   limits and show usage and remaining allowance. Define the allowance sizes, reset
   periods and behaviour at the limit, including password-reset delivery. Settle how
   venue-generated requests count against an account and prevent multiple installations
-  from bypassing its allowance. Keep provider credentials in Cloud.
+  from bypassing its allowance. The relay contract proposes one unit per admitted
+  message and shared account reservations, not an implemented balance or an approved
+  allowance policy. Keep provider credentials in Cloud.
 
 Low operating cost is an assumption to validate against provider pricing and expected
 usage. Estimate costs and abuse exposure before setting allowances, and apply the
@@ -745,7 +755,7 @@ notifications separately.
 | Analytics and reports | Choose ingestion, supported source versions, country and cell placement, search/aggregation engine, scheduled reports and group reporting. Elasticsearch is a candidate. |
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |
 | Address lookup (free) | [Scope researched on 2026-09-30](address-lookup-scope.md); provider and implementation remain open. Resolve durable storage rights, Spain-first quality test, peak-day costs, account attribution and allowance policy before implementing lookup and completion for open-source Waitron. See [free services](#free-services-for-open-source-waitron). |
-| Messaging | Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
+| Messaging | The [version 1 on-prem relay contract](transactional-email-relay-contract.md) is scoped; Cloud grants/queue/routes, Waitron durable caller, joint proof and production decisions remain open. Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
 | Automated upgrades | Treat cloud services, cloud-hosted Waitron and on-prem installations separately; choose rollout groups, compatibility, maintenance windows, pause and recovery behaviour. |
 | Monitoring | External venue and remote-route health, backup staleness, customer incidents and bilingual email alerts are implemented locally. Accepted public/staff probes now emit retry-safe organisation usage events and the portal shows their measured total. Add filing/device signals, broader functional checks and performance evidence. The local deployment now schedules usage reconciliation; define production operations, cost, allowance and limit policy before using measurements for enforcement. |
 
