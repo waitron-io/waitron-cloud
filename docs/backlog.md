@@ -280,9 +280,12 @@ notifications separately.
   not appear within four seconds. Portal results were 110/111. The unchanged
   focused English/Spanish cases passed 2/2 locally on base `21274d4`; the cause
   remains unverified. No portal, remote-access, account-http or dependency change
-  is included in PR #99. Separately scope a reproduction with request/reconciliation
-  evidence, then fix the demonstrated cause without increasing the assertion
-  timeout or rerunning CI to dismiss it. This blocks PR #99's green-CI landing gate.
+  is included in PR #99. [PR #100](https://github.com/waitron-io/waitron-cloud/pull/100)
+  fixes a demonstrated fixture-ordering timeout and adds request/reconciliation
+  diagnostics without increasing the assertion timeout. Its exact-merge CI passed.
+  See [the ordering receipt](#portal-lost-reply-test-ordering) for the controlled
+  reproduction and the uncertainty about this historical failure. Investigate a
+  future failure from its diagnostics; passing repeats alone do not explain it.
 
 - **CI execution budget.** [Run 36723901567](https://github.com/waitron-io/waitron-cloud/actions/runs/36723901567)
   on `bcda7444aa8b452a8023b905b09069a34522ee3c` was cancelled at the job's
