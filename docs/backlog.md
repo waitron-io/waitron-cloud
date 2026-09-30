@@ -273,6 +273,17 @@ notifications separately.
 
 ## Platform work to scope
 
+- **Remote DNS lost-reply browser failure.** [CI run 36738638444](https://github.com/waitron-io/waitron-cloud/actions/runs/36738638444)
+  on `1963b0735ef38cf92c5e79640cae0f8e2d8f5a95` passed all 147 backup tests,
+  then failed the English `apps/portal/test/remote-browser.test.ts:25` case:
+  after the apply response was deliberately lost, the saved-name message did
+  not appear within four seconds. Portal results were 110/111. The unchanged
+  focused English/Spanish cases passed 2/2 locally on base `21274d4`; the cause
+  remains unverified. No portal, remote-access, account-http or dependency change
+  is included in PR #99. Separately scope a reproduction with request/reconciliation
+  evidence, then fix the demonstrated cause without increasing the assertion
+  timeout or rerunning CI to dismiss it. This blocks PR #99's green-CI landing gate.
+
 - **CI execution budget.** [Run 36723901567](https://github.com/waitron-io/waitron-cloud/actions/runs/36723901567)
   on `bcda7444aa8b452a8023b905b09069a34522ee3c` was cancelled at the job's
   15-minute limit after reporting 144/144 backup tests and 111/111 portal tests
