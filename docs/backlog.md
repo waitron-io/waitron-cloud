@@ -299,8 +299,17 @@ notifications separately.
   on `bcda7444aa8b452a8023b905b09069a34522ee3c` was cancelled at the job's
   15-minute limit after reporting 144/144 backup tests and 111/111 portal tests
   passed. The job annotation confirms the time limit; the whole run did not pass.
-  Measure package and setup durations before choosing a job split or a revised
-  overall budget. Preserve individual test deadlines and assertions. This is
+  D47's [run 36775499697](https://github.com/waitron-io/waitron-cloud/actions/runs/36775499697)
+  also reached that limit during the portal suite. Registration passed 357/357 in
+  203.7 seconds, backups 147/147 in 183.0 seconds, remote access 62/62 in 51.3
+  seconds and account HTTP 165/165 in 205.0 seconds. The preceding main run
+  [36767035514](https://github.com/waitron-io/waitron-cloud/actions/runs/36767035514)
+  completed in 14m39s; its registration suite had 321 tests and took 153.9 seconds.
+  The whole-job allowance is now 20 minutes to accommodate the added relay
+  integration coverage. Individual test deadlines and assertions are unchanged.
+  These two runs measure elapsed time, not an isolated attribution of every
+  duration change to D47. CI must still complete on the updated head; consider
+  splitting the job if further suite growth consumes this margin. This remains
   separate from D48's intermittent backup verdict and is not a diagnosis of it.
 
 - **Shared UI.** [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519)
