@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
-import {mkdtemp,readFile,writeFile,mkdir,rm,rename,realpath} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,mkdir,rm,rename,realpath,access} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {createRequire} from 'node:module';
 import {generateKeyPairSync,randomUUID,randomBytes,X509Certificate} from 'node:crypto';
-import {request} from 'node:https';
+import {request,Agent} from 'node:https';
 import {connect as tlsConnect} from 'node:tls';
 import {setTimeout as delay} from 'node:timers/promises';
 import {startPortalFixture} from '../apps/portal/test/fixtures.ts';
@@ -22,6 +22,8 @@ import {BackupObjects,receipt as backupReceipt} from '../packages/backups/src/st
 import {BackupCatalogue} from '../packages/backups/src/catalogue.ts';
 import {startBackupStorage} from './backup-storage-fixture.mjs';
 import {startAcme,docker,waitFor} from './remote-fixtures.mjs';
+import {measureControlledGate,measureGatewayTraffic,sample,accessCookie} from './public-gateway-limits.mjs';
+import {verifyPublicGatewayLimitsReceipt} from './verify-public-gateway-limits-receipt.mjs';
 const waitron=resolve(process.env.WAITRON_CHECKOUT??'');
 assert.ok(process.env.WAITRON_CHECKOUT,'Set WAITRON_CHECKOUT');
 const require=createRequire(join(waitron,'apps/server/package.json'));
@@ -29,6 +31,7 @@ const acmeRequire=createRequire(new URL('../packages/remote-access/package.json'
 const {crypto:acmeCrypto}=acmeRequire('acme-client');
 const root=await mkdtemp(join(tmpdir(),'cloud-remote-')),name='cloud-remote-'+randomUUID();
 const owned=new Set(),children=[],roots=[],checks=[],backupObjectClients=[],backupClients=new Map();
+let limitsReceipt;
 let f,acme,s3,catalogue,network=false,gatewayPort,gatewayIp,targetGatewayPort,targetGatewayIp;
 const backupVault=new BackupKeyVault(randomBytes(32));
 const backupObjects=location=>{if(!backupClients.has(location.bucket)){const client=new BackupObjects(location,s3.admin,s3.ca);backupClients.set(location.bucket,client);backupObjectClients.push(client);}return backupClients.get(location.bucket);};
@@ -77,8 +80,8 @@ function startPeer(venue,index){
 function remoteAt(port,host,path='/public/availability',options={}){
  return new Promise((resolve,reject)=>{
   const body=options.body===undefined?undefined:JSON.stringify(options.body);
-  const req=request({host:'127.0.0.1',port,servername:host,ca:acme.certificateRoot,agent:false,path,method:options.method??(body?'POST':'GET'),headers:{Host:host,...(body?{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)}:{}),...options.headers}},res=>{let text='';res.on('data',v=>text+=v);res.on('error',reject);res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,text,certificate:res.socket?.getPeerCertificate?.().fingerprint256}));});
-  req.setTimeout(4000,()=>req.destroy(Error('request timeout')));req.on('error',reject);req.end(body);
+  const req=request({host:'127.0.0.1',port,servername:host,ca:acme.certificateRoot,agent:options.agent??false,path,method:options.method??(body?'POST':'GET'),headers:{Host:host,...(body?{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)}:{}),...options.headers}},res=>{let text='';res.on('data',v=>text+=v);res.on('error',reject);res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,text,certificate:res.socket?.getPeerCertificate?.().fingerprint256}));});
+  req.setTimeout(options.timeout??4000,()=>req.destroy(Error('request timeout')));req.on('error',reject);req.end(body);
  });
 }
 const remote=(host,path,options)=>remoteAt(gatewayPort,host,path,options);
@@ -165,6 +168,26 @@ try{
  const cookie=await solve(publicHost);assert.equal((await remote(publicHost,'/public/availability',{headers:{cookie}})).status,200);
  assert.equal((await remote(venues[1].placement.publicHostname,'/public/availability',{headers:{cookie}})).status,403);
  checks.push('real browser Worker proof of work, rejected public calls have zero upstream requests, blocked manager paths, overwritten proxy headers, cross-host bot cookie refusal');
+ if(process.env.PUBLIC_LIMITS_RECEIPT){
+  const controlled=await measureControlledGate();
+  const restart=async()=>{docker('rm','-f',name+'-gateway');owned.delete(name+'-gateway');startGateway();await waitFor(async()=>{for(const venue of venues)if((await remote(venue.placement.staffHostname)).status!==200)return false;return true;},180000);};
+  await restart();
+  const agents=venues.map(()=>new Agent({keepAlive:true,maxSockets:8})),hosts=venues.map(v=>v.placement.publicHostname);
+  let gateway;
+  try{
+   const send=(host,path,options={})=>remote(host,path,{...options,agent:agents[hosts.indexOf(host)],timeout:8000});
+   gateway=await measureGatewayTraffic({hosts,send,failA:async()=>{docker('rm','-f',venues[0].peer);owned.delete(venues[0].peer);},recoverA:async()=>{startPeer(venues[0],0);await waitFor(async()=>{try{return (await remote(venues[0].placement.staffHostname)).status===200;}catch{return false;}},180000);}});
+  }finally{for(const agent of agents)agent.destroy();}
+  await restart();
+  gateway.connectionBurst=await sample('fresh-connections',Array.from({length:80},(_,i)=>()=>remote(hosts[i%2])));
+  assert.ok(gateway.connectionBurst.statuses.transport>0);assert.ok(gateway.connectionBurst.statuses['403']>0);
+  await restart();
+  const renewed=await Promise.all(hosts.map(host=>accessCookie(remote,host)));
+  gateway.afterRestart=await sample('after-restart',hosts.map((host,i)=>()=>remote(host,undefined,{headers:{cookie:renewed[i]}})));
+  assert.deepEqual(gateway.afterRestart.statuses,{200:2});
+  limitsReceipt={version:1,cloudHead:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),waitronHead:execFileSync('git',['-C',waitron,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),cloudDirty:execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim()!=='',waitronDirty:execFileSync('git',['-C',waitron,'status','--porcelain'],{encoding:'utf8'}).trim()!=='',venues:venues.map(({placement:p})=>({venueId:p.venueId,installationId:p.installationId,publicHostname:p.publicHostname})),controlled,gateway};
+  checks.push('bounded public gateway measurements complete; receipt awaits cleanup');
+ }else{
  // A compromised peer can broaden its own routes; the gateway still refuses venue-to-venue forwarding.
  docker('exec',venues[0].peer,'wg','set','wg-cloud','peer',gatewayKey.publicKey,'allowed-ips','10.77.17.0/24');docker('exec',venues[0].peer,'ip','route','add',venues[1].placement.address+'/32','dev','wg-cloud');
  const isolation=docker('exec',venues[0].peer,'node','-e',`const s=require('net').connect(443,'${venues[1].placement.address}');s.on('connect',()=>process.exit(1));s.on('error',()=>process.exit(0));setTimeout(()=>{s.destroy();process.exit(0)},1500);`);assert.equal(isolation,'');
@@ -266,5 +289,17 @@ try{
  docker('rm','-f',name+'-gateway');owned.delete(name+'-gateway');await secret(join(state,'accepted.json'),'{broken');startGateway();await waitFor(()=>docker('inspect','--format','{{.State.Running}}',name+'-gateway')==='false');assert.notEqual(docker('inspect','--format','{{.State.ExitCode}}',name+'-gateway'),'0');checks.push('corrupt gateway cache refuses startup');
  const receipt={version:2,cloudHead:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),cloudDirty:execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim()!=='',waitronDirty:execFileSync('git',['-C',waitron,'status','--porcelain'],{encoding:'utf8'}).trim()!=='',waitronHead:execFileSync('git',['-C',waitron,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),checks,replacementMs,revocationMs,functionalProbes,monitoring,movement,backupContinuity};
  if(process.env.REMOTE_RECEIPT)await secret(process.env.REMOTE_RECEIPT,JSON.stringify(receipt,null,2));console.log(JSON.stringify(receipt,null,2));
+ }
 }catch(error){for(const container of owned){try{console.error(container,docker('logs','--tail','30',container));}catch{}}throw error;}
 finally{for(const container of [...owned].reverse())docker('rm','-f',container);if(network)docker('network','rm',name);for(const child of children)await stop(child);for(const client of backupObjectClients)client.close();await s3?.stop();await acme?.close();await f?.close();for(const venueRoot of roots)await rm(venueRoot,{recursive:true,force:true});await rm(root,{recursive:true,force:true});}
+
+if(limitsReceipt){
+ const containers=docker('ps','-a','--format','{{.Names}}').split('\n').filter(n=>n===name||n.startsWith(name+'-')||n.startsWith(acme.name+'-'));
+ const networks=docker('network','ls','--format','{{.Name}}').split('\n').filter(n=>n===name||n===acme.name);
+ assert.equal(containers.length,0);assert.equal(networks.length,0);
+ for(const path of [root,...roots,acme.root])await assert.rejects(access(path),{code:'ENOENT'});
+ assert.ok(children.every(c=>c.child.exitCode!==null));
+ limitsReceipt.cleanup={containers:containers.length,networks:networks.length,temporaryDirectories:0,childProcesses:children.filter(c=>c.child.exitCode===null).length};
+ verifyPublicGatewayLimitsReceipt(limitsReceipt);
+ await secret(process.env.PUBLIC_LIMITS_RECEIPT,JSON.stringify(limitsReceipt,null,2));console.log(JSON.stringify(limitsReceipt,null,2));
+}

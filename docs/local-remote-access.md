@@ -401,3 +401,53 @@ for its bounds, durable evidence and JSON-line result contract. The monitor reco
 failure, stale-probe, certificate-expiry and recovery transitions. The portal shows the
 latest redacted public/staff evidence, and opted-in owners receive bilingual incident and
 recovery mail after current route authority is rechecked.
+
+## Measure shared public traffic limits
+
+Two venues can keep their sessions separate while still sharing capacity. Run the
+bounded traffic profile before choosing limits for customers behind a shared public
+IP address, such as an office or mobile carrier. Use the same prerequisites, image
+build and clean Cloud/Waitron checkouts as the remote proof above:
+
+```sh
+WAITRON_CHECKOUT=/absolute/path/to/waitron \
+  PUBLIC_LIMITS_RECEIPT=/tmp/cloud-public-limits.json \
+  node scripts/test-postgres.mjs exec node scripts/test-local-remote.mjs
+node scripts/verify-public-gateway-limits-receipt.mjs /tmp/cloud-public-limits.json
+```
+
+This mode reuses the two paired Waitron servers, test certificates, HAProxy gateway
+and WireGuard peers. It ends after the traffic measurements and cleanup; it does
+not repeat the backup, movement or monitoring milestone. The version 1 receipt
+names both code commits and venues, counts HTTP responses and connection refusals,
+and records minimum, median, 95th-percentile and maximum request latency. It is
+written only after cleanup succeeds and refuses dirty code checkouts.
+
+The real gateway profile sends solved and unsolved challenges, checks cross-host
+cookies, blocks staff paths and forged proxy headers, disconnects one venue while
+calling the other, and recovers it. Reused HTTPS connections isolate the public
+gate's request budget from HAProxy's connection budget. A separate burst opens 80
+fresh connections across both venues. Restart checks demonstrate recovery, not a
+persistent distributed allowance.
+
+A companion profile uses the unchanged public gate and two controlled HTTPS
+upstreams. It holds 64 requests until you can observe the other venue's refusal,
+then releases them and checks recovery. It also verifies request and response
+credential stripping, distinct venue bodies, expired challenges and access cookies,
+and rejection without upstream calls. Only this companion advances an injected
+clock; the Docker gateway uses wall-clock time. Run it and the receipt guards with
+`pnpm test:public-gateway-limits`.
+
+The current policy is shared: one source gets 120 gate requests per minute across
+all venues, and the gate has 64 upstream slots across all sources and venues.
+Challenge requests also spend that allowance. HAProxy separately permits at most
+32 concurrent connections and a connection rate of 60 per ten seconds from a
+source. Solving a challenge grants no separate allowance. A valid customer can
+therefore receive a refusal because another customer shares their address or
+because a different venue occupies the available slots. These are capacity
+interactions; the session and credential checks still apply.
+
+The profile retains those policy values. You still need to choose per-venue
+fairness and an authenticated automated-client policy. These local synthetic
+bursts do not establish a production throughput target, real-carrier false-positive
+rate, multi-gateway coordination, browser/device mix, or acceptable customer latency.
