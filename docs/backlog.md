@@ -28,6 +28,17 @@ candidate list and previous commercial reasoning. Remote access and backups are 
 agreed initial services. The first integration milestone is complete locally; the
 production release scope remains open.
 
+## Open portal browser investigation
+
+- The English remote-DNS lost-reply journey timed out waiting for the saved-name
+  notice in [CI 36738638444](https://github.com/waitron-io/waitron-cloud/actions/runs/36738638444).
+  The cause remains unverified. The test now records bounded remote request/status
+  events, the injected reply-loss stages and the current setup screen on failure,
+  without request bodies or cookies. Existing assertions and deadlines are unchanged.
+  Local normal and slower-browser controls passed; they do not close this defect.
+  Lane D item D50 owns the reproduction and fix. Remove its temporary diagnostic
+  workflow before landing and require the portal suite on the fix's exact CI head.
+
 ## First working milestone
 
 The [combined local receipt](launch-evidence.md#read-the-local-evidence-narrowly)
