@@ -57,7 +57,7 @@ for(const {locale,replyDelayMs} of [{locale:'en',replyDelayMs:0},{locale:'es',re
 
  }catch(error){
   // Keep the request sequence and current screen when a browser wait fails; omit cookies and bodies.
-  t.diagnostic(JSON.stringify({locale,events,screen:await page?.locator('.remote-setup').textContent({timeout:1000}).catch(()=>null)}));
+  t.diagnostic(JSON.stringify({locale,replyDelayMs,events,screen:await page?.locator('.remote-setup').textContent({timeout:1000}).catch(()=>null)}));
   throw error;
  }finally{await f.close();}
 });
