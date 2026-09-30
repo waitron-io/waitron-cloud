@@ -90,7 +90,11 @@ test('replay keys survive rotation; their loss fails closed without a second deb
  const a=await f.venue(),body:any={...a.body,class:'email_change',code:'012345',codeExpiresAt:new Date(Date.now()+600000).toISOString()};delete body.token;
  assert.equal((await submit(a,body)).status,202);const n=await count('relay_reservations');
  const row=(await f.db.pool.query('SELECT * FROM relay_messages WHERE message_id=$1',[body.messageId])).rows[0];
- assert.notEqual(row.binding,createHash('sha256').update(JSON.stringify(body)).digest('hex'));
+ // A database copy has the message metadata and can guess six-digit codes; neither
+ // a plain payload hash nor a public-metadata salt may validate those guesses.
+ const storedDigest=row.binding.split(':').at(-1);
+ assert.notEqual(storedDigest,createHash('sha256').update(JSON.stringify(body)).digest('hex'));
+ assert.notEqual(storedDigest,createHash('sha256').update(JSON.stringify(['waitron-relay-v1',a.installationId,body.messageId,JSON.stringify(body)])).digest('hex'));
  assert.equal(JSON.stringify(row).includes(body.code),false);
  const rotated={...f.relay,payloadKeys:{activeKeyId:'p2',keys:{...f.relay.payloadKeys.keys,p2:randomBytes(32).toString('hex')}},replayKeys:{activeKeyId:'r2',keys:{...f.relay.replayKeys.keys,r2:randomBytes(32).toString('hex')}}};
  try{
@@ -179,4 +183,22 @@ test('forged installation IDs spend ingress but cannot exhaust the victim instal
  const a=await f.venue(),b=await f.venue();
  for(let i=0;i<31;i++)assert.equal((await f.request('submit',a.proof('email-submit',a.body,{installationId:b.installationId}))).status,401);
  assert.equal((await submit(b)).status,202);
+});
+
+test('cancel waiting behind a started handoff cannot overwrite its sending state',async()=>{
+ const a=await f.venue();assert.equal((await submit(a)).status,202);
+ const handoff=await f.db.pool.connect();await handoff.query('BEGIN');
+ await handoff.query("UPDATE relay_messages SET state='sending',status_revision=2 WHERE message_id=$1",[a.body.messageId]);
+ const pending=read(a,'cancel');
+ try{
+  // Wait for cancellation's UPDATE to be blocked by the handoff transaction.
+  let blocked=false;
+  for(let i=0;i<100;i++){
+   const r=await f.db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'UPDATE relay_messages SET state=%'",[f.db.schema]);
+   if(r.rowCount){blocked=true;break;}await new Promise(r=>setTimeout(r,10));
+  }
+  assert.equal(blocked,true,'cancellation must reach the row lock before handoff commits');
+  await handoff.query('COMMIT');const r=await pending;assert.equal(r.status,200,r.text);assert.equal(r.body.state,'sending');assert.equal(r.body.statusRevision,2);
+  assert.ok((await f.db.pool.query('SELECT payload FROM relay_messages WHERE message_id=$1',[a.body.messageId])).rows[0].payload);
+ }finally{await handoff.query('ROLLBACK');handoff.release();await pending;}
 });

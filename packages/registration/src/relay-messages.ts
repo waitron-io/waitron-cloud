@@ -57,7 +57,9 @@ export class RelayMessages {
    }else if(!reservation.replay)messageError('relay_unavailable');
    if(row.state==='queued'&&(row.expires_at.getTime()<=now||action==='email-cancel')){
     const state=row.expires_at.getTime()<=now?'expired':'cancelled';
-    row=(await client.query<MessageRow>(`UPDATE relay_messages SET state=$3,reason=$3,payload=NULL,status_revision=status_revision+1 WHERE installation_id=$1 AND message_id=$2 RETURNING *`,[claims.installationId,body.messageId,state])).rows[0]!;
+    // Handoff may acquire the row after our read; only queued content can be cleared.
+    const changed=(await client.query<MessageRow>(`UPDATE relay_messages SET state=$3,reason=$3,payload=NULL,status_revision=status_revision+1 WHERE installation_id=$1 AND message_id=$2 AND state='queued' RETURNING *`,[claims.installationId,body.messageId,state])).rows[0];
+    row=changed??(await client.query<MessageRow>('SELECT * FROM relay_messages WHERE installation_id=$1 AND message_id=$2',[claims.installationId,body.messageId])).rows[0]!;
    }
    if(row.payload)this.#payload.open({...row,payload:row.payload});
    return {created,status:view(row)};
