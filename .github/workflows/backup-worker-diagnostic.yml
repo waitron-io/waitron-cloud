@@ -1,0 +1,33 @@
+name: Backup worker diagnostic
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  packages: read
+jobs:
+  reproduce:
+    if: github.head_ref == 'fix/backup-worker-container-race'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Reproduce with bounded repeated worker tests
+        run: |
+          node scripts/test-postgres.mjs exec node --input-type=module -e '
+            import {spawnSync} from "node:child_process";
+            for(let run=1;run<=40;run++) {
+              console.log("DIAGNOSTIC RUN",run);
+              const result=spawnSync(process.execPath,["--test","--test-timeout=30000","test/container-worker.test.ts"],{cwd:"packages/backups",stdio:"inherit"});
+              if(result.status!==0){process.exitCode=result.status??1;break;}
+            }
+          '
