@@ -206,9 +206,11 @@ These services should make ordinary account and address tasks easier even when a
 venue does not subscribe to remote access or backups.
 
 - **Address lookup.** Offer free geographic address lookup and completion to help
-  fill out addresses correctly. Choose the provider and confirm country coverage,
-  address quality, licensing and caching rules. Keep manual entry and correction
-  available when a lookup is unavailable or returns the wrong address.
+  fill out addresses correctly. The [2026-09-30 scope note](address-lookup-scope.md)
+  compares provider terms, cost scenarios, Waitron field mapping and account metering.
+  Choose the provider only after confirming durable address-storage rights, country
+  coverage, measured address quality, licensing, caching and peak-day capacity. Keep
+  manual entry and correction available when lookup is unavailable or wrong.
 - **Transactional email.** Offer managed SMTP delivery for password resets and other
   account administration emails from on-prem Waitron. Scope the relay to these
   messages, authenticate requests and handle delivery failures and abuse. The existing
@@ -225,9 +227,10 @@ venue does not subscribe to remote access or backups.
 
 Low operating cost is an assumption to validate against provider pricing and expected
 usage. Estimate costs and abuse exposure before setting allowances, and apply the
-existing Spain-first residency preference when selecting providers. Next: scope the
-address provider and Waitron integration, then the authenticated email relay; evaluate
-mobile notifications separately.
+existing Spain-first residency preference when selecting providers. Next: resolve the
+[address lookup scope note's](address-lookup-scope.md) storage, quality, cost and
+account-allowance gates, then the authenticated email relay; evaluate mobile
+notifications separately.
 
 ## Decisions in progress
 
@@ -741,7 +744,7 @@ mobile notifications separately.
 | Invoice archive | Define the archived objects and access grants, including owner-approved AEAT/advisor access, retention, download and customer exit. Have hosting/archive questions reviewed for the launch country. |
 | Analytics and reports | Choose ingestion, supported source versions, country and cell placement, search/aggregation engine, scheduled reports and group reporting. Elasticsearch is a candidate. |
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |
-| Address lookup (free) | Implement geographic address lookup and completion for open-source Waitron with a Cloud login and per-user limits; see [free services](#free-services-for-open-source-waitron). Validate provider coverage, address quality and costs. |
+| Address lookup (free) | [Scope researched on 2026-09-30](address-lookup-scope.md); provider and implementation remain open. Resolve durable storage rights, Spain-first quality test, peak-day costs, account attribution and allowance policy before implementing lookup and completion for open-source Waitron. See [free services](#free-services-for-open-source-waitron). |
 | Messaging | Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
 | Automated upgrades | Treat cloud services, cloud-hosted Waitron and on-prem installations separately; choose rollout groups, compatibility, maintenance windows, pause and recovery behaviour. |
 | Monitoring | External venue and remote-route health, backup staleness, customer incidents and bilingual email alerts are implemented locally. Accepted public/staff probes now emit retry-safe organisation usage events and the portal shows their measured total. Add filing/device signals, broader functional checks and performance evidence. The local deployment now schedules usage reconciliation; define production operations, cost, allowance and limit policy before using measurements for enforcement. |

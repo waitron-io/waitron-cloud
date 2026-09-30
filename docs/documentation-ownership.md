@@ -47,6 +47,9 @@ Shared unfinished work stays visible on both sides through references. In partic
 moving a provider-validation or promotion follow-up does not discharge its test gate.
 The cloud subscription journey starts inside Waitron, so its UI and local credential
 handling will need corresponding Waitron changes once the contract is agreed.
+Cloud owns the [free address lookup scope](address-lookup-scope.md), provider and
+account allowance decisions; Waitron owns the editable venue form and country-pack
+validation that any suggestion must pass.
 
 ## Backup and recovery design reconciliation
 
