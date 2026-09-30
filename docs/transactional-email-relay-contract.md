@@ -1,8 +1,9 @@
 # On-prem transactional email relay, version 1
 
-Status: proposed Cloud/Waitron contract, scoped on 2026-09-30. No relay route,
-account grant or allowance enforcement is implemented by this document. Production
-remains disabled until the decisions and proofs below are complete.
+Status: version 1 Cloud/Waitron contract, scoped on 2026-09-30. The internal
+local-proof grant and reservation core is implemented. No relay route, queue or
+worker is installed. Production remains disabled until the decisions and proofs
+below are complete.
 
 You should be able to send ordinary Waitron account emails after connecting a free
 Cloud account, without buying remote access or backups. The relay accepts a small
@@ -201,7 +202,7 @@ best-effort cancel suppress stale mail; Waitron's consume check remains decisive
 
 ## Allowances, abuse and status
 
-Recommend one customer unit per durably admitted message, retained for every later
+For production, recommend one customer unit per durably admitted message, retained for every later
 outcome, including uncertainty. This simple rule needs owner approval alongside the
 password-reset limit policy; it is not current pricing or an implemented entitlement.
 Rejected admissions cost zero customer units; exact retries cost zero extra units.
@@ -246,14 +247,89 @@ mail tests. Adversarial cases must include header/HTML injection, a phishing ori
 reused operation ID with a new recipient, database-only guessing of a short code,
 forged account attribution, restored old installation credentials, payload-key loss,
 and abuse by a valid compromised installation. Delete critical guards in disposable
-checkouts to show those tests fail. These are future acceptance requirements, not
-claims that the relay has passed them.
+checkouts to show those tests fail. Slice 1 tests the grant and reservation boundaries below. The remaining cases
+are acceptance requirements for their owning slices, not completed relay proofs.
 
 The Waitron profile caller currently logs raw exception text in its email-send catch
 (`me-api.ts` at the pinned revision above), while management logs fixed fields. Before
 wiring relay errors, replace that path with bounded diagnostics under a separately
 authorised Waitron change and test with a secret-bearing exception. This is a source
 finding; actual sensitive-log exposure has not been reproduced in this scope.
+
+## Use the disabled grant core locally
+
+An ordinary startup installs no relay capability. `new RelayGrantStore(pool)`
+refuses approvals and reservations, including reservations against existing grants.
+There is no production constructor mode, HTTP grant endpoint, machine action or
+send route. Cloud account emails and paid-service configuration remain independent.
+The core is in `packages/registration/src/relay-grants.ts`; importing it alone does
+not enable it. Migration 031 creates empty tables with grants disabled by default.
+
+For a disposable proof, you must supply `mode: 'local-proof'`, a consent version,
+a trusted `verifyOrigin` adapter, and every allowance field. The allowance fields
+are `version`, positive `units`, `periodSeconds`, a canonical UTC `epoch`,
+`excess: 'refuse'` and `debit: 'retain'`. These choices are explicit test settings,
+not approved production policy. Only installations whose stored environment is
+`test` qualify. The approving Cloud session must pass CSRF validation and belong
+to a currently enabled, email-verified organisation owner. A future browser route
+must also enforce the normal HTTP Origin check before calling this core.
+
+The origin adapter receives an installation ID, canonical HTTPS management origin
+and a fresh challenge. It must independently prove domain control and the HTTPS
+endpoint, and return that exact binding with both checks successful and an expiry.
+The request cannot submit its own proof. The adapter is trusted operator code;
+no production adapter or private-LAN verification policy exists. Current tests
+supply synthetic evidence and prove refusal of wrong, missing or expired bindings.
+They do **not** prove public DNS/HTTPS verification. A production adapter must add
+bounded network calls, redirect/address restrictions and real domain-control tests
+before enablement. No hostname is fetched by this core.
+
+You approve an installation with explicit `consent: true`, the configured consent
+version, an expiry, management origin and `expectedRevision` (zero initially).
+The core derives account, organisation, venue, environment and installation key
+from stored authority. A successful local approval enables that grant and returns
+its revision. Reapproval requires the current revision and advances it, so changing
+the origin invalidates old submissions. Revocation disables the grant; it remains
+available even when the store's admission switch is off. A current owner can revoke
+a grant after its original owner or installation loses authority.
+
+Reservations require a transaction and a separately authenticated installation ID
+and public key. The method takes only grant ID/revision, message ID and an opaque
+keyed replay binding. It does not authenticate machine signatures itself: slice 2
+must verify its signed envelope and lease while holding the same transaction's
+authority locks. Never construct the authenticated identity from message fields.
+Insert the encrypted queue record in that transaction and roll back both on failure.
+The core returns derived account/period attribution and whether this is a replay.
+Only new reservations may create queue records.
+
+One account's installations share the configured period allowance. Exact retries
+retain their original period and consume no new unit, including after a restart or
+period boundary. A changed replay binding or grant revision conflicts. Revoked,
+expired, replaced or key-changed installations and grants, lost ownership, disabled
+accounts and lost email verification cannot reserve, even on replay. A new owner
+needs fresh consent; earlier reservations retain the original account attribution.
+Reservations are retained regardless of subsequent outcome. There is no cleanup or
+refund operation in this slice.
+
+Policy definitions are immutable by version. An account is bound to the first
+policy it uses, so a second process or new installation cannot reset its balance by
+changing the version, limit or period. Changing that binding needs a separately
+specified upgrade policy; do not edit the rows to reset an exhausted allowance.
+Deadlines and UTC periods are checked with database time after lock waits.
+
+Run the focused proof from the repository root:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test \
+  test/relay-grants.test.ts test/account-mail.test.ts test/email-outbox.test.ts \
+  test/schema-compatibility.test.ts test/registration.test.ts \
+  ../account-http/test/relay-disabled.test.ts
+```
+
+This exercises PostgreSQL concurrency, rollover, rollback, process restart,
+authority changes and expiry after contention, plus the unchanged Cloud account
+mail tests. The HTTP test starts the normal server and confirms that the proposed
+relay routes return 404 and queue no mail. It sends no relay message.
 
 ## Decisions before production
 
