@@ -220,11 +220,14 @@ venue does not subscribe to remote access or backups.
   The disabled local-proof grant and account reservation core is implemented, with
   PostgreSQL concurrency, revocation, rollover and process-restart tests. The trusted
   origin-verifier boundary has synthetic evidence tests only; implement and prove
-  production domain/HTTPS verification before enablement. Signed admission, encrypted
-  queueing and the relay worker remain open. During signed admission, prove the
-  combined lock order against installation revocation/replacement; the core review
-  tested grant-level races but not those cross-module operations. Separately queue Waitron's durable
-  caller/status work before a joint local proof.
+  production domain/HTTPS verification before enablement. Signed submit/status/cancel
+  and an encrypted queue now have opt-in local HTTP/PostgreSQL proof for retries,
+  concurrent account reservations, key rotation/loss, cancellation and transaction
+  rollback, including admission racing installation revocation/replacement. Normal
+  startup keeps the routes absent. The relay worker, unattended expiry, retention,
+  production recipient/grant/queue-byte abuse bounds and provider spending controls
+  remain open. Separately queue Waitron's durable caller/status work before a joint
+  local proof.
   Decide provider, processing location, account consent, allowance/debit policy and
   password-reset-limit behaviour before production. The source trace also found
   Waitron's profile-email catch logs raw exception text (`apps/server/src/me-api.ts`
@@ -771,7 +774,7 @@ notifications separately.
 | Analytics and reports | Choose ingestion, supported source versions, country and cell placement, search/aggregation engine, scheduled reports and group reporting. Elasticsearch is a candidate. |
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |
 | Address lookup (free) | [Scope researched on 2026-09-30](address-lookup-scope.md); provider and implementation remain open. Resolve durable storage rights, Spain-first quality test, peak-day costs, account attribution and allowance policy before implementing lookup and completion for open-source Waitron. See [free services](#free-services-for-open-source-waitron). |
-| Messaging | The [version 1 on-prem relay contract](transactional-email-relay-contract.md) has a disabled local-proof grant/reservation core; production origin verification, Cloud queue/routes/worker, Waitron durable caller, joint proof and production decisions remain open. Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
+| Messaging | The [version 1 on-prem relay contract](transactional-email-relay-contract.md) has a disabled local-proof grant/reservation core; opt-in signed routes and an encrypted queue; production origin verification, relay worker, Waitron durable caller, joint proof and production decisions remain open. Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
 | Automated upgrades | Treat cloud services, cloud-hosted Waitron and on-prem installations separately; choose rollout groups, compatibility, maintenance windows, pause and recovery behaviour. |
 | Monitoring | External venue and remote-route health, backup staleness, customer incidents and bilingual email alerts are implemented locally. Accepted public/staff probes now emit retry-safe organisation usage events and the portal shows their measured total. Add filing/device signals, broader functional checks and performance evidence. The local deployment now schedules usage reconciliation; define production operations, cost, allowance and limit policy before using measurements for enforcement. |
 

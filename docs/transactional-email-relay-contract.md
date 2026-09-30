@@ -1,8 +1,8 @@
 # On-prem transactional email relay, version 1
 
 Status: version 1 Cloud/Waitron contract, scoped on 2026-09-30. The internal
-local-proof grant and reservation core is implemented. No relay route, queue or
-worker is installed. Production remains disabled until the decisions and proofs
+local-proof grant, reservation, signed admission and encrypted queue are implemented.
+No relay worker is installed. Normal startup exposes no relay routes. Production remains disabled until the decisions and proofs
 below are complete.
 
 You should be able to send ordinary Waitron account emails after connecting a free
@@ -22,7 +22,7 @@ the existing transport; its historical provider research needs a separate decisi
 | --- | --- |
 | Waitron caller | [`management-api.ts`](https://github.com/clintongormley/waitron/blob/0fbcde00151f47b5e300d4adad8d297f92d3bed3/apps/server/src/management-api.ts) builds `/manage/account?token=…&purpose=…` and an email fragment for invitations/resets. [`me-api.ts`](https://github.com/clintongormley/waitron/blob/0fbcde00151f47b5e300d4adad8d297f92d3bed3/apps/server/src/me-api.ts) sends email-change codes with the profile URL. Both call `AccountEmailSender`, returning `Promise<void>`; neither result is a durable Cloud delivery receipt. |
 | Waitron transport | [`boot.ts`](https://github.com/clintongormley/waitron/blob/0fbcde00151f47b5e300d4adad8d297f92d3bed3/apps/server/src/boot.ts) wires both callers through [`resolveEmailDelivery`](https://github.com/clintongormley/waitron/blob/0fbcde00151f47b5e300d4adad8d297f92d3bed3/apps/server/src/email-delivery.ts): configured SMTP, practice/development capture, or unconfigured. [`account-email.ts`](https://github.com/clintongormley/waitron/blob/0fbcde00151f47b5e300d4adad8d297f92d3bed3/apps/server/src/account-email.ts) renders invitation, password-reset and email-change templates. A durable Cloud client and explicit transport selection are missing. |
-| Machine identity | [`installation-proof.ts`](../packages/registration/src/installation-proof.ts) signs origin, action, installation, operation ID, time, lease and body. The action list has no email operation. [`installations.ts`](../packages/registration/src/installations.ts) separates preliminary authentication from a transaction that locks and rechecks authority. Preliminary signature verification alone is insufficient for relay admission. |
+| Machine identity | [`installation-proof.ts`](../packages/registration/src/installation-proof.ts) signs origin, action, installation, operation ID, time, lease and body. The action list now includes the three explicit email operations. [`installations.ts`](../packages/registration/src/installations.ts) separates preliminary authentication from a transaction that locks and rechecks authority. Preliminary signature verification alone is insufficient for relay admission. |
 | Cloud queue | [`email-outbox.ts`](../packages/registration/src/email-outbox.ts) encrypts payloads with separately supplied keys and leases worker claims. Its verification/reset liveness queries read Cloud account tables; they cannot validate an on-prem token. The existing `sent` result means transport acceptance, not inbox delivery. |
 | Usage | [`usage-metering.ts`](../packages/registration/src/usage-metering.ts) records organisation-scoped observations. It does not supply a free-service account balance. The [address scope](address-lookup-scope.md#the-cloud-account-owns-the-allowance-provider-calls-remain-separate) proposes a separate, explicit Cloud account attribution shared by installations. |
 
@@ -82,8 +82,9 @@ traffic reduce that abuse; they do not eliminate it. Suspend the grant when dete
 ## Proposed wire exchange
 
 The proposed routes are `POST /v1/installations/email/submit`, `/status` and `/cancel`.
-They do not exist yet. Add `email-submit`, `email-status` and `email-cancel` to the
-machine action catalogue deliberately, with negative cross-action tests. Reuse the
+They are installed only when you inject local-proof relay configuration into the
+account app/server. The machine catalogue includes `email-submit`, `email-status`
+and `email-cancel`, with negative cross-action tests. They reuse the
 signed `waitron-cloud-machine-v1` envelope over HTTPS and its current time window,
 key-bound lease and origin checks. Each signed body's `version` is `1`. Unsupported
 versions and unknown fields fail before queueing.
@@ -113,8 +114,10 @@ This illustrative decoded body uses synthetic values, not a runnable request:
 }
 ```
 
-Validate against Waitron's action format before implementation; the example token
-is deliberately not valid. Invitation/reset require a token and forbid code fields.
+The example token is deliberately not valid. The implemented validator accepts
+Waitron's current canonical 43-character base64url token (32 random bytes) and
+six-digit email-change code. The source check on 2026-09-30 found invitation
+expiry at 24 hours, reset/change at 30 minutes and code expiry at 10 minutes. Invitation/reset require a token and forbid code fields.
 Email change requires `code` and `codeExpiresAt`, forbids token, and expires at the
 earlier code/action deadline. Permit the supported English/Spanish locale variants
 and validated time zones; do not change Waitron's token format to fit Cloud's existing
@@ -258,10 +261,10 @@ finding; actual sensitive-log exposure has not been reproduced in this scope.
 
 ## Use the disabled grant core locally
 
-An ordinary startup installs no relay capability. `new RelayGrantStore(pool)`
+An ordinary startup installs no usable relay capability. `new RelayGrantStore(pool)`
 refuses approvals and reservations, including reservations against existing grants.
-There is no production constructor mode, HTTP grant endpoint, machine action or
-send route. Cloud account emails and paid-service configuration remain independent.
+There is no production constructor mode, HTTP grant endpoint or delivery worker.
+The signed message routes require explicit local-proof constructor configuration. Cloud account emails and paid-service configuration remain independent.
 The core is in `packages/registration/src/relay-grants.ts`; importing it alone does
 not enable it. Migration 031 creates empty tables with grants disabled by default.
 
@@ -297,11 +300,11 @@ Reservations require an open transaction and a separately authenticated installa
 ID and public key. An autocommit client receives `transaction_required` before any
 write, so a missing `BEGIN` cannot silently bypass the account lock or commit an
 orphan charge. The method takes only grant ID/revision, message ID and an opaque
-keyed replay binding. It does not authenticate machine signatures itself: slice 2
-must verify its signed envelope and lease while holding the same transaction's
-authority locks. Keep the documented account/membership/venue/installation lock
-order when integrating that caller, and test it against installation revocation and
-replacement; the core review exercised grant-level races only. Never construct the
+keyed replay binding. It does not authenticate machine signatures itself. The message store verifies
+the signed envelope and lease again while holding the reservation transaction's
+authority locks. A per-message lock comes first, followed by the existing
+account/membership/venue/installation/grant/account-allowance order. The local
+proof exercises admission alongside owner revocation and replacement. Never construct the
 authenticated identity from message fields.
 Insert the encrypted queue record in that transaction and roll back both on failure.
 The core returns derived account/period attribution and whether this is a replay.
@@ -334,7 +337,52 @@ node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node -
 This exercises PostgreSQL concurrency, rollover, rollback, process restart,
 authority changes and expiry after contention, plus the unchanged Cloud account
 mail tests. The HTTP test starts the normal server and confirms that the proposed
-relay routes return 404 and queue no mail. It sends no relay message.
+relay routes return 404 and queue no mail. It sends no relay message. The separate admission suite enables only local-proof
+routes over loopback HTTP and writes encrypted queue records.
+
+## Exercise signed admission locally
+
+You can inject `relay: {mode: 'local-proof', grants, payloadKeys, replayKeys}` into
+`startAccountServer`, with a lease issuer and the explicit grant configuration
+above. Both key rings use `{activeKeyId, keys}` with separately supplied 32-byte
+hex keys. There is no CLI/environment enablement switch. Production installations
+remain refused by the grant core. The test fixture in
+`packages/account-http/test/fixtures/relay.ts` supplies synthetic accounts, grants
+and keys; it is not production configuration.
+
+Run the real HTTP/PostgreSQL proof from the repository root:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node \
+  --test --test-timeout=30000 test/relay-messages.test.ts test/relay-disabled.test.ts
+```
+
+Submit is `202` after commit and `200` for an exact replay. Each successful reply
+contains only version, message ID, state, status revision, effective expiry and a
+fixed reason (initially `null`). The status and cancel routes use the same shape.
+Missing and foreign IDs both return `403 grant_unavailable`. The tests exercise
+all three classes, authority loss, concurrent account allowance, rollback, a new
+process, key rotation/loss and cancellation. No SMTP call is made.
+
+Recipients, names, tokens, codes and the verified management origin are encrypted
+with AES-256-GCM. Authentication binds ciphertext to installation, message, grant,
+revision, class and encryption key ID. Replay fingerprints use HMAC with a separate
+key ring and include the complete signed body. Keep old payload and fingerprint
+keys until all corresponding records and retry tombstones can be retired. Missing
+keys and invalid ciphertext fail closed with `503 relay_unavailable`; status never
+returns plaintext. Cancellation still clears unreadable queued content.
+
+Cancellation and observed expiry clear queued ciphertext and advance the status
+revision once. They keep the original reservation and replay tombstone. Cancellation
+cannot change `sending` or later states. No automatic cleanup or retention period
+is installed; choose those before production, and retain tombstones throughout the
+accepted retry window. The worker slice owns unattended expiry and delivery states.
+
+The local routes reuse 60 requests/minute per source and 30/minute per authenticated
+installation. Forged proofs cannot spend another installation's request limit.
+These fixture bounds and the explicitly configured account allowance are not an
+approved production abuse policy. Per-recipient/grant budgets, aggregate queued
+bytes, suppression and provider spending controls remain production prerequisites.
 
 ## Decisions before production
 

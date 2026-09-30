@@ -3,7 +3,7 @@ import type {CaptureOptions} from '@waitron-cloud/backups/captures';
 import { createServer, type Server } from 'node:http';
 import { getRequestListener } from '@hono/node-server';
 import type { Pool } from 'pg';
-import type { EmailOutbox, LeaseIssuer, PasswordScreeningProvider } from '@waitron-cloud/registration';
+import type { RelayAdmissionConfig, EmailOutbox, LeaseIssuer, PasswordScreeningProvider } from '@waitron-cloud/registration';
 import type { AccountHttpConfig } from './config.ts';
 import { portalErrorResponse, portalResponse, securityHeaders, type PortalAssets } from './portal.ts';
 import { createAccountApp } from './app.ts';
@@ -13,7 +13,7 @@ function unavailable(request?: Request, portal = false) {
     ...securityHeaders, 'Retry-After': '1',
   }});
 }
-export async function startAccountServer(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig; host?: string; port?: number; portalAssets?: PortalAssets;staffCertificates?:boolean;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider}): Promise<{server: Server; close(): Promise<void>}> {
+export async function startAccountServer(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig; host?: string; port?: number; portalAssets?: PortalAssets;relay?:RelayAdmissionConfig;staffCertificates?:boolean;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider}): Promise<{server: Server; close(): Promise<void>}> {
   const app = createAccountApp(options);
   let active = 0;let readinessActive=0; let stopping = false; let closing: Promise<void> | undefined;
   const listener = getRequestListener(async (request, bindings) => {
