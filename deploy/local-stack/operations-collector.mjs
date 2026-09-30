@@ -51,7 +51,7 @@ export async function serveCollection({collect,intervalMs=60000,port=9091,host='
  const done=(async()=>{
   try{while(!signal.aborted){await collection.poll();await delay(intervalMs,undefined,{signal});}}
   catch(error){if(!signal.aborted)throw error;}
-  finally{await new Promise(resolve=>server.close(resolve));}
+  finally{await new Promise(resolve=>{server.close(resolve);server.closeAllConnections();});}
  })();
  return {server,done};
 }

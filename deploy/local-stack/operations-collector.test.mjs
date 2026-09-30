@@ -3,7 +3,7 @@ import {execFileSync} from 'node:child_process';
 import {test} from 'node:test';
 
 // Missing opt-in wiring would leave the status command unscheduled.
-test('operations collection is opt-in, loopback-only and has no worker or Docker authority',()=>{
+test('operations collection is opt-in, loopback-only and has no writable mount or Docker socket',()=>{
  const config=profiles=>JSON.parse(execFileSync('docker',['compose',...profiles,'config','--format','json'],{encoding:'utf8'}));
  assert.equal(config([]).services['operations-collector'],undefined);
  const services=config(['--profile','operations']).services;
@@ -70,4 +70,18 @@ test('scrapes expose failure without stale health and the service closes on stop
   assert.equal((await fetch(`${url}/status`,{method:'POST'})).status,404);
  }finally{controller.abort();await done;}
  assert.equal(server.listening,false);
+});
+
+test('an unfinished HTTP request cannot hold collection shutdown open',async()=>{
+ const {serveCollection}=await import('./operations-collector.mjs');
+ const {connect}=await import('node:net');const {once}=await import('node:events');
+ const controller=new AbortController();
+ const {server,done}=await serveCollection({collect:async()=>{throw Error();},port:0,host:'127.0.0.1',signal:controller.signal});
+ const socket=connect(server.address().port,'127.0.0.1');
+ try{
+  await once(socket,'connect');socket.write('GET /status HTTP/1.1\r\nHost: localhost\r\n');
+  await new Promise(resolve=>setTimeout(resolve,20));controller.abort();
+  const stopped=await Promise.race([done.then(()=>true),new Promise(resolve=>setTimeout(()=>resolve(false),500))]);
+  assert.equal(stopped,true,'stop must close an unfinished scrape connection');
+ }finally{socket.destroy();controller.abort();await done;}
 });
