@@ -48,6 +48,7 @@ try{
   `import {createRequire} from 'node:module';import {loadRuntime,runtimeEnvironment} from './deploy/local-stack/runtime.mjs';const {Pool}=createRequire(new URL('./packages/operations/package.json',import.meta.url))('pg');const {DATABASE_URL}=runtimeEnvironment('usage',await loadRuntime('/run/local-stack'));const pool=new Pool({connectionString:DATABASE_URL});try{await pool.query('UPDATE usage_reconciliation_sources SET caught_up_at=clock_timestamp()');throw Error('write accepted');}catch(error){if(error.code!=='25006')throw error;console.log('read_only_refused');}finally{await pool.end();}`);
  assert.equal(readonly,'read_only_refused');
  const beforeRestart=Date.now();compose('restart','operations-collector');
+ origin=`http://${capture('port','operations-collector','9091')}`;
  const restarted=await until(value=>value.snapshot?.ready&&Date.parse(value.collection.succeededAt)>beforeRestart);
  const node=capture('ps','-q','operations-collector');compose('stop','operations-collector');
  const stopped=JSON.parse(run(['inspect',node],true))[0].State;assert.equal(stopped.ExitCode,0);assert.equal(stopped.OOMKilled,false);
