@@ -22,9 +22,59 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: docker build -q -t cloud-verifier-probe -f packages/backups/test/container-fixture/Dockerfile .
-      - name: Reproduce with the backup package's normal concurrent tests
+      - name: Record container environment
         run: |
-          for attempt in 1 2 3; do
-            echo "PACKAGE ATTEMPT $attempt"
-            node scripts/test-postgres.mjs exec pnpm --dir packages/backups test || exit 1
-          done
+          docker version
+          uname -a
+          docker info --format '{{.CgroupVersion}} {{.CgroupDriver}}'
+      - name: Probe file-backed verifier lifecycle transitions
+        run: |
+          cat > /tmp/d48-lifecycle-probe.mjs <<'NODE'
+          import assert from 'node:assert/strict';
+          import {execFileSync} from 'node:child_process';
+          import {randomUUID} from 'node:crypto';
+          import {createReadStream} from 'node:fs';
+          import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
+          import {tmpdir} from 'node:os';
+          import {join} from 'node:path';
+          import {pathToFileURL} from 'node:url';
+          import {DatabaseSync} from 'node:sqlite';
+          const {createContainerWaitronVerifier}=await import(pathToFileURL(join(process.cwd(),'packages/backups/src/container-verifier.ts')));
+          const {receipt}=await import(pathToFileURL(join(process.cwd(),'packages/backups/src/storage.ts')));
+          const count=Number(process.env.PROBE_COUNT??200),parallel=Number(process.env.PROBE_PARALLEL??2);
+          const image='cloud-verifier-probe',owner='d48-lifecycle-'+randomUUID(),root=await mkdtemp(join(tmpdir(),'d48-lifecycle-'));
+          const docker=(...args)=>execFileSync('docker',args,{encoding:'utf8',timeout:120000}).trim();
+          const db=new DatabaseSync(join(root,'source.db'));db.exec('CREATE TABLE proof(value TEXT)');db.close();
+          const body=await readFile(join(root,'source.db'));
+          for(const mode of [0,1,2])await writeFile(join(root,String(mode)),Buffer.concat([Buffer.from([mode]),body]));
+          const started=new Date().toISOString(),totals={};
+          let stopped=false;
+          try{
+           const results=await Promise.allSettled(Array.from({length:parallel},async(_,lane)=>{
+            const verify=await createContainerWaitronVerifier({image,owner:process.env.PROBE_SHARED_OWNER==='1'?owner:owner+'-'+lane,memoryMiB:192,scratchMiB:16});
+            for(let attempt=0;attempt<count&&!stopped;attempt++){
+             const mode=attempt%3,bytes=Buffer.concat([Buffer.from([mode]),body]);
+             let outcome='verified',details;
+             try{await verify({receipt:receipt(bytes),open:()=>createReadStream(join(root,String(mode))),async dispose(){}},{recoveryKey:'fixture'},
+              {sourceNodeId:'00000000-0000-4000-8000-'+String(mode).padStart(12,'0'),modules:{fake:1},capturedAt:'2026-09-26T00:00:00.000Z'},new AbortController().signal);
+             }catch(error){outcome=error.message;details={cause:error.cause,stack:error.stack};}
+             totals[outcome]=(totals[outcome]??0)+1;
+             if(outcome!==(mode===0?'verified':'backup.verifier_resource')){stopped=true;console.error(JSON.stringify({lane,attempt,mode,outcome,details}));throw Error('Unexpected verifier outcome');}
+             if(attempt%25===0)console.log(JSON.stringify({lane,attempt,totals}));
+            }
+           }));
+           console.log(JSON.stringify({started,finished:new Date().toISOString(),totals}));
+           if(results.some(result=>result.status==='rejected')){
+            for(let lane=0;lane<parallel;lane++)console.log(docker('events','--since',started,'--until',new Date().toISOString(),'--filter','label=cloud.backup-verifier.owner='+(process.env.PROBE_SHARED_OWNER==='1'?owner:owner+'-'+lane),'--format','{{json .}}'));
+            throw Error('Lifecycle probe failed; inspect outcome and Docker events');
+           }
+           for(let lane=0;lane<parallel;lane++)assert.equal(docker('ps','-aq','--filter','label=cloud.backup-verifier.owner='+(process.env.PROBE_SHARED_OWNER==='1'?owner:owner+'-'+lane)),'');
+          }finally{
+           for(let lane=0;lane<parallel;lane++){
+            const ids=docker('ps','-aq','--filter','label=cloud.backup-verifier.owner='+(process.env.PROBE_SHARED_OWNER==='1'?owner:owner+'-'+lane)).split(/\s+/).filter(Boolean);
+            if(ids.length)docker('rm','-f',...ids);
+           }
+           await rm(root,{recursive:true,force:true});
+          }
+          NODE
+          node /tmp/d48-lifecycle-probe.mjs

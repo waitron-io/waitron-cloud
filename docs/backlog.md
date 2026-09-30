@@ -700,6 +700,14 @@ notifications separately.
   and verified fallback protection remain covered. See the containment guide for the exact
   executed cases; shared-daemon loss during active cleanup, physical host crashes and
   production recovery timings remain unmeasured.
+  D48 investigation follow-up: concurrent verifier calls with the same owner can fail
+  infrastructure inspection during reclamation: one call lists a completed container
+  while another removes it before the first can inspect it. A local two-caller,
+  file-backed lifecycle probe reproduced `backup.verifier_container` from `inspect`
+  (exit 1); isolated-owner control passed 12 calls. This does not explain the original
+  sequential worker-test failure. Next: reproduce the list/remove/inspect boundary
+  deterministically and tolerate a container disappearing during reclamation while
+  keeping Docker failures and live/foreign ownership fences intact.
   A read-only
   dependency inventory and local drill now prove active-key rotation, old snapshot restore,
   worker restart and wrong/missing-key refusal without exposing secrets or deleting keys.
