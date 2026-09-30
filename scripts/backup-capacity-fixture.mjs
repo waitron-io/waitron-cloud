@@ -236,7 +236,11 @@ export async function runCapacityFixture(bytes, {onRoot = () => {}} = {}) {
     await waitEvent('download-started'); start=performance.now(); downloadAbort.abort(); await downloading;
     failures.downloadAbortMs=performance.now()-start;
     failures.cancelledDownloadStages=(await readdir(join(root,'download'))).length;
-    await assert.rejects(clients[0].stage('a/wrong-length',undefined,{temporaryRoot:join(root,'download')})); failures.wrongLengthRefused=true;
+    await assert.rejects(clients[0].stage('a/wrong-length',undefined,{temporaryRoot:join(root,'download')}));
+    // HTTP truncation fails in the transport; clean finite sources exercise both staging length guards.
+    await assert.rejects(stageReadable(Readable.from([Buffer.alloc(65536)]),65537,{temporaryRoot:join(root,'download')}),/backup.object_invalid/);
+    await assert.rejects(stageReadable(Readable.from([Buffer.alloc(65537)]),65536,{temporaryRoot:join(root,'download')}),/backup.object_invalid/);
+    failures.wrongLengthRefused=true;
     await assert.rejects(clients[0].putStaged('a/normal',sources[1],undefined,{temporaryRoot:join(root,'download')}),/backup.object_conflict/); failures.wrongDigestRefused=true;
     // Cancellation must leave both clients able to use their original immutable objects.
     for (const [i,client] of clients.slice(0,2).entries()) {
@@ -261,6 +265,8 @@ export async function runCapacityFixture(bytes, {onRoot = () => {}} = {}) {
   assert.equal(await exists(root),false);
   assert.equal(sockets.size,0); assert.equal(handlers.size,0);
   assert.deepEqual(errors,[]);
-  result.cleanup={remainingFiles:0,remainingBytes:0};
+  const residue=await diskUsage(root);
+  result.cleanup={remainingFiles:residue.files,remainingBytes:residue.bytes};
+  assert.deepEqual(result.cleanup,{remainingFiles:0,remainingBytes:0});
   return {fixture:result,cleanup:{rootRemoved:true,sockets:sockets.size,activeRequests:handlers.size}};
 }

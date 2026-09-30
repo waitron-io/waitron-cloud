@@ -48,6 +48,6 @@ export function verifyBackupCapacityReceipt(r) {
     number(f.failures.uploadAbortMs); number(f.failures.downloadAbortMs);
     assert.deepEqual(f.cleanup, {remainingFiles: 0, remainingBytes: 0});
   }
-  assert.deepEqual(r.cleanup, {rootRemoved: true, sockets: 0, activeRequests: 0});
+  assert.deepEqual(r.cleanup, r.fixtures.some(f => f.status === 'ran') ? {rootRemoved: true, sockets: 0, activeRequests: 0} : null);
   return r;
 }

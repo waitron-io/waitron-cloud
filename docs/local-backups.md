@@ -199,7 +199,8 @@ It requires 1 GiB available memory and eight times the fixture size plus 256 MiB
 of free disk. These are conservative fixture admission checks, not deployment
 requirements. A resource shortage records that size as skipped with its reason and
 measured resources. The validator requires a result or skip for every size; a skip
-does not prove that size works.
+does not prove that size works. If all sizes are skipped, cleanup is `null` because
+no fixture ran. Each executed size must independently pass its cleanup assertions.
 
 The version 2 receipt records the Cloud commit and dirty state, per-venue SHA-256
 and byte counts, concurrent upload/download times, and memory and disk observations.
@@ -218,8 +219,9 @@ The runner interrupts an upload after receiving part of its body, checks that it
 partial stage was removed before the retry, and verifies the retried stored object.
 It breaks a download mid-body and verifies the retried digest and length. Separate
 upload and download cancellations leave no partial publication or download stage;
-both clients can subsequently read their original objects. Truncated downloads and
-a create-only retry with another venue's bytes are refused. Before deleting its
+both clients can subsequently read their original objects. Truncated downloads are refused at the transport boundary; separate clean finite
+sources that are one byte short or long prove application length checking independently. A
+create-only retry with another venue's bytes are refused. Before deleting its
 exact temporary directory, the runner checks the store's exact object list and
 empty partial/download directories. It then closes clients, requests and sockets
 and verifies that the directory is gone.

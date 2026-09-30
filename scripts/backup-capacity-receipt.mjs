@@ -1,3 +1,4 @@
+import { MAX_OBJECT_BYTES } from '../packages/backups/src/object-transfer.ts';
 import { execFileSync } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { runCapacityFixture, preflight } from './backup-capacity-fixture.mjs';
@@ -6,9 +7,9 @@ const sizes = [32,128,512].map(n => n * 1024 * 1024);
 const receipt = {
   version:2,cloudHead:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
   cloudDirty:Boolean(execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim()),
-  profile:'controlled-tls-capacity',ceilingBytes:536870912,
+  profile:'controlled-tls-capacity',ceilingBytes:MAX_OBJECT_BYTES,
   environment:{platform:process.platform,arch:process.arch,node:process.version,samplingMs:20},fixtures:[],
-  cleanup:{rootRemoved:true,sockets:0,activeRequests:0},
+  cleanup:null,
 };
 for (const bytes of sizes) {
   const {reason,...resources} = await preflight(bytes);

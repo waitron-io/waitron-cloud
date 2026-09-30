@@ -37,3 +37,12 @@ for (const [name, change] of [
   ['open socket', r => r.cleanup.sockets = 1],
   ['unexpected secret', r => r.secretAccessKey = 'not allowed'],
 ]) test(`rejects ${name}`, () => {const r = capacityReceipt(); change(r); assert.throws(() => verifyBackupTransferReceipt(r));});
+
+test('an entirely skipped profile reports no cleanup rather than an unrun fixture removal', () => {
+  const r=capacityReceipt();
+  r.fixtures=r.fixtures.map(f => ({bytes:f.bytes,status:'skipped',reason:'insufficient disk',preflight:{availableMemoryBytes:2**32,freeDiskBytes:1}}));
+  r.cleanup=null;
+  assert.equal(verifyBackupTransferReceipt(r),r);
+  r.cleanup={rootRemoved:true,sockets:0,activeRequests:0};
+  assert.throws(() => verifyBackupTransferReceipt(r));
+});
