@@ -226,7 +226,10 @@ venue does not subscribe to remote access or backups.
   rollback, including admission racing installation revocation/replacement. Normal
   startup keeps the routes absent. The relay worker, unattended expiry, retention,
   production recipient/grant/queue-byte abuse bounds and provider spending controls
-  remain open. Separately queue Waitron's durable caller/status work before a joint
+  remain open. When D47 adds worker transitions, constrain state/reason pairs in
+  the schema and test every terminal transition; the current schema validates each
+  value separately, while current admission/cancel code writes consistent pairs.
+  Separately queue Waitron's durable caller/status work before a joint
   local proof.
   Decide provider, processing location, account consent, allowance/debit policy and
   password-reset-limit behaviour before production. The source trace also found

@@ -46,7 +46,7 @@ export async function relayFixture(){
  async function request(action:string,envelope:unknown,headers:Record<string,string>={}){
   const address=running.server.address();assert.ok(address&&typeof address!=='string');
   return new Promise<{status:number;body:any;text:string;headers:Record<string,unknown>}>((resolve,reject)=>{
-   const req=httpRequest({host:'127.0.0.1',port:address.port,path:'/v1/installations/email/'+action,method:'POST',headers:{host:'localhost','content-type':'application/json',...headers}},res=>{
+   const req=httpRequest({host:'127.0.0.1',port:address.port,path:action.startsWith('/')?action:'/v1/installations/email/'+action,method:'POST',headers:{host:'localhost','content-type':'application/json',...headers}},res=>{
     let text='';res.on('data',b=>{text+=b;});res.once('error',reject);res.once('end',()=>{let body:unknown;try{body=JSON.parse(text);}catch{body=null;}resolve({status:res.statusCode!,body,text,headers:res.headers});});
    });req.once('error',reject);req.end(JSON.stringify(envelope));
   });

@@ -22,7 +22,7 @@ test('signed admission commits one encrypted message and debit and replays after
  await f.restart();const again=await submit(a);assert.equal(again.status,200,again.text);assert.deepEqual(again.body,first.body);
  assert.deepEqual((await read(a)).body,first.body);assert.equal(await count('relay_reservations'),n+1);
  const row=(await f.db.pool.query('SELECT * FROM relay_messages WHERE message_id=$1',[a.body.messageId])).rows[0];
- for(const secret of [a.body.recipient,a.body.token,a.body.displayName])assert.equal(JSON.stringify(row).includes(secret),false);
+ for(const secret of [a.body.recipient,a.body.token,a.body.displayName]){assert.equal(JSON.stringify(row).includes(secret),false);assert.equal(row.payload.toString('utf8').includes(secret),false);}
  assert.ok(Buffer.isBuffer(row.payload));assert.ok(row.payload.length>28);
  assert.equal(await count('email_outbox'),0);
 });
@@ -95,7 +95,7 @@ test('replay keys survive rotation; their loss fails closed without a second deb
  const storedDigest=row.binding.split(':').at(-1);
  assert.notEqual(storedDigest,createHash('sha256').update(JSON.stringify(body)).digest('hex'));
  assert.notEqual(storedDigest,createHash('sha256').update(JSON.stringify(['waitron-relay-v1',a.installationId,body.messageId,JSON.stringify(body)])).digest('hex'));
- assert.equal(JSON.stringify(row).includes(body.code),false);
+ assert.equal(JSON.stringify(row).includes(body.code),false);assert.equal(row.payload.toString('utf8').includes(body.code),false);
  const rotated={...f.relay,payloadKeys:{activeKeyId:'p2',keys:{...f.relay.payloadKeys.keys,p2:randomBytes(32).toString('hex')}},replayKeys:{activeKeyId:'r2',keys:{...f.relay.replayKeys.keys,r2:randomBytes(32).toString('hex')}}};
  try{
   await f.restart(rotated);assert.equal((await submit(a,body)).status,200);
@@ -209,4 +209,35 @@ test('signed relay routes remain HTTP APIs when the account portal is served alo
   await f.restart(f.relay,true);const r=await submit(a);assert.equal(r.status,202,r.text);assert.equal((await read(a)).body.state,'queued');
   await f.restart(null,true);const disabled=await submit(a);assert.equal(disabled.status,404);assert.deepEqual(disabled.body,{error:'not_found'});
  }finally{await f.restart();}
+});
+
+test('a clock-ahead invitation is admitted but its queue deadline never exceeds 24 Cloud hours',async()=>{
+ const a=await f.venue(),cloudNow=Date.now(),issuedAt=cloudNow+3000,body={...a.body,class:'invitation',expiresAt:new Date(issuedAt+86400000).toISOString()};
+ const r=await f.request('submit',a.proof('email-submit',body,{issuedAt}));
+ assert.equal(r.status,202,r.text);assert.ok(Date.parse(r.body.expiresAt)<=Date.now()+86400000);assert.ok(Date.parse(r.body.expiresAt)<Date.parse(body.expiresAt));
+ const beyond={...body,messageId:randomUUID(),expiresAt:new Date(issuedAt+86400001).toISOString()};
+ assert.equal((await f.request('submit',a.proof('email-submit',beyond,{issuedAt}))).status,400);
+});
+test('the signed request age is rechecked after a grant lock wait even when its lease stays live',async()=>{
+ const a=await f.venue(),block=await f.db.pool.connect();await block.query('BEGIN');await block.query('SELECT * FROM relay_grants WHERE id=$1 FOR UPDATE',[a.grant.id]);
+ const issuedAt=Date.now()-55000,pending=f.request('submit',a.proof('email-submit',a.body,{issuedAt}));
+ try{
+  let blocked=false;for(let i=0;i<200;i++){const r=await f.db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT * FROM relay_grants WHERE id=%'",[f.db.schema]);if(r.rowCount){blocked=true;break;}await new Promise(r=>setTimeout(r,10));}
+  assert.equal(blocked,true,'proof must authenticate before the grant wait');
+  await new Promise(r=>setTimeout(r,Math.max(0,issuedAt+60050-Date.now())));await block.query('COMMIT');
+  const r=await pending;assert.equal(r.status,401,r.text);
+ }finally{await block.query('ROLLBACK');block.release();await pending;}
+ assert.equal((await f.db.pool.query('SELECT count(*) FROM relay_reservations WHERE installation_id=$1',[a.installationId])).rows[0].count,'0');
+});
+test('relay and lifecycle requests share the same authenticated machine request budget',async()=>{
+ const a=await f.venue();
+ for(let i=0;i<30;i++){
+  const r=await f.request('/api/installations/configuration',a.proof('configuration',{}));assert.equal(r.status,200,r.text);
+ }
+ const r=await submit(a);assert.equal(r.status,429,r.text);assert.deepEqual(r.body,{error:'rate_limited'});
+});
+test('omitting the local grant configuration keeps admission disabled even when routes are injected',async()=>{
+ const a=await f.venue();
+ try{await f.restart({...f.relay,grants:undefined});const r=await submit(a);assert.equal(r.status,403,r.text);assert.deepEqual(r.body,{error:'relay_disabled'});}
+ finally{await f.restart();}
 });

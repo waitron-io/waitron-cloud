@@ -12,8 +12,8 @@ Waitron still owns the account action and decides whether its token or code work
 
 ## What exists today
 
-These are source observations, not executed relay guarantees. The inspected Cloud
-base is `5dae08dff38661c590c3c7a891f4c5a866911ba4`; the inspected Waitron base is
+These are source observations, not executed relay guarantees. The grant/admission work builds on Cloud
+base `7483d6f1010663878076d00dfe7f2dcdcb5db6c7`; the inspected Waitron base is
 `0fbcde00151f47b5e300d4adad8d297f92d3bed3`. No provider terms or location claims are
 made here. The [account SMTP guide](production-email-implementation.md) describes
 the existing transport; its historical provider research needs a separate decision.
@@ -127,8 +127,11 @@ Proposed protocol bounds: at most 4,096 UTF-8 bytes for the serialized body with
 the current machine-envelope limit; one normalised email up to 254 bytes; display
 name up to 200 Unicode code points; token up to 512 ASCII bytes; code up to 64 ASCII
 bytes. Reject controls in all header-relevant fields. Reject past expiries and
-expiries over 24 hours away; those upper bounds need compatibility tests against all
-three Waitron actions, not truncation. A shorter action deadline always wins.
+expiries over 24 hours after the signed request time. That time must pass the
+existing 60-second proof window. The queue deadline is capped at 24 Cloud hours,
+so a slightly fast venue clock can submit a 24-hour invitation without extending
+Cloud retention. The encrypted action keeps its original expiry for the template;
+the earlier queue or action deadline controls handoff. A shorter action deadline always wins.
 
 Commit the message, keyed body fingerprint and one allowance reservation together.
 Use a separately keyed fingerprint because a plain hash of an email-change code
@@ -266,7 +269,8 @@ refuses approvals and reservations, including reservations against existing gran
 There is no production constructor mode, HTTP grant endpoint or delivery worker.
 The signed message routes require explicit local-proof constructor configuration. Cloud account emails and paid-service configuration remain independent.
 The core is in `packages/registration/src/relay-grants.ts`; importing it alone does
-not enable it. Migration 031 creates empty tables with grants disabled by default.
+not enable it. Migration 031 creates empty grant/reservation tables with grants disabled by default;
+migration 032 adds the separate encrypted message table.
 
 For a disposable proof, you must supply `mode: 'local-proof'`, a consent version,
 a trusted `verifyOrigin` adapter, and every allowance field. The allowance fields
@@ -378,8 +382,8 @@ cannot change `sending` or later states. No automatic cleanup or retention perio
 is installed; choose those before production, and retain tombstones throughout the
 accepted retry window. The worker slice owns unattended expiry and delivery states.
 
-The local routes reuse 60 requests/minute per source and 30/minute per authenticated
-installation. Forged proofs cannot spend another installation's request limit.
+The local routes share the existing machine counters: 60 requests/minute per source
+and 30/minute per authenticated installation across relay and lifecycle endpoints. Forged proofs cannot spend another installation's request limit.
 These fixture bounds and the explicitly configured account allowance are not an
 approved production abuse policy. Per-recipient/grant budgets, aggregate queued
 bytes, suppression and provider spending controls remain production prerequisites.

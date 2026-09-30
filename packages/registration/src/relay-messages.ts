@@ -46,8 +46,10 @@ export class RelayMessages {
    let created=false;
    if(!row){
     if(reservation.replay)messageError('relay_unavailable');
-    const expiry=Math.min(Date.parse(submitted.expiresAt),submitted.codeExpiresAt?Date.parse(submitted.codeExpiresAt):Infinity);
-    if(expiry<=now||Date.parse(submitted.expiresAt)>now+86400000||(submitted.codeExpiresAt&&Date.parse(submitted.codeExpiresAt)>now+86400000))messageError('invalid_message');
+    // Signed time already passed the 60-second proof window; keep the queue's own
+    // deadline within 24 Cloud hours without rejecting a slightly fast venue clock.
+    const expiry=Math.min(Date.parse(submitted.expiresAt),submitted.codeExpiresAt?Date.parse(submitted.codeExpiresAt):Infinity,now+86400000);
+    if(expiry<=now||Date.parse(submitted.expiresAt)>claims.issuedAt+86400000||(submitted.codeExpiresAt&&Date.parse(submitted.codeExpiresAt)>claims.issuedAt+86400000))messageError('invalid_message');
     const grant=(await client.query('SELECT management_origin FROM relay_grants WHERE id=$1',[grantId])).rows[0];
     const metadata={installation_id:claims.installationId,message_id:body.messageId,grant_id:grantId,grant_revision:revision,class:submitted.class,key_id:this.#payload.active};
     const encrypted=this.#payload.seal(metadata,{...submitted,managementOrigin:grant.management_origin});
