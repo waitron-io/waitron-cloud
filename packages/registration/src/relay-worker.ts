@@ -15,7 +15,7 @@ const states=['queued','sending','accepted','uncertain','failed','expired','canc
 type Terminal='accepted'|'uncertain'|'failed'|'expired'|'cancelled';
 const key=(row:Row)=>[row.installation_id,row.message_id];
 async function lockMessage(client:PoolClient,row:Row){await client.query("SELECT pg_advisory_xact_lock(hashtextextended('relay-message:'||$1||':'||$2,0))",key(row));}
-const suppressionLock="SELECT pg_advisory_xact_lock(hashtextextended('relay-suppression',0))";
+const suppressionLock="SELECT pg_advisory_xact_lock(hashtextextended(current_schema()||':relay-suppression',0))";
 
 export class RelayWorker {
  readonly #pool:Pool;readonly #grants:RelayGrantStore|undefined;readonly #payload:RelayKeys|undefined;
@@ -55,7 +55,7 @@ export class RelayWorker {
   if(!this.#send)return false;
   const claimed=await transaction(this.#pool,async c=>{
    // Serialize capacity decisions across instances; row locks alone do not bound distinct messages.
-   await c.query("SELECT pg_advisory_xact_lock(hashtextextended('relay-worker-capacity',0))");
+   await c.query("SELECT pg_advisory_xact_lock(hashtextextended(current_schema()||':relay-worker-capacity',0))");
    const dead=(await c.query<Row>("SELECT * FROM relay_messages WHERE state='sending' AND lease_until<=clock_timestamp() ORDER BY lease_until FOR UPDATE SKIP LOCKED LIMIT 1")).rows[0];
    if(dead){await this.#terminal(c,dead,'uncertain','uncertain');return null;}
    const live=Number((await c.query("SELECT count(*) FROM relay_messages WHERE claim_id IS NOT NULL AND lease_until>clock_timestamp() AND state IN ('queued','sending')")).rows[0].count);
@@ -122,7 +122,7 @@ export class RelayWorker {
    }
    // This commit is the handoff boundary. Later revoke/cancel cannot recall SMTP.
    const changed=await c.query(`UPDATE relay_messages SET state='sending',attempts=attempts+1,status_revision=status_revision+1
-    WHERE installation_id=$1 AND message_id=$2 AND claim_id=$3 AND lease_until>clock_timestamp() AND expires_at>clock_timestamp()`,[...key(row),row.claim_id]);
+    WHERE installation_id=$1 AND message_id=$2 AND claim_id=$3 AND lease_until>clock_timestamp() AND expires_at>clock_timestamp()`,[...key(row),claim.claim_id]);
    return changed.rowCount?content:undefined;
   });
  }

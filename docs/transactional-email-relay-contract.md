@@ -380,7 +380,7 @@ Cancellation and observed expiry clear queued ciphertext and advance the status
 revision once. They keep the original reservation and replay tombstone. Cancellation
 cannot change `sending` or later states. No automatic cleanup or retention period
 is installed; choose those before production, and retain tombstones throughout the
-accepted retry window. The worker slice owns unattended expiry and delivery states.
+accepted retry window. The local worker handles unattended expiry and delivery states when explicitly configured.
 
 The local routes share the existing machine counters: 60 requests/minute per source
 and 30/minute per authenticated installation across relay and lifecycle endpoints. Forged proofs cannot spend another installation's request limit.
@@ -425,11 +425,18 @@ that loopback fixture. It cannot serve as a production TLS adapter. Templates ar
 plain text in English or Spanish; links use the verified management origin and
 Waitron's existing token/purpose query parameters and recipient email fragment.
 
-Claims last 60 seconds and at most four can be live across worker instances. SMTP
+Claims last 60 seconds and at most four can be live across worker instances in one
+Cloud schema. The capacity and suppression locks are scoped to that schema, so a
+separate Cloud database schema does not share their lock waits. SMTP
 has a 15-second total deadline inside the worker's 20-second deadline. Known negative
 SMTP replies and refused TCP connections may retry: eight attempts, 30-second
 exponential delays capped at 900 seconds, with no retry scheduled beyond expiry.
-Permanent SMTP refusal ends as `failed`. A leased queued row has not crossed handoff
+Permanent SMTP refusal, local suppression and exhausted attempts all end as
+`failed/refused`. This fixed public reason deliberately does not disclose the
+suppression list or raw SMTP responses. Deadlines are conservatively uncertain
+even if they fire during connection setup: this adapter does not prove SMTP phase
+at timeout, so it trades automatic recovery for avoiding duplicate delivery.
+A leased queued row has not crossed handoff
 and can still be cancelled or reclaimed after a crash.
 
 The handoff transaction rechecks the original reservation, consenting account,
@@ -441,7 +448,9 @@ or database read errors leave unstarted work deferred; they do not authorise sen
 
 Suppression stores only a keyed recipient fingerprint. Keep every historical
 suppression key while its rows exist; losing one stops handoff rather than silently
-ignoring its entries. Payload-key loss terminates unreadable mail as
+ignoring its entries. A failed handoff retains its unstarted 60-second claim; missing
+keys can therefore occupy all four slots until the leases expire. Restore the key
+ring before expecting progress. Payload-key loss terminates unreadable mail as
 `failed/payload_unavailable`. Expiry still clears ciphertext if a suppression key is
 missing. Terminal messages retain their reservation and replay fingerprint while
 clearing ciphertext. No retention cleanup is enabled, so tombstones outlive the
@@ -449,7 +458,11 @@ accepted retry window until you choose a policy.
 
 `status()` returns fixed state counts and a total attempt count, with no recipients,
 tokens, account IDs or message IDs. Migration 033 checks state/reason pairs and claim
-metadata. Suppression is currently a trusted local administration API; authenticated
+metadata. Its scheduling default preserves existing queued ciphertext without
+rewriting the message table. A manually created pre-worker `sending` row has no
+claim and fails the new constraint; inspect such experimental data before applying
+033. The normal admission slice does not create sending rows.
+Suppression is currently a trusted local administration API; authenticated
 provider event ingestion remains open. Waitron's durable caller, the joint local
 proof, production abuse bounds, policy and provider selection are still required.
 

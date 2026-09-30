@@ -2,7 +2,7 @@ ALTER TABLE relay_messages
  ADD COLUMN claim_id uuid,
  ADD COLUMN lease_until timestamptz,
  ADD COLUMN attempts integer NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 8),
- ADD COLUMN available_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ ADD COLUMN available_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
  ADD CONSTRAINT relay_claim_pair CHECK ((claim_id IS NULL)=(lease_until IS NULL)),
  ADD CONSTRAINT relay_claim_state CHECK (state IN ('queued','sending') OR claim_id IS NULL),
  ADD CONSTRAINT relay_sending_claim CHECK (state<>'sending' OR claim_id IS NOT NULL),
