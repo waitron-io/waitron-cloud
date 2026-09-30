@@ -227,15 +227,15 @@ empty partial/download directories. It then closes clients, requests and sockets
 and verifies that the directory is gone.
 
 The [2026-09-30 clean-commit receipt](receipts/backup-capacity-2026-09-30.json)
-records Cloud `e30c438b70667f5e33e3fcefa55a8636c210e5c4` on macOS arm64 with Node v26.7.0.
+records Cloud `a365a142b508d9cb6f0c844650e6d5e131cd3310` on macOS arm64 with Node v26.7.0.
 All sizes ran. Times below are per-venue ranges from one run; memory and disk
 are the sampled combined-process/fixture peaks. MiB and GiB use powers of 1024.
 
 | MiB per venue | Upload ms | Download ms | Peak RSS MiB | Peak ArrayBuffer MiB | Scratch GiB | Allocated disk GiB |
 | --- | --- | --- | --- | --- | --- | --- |
-| 32 | 136.9–138.6 | 102.8–103.0 | 217.2 | 47.1 | 0.188 | 0.188 |
-| 128 | 437.2–438.4 | 352.1–352.2 | 221.6 | 54.7 | 0.750 | 0.750 |
-| 512 | 1685.2–1686.3 | 1371.7–1373.2 | 242.6 | 61.5 | 3.000 | 3.039 |
+| 32 | 139.2–140.1 | 103.6–104.3 | 182.4 | 49.3 | 0.188 | 0.188 |
+| 128 | 430.0–430.5 | 352.5–353.0 | 196.5 | 56.2 | 0.750 | 0.750 |
+| 512 | 1682.9–1683.4 | 1367.5–1368.2 | 228.0 | 58.8 | 3.000 | 3.013 |
 
 This is a controlled object-store policy, not a provider implementation. Continue
 running the SeaweedFS credential and conditional-write contract above, and repeat

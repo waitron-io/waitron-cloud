@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "cloudHead": "e30c438b70667f5e33e3fcefa55a8636c210e5c4",
+  "cloudHead": "a365a142b508d9cb6f0c844650e6d5e131cd3310",
   "cloudDirty": false,
   "profile": "controlled-tls-capacity",
   "ceilingBytes": 536870912,
@@ -15,8 +15,8 @@
       "bytes": 33554432,
       "status": "ran",
       "preflight": {
-        "availableMemoryBytes": 24345083904,
-        "freeDiskBytes": 467408658432
+        "availableMemoryBytes": 24341463040,
+        "freeDiskBytes": 467460980736
       },
       "uploadOverlap": 2,
       "downloadOverlap": 2,
@@ -25,27 +25,27 @@
           "venue": "a",
           "digest": "facb58ac139bf9fc0e1f8b1f147003236b1b69e84f3a4c94166fa66f18f89932",
           "uploadedBytes": 33554432,
-          "uploadMs": 138.57241699999997,
+          "uploadMs": 140.098666,
           "downloadedBytes": 33554432,
-          "downloadMs": 103.03366699999998
+          "downloadMs": 104.33883299999997
         },
         {
           "venue": "b",
           "digest": "e75f883f87d4a8c873d69e3823383a901b00a2dcff331e267c61134135c381ee",
           "uploadedBytes": 33554432,
-          "uploadMs": 136.90545900000004,
+          "uploadMs": 139.217833,
           "downloadedBytes": 33554432,
-          "downloadMs": 102.80700000000002
+          "downloadMs": 103.63470899999999
         }
       ],
       "baseline": {
-        "rssBytes": 108232704,
-        "arrayBufferBytes": 171258
+        "rssBytes": 108888064,
+        "arrayBufferBytes": 171254
       },
       "peaks": {
-        "rssBytes": 227786752,
-        "arrayBufferBytes": 49396004,
-        "scratchBytes": 201329435,
+        "rssBytes": 191250432,
+        "arrayBufferBytes": 51651410,
+        "scratchBytes": 201329431,
         "diskAllocatedBytes": 201334784
       },
       "failures": {
@@ -57,9 +57,9 @@
         "uploadRecovered": true,
         "downloadAttempts": 2,
         "downloadRecovered": true,
-        "uploadAbortMs": 0.358208999999988,
+        "uploadAbortMs": 0.3433750000000373,
         "cancelledUploadUnpublished": true,
-        "downloadAbortMs": 0.7686249999999291,
+        "downloadAbortMs": 1.1227499999999964,
         "cancelledDownloadStages": 0,
         "wrongLengthRefused": true,
         "wrongDigestRefused": true
@@ -73,8 +73,8 @@
       "bytes": 134217728,
       "status": "ran",
       "preflight": {
-        "availableMemoryBytes": 24305401856,
-        "freeDiskBytes": 467330912256
+        "availableMemoryBytes": 24265932800,
+        "freeDiskBytes": 467393822720
       },
       "uploadOverlap": 2,
       "downloadOverlap": 2,
@@ -83,27 +83,27 @@
           "venue": "a",
           "digest": "3510b7e066e76c8f7c306693c97204824d0c8f92ae6fc8a4c0dd657abf424a1b",
           "uploadedBytes": 134217728,
-          "uploadMs": 438.39937499999996,
+          "uploadMs": 430.522291,
           "downloadedBytes": 134217728,
-          "downloadMs": 352.2112090000003
+          "downloadMs": 352.9979999999998
         },
         {
           "venue": "b",
           "digest": "df49fba879413714c1af6854d51b343ee3f39f93123c05a4389bff38ce464aaf",
           "uploadedBytes": 134217728,
-          "uploadMs": 437.23254099999986,
+          "uploadMs": 429.95975,
           "downloadedBytes": 134217728,
-          "downloadMs": 352.1245839999999
+          "downloadMs": 352.4826660000001
         }
       ],
       "baseline": {
-        "rssBytes": 228048896,
-        "arrayBufferBytes": 371610
+        "rssBytes": 191414272,
+        "arrayBufferBytes": 3080592
       },
       "peaks": {
-        "rssBytes": 232390656,
-        "arrayBufferBytes": 57352911,
-        "scratchBytes": 805309203,
+        "rssBytes": 206012416,
+        "arrayBufferBytes": 58963431,
+        "scratchBytes": 805309207,
         "diskAllocatedBytes": 805314560
       },
       "failures": {
@@ -115,9 +115,9 @@
         "uploadRecovered": true,
         "downloadAttempts": 2,
         "downloadRecovered": true,
-        "uploadAbortMs": 0.31320899999991525,
+        "uploadAbortMs": 0.3554169999997612,
         "cancelledUploadUnpublished": true,
-        "downloadAbortMs": 0.5655409999999392,
+        "downloadAbortMs": 0.7824590000000171,
         "cancelledDownloadStages": 0,
         "wrongLengthRefused": true,
         "wrongDigestRefused": true
@@ -131,8 +131,8 @@
       "bytes": 536870912,
       "status": "ran",
       "preflight": {
-        "availableMemoryBytes": 24191352832,
-        "freeDiskBytes": 467062427648
+        "availableMemoryBytes": 24326078464,
+        "freeDiskBytes": 467125579776
       },
       "uploadOverlap": 2,
       "downloadOverlap": 2,
@@ -141,28 +141,28 @@
           "venue": "a",
           "digest": "b9045a713caed5dff3d3b783e98d1ce5778d8bc331ee4119d707072312af06a7",
           "uploadedBytes": 536870912,
-          "uploadMs": 1686.2642079999996,
+          "uploadMs": 1683.3980839999995,
           "downloadedBytes": 536870912,
-          "downloadMs": 1373.169833
+          "downloadMs": 1367.5102500000003
         },
         {
           "venue": "b",
           "digest": "13c310413e2f96c05265d8e01762d2910e105a168c290bc1f849b65f71b3d0b7",
           "uploadedBytes": 536870912,
-          "uploadMs": 1685.2286249999997,
+          "uploadMs": 1682.940917,
           "downloadedBytes": 536870912,
-          "downloadMs": 1371.7327079999995
+          "downloadMs": 1368.2099159999998
         }
       ],
       "baseline": {
-        "rssBytes": 232390656,
-        "arrayBufferBytes": 4261800
+        "rssBytes": 206077952,
+        "arrayBufferBytes": 3980152
       },
       "peaks": {
-        "rssBytes": 254345216,
-        "arrayBufferBytes": 64465687,
-        "scratchBytes": 3221228311,
-        "diskAllocatedBytes": 3263569920
+        "rssBytes": 239124480,
+        "arrayBufferBytes": 61647639,
+        "scratchBytes": 3220982551,
+        "diskAllocatedBytes": 3235012608
       },
       "failures": {
         "crossedReadDenied": 2,
@@ -173,9 +173,9 @@
         "uploadRecovered": true,
         "downloadAttempts": 2,
         "downloadRecovered": true,
-        "uploadAbortMs": 0.3202079999991838,
+        "uploadAbortMs": 0.36883300000044983,
         "cancelledUploadUnpublished": true,
-        "downloadAbortMs": 0.6554169999999431,
+        "downloadAbortMs": 1.815082999999504,
         "cancelledDownloadStages": 0,
         "wrongLengthRefused": true,
         "wrongDigestRefused": true
