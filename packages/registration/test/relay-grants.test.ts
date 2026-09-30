@@ -226,3 +226,21 @@ test('policy lock contention cannot preserve an expired grant for a replay',asyn
  try{await new Promise(r=>setTimeout(r,300));await block.query('COMMIT');await pending;}
  finally{await block.query('ROLLBACK');block.release();}
 });
+
+test('a borrowed client without a transaction cannot commit an orphan reservation',async()=>{
+ const s=store(),g=await approve(s),client=await pool.connect();
+ try{await code(s.reserve(client,{installationId:installation,publicKey:`key-${installation}`},reservation(g)),'transaction_required');}
+ finally{client.release();}
+ for(const table of ['relay_reservations','relay_policies','relay_account_policies']){
+  assert.equal((await pool.query(`SELECT count(*) FROM ${table}`)).rows[0].count,'0');
+ }
+ await reserve(s,g);
+});
+
+test('revocation stays available when the store admission switch is off',async()=>{
+ const s=store(),g=await approve(s);const disabled=new relay.RelayGrantStore(pool);
+ await disabled.revoke(session.token,session.csrfToken,g.id);
+ await code(reserve(s,g),'grant_unavailable');
+ const row=(await pool.query('SELECT enabled,revoked_at FROM relay_grants WHERE id=$1',[g.id])).rows[0];
+ assert.equal(row.enabled,false);assert.ok(row.revoked_at instanceof Date);
+});

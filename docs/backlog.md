@@ -221,7 +221,9 @@ venue does not subscribe to remote access or backups.
   PostgreSQL concurrency, revocation, rollover and process-restart tests. The trusted
   origin-verifier boundary has synthetic evidence tests only; implement and prove
   production domain/HTTPS verification before enablement. Signed admission, encrypted
-  queueing and the relay worker remain open. Separately queue Waitron's durable
+  queueing and the relay worker remain open. During signed admission, prove the
+  combined lock order against installation revocation/replacement; the core review
+  tested grant-level races but not those cross-module operations. Separately queue Waitron's durable
   caller/status work before a joint local proof.
   Decide provider, processing location, account consent, allowance/debit policy and
   password-reset-limit behaviour before production. The source trace also found

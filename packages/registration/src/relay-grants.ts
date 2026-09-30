@@ -6,7 +6,7 @@ import {transaction} from './transaction.ts';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const version=/^[a-zA-Z0-9_.:-]{1,100}$/;
 export class RelayError extends Error {
- readonly code:'relay_disabled'|'invalid_input'|'grant_unavailable'|'origin_unverified'|'grant_conflict'|'message_conflict'|'allowance_exhausted'|'policy_conflict';
+ readonly code:'relay_disabled'|'invalid_input'|'grant_unavailable'|'origin_unverified'|'grant_conflict'|'message_conflict'|'allowance_exhausted'|'policy_conflict'|'transaction_required';
  constructor(code:RelayError['code']){super(code);this.name='RelayError';this.code=code;}
 }
 function fail(code:RelayError['code']):never{throw new RelayError(code);}
@@ -113,6 +113,10 @@ export class RelayGrantStore {
   if(!exact(authenticated,['installationId','publicKey'])||!id(authenticated.installationId)||typeof authenticated.publicKey!=='string'
    ||!exact(input,['grantId','grantRevision','messageId','binding'])||!id(input.grantId)||!id(input.messageId)
    ||!Number.isSafeInteger(input.grantRevision)||input.grantRevision<1||typeof input.binding!=='string'||!input.binding.length||input.binding.length>256)fail('invalid_input');
+  // A PoolClient also works in autocommit, where transaction locks would immediately disappear.
+  try{await client.query('SAVEPOINT relay_reservation_transaction');}
+  catch(error){if((error as {code?:string})?.code==='25P01')fail('transaction_required');throw error;}
+  await client.query('RELEASE SAVEPOINT relay_reservation_transaction');
   const candidate=(await client.query<GrantRow>('SELECT * FROM relay_grants WHERE id=$1 AND installation_id=$2',[input.grantId,authenticated.installationId])).rows[0];
   if(!candidate)fail('grant_unavailable');
   await account(client,candidate.account_id);

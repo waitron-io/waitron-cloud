@@ -293,11 +293,16 @@ the origin invalidates old submissions. Revocation disables the grant; it remain
 available even when the store's admission switch is off. A current owner can revoke
 a grant after its original owner or installation loses authority.
 
-Reservations require a transaction and a separately authenticated installation ID
-and public key. The method takes only grant ID/revision, message ID and an opaque
+Reservations require an open transaction and a separately authenticated installation
+ID and public key. An autocommit client receives `transaction_required` before any
+write, so a missing `BEGIN` cannot silently bypass the account lock or commit an
+orphan charge. The method takes only grant ID/revision, message ID and an opaque
 keyed replay binding. It does not authenticate machine signatures itself: slice 2
 must verify its signed envelope and lease while holding the same transaction's
-authority locks. Never construct the authenticated identity from message fields.
+authority locks. Keep the documented account/membership/venue/installation lock
+order when integrating that caller, and test it against installation revocation and
+replacement; the core review exercised grant-level races only. Never construct the
+authenticated identity from message fields.
 Insert the encrypted queue record in that transaction and roll back both on failure.
 The core returns derived account/period attribution and whether this is a replay.
 Only new reservations may create queue records.
