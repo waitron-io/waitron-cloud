@@ -224,11 +224,13 @@ venue does not subscribe to remote access or backups.
   and an encrypted queue now have opt-in local HTTP/PostgreSQL proof for retries,
   concurrent account reservations, key rotation/loss, cancellation and transaction
   rollback, including admission racing installation revocation/replacement. Normal
-  startup keeps the routes absent. The relay worker, unattended expiry, retention,
-  production recipient/grant/queue-byte abuse bounds and provider spending controls
-  remain open. When D47 adds worker transitions, constrain state/reason pairs in
-  the schema and test every terminal transition; the current schema validates each
-  value separately, while current admission/cancel code writes consistent pairs.
+  startup keeps the routes absent. The separate local relay worker now handles
+  bounded claims, expiry, keyed suppression and terminal ciphertext removal, with
+  state/reason constraints. Its loopback-only SMTP proof covers temporary/permanent
+  refusal, two-worker fencing, cancellation, key rotation/loss and uncertain delivery
+  after disconnect or process death. Normal startup leaves it off. Retention policy,
+  authenticated provider suppression events, production recipient/grant/queue-byte
+  abuse bounds and provider spending controls remain open.
   Separately queue Waitron's durable caller/status work before a joint
   local proof.
   Decide provider, processing location, account consent, allowance/debit policy and
@@ -854,7 +856,7 @@ notifications separately.
 | Analytics and reports | Choose ingestion, supported source versions, country and cell placement, search/aggregation engine, scheduled reports and group reporting. Elasticsearch is a candidate. |
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |
 | Address lookup (free) | [Scope researched on 2026-09-30](address-lookup-scope.md); provider and implementation remain open. Resolve durable storage rights, Spain-first quality test, peak-day costs, account attribution and allowance policy before implementing lookup and completion for open-source Waitron. See [free services](#free-services-for-open-source-waitron). |
-| Messaging | The [version 1 on-prem relay contract](transactional-email-relay-contract.md) has a disabled local-proof grant/reservation core; opt-in signed routes and an encrypted queue; production origin verification, relay worker, Waitron durable caller, joint proof and production decisions remain open. Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
+| Messaging | The [version 1 on-prem relay contract](transactional-email-relay-contract.md) has a disabled local-proof grant/reservation core; opt-in signed routes, an encrypted queue and a disabled local capture worker with bounded claims and accepted/uncertain outcomes; production origin verification, Waitron durable caller, joint proof and production decisions remain open. Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
 | Automated upgrades | Treat cloud services, cloud-hosted Waitron and on-prem installations separately; choose rollout groups, compatibility, maintenance windows, pause and recovery behaviour. |
 | Monitoring | External venue and remote-route health, backup staleness, customer incidents and bilingual email alerts are implemented locally. Accepted public/staff probes now emit retry-safe organisation usage events and the portal shows their measured total. Add filing/device signals, broader functional checks and performance evidence. The local deployment now schedules usage reconciliation; define production operations, cost, allowance and limit policy before using measurements for enforcement. |
 

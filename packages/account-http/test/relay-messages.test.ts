@@ -69,7 +69,7 @@ test('cancel clears ciphertext, retains the debit and tombstone, and cannot canc
  const cancelled=await read(a,'cancel');assert.equal(cancelled.status,200);assert.equal(cancelled.body.state,'cancelled');assert.equal(cancelled.body.statusRevision,2);
  assert.deepEqual((await read(a,'cancel')).body,cancelled.body);assert.deepEqual((await submit(a)).body,cancelled.body);
  assert.equal((await f.db.pool.query('SELECT payload FROM relay_messages WHERE message_id=$1',[a.body.messageId])).rows[0].payload,null);assert.equal(await count('relay_reservations'),n);
- const b=await f.venue();assert.equal((await submit(b)).status,202);await f.db.pool.query("UPDATE relay_messages SET state='sending',status_revision=2 WHERE message_id=$1",[b.body.messageId]);
+ const b=await f.venue();assert.equal((await submit(b)).status,202);await f.db.pool.query("UPDATE relay_messages SET state='sending',status_revision=2,claim_id=gen_random_uuid(),lease_until=clock_timestamp()+interval '60 seconds' WHERE message_id=$1",[b.body.messageId]);
  assert.equal((await read(b,'cancel')).body.state,'sending');
 });
 for(const [name,sql] of [
@@ -188,7 +188,7 @@ test('forged installation IDs spend ingress but cannot exhaust the victim instal
 test('cancel waiting behind a started handoff cannot overwrite its sending state',async()=>{
  const a=await f.venue();assert.equal((await submit(a)).status,202);
  const handoff=await f.db.pool.connect();await handoff.query('BEGIN');
- await handoff.query("UPDATE relay_messages SET state='sending',status_revision=2 WHERE message_id=$1",[a.body.messageId]);
+ await handoff.query("UPDATE relay_messages SET state='sending',status_revision=2,claim_id=gen_random_uuid(),lease_until=clock_timestamp()+interval '60 seconds' WHERE message_id=$1",[a.body.messageId]);
  const pending=read(a,'cancel');
  try{
   // Wait for cancellation's UPDATE to be blocked by the handoff transaction.

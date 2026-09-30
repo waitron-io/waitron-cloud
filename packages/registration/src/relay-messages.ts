@@ -8,7 +8,7 @@ export type RelayAction='email-submit'|'email-status'|'email-cancel';
 export interface RelayAdmissionConfig {mode:'local-proof';grants:RelayConfig;payloadKeys:RelayKeyConfig;replayKeys:RelayKeyConfig}
 interface MessageRow extends RelayPayloadBinding {binding:string;replay_key_id:string;payload:Buffer|null;state:string;status_revision:number;reason:string|null;expires_at:Date}
 function view(row:MessageRow){return {version:1,messageId:row.message_id,state:row.state,statusRevision:row.status_revision,expiresAt:row.expires_at.toISOString(),reason:row.reason};}
-/** No worker is connected to this separately configured local-proof queue. */
+/** Admission stays separately configured from the local capture worker. */
 export class RelayMessages {
  readonly #pool:Pool;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;readonly #installations:InstallationStore;
  readonly #grants:RelayGrantStore;readonly #payload:RelayKeys;readonly #replay:RelayKeys;
@@ -60,7 +60,7 @@ export class RelayMessages {
    if(row.state==='queued'&&(row.expires_at.getTime()<=now||action==='email-cancel')){
     const state=row.expires_at.getTime()<=now?'expired':'cancelled';
     // Handoff may acquire the row after our read; only queued content can be cleared.
-    const changed=(await client.query<MessageRow>(`UPDATE relay_messages SET state=$3,reason=$3,payload=NULL,status_revision=status_revision+1 WHERE installation_id=$1 AND message_id=$2 AND state='queued' RETURNING *`,[claims.installationId,body.messageId,state])).rows[0];
+    const changed=(await client.query<MessageRow>(`UPDATE relay_messages SET state=$3,reason=$3,payload=NULL,claim_id=NULL,lease_until=NULL,status_revision=status_revision+1 WHERE installation_id=$1 AND message_id=$2 AND state='queued' RETURNING *`,[claims.installationId,body.messageId,state])).rows[0];
     row=changed??(await client.query<MessageRow>('SELECT * FROM relay_messages WHERE installation_id=$1 AND message_id=$2',[claims.installationId,body.messageId])).rows[0]!;
    }
    if(row.payload)this.#payload.open({...row,payload:row.payload});
