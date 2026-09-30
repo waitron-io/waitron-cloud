@@ -712,7 +712,7 @@ notifications separately.
   expected a failed archive check but found it pending. Its cause remains unresolved:
   local and Ubuntu probes have not reproduced it. [PR #99](https://github.com/waitron-io/waitron-cloud/pull/99)
   adds verifier outcome, fixed Docker failure details and queued-job state to the
-  unchanged test assertion; a forced start refusal proves those diagnostics report
+  unchanged test assertion; a controlled start-refusal experiment reports
   created state, attach exit 125 and `verification_unavailable`. This is diagnostic
   coverage, not a fix. The temporary stress workflow is removed. On the next natural
   failure, use those details to identify the failing boundary, reproduce it and fix

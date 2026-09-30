@@ -151,3 +151,33 @@ test('an external container kill is infrastructure uncertainty rather than an ar
  const deadline=Date.now()+10000;while(!id&&Date.now()<deadline){id=docker('ps','-q','--filter','label=cloud.backup-verifier.owner='+owner);if(!id)await delay(20);}
  assert(id);docker('kill','--signal','KILL',id);await rejected;empty();
 });
+
+for(const boundary of ['start','image'] as const)test(`Docker ${boundary} refusal diagnostics omit raw daemon text`,async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'container-diagnostic-')),oldPath=process.env.PATH,realDocker=execFileSync('which',['docker'],{encoding:'utf8'}).trim();
+ const secret='private-daemon-error /private/recovery-key',wrapper=join(directory,'docker');
+ await writeFile(wrapper,`#!${process.execPath}\nconst cp=require('node:child_process'),args=process.argv.slice(2);if(args[0]===${JSON.stringify(boundary)}){process.stderr.write(${JSON.stringify(secret)});process.exit(125);}else{const r=cp.spawnSync(${JSON.stringify(realDocker)},args,{stdio:'inherit'});process.exit(r.status??1);}`);
+ await chmod(wrapper,0o700);process.env.PATH=directory+':'+oldPath;
+ try{
+  const operation=async()=>{const verify=await createContainerWaitronVerifier({image,owner});return verify(source(0),keys,point(0),new AbortController().signal);};
+  await assert.rejects(operation(),(error:any)=>{
+   assert.equal(error.message,'backup.verifier_container');
+   if(boundary==='image')assert.deepEqual(error.cause,{operation:'image',code:125,signal:null,killed:false});
+   else{
+    assert.deepEqual(Object.keys(error.cause??{}).sort(),['attachCode','exitCode','oomKilled','startError','status','uploadFailed']);
+    assert.equal(error.cause.status,'created');assert.equal(error.cause.exitCode,0);assert.equal(error.cause.oomKilled,false);assert.equal(error.cause.startError,false);assert.equal(error.cause.attachCode,125);assert.equal(typeof error.cause.uploadFailed,'boolean');
+   }
+   assert(!JSON.stringify(error.cause).includes(secret));return true;
+  });empty();
+ }finally{process.env.PATH=oldPath;await rm(directory,{recursive:true,force:true});}
+});
+
+test('external kill diagnostics retain the exit without claiming a resource refusal',async()=>{
+ const verify=await createContainerWaitronVerifier({image,owner}),pending=verify(source(3),keys,point(3),new AbortController().signal);
+ const rejected=assert.rejects(pending,(error:any)=>{
+  assert.equal(error.message,'backup.verifier_container');
+  assert.deepEqual(Object.keys(error.cause??{}).sort(),['attachCode','exitCode','oomKilled','startError','status','uploadFailed']);
+  assert.equal(error.cause.status,'exited');assert.equal(error.cause.exitCode,137);assert.equal(error.cause.oomKilled,false);assert.equal(error.cause.startError,false);assert.equal(error.cause.attachCode,137);assert.equal(typeof error.cause.uploadFailed,'boolean');return true;
+ });let id='';
+ const deadline=Date.now()+10000;while(!id&&Date.now()<deadline){id=docker('ps','-q','--filter','label=cloud.backup-verifier.owner='+owner);if(!id)await delay(20);}
+ assert(id);docker('kill','--signal','KILL',id);await rejected;empty();
+});
