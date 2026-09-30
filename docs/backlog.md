@@ -273,6 +273,14 @@ notifications separately.
 
 ## Platform work to scope
 
+- **CI execution budget.** [Run 36723901567](https://github.com/waitron-io/waitron-cloud/actions/runs/36723901567)
+  on `bcda7444aa8b452a8023b905b09069a34522ee3c` was cancelled at the job's
+  15-minute limit after reporting 144/144 backup tests and 111/111 portal tests
+  passed. The job annotation confirms the time limit; the whole run did not pass.
+  Measure package and setup durations before choosing a job split or a revised
+  overall budget. Preserve individual test deadlines and assertions. This is
+  separate from D48's intermittent backup verdict and is not a diagnosis of it.
+
 - **Shared UI.** [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519)
   implements `@waitron/ui-core` in Waitron with seven account controls, theme tokens
   and common helpers. Existing `@waitron/ui` imports re-export the same implementation;
