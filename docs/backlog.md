@@ -273,6 +273,28 @@ notifications separately.
 
 ## Platform work to scope
 
+- **Remote DNS lost-reply browser failure.** [CI run 36738638444](https://github.com/waitron-io/waitron-cloud/actions/runs/36738638444)
+  on `1963b0735ef38cf92c5e79640cae0f8e2d8f5a95` passed all 147 backup tests,
+  then failed the English `apps/portal/test/remote-browser.test.ts:25` case:
+  after the apply response was deliberately lost, the saved-name message did
+  not appear within four seconds. Portal results were 110/111. The unchanged
+  focused English/Spanish cases passed 2/2 locally on base `21274d4`; the cause
+  remains unverified. No portal, remote-access, account-http or dependency change
+  is included in PR #99. [PR #100](https://github.com/waitron-io/waitron-cloud/pull/100)
+  fixes a demonstrated fixture-ordering timeout and adds request/reconciliation
+  diagnostics without increasing the assertion timeout. Its exact-merge CI passed.
+  See [the ordering receipt](#portal-lost-reply-test-ordering) for the controlled
+  reproduction and the uncertainty about this historical failure. Investigate a
+  future failure from its diagnostics; passing repeats alone do not explain it.
+
+- **CI execution budget.** [Run 36723901567](https://github.com/waitron-io/waitron-cloud/actions/runs/36723901567)
+  on `bcda7444aa8b452a8023b905b09069a34522ee3c` was cancelled at the job's
+  15-minute limit after reporting 144/144 backup tests and 111/111 portal tests
+  passed. The job annotation confirms the time limit; the whole run did not pass.
+  Measure package and setup durations before choosing a job split or a revised
+  overall budget. Preserve individual test deadlines and assertions. This is
+  separate from D48's intermittent backup verdict and is not a diagnosis of it.
+
 - **Shared UI.** [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519)
   implements `@waitron/ui-core` in Waitron with seven account controls, theme tokens
   and common helpers. Existing `@waitron/ui` imports re-export the same implementation;
@@ -700,6 +722,24 @@ notifications separately.
   and verified fallback protection remain covered. See the containment guide for the exact
   executed cases; shared-daemon loss during active cleanup, physical host crashes and
   production recovery timings remain unmeasured.
+  **Open: intermittent container-worker verdict.** [CI run 36702956368, attempt 1](https://github.com/waitron-io/waitron-cloud/actions/runs/36702956368/attempts/1)
+  expected a failed archive check but found it pending. Its cause remains unresolved:
+  local and Ubuntu probes have not reproduced it. [PR #99](https://github.com/waitron-io/waitron-cloud/pull/99)
+  adds verifier outcome, fixed Docker failure details and queued-job state to the
+  unchanged test assertion; a controlled start-refusal experiment reports
+  created state, attach exit 125 and `verification_unavailable`. This is diagnostic
+  coverage, not a fix. The temporary stress workflow is removed. On the next natural
+  failure, use those details to identify the failing boundary, reproduce it and fix
+  its cause while preserving D37's distinction between infrastructure uncertainty
+  and an invalid archive. Passing probes do not close this defect.
+  D48 investigation follow-up: concurrent verifier calls with the same owner can fail
+  infrastructure inspection during reclamation: one call lists a completed container
+  while another removes it before the first can inspect it. A local two-caller,
+  file-backed lifecycle probe reproduced `backup.verifier_container` from `inspect`
+  (exit 1); isolated-owner control passed 12 calls. This does not explain the original
+  sequential worker-test failure. Next: reproduce the list/remove/inspect boundary
+  deterministically and tolerate a container disappearing during reclamation while
+  keeping Docker failures and live/foreign ownership fences intact.
   A read-only
   dependency inventory and local drill now prove active-key rotation, old snapshot restore,
   worker restart and wrong/missing-key refusal without exposing secrets or deleting keys.
