@@ -1,3 +1,5 @@
+import {RelayMessages,type RelayAdmissionConfig} from '@waitron-cloud/registration';
+import {relayMessageResponse} from './relay-messages.ts';
 import {StaffCertificateExchange} from '@waitron-cloud/remote-access/staff-exchange';
 import {staffCertificateResponse} from './staff-certificates.ts';
 import {recoveryCodeKeysFromEnv,type RecoveryCodeKeys} from '@waitron-cloud/backups/recovery-codes';
@@ -60,8 +62,9 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;staffCertificates?:boolean;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
+export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
   const config = validateConfig(options.config);
+  if(options.relay&&!options.leaseIssuer)throw Error('relay.installation_issuer_required');
   if(options.staffCertificates&&!options.leaseIssuer)throw Error('staff_certificate.installation_issuer_required');
   if(options.captures&&!options.leaseIssuer)throw Error('backup.installation_issuer_required');
   const {pool, outbox} = options;
@@ -71,6 +74,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
   const captures=options.captures&&options.leaseIssuer?new BackupCaptures(pool,options.leaseIssuer,config.portalOrigin,options.captures,options.leaseTrust):undefined;
   const staffExchange=options.staffCertificates&&options.leaseIssuer?new StaffCertificateExchange(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust):undefined;
   const streams=options.captures?.managedStreams&&options.leaseIssuer?new ManagedStreamMachines(pool,options.leaseIssuer,config.portalOrigin,options.captures.vault,options.captures.managedStreams,options.leaseTrust):undefined;
+  const relay=options.relay&&options.leaseIssuer?new RelayMessages(pool,options.leaseIssuer,config.portalOrigin,options.relay,options.leaseTrust):undefined;
   const limiter = new AccountRateLimiter(pool, config.rateKey);
   const signup = new SignupStore(pool, outbox, options.passwordScreening); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
   const passkeys = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: origin.hostname, origin: config.portalOrigin}, options.passkeyAdapter);
@@ -104,6 +108,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
       }catch{return c.json({status:'unavailable'},503);}
     }
     await consume([{scope: 'all-ip', subject: ip, limit: 120, windowSeconds: 60}]);
+    if(relay&&['/v1/installations/email/submit','/v1/installations/email/status','/v1/installations/email/cancel'].includes(c.req.path))return relayMessageResponse(c,{relay,ip,consume});
     if(c.req.path.startsWith('/api/account/diagnostics/'))return diagnosticsResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/usage/'))return usageResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/security-audit/'))return securityAuditResponse(c,{pool,origin:config.portalOrigin,secure,consume});

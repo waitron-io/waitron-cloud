@@ -1,7 +1,7 @@
 import {createHash,createPrivateKey,createPublicKey,sign,verify,type KeyObject} from 'node:crypto';
 import {isPairingUuid} from './pairing-proof.ts';
 
-export type MachineAction='renew'|'configuration'|'report'|'revoke'|'backup-reserve'|'backup-publish'|'backup-stream-configure'|'backup-stream-observe'|'staff-certificate-submit'|'staff-certificate-status';
+export type MachineAction='renew'|'configuration'|'report'|'revoke'|'backup-reserve'|'backup-publish'|'backup-stream-configure'|'backup-stream-observe'|'staff-certificate-submit'|'staff-certificate-status'|'email-submit'|'email-status'|'email-cancel';
 export interface SignedEnvelope {payload:string;signature:string}
 export interface MachineClaims {origin:string;action:MachineAction;installationId:string;operationId:string;issuedAt:number;lease:string;body:string}
 export interface LeaseInput {origin:string;leaseId:string;installationId:string;venueId:string;environment:'test'|'production';publicKey:string;issuedAt:number;expiresAt:number}
@@ -38,7 +38,7 @@ export function encodeMachine(c:MachineClaims):Buffer {
 export function readMachineClaims(value:unknown):MachineClaims {
   try {
     const {values:v}=envelope(value);
-    if(v.length!==8||v[0]!=='waitron-cloud-machine-v1'||!originValid(v[1])||!['renew','configuration','report','revoke','backup-reserve','backup-publish','backup-stream-configure','backup-stream-observe','staff-certificate-submit','staff-certificate-status'].includes(v[2] as string)
+    if(v.length!==8||v[0]!=='waitron-cloud-machine-v1'||!originValid(v[1])||!['renew','configuration','report','revoke','backup-reserve','backup-publish','backup-stream-configure','backup-stream-observe','staff-certificate-submit','staff-certificate-status','email-submit','email-status','email-cancel'].includes(v[2] as string)
       ||!isPairingUuid(v[3])||!isPairingUuid(v[4])||!dateValid(v[5])||typeof v[6]!=='string'||v[6].length>4096||typeof v[7]!=='string'||v[7].length>4096)return invalid();
     return {origin:v[1],action:v[2] as MachineAction,installationId:v[3],operationId:v[4],issuedAt:v[5],lease:v[6],body:v[7]};
   }catch{return invalid();}

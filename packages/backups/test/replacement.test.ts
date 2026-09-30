@@ -198,3 +198,21 @@ test('unexpected database failures are redacted and retryable at the HTTP bounda
  context.mock.method(db.pool,'connect',async()=>{throw Object.assign(Error('private database diagnostics'),{code:'40P01'});});
  const response=await app.request(origin+'/api/account/recovery/replace',{method:'POST',headers:{origin,'content-type':'application/json'},body:'{}'},{incoming:{socket:{remoteAddress:'192.0.2.77'}}});assert.equal(response.status,503);assert.equal(response.headers.get('retry-after'),'1');assert.deepEqual(await response.json(),{error:'temporarily_unavailable'});
 });
+
+test('relay admission racing owner-confirmed replacement cannot retain authority on the retired installation',async()=>{
+ const {RelayGrantStore}=await import('../../registration/src/relay-grants.ts');
+ const {RelayMessages}=await import('../../registration/src/relay-messages.ts');
+ const f=await ready(),issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
+ await f.store.machine('prepare',f.envelope('prepare'));
+ await db.pool.query("UPDATE installations SET lease_expires_at=clock_timestamp()+interval '1 hour' WHERE id=$1",[f.installed.installationId]);
+ const config={mode:'local-proof' as const,consentVersion:'race-v1',policy:{version:'race-v1',units:3,periodSeconds:3600,epoch:'2026-01-01T00:00:00.000Z',excess:'refuse' as const,debit:'retain' as const},verifyOrigin:async (r:any)=>({...r,domainControl:true,httpsEndpoint:true,expiresAt:new Date(Date.now()+3600000).toISOString()})};
+ const grant=await new RelayGrantStore(db.pool,config).approve(f.session.token,f.session.csrfToken,{installationId:f.installed.installationId,expectedRevision:0,consent:true,consentVersion:'race-v1',managementOrigin:'https://manage.example.test',expiresAt:new Date(Date.now()+1800000).toISOString()});
+ const now=Date.now(),lease=issuer.issue({origin,leaseId:randomUUID(),installationId:f.installed.installationId,venueId:f.installed.venueId,environment:'test',publicKey:f.installedKey.publicKey,issuedAt:now,expiresAt:now+3600000});
+ const body={version:1,messageId:randomUUID(),grantId:grant.id,grantRevision:grant.revision,class:'password_reset',recipient:'ana@example.test',displayName:'Ana',locale:'es-ES',timeZone:'Europe/Madrid',expiresAt:new Date(now+600000).toISOString(),token:randomBytes(32).toString('base64url')};
+ const bytes=encodeMachine({origin,action:'email-submit',installationId:f.installed.installationId,operationId:body.messageId,issuedAt:now,lease:JSON.stringify(lease),body:JSON.stringify(body)}),envelope={payload:bytes.toString('base64url'),signature:f.installedKey.sign(bytes)};
+ const relay=new RelayMessages(db.pool,issuer,origin,{mode:'local-proof',grants:config,payloadKeys:{activeKeyId:'p',keys:{p:randomBytes(32).toString('hex')}},replayKeys:{activeKeyId:'r',keys:{r:randomBytes(32).toString('hex')}}});
+ const [admission,replacement]=await Promise.allSettled([relay.execute('email-submit',envelope),f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f))]);
+ assert.equal(replacement.status,'fulfilled');if(replacement.status==='fulfilled')assert.equal(replacement.value.state,'complete');
+ if(admission.status==='rejected')assert.equal(admission.reason.code,'grant_unavailable');else assert.equal(admission.value.status.state,'queued');
+ await assert.rejects(relay.execute('email-submit',envelope),(e:any)=>e.code==='grant_unavailable');
+});

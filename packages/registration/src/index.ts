@@ -269,3 +269,7 @@ export {HistoryCleanup, historyCleanupCategories, parseHistoryCleanupPolicy} fro
 export type {HistoryCleanupCategory, HistoryCleanupCategoryReport, HistoryCleanupPolicy, HistoryCleanupReport} from './history-cleanup.ts';
 
 export {pairingCodeKeysFromEnv,upgradePairingCodes,type PairingCodeKeys} from './pairing-codes.ts';
+
+export {RelayMessages,type RelayAdmissionConfig,type RelayAction} from './relay-messages.ts';
+export {RelayMessageError,RelayKeys} from './relay-payload.ts';
+export {RelayError} from './relay-grants.ts';
