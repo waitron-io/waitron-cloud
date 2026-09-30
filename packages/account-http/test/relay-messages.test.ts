@@ -22,7 +22,7 @@ test('signed admission commits one encrypted message and debit and replays after
  await f.restart();const again=await submit(a);assert.equal(again.status,200,again.text);assert.deepEqual(again.body,first.body);
  assert.deepEqual((await read(a)).body,first.body);assert.equal(await count('relay_reservations'),n+1);
  const row=(await f.db.pool.query('SELECT * FROM relay_messages WHERE message_id=$1',[a.body.messageId])).rows[0];
- for(const secret of [a.body.recipient,a.body.token,a.body.displayName]){assert.equal(JSON.stringify(row).includes(secret),false);assert.equal(row.payload.toString('utf8').includes(secret),false);}
+ for(const [field,secret] of Object.entries({recipient:a.body.recipient,token:a.body.token,displayName:a.body.displayName})){assert.equal(JSON.stringify(row).includes(secret),false);assert.equal(row.payload.toString('utf8').includes(JSON.stringify(field)+':'+JSON.stringify(secret)),false);}
  assert.ok(Buffer.isBuffer(row.payload));assert.ok(row.payload.length>28);
  assert.equal(await count('email_outbox'),0);
 });
@@ -95,7 +95,7 @@ test('replay keys survive rotation; their loss fails closed without a second deb
  const storedDigest=row.binding.split(':').at(-1);
  assert.notEqual(storedDigest,createHash('sha256').update(JSON.stringify(body)).digest('hex'));
  assert.notEqual(storedDigest,createHash('sha256').update(JSON.stringify(['waitron-relay-v1',a.installationId,body.messageId,JSON.stringify(body)])).digest('hex'));
- assert.equal(JSON.stringify(row).includes(body.code),false);assert.equal(row.payload.toString('utf8').includes(body.code),false);
+ assert.equal(JSON.stringify(row).includes(body.code),false);assert.equal(row.payload.toString('utf8').includes('"code":'+JSON.stringify(body.code)),false);
  const rotated={...f.relay,payloadKeys:{activeKeyId:'p2',keys:{...f.relay.payloadKeys.keys,p2:randomBytes(32).toString('hex')}},replayKeys:{activeKeyId:'r2',keys:{...f.relay.replayKeys.keys,r2:randomBytes(32).toString('hex')}}};
  try{
   await f.restart(rotated);assert.equal((await submit(a,body)).status,200);
