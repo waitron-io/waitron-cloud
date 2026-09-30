@@ -104,6 +104,7 @@ services:
       retries: 30
     ports:
       - "127.0.0.1:${LOCAL_STACK_ACCOUNT_PORT:-3000}:3000"
+      - "127.0.0.1:${LOCAL_STACK_OPERATIONS_PORT:-9091}:9091"
     restart: unless-stopped
     stop_grace_period: 12s
 
@@ -142,6 +143,21 @@ services:
       CLOUD_USAGE_BATCH_SIZE: ${CLOUD_USAGE_BATCH_SIZE:-100}
     restart: unless-stopped
     stop_grace_period: 15s
+
+  operations-collector:
+    <<: *cloud
+    profiles: [operations]
+    command: ["node", "deploy/local-stack/operations-collector.mjs"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      account:
+        condition: service_started
+    environment:
+      CLOUD_OPERATIONS_INTERVAL_MS: ${CLOUD_OPERATIONS_INTERVAL_MS:-60000}
+    network_mode: service:account
+    restart: unless-stopped
+    stop_grace_period: 5s
 
   remote-probe:
     <<: *cloud

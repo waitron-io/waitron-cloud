@@ -125,6 +125,63 @@ details, configuration and raw failure text. The labels come from fixed componen
 state, code and status sets, so a growing customer population does not create an
 unbounded series count.
 
+## Collect status in the local deployment
+
+To watch the local stack without running a command each time, enable its optional
+collector after starting the stack:
+
+```sh
+docker compose --env-file deploy/local-stack/local.env --profile operations up -d operations-collector
+curl --fail http://127.0.0.1:9091/status
+curl --fail http://127.0.0.1:9091/metrics
+```
+
+The collector invokes the existing status command immediately, then waits 60 seconds
+between completed inspections. It runs separately from the workers and does not schedule
+or repair their work. Each inspection checks the release's complete migration ledger,
+uses PostgreSQL's read-only transaction default, and has a 30-second process deadline.
+The local runtime login still has write privileges; this setting prevents accidental
+writes by the collector, rather than providing a separate database security boundary.
+
+`/status` wraps the command's unchanged JSON in a version 1 document. Its `collection`
+object gives you `state`, `attemptedAt`, `succeededAt` and `expiresAt`; `snapshot` holds
+the successful inspection. `current` means collection succeeded, even when that
+snapshot reports `degraded` or `unready`. Collection failures return HTTP 503 with
+`state: "failed"` and `snapshot: null`. Before the first result, the state is `pending`.
+If the last successful result ages beyond the interval plus the command deadline, the
+state becomes `stale` and its snapshot is suppressed. This bound describes the collection
+schedule; it does not set an alert threshold or a service availability promise.
+
+`/metrics` remains available on a collection failure. It exports
+`waitron_cloud_collection_success` as zero and omits all previous operations metrics,
+so a broken database cannot leave a healthy sample in the current export. The
+`waitron_cloud_collection_last_attempt_timestamp_seconds` and
+`waitron_cloud_collection_last_success_timestamp_seconds` gauges identify the attempts
+and last success without adding labels. When collection succeeds, the endpoint also
+exports the status command's existing bounded-label metrics. An unreachable collector
+must be treated as a scrape failure by the client; it cannot report its own disappearance.
+
+Set `CLOUD_OPERATIONS_INTERVAL_MS` to an integer from 1,000 to 3,600,000 before creating
+the service to change the interval. The default is 60,000. A very short interval competes
+with other health probes for the existing account API rate allowance. Set
+`LOCAL_STACK_OPERATIONS_PORT` to change the loopback port. The port belongs to the account
+container because both processes share its network and health authority. Compose reserves
+that port even when the collector is disabled; no collector listener runs until you enable
+it. After recreating the account container, recreate the collector too.
+
+The collector keeps only the current result in memory and starts with no sample after a
+restart. It does not retain a time series. You can stop it without stopping the workers:
+
+```sh
+docker compose --env-file deploy/local-stack/local.env --profile operations stop operations-collector
+```
+
+Run the disposable local rehearsal with `pnpm proof:operations-collection`. It requires
+the same package-read token as the stack build and removes only its generated project.
+It exercises changing readiness, incompatible migration contents, database loss,
+recovery and collector restart. See the [deployment guide](local-deployment.md) for
+its measured receipt and limits.
+
 ## Use the account API health routes
 
 `GET /api/health/live` returns `200 {"status":"live"}` when the account process can
@@ -162,8 +219,8 @@ identify their Cloud resources.
 ## Production limits
 
 This status surface is local operational tooling, not a deployed monitor. The repository
-does not schedule the command, publish its metrics, configure alerts or provide a public
-status page. The checks reflect current database projections; they do not prove provider
+offers opt-in local collection and a loopback metrics endpoint. It does not configure
+production collection, alerts or a public status page. The checks reflect current database projections; they do not prove provider
 capacity, restore success, regional availability or an end-to-end customer journey.
 
 Before relying on it for production traffic or an availability promise, run it in the

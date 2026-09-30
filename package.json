@@ -59,7 +59,8 @@
     "proof:schema-upgrade": "node scripts/schema-upgrade-receipt.mjs",
     "verify:schema-upgrade": "node scripts/verify-schema-upgrade-receipt.mjs",
     "test:public-gateway-limits": "node --test --test-timeout=30000 scripts/public-gateway-limits.test.mjs scripts/verify-public-gateway-limits-receipt.test.mjs",
-    "verify:public-gateway-limits": "node scripts/verify-public-gateway-limits-receipt.mjs"
+    "verify:public-gateway-limits": "node scripts/verify-public-gateway-limits-receipt.mjs",
+    "proof:operations-collection": "node scripts/operations-collection-proof.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

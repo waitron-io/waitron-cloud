@@ -577,7 +577,11 @@ mobile notifications separately.
   Locked venues, restart completion and shutdown fencing remained intact. These are local
   measurements, not capacity promises. The aggregate operations command now surfaces
   the current worker queues and evidence projections through JSON, a readiness exit code
-  and bounded-label Prometheus metrics. It does not schedule collection or alerting.
+  and bounded-label Prometheus metrics. An opt-in local Compose collector now runs
+  that command on a bounded schedule, exports collection timestamps and failure,
+  and suppresses expired or failed samples. It checks the full migration ledger
+  before each inspection and uses read-only transactions. Production collection,
+  retained time series and alerting remain open.
   Next: choose the terminal-delivery cutoff, repeat the receipt and aggregate checks in
   the selected deployment environment, and add external representative checks,
   escalation/quiet periods and rollout pause criteria.
