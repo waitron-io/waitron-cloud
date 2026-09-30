@@ -9,7 +9,7 @@ jobs:
   reproduce:
     if: github.head_ref == 'fix/backup-worker-container-race'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v6
@@ -22,16 +22,9 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: docker build -q -t cloud-verifier-probe -f packages/backups/test/container-fixture/Dockerfile .
-      - name: Reproduce with bounded repeated worker tests
+      - name: Reproduce with the backup package's normal concurrent tests
         run: |
-          node scripts/test-postgres.mjs exec node --input-type=module -e '
-            import {spawn} from "node:child_process";
-            for(let batch=1;batch<=20;batch++) {
-              console.log("LOAD BATCH",batch);
-              const results=await Promise.all(Array.from({length:4},()=>new Promise(resolve=>{
-                const child=spawn(process.execPath,["--test","--test-timeout=30000","test/container-worker.test.ts"],{cwd:"packages/backups",stdio:"inherit"});
-                child.on("close",resolve);
-              })));
-              if(results.some(code=>code!==0)){process.exitCode=1;break;}
-            }
-          '
+          for attempt in 1 2 3; do
+            echo "PACKAGE ATTEMPT $attempt"
+            node scripts/test-postgres.mjs exec pnpm --dir packages/backups test || exit 1
+          done

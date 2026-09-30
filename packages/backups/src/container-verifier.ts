@@ -12,7 +12,7 @@ async function removeContainer(name:string){
 interface ContainerVerifierOptions {image:string;owner:string;memoryMiB?:number;scratchMiB?:number;}
 async function docker(args:string[]){
  try{return (await execute('docker',args,{timeout:10000,maxBuffer:65536})).stdout.trim();}
- catch{throw Error('backup.verifier_container');}
+ catch(error){const detail=error as {code?:unknown;signal?:unknown;killed?:boolean};throw Error('backup.verifier_container',{cause:{operation:args[0],code:detail.code,signal:detail.signal,killed:detail.killed}});}
 }
 export async function createContainerWaitronVerifier(options:ContainerVerifierOptions):Promise<RestoreVerifier>{
  const {image,owner}=options,memory=options.memoryMiB??1024,scratch=options.scratchMiB??256;
@@ -64,10 +64,10 @@ export async function createContainerWaitronVerifier(options:ContainerVerifierOp
    const [info]=JSON.parse(await docker(['inspect',name]));
    if(failure)throw Error(failure);
    // A created container or host start error has not completed an archive check.
-   if(info.State.Status!=='exited'||info.State.Error||(info.State.ExitCode===0&&attachCode!==0))throw Error('backup.verifier_container');
+   if(info.State.Status!=='exited'||info.State.Error||(info.State.ExitCode===0&&attachCode!==0))throw Error('backup.verifier_container',{cause:{status:info.State.Status,exitCode:info.State.ExitCode,oomKilled:info.State.OOMKilled,startError:Boolean(info.State.Error),attachCode,uploadFailed}});
    if(info.State.OOMKilled||info.State.ExitCode===73)throw Error('backup.verifier_resource',{cause:{oomKilled:info.State.OOMKilled,exitCode:info.State.ExitCode,memoryBytes:info.HostConfig.Memory,memorySwapBytes:info.HostConfig.MemorySwap,scratch:info.HostConfig.Tmpfs,network:info.HostConfig.NetworkMode,readOnly:info.HostConfig.ReadonlyRootfs,mounts:info.Mounts}});
    // Only the entrypoint's documented exit codes attest a completed verifier outcome.
-   if(![0,1,74].includes(info.State.ExitCode))throw Error('backup.verifier_container');
+   if(![0,1,74].includes(info.State.ExitCode))throw Error('backup.verifier_container',{cause:{status:info.State.Status,exitCode:info.State.ExitCode,oomKilled:info.State.OOMKilled,startError:Boolean(info.State.Error),attachCode,uploadFailed}});
    if(uploadFailed)throw Error('backup.verifier_input');
    if(info.State.ExitCode===74)throw Error('backup.verifier_timeout');
    if(info.State.ExitCode!==0)throw Error('backup.verifier_failed');
