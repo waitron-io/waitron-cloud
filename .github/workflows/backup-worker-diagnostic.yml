@@ -21,6 +21,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: docker build -q -t cloud-verifier-probe -f packages/backups/test/container-fixture/Dockerfile .
       - name: Reproduce with bounded repeated worker tests
         run: |
           node scripts/test-postgres.mjs exec node --input-type=module -e '
