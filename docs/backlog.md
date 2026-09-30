@@ -822,6 +822,16 @@ notifications separately.
 
 ## Portal lost-reply test ordering
 
+- **Open: reconciliation can still stall after the reply is dropped.**
+  [CI 36777640375](https://github.com/waitron-io/waitron-cloud/actions/runs/36777640375)
+  on `ab5161d4af0fc41aad83c99ce22de80035b2e027` fails both English journeys
+  at the four-second saved-name wait (portal 110/112). Their diagnostics show
+  committed HTTP 200, completed abort and a subsequent status request, with no
+  status response before failure; the screen still says “Please wait…”. The
+  delayed-injection case fails too, so the injection acknowledgement alone does
+  not resolve this observed failure. Investigate the status request across the
+  browser, HTTP server and database before choosing a fix. This evidence does
+  not identify which layer stalled or establish a relay-worker regression.
 - The remote-DNS journey waits until its fixture has dropped a successful apply
   reply before starting the four-second saved-name assertion. Previously that UI
   wait also timed the fixture's forwarding and fault injection. A controlled
