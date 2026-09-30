@@ -12,8 +12,8 @@ export async function relayFixture(){
  const grants:RelayConfig={mode:'local-proof',consentVersion:'local-v1',policy:{version:'local-v1',units:100,periodSeconds:3600,epoch:'2026-01-01T00:00:00.000Z',excess:'refuse',debit:'retain'},verifyOrigin:async r=>({...r,domainControl:true,httpsEndpoint:true,expiresAt:new Date(Date.now()+7200000).toISOString()})};
  const relay={mode:'local-proof',grants,payloadKeys:{activeKeyId:'p1',keys:{p1:randomBytes(32).toString('hex')}},replayKeys:{activeKeyId:'r1',keys:{r1:randomBytes(32).toString('hex')}}};
  let running:Awaited<ReturnType<typeof startAccountServer>>;
- async function start(config:unknown=relay){
-  running=await startAccountServer({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:false,rateKey:db.rateKey,trustedProxyIps:[]},port:0,leaseIssuer:issuer,...(config?{relay:config}: {})} as Parameters<typeof startAccountServer>[0]);
+ async function start(config:unknown=relay,withPortal=false){
+  running=await startAccountServer({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:false,rateKey:db.rateKey,trustedProxyIps:[]},port:0,leaseIssuer:issuer,...(withPortal?{portalAssets:new Map([['/index.html',{body:Buffer.from('<html>Portal</html>'),contentType:'text/html'}]])}:{}),...(config?{relay:config}: {})} as Parameters<typeof startAccountServer>[0]);
  }
  await start();
  async function venue(owner?:{accountId:string;organisationId:string}){
@@ -47,9 +47,9 @@ export async function relayFixture(){
   const address=running.server.address();assert.ok(address&&typeof address!=='string');
   return new Promise<{status:number;body:any;text:string;headers:Record<string,unknown>}>((resolve,reject)=>{
    const req=httpRequest({host:'127.0.0.1',port:address.port,path:'/v1/installations/email/'+action,method:'POST',headers:{host:'localhost','content-type':'application/json',...headers}},res=>{
-    let text='';res.on('data',b=>{text+=b;});res.once('error',reject);res.once('end',()=>resolve({status:res.statusCode!,body:JSON.parse(text),text,headers:res.headers}));
+    let text='';res.on('data',b=>{text+=b;});res.once('error',reject);res.once('end',()=>{let body:unknown;try{body=JSON.parse(text);}catch{body=null;}resolve({status:res.statusCode!,body,text,headers:res.headers});});
    });req.once('error',reject);req.end(JSON.stringify(envelope));
   });
  }
- return {db,origin,issuer,issuerKey,relay,grants,venue,request,discardReply,async restart(config:unknown=relay){await running.close();await start(config);},async close(){await running.close();await db.close();}};
+ return {db,origin,issuer,issuerKey,relay,grants,venue,request,discardReply,async restart(config:unknown=relay,withPortal=false){await running.close();await start(config,withPortal);},async close(){await running.close();await db.close();}};
 }

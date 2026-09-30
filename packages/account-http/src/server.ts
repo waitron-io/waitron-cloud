@@ -18,7 +18,7 @@ export async function startAccountServer(options: {pool: Pool; outbox: EmailOutb
   let active = 0;let readinessActive=0; let stopping = false; let closing: Promise<void> | undefined;
   const listener = getRequestListener(async (request, bindings) => {
     const url = new URL(request.url);
-    const portalRequest = !!options.portalAssets && !url.pathname.startsWith('/api/');
+    const portalRequest = !!options.portalAssets && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/v1/installations/email/');
     if (portalRequest) {
       const host = new URL(options.config.portalOrigin).host;
       if (url.host !== host || (request.headers.has('host') && request.headers.get('host') !== host))

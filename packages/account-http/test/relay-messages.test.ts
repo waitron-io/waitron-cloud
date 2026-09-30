@@ -202,3 +202,11 @@ test('cancel waiting behind a started handoff cannot overwrite its sending state
   assert.ok((await f.db.pool.query('SELECT payload FROM relay_messages WHERE message_id=$1',[a.body.messageId])).rows[0].payload);
  }finally{await handoff.query('ROLLBACK');handoff.release();await pending;}
 });
+
+test('signed relay routes remain HTTP APIs when the account portal is served alongside them',async()=>{
+ const a=await f.venue();
+ try{
+  await f.restart(f.relay,true);const r=await submit(a);assert.equal(r.status,202,r.text);assert.equal((await read(a)).body.state,'queued');
+  await f.restart(null,true);const disabled=await submit(a);assert.equal(disabled.status,404);assert.deepEqual(disabled.body,{error:'not_found'});
+ }finally{await f.restart();}
+});
