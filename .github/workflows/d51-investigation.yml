@@ -32,8 +32,8 @@ jobs:
             exit 1
           fi
           cat /tmp/d51/control.log
-          rg 'controlled status held before server' /tmp/d51/control.log
-          rg 'Timeout 4000ms exceeded' /tmp/d51/control.log
+          grep -F 'controlled status held before server' /tmp/d51/control.log
+          grep -F 'Timeout 4000ms exceeded' /tmp/d51/control.log
       - name: Reproduce unchanged injection with boundary diagnostics
         run: |
           set -o pipefail
