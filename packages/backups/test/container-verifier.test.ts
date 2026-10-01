@@ -181,3 +181,46 @@ test('external kill diagnostics retain the exit without claiming a resource refu
  const deadline=Date.now()+10000;while(!id&&Date.now()<deadline){id=docker('ps','-q','--filter','label=cloud.backup-verifier.owner='+owner);if(!id)await delay(20);}
  assert(id);docker('kill','--signal','KILL',id);await rejected;empty();
 });
+
+for(const boundary of ['inspect','rm','rm-exit-one'] as const)test(`reclamation tolerates a listed container removed before ${boundary}`,async()=>{
+ const id=docker('create','--label','cloud.backup-verifier.deadline=0','--label','cloud.backup-verifier.owner='+owner,'--entrypoint','node',image,'-e','');
+ docker('start','-a',id);
+ const directory=await mkdtemp(join(tmpdir(),'container-reclaim-')),oldPath=process.env.PATH,realDocker=execFileSync('which',['docker'],{encoding:'utf8'}).trim();
+ const wrapper=join(directory,'docker'),removed=join(directory,'removed');
+ await writeFile(wrapper,`#!${process.execPath}\nconst fs=require('node:fs'),cp=require('node:child_process'),args=process.argv.slice(2);let disappeared=false;if(args[0]===${JSON.stringify(boundary==='rm-exit-one'?'rm':boundary)}&&${JSON.stringify(id)}.startsWith(args.at(-1))&&args.at(-1).length>=12&&!fs.existsSync(${JSON.stringify(removed)})){cp.execFileSync(${JSON.stringify(realDocker)},['rm','-f',${JSON.stringify(id)}]);fs.writeFileSync(${JSON.stringify(removed)},'');disappeared=true;}const r=cp.spawnSync(${JSON.stringify(realDocker)},args,{stdio:'inherit'});process.exit(disappeared&&${JSON.stringify(boundary==='rm-exit-one')}?1:r.status??1);`);
+ await chmod(wrapper,0o700);process.env.PATH=directory+':'+oldPath;
+ try{
+  const verify=await createContainerWaitronVerifier({image,owner});
+  assert(existsSync(removed));
+  assert.equal((await verify(source(0),keys,point(0),new AbortController().signal) as any).integrityOk,true);empty();
+ }finally{process.env.PATH=oldPath;try{docker('rm','-f',id);}catch{}await rm(directory,{recursive:true,force:true});}
+});
+
+for(const boundary of ['inspect','rm'] as const)for(const failure of ['daemon','wrong-id','wrong-exit'] as const)test(`reclamation reports a Docker ${failure} failure during ${boundary}`,async()=>{
+ const id=docker('create','--label','cloud.backup-verifier.deadline=0','--label','cloud.backup-verifier.owner='+owner,'--entrypoint','node',image,'-e','');
+ const directory=await mkdtemp(join(tmpdir(),'container-reclaim-failure-')),oldPath=process.env.PATH,realDocker=execFileSync('which',['docker'],{encoding:'utf8'}).trim();
+ const secret='private-daemon-error /private/recovery-key',wrapper=join(directory,'docker');
+ await writeFile(wrapper,`#!${process.execPath}\nconst cp=require('node:child_process'),args=process.argv.slice(2);if(args[0]===${JSON.stringify(boundary)}&&${JSON.stringify(id)}.startsWith(args.at(-1))&&args.at(-1).length>=12){const missing=${JSON.stringify(boundary==='inspect'?'Error: No such object: ':'Error response from daemon: No such container: ')}+(${JSON.stringify(failure==='wrong-id')}?'different-id':args.at(-1));process.stderr.write(${JSON.stringify(failure==='daemon')}?'Cannot connect to Docker: '+missing+' '+${JSON.stringify(secret)}:missing);process.exit(${failure==='wrong-exit'?125:1});}const r=cp.spawnSync(${JSON.stringify(realDocker)},args,{stdio:'inherit'});process.exit(r.status??1);`);
+ await chmod(wrapper,0o700);process.env.PATH=directory+':'+oldPath;
+ try{
+  await assert.rejects(createContainerWaitronVerifier({image,owner}),(error:any)=>{
+   assert.equal(error.message,boundary==='inspect'?'backup.verifier_container':'backup.verifier_cleanup');
+   if(boundary==='inspect')assert.deepEqual(error.cause,{operation:'inspect',code:failure==='wrong-exit'?125:1,signal:null,killed:false});
+   assert(!JSON.stringify({cause:error.cause}).includes(secret));return true;
+  });
+  assert.equal(JSON.parse(execFileSync(realDocker,['inspect',id],{encoding:'utf8'}))[0].State.Status,'created');
+ }finally{process.env.PATH=oldPath;docker('rm','-f',id);await rm(directory,{recursive:true,force:true});}empty();
+});
+
+test('a container disappearing during active result inspection stays an infrastructure failure',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'container-result-missing-')),oldPath=process.env.PATH,realDocker=execFileSync('which',['docker'],{encoding:'utf8'}).trim();
+ const wrapper=join(directory,'docker');
+ await writeFile(wrapper,`#!${process.execPath}\nconst cp=require('node:child_process'),args=process.argv.slice(2);if(args[0]==='inspect'&&args[1].startsWith('cloud-verify-'))cp.execFileSync(${JSON.stringify(realDocker)},['rm','-f',args[1]]);const r=cp.spawnSync(${JSON.stringify(realDocker)},args,{stdio:'inherit'});process.exit(r.status??1);`);
+ await chmod(wrapper,0o700);process.env.PATH=directory+':'+oldPath;
+ try{
+  const verify=await createContainerWaitronVerifier({image,owner});
+  await assert.rejects(verify(source(0),keys,point(0),new AbortController().signal),(error:any)=>{
+   assert.equal(error.message,'backup.verifier_container');assert.deepEqual(error.cause,{operation:'inspect',code:1,signal:null,killed:false});return true;
+  });empty();
+ }finally{process.env.PATH=oldPath;await rm(directory,{recursive:true,force:true});}
+});

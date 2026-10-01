@@ -5,14 +5,20 @@ import {pipeline} from 'node:stream/promises';
 import {promisify} from 'node:util';
 import type {RestoreVerifier} from './worker.ts';
 const execute=promisify(execFile),label='cloud.backup-verifier.owner';
+function missingContainer(error:unknown,id:string){
+ const detail=error as {code?:unknown;signal?:unknown;killed?:boolean;stderr?:string};
+ return detail.code===1&&!detail.signal&&!detail.killed&&[
+  `error: no such object: ${id}`,`error response from daemon: no such container: ${id}`,
+ ].includes(detail.stderr?.trim().toLowerCase()??'');
+}
 async function removeContainer(name:string){
  try{return (await execute('docker',['rm','-f',name],{timeout:10000,maxBuffer:65536})).stdout.trim();}
- catch(error){if(/No such container/.test(String((error as {stderr?:string}).stderr)))return '';throw Error('backup.verifier_cleanup');}
+ catch(error){if(missingContainer(error,name))return '';throw Error('backup.verifier_cleanup');}
 }
 interface ContainerVerifierOptions {image:string;owner:string;memoryMiB?:number;scratchMiB?:number;}
-async function docker(args:string[]){
+async function docker(args:string[],missingId?:string){
  try{return (await execute('docker',args,{timeout:10000,maxBuffer:65536})).stdout.trim();}
- catch(error){const detail=error as {code?:unknown;signal?:unknown;killed?:boolean};throw Error('backup.verifier_container',{cause:{operation:args[0],code:detail.code,signal:detail.signal,killed:detail.killed}});}
+ catch(error){if(missingId!==undefined&&missingContainer(error,missingId))return '';const detail=error as {code?:unknown;signal?:unknown;killed?:boolean};throw Error('backup.verifier_container',{cause:{operation:args[0],code:detail.code,signal:detail.signal,killed:detail.killed}});}
 }
 export async function createContainerWaitronVerifier(options:ContainerVerifierOptions):Promise<RestoreVerifier>{
  const {image,owner}=options,memory=options.memoryMiB??1024,scratch=options.scratchMiB??256;
@@ -23,7 +29,9 @@ export async function createContainerWaitronVerifier(options:ContainerVerifierOp
  const reclaim=async()=>{
  const expired=(await docker(['ps','-aq','--filter',`label=${label}=${owner}`])).split(/\s+/).filter(Boolean);
  for(const id of expired){
-  const [info]=JSON.parse(await docker(['inspect',id]));
+  const inspected=await docker(['inspect',id],id);
+  if(!inspected)continue;
+  const [info]=JSON.parse(inspected);
   // An ownership deadline fences a pass even if its process is still alive; recent results remain readable.
   const deadline=Number(info.Config.Labels?.['cloud.backup-verifier.deadline']);
   if(Number.isFinite(deadline)&&deadline<Date.now())await removeContainer(id);
