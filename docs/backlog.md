@@ -308,7 +308,8 @@ notifications separately.
   The whole-job allowance is now 20 minutes to accommodate the added relay
   integration coverage. Individual test deadlines and assertions are unchanged.
   These two runs measure elapsed time, not an isolated attribution of every
-  duration change to D47. CI must still complete on the updated head; consider
+  duration change to D47. [CI 36855902107](https://github.com/waitron-io/waitron-cloud/actions/runs/36855902107)
+  passed on `7b5cdb1f50449e4a9c2d50e59f757aa1c1cd8716` in 13m46s. Consider
   splitting the job if further suite growth consumes this margin. This remains
   separate from D48's intermittent backup verdict and is not a diagnosis of it.
 
@@ -829,7 +830,8 @@ notifications separately.
   the browser-side stall and retained the apply interceptor through reconciliation,
   as described below. [D51's exact-merge CI](https://github.com/waitron-io/waitron-cloud/actions/runs/36851962407)
   passed on `3085054b8d82698ec3e8f420ade798957df2d9a8`. D47 now includes that
-  fix through rebase; its own current-head CI remains the separate landing gate.
+  fix through rebase; [its rebased-head CI](https://github.com/waitron-io/waitron-cloud/actions/runs/36855902107)
+  passed on `7b5cdb1f50449e4a9c2d50e59f757aa1c1cd8716`.
 - The remote-DNS journey waits until its fixture has dropped a successful apply
   reply before starting the four-second saved-name assertion. Previously that UI
   wait also timed the fixture's forwarding and fault injection. A controlled
