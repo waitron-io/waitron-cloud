@@ -65,7 +65,8 @@ for(const {locale,replyDelayMs} of [{locale:'en',replyDelayMs:0},{locale:'es',re
 
  }catch(error){
   // Keep the request sequence and current screen when a browser wait fails; omit cookies and bodies.
-  const activity=await f.db.secondPool.query({text:"SELECT state,wait_event_type,wait_event FROM pg_stat_activity WHERE application_name=$1 AND pid<>pg_backend_pid()",values:[f.db.schema],query_timeout:1000}).then(r=>r.rows).catch(()=>[]);
+  const activityQuery={text:"SELECT state,wait_event_type,wait_event FROM pg_stat_activity WHERE application_name=$1 AND pid<>pg_backend_pid()",values:[f.db.schema],query_timeout:1000};
+  const activity=await f.db.secondPool.query(activityQuery).then(r=>r.rows).catch(()=>[]);
   t.diagnostic(JSON.stringify({locale,replyDelayMs,events,activity,screen:await page?.locator('.remote-setup').textContent({timeout:1000}).catch(()=>null)}));
   throw error;
  }finally{await f.close();}
