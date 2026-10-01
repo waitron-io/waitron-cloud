@@ -38,7 +38,7 @@ jobs:
         run: |
           set -o pipefail
           for pass in 1 2 3 4 5 6; do
-            node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test --test-timeout=120000 test/remote-browser.test.ts 2>&1 | tee /tmp/d51/probe-$pass.log
+            node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec env DEBUG=pw:protocol node --test --test-timeout=120000 test/remote-browser.test.ts 2>&1 | node scripts/d51-protocol-trace.mjs | tee /tmp/d51/probe-$pass.log
           done
       - uses: actions/upload-artifact@v4
         if: always()
