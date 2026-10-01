@@ -3,17 +3,27 @@ import {randomUUID} from 'node:crypto';
 import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {promisify} from 'node:util';
+import {setTimeout as delay} from 'node:timers/promises';
 import type {RestoreVerifier} from './worker.ts';
 const execute=promisify(execFile),label='cloud.backup-verifier.owner';
-function missingContainer(error:unknown,id:string){
+function containerDiagnostic(error:unknown,messages:string[]){
  const detail=error as {code?:unknown;signal?:unknown;killed?:boolean;stderr?:string};
- return detail.code===1&&!detail.signal&&!detail.killed&&[
-  `error: no such object: ${id}`,`error response from daemon: no such container: ${id}`,
- ].includes(detail.stderr?.trim().toLowerCase()??'');
+ return detail.code===1&&!detail.signal&&!detail.killed&&messages.includes(detail.stderr?.trim().toLowerCase()??'');
 }
-async function removeContainer(name:string){
- try{return (await execute('docker',['rm','-f',name],{timeout:10000,maxBuffer:65536})).stdout.trim();}
- catch(error){if(missingContainer(error,name))return '';throw Error('backup.verifier_cleanup');}
+function missingContainer(error:unknown,id:string){
+ return containerDiagnostic(error,[`error: no such object: ${id}`,`error response from daemon: no such container: ${id}`]);
+}
+async function removeContainer(name:string,waitForRemoval=false){
+ const deadline=Date.now()+10000;
+ for(;;){
+  try{return (await execute('docker',['rm','-f',name],{timeout:Math.max(1,deadline-Date.now()),maxBuffer:65536})).stdout.trim();}
+  catch(error){
+   if(missingContainer(error,name))return '';
+   // A sibling's removal must finish before reclamation can treat its resources as released.
+   if(waitForRemoval&&Date.now()<deadline&&containerDiagnostic(error,[`error response from daemon: removal of container ${name} is already in progress`])){await delay(50);continue;}
+   throw Error('backup.verifier_cleanup');
+  }
+ }
 }
 interface ContainerVerifierOptions {image:string;owner:string;memoryMiB?:number;scratchMiB?:number;}
 async function docker(args:string[],missingId?:string){
@@ -34,7 +44,7 @@ export async function createContainerWaitronVerifier(options:ContainerVerifierOp
   const [info]=JSON.parse(inspected);
   // An ownership deadline fences a pass even if its process is still alive; recent results remain readable.
   const deadline=Number(info.Config.Labels?.['cloud.backup-verifier.deadline']);
-  if(Number.isFinite(deadline)&&deadline<Date.now())await removeContainer(id);
+  if(Number.isFinite(deadline)&&deadline<Date.now())await removeContainer(info.Id,true);
  }
  };
  await reclaim();

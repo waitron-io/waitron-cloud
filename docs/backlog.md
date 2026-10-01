@@ -753,12 +753,15 @@ notifications separately.
   **D49 done: concurrent reclamation tolerates an already removed container.**
   Deterministic Docker fixtures remove a listed container before inspection or
   removal; a missing result during active verification still raises infrastructure
-  failure. Only exit 1 with the exact missing-object/container diagnostic naming
-  that ID is tolerated. Daemon errors, another ID and a different exit code remain
+  failure. Exit 1 with the exact missing-object/container diagnostic naming that
+  ID is tolerated. Reclamation retries an exact removal-in-progress diagnostic
+  within one ten-second removal budget, refusing a removal that never finishes.
+  Daemon errors, another ID and a different exit code remain
   failures; raw daemon text is not exposed. The existing deadline and foreign-owner
   test passes unchanged. Shared-owner and isolated-owner lifecycle probes each
   complete 12 calls, with four successful restores and eight expected resource
-  refusals. This fixes the separate D48 investigation follow-up, not the unresolved
+  refusals. Three further rounds with ten expired containers and two reclaimers
+  each finish without errors. This fixes the separate D48 investigation follow-up, not the unresolved
   sequential worker-test failure above. Continue assigning distinct worker owners;
   these local probes do not establish production concurrency capacity.
   A read-only

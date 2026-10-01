@@ -182,7 +182,7 @@ test('external kill diagnostics retain the exit without claiming a resource refu
  assert(id);docker('kill','--signal','KILL',id);await rejected;empty();
 });
 
-for(const boundary of ['inspect','rm','rm-exit-one'] as const)test(`reclamation tolerates a listed container removed before ${boundary}`,async()=>{
+for(const boundary of ['inspect','rm','rm-exit-one'] as const)test(boundary==='rm'?"reclamation handles Docker's exit-zero removal of an already missing container":`reclamation tolerates a listed container removed before ${boundary}`,async()=>{
  const id=docker('create','--label','cloud.backup-verifier.deadline=0','--label','cloud.backup-verifier.owner='+owner,'--entrypoint','node',image,'-e','');
  docker('start','-a',id);
  const directory=await mkdtemp(join(tmpdir(),'container-reclaim-')),oldPath=process.env.PATH,realDocker=execFileSync('which',['docker'],{encoding:'utf8'}).trim();
@@ -223,4 +223,23 @@ test('a container disappearing during active result inspection stays an infrastr
    assert.equal(error.message,'backup.verifier_container');assert.deepEqual(error.cause,{operation:'inspect',code:1,signal:null,killed:false});return true;
   });empty();
  }finally{process.env.PATH=oldPath;await rm(directory,{recursive:true,force:true});}
+});
+
+for(const completes of [true,false])test(`reclamation ${completes?'waits for':'bounds its wait for'} an in-progress removal`,{timeout:15000},async()=>{
+ const id=docker('create','--label','cloud.backup-verifier.deadline=0','--label','cloud.backup-verifier.owner='+owner,'--entrypoint','node',image,'-e','');
+ const directory=await mkdtemp(join(tmpdir(),'container-reclaim-busy-')),oldPath=process.env.PATH,realDocker=execFileSync('which',['docker'],{encoding:'utf8'}).trim();
+ const wrapper=join(directory,'docker'),waiting=join(directory,'waiting');
+ await writeFile(wrapper,`#!${process.execPath}\nconst fs=require('node:fs'),cp=require('node:child_process'),args=process.argv.slice(2);if(args[0]==='rm'&&${JSON.stringify(id)}.startsWith(args.at(-1))&&args.at(-1).length>=12){if(!fs.existsSync(${JSON.stringify(waiting)})||!${completes}){fs.writeFileSync(${JSON.stringify(waiting)},'');process.stderr.write('Error response from daemon: removal of container '+${JSON.stringify(id)}+' is already in progress');process.exit(1);}cp.execFileSync(${JSON.stringify(realDocker)},['rm','-f',${JSON.stringify(id)}]);}const r=cp.spawnSync(${JSON.stringify(realDocker)},args,{stdio:'inherit'});process.exit(r.status??1);`);
+ await chmod(wrapper,0o700);process.env.PATH=directory+':'+oldPath;
+ const started=Date.now();
+ try{
+  if(completes){
+   const verify=await createContainerWaitronVerifier({image,owner});assert(existsSync(waiting));
+   assert.equal((await verify(source(0),keys,point(0),new AbortController().signal) as any).integrityOk,true);empty();
+  }else{
+   await assert.rejects(createContainerWaitronVerifier({image,owner}),/backup.verifier_cleanup/);
+   assert.equal(JSON.parse(execFileSync(realDocker,['inspect',id],{encoding:'utf8'}))[0].State.Status,'created');
+  }
+  assert(Date.now()-started<13000);
+ }finally{process.env.PATH=oldPath;try{docker('rm','-f',id);}catch{}await rm(directory,{recursive:true,force:true});}
 });
