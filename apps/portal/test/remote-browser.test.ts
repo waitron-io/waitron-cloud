@@ -32,17 +32,19 @@ for(const {locale,replyDelayMs} of [{locale:'en',replyDelayMs:0},{locale:'es',re
   // The UI deadline starts after the fixture drops the committed reply, not while it is still forwarding it.
   let finishInjection!:(status:number)=>void;
   const injectedStatus=new Promise<number>(resolve=>{finishInjection=resolve;});
+  // Keep interception active through the status read that starts as soon as apply rejects.
   await page.route('**/api/account/remote-access/apply',async route=>{
    try{
     record('lost-reply fetch started');const response=await route.fetch();record({lostReplyStatus:response.status()});
     if(replyDelayMs)await delay(replyDelayMs);
     await route.abort('failed');record('lost-reply aborted');finishInjection(response.status());
    }catch(error){record({injectionError:error instanceof Error?error.name:'unknown'});finishInjection(0);}
-  },{times:1});
+  });
   const injectionTimeout=setTimeout(()=>{record('lost-reply injection timed out');finishInjection(0);},30_000);
   try{await confirm.click();assert.equal(await injectedStatus,200,'the lost reply must follow a successful committed apply');}
   finally{clearTimeout(injectionTimeout);}
   await section.getByText(locale==='en'?'Name saved. Access remains pending until the certificate and venue settings are ready.':'Nombre guardado. El acceso sigue pendiente hasta que el certificado y la configuración del local estén listos.',{exact:true}).waitFor();
+  await page.unroute('**/api/account/remote-access/apply');
   assert.equal((await f.db.pool.query('SELECT count(*) FROM remote_hostname_changes')).rows[0].count,'2');
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false');await section.getByRole('button',{name:c.refreshStatus,exact:true}).click();await section.getByRole('alert').waitFor();assert.equal(await input.count(),0);
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=true');await section.getByRole('button',{name:c.refreshStatus,exact:true}).click();await input.waitFor();
