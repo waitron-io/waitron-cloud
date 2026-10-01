@@ -42,6 +42,19 @@ export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?
       port: Number(process.env.MAILPIT_TEST_SMTP_PORT), portalOrigin: origin,
     }));
     return {origin, browser, db, issuer,
+      traceRemoteRequests(record:(event:unknown)=>void) {
+        const server=running!.server;let nextSocket=0;const sockets=new WeakMap<object,number>();
+        const hook=(request:IncomingMessage,response:ServerResponse)=>{
+          const path=request.url?.split('?')[0];if(!path?.startsWith('/api/account/remote-access/'))return;
+          let socket=sockets.get(request.socket);if(!socket){socket=++nextSocket;sockets.set(request.socket,socket);}
+          record({serverRequest:path,socket});
+          request.once('end',()=>record({serverBodyEnd:path,socket}));
+          response.once('finish',()=>record({serverFinish:path,status:response.statusCode,socket}));
+          response.once('close',()=>record({serverClose:path,finished:response.writableFinished,socket}));
+        };
+        server.prependListener('request',hook);
+        return ()=>server.removeListener('request',hook);
+      },
       loseRecoveryReply(action: 'approve' | 'replace') {
         // Drop the socket after the handler commits, so reconciliation uses ordinary browser networking.
         return new Promise<{status: number; body: string}>(resolve => {

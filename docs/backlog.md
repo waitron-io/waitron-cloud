@@ -286,6 +286,11 @@ notifications separately.
   See [the ordering receipt](#portal-lost-reply-test-ordering) for the controlled
   reproduction and the uncertainty about this historical failure. Investigate a
   future failure from its diagnostics; passing repeats alone do not explain it.
+  D51 is investigating the newer stalled-status failures in D47 CI 36777640375.
+  Branch `fix/portal-status-after-fault` adds temporary Ubuntu reproduction and
+  bounded browser/server/database boundary traces, validated against a deliberately
+  held status request. The cause and fix remain unverified; existing assertions
+  and deadlines stay unchanged.
 
 - **CI execution budget.** [Run 36723901567](https://github.com/waitron-io/waitron-cloud/actions/runs/36723901567)
   on `bcda7444aa8b452a8023b905b09069a34522ee3c` was cancelled at the job's

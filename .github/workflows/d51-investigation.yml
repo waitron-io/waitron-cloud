@@ -1,0 +1,47 @@
+name: D51 status stall investigation
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  packages: read
+jobs:
+  probe:
+    if: github.head_ref == 'fix/portal-status-after-fault'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: pnpm --dir apps/portal exec playwright install --with-deps chromium
+      - run: pnpm --dir apps/portal build
+      - name: Validate diagnostics against a held status control
+        run: |
+          mkdir -p /tmp/d51
+          if node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec env CLOUD_REMOTE_STALL_CONTROL=1 node --test --test-name-pattern='^en owner.*reply$' --test-timeout=120000 test/remote-browser.test.ts > /tmp/d51/control.log 2>&1; then
+            cat /tmp/d51/control.log
+            exit 1
+          fi
+          cat /tmp/d51/control.log
+          rg 'controlled status held before server' /tmp/d51/control.log
+          rg 'Timeout 4000ms exceeded' /tmp/d51/control.log
+      - name: Reproduce unchanged injection with boundary diagnostics
+        run: |
+          set -o pipefail
+          for pass in 1 2 3 4 5 6; do
+            node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test --test-timeout=120000 test/remote-browser.test.ts 2>&1 | tee /tmp/d51/probe-$pass.log
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: d51-boundary-diagnostics
+          path: /tmp/d51/*.log

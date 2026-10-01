@@ -12,10 +12,17 @@ for(const {locale,replyDelayMs} of [{locale:'en',replyDelayMs:0},{locale:'es',re
  let page:Page|undefined;const started=Date.now();const events:unknown[]=[];
  const record=(event:unknown)=>{if(events.length<60)events.push({afterMs:Date.now()-started,event});};
  let assigned='';const f=await startPortalFixture(undefined,async name=>[name.startsWith('_acme')?'_acme-challenge.'+assigned:assigned]);try{
+  f.traceRemoteRequests(record);
   const email='remote@example.test',password='A long enough owner password',signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email);const mail=f.db.outbox.open((await f.db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
   const owner=await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'}),r=new RegistrationStore(f.db.pool),b={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};await r.start(b);await r.approveCloud(b,owner.accountId);await r.approveLocal(b,randomUUID());const v=await r.complete(b);
   const store=new RemoteAccessStore(f.db.pool),cell={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'local.example.test',subnet:7,publicKey:randomBytes(32).toString('base64'),endpoint:'gateway.example.test:51820'};await store.createCell(cell);assigned=(await store.provision(v.installationId,cell.id,randomBytes(32).toString('base64'))).staffHostname;
   const context=await f.browser.newContext({locale,viewport:{width:375,height:812},colorScheme:locale==='en'?'light':'dark'});page=await context.newPage();page.setDefaultTimeout(4000);const c=translations[locale];
+  const cdp=await context.newCDPSession(page);await cdp.send('Network.enable');
+  const requests=new Set<string>();
+  cdp.on('Network.requestWillBeSent',event=>{const path=new URL(event.request.url).pathname;if(path.startsWith('/api/account/remote-access/')){requests.add(event.requestId);record({browserSent:path,id:event.requestId});}});
+  cdp.on('Network.responseReceived',event=>{if(requests.has(event.requestId))record({browserResponse:event.response.status,id:event.requestId});});
+  cdp.on('Network.loadingFailed',event=>{if(requests.has(event.requestId))record({browserFailed:event.errorText,id:event.requestId});});
+
   page.on('request',request=>{const path=new URL(request.url()).pathname;if(path.startsWith('/api/account/remote-access/'))record({request:path});});
   page.on('response',response=>{const path=new URL(response.url()).pathname;if(path.startsWith('/api/account/remote-access/'))record({response:path,status:response.status()});});
   page.on('requestfailed',request=>{const path=new URL(request.url()).pathname;if(path.startsWith('/api/account/remote-access/'))record({failed:path,error:request.failure()?.errorText});});
@@ -39,6 +46,7 @@ for(const {locale,replyDelayMs} of [{locale:'en',replyDelayMs:0},{locale:'es',re
     await route.abort('failed');record('lost-reply aborted');finishInjection(response.status());
    }catch(error){record({injectionError:error instanceof Error?error.name:'unknown'});finishInjection(0);}
   },{times:1});
+  if(process.env.CLOUD_REMOTE_STALL_CONTROL)await page.route('**/api/account/remote-access/status',async route=>{record('controlled status held before server');await delay(4500);await route.continue();},{times:1});
   const injectionTimeout=setTimeout(()=>{record('lost-reply injection timed out');finishInjection(0);},30_000);
   try{await confirm.click();assert.equal(await injectedStatus,200,'the lost reply must follow a successful committed apply');}
   finally{clearTimeout(injectionTimeout);}
@@ -57,7 +65,8 @@ for(const {locale,replyDelayMs} of [{locale:'en',replyDelayMs:0},{locale:'es',re
 
  }catch(error){
   // Keep the request sequence and current screen when a browser wait fails; omit cookies and bodies.
-  t.diagnostic(JSON.stringify({locale,replyDelayMs,events,screen:await page?.locator('.remote-setup').textContent({timeout:1000}).catch(()=>null)}));
+  const activity=await f.db.secondPool.query({text:"SELECT state,wait_event_type,wait_event FROM pg_stat_activity WHERE application_name=$1 AND pid<>pg_backend_pid()",values:[f.db.schema],query_timeout:1000}).then(r=>r.rows).catch(()=>[]);
+  t.diagnostic(JSON.stringify({locale,replyDelayMs,events,activity,screen:await page?.locator('.remote-setup').textContent({timeout:1000}).catch(()=>null)}));
   throw error;
  }finally{await f.close();}
 });
