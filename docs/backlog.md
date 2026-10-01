@@ -286,11 +286,12 @@ notifications separately.
   See [the ordering receipt](#portal-lost-reply-test-ordering) for the controlled
   reproduction and the uncertainty about this historical failure. Investigate a
   future failure from its diagnostics; passing repeats alone do not explain it.
-  D51 is investigating the newer stalled-status failures in D47 CI 36777640375.
-  Branch `fix/portal-status-after-fault` adds temporary Ubuntu reproduction and
-  bounded browser/server/database boundary traces, validated against a deliberately
-  held status request. The cause and fix remain unverified; existing assertions
-  and deadlines stay unchanged.
+  [PR #102](https://github.com/waitron-io/waitron-cloud/pull/102) keeps the fault
+  interceptor active until reconciliation completes, then removes it explicitly.
+  The newer failure was reproduced twice on Ubuntu: the browser issued the status
+  request after the abort, but the HTTP server never received it
+  and database connections were idle. See the receipt below. No production portal
+  change, assertion edit, extra retry or longer deadline is included.
 
 - **CI execution budget.** [Run 36723901567](https://github.com/waitron-io/waitron-cloud/actions/runs/36723901567)
   on `bcda7444aa8b452a8023b905b09069a34522ee3c` was cancelled at the job's
@@ -824,6 +825,20 @@ notifications separately.
   this mechanism with certainty. The test records bounded request/status events,
   injection stages and the setup screen if it fails again. Investigate any new
   failure from that evidence; a passing repeat alone does not establish its cause.
+- D51's bounded Ubuntu probes reproduced the newer status stall in
+  [run 36846155539](https://github.com/waitron-io/waitron-cloud/actions/runs/36846155539)
+  and [run 36846703454](https://github.com/waitron-io/waitron-cloud/actions/runs/36846703454).
+  Both failures followed a committed apply and completed abort. The browser emitted
+  the status request, the server never received it, and the database was idle.
+  The second probe recorded interception being disabled after the abort. Keeping
+  the apply interceptor until the saved-name assertion completes makes the status
+  read pass through interception before teardown. Chromium's internal reason for
+  stranding the request during teardown remains unverified. The separate delayed
+  status control still fails at four seconds, so a genuinely slow read is not hidden.
+  [The fixed probe](https://github.com/waitron-io/waitron-cloud/actions/runs/36847208929)
+  passed all 18 English, Spanish and delayed-injection journeys; each status read
+  was explicitly continued before interception was disabled. Temporary Ubuntu
+  workflows, control switches and protocol tracing are removed.
 
 ## Initial services and future candidates
 
