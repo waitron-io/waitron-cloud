@@ -2,7 +2,7 @@
 
 Status: version 1 Cloud/Waitron contract, scoped on 2026-09-30. The internal
 local-proof grant, reservation, signed admission and encrypted queue are implemented.
-No relay worker is installed. Normal startup exposes no relay routes. Production remains disabled until the decisions and proofs
+A separate local capture worker is implemented but is not wired into normal startup. Normal startup exposes no relay routes. Production remains disabled until the decisions and proofs
 below are complete.
 
 You should be able to send ordinary Waitron account emails after connecting a free
@@ -380,13 +380,91 @@ Cancellation and observed expiry clear queued ciphertext and advance the status
 revision once. They keep the original reservation and replay tombstone. Cancellation
 cannot change `sending` or later states. No automatic cleanup or retention period
 is installed; choose those before production, and retain tombstones throughout the
-accepted retry window. The worker slice owns unattended expiry and delivery states.
+accepted retry window. The local worker handles unattended expiry and delivery states when explicitly configured.
 
 The local routes share the existing machine counters: 60 requests/minute per source
 and 30/minute per authenticated installation across relay and lifecycle endpoints. Forged proofs cannot spend another installation's request limit.
 These fixture bounds and the explicitly configured account allowance are not an
 approved production abuse policy. Per-recipient/grant budgets, aggregate queued
-bytes, suppression and provider spending controls remain production prerequisites.
+bytes, authenticated suppression events and provider spending controls remain production prerequisites.
+
+## Exercise the local worker
+
+An interrupted SMTP send may already have reached the receiving server. You need to
+keep that uncertainty instead of sending the same action again. `RelayWorker` records
+`sending` durably before calling SMTP. An expired `sending` lease, a worker deadline,
+an unknown transport failure or a disconnect after DATA becomes `uncertain`; the
+worker never sends that record again. `accepted` means the SMTP fixture accepted it,
+not that a recipient read it.
+
+Run the worker proof from the repository root:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node \
+  --test --test-timeout=30000 test/relay-worker.test.ts
+```
+
+The proof uses disposable PostgreSQL, loopback SMTP servers and synthetic addresses.
+It covers two accounts and workers, all three templates, revocation racing handoff,
+expiry, cancellation, suppression, key rotation/loss, temporary and permanent refusals,
+post-DATA disconnect and a killed process. Existing account mail has separate tests
+and retains its existing transport and retry policy.
+
+For an explicit local harness, construct `new RelayWorker(pool, config)` from
+`@waitron-cloud/registration`. Its configuration is `{mode: 'local-proof', grants,
+payloadKeys, suppressionKeys, smtpPort}`. Reuse the admission grant configuration and
+payload ring; supply a separate suppression key ring with `{activeKeyId, keys}`.
+`runOnce()` handles at most one message and returns whether it handled work. You can
+use the existing `runWorkerLoop` with concurrency four to schedule it. Without a
+configuration, `runOnce()` returns false and leaves the queue unchanged. No server,
+Compose service, CLI or environment switch starts this worker automatically.
+
+The adapter connects only to `127.0.0.1` at the supplied disposable capture port.
+It uses the fixed sender `relay@example.test`, no credentials and plain SMTP for
+that loopback fixture. It cannot serve as a production TLS adapter. Templates are
+plain text in English or Spanish; links use the verified management origin and
+Waitron's existing token/purpose query parameters and recipient email fragment.
+
+Claims last 60 seconds and at most four can be live across worker instances in one
+Cloud schema. The capacity and suppression locks are scoped to that schema, so a
+separate Cloud database schema does not share their lock waits. SMTP
+has a 15-second total deadline inside the worker's 20-second deadline. Known negative
+SMTP replies and refused TCP connections may retry: eight attempts, 30-second
+exponential delays capped at 900 seconds, with no retry scheduled beyond expiry.
+Permanent SMTP refusal, local suppression and exhausted attempts all end as
+`failed/refused`. This fixed public reason deliberately does not disclose the
+suppression list or raw SMTP responses. Deadlines are conservatively uncertain
+even if they fire during connection setup: this adapter does not prove SMTP phase
+at timeout, so it trades automatic recovery for avoiding duplicate delivery.
+A leased queued row has not crossed handoff
+and can still be cancelled or reclaimed after a crash.
+
+The handoff transaction rechecks the original reservation, consenting account,
+owner membership, installation, grant revision/origin and deadlines. It serializes
+against cancel and the trusted local `suppress(recipient)` operation. Revocation or
+suppression committed before handoff prevents the send. Once `sending` commits,
+cancel returns that state and later revocation cannot recall the message. Authority
+or database read errors leave unstarted work deferred; they do not authorise sending.
+
+Suppression stores only a keyed recipient fingerprint. Keep every historical
+suppression key while its rows exist; losing one stops handoff rather than silently
+ignoring its entries. A failed handoff retains its unstarted 60-second claim; missing
+keys can therefore occupy all four slots until the leases expire. Restore the key
+ring before expecting progress. Payload-key loss terminates unreadable mail as
+`failed/payload_unavailable`. Expiry still clears ciphertext if a suppression key is
+missing. Terminal messages retain their reservation and replay fingerprint while
+clearing ciphertext. No retention cleanup is enabled, so tombstones outlive the
+accepted retry window until you choose a policy.
+
+`status()` returns fixed state counts and a total attempt count, with no recipients,
+tokens, account IDs or message IDs. Migration 033 checks state/reason pairs and claim
+metadata. Its scheduling default preserves existing queued ciphertext without
+rewriting the message table. A manually created pre-worker `sending` row has no
+claim and fails the new constraint; inspect such experimental data before applying
+033. The normal admission slice does not create sending rows.
+Suppression is currently a trusted local administration API; authenticated
+provider event ingestion remains open. Waitron's durable caller, the joint local
+proof, production abuse bounds, policy and provider selection are still required.
 
 ## Decisions before production
 

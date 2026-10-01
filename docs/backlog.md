@@ -224,11 +224,13 @@ venue does not subscribe to remote access or backups.
   and an encrypted queue now have opt-in local HTTP/PostgreSQL proof for retries,
   concurrent account reservations, key rotation/loss, cancellation and transaction
   rollback, including admission racing installation revocation/replacement. Normal
-  startup keeps the routes absent. The relay worker, unattended expiry, retention,
-  production recipient/grant/queue-byte abuse bounds and provider spending controls
-  remain open. When D47 adds worker transitions, constrain state/reason pairs in
-  the schema and test every terminal transition; the current schema validates each
-  value separately, while current admission/cancel code writes consistent pairs.
+  startup keeps the routes absent. The separate local relay worker now handles
+  bounded claims, expiry, keyed suppression and terminal ciphertext removal, with
+  state/reason constraints. Its loopback-only SMTP proof covers temporary/permanent
+  refusal, two-worker fencing, cancellation, key rotation/loss and uncertain delivery
+  after disconnect or process death. Normal startup leaves it off. Retention policy,
+  authenticated provider suppression events, production recipient/grant/queue-byte
+  abuse bounds and provider spending controls remain open.
   Separately queue Waitron's durable caller/status work before a joint
   local proof.
   Decide provider, processing location, account consent, allowance/debit policy and
@@ -297,8 +299,18 @@ notifications separately.
   on `bcda7444aa8b452a8023b905b09069a34522ee3c` was cancelled at the job's
   15-minute limit after reporting 144/144 backup tests and 111/111 portal tests
   passed. The job annotation confirms the time limit; the whole run did not pass.
-  Measure package and setup durations before choosing a job split or a revised
-  overall budget. Preserve individual test deadlines and assertions. This is
+  D47's [run 36775499697](https://github.com/waitron-io/waitron-cloud/actions/runs/36775499697)
+  also reached that limit during the portal suite. Registration passed 357/357 in
+  203.7 seconds, backups 147/147 in 183.0 seconds, remote access 62/62 in 51.3
+  seconds and account HTTP 165/165 in 205.0 seconds. The preceding main run
+  [36767035514](https://github.com/waitron-io/waitron-cloud/actions/runs/36767035514)
+  completed in 14m39s; its registration suite had 321 tests and took 153.9 seconds.
+  The whole-job allowance is now 20 minutes to accommodate the added relay
+  integration coverage. Individual test deadlines and assertions are unchanged.
+  These two runs measure elapsed time, not an isolated attribution of every
+  duration change to D47. [CI 36855902107](https://github.com/waitron-io/waitron-cloud/actions/runs/36855902107)
+  passed on `7b5cdb1f50449e4a9c2d50e59f757aa1c1cd8716` in 13m46s. Consider
+  splitting the job if further suite growth consumes this margin. This remains
   separate from D48's intermittent backup verdict and is not a diagnosis of it.
 
 - **Shared UI.** [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519)
@@ -811,6 +823,15 @@ notifications separately.
 
 ## Portal lost-reply test ordering
 
+- **Resolved by D51: reconciliation stalled after the reply was dropped.**
+  [CI 36777640375](https://github.com/waitron-io/waitron-cloud/actions/runs/36777640375)
+  on `ab5161d4af0fc41aad83c99ce22de80035b2e027` failed both English journeys
+  at the four-second saved-name wait (portal 110/112). D51 subsequently reproduced
+  the browser-side stall and retained the apply interceptor through reconciliation,
+  as described below. [D51's exact-merge CI](https://github.com/waitron-io/waitron-cloud/actions/runs/36851962407)
+  passed on `3085054b8d82698ec3e8f420ade798957df2d9a8`. D47 now includes that
+  fix through rebase; [its rebased-head CI](https://github.com/waitron-io/waitron-cloud/actions/runs/36855902107)
+  passed on `7b5cdb1f50449e4a9c2d50e59f757aa1c1cd8716`.
 - The remote-DNS journey waits until its fixture has dropped a successful apply
   reply before starting the four-second saved-name assertion. Previously that UI
   wait also timed the fixture's forwarding and fault injection. A controlled
@@ -854,7 +875,7 @@ notifications separately.
 | Analytics and reports | Choose ingestion, supported source versions, country and cell placement, search/aggregation engine, scheduled reports and group reporting. Elasticsearch is a candidate. |
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |
 | Address lookup (free) | [Scope researched on 2026-09-30](address-lookup-scope.md); provider and implementation remain open. Resolve durable storage rights, Spain-first quality test, peak-day costs, account attribution and allowance policy before implementing lookup and completion for open-source Waitron. See [free services](#free-services-for-open-source-waitron). |
-| Messaging | The [version 1 on-prem relay contract](transactional-email-relay-contract.md) has a disabled local-proof grant/reservation core; opt-in signed routes and an encrypted queue; production origin verification, relay worker, Waitron durable caller, joint proof and production decisions remain open. Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
+| Messaging | The [version 1 on-prem relay contract](transactional-email-relay-contract.md) has a disabled local-proof grant/reservation core; opt-in signed routes, an encrypted queue and a disabled local capture worker with bounded claims and accepted/uncertain outcomes; production origin verification, Waitron durable caller, joint proof and production decisions remain open. Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
 | Automated upgrades | Treat cloud services, cloud-hosted Waitron and on-prem installations separately; choose rollout groups, compatibility, maintenance windows, pause and recovery behaviour. |
 | Monitoring | External venue and remote-route health, backup staleness, customer incidents and bilingual email alerts are implemented locally. Accepted public/staff probes now emit retry-safe organisation usage events and the portal shows their measured total. Add filing/device signals, broader functional checks and performance evidence. The local deployment now schedules usage reconciliation; define production operations, cost, allowance and limit policy before using measurements for enforcement. |
 
