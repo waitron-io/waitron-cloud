@@ -68,7 +68,13 @@ Cancellation removes the container and waits for its local attach process to exi
 reclaim only containers carrying its owner label whose 60-second ownership deadline has
 expired. It leaves recent results alone while another pass reads them. Once ownership expires,
 cleanup removes the container even if it is still running; a stalled pass cannot retain
-resources indefinitely. Do not scale the Compose backup service without assigning
+resources indefinitely. If another pass removes a listed container before reclamation
+inspects or removes it, the exact missing-container diagnostic for that ID is accepted.
+If Docker reports that removal of that exact container is already in progress,
+reclamation retries within one ten-second removal budget. It fails if removal does
+not finish within that budget.
+A missing container during active result inspection still fails verification as
+unavailable, and other Docker errors still fail. Do not scale the Compose backup service without assigning
 distinct worker owners. Use a different
 owner value for each worker slot. An abandoned container retains its scratch until removal;
 the next restore or startup after its deadline reclaims it. You can also remove that exact

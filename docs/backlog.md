@@ -750,14 +750,20 @@ notifications separately.
   failure, use those details to identify the failing boundary, reproduce it and fix
   its cause while preserving D37's distinction between infrastructure uncertainty
   and an invalid archive. Passing probes do not close this defect.
-  D48 investigation follow-up: concurrent verifier calls with the same owner can fail
-  infrastructure inspection during reclamation: one call lists a completed container
-  while another removes it before the first can inspect it. A local two-caller,
-  file-backed lifecycle probe reproduced `backup.verifier_container` from `inspect`
-  (exit 1); isolated-owner control passed 12 calls. This does not explain the original
-  sequential worker-test failure. Next: reproduce the list/remove/inspect boundary
-  deterministically and tolerate a container disappearing during reclamation while
-  keeping Docker failures and live/foreign ownership fences intact.
+  **D49 done: concurrent reclamation tolerates an already removed container.**
+  Deterministic Docker fixtures remove a listed container before inspection or
+  removal; a missing result during active verification still raises infrastructure
+  failure. Exit 1 with the exact missing-object/container diagnostic naming that
+  ID is tolerated. Reclamation retries an exact removal-in-progress diagnostic
+  within one ten-second removal budget, refusing a removal that never finishes.
+  Daemon errors, another ID and a different exit code remain
+  failures; raw daemon text is not exposed. The existing deadline and foreign-owner
+  test passes unchanged. Shared-owner and isolated-owner lifecycle probes each
+  complete 12 calls, with four successful restores and eight expected resource
+  refusals. Three further rounds with ten expired containers and two reclaimers
+  each finish without errors. This fixes the separate D48 investigation follow-up, not the unresolved
+  sequential worker-test failure above. Continue assigning distinct worker owners;
+  these local probes do not establish production concurrency capacity.
   A read-only
   dependency inventory and local drill now prove active-key rotation, old snapshot restore,
   worker restart and wrong/missing-key refusal without exposing secrets or deleting keys.
