@@ -235,7 +235,14 @@ venue does not subscribe to remote access or backups.
   refusal, two-worker fencing, cancellation, key rotation/loss and uncertain delivery
   after disconnect or process death. Normal startup leaves it off. Retention policy,
   authenticated provider suppression events, production recipient/grant/queue-byte
-  abuse bounds and provider spending controls remain open.
+  abuse bounds and provider spending controls remain open. The
+  [shared admission-bounds design](superpowers/specs/2026-10-12-relay-admission-bounds-design.md)
+  and [implementation plan](superpowers/plans/2026-10-12-relay-admission-bounds.md)
+  propose keyed recipient and stable-grant counters, a shared encrypted-payload-byte
+  ceiling and explicit local configuration. These are acceptance proposals, not
+  implemented limits or approved production budgets. Deliver the complete mechanism
+  together and verify real HTTP/PostgreSQL contention, retries, rotation, worker
+  cleanup and populated upgrades before closing that work.
   Separately queue Waitron's durable caller/status work before a joint
   local proof.
   Decide provider, processing location, account consent, allowance/debit policy and
