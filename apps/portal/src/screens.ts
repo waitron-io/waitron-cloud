@@ -1,3 +1,4 @@
+import {authenticatorLoginScreen,authenticatorCodesScreen} from './authenticator-screen.ts';
 import {recoveryScreen} from './recovery-screen.ts';
 import {installationScreen} from './installation-screen.ts';
 import { pairingScreen } from './pairing-screen.ts';
@@ -18,19 +19,21 @@ export function screen(app: PortalApp) {
   const link = (path: string, label: string) => html`<a href=${path} @click=${(event: MouseEvent) => app.follow(event, path)}>${label}</a>`;
   const field = (key: keyof Fields, label: keyof Copy, type = 'text', autocomplete = '') => html`
     <wt-input name=${key} .label=${c[label]} .value=${app.fields[key]} .type=${type} .autocomplete=${autocomplete}
-      .disabled=${app.pending} .required=${true} .error=${app.errors[key] ? c[app.errors[key]!] : ''}
+      .disabled=${app.pending||app.authenticator.pending} .required=${true} .error=${app.errors[key] ? c[app.errors[key]!] : ''}
       @wt-change=${(event: CustomEvent<{value: string}>) => {app.fields[key] = event.detail.value;}}>
       ${key === 'password' ? html`<button type="button" slot="end" class="reveal" aria-label=${app.reveal ? c.hide : c.show}
         @click=${() => {app.readFields(); app.reveal = !app.reveal; app.draw();}}>${app.reveal ? c.hide : c.show}</button>` : nothing}
     </wt-input>`;
   const password = () => field('password', app.completion ? 'newPassword' : 'password', app.reveal ? 'text' : 'password', app.completion ? 'new-password' : 'current-password');
-  const action = (label: string, fn = () => {void app.submit();}) => html`<wt-form-actions><wt-button variant="primary" id="submit" .disabled=${!!app.waiting || app.pending}
+  const action = (label: string, fn = () => {void app.submit();}) => html`<wt-form-actions><wt-button variant="primary" id="submit" .disabled=${!!app.waiting || app.pending||app.authenticator.pending||Date.now()<app.authenticator.retryAt}
     .loading=${app.pending} @click=${fn}>${app.pending ? c.wait : label}</wt-button></wt-form-actions>`;
   const retryLink = app.path === '/signup' ? '/signup' : '/forgot-password';
   let content;
   if (app.path === '/recover') content = recoveryScreen(app);
   else if (app.path === '/connect') content = pairingScreen(app);
-  else if (app.notice && !['signedOut', 'sessionExpired'].includes(app.notice)) content = html`<p role="status">${c[app.notice]}</p>${link('/login', c.login)}`;
+  else if (app.path === '/login' && app.factorCodes.length) content = authenticatorCodesScreen(app);
+  else if (app.path === '/login' && app.authenticator.challenge) content = authenticatorLoginScreen(app);
+  else if (app.notice && !['signedOut', 'sessionExpired','factorChanged','factorRemoved','factorChangeUncertain'].includes(app.notice)) content = html`<p role="status">${c[app.notice]}</p>${link('/login', c.login)}`;
   else if (app.path === '/' || app.path === '/account') {
     content = app.session.state.kind === 'authenticated'
       ? html`<p>${c.accountIntro}</p>${accountSecurityScreen(app)}${installationScreen(app)}<wt-form-actions><wt-button .disabled=${app.pending||!!app.logoutWaiting||app.installations.pending||app.security.pending||app.usage.pending||app.diagnostics.pending} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions><p>${link('/forgot-password', c.forgot)}</p>`
@@ -53,7 +56,7 @@ export function screen(app: PortalApp) {
   } else if (app.path === '/reset-password') content = html`${password()}<p class="help">${c.passwordHelp}</p>${action(c.savePassword)}`;
   else content = html`<p>${app.path === '/signup' ? c.emailIntro : c.resetIntro}</p>${field('email', 'email', 'email', 'email')}
     ${action(app.path === '/signup' ? c.continue : c.sendReset)}<p>${c.loginLink} ${link('/login', c.login)}</p>`;
-  const errors = [...Object.values(app.errors).map(key => c[key!]), ...(app.error ? [c[app.error]] : []), ...(app.passkeys.error ? [c[app.passkeys.error]] : []), ...(app.path === '/connect' && app.pairing.error ? [c[app.pairing.error]] : [])];
+  const errors = [...Object.values(app.errors).map(key => c[key!]), ...(app.error ? [c[app.error]] : []), ...(app.path==='/login' && app.authenticator.error ? [c[app.authenticator.error]] : []), ...(app.passkeys.error ? [c[app.passkeys.error]] : []), ...(app.path === '/connect' && app.pairing.error ? [c[app.pairing.error]] : [])];
   return html`<header><a class="brand" href="/" @click=${(event: MouseEvent) => app.follow(event, '/')}>Waitron <strong>Cloud</strong></a>
     <label class="language">${c.language}<select aria-label=${c.language} .value=${app.locale}
       @change=${(event: Event) => app.setLocale((event.target as HTMLSelectElement).value as Locale)}><option value="en">English</option><option value="es">Español</option></select></label></header>

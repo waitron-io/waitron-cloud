@@ -379,8 +379,9 @@ notifications separately.
   The [optional authenticator-app design](superpowers/specs/2026-10-12-cloud-authenticator-factor-design.md)
   has approved email recovery and session policies: password reset keeps the factor, and
   factor changes end every session. Its [implementation plan](superpowers/plans/2026-10-12-cloud-authenticator-factor.md)
-  covers storage, account controls and browser acceptance. No authenticator feature is
-  implemented end to end yet. The identity primitive now encrypts account/version/purpose-bound
+  covers storage, account controls and browser acceptance. Storage, API and the bilingual
+  portal are implemented locally; operational key rotation, stack configuration and
+  populated upgrade/restore acceptance remain. The identity primitive encrypts account/version/purpose-bound
   secrets and returns every matching adjacent time step; migration 035 persists factor,
   session-bound enrolment, challenge, hashed recovery and replay state. Focused PostgreSQL
   and cryptography checks cover constraints, ciphertext binding and preserved upgrade data.
@@ -408,8 +409,17 @@ notifications separately.
   `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test
   test/authenticator-factor.test.ts test/account-http.test.ts test/passkeys.test.ts
   test/account-security.test.ts test/rate-limit.test.ts test/server.test.ts`.
-  Bilingual portal journeys and operational rotation/restore acceptance remain implementation
-  work. No production factor policy or key configuration is selected.
+  The portal keeps challenges, setup secrets and recovery codes in tab memory. Its QR code
+  is rendered locally. Successful changes show recovery codes once after signing you out;
+  lost replies check your session without automatically resending the consumed proof.
+  Browser checks cover English/Spanish, 390/1280 widths and light/dark themes: enrolment,
+  replacement, single-use codes, email reset with the factor retained, independent passkeys,
+  removal, cancellation, lost replies, keyboard focus, accessibility and temporary-state clearing:
+  `node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test
+  --test-timeout=120000 test/authenticator-browser.test.ts test/passkey-browser.test.ts
+  test/account-security-browser.test.ts test/session.test.ts`.
+  Operational rotation, local-stack configuration and populated upgrade/restore checks remain
+  before the cohesive implementation PR. No production factor policy or key configuration is selected.
   Configure live email delivery, implement the remaining second-factor plan,
   and define the wider platform role catalogue before public use. Shared login/request limits, secure
   cookies and Origin/CSRF checks are implemented in the account API. A local streaming

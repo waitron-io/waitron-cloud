@@ -59,3 +59,12 @@ button:disabled { cursor: default; opacity: .6; }
   .session-list li, .passkey-list li { align-items: stretch; flex-direction: column; }
   .session-list wt-button, .passkey-list wt-button { align-self: start; }
 }
+
+.authenticator { border-block-start: 1px solid var(--wt-color-border); margin-block-start: 1.25rem; padding-block-start: .5rem; }
+.factor-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-block: 1rem; }
+.factor-proof-type { display: grid; gap: .3rem; }
+.authenticator canvas { display: block; max-width: 100%; height: auto; margin-block: 1rem; }
+.factor-secret, .factor-codes code { overflow-wrap: anywhere; font-size: .9rem; }
+.factor-secret { display: block; }
+.factor-codes { padding-inline-start: 1.25rem; }
+.factor-codes li { margin-block: .5rem; }

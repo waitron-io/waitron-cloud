@@ -10,10 +10,12 @@
   "dependencies": {
     "@simplewebauthn/browser": "14.0.0",
     "@waitron-io/ui-core": "0.1.0",
-    "lit": "3.3.3"
+    "lit": "3.3.3",
+    "qrcode": "1.5.4"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1",
+    "@types/qrcode": "1.5.6",
     "@waitron-cloud/account-http": "workspace:*",
     "@waitron-cloud/identity": "workspace:*",
     "@waitron-cloud/registration": "workspace:*",
