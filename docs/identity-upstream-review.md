@@ -33,4 +33,4 @@ pnpm --dir packages/identity test
 node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/identity.test.ts test/passkeys.test.ts test/password-recovery.test.ts
 ```
 
-The passkey regression uses the real WebAuthn library, generated public keys and real PostgreSQL. Removing either algorithm argument independently fails its corresponding regression. It does not change existing credentials or authentication; you can still sign in with an existing key. Browser credential synchronization and provider-name display remain optional follow-ups, not security fixes.
+The passkey regression uses the real WebAuthn library, generated public keys and real PostgreSQL. Removing either algorithm argument independently fails its corresponding regression. A further real-library test signs in with a pre-existing ML-DSA credential and advances its counter, so narrowing new registration does not remove that existing access. Failed new registration cannot reuse its consumed ceremony. Browser credential synchronization and provider-name display remain optional follow-ups, not security fixes.

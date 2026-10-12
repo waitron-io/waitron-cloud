@@ -34,6 +34,7 @@ test('the upstream report lists only mapped source and behavioural-test commits 
     writeFileSync(sourceMap, `Original copy: commit \`${original}\`.\nLast reviewed Waitron revision: \`${reviewed}\`.\n` +
       `[source](https://github.com/clintongormley/waitron/blob/${original}/packages/identity/src/secret-hash.ts)\n` +
       `[tests](https://github.com/clintongormley/waitron/blob/${original}/packages/identity/src/secret-hash.test.ts)\n`);
+    const beforeRefs = git('show-ref');
     const result = spawnSync(process.execPath, [script, repository, 'main', sourceMap], {encoding: 'utf8', cwd: folder});
     assert.equal(result.status, 0, result.stderr);
     const report = JSON.parse(result.stdout);
@@ -45,11 +46,14 @@ test('the upstream report lists only mapped source and behavioural-test commits 
     const empty = spawnSync(process.execPath, [script, repository, reviewed, sourceMap], {encoding: 'utf8'});
     assert.equal(empty.status, 0, empty.stderr);
     assert.deepEqual(JSON.parse(empty.stdout).commits, []);
+    assert.equal(git('show-ref'), beforeRefs);
+    assert.equal(git('status', '--porcelain'), '');
     const diverged = spawnSync(process.execPath, [script, repository, original, sourceMap], {encoding: 'utf8'});
     assert.notEqual(diverged.status, 0);
     assert.match(diverged.stderr, /not an ancestor/);
     const validMap = `Original copy: commit \`${original}\`.\nLast reviewed Waitron revision: \`${reviewed}\`.\n` +
       `[source](https://github.com/clintongormley/waitron/blob/${original}/packages/identity/src/secret-hash.ts)\n`;
+    commit('packages/identity/src/absent.ts', 'File added after original copy');
     writeFileSync(sourceMap, validMap +
       `[missing](https://github.com/clintongormley/waitron/blob/${original}/packages/identity/src/absent.ts)\n`);
     const missing = spawnSync(process.execPath, [script, repository, 'main', sourceMap], {encoding: 'utf8'});
