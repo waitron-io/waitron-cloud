@@ -5,6 +5,17 @@ HTTPS ends at their venue; public HTTPS ends at the gateway and passes a browser
 challenge before reaching Waitron over a second verified HTTPS connection. This
 milestone exposes only `/public/availability`. It does not publish menus or bookings.
 
+If the venue cannot answer after the browser challenge, you see a short unavailable
+page in English or Spanish, chosen from your browser language preferences. It follows
+your light or dark theme and offers **Try again** on the same public route. The gateway
+keeps the 503 response, sends `Retry-After: 30` and disables caching so you can retry
+without keeping an old failure. A client requesting `application/json` receives
+`{"error":"venue_unavailable"}` instead; neither response includes venue hostnames or
+internal failure details. Run the focused HTTP checks with
+`pnpm --dir packages/remote-access exec node --test test/public-gate.test.ts` and the
+browser matrix with `pnpm --dir packages/ui-smoke exec node --test
+--test-name-pattern="unavailable page" test.mjs`.
+
 ## Run the proof
 
 Use Docker with Linux WireGuard support, Node 26 or later, pnpm, and a Waitron

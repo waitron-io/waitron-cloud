@@ -58,3 +58,36 @@ test('the pinned registry package renders and responds in a real browser', { tim
     finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   }
 });
+
+
+test('the unavailable page stays readable and retryable in both languages, themes and widths', {timeout:60000}, async()=>{
+ const {createPublicGate}=await import('../remote-access/src/public-gate.ts');
+ const {randomBytes,createHash}=await import('node:crypto');
+ const gate=createPublicGate({key:randomBytes(32),difficulty:8,routes:()=>[{publicHostname:'public.example.test',staffHostname:'staff.example.test',address:'127.0.0.1',port:1}]});
+ const server=createServer((req,res)=>{req.headers.host='public.example.test';req.headers['x-waitron-sni']='public.example.test';req.headers['x-waitron-client-ip']='192.0.2.2';gate.handle(req,res);});
+ let browser;
+ try{
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const url=`http://127.0.0.1:${server.address().port}`;
+  const challenge=await(await fetch(url+'/_cloud/challenge')).json();
+  let nonce=0;while(createHash('sha256').update(`${challenge.challenge}:${nonce}`).digest().readUInt32BE(0)>=2**(32-challenge.difficulty))nonce++;
+  const answer=await fetch(url+'/_cloud/solve',{method:'POST',body:JSON.stringify({challenge:challenge.challenge,nonce})});
+  assert.equal(answer.status,204);
+  browser=await chromium.launch();
+  for(const language of ['en','es'])for(const theme of ['light','dark'])for(const width of [390,1280]){
+   const context=await browser.newContext({locale:language,colorScheme:theme,viewport:{width,height:800},extraHTTPHeaders:{cookie:answer.headers.get('set-cookie').split(';')[0]}});
+   try{
+    const page=await context.newPage();const errors=[];page.on('pageerror',error=>errors.push(error.message));
+    const response=await page.goto(url+'/public/availability');assert.equal(response.status(),503);
+    assert.equal(await page.locator('html').getAttribute('lang'),language);
+    assert.match(await page.locator('h1').innerText(),language==='es'?/No disponible temporalmente/:/Temporarily unavailable/);
+    const layout=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,background:getComputedStyle(document.body).backgroundColor,main:document.querySelector('main').getBoundingClientRect().toJSON()}));
+    assert.equal(layout.overflow,false);assert.equal(layout.background,theme==='light'?'rgb(247, 248, 250)':'rgb(17, 24, 39)');assert(layout.main.width<=width);
+    if(process.env.CLOUD_UNAVAILABLE_SCREENSHOTS)await page.screenshot({path:join(process.env.CLOUD_UNAVAILABLE_SCREENSHOTS,`${language}-${theme}-${width}.png`),fullPage:true});
+    await Promise.all([page.waitForResponse(response=>response.url()===url+'/public/availability'&&response.status()===503),page.getByRole('link',{name:language==='es'?'Volver a intentar':'Try again',exact:true}).click()]);
+    assert.deepEqual(errors,[]);
+   }finally{await context.close();}
+  }
+  assert.equal(gate.stats().active,0);assert.equal(gate.stats().unavailable,16);
+ }finally{await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+});

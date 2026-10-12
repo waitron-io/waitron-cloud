@@ -146,8 +146,13 @@ remains a separate exchange requiring both Cloud and local administrator proof.
   local permissions.
 - Remote access covers owners and staff plus customer-facing pages such as menus
   and bookings. Temporary unavailability is acceptable when the venue server or its
-  internet connection is down. Define route permissions and the unavailable-page
-  experience; cloud copies and offline booking acceptance are future capabilities.
+  internet connection is down. The public gateway now returns a concise English or
+  Spanish unavailable page, with light/dark and phone layouts, a retry link, a
+  30-second retry hint and no caching. Clients requesting JSON receive a generic
+  error with the same 503 status. Real HTTP and Chromium tests cover failed venue
+  responses, lost connections, language/content preferences and all eight visual
+  states. Wider route permissions, cloud copies and offline booking acceptance
+  remain open.
 - Complete self-service recovery onto a replacement server without routine staff assistance.
   The local continuous and verified-snapshot paths now share a matching-code owner
   approval flow. Continuous recovery freezes verified pointer evidence and releases a
