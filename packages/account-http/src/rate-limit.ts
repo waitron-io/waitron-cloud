@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { transaction } from '@waitron-cloud/registration';
 export interface RateRule { scope: string; subject: string; limit: number; windowSeconds: number; }
 export interface RateDecision { allowed: boolean; retryAfterSeconds: number; }
@@ -10,7 +10,8 @@ export class AccountRateLimiter {
     if (typeof key !== 'string' || !/^[a-fA-F0-9]{64}$/.test(key)) throw new Error('Invalid rate configuration');
     this.#pool = pool; this.#key = Buffer.from(key, 'hex');
   }
-  async consume(rules: readonly RateRule[]): Promise<RateDecision> {
+  /** A supplied client keeps counters in the caller's transaction; the caller commits expected refusals. */
+  async consume(rules: readonly RateRule[], client?: PoolClient): Promise<RateDecision> {
     if (!Array.isArray(rules) || !rules.length || rules.length > 8) throw new Error('Invalid rate rule');
     const entries = rules.map(rule => {
       if (!rule || typeof rule.scope !== 'string' || !rule.scope || rule.scope.length > 64
@@ -20,7 +21,7 @@ export class AccountRateLimiter {
       return {...rule, key: createHmac('sha256', this.#key).update(JSON.stringify([rule.scope, rule.subject])).digest('hex')};
     }).sort((a, b) => a.key.localeCompare(b.key));
     if (new Set(entries.map(entry => entry.key)).size !== entries.length) throw new Error('Invalid rate rule');
-    return transaction(this.#pool, async client => {
+    const spend = async (client: PoolClient) => {
       let retryAfterSeconds = 0;
       // Stable key order prevents overlapping multi-rule requests acquiring rows in reverse order.
       for (const rule of entries) {
@@ -37,7 +38,8 @@ export class AccountRateLimiter {
         if (attempts > rule.limit) retryAfterSeconds = Math.max(retryAfterSeconds, row.wait);
       }
       return {allowed: retryAfterSeconds === 0, retryAfterSeconds};
-    });
+    };
+    return client ? spend(client) : transaction(this.#pool, spend);
   }
   async prune(): Promise<number> {
     const result = await this.#pool.query(`DELETE FROM account_rate_limits WHERE key IN

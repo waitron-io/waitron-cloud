@@ -1,7 +1,7 @@
 import {captureRuntime} from '@waitron-cloud/backups/capture-config';
 import { Pool } from 'pg';
 import { EmailOutbox, createLeaseIssuer, createLeaseTrust, migrationNames } from '@waitron-cloud/registration';
-import { accountHttpConfig, passwordScreeningFromEnv } from './config.ts';
+import { accountHttpConfig, passwordScreeningFromEnv, factorConfigFromEnv } from './config.ts';
 import { AccountRateLimiter } from './rate-limit.ts';
 import { loadPortalAssets } from './portal.ts';
 import { startAccountServer } from './server.ts';
@@ -26,6 +26,7 @@ try {
   const staffFlag=process.env.CLOUD_STAFF_CERTIFICATES??'0';if(!['0','1'].includes(staffFlag))throw new Error();
   const staffCertificates=staffFlag==='1';
   const config = accountHttpConfig(process.env);
+  const factor = factorConfigFromEnv(process.env);
   const passwordScreening = await passwordScreeningFromEnv(process.env);
   const portText = process.env.CLOUD_HTTP_PORT ?? '3000';
   if (!/^\d+$/.test(portText) || Number(portText) > 65535) throw new Error();
@@ -39,7 +40,7 @@ try {
     if(process.env.CLOUD_INSTALLATION_TRUSTED_KEYS&&!leaseIssuer)throw new Error();
     const leaseTrust=leaseIssuer?createLeaseTrust(leaseIssuer,process.env.CLOUD_INSTALLATION_TRUSTED_KEYS):undefined;
     captures=captureRuntime(process.env);
-    running = await startAccountServer({staffCertificates,captures:captures?.options,pool, outbox, config, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    running = await startAccountServer({staffCertificates,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
     console.log(JSON.stringify({status: 'listening', port: address.port}));

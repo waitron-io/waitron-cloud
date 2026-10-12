@@ -83,24 +83,37 @@ export class PasswordLoginStore {
   constructor(pool: Pool, keys: FactorKeys | null, policy: PasswordLoginPolicy | null) {
     this.#pool = pool; this.#keys = keys; this.#policy = policy;
   }
-  async start(input: {email: string; password: string}): Promise<PasswordLoginResult> {
-    return transaction(this.#pool, async client => {
+  async start(input: {email: string; password: string},
+    verified?: (accountId:string, client:PoolClient)=>Promise<Error|void>): Promise<PasswordLoginResult> {
+    const result = await transaction<PasswordLoginResult | Error>(this.#pool, async client => {
       const authority = await requirePasswordAuthority(client, {email: input.email}, input.password, 'update');
-      const factor = (await client.query(`SELECT * FROM cloud_authenticator_factors WHERE account_id=$1 FOR UPDATE`,
-        [authority.accountId])).rows[0];
-      if (!factor?.secret_envelope) return {kind: 'session', credentials: await createSession(client, authority.accountId)};
-      const policy = requirePolicy(this.#policy);
-      secretFor(factor, this.#keys);
-      const token = randomBytes(32).toString('base64url');
-      const now = await factorNow(client);
-      const expiresAt = new Date(now.getTime() + policy.loginLifetimeMs);
-      await client.query(`INSERT INTO cloud_factor_login_challenges
-        (token_hash,account_id,password_fingerprint,factor_version,created_at,expires_at,attempt_limit)
-        VALUES($1,$2,$3,$4,$5,$6,$7)`, [factorDigest(token), authority.accountId,
-        authority.passwordFingerprint, factor.version, now, expiresAt, policy.challengeAttempts]);
-      if (await factorNow(client) >= expiresAt) throw new FactorError();
-      return {kind: 'factor', challengeToken: token, expiresAt: expiresAt.toISOString()};
+      // Commit a refused issuance budget without borrowing a second connection or creating authority.
+      const refused=await verified?.(authority.accountId,client);
+      if(refused)return refused;
+      await client.query('SAVEPOINT login_issuance_effects');
+      try {
+        const factor = (await client.query(`SELECT * FROM cloud_authenticator_factors WHERE account_id=$1 FOR UPDATE`,
+          [authority.accountId])).rows[0];
+        if (!factor?.secret_envelope) return {kind: 'session', credentials: await createSession(client, authority.accountId)};
+        const policy = requirePolicy(this.#policy);
+        secretFor(factor, this.#keys);
+        const token = randomBytes(32).toString('base64url');
+        const now = await factorNow(client);
+        const expiresAt = new Date(now.getTime() + policy.loginLifetimeMs);
+        await client.query(`INSERT INTO cloud_factor_login_challenges
+          (token_hash,account_id,password_fingerprint,factor_version,created_at,expires_at,attempt_limit)
+          VALUES($1,$2,$3,$4,$5,$6,$7)`, [factorDigest(token), authority.accountId,
+          authority.passwordFingerprint, factor.version, now, expiresAt, policy.challengeAttempts]);
+        if (await factorNow(client) >= expiresAt) throw new FactorError();
+        return {kind: 'factor', challengeToken: token, expiresAt: expiresAt.toISOString()};
+      } catch(error) {
+        if(!(error instanceof FactorError))throw error;
+        await client.query('ROLLBACK TO SAVEPOINT login_issuance_effects');
+        return error;
+      }
     });
+    if(result instanceof Error)throw result;
+    return result;
   }
   async complete(token: string, proof: FactorProof): Promise<SessionCredentials> {
     if (typeof token !== 'string' || !TOKEN.test(token)) throw new FactorError();

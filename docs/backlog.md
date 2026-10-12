@@ -397,8 +397,19 @@ notifications separately.
   passkey access during key outages, reset during password derivation and expiry after writes:
   `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test
   test/authenticator-factor.test.ts test/password-recovery.test.ts test/passkeys.test.ts
-  test/history-cleanup.test.ts`. HTTP limits, bilingual portal journeys and operational
-  rotation/restore acceptance remain implementation work.
+  test/history-cleanup.test.ts`. The account API now returns a cookie-free second-step
+  challenge after password proof, accepts a single-use factor completion, and exposes
+  strict session/CSRF-protected account controls. Explicit factor policy supplies shared
+  account, challenge and IP limits; IP refusals spend no account or challenge allowance.
+  Separate factor keys and malformed-configuration handling preserve ordinary password
+  login, passkeys and live account access during an outage. HTTP checks cover strict
+  bodies, all session-backed route families, independent instances, real server restart,
+  generic errors and cookie clearing after committed changes:
+  `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test
+  test/authenticator-factor.test.ts test/account-http.test.ts test/passkeys.test.ts
+  test/account-security.test.ts test/rate-limit.test.ts test/server.test.ts`.
+  Bilingual portal journeys and operational rotation/restore acceptance remain implementation
+  work. No production factor policy or key configuration is selected.
   Configure live email delivery, implement the remaining second-factor plan,
   and define the wider platform role catalogue before public use. Shared login/request limits, secure
   cookies and Origin/CSRF checks are implemented in the account API. A local streaming
