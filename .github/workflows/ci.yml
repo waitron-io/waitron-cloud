@@ -7,12 +7,13 @@ permissions:
   contents: read
   packages: read
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Every main merge needs its own run, even when several merges arrive together.
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  registration:
+  typecheck:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v6
@@ -25,11 +26,85 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: pnpm --filter @waitron-cloud/ui-smoke exec playwright install --with-deps chromium
+      - run: node --test scripts/ci-workflow.test.mjs
       - run: pnpm typecheck
-      - run: pnpm test:two-venue-milestone-receipt
-      - run: pnpm test:backup-capacity
-      - run: pnpm test:public-gateway-limits
-      - run: pnpm test:local-stack
-      - run: pnpm test:database-recovery-receipt
-      - run: pnpm test
+  receipts:
+    name: receipt (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - test:two-venue-milestone-receipt
+          - test:backup-capacity
+          - test:public-gateway-limits
+          - test:local-stack
+          - test:database-recovery-receipt
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: pnpm ${{ matrix.suite }}
+  packages:
+    name: package (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - '@waitron-cloud/registration'
+          - '@waitron-cloud/backups'
+          - '@waitron-cloud/account-http'
+          - '@waitron-cloud/identity'
+          - '@waitron-cloud/operations'
+          - '@waitron-cloud/remote-access'
+          - '@waitron-cloud/portal'
+          - '@waitron-cloud/ui-smoke'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Chromium with bounded retry
+        if: matrix.package == '@waitron-cloud/portal' || matrix.package == '@waitron-cloud/ui-smoke'
+        run: |
+          for attempt in 1 2; do
+            if timeout --kill-after=10s 120s pnpm --filter @waitron-cloud/ui-smoke exec playwright install --with-deps chromium; then
+              break
+            fi
+            if [ "$attempt" -eq 2 ]; then exit 1; fi
+            sleep 5
+          done
+      - run: node scripts/test-postgres.mjs --filter ${{ matrix.package }} test
+  summary:
+    if: ${{ always() }}
+    needs: [typecheck, receipts, packages]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every job to succeed
+        env:
+          TYPECHECK: ${{ needs.typecheck.result }}
+          RECEIPTS: ${{ needs.receipts.result }}
+          PACKAGES: ${{ needs.packages.result }}
+        run: |
+          for result in "$TYPECHECK" "$RECEIPTS" "$PACKAGES"; do
+            [ "$result" = success ] || exit 1
+          done
