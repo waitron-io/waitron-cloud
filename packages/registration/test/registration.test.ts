@@ -61,7 +61,7 @@ beforeEach(async () => {
 
 test('migration remains repeatable after concurrent initial application', async () => {
   await migrate(pool);
-  const legacyNames=migrationNames.slice(0,33);
+  const legacyNames=(await pool.query("SELECT name FROM schema_migrations WHERE name<>'034_relay_admission_bounds.sql' ORDER BY name")).rows.map(row=>row.name);
   assert.equal(legacyNames.length, 33);
   assert.equal(legacyNames.at(-8), '026_support_grants.sql');
   assert.equal(legacyNames.at(-7), '027_pairing_code_protection.sql');

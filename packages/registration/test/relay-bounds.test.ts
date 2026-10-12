@@ -222,3 +222,19 @@ test('counter-row capacity serializes distinct subjects before either counter in
   assert.equal((await store.status()).counterRows,3);
  }finally{await f.close();}
 });
+for(const action of ['email-status','email-cancel'] as const)for(const deadline of ['grant','installation','lease','proof'])test(`${action} refuses ${deadline} expiry after a bounds-lock wait without changing ciphertext`,async()=>{
+ const f=await configured(),lock=await f.pool.connect();let pending:Promise<unknown>|undefined;
+ try{
+  const v=await f.venue(),first=await submit(f,v,'ana@example.test');
+  const before=await f.row(first.body.messageId),counters=(await f.pool.query('SELECT * FROM relay_bounds_counters ORDER BY kind,subject')).rows;
+  const time=Date.now();
+  if(deadline==='grant')await f.pool.query("UPDATE relay_grants SET expires_at=clock_timestamp()+interval '700 milliseconds' WHERE id=$1",[v.grant.id]);
+  if(deadline==='installation')await f.pool.query("UPDATE installations SET lease_expires_at=clock_timestamp()+interval '700 milliseconds' WHERE id=$1",[v.installation]);
+  const proof=v.proof(action,{version:1,messageId:first.body.messageId},deadline==='proof'?{issuedAt:time-59500}:deadline==='lease'?{leaseExpiresAt:time+700}:{});
+  await lock.query('BEGIN');await lock.query("SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext('relay-admission-bounds'))");
+  pending=f.messages.execute(action,proof);void pending.catch(()=>{});await waitForLock(f,'relay-admission-bounds');
+  await new Promise(r=>setTimeout(r,850));await lock.query('COMMIT');
+  await assert.rejects(pending,{code:deadline==='grant'||deadline==='installation'?'grant_unavailable':'invalid_proof'});
+  assert.deepEqual(await f.row(first.body.messageId),before);assert.deepEqual((await f.pool.query('SELECT * FROM relay_bounds_counters ORDER BY kind,subject')).rows,counters);
+ }finally{await lock.query('ROLLBACK');lock.release();await pending?.catch(()=>{});await f.close();}
+});

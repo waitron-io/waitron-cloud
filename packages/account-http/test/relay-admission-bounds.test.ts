@@ -94,3 +94,14 @@ test('exact byte cap admits, one-byte growth refuses and cancellation releases c
   assert.equal((await f.request('submit',v.proof('email-submit',{...body,messageId:randomUUID()}))).status,202);
  }finally{await f.close();}
 });
+test('missing byte tally returns fixed relay unavailable and rolls back the attempted debit and counters',async()=>{
+ const f=await relayFixture();try{
+  const v=await f.venue();assert.equal((await f.request('submit',v.proof('email-submit'))).status,202);
+  const counters=(await f.db.pool.query('SELECT * FROM relay_bounds_counters ORDER BY kind,subject')).rows;
+  await f.db.pool.query('DELETE FROM relay_queue_bytes');
+  const result=await f.request('submit',v.proof('email-submit',{...v.body,messageId:randomUUID(),recipient:'other@example.test'}));
+  assert.equal(result.status,503);assert.deepEqual(result.body,{error:'relay_unavailable'});assert.equal(result.headers['retry-after'],'1');
+  assert.deepEqual((await f.db.pool.query('SELECT * FROM relay_bounds_counters ORDER BY kind,subject')).rows,counters);
+  for(const table of ['relay_messages','relay_reservations'])assert.equal((await f.db.pool.query(`SELECT count(*) FROM ${table}`)).rows[0].count,'1');
+ }finally{await f.close();}
+});

@@ -247,7 +247,8 @@ venue does not subscribe to remote access or backups.
   Choose production budgets and recipient-key custody before enablement; normal
   startup still has no relay configuration. The immutable local policy deliberately
   refuses mismatched limits rather than resetting budgets. Policy replacement and
-  the operator stop switch remain separate work.
+  the operator stop switch remain separate work. Measure admission-lock contention
+  before production enablement: status, cancellation and retries share that lock.
   Separately queue Waitron's durable caller/status work before a joint
   local proof.
   Decide provider, processing location, account consent, allowance/debit policy and
