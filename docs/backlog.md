@@ -388,9 +388,17 @@ notifications separately.
   recovery code completes the check. Focused PostgreSQL tests cover concurrent completion,
   durable attempt limits, stale credentials, code reuse and expiry during database waits:
   `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test
-  test/password-login.test.ts test/identity.test.ts`. Account controls, reset integration,
-  HTTP limits, bilingual portal journeys and operational rotation/restore acceptance remain
-  implementation work.
+  test/password-login.test.ts test/identity.test.ts`. Account controls now require your live
+  session, current password and, for an active factor, fresh proof. Activation, replacement,
+  removal and recovery-code regeneration end every session together. Email reset preserves
+  the factor, unused codes and replay history but invalidates pending enrolments and login
+  challenges. Session cleanup retains factor-referenced rows until a separate retention
+  policy is approved. PostgreSQL checks cover concurrent changes, durable failed attempts,
+  passkey access during key outages, reset during password derivation and expiry after writes:
+  `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test
+  test/authenticator-factor.test.ts test/password-recovery.test.ts test/passkeys.test.ts
+  test/history-cleanup.test.ts`. HTTP limits, bilingual portal journeys and operational
+  rotation/restore acceptance remain implementation work.
   Configure live email delivery, implement the remaining second-factor plan,
   and define the wider platform role catalogue before public use. Shared login/request limits, secure
   cookies and Origin/CSRF checks are implemented in the account API. A local streaming

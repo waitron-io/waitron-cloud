@@ -73,6 +73,9 @@ export class PasswordRecoveryStore {
         || digest(credential.password_hash) !== request.password_fingerprint) throw new PasswordRecoveryError('reset_unavailable');
       // A fresh salted hash invalidates all earlier links, including when reusing the old password.
       await client.query('UPDATE cloud_credentials SET password_hash = $2 WHERE account_id = $1', [candidate.account_id, passwordHash]);
+      // Email recovery preserves the enrolled factor but cannot preserve earlier pending authority.
+      await client.query('UPDATE cloud_factor_enrolments SET consumed_at = clock_timestamp() WHERE account_id = $1 AND consumed_at IS NULL', [candidate.account_id]);
+      await client.query('UPDATE cloud_factor_login_challenges SET consumed_at = clock_timestamp() WHERE account_id = $1 AND consumed_at IS NULL', [candidate.account_id]);
       await client.query('UPDATE cloud_sessions SET ended_at = clock_timestamp() WHERE account_id = $1 AND ended_at IS NULL', [candidate.account_id]);
       await this.#outbox.enqueue(client, 'password_changed', { email: credential.email, locale });
       const consumed = await client.query(`UPDATE password_reset_requests SET consumed_at = clock_timestamp()
