@@ -1,6 +1,6 @@
 # Optional Cloud authenticator-app second factor
 
-**Status: awaiting owner recovery and session decisions.** Design only; this PR does not implement the feature.
+**Status: approved for implementation.** The owner approved both policies on 2026-10-12. This document describes the design; the feature is not implemented yet.
 
 ## Intent and boundary
 
@@ -8,19 +8,17 @@ If your password is stolen, an optional authenticator code adds a second check t
 
 Passkeys remain independent and phishing-resistant through their origin-bound verification. Authenticator codes do not gate passkey sign-in and do not offer that phishing resistance. Email password recovery remains available.
 
-## Recovery decision remains OPEN
+## Email recovery keeps the factor
 
-**Recommendation:** preserve the enrolled factor and its recovery codes after email recovery. Reset changes your password, ends sessions and invalidates pending password-login/enrolment challenges. Your next password login still needs an authenticator or unused recovery code. Your passkeys remain available. Email access alone must not remove this protection.
+Email password recovery preserves your enrolled authenticator and its unused recovery codes. Reset changes your password, ends sessions and invalidates pending password-login and enrolment challenges. Your next password login still needs an authenticator or unused recovery code. Your passkeys remain available. Email access alone cannot remove this protection.
 
-If you lose both your authenticator and codes and have no passkey, this recommendation provides **no automatic account recovery**. The owner must explicitly approve that consequence. A passkey still grants account access, but cannot alone authorise factor removal or replacement. No support bypass is designed here.
+If you lose your authenticator, saved codes and passkey, there is no automatic account recovery. The owner approved this consequence. A passkey still grants account access, but cannot alone authorise factor removal or replacement. There is no support bypass.
 
-**Alternative:** email reset also removes the factor, invalidates its codes and advances its version atomically. This restores password access after losing the authenticator, but control of email then allows removal of the second factor. Neither alternative is approved by this document.
+## Factor changes end all sessions
 
-## Session decision remains OPEN
+Successful enrolment, replacement, removal and recovery-code regeneration end all existing Cloud sessions in the same transaction. You sign in again with the resulting configuration. This closes sessions that may have been created with a stolen password and signs you out on every device.
 
-**Recommendation:** successful enrolment, replacement, removal and recovery-code regeneration end all existing Cloud sessions in the same transaction. You sign in again with the resulting configuration. This closes sessions that may have been created with a stolen password, at the cost of signing you out on every device.
-
-**Alternative:** keep existing sessions and apply the new configuration only to subsequent password sign-ins. This avoids interruption but leaves earlier sessions usable. Either policy must invalidate pending login/enrolment challenges and prevent concurrent stale-authority changes. The owner must choose before implementation; test the chosen behaviour and its lost-reply reconciliation.
+Each change also invalidates pending login and enrolment challenges and prevents concurrent stale-authority changes. Test this behaviour and reconciliation after a lost reply.
 
 ## Sign-in and account controls
 
@@ -59,6 +57,6 @@ Waitron pin: `3d6b31ac6b2ff9fb9a62e4081e1afe50000963c4`, read through `git show`
 
 Acceptance requires failing-first PostgreSQL/HTTP tests for replay/skew boundaries, concurrent consumption, cross-account ciphertext/challenges/codes, rotation, expired pending state, lost replies, races, generic failures, limits and cookie absence before success. Test the approved email-reset policy and independent passkeys. Chromium must cover English/Spanish × phone/desktop × light/dark: enrol, confirm, save/regenerate codes, password second step, recovery-code reuse rejection, removal, reset, passkey access, cancellation, accessibility and stale/lost responses.
 
-## Implementation stages, to be planned only after approval
+## Implementation stages
 
-After the recovery/session decisions and design approval, plan identity/storage and key handling, registration/reset integration, HTTP/portal journeys, then concurrency/browser acceptance and operational documentation. No separate implementation plan is created here.
+The implementation plan covers identity storage and key handling, registration/reset integration, HTTP and portal journeys, then concurrency/browser acceptance and operational documentation. Land this design and the checked plan before beginning the cohesive implementation PR.
