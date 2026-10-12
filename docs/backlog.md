@@ -441,8 +441,13 @@ notifications separately.
   breaks the boundary test; deleting only the HTTP guard remains masked by the store's
   defence-in-depth check. Deleting the declared-length guard breaks its early-refusal test;
   the separate streamed-body bound remains covered.
-  Review the inherited password cost for deployment and apply the source map's
-  security-fix process to both repositories. Further reuse should take code and
+  Review the inherited password cost for deployment. The [identity source review](identity-upstream-review.md)
+  classifies every mapped Waitron source and test change through `b9440c685e44`.
+  Cloud already covers generic refusals, asynchronous password checks and hashed sessions;
+  registration now pins the offered and accepted passkey algorithms, with real-library
+  regression tests. Run `node scripts/identity-upstream.mjs ../waitron` for later changes.
+  Browser credential synchronization and passkey provider-name display remain optional follow-ups.
+  Further reuse should take code and
   behavioural tests from `pre-sqlite-migration`, pinned to
   `c9d80c59a30ab1ae7a4acc0a6999e6a342de924e` in the registration plan. Adapt its
   PostgreSQL schema and dependencies; add cloud memberships and permissions for
@@ -454,7 +459,8 @@ notifications separately.
   immutable events, with every action disabled by default. Define the platform role and
   action catalogues, emergency authorisation and the audit events not covered by the
   customer security trail before enabling it. Review
-  database and module dependencies, and establish how security fixes reach both codebases.
+  database and module dependencies. Keep the source review current and port applicable
+  security fixes with failing regression tests in each affected repository.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
   services, usage accounting, trials, failed payment and cancellation.
 - **Venue and node registration.** The agreed Waitron signup and connection journey is

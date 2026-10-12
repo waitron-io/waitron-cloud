@@ -21,6 +21,8 @@ import type {
 import { createSession, requireCurrentPassword, resolveSession, type SessionCredentials } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
 
+// Offer and accept the same reviewed algorithms, independent of runtime defaults.
+const SUPPORTED_ALGORITHM_IDS = [-8, -7, -257];
 const CEREMONY_MS = 5 * 60_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
@@ -83,6 +85,7 @@ export class PasskeyStore {
         userID: new Uint8Array(identity.user_handle),
         timeout: CEREMONY_MS,
         attestationType: 'none',
+        supportedAlgorithmIDs: SUPPORTED_ALGORITHM_IDS,
         excludeCredentials: existing,
         authenticatorSelection: {residentKey: 'required', userVerification: 'required'},
       });
@@ -104,7 +107,8 @@ export class PasskeyStore {
     let verification: VerifiedRegistrationResponse;
     try {
       verification = await this.#adapter.verifyRegistration({response, expectedChallenge: ceremony.challenge,
-        expectedOrigin: this.#config.origin, expectedRPID: this.#config.rpId, requireUserVerification: true});
+        expectedOrigin: this.#config.origin, expectedRPID: this.#config.rpId, requireUserVerification: true,
+        supportedAlgorithmIDs: SUPPORTED_ALGORITHM_IDS});
     } catch { throw new PasskeyError(); }
     if (!verification.verified || !verification.registrationInfo.userVerified) throw new PasskeyError();
     const {credential, credentialDeviceType, credentialBackedUp} = verification.registrationInfo;
