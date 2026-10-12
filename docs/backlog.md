@@ -378,7 +378,9 @@ notifications separately.
   customer approver policy, emergency route and any SSH session-termination contract before use.
   The [optional authenticator-app design](superpowers/specs/2026-10-12-cloud-authenticator-factor-design.md)
   has approved email recovery and session policies: password reset keeps the factor, and
-  factor changes end every session. No authenticator feature is implemented yet. Configure live email delivery, implement the approved second-factor design,
+  factor changes end every session. Its [implementation plan](superpowers/plans/2026-10-12-cloud-authenticator-factor.md)
+  covers storage, account controls and browser acceptance. No authenticator feature is
+  implemented yet. Configure live email delivery, implement the approved second-factor design,
   and define the wider platform role catalogue before public use. Shared login/request limits, secure
   cookies and Origin/CSRF checks are implemented in the account API. A local streaming
   reverse-proxy test now exercises two real account instances with overwritten client
