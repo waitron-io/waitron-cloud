@@ -58,8 +58,8 @@ Produce `PasswordLoginStore(pool,keys,policy)` with `start({email,password})` re
 
 Return an internal refusal result from `transaction`, commit spent attempts, then throw the public error **outside** it (`transaction.ts:19` rolls back thrown errors). Place an effect savepoint after spending attempts; late expected refusal rolls back proof/session/change effects to that savepoint, preserving the budget. Unexpected database failures roll back the transaction. Never return an account ID with a challenge.
 
-- [ ] Failing tests: unchanged no-factor success; direct-login factor refusal; unknown/disabled/passwordless/wrong-password equivalence; no pre-session row; cross-account/stale/expired/exhausted challenges; durable failed attempts; two concurrent completions yield one session; recovery reuse and cross-operation TOTP replay fail.
-- [ ] Red then minimal implementation then green: `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/password-login.test.ts test/identity.test.ts`.
+- [x] Failing tests: unchanged no-factor success; direct-login factor refusal; unknown/disabled/passwordless/wrong-password equivalence; no pre-session row; cross-account/stale/expired/exhausted challenges; durable failed attempts; two concurrent completions yield one session; recovery reuse and cross-operation TOTP replay fail.
+- [x] Red then minimal implementation then green: `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/password-login.test.ts test/identity.test.ts`.
 
 ## 3. Management, reset and lifecycle races
 

@@ -384,8 +384,13 @@ notifications separately.
   secrets and returns every matching adjacent time step; migration 035 persists factor,
   session-bound enrolment, challenge, hashed recovery and replay state. Focused PostgreSQL
   and cryptography checks cover constraints, ciphertext binding and preserved upgrade data.
-  Password challenges, account controls, reset integration, HTTP limits, bilingual portal
-  journeys and operational rotation/restore acceptance remain implementation work.
+  Password challenges now keep you outside a session until a valid authenticator or unused
+  recovery code completes the check. Focused PostgreSQL tests cover concurrent completion,
+  durable attempt limits, stale credentials, code reuse and expiry during database waits:
+  `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test
+  test/password-login.test.ts test/identity.test.ts`. Account controls, reset integration,
+  HTTP limits, bilingual portal journeys and operational rotation/restore acceptance remain
+  implementation work.
   Configure live email delivery, implement the remaining second-factor plan,
   and define the wider platform role catalogue before public use. Shared login/request limits, secure
   cookies and Origin/CSRF checks are implemented in the account API. A local streaming

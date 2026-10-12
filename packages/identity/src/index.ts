@@ -1,5 +1,5 @@
 export { hashSecret, verifySecret } from './secret-hash.ts';
-export { createSession, IdentityError, IDLE_TIMEOUT_MS, listAccountSessions, login, requireCurrentPassword,
+export { createSession, IdentityError, IDLE_TIMEOUT_MS, listAccountSessions, login, requireCurrentPassword, requirePasswordAuthority,
   resolveSession, endSession, requirePlatformPermission, revokeAccountSession, withPassiveRead } from './sessions.ts';
 export type { AccountSessionRevocation, AccountSessionSummary, Session, SessionCredentials } from './sessions.ts';
 export {matchedTotpSteps, encryptFactorSecret, decryptFactorSecret} from './authenticator-crypto.ts';
