@@ -1,6 +1,6 @@
 # D57: Shared relay admission bounds
 
-Status: proposed mechanism and acceptance checks, not runtime proof. Read the
+Status: implemented local mechanism; production configuration remains open. Read the
 [implementation plan](../plans/2026-10-12-relay-admission-bounds.md) with this design.
 
 ## Purpose and scope
@@ -21,7 +21,7 @@ campaign, production enablement or production default values belong to this work
 ## Explicit configuration and counters
 
 Require `bounds` in injected `RelayAdmissionConfig`; normal startup still has no
-relay configuration or routes. Proposed `RelayBoundsConfig` fields are `version`,
+relay configuration or routes. Required `RelayBoundsConfig` fields are `version`,
 `epoch` (canonical UTC window origin), `windowSeconds`, `recipientLimit`, `grantLimit`,
 `queuedPayloadBytes`, `maxCounterRows`, and separate `recipientKeys: RelayKeyConfig`.
 Require positive safe integers, at least three counter-storage rows, valid dates
@@ -104,5 +104,5 @@ until payload clearing creates room. Keep release-manifest name/digest gates,
 transactional migration retry and separate-backup recovery conventions.
 
 Expose only aggregate byte/count status and fixed errors. No address, digest, key
-or message labels in metrics or diagnostics. The plan's local HTTP/PostgreSQL,
-worker, rotation, rollback and guard-deletion checks are proposed acceptance gates.
+or message labels in metrics or diagnostics. The [executed local checks](../../transactional-email-relay-contract.md#exercise-shared-admission-bounds)
+cover HTTP/PostgreSQL contention, worker paths, rotation, rollback and guard deletion.

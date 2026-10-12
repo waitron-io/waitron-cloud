@@ -1,3 +1,4 @@
+import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
 import {request as httpRequest} from 'node:http';
@@ -10,7 +11,7 @@ export async function relayFixture(){
  const db=await database(),origin='http://localhost';
  const issuerKey=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'),issuer=createLeaseIssuer(issuerKey);
  const grants:RelayConfig={mode:'local-proof',consentVersion:'local-v1',policy:{version:'local-v1',units:100,periodSeconds:3600,epoch:'2026-01-01T00:00:00.000Z',excess:'refuse',debit:'retain'},verifyOrigin:async r=>({...r,domainControl:true,httpsEndpoint:true,expiresAt:new Date(Date.now()+7200000).toISOString()})};
- const relay={mode:'local-proof',grants,payloadKeys:{activeKeyId:'p1',keys:{p1:randomBytes(32).toString('hex')}},replayKeys:{activeKeyId:'r1',keys:{r1:randomBytes(32).toString('hex')}}};
+ const relay={mode:'local-proof',grants,payloadKeys:{activeKeyId:'p1',keys:{p1:randomBytes(32).toString('hex')}},replayKeys:{activeKeyId:'r1',keys:{r1:randomBytes(32).toString('hex')}},bounds:{version:'ample-local-v1',epoch:'2026-01-01T00:00:00.000Z',windowSeconds:3600,recipientLimit:1000,grantLimit:1000,queuedPayloadBytes:10000000,maxCounterRows:10000,recipientKeys:{activeKeyId:'b1',keys:{b1:randomBytes(32).toString('hex')}}}};
  let running:Awaited<ReturnType<typeof startAccountServer>>;
  async function start(config:unknown=relay,withPortal=false){
   running=await startAccountServer({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:false,rateKey:db.rateKey,trustedProxyIps:[]},port:0,leaseIssuer:issuer,...(withPortal?{portalAssets:new Map([['/index.html',{body:Buffer.from('<html>Portal</html>'),contentType:'text/html'}]])}:{}),...(config?{relay:config}: {})} as Parameters<typeof startAccountServer>[0]);
@@ -43,13 +44,22 @@ export async function relayFixture(){
    });req.once('error',reject);req.end(JSON.stringify(envelope));
   });
  }
- async function request(action:string,envelope:unknown,headers:Record<string,string>={}){
+ async function request(action:string,envelope:unknown,headers:Record<string,string>={},port?:number){
   const address=running.server.address();assert.ok(address&&typeof address!=='string');
   return new Promise<{status:number;body:any;text:string;headers:Record<string,unknown>}>((resolve,reject)=>{
-   const req=httpRequest({host:'127.0.0.1',port:address.port,path:action.startsWith('/')?action:'/v1/installations/email/'+action,method:'POST',headers:{host:'localhost','content-type':'application/json',...headers}},res=>{
+   const req=httpRequest({host:'127.0.0.1',port:port??address.port,path:action.startsWith('/')?action:'/v1/installations/email/'+action,method:'POST',headers:{host:'localhost','content-type':'application/json',...headers}},res=>{
     let text='';res.on('data',b=>{text+=b;});res.once('error',reject);res.once('end',()=>{let body:unknown;try{body=JSON.parse(text);}catch{body=null;}resolve({status:res.statusCode!,body,text,headers:res.headers});});
    });req.once('error',reject);req.end(JSON.stringify(envelope));
   });
  }
- return {db,origin,issuer,issuerKey,relay,grants,venue,request,discardReply,async restart(config:unknown=relay,withPortal=false){await running.close();await start(config,withPortal);},async close(){await running.close();await db.close();}};
+ const children=new Set<ReturnType<typeof spawn>>();
+ async function second(config:unknown=relay){
+  const child=spawn(process.execPath,['test/fixtures/relay-http-process.ts'],{env:process.env,stdio:['pipe','pipe','pipe']});children.add(child);
+  const exited=new Promise<void>((resolve,reject)=>{child.once('error',reject);child.once('exit',()=>{children.delete(child);resolve();});});
+  let error='',text='';child.stderr!.on('data',b=>error+=b);
+  child.stdin!.end(JSON.stringify({schema:db.schema,issuerKey,config,origin,keys:db.keys,rateKey:db.rateKey}));
+  const port=await Promise.race([new Promise<number>(resolve=>child.stdout!.on('data',b=>{text+=b;if(text.includes('\n'))resolve(JSON.parse(text.split('\n')[0]!).port);})),exited.then(()=>{throw Error('HTTP child exited: '+error);})]);
+  return {request:(action:string,envelope:unknown)=>request(action,envelope,{},port),close:async()=>{child.kill('SIGTERM');await exited;}};
+ }
+ return {db,origin,issuer,issuerKey,relay,grants,venue,request,discardReply,second,async restart(config:unknown=relay,withPortal=false){await running.close();await start(config,withPortal);},async close(){for(const child of children){const exit=new Promise<void>(r=>child.once('exit',()=>r()));child.kill('SIGTERM');await exit;}await running.close();await db.close();}};
 }
