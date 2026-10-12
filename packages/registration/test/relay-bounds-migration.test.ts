@@ -10,6 +10,8 @@ const {checkConsumerSchema}=await import(new URL('../../../deploy/local-stack/ru
 const {hasReleaseMigrationCount}=await import(new URL('../../../scripts/database-recovery-migrations.mjs',import.meta.url).href);
 
 async function removeBounds(f:Awaited<ReturnType<typeof fixture>>){
+ await f.pool.query('DROP TABLE IF EXISTS cloud_factor_replays,cloud_factor_recovery_codes,cloud_factor_enrolments,cloud_factor_login_challenges,cloud_authenticator_factors; ALTER TABLE cloud_sessions DROP CONSTRAINT IF EXISTS cloud_sessions_factor_account_unique');
+ await f.pool.query("DELETE FROM schema_migrations WHERE name='035_authenticator_factor.sql'");
  await f.pool.query('DROP TRIGGER relay_payload_bytes ON relay_messages; DROP TRIGGER relay_payload_bytes_truncate ON relay_messages; DROP FUNCTION relay_account_payload_bytes(); DROP TABLE relay_bounds_counters,relay_bounds_windows,relay_bounds_policy,relay_queue_bytes');
  await f.pool.query("DELETE FROM schema_migrations WHERE name='034_relay_admission_bounds.sql'");
 }
@@ -47,13 +49,13 @@ test('interrupted bounds DDL rolls back ledger and tables, then retry succeeds',
   assert.ok(pid,'migration reached table lock');await block.query('SELECT pg_cancel_backend($1)',[pid]);await assert.rejects(run,{code:'57014'});
   assert.equal((await block.query("SELECT to_regclass('relay_bounds_policy') AS table")).rows[0].table,null);
   assert.equal((await block.query("SELECT count(*) FROM schema_migrations WHERE name='034_relay_admission_bounds.sql'")).rows[0].count,'0');
-  await block.query('COMMIT');await migrate(f.pool);assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'34');
+  await block.query('COMMIT');await migrate(f.pool);assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'35');
  }finally{await block.query('ROLLBACK');block.release();await run?.catch(()=>{});await f.close();}
 });
 test('current release consumer and recovery gates reject missing, future or changed manifests',async()=>{
  const f=await fixture();try{
   const root=new URL('../../../',import.meta.url).pathname;
-  await checkConsumerSchema(f.pool,root);assert.equal(hasReleaseMigrationCount('34'),true);assert.equal(hasReleaseMigrationCount('33'),false);assert.equal(hasReleaseMigrationCount('35'),false);
+  await checkConsumerSchema(f.pool,root);assert.equal(hasReleaseMigrationCount('35'),true);assert.equal(hasReleaseMigrationCount('33'),false);assert.equal(hasReleaseMigrationCount('34'),false);assert.equal(hasReleaseMigrationCount('36'),false);
   const prior=(await f.pool.query("SELECT * FROM schema_migrations WHERE name='034_relay_admission_bounds.sql'")).rows[0];
   await f.pool.query("DELETE FROM schema_migrations WHERE name='034_relay_admission_bounds.sql'");await assert.rejects(checkConsumerSchema(f.pool,root),/schema_incompatible/);
   await f.pool.query('INSERT INTO schema_migrations(name,digest) VALUES($1,$2)',[prior.name,'changed']);await assert.rejects(checkConsumerSchema(f.pool,root),/schema_incompatible/);
@@ -76,7 +78,7 @@ test('pre-upgrade backup restores separately with external keys while upgraded s
   assert.equal((await restored.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'33');
   const copy=(await restored.query('SELECT * FROM relay_messages WHERE message_id=$1',[body.messageId])).rows[0];assert.deepEqual(copy.payload,original.payload);
   const {RelayKeys}=await import('../src/relay-payload.ts');assert.equal(new RelayKeys(f.relay.payloadKeys).open(copy).recipient,body.recipient);
-  await migrate(f.pool);assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'34');
+  await migrate(f.pool);assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'35');
   assert.equal((await restored.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'33');assert.deepEqual((await f.row(body.messageId)).payload,original.payload);
  }finally{await restored?.end();await f.pool.query(`DROP SCHEMA IF EXISTS ${restoredSchema} CASCADE`);await f.close();}
 });

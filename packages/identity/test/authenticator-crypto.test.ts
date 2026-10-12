@@ -81,7 +81,8 @@ test('rejects absent, wrong-length and partly valid keys before encryption', asy
   for (const invalid of [
     {activeKeyId: 'current', keys: {}}, {activeKeyId: 'current', keys: {current: '07'.repeat(16)}},
     {activeKeyId: 'current', keys: {current: `${'07'.repeat(32)}junk`}},
-    {activeKeyId: 'bad.key', keys: {'bad.key': '07'.repeat(32)}}, null,
+    {activeKeyId: 'bad.key', keys: {'bad.key': '07'.repeat(32)}},
+    {activeKeyId: '0', keys: ['07'.repeat(32)]}, null,
   ]) {
     assert.throws(() => encryptFactorSecret(secret, invalid, binding));
     assert.equal(decryptFactorSecret(stored, invalid, binding), null);

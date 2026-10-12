@@ -20,7 +20,7 @@ function associatedData(binding: FactorBinding, keyId: string): Buffer {
 }
 function keyBytes(config: FactorKeys, id: string): Buffer {
   if (!config || typeof config !== 'object' || typeof config.activeKeyId !== 'string'
-    || !KEY_ID.test(config.activeKeyId) || !config.keys || typeof config.keys !== 'object'
+    || !KEY_ID.test(config.activeKeyId) || !config.keys || typeof config.keys !== 'object' || Array.isArray(config.keys)
     || !Object.hasOwn(config.keys, config.activeKeyId) || !Object.hasOwn(config.keys, id)
     || !Object.entries(config.keys).every(([label, key]) => KEY_ID.test(label)
       && typeof key === 'string' && /^[0-9a-fA-F]{64}$/.test(key))) unavailable();

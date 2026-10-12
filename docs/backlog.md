@@ -380,7 +380,13 @@ notifications separately.
   has approved email recovery and session policies: password reset keeps the factor, and
   factor changes end every session. Its [implementation plan](superpowers/plans/2026-10-12-cloud-authenticator-factor.md)
   covers storage, account controls and browser acceptance. No authenticator feature is
-  implemented yet. Configure live email delivery, implement the approved second-factor design,
+  implemented end to end yet. The identity primitive now encrypts account/version/purpose-bound
+  secrets and returns every matching adjacent time step; migration 035 persists factor,
+  session-bound enrolment, challenge, hashed recovery and replay state. Focused PostgreSQL
+  and cryptography checks cover constraints, ciphertext binding and preserved upgrade data.
+  Password challenges, account controls, reset integration, HTTP limits, bilingual portal
+  journeys and operational rotation/restore acceptance remain implementation work.
+  Configure live email delivery, implement the remaining second-factor plan,
   and define the wider platform role catalogue before public use. Shared login/request limits, secure
   cookies and Origin/CSRF checks are implemented in the account API. A local streaming
   reverse-proxy test now exercises two real account instances with overwritten client
