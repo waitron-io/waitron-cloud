@@ -376,7 +376,9 @@ notifications separately.
   protected PostgreSQL work and appends redacted immutable audit events. No HTTP route or
   production action is configured. Define the platform role, eligibility and action catalogues,
   customer approver policy, emergency route and any SSH session-termination contract before use.
-  Configure live email delivery, implement MFA,
+  The [optional authenticator-app design](superpowers/specs/2026-10-12-cloud-authenticator-factor-design.md)
+  is awaiting decisions on email recovery and sessions after factor changes; no authenticator
+  feature is implemented yet. Configure live email delivery, implement the approved second-factor design,
   and define the wider platform role catalogue before public use. Shared login/request limits, secure
   cookies and Origin/CSRF checks are implemented in the account API. A local streaming
   reverse-proxy test now exercises two real account instances with overwritten client
