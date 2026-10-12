@@ -295,23 +295,23 @@ notifications separately.
   and database connections were idle. See the receipt below. No production portal
   change, assertion edit, extra retry or longer deadline is included.
 
-- **CI execution budget.** [Run 36723901567](https://github.com/waitron-io/waitron-cloud/actions/runs/36723901567)
-  on `bcda7444aa8b452a8023b905b09069a34522ee3c` was cancelled at the job's
-  15-minute limit after reporting 144/144 backup tests and 111/111 portal tests
-  passed. The job annotation confirms the time limit; the whole run did not pass.
-  D47's [run 36775499697](https://github.com/waitron-io/waitron-cloud/actions/runs/36775499697)
-  also reached that limit during the portal suite. Registration passed 357/357 in
-  203.7 seconds, backups 147/147 in 183.0 seconds, remote access 62/62 in 51.3
-  seconds and account HTTP 165/165 in 205.0 seconds. The preceding main run
-  [36767035514](https://github.com/waitron-io/waitron-cloud/actions/runs/36767035514)
-  completed in 14m39s; its registration suite had 321 tests and took 153.9 seconds.
-  The whole-job allowance is now 20 minutes to accommodate the added relay
-  integration coverage. Individual test deadlines and assertions are unchanged.
-  These two runs measure elapsed time, not an isolated attribution of every
-  duration change to D47. [CI 36855902107](https://github.com/waitron-io/waitron-cloud/actions/runs/36855902107)
-  passed on `7b5cdb1f50449e4a9c2d50e59f757aa1c1cd8716` in 13m46s. Consider
-  splitting the job if further suite growth consumes this margin. This remains
-  separate from D48's intermittent backup verdict and is not a diagnosis of it.
+- **CI execution budget.** You can read one summary job and the individual package
+  and receipt jobs to check a candidate. CI runs type checking, each of the five
+  existing receipt suites and all eight package suites in parallel, with a
+  ten-minute limit per work job. Browser packages install Chromium with at most
+  two attempts, each bounded to 120 seconds plus ten seconds to stop it. Main
+  pushes use a unique concurrency group per run so a later merge cannot cancel
+  an earlier merge's checks; superseded pull request runs still cancel.
+  The workflow text guard runs in the typecheck job. Individual test deadlines
+  and assertions are unchanged. The previous main
+  [run 36878576466](https://github.com/waitron-io/waitron-cloud/actions/runs/36878576466)
+  on `741dd7d1241d6b66d32ff711734469741e9c7cb0` spent 14m19s in its single
+  job, including 13m04s in `pnpm test`. Registration, backups and account HTTP
+  took about 180, 195 and 185 seconds respectively; portal took 155 seconds.
+  Aim for about four minutes per job and measure real runs before deciding
+  whether a package needs further splitting. This is a working target the
+  owner can change. The budget remains separate from intermittent fixture
+  failures; more time is not a diagnosis of a failing assertion.
 
 - **Shared UI.** [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519)
   implements `@waitron/ui-core` in Waitron with seven account controls, theme tokens
