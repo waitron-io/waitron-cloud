@@ -1,5 +1,5 @@
 import type {Context} from 'hono';
-import {RelayError,RelayMessageError,type RelayMessages,type RelayAction} from '@waitron-cloud/registration';
+import {RelayError,RelayMessageError,RelayBoundsError,type RelayMessages,type RelayAction} from '@waitron-cloud/registration';
 import {AccountHttpError} from './errors.ts';
 import {readAccountBody} from './request.ts';
 import type {RateRule} from './rate-limit.ts';
@@ -12,11 +12,12 @@ export async function relayMessageResponse(c:Context,options:{relay:RelayMessage
  await options.consume([{scope:'installation-key',subject:claims.installationId,limit:30,windowSeconds:60}]);
  try{const result=await options.relay.execute(action,envelope);return c.json(result.status,result.created?202:200);}
  catch(error){
-  if(error instanceof RelayError||error instanceof RelayMessageError){
+  if(error instanceof RelayError||error instanceof RelayMessageError||error instanceof RelayBoundsError){
    const code=error.code==='invalid_input'?'invalid_message':error.code;
    if(code==='invalid_message')throw new AccountHttpError(400,code);
    if(code==='grant_unavailable'||code==='relay_disabled')throw new AccountHttpError(403,code);
    if(code==='message_conflict')throw new AccountHttpError(409,code);
+   if(code==='rate_limited')throw new AccountHttpError(429,code,60);
    if(code==='allowance_exhausted')throw new AccountHttpError(429,code,60);
    throw new AccountHttpError(503,'relay_unavailable',1);
   }

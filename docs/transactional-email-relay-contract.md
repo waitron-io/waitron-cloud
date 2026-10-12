@@ -346,7 +346,7 @@ routes over loopback HTTP and writes encrypted queue records.
 
 ## Exercise signed admission locally
 
-You can inject `relay: {mode: 'local-proof', grants, payloadKeys, replayKeys}` into
+You can inject `relay: {mode: 'local-proof', grants, payloadKeys, replayKeys, bounds}` into
 `startAccountServer`, with a lease issuer and the explicit grant configuration
 above. Both key rings use `{activeKeyId, keys}` with separately supplied 32-byte
 hex keys. There is no CLI/environment enablement switch. Production installations
@@ -385,8 +385,58 @@ accepted retry window. The local worker handles unattended expiry and delivery s
 The local routes share the existing machine counters: 60 requests/minute per source
 and 30/minute per authenticated installation across relay and lifecycle endpoints. Forged proofs cannot spend another installation's request limit.
 These fixture bounds and the explicitly configured account allowance are not an
-approved production abuse policy. Per-recipient/grant budgets, aggregate queued
-bytes, authenticated suppression events and provider spending controls remain production prerequisites.
+approved production abuse policy. Shared recipient/grant and retained-payload-byte
+mechanisms are proved locally below; production budgets, authenticated suppression
+events and provider spending controls remain prerequisites.
+
+## Exercise shared admission bounds
+
+Different accounts can target the same address, and delayed mail still occupies
+storage. Supply explicit `bounds` with `version`, `epoch`, `windowSeconds`,
+`recipientLimit`, `grantLimit`, `queuedPayloadBytes`, `maxCounterRows` and separate
+`recipientKeys: {activeKeyId, keys}`. The local fixtures supply synthetic keys and
+budgets; no production defaults exist.
+
+Recipient counts combine the three message classes across accounts. Grant counts
+use the stable grant ID across revisions. PostgreSQL serializes reservations within
+fixed windows and pins one recipient key per live window, so changing the active
+key does not replenish a budget. Keep every live pinned key available with its
+original material. Missing keys or a mismatched policy return `503 relay_unavailable`.
+Changing the persisted policy is outside this mechanism.
+
+A new admission reserves both counts and actual ciphertext bytes in the same
+transaction as its account unit. Exhaustion returns `429 rate_limited` with
+`Retry-After: 60`. Exact retries reserve nothing extra. Cancellation and delivery
+release payload bytes but do not refund counts. Sending, delayed and unreadable
+payloads count until cleared. The byte ceiling includes the encrypted JSON's
+28-byte nonce and authentication tag, but excludes indexes and other mail queues.
+
+Migration 034 backfills existing bytes while consumers are stopped. An existing
+queue above your cap can drain, but cannot grow. Admission checks its signed proof,
+lease, installation, grant and message deadlines after both the bounds-lock and
+byte-tally waits. If its counter window ends during the final wait, the whole
+admission rolls back with `503 relay_unavailable` and `Retry-After: 1`; send a fresh
+signed retry. Workers never acquire the bounds lock.
+
+Run the local PostgreSQL and independent HTTP-process proofs:
+
+```sh
+node scripts/test-postgres.mjs --dir packages/registration exec node --test \
+  --test-timeout=30000 test/relay-bounds.test.ts test/relay-bounds-migration.test.ts \
+  test/relay-worker.test.ts
+node scripts/test-postgres.mjs --dir packages/account-http exec node --test \
+  --test-timeout=120000 test/relay-admission-bounds.test.ts \
+  test/relay-messages.test.ts test/relay-disabled.test.ts
+```
+
+These checks cover shared limits, exact-cap and one-byte-over cases, rotation,
+retries, forgery, database rollback, deadline waits, worker contention and populated
+upgrades. The upgrade proof also restores a pre-upgrade backup separately with
+external keys and leaves the upgraded source intact. `RelayBounds.status()` returns
+only aggregate retained bytes and the combined window/counter row count. Admission
+prunes expired counters; enable `relayAdmissionCounters` in your
+[history cleanup policy](history-cleanup.md) to clean idle windows without deleting
+messages or replay records.
 
 ## Exercise the local worker
 

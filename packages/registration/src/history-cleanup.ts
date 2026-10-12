@@ -1,5 +1,6 @@
 import type {Pool, PoolClient, QueryResult} from 'pg';
 import {IDLE_TIMEOUT_MS} from '@waitron-cloud/identity';
+import {pruneRelayBounds,relayBoundsLock} from './relay-bounds.ts';
 import {transaction} from './transaction.ts';
 
 export const historyCleanupCategories = [
@@ -13,6 +14,7 @@ export const historyCleanupCategories = [
   'backupJobs',
   'recoveryHistory',
   'backupTombstones',
+  'relayAdmissionCounters',
 ] as const;
 
 export type HistoryCleanupCategory = typeof historyCleanupCategories[number];
@@ -88,6 +90,13 @@ export class HistoryCleanup {
   async #category(client: PoolClient, category: HistoryCleanupCategory, cutoff: string,
     limit: number, apply: boolean): Promise<HistoryCleanupCategoryReport> {
     switch (category) {
+      case 'relayAdmissionCounters': {
+        await client.query(relayBoundsLock);
+        const eligible=await count(client,`SELECT ((SELECT count(*) FROM relay_bounds_windows WHERE ends_at<$1 AND ends_at<=clock_timestamp())
+         +(SELECT count(*) FROM relay_bounds_counters b JOIN relay_bounds_windows w USING(window_start) WHERE w.ends_at<$1 AND w.ends_at<=clock_timestamp()))::integer AS count`,[cutoff]);
+        const deleted=apply?await pruneRelayBounds(client,limit,cutoff):0;
+        return {cutoff,eligible,blocked:0,deleted,hasMore:eligible>deleted};
+      }
       case 'sessions': return this.#simple(client, cutoff, limit, apply, {
         eligible: `SELECT count(*)::integer AS count FROM cloud_sessions s
           WHERE (s.ended_at<$1 OR (s.ended_at IS NULL AND LEAST(s.last_seen_at+(${IDLE_TIMEOUT_MS}*interval '1 millisecond'),s.absolute_expires_at)<$1))

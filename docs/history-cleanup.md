@@ -61,4 +61,10 @@ An applied deletion cannot be rolled back after the transaction commits. Restore
 - `recoveryHistory` removes closed, expired recovery operations after their approved request and completed replacement reference. An incomplete replacement blocks deletion.
 - `backupTombstones` removes database metadata for objects that the backup worker already deleted. Any recovery or backup-job reference blocks deletion, so include `backupJobs` with a suitable cutoff when old completed jobs should be removed first. Current backup points are outside this category.
 
+- `relayAdmissionCounters` removes only expired recipient/grant counters and their
+  empty windows, using PostgreSQL time and the admission lock. The chunk size counts
+  both counters and windows. It never removes live budgets, messages or replay
+  records. Include an explicit cutoff when you want idle relay schemas cleaned;
+  normal admission also prunes expired rows before reserving a budget.
+
 The command does not delete current incident, monitor or probe rows. Those tables keep one current row per venue, route or incident kind. It also leaves installation revocations, hostname changes and security audit data alone because their retention needs a separate policy.

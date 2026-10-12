@@ -234,15 +234,20 @@ venue does not subscribe to remote access or backups.
   state/reason constraints. Its loopback-only SMTP proof covers temporary/permanent
   refusal, two-worker fencing, cancellation, key rotation/loss and uncertain delivery
   after disconnect or process death. Normal startup leaves it off. Retention policy,
-  authenticated provider suppression events, production recipient/grant/queue-byte
-  abuse bounds and provider spending controls remain open. The
-  [shared admission-bounds design](superpowers/specs/2026-10-12-relay-admission-bounds-design.md)
-  and [implementation plan](superpowers/plans/2026-10-12-relay-admission-bounds.md)
-  propose keyed recipient and stable-grant counters, a shared encrypted-payload-byte
-  ceiling and explicit local configuration. These are acceptance proposals, not
-  implemented limits or approved production budgets. Deliver the complete mechanism
-  together and verify real HTTP/PostgreSQL contention, retries, rotation, worker
-  cleanup and populated upgrades before closing that work.
+  authenticated provider suppression events and provider spending controls remain
+  open. Shared keyed recipient and stable-grant counters now enforce explicitly
+  configured local budgets across independent HTTP processes. Migration 034 accounts
+  for actual retained encrypted payload bytes, including sending and delayed work;
+  clearing payload releases bytes without refunding message counts. Exact retries
+  spend nothing extra. Local PostgreSQL proofs cover races, rollback, key rotation,
+  deadline expiry during lock waits, worker cleanup and populated upgrades, including
+  interrupted migration and separate pre-upgrade backup restore with external keys.
+  See the [admission-bounds design](superpowers/specs/2026-10-12-relay-admission-bounds-design.md)
+  and [local acceptance commands](transactional-email-relay-contract.md#exercise-shared-admission-bounds).
+  Choose production budgets and recipient-key custody before enablement; normal
+  startup still has no relay configuration. The immutable local policy deliberately
+  refuses mismatched limits rather than resetting budgets. Policy replacement and
+  the operator stop switch remain separate work.
   Separately queue Waitron's durable caller/status work before a joint
   local proof.
   Decide provider, processing location, account consent, allowance/debit policy and

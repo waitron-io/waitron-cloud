@@ -1,6 +1,6 @@
 # D57: Shared relay admission bounds
 
-Status: proposed mechanism and acceptance checks, not runtime proof. Read the
+Status: implemented local mechanism; production configuration remains open. Read the
 [implementation plan](../plans/2026-10-12-relay-admission-bounds.md) with this design.
 
 ## Purpose and scope
