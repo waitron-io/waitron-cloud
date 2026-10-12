@@ -21,7 +21,7 @@ campaign, production enablement or production default values belong to this work
 ## Explicit configuration and counters
 
 Require `bounds` in injected `RelayAdmissionConfig`; normal startup still has no
-relay configuration or routes. Proposed `RelayBoundsConfig` fields are `version`,
+relay configuration or routes. Required `RelayBoundsConfig` fields are `version`,
 `epoch` (canonical UTC window origin), `windowSeconds`, `recipientLimit`, `grantLimit`,
 `queuedPayloadBytes`, `maxCounterRows`, and separate `recipientKeys: RelayKeyConfig`.
 Require positive safe integers, at least three counter-storage rows, valid dates
