@@ -211,7 +211,9 @@ test('two workers, cancellation, reaping and new admissions keep exact bytes wit
 test('counter-row capacity serializes distinct subjects before either counter insertion',async()=>{
  const f=await fixture();try{
   const {RelayBounds}=await import('../src/relay-bounds.ts');const {transaction}=await import('../src/transaction.ts');
-  const store=new RelayBounds(f.pool,bounds({maxCounterRows:3}));await transaction(f.pool,c=>store.check(c));
+  const store=new RelayBounds(f.pool,bounds({maxCounterRows:3}));
+  await transaction(f.pool,c=>store.reserve(c,{grantId:randomUUID(),recipient:'seed@example.test'}));
+  await f.pool.query('DELETE FROM relay_bounds_counters');
   // Delay the first write after the capacity read; without serialization all readers see room.
   await f.pool.query("CREATE FUNCTION delay_counter_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.1); RETURN NEW; END; $$; CREATE TRIGGER delay_counter BEFORE INSERT ON relay_bounds_counters FOR EACH ROW EXECUTE FUNCTION delay_counter_fixture()");
   const results=await Promise.allSettled(Array.from({length:6},(_,i)=>transaction(f.pool,c=>store.reserve(c,{grantId:randomUUID(),recipient:`person${i}@example.test`}))));
