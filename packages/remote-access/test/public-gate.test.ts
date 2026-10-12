@@ -10,18 +10,18 @@ import {randomBytes,createHash} from 'node:crypto';
 import {createPublicGate} from '../src/public-gate.ts';
 const host='sol.example.test';
 async function fixture(){
- let now=Date.now(),available=true;
+ let now=Date.now(),available=true,disconnect=false;
  const root=await mkdtemp(join(tmpdir(),'cloud-gate-pki-'));
  execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=staff.sol.example.test','-addext','subjectAltName=DNS:staff.sol.example.test','-keyout',join(root,'key.pem'),'-out',join(root,'cert.pem')],{stdio:'ignore'});
  const key=await readFile(join(root,'key.pem')),certificate=await readFile(join(root,'cert.pem'));await rm(root,{recursive:true});
  let upstream=0;let headers:Record<string,unknown>={};
- const venue=httpsServer({key,cert:certificate},(req,res)=>{upstream++;headers=req.headers;if(!available){res.statusCode=503;res.end();return;}res.setHeader('Set-Cookie','staff=private');res.end('available');});await new Promise<void>(r=>venue.listen(0,'127.0.0.1',r));const address=venue.address();assert.ok(address&&typeof address!=='string');
+ const venue=httpsServer({key,cert:certificate},(req,res)=>{upstream++;headers=req.headers;if(!available){if(disconnect){req.socket.destroy();return;}res.statusCode=503;res.end('internal failure at staff.sol.example.test: database offline');return;}res.setHeader('Set-Cookie','staff=private');res.end('available');});await new Promise<void>(r=>venue.listen(0,'127.0.0.1',r));const address=venue.address();assert.ok(address&&typeof address!=='string');
  const gate=createPublicGate({key:randomBytes(32),now:()=>now,difficulty:8,ca:certificate,routes:()=>[{publicHostname:host,staffHostname:'staff.sol.example.test',address:'127.0.0.1',port:address.port}]});
  const server=createServer(gate.handle);await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const bound=server.address();assert.ok(bound&&typeof bound!=='string');
  const send=(path='/public/availability',extra:Record<string,string>={},method='GET',body?:string)=>new Promise<Response>((resolve,reject)=>{
   const req=request({host:'127.0.0.1',port:bound.port,path,method,headers:{host,'x-waitron-client-ip':'192.0.2.2','x-waitron-sni':host,...extra}},res=>{const chunks:Buffer[]=[];res.on('data',chunk=>chunks.push(chunk));res.on('end',()=>{const headers=new Headers();for(const [key,value]of Object.entries(res.headers)){if(Array.isArray(value))for(const v of value)headers.append(key,v);else if(value)headers.set(key,value);}resolve(new Response(res.statusCode===204?null:Buffer.concat(chunks),{status:res.statusCode!,headers}));});});req.on('error',reject);req.end(body);
  });
- return {send,gate,advance:(ms:number)=>{now+=ms;},unavailable:()=>{available=false;},count:()=>upstream,headers:()=>headers,async close(){server.closeAllConnections();venue.closeAllConnections();await Promise.all([new Promise<void>(r=>server.close(()=>r())),new Promise<void>(r=>venue.close(()=>r()))]);}};
+ return {send,gate,advance:(ms:number)=>{now+=ms;},unavailable:(dropConnection=false)=>{available=false;disconnect=dropConnection;},count:()=>upstream,headers:()=>headers,async close(){server.closeAllConnections();venue.closeAllConnections();await Promise.all([new Promise<void>(r=>server.close(()=>r())),new Promise<void>(r=>venue.close(()=>r()))]);}};
 }
 function solve(challenge:string,bits:number){for(let n=0;;n++){const hash=createHash('sha256').update(`${challenge}:${n}`).digest();if(hash.readUInt32BE(0)<2**(32-bits))return n;}}
 test('public challenge gates actual HTTPS forwarding and strips staff credentials and cookies',async()=>{
@@ -53,5 +53,42 @@ test('expired proof and access, request quotas and unavailable venues stay bound
   assert.equal((await f.send('/_cloud/solve',{},'POST','{')).status,400);
   assert.equal((await f.send('/_cloud/solve',{},'POST',JSON.stringify({challenge:'forged',nonce:0}))).status,403);
   f.advance(60001);for(let i=0;i<120;i++)assert.equal((await f.send('/_cloud/challenge')).status,200);assert.equal((await f.send('/_cloud/challenge')).status,429);assert.equal(f.count(),1);assert.equal(f.gate.stats().buckets,1);
+ }finally{await f.close();}
+});
+
+for(const dropConnection of [false,true])test(`unavailable venues return private, localised HTML or JSON (${dropConnection?'connection lost':'HTTP error'})`,async()=>{
+ const f=await fixture();try{
+  const challenge=await (await f.send('/_cloud/challenge')).json() as {challenge:string;difficulty:number};
+  const answer=await f.send('/_cloud/solve',{},'POST',JSON.stringify({challenge:challenge.challenge,nonce:solve(challenge.challenge,challenge.difficulty)}));
+  assert.equal(answer.status,204);const cookie=answer.headers.get('set-cookie')!.split(';')[0]!;
+  f.unavailable(dropConnection);
+  const cases=[
+   {accept:'text/html',language:'es-ES, en;q=0.5',want:'es'},
+   {accept:'*/*',language:'es;q=0.2,en;q=0.9',want:'en'},
+   {accept:'text/html',language:'fr',want:'en'},
+   {accept:'text/html',language:'es;q=0,en',want:'en'},
+   {accept:'text/html',language:'es;q=0',want:'en'},
+   {accept:'application/json;q=0',language:'en',want:'en'},
+   {accept:'text/html',language:'es\"><script>alert(1)</script>',want:'en'},
+   {accept:'application/json',language:'es',want:'json'},
+   {accept:'application/json;q=0,text/html',language:'es',want:'es'},
+   {accept:'text/html;q=0.5,application/json;q=1',language:'en',want:'json'},
+   {accept:'application/json;q=0.1,text/html;q=1',language:'en',want:'en'},
+  ];
+  for(const {accept,language,want}of cases){
+   const response=await f.send('/public/availability',{cookie,accept,'accept-language':language});
+   assert.equal(response.status,503);assert.equal(response.headers.get('cache-control'),'no-store');assert.equal(response.headers.get('retry-after'),'30');
+   assert.match(response.headers.get('vary')!,/Accept-Language/i);assert.match(response.headers.get('vary')!,/Accept(?:,|$)/i);
+   const body=await response.text();assert.doesNotMatch(body,/staff\.|sol\.example|127\.0\.0|database|internal failure|upstream/i);
+   if(want==='json'){
+    assert.match(response.headers.get('content-type')!,/^application\/json/);assert.deepEqual(JSON.parse(body),{error:'venue_unavailable'});
+   }else{
+    assert.match(response.headers.get('content-type')!,/^text\/html/);assert.equal(response.headers.get('content-language'),want);
+    assert.match(body,new RegExp(`<html lang="${want}">`));assert.match(body,/<main>/);assert.match(body,/<a href="\/public\/availability">/);
+    assert.match(body,want==='es'?/No disponible temporalmente/:/Temporarily unavailable/);
+    assert.match(response.headers.get('content-security-policy')!,/style-src 'sha256-/);
+   }
+  }
+  assert.equal(f.gate.stats().unavailable,cases.length);assert.equal(f.gate.stats().forwarded,cases.length);assert.equal(f.gate.stats().active,0);
  }finally{await f.close();}
 });

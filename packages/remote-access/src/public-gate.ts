@@ -1,5 +1,6 @@
 import {createHmac,randomBytes,timingSafeEqual,createHash} from 'node:crypto';
 import {isIP} from 'node:net';
+import {publicUnavailable} from './public-unavailable.ts';
 import {request} from 'node:https';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 interface Route {publicHostname:string;staffHostname:string;address:string;port:number}
@@ -19,7 +20,7 @@ export function createPublicGate(options:Options){
   }catch{return false;}
  }
  async function handle(req:IncomingMessage,res:ServerResponse){
-  const reply=(status:number,body='',type='text/plain; charset=utf-8')=>{res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"});res.end(body);};
+  const reply=(status:number,body='',type='text/plain; charset=utf-8',headers:Record<string,string>={})=>{res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'",...headers});res.end(body);};
   try{
    const ip=req.headers['x-waitron-client-ip'],sni=req.headers['x-waitron-sni'],host=req.headers.host?.split(':')[0];
    if(typeof ip!=='string'||!isIP(ip)||typeof sni!=='string'||host!==sni||![sni,sni+':443'].includes(req.headers.host??'')){counters.rejected++;reply(421);return;}
@@ -54,7 +55,7 @@ export function createPublicGate(options:Options){
      const cancel=()=>{if(!res.writableEnded)upstream.destroy(new Error('client_closed'));};res.once('close',cancel);upstream.once('close',()=>res.off('close',cancel));upstream.end();
     });
     if(result.status!==200)throw new Error('unavailable');reply(200,result.body.toString(),'application/json');
-   }catch{counters.unavailable++;reply(503,'The venue is temporarily unavailable. / El local no está disponible temporalmente.');}
+   }catch{counters.unavailable++;const unavailable=publicUnavailable(req.headers.accept,req.headers['accept-language']);reply(503,unavailable.body,unavailable.type,unavailable.headers);}
    finally{active--;}
   }catch{if(!res.headersSent)reply(400);else res.destroy();}
  }
