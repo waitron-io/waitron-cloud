@@ -9,7 +9,10 @@ commit `c9d80c59a30ab1ae7a4acc0a6999e6a342de924e`.
 | `src/sessions.ts` login and registration's `test/identity.test.ts` | [manager-login.ts](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/manager-login.ts), [tests](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/manager-login.test.ts) | Adapted email/password flow, generic failures and one derivation for unknown, disabled or passwordless accounts. No by-ID login. Authenticator factors and their recovery codes are not copied; Cloud owns signup and email password recovery. |
 | `src/sessions.ts` lifecycle and registration's `test/identity.test.ts` | [management-session.ts](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/management-session.ts), [tests](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/management-session.test.ts) | Preserve 30-minute idle expiry, passive reads, logout and current suspension checks. Use PostgreSQL wall time and row locks, hashed opaque tokens and a 12-hour absolute lifetime. Local roles and locale are not copied into Cloud sessions. |
 | Registration's `src/passkeys.ts`, `test/passkeys.test.ts` | [passkey.ts](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/passkey.ts), [tests](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/passkey.test.ts) | Independently adapted PostgreSQL ceremonies, opaque handles, session/CSRF/password-bound enrolment and generic failures. Failed ceremonies are consumed. |
-| Registration's `src/password-recovery.ts`, `test/password-recovery.test.ts` | [password-recovery.ts](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/password-recovery.ts), [tests](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/password-recovery.test.ts) | Cloud owns email delivery, single-use reset tokens, credential fingerprints, current account checks and ending sessions. |
+| `src/secret-hash.ts` and `src/sessions.ts` password checks | [verify-password.ts](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/verify-password.ts), [tests](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/verify-password.test.ts) | Cloud calls its asynchronous secret verifier directly; password bounds belong to signup and account boundaries. |
+
+Cloud's registration `src/password-recovery.ts` and its tests have no Waitron
+identity-package counterpart. Maintain and test that Cloud-owned flow here.
 
 Last reviewed Waitron revision: `b9440c685e440d37d5bc65a7feade840ceacf1c9`.
 
@@ -30,6 +33,9 @@ last reviewed revision through `origin/main`. It reads your existing local Git
 references without fetching or changing Waitron. Pass an explicit revision as the
 second argument when you need a fixed comparison. A target that does not descend
 from the reviewed revision is refused rather than silently reported as current.
+The report also checks each mapped path at its linked source revision and at the
+target revision. If a file is renamed or deleted, update its mapped path and link
+after reviewing that change; do not advance the reviewed revision blindly.
 Keep the original copy revision; update the reviewed revision only after you have
 classified every reported change. The [2026-10-12 review](../../docs/identity-upstream-review.md)
 records applicable ports, already adapted properties and changes outside Cloud's

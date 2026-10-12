@@ -24,6 +24,8 @@ test('the upstream report lists only mapped source and behavioural-test commits 
     git('config', 'user.name', 'Identity test');
     git('config', 'user.email', 'identity@example.test');
     mkdirSync(join(repository, 'packages/identity/src'), {recursive: true});
+    writeFileSync(join(repository, 'packages/identity/src/secret-hash.test.ts'), 'Original tests');
+    git('add', 'packages/identity/src/secret-hash.test.ts');
     const original = commit('packages/identity/src/secret-hash.ts', 'Original copy');
     const reviewed = commit('packages/identity/src/secret-hash.ts', 'Previously reviewed fix');
     const unrelated = commit('unrelated.txt', 'Unrelated change');
@@ -46,6 +48,26 @@ test('the upstream report lists only mapped source and behavioural-test commits 
     const diverged = spawnSync(process.execPath, [script, repository, original, sourceMap], {encoding: 'utf8'});
     assert.notEqual(diverged.status, 0);
     assert.match(diverged.stderr, /not an ancestor/);
+    const validMap = `Original copy: commit \`${original}\`.\nLast reviewed Waitron revision: \`${reviewed}\`.\n` +
+      `[source](https://github.com/clintongormley/waitron/blob/${original}/packages/identity/src/secret-hash.ts)\n`;
+    writeFileSync(sourceMap, validMap +
+      `[missing](https://github.com/clintongormley/waitron/blob/${original}/packages/identity/src/absent.ts)\n`);
+    const missing = spawnSync(process.execPath, [script, repository, 'main', sourceMap], {encoding: 'utf8'});
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /Mapped path missing.*absent.ts/);
+    writeFileSync(sourceMap, validMap);
+    git('mv', 'packages/identity/src/secret-hash.ts', 'packages/identity/src/password-hash.ts');
+    git('commit', '-s', '-m', 'Rename password hashing');
+    const renamed = git('rev-parse', 'HEAD');
+    commit('packages/identity/src/password-hash.ts', 'Fix after rename');
+    const stale = spawnSync(process.execPath, [script, repository, 'main', sourceMap], {encoding: 'utf8'});
+    assert.notEqual(stale.status, 0);
+    assert.match(stale.stderr, /Mapped path missing.*secret-hash.ts/);
+    writeFileSync(sourceMap, validMap.replace(`${original}/packages/identity/src/secret-hash.ts`,
+      `${renamed}/packages/identity/src/password-hash.ts`));
+    const remapped = spawnSync(process.execPath, [script, repository, 'main', sourceMap], {encoding: 'utf8'});
+    assert.equal(remapped.status, 0, remapped.stderr);
+    assert.ok(JSON.parse(remapped.stdout).commits.some(commit => commit.subject === 'Fix after rename'));
     writeFileSync(sourceMap, 'No source revision or paths');
     const invalid = spawnSync(process.execPath, [script, repository, 'main', sourceMap], {encoding: 'utf8'});
     assert.notEqual(invalid.status, 0);

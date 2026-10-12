@@ -2,7 +2,7 @@
 
 You can reproduce this inventory with the source-report command in [SOURCE.md](../packages/identity/SOURCE.md). The original copy revision stays unchanged; the reviewed revision advances only after every mapped source and behavioural-test change has been considered.
 
-Reviewed through Waitron `b9440c685e440d37d5bc65a7feade840ceacf1c9`. The report includes 18 commits across the five source files and their tests, including three test-only maintenance commits.
+Reviewed through Waitron `b9440c685e440d37d5bc65a7feade840ceacf1c9`. The report includes 18 commits across five existing source files and their tests (including the password-verifier wrapper; email recovery is Cloud-owned), including three test-only maintenance commits.
 
 | Waitron commit | Cloud decision and evidence |
 | --- | --- |
