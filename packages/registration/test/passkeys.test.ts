@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
 import { Pool } from 'pg';
 import type {
@@ -14,6 +14,7 @@ import type {
   VerifyAuthenticationResponseOpts,
   VerifyRegistrationResponseOpts,
 } from '@simplewebauthn/server';
+import { isoCBOR } from '@simplewebauthn/server/helpers';
 import { endSession, hashSecret, login } from '@waitron-cloud/identity';
 import { migrate } from '../src/migrate.ts';
 import { PasskeyError, PasskeyStore, type PasskeyCeremonyAdapter } from '../src/passkeys.ts';
@@ -266,4 +267,53 @@ test('expired and wrong-kind ceremonies cannot be completed or revived', async (
   const wrongRegistration = await store.registrationOptions(session.token, session.csrfToken, password);
   await expectPasskeyInvalid(store.authenticate(wrongRegistration.ceremonyId, authenticationResponse(response.id, handle)));
   assert.equal((await pool.query('SELECT consumed_at FROM cloud_webauthn_ceremonies WHERE id = $1', [wrongRegistration.ceremonyId])).rows[0].consumed_at, null);
+});
+
+function attestedRegistration(challenge: string, algorithm: -7 | -48): RegistrationResponseJSON {
+  const credentialId = randomBytes(32);
+  let key: Map<number, number | Uint8Array>;
+  if (algorithm === -7) {
+    const {publicKey} = generateKeyPairSync('ec', {namedCurve: 'prime256v1'});
+    const jwk = publicKey.export({format: 'jwk'});
+    key = new Map<number, number | Uint8Array>([[1, 2], [3, -7], [-1, 1],
+      [-2, Buffer.from(jwk.x!, 'base64url')], [-3, Buffer.from(jwk.y!, 'base64url')]]);
+  } else {
+    const {publicKey} = generateKeyPairSync('ml-dsa-44');
+    const rawKey = publicKey.export({format: 'der', type: 'spki'}).subarray(-1312);
+    key = new Map<number, number | Uint8Array>([[1, 7], [3, -48], [-1, rawKey]]);
+  }
+  const length = Buffer.alloc(2);
+  length.writeUInt16BE(credentialId.length);
+  const authData = Buffer.concat([createHash('sha256').update('cloud.example.test').digest(),
+    Buffer.from([0x45]), Buffer.alloc(4), Buffer.alloc(16), length, credentialId, isoCBOR.encode(key)]);
+  const attestation = isoCBOR.encode(new Map<string, string | Uint8Array | Map<string, string>>([
+    ['fmt', 'none'], ['authData', authData], ['attStmt', new Map()],
+  ]));
+  const id = credentialId.toString('base64url');
+  return {id, rawId: id, type: 'public-key', clientExtensionResults: {}, response: {
+    clientDataJSON: Buffer.from(JSON.stringify({type: 'webauthn.create', challenge, origin})).toString('base64url'),
+    attestationObject: Buffer.from(attestation).toString('base64url'),
+  }};
+}
+
+test('real registration offers the reviewed algorithms regardless of runtime capabilities', async () => {
+  const realStore = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: 'cloud.example.test', origin});
+  const session = await signIn();
+  const ceremony = await realStore.registrationOptions(session.token, session.csrfToken, password);
+  assert.deepEqual(ceremony.options.pubKeyCredParams.map(key => key.alg), [-8, -7, -257]);
+  assert.equal(ceremony.options.user.name, 'owner@example.test');
+  assert.equal(ceremony.options.user.displayName, 'owner@example.test');
+});
+
+test('real registration refuses an unoffered algorithm but still enrols an offered key', async () => {
+  const realStore = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: 'cloud.example.test', origin});
+  const session = await signIn();
+  const unexpected = await realStore.registrationOptions(session.token, session.csrfToken, password);
+  await expectPasskeyInvalid(realStore.verifyRegistration(session.token, session.csrfToken, unexpected.ceremonyId,
+    attestedRegistration(unexpected.options.challenge, -48)));
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_passkeys')).rows[0].count, '0');
+  const offered = await realStore.registrationOptions(session.token, session.csrfToken, password);
+  const registered = await realStore.verifyRegistration(session.token, session.csrfToken, offered.ceremonyId,
+    attestedRegistration(offered.options.challenge, -7));
+  assert.equal((await realStore.list(session.token))[0]?.id, registered.id);
 });
