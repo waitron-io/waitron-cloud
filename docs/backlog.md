@@ -1,6 +1,6 @@
 # Waitron Cloud backlog
 
-Updated 2026-09-30. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-10-12. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
@@ -275,25 +275,12 @@ notifications separately.
 
 ## Platform work to scope
 
-- **Remote DNS lost-reply browser failure.** [CI run 36738638444](https://github.com/waitron-io/waitron-cloud/actions/runs/36738638444)
-  on `1963b0735ef38cf92c5e79640cae0f8e2d8f5a95` passed all 147 backup tests,
-  then failed the English `apps/portal/test/remote-browser.test.ts:25` case:
-  after the apply response was deliberately lost, the saved-name message did
-  not appear within four seconds. Portal results were 110/111. The unchanged
-  focused English/Spanish cases passed 2/2 locally on base `21274d4`; the cause
-  remains unverified. No portal, remote-access, account-http or dependency change
-  is included in PR #99. [PR #100](https://github.com/waitron-io/waitron-cloud/pull/100)
-  fixes a demonstrated fixture-ordering timeout and adds request/reconciliation
-  diagnostics without increasing the assertion timeout. Its exact-merge CI passed.
-  See [the ordering receipt](#portal-lost-reply-test-ordering) for the controlled
-  reproduction and the uncertainty about this historical failure. Investigate a
-  future failure from its diagnostics; passing repeats alone do not explain it.
-  [PR #102](https://github.com/waitron-io/waitron-cloud/pull/102) keeps the fault
-  interceptor active until reconciliation completes, then removes it explicitly.
-  The newer failure was reproduced twice on Ubuntu: the browser issued the status
-  request after the abort, but the HTTP server never received it
-  and database connections were idle. See the receipt below. No production portal
-  change, assertion edit, extra retry or longer deadline is included.
+- **Future remote DNS lost-reply browser failures.** The reproduced reconciliation
+  stall is resolved by [PR #102](https://github.com/waitron-io/waitron-cloud/pull/102).
+  If the saved-name assertion fails again, use the bounded request/status events,
+  injection stages and setup-screen diagnostics to identify and reproduce the cause.
+  Keep the four-second assertion and fault-injection ordering checks unchanged;
+  passing repeats alone do not explain a failure. See [the ordering receipt](#portal-lost-reply-test-ordering).
 
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. CI runs type checking, each of the five
@@ -327,11 +314,15 @@ notifications separately.
   and declaration checking uses `skipLibCheck: false`. Local installs use GitHub CLI
   authentication; CI uses its package-read token. The portal now uses these controls for signup, login and recovery. Read the first weekly mutation scores
   after the split in Waitron; the extraction verifies the wiring and coverage, not the
-  new full mutation scores. On unchanged Cloud `main` at `2305f70`, the Chromium
-  accessibility check reports a 3.61:1 light-theme contrast ratio for the shared primary
-  button against the required 4.5:1. Dark theme passes. Fix and release the token in the
-  private `@waitron-io/ui-core` package, then repin Cloud; reproduce with
+  new full mutation scores. The portal's primary-button hover override in
+  `apps/portal/src/styles.css:13` keeps opacity at 1. English/Spanish light/dark
+  accessibility checks pass 4/4 with
   `node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test --test-timeout=120000 test/accessibility.test.ts`.
+  A 2026-10-12 Chromium hover probe confirms axe checks the rendered primary button:
+  the portal has no contrast violation in either theme, while restoring the shared
+  0.85 hover opacity reproduces 3.61:1 in both light-theme languages. The workaround
+  is already in Cloud; fix and release the shared hover style in Waitron before
+  removing the override or claiming the private package itself is fixed.
 - **Identity and organisations.** Password helpers and management-session behaviours
   have been adapted with a pinned source map, PostgreSQL tests, hashed session/CSRF
   tokens, passive polling and separate platform permission checks. Session-backed
@@ -473,10 +464,14 @@ notifications separately.
   that an offline server has stopped trading.
   The shared replacement flow for planned upgrades and failure recovery is implemented
   locally. Add the final-backup handover after stopping writes during a planned move.
-  For failure recovery, show the recovery point and potential data loss, and require
-  confirmation that the old server is taken out of service under Waitron's recovery
-  rules. Preserve venue, subscription and addresses; test interrupted activation and
-  route changes.
+  Failure recovery already shows the selected snapshot time or continuous recovery
+  point and potential data loss. Approval requires confirmation that the old server
+  is unavailable and acceptance of data loss; replacement separately requires explicit
+  confirmation. PostgreSQL and HTTP refusal tests cover the server-side checks in
+  `packages/backups/test/recovery-request.test.ts` and `replacement.test.ts`.
+  These confirmations do not prove an offline server has stopped trading. Preserve
+  Waitron's recovery rules; production activation and route-switch interruption
+  checks remain open.
   Registration persistence now records bound approvals and results with transactional
   completion, expiry, retries, permission rechecks and separate service states. Real
   PostgreSQL tests cover concurrent workers and process restart. The Cloud pairing verifier and HTTP exchange now bind Ed25519 installation proof,
@@ -587,12 +582,12 @@ notifications separately.
   pre-upgrade logical backup with matching external keys. The original upgraded fixture is
   preserved. Historical binaries require the current deployment gate; no online upgrade,
   downgrade migration, post-backup-write recovery or production traffic switch is proved.
-  **D35 done:** the physical standby drill reads its expected migration count from
+  The physical standby drill reads its expected migration count from
   the release manifest for both migration and runtime logins. Focused tests cover
   complete manifests of different sizes, missing migrations and extra migrations.
   The original 2026-09-27 promotion receipt above remains historical; the new drill
   receipt is recorded in [database recovery](database-recovery.md). This remains
-  separate from D34's logical-backup recovery.
+  separate from logical-backup recovery.
   Customer and operator portals, audit, budgets,
   quotas, staged releases, maintenance and recovery controls remain broader work.
   Customer portal login and account recovery must work when the venue server is
@@ -708,8 +703,8 @@ notifications separately.
   credential renewal with one durable archive and shutdown through a controlled Waitron archive
   wait. Cloud download cancellation now releases its durable verification claim without recording
   failure or consuming a retry. These are local boundary measurements, not production timeout or
-  bandwidth targets. D44 adds a disk-backed two-venue TLS capacity profile at 32, 128
-  and 512 MiB per venue, with signed credential isolation, interrupted retries,
+  bandwidth targets. The capacity fixture adds a disk-backed two-venue TLS profile
+  at 32, 128 and 512 MiB per venue, with signed credential isolation, interrupted retries,
   digest/length checks, cancellation and exact fixture cleanup. Its version 2 receipt
   records per-size resource preflights/skips, transfer times and sampled process memory
   and scratch/disk peaks. CI exercises the boundary cases at 1 MiB; larger runs stay
@@ -721,8 +716,8 @@ notifications separately.
   encryption shutdown latency, stream Waitron archive assembly/restoration before reconsidering the current 512 MiB bound,
   production master-key custody/rewrapping and production-host verifier hardening. The
   process verifier denies network, subprocesses, native addons, host reads and outside
-  writes. D32 adds a disposable container around the deployed verifier with total memory,
-  swap disabled, aggregate scratch, no network or host mounts, and ownership cleanup.
+  writes. The container adapter adds a disposable container around the deployed
+  verifier with total memory, swap disabled, aggregate scratch, no network or host mounts, and ownership cleanup.
   Real Docker fixtures exhaust native memory (192 MiB) and scratch (16 MiB); the parent
   survives and verifies later work. Two real Waitron snapshots at revision
   `00496fcd182a5c2c9189cc3faf0f8f22d3baf8ac` restore with 1024 MiB memory and 256 MiB scratch.
@@ -732,8 +727,8 @@ notifications separately.
   stay unchanged. A controlled 31-second build delay reproduces the former setup timeout.
   Production host/kernel isolation, hostile native exploits, fleet sizing and large archives remain
   unverified; the process-only development adapter still lacks these total-resource bounds.
-  D37 distinguishes bounded infrastructure failures from archive verdicts: failed staging,
-  Docker start/connection, cleanup and verifier protocol errors preserve the prior snapshot
+  The verifier distinguishes bounded infrastructure failures from archive verdicts:
+  failed staging, Docker start/connection, cleanup and verifier protocol errors preserve the prior snapshot
   state and retry with `verification_unavailable`. A real local PostgreSQL stop/restart,
   worker-only Docker connection outage, start refusal and two-organisation valid/invalid
   recovery tests pass. Eight-attempt exhaustion, explicit retry, cancellation, lease fencing
@@ -748,9 +743,9 @@ notifications separately.
   created state, attach exit 125 and `verification_unavailable`. This is diagnostic
   coverage, not a fix. The temporary stress workflow is removed. On the next natural
   failure, use those details to identify the failing boundary, reproduce it and fix
-  its cause while preserving D37's distinction between infrastructure uncertainty
+  its cause while preserving the distinction between infrastructure uncertainty
   and an invalid archive. Passing probes do not close this defect.
-  **D49 done: concurrent reclamation tolerates an already removed container.**
+  **Concurrent reclamation tolerates an already removed container.**
   Deterministic Docker fixtures remove a listed container before inspection or
   removal; a missing result during active verification still raises infrastructure
   failure. Exit 1 with the exact missing-object/container diagnostic naming that
@@ -761,8 +756,8 @@ notifications separately.
   test passes unchanged. Shared-owner and isolated-owner lifecycle probes each
   complete 12 calls, with four successful restores and eight expected resource
   refusals. Three further rounds with ten expired containers and two reclaimers
-  each finish without errors. This fixes the separate D48 investigation follow-up, not the unresolved
-  sequential worker-test failure above. Continue assigning distinct worker owners;
+  each finish without errors. This fixes the concurrent reclamation failure; it
+  does not resolve the sequential worker-test failure above. Continue assigning distinct worker owners;
   these local probes do not establish production concurrency capacity.
   A read-only
   dependency inventory and local drill now prove active-key rotation, old snapshot restore,
@@ -788,9 +783,12 @@ notifications separately.
   capture per local month gets monthly retention, and missed runs make one current copy.
   Validate storage costs before pricing.
   Validate the inherited continuous-backup retention baseline. Protect the last verified snapshot from automatic
-  expiry while the backup subscription is active. Specify verification before a newer
-  snapshot takes its place; test failed new snapshots and interrupted cleanup. Explicit
-  deletion and cancellation policies remain open.
+  expiry while the backup subscription is active. PostgreSQL tests already prove
+  failed verification preserves the verified fallback and cleanup resumes after
+  storage deletion fails, including concurrent cleanup. Run the focused cases in
+  `packages/backups/test/worker.test.ts` and `catalogue.test.ts`; repeat these
+  failure boundaries against the selected provider. Explicit deletion and
+  cancellation policies remain open.
   Carry forward the existing topology's proposed hourly stream snapshots and 30-day
   stream retention as a baseline to validate. Productionise the implemented internal Cloud-managed recovery-key
   custody and authorised delivery, respecting the existing external vault-key design.
@@ -829,14 +827,15 @@ notifications separately.
 
 ## Portal lost-reply test ordering
 
-- **Resolved by D51: reconciliation stalled after the reply was dropped.**
+- **Resolved: reconciliation stalled after the reply was dropped.**
   [CI 36777640375](https://github.com/waitron-io/waitron-cloud/actions/runs/36777640375)
   on `ab5161d4af0fc41aad83c99ce22de80035b2e027` failed both English journeys
-  at the four-second saved-name wait (portal 110/112). D51 subsequently reproduced
+  at the four-second saved-name wait (portal 110/112). PR #102 subsequently reproduced
   the browser-side stall and retained the apply interceptor through reconciliation,
-  as described below. [D51's exact-merge CI](https://github.com/waitron-io/waitron-cloud/actions/runs/36851962407)
-  passed on `3085054b8d82698ec3e8f420ade798957df2d9a8`. D47 now includes that
-  fix through rebase; [its rebased-head CI](https://github.com/waitron-io/waitron-cloud/actions/runs/36855902107)
+  as described below. [The fix's exact-merge CI](https://github.com/waitron-io/waitron-cloud/actions/runs/36851962407)
+  passed on `3085054b8d82698ec3e8f420ade798957df2d9a8`.
+  [PR #103](https://github.com/waitron-io/waitron-cloud/pull/103) includes the fix;
+  [its rebased-head CI](https://github.com/waitron-io/waitron-cloud/actions/runs/36855902107)
   passed on `7b5cdb1f50449e4a9c2d50e59f757aa1c1cd8716`.
 - The remote-DNS journey waits until its fixture has dropped a successful apply
   reply before starting the four-second saved-name assertion. Previously that UI
@@ -852,7 +851,7 @@ notifications separately.
   this mechanism with certainty. The test records bounded request/status events,
   injection stages and the setup screen if it fails again. Investigate any new
   failure from that evidence; a passing repeat alone does not establish its cause.
-- D51's bounded Ubuntu probes reproduced the newer status stall in
+- The bounded Ubuntu probes reproduced the newer status stall in
   [run 36846155539](https://github.com/waitron-io/waitron-cloud/actions/runs/36846155539)
   and [run 36846703454](https://github.com/waitron-io/waitron-cloud/actions/runs/36846703454).
   Both failures followed a committed apply and completed abort. The browser emitted

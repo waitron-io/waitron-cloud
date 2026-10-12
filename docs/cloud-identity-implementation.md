@@ -14,7 +14,10 @@ The subsequent [signup backend](cloud-signup-implementation.md) creates customer
 credentials after email proof. The [recovery backend](password-recovery-implementation.md)
 now resets passwords and revokes existing sessions. The [account HTTP API](../packages/account-http/README.md)
 provides the account routes and serves the [bilingual portal](../README.md#run-the-account-portal).
-Live delivery, MFA and passkeys remain integration work before public use.
+Optional passkeys are implemented in [the passkey slice](superpowers/specs/2026-09-26-cloud-passkeys-design.md),
+with password-confirmed enrolment/removal, account-scoped credentials and Chromium
+sign-in checks. Password login and email recovery remain available. Live delivery
+and MFA remain integration work before public use.
 
 Store only hashes of session and CSRF tokens. Keep Waitron's 30-minute sliding idle
 limit and passive-polling distinction. Add a 12-hour absolute limit for this internal
