@@ -29,12 +29,13 @@ Use local fixtures only. All commits use `git commit -s`; never bypass hooks.
 **Interfaces:** Export the design's `RelayBoundsConfig` and
 `RelayBounds(pool: Pool, config: RelayBoundsConfig)` with
 `check(client: PoolClient): Promise<void>`,
-`reserve(client: PoolClient, input: {grantId: string; recipient: string}): Promise<void>`,
+`reserve(client: PoolClient, input: {grantId: string; recipient: string}): Promise<Date>`,
 `prune(client: PoolClient, limit: number): Promise<number>`, and
 `status(): Promise<{retainedPayloadBytes: string; counterRows: number}>`.
 All client methods require a transaction. `check` serializes policy binding/live-key
 validation with the schema-scoped admission lock; `reserve` reuses that lock.
-`prune` deletes only database-expired window data, up to its row limit.
+`reserve` returns the reserved window end for the final rollover check, avoiding mutable
+state shared between calls. `prune` deletes only database-expired window data, up to its row limit.
 Export `RelayBoundsError` with `rate_limited | relay_unavailable`; map the trigger's
 fixed `P0001/relay_bytes_exhausted` exception to `rate_limited`.
 
@@ -152,5 +153,5 @@ pnpm typecheck
 
 Keep runtime proof local and stop only recorded child PIDs/owned containers.
 Review focus: window boundaries after waits; policy drift; dormant expired rows;
-legacy over-cap queues; late worker replies. These checks are acceptance proposals,
-not runtime proof from this docs-only branch.
+legacy over-cap queues; late worker replies. The implementation and [local acceptance commands](../../transactional-email-relay-contract.md#exercise-shared-admission-bounds)
+now exercise these boundaries; production deployment and thresholds remain open.

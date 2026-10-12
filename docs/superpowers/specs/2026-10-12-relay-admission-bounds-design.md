@@ -104,5 +104,5 @@ until payload clearing creates room. Keep release-manifest name/digest gates,
 transactional migration retry and separate-backup recovery conventions.
 
 Expose only aggregate byte/count status and fixed errors. No address, digest, key
-or message labels in metrics or diagnostics. The plan's local HTTP/PostgreSQL,
-worker, rotation, rollback and guard-deletion checks are proposed acceptance gates.
+or message labels in metrics or diagnostics. The [executed local checks](../../transactional-email-relay-contract.md#exercise-shared-admission-bounds)
+cover HTTP/PostgreSQL contention, worker paths, rotation, rollback and guard deletion.
