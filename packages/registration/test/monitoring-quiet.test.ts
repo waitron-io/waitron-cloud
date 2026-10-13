@@ -490,3 +490,43 @@ test('a replaced installation cannot leave a recovered old episode waiting forev
  });await due();await monitor.runOnce();
  const obsolete=(await db.pool.query('SELECT * FROM venue_alert_episodes WHERE id=$1',[old.id])).rows[0];assert.equal(obsolete.status,'suppressed');assert.equal(obsolete.recovery_complete,true);assert.equal((await recoveries()).length,0);
 });
+async function settledCycle(){
+ await sentOpening();const e=(await db.pool.query("SELECT e.id FROM venue_alert_episodes e JOIN venue_incidents i ON i.id=e.incident_id WHERE i.kind='disconnected' ORDER BY e.opening_revision DESC LIMIT 1")).rows[0];await contact(0);await monitor.runOnce();const sent:ServiceAlert[]=[];while(await emailWorker(sent).runOnce()){}await due();await monitor.runOnce();return e.id as string;
+}
+test('cleanup progresses past older episodes whose receipts are still fresh',async()=>{
+ const fresh=await settledCycle(),aged=await settledCycle();assert.notEqual(fresh,aged);
+ await db.pool.query("UPDATE venue_alert_episodes SET opened_at=opened_at-interval '10 days',opening_due_at=opening_due_at-interval '10 days' WHERE id=$1",[fresh]);
+ await db.pool.query("UPDATE venue_alert_episodes SET opened_at=opened_at-interval '3 days',opening_due_at=opening_due_at-interval '3 days' WHERE id=$1",[aged]);
+ await db.pool.query("UPDATE email_outbox SET finished_at=clock_timestamp()-interval '2 days' WHERE id IN (SELECT outbox_id FROM service_alert_deliveries WHERE episode_id=$1)",[aged]);await new UsageReconciler(db.pool).runOnce(100);
+ const cleanup=new HistoryCleanup(db.pool),policy={cutoffs:{emailDeliveries:new Date(Date.now()-86400000).toISOString()},chunkSize:1};
+ for(let n=0;n<6;n++){const report=await cleanup.run(policy,{apply:true});assert.ok(report.categories.emailDeliveries!.deleted<=1);if(!report.categories.emailDeliveries!.hasMore)break;}
+ const count=async(id:string)=>(await db.pool.query('SELECT count(*) FROM service_alert_deliveries WHERE episode_id=$1',[id])).rows[0].count;
+ assert.equal(await count(aged),'0','a fresh older episode cannot monopolize every cleanup batch');assert.equal(await count(fresh),'2','fresh opening and recovery receipts remain');
+});
+for(const state of ['recovered','suppressed'] as const)test('unchanged settled '+state+' episode performs no history writes',async()=>{
+ const id=await settledCycle();
+ if(state==='suppressed'){await db.pool.query("UPDATE installation_services SET state='unconfigured' WHERE installation_id=$1",[venue.installationId]);await due();await monitor.runOnce();}
+ const snapshot=async()=>({episode:(await db.pool.query('SELECT xmin::text AS version FROM venue_alert_episodes WHERE id=$1',[id])).rows,recipients:(await db.pool.query('SELECT account_id,xmin::text AS version FROM venue_alert_recipients WHERE episode_id=$1 ORDER BY account_id',[id])).rows});
+ const before=await snapshot();for(let n=0;n<3;n++){await due();await monitor.runOnce();assert.deepEqual(await snapshot(),before,'completed alert history must not be rewritten on each unchanged scan');}
+});
+for(const closure of ['recovered','suppressed'] as const)test('a sent reminder remains done after '+closure,async()=>{
+ await queuedReminder();const delivered:ServiceAlert[]=[];while(await emailWorker(delivered).runOnce()){}assert.equal(delivered[0]!.notification,'reminder');
+ if(closure==='recovered')await contact(0);else{await db.pool.query("UPDATE installation_services SET state='unconfigured' WHERE installation_id=$1",[venue.installationId]);await due();}
+ await monitor.runOnce();assert.equal((await db.pool.query('SELECT reminder_status FROM venue_alert_recipients')).rows[0].reminder_status,'done','a committed send retains its settled reminder outcome');assert.equal((await reminders())[0].status,'sent');
+});
+for(const closure of ['recovered','suppressed'] as const)test('an in-flight reminder retains its committed outcome after '+closure,async()=>{
+ await queuedReminder();let accepted!:()=>void,finish!:()=>void;const handoff=new Promise<void>(r=>accepted=r),release=new Promise<void>(r=>finish=r);
+ const worker=new EmailWorker(db.pool,db.outbox,{async sendVerification(){},async sendPasswordReset(){},async sendPasswordChanged(){},async sendServiceAlert(){accepted();await release;}});
+ const sending=worker.runOnce();await handoff;
+ try{
+  if(closure==='recovered')await contact(0);else{await db.pool.query("UPDATE installation_services SET state='unconfigured' WHERE installation_id=$1",[venue.installationId]);await due();}
+  await monitor.runOnce();assert.equal((await db.pool.query('SELECT reminder_status FROM venue_alert_recipients')).rows[0].reminder_status,'queued','a handed-off send is still in progress');assert.equal((await reminders())[0].status,'processing');
+ }finally{finish();await sending;}
+ await due();await monitor.runOnce();assert.equal((await reminders())[0].status,'sent');assert.equal((await db.pool.query('SELECT reminder_status FROM venue_alert_recipients')).rows[0].reminder_status,'done');
+});
+test('suppressed episode retries cancellation skipped by a locked pending opening',async()=>{
+ const opened=await opening(),holder=await db.secondPool.connect();await holder.query('BEGIN');await holder.query('SELECT id FROM email_outbox WHERE id=$1 FOR UPDATE',[opened.id]);
+ try{await db.pool.query("UPDATE installation_services SET state='unconfigured' WHERE installation_id=$1",[venue.installationId]);await due();await monitor.runOnce();assert.equal((await alerts())[0].status,'pending');}
+ finally{await holder.query('ROLLBACK');holder.release();}
+ await due();await monitor.runOnce();assert.equal((await alerts())[0].status,'cancelled','an unchanged suppressed episode still cancels work whose row was locked');
+});

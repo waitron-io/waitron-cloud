@@ -208,7 +208,7 @@ export class HistoryCleanup {
     // Take settled episode locks before delivery locks, matching the monitor's order.
     // An unfinished episode retains receipts even when its incident is already recovered.
     const settled=apply?(await client.query(`SELECT episode.id FROM venue_alert_episodes episode WHERE episode.status<>'open' AND episode.recovery_complete
-      AND (episode.opened_at<$2 OR EXISTS(SELECT 1 FROM service_alert_deliveries aged JOIN email_outbox mail ON mail.id=aged.outbox_id WHERE aged.episode_id=episode.id AND mail.finished_at<$2))
+      AND ((episode.opened_at<$2 AND NOT EXISTS(SELECT 1 FROM service_alert_deliveries remaining WHERE remaining.episode_id=episode.id)) OR EXISTS(SELECT 1 FROM service_alert_deliveries aged JOIN email_outbox mail ON mail.id=aged.outbox_id WHERE aged.episode_id=episode.id AND mail.finished_at<$2))
       AND NOT EXISTS(SELECT 1 FROM service_alert_deliveries d JOIN email_outbox mail ON mail.id=d.outbox_id
        WHERE d.episode_id=episode.id AND (mail.status IN ('pending','processing') OR NOT EXISTS(SELECT 1 FROM usage_events u
         WHERE u.event_type='message.service_alert_'||mail.status AND u.source_kind='service_alert' AND u.source_reference=mail.id::text)))
