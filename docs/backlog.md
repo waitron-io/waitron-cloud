@@ -368,11 +368,16 @@ notifications separately.
   worker assertion remain. The Spanish/dark/390 authenticator journey also failed
   at its first factor sign-in. A controlled rollover after enrolment reproduces the
   same timeout with a real 401: the journey's previous-step code then names the
-  already-consumed enrolment step. Choose an unused valid proof for that sign-in
-  while retaining the separate replay/adjacent-step assertions and seven-second
-  wait. The failed CI did not record its factor response or steps, so this is a
-  reproduced failure mechanism, not proof of that run's exact cause. The browser
-  correction remains open; a passing rerun does not resolve it.
+  already-consumed enrolment step. The first sign-in fixture now uses a valid
+  code for the next 30-second period, which the existing verification window
+  accepts. A real browser/PostgreSQL regression observes the clock advance
+  after enrolment, signs in with that fresh code, refuses the consumed enrolment
+  code, then accepts an unused code from the previous period after the next clock
+  advance.
+  It fails with 401 before the fixture correction and passes afterward. All original
+  journey assertions and the seven-second waits remain. The failed CI did not record
+  its factor response or steps, so the reproduced mechanism does not establish that
+  historical run's exact cause; collect the failing response on any future failure.
   **Server-startup fixture grouping.** The plan merge's
   [run 38375993173](https://github.com/waitron-io/waitron-cloud/actions/runs/38375993173)
   timed out in the single server CLI settings/missing-migration test after 30 seconds.
