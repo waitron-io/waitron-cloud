@@ -5,9 +5,10 @@ number alone. The registry requires independently verified taxpayer custody,
 subscription entitlement, a current outside history and an externally supplied
 signing key. All of those capabilities are unavailable by default.
 
-The contract and storage stage defines the receipt format and the PostgreSQL
-projection. The current-history, reservation, paper-import and HTTP services are
-still to be implemented. The
+The contract and storage stages define the receipt format and the PostgreSQL
+projection. The current-history stage checks a signed outside journal and excludes
+previous writers. Authenticated reservation, paper import and HTTP services remain
+to be implemented. The
 [shared implementation plan](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md)
 owns those stages and the later phone and Waitron journeys.
 
@@ -36,6 +37,45 @@ facts refuse updates, deletion and truncation, including cascading truncation;
 foreign keys prevent deletion of their venue or account. A migration owner can
 still change the schema. Physical backup recovery supplies neither a current
 outside journal nor permission to reissue a name missing from that backup.
+
+## Reconcile the outside history before writing
+
+A restored database can omit a name that was reserved after its backup. Before
+you allocate another name, `requireCurrentHistory` challenges the configured
+outside authority with fresh unpredictable values, verifies its pinned public
+keys, and checks the complete uninterrupted journal against the signed current
+head. Historical receipt signatures alone do not establish currentness.
+
+`fenceWriter` obtains a signed, expiring writer grant that includes the writer ID
+and an increasing fence number. The authority rejects the previous writer on every
+append. After an append loses its reply, `appendEvent` reads current history for
+that exact operation and request digest. A confirmed result returns the original
+receipt; an unknown outcome refuses another optimistic allocation. Confirmed
+contention may retry against newly read history.
+
+`projectHistory` replays those verified facts inside your existing PostgreSQL
+transaction. It compares complete existing rows rather than overwriting history
+or freeing absent names. Evidence that expires while waiting for a database lock
+refuses. A failed database commit leaves the outside name occupied; the next
+current-history read projects the retained signed result again.
+
+The local fixture uses a separate Node process with its own persisted journal and
+two registry worker processes. Its dump/restore check reserves C000042 after the
+backup, refuses that candidate from the restored state, reconciles it and then
+permits C000043. Its restart and failed-commit checks retain the exact original
+receipt. Run these checks from the Cloud checkout:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/fiscal-allocation exec \
+  node --test --test-timeout=30000 test/continuity.test.ts
+```
+
+Supply the authority ID, pinned public keys, receipt trust and explicit bounded
+timing policy through the injected adapter's `verification` configuration. No
+runtime adapter or production values are supplied. This stage replays Cloud
+reservation events; other journal actions refuse until their full replay rules
+are implemented. The fixture proves local process recovery, not independent
+production storage or failure domains.
 
 ## Keep the complete signed receipt
 

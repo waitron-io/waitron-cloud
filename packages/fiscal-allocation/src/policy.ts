@@ -43,6 +43,8 @@ export interface WriterGrant {
   readonly fence: string;
   readonly expiresAt: string;
   readonly witness: ContinuityWitness;
+  readonly keyId: string;
+  readonly signature: string;
 }
 export interface RegistryEvent {
   readonly eventId: string;
@@ -77,6 +79,12 @@ export interface ContinuityHistory {
   readonly witness: ContinuityWitness;
 }
 export interface ContinuityAuthority {
+  readonly verification: {
+    readonly authorityId: string;
+    readonly keys: ReadonlyMap<string, string>;
+    readonly receipts: ReceiptTrust;
+    readonly policy: RegistryPolicy;
+  };
   current(scope: Scope, nonce: string): Promise<ContinuityWitness>;
   claim(input: ContinuityClaim): Promise<ContinuityResult>;
   history(scope: Scope, afterSequence: string, nonce: string): Promise<ContinuityHistory>;
@@ -91,9 +99,7 @@ export interface RegistryOptions {
   readonly paperTrust?: PaperTrust | null;
   readonly policy?: RegistryPolicy | null;
 }
-export function requireCapabilities(
-  options: RegistryOptions,
-): Readonly<{
+export function requireCapabilities(options: RegistryOptions): Readonly<{
   entitlement: Entitlement;
   custody: Custody;
   continuity: ContinuityAuthority;

@@ -68,6 +68,16 @@ Do the same in production: recover the database and the secret store as separate
 
 ## What remains before deployment
 
+The fiscal allocation registry needs an independently current outside journal
+even after this database drill succeeds. A backup can omit a name reserved after
+its recovery point. Restoring that backup must not allow you to reserve the same
+name again. The [registry continuity checks](fiscal-allocation-registry.md#reconcile-the-outside-history-before-writing)
+take an actual PostgreSQL dump, reserve C000042 afterward, restore only the dump,
+refuse C000042 and reconcile the outside journal before allowing C000043. Separate
+Node workers also exercise previous-writer exclusion and a lost reply followed by
+a failed database commit. The supplied authority is a synthetic local fixture;
+selecting and qualifying production continuity storage remains an owner gate.
+
 Repeat this drill with the selected managed PostgreSQL service and its real backup, replication, routing and credential model. Define who or what detects failure and authorizes promotion. Measure realistic data volumes and failure modes before setting recovery-point or recovery-time objectives.
 
 You also need provider-native monitoring, tested secret custody and rotation, and a rollback procedure for releases whose schema cannot run on the previous application version. This local drill deliberately does not choose those policies or automate failover.

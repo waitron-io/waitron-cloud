@@ -140,9 +140,16 @@ exercise the actual fiscal validator, populated concurrent 37-to-38 upgrades,
 interrupted migration rollback, namespace uniqueness, retained runtime history
 and exact schema gates. Production authority is unavailable.
 
-Independent current history and writer exclusion, live session/custody/entitlement
-checks, monotonic paper import, actual account and machine HTTP routes, lost-reply
-reconciliation and the whole-branch review/CI remain open on this branch. The phone
+The current-history stage adds challenged signed journal reads, signed expiring
+writer grants, exact full-history replay and permanent unknown outcomes. Local
+PostgreSQL dump/restore and independent Node workers prove that missing C000042
+cannot be reissued, the previous writer is refused, and lost replies or failed
+database commits reconcile the same signed result. The external fixture survives
+process restart; no production continuity provider is supplied.
+
+Live session/custody/entitlement checks, monotonic paper import, actual account and
+machine HTTP routes, lost-reply reconciliation and the whole-branch review/CI remain
+open on this branch. The phone
 journey and Waitron adapter are separate dependent items. Production continuity
 storage, taxpayer custody and operator attribution, subscription policy and the
 signing-key custodian remain owner enablement gates; no production defaults are
