@@ -24,3 +24,8 @@ test('relay stop upgrades require their own mode and two distinct pinned revisio
  assert.deepEqual(fixture.upgradeRevisions([...pair,'--relay-stop']),want);
  for(const args of [['--relay-stop'],['--relay-stop','--old','a'.repeat(40)],['--relay-stop','--old','main','--new','b'.repeat(40)],['--relay-stop','--old','a'.repeat(40),'--new','a'.repeat(40)],['--relay-stop','--relay-stop',...pair],['--relay-stop','--factor',...pair],['--relay-stop',...pair,'--force']])assert.throws(()=>fixture.upgradeRevisions(args),/revisions/);
 });
+test('monitoring quiet upgrades select only their complete distinct pinned pair',()=>{
+ const pair=['--old','a'.repeat(40),'--new','b'.repeat(40)],want={oldHead:'a'.repeat(40),newHead:'b'.repeat(40),factor:false,monitoringQuiet:true};
+ assert.deepEqual(fixture.upgradeRevisions(['--monitoring-quiet',...pair]),want);assert.deepEqual(fixture.upgradeRevisions([...pair,'--monitoring-quiet']),want);
+ for(const args of [['--monitoring-quiet'],['--monitoring-quiet','--old','a'.repeat(40)],['--monitoring-quiet','--old','main','--new','b'.repeat(40)],['--monitoring-quiet','--old','a'.repeat(40),'--new','a'.repeat(40)],['--monitoring-quiet','--monitoring-quiet',...pair],['--monitoring-quiet','--relay-stop',...pair],['--relay-stop','--monitoring-quiet',...pair]])assert.throws(()=>fixture.upgradeRevisions(args),/revisions/);
+});
