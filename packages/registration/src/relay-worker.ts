@@ -5,6 +5,7 @@ import {RelayError,RelayGrantStore,type RelayConfig} from './relay-grants.ts';
 import {RelayKeys,messageError,type RelayKeyConfig,type RelayPayloadBinding} from './relay-payload.ts';
 import {localRelaySmtp,relayTemplate,type RelayContent,type RelayDelivery} from './relay-smtp.ts';
 import {transaction} from './transaction.ts';
+import {RelayControl} from './relay-control.ts';
 export interface RelayWorkerConfig {
  mode:'local-proof';grants:RelayConfig;payloadKeys:RelayKeyConfig;suppressionKeys:RelayKeyConfig;smtpPort:number;sendTimeoutMs?:number;
 }
@@ -54,10 +55,12 @@ export class RelayWorker {
  async runOnce():Promise<boolean>{
   if(!this.#send)return false;
   const claimed=await transaction(this.#pool,async c=>{
+   const control=await new RelayControl(this.#pool).lock(c);
    // Serialize capacity decisions across instances; row locks alone do not bound distinct messages.
    await c.query("SELECT pg_advisory_xact_lock(hashtextextended(current_schema()||':relay-worker-capacity',0))");
    const dead=(await c.query<Row>("SELECT * FROM relay_messages WHERE state='sending' AND lease_until<=clock_timestamp() ORDER BY lease_until FOR UPDATE SKIP LOCKED LIMIT 1")).rows[0];
    if(dead){await this.#terminal(c,dead,'uncertain','uncertain');return null;}
+   if(control.stopped)return undefined;
    const live=Number((await c.query("SELECT count(*) FROM relay_messages WHERE claim_id IS NOT NULL AND lease_until>clock_timestamp() AND state IN ('queued','sending')")).rows[0].count);
    if(live>=4)return undefined;
    const row=(await c.query<Row>(`SELECT * FROM relay_messages WHERE state='queued'
@@ -86,7 +89,14 @@ export class RelayWorker {
  }
  async #handoff(claim:Row):Promise<RelayContent|undefined>{
   return transaction(this.#pool,async c=>{
+   const control=await new RelayControl(this.#pool).lock(c);
    await lockMessage(c,claim);
+   if(control.stopped){
+    // Release only this unstarted claim; stop must preserve ciphertext and delivery history.
+    await c.query(`UPDATE relay_messages SET claim_id=NULL,lease_until=NULL
+     WHERE installation_id=$1 AND message_id=$2 AND state='queued' AND claim_id=$3`,[...key(claim),claim.claim_id]);
+    return;
+   }
    // Match admission's lock order: message identity, authority, then the queue row.
    // A cancelled row needs no authority and must not mint a reservation.
    const candidate=(await c.query<Row>('SELECT * FROM relay_messages WHERE installation_id=$1 AND message_id=$2',key(claim))).rows[0];

@@ -29,7 +29,8 @@ export async function fixture(){
   await pool.query("INSERT INTO installations(id,venue_id,public_key,lease_expires_at) VALUES($1,$2,$3,clock_timestamp()+interval '1 hour')",[installation,venue,publicKey]);
   const session=await transaction(pool,c=>createSession(c,account));
   const grant=await new RelayGrantStore(pool,grants).approve(session.token,session.csrfToken,{installationId:installation,expectedRevision:0,consent:true,consentVersion:'local-v1',managementOrigin:'https://manage.example.test',expiresAt:new Date(Date.now()+3600000).toISOString()});
-  const leaseInput={origin:'http://localhost',leaseId:randomUUID(),installationId:installation,venueId:venue,environment:'test' as const,publicKey,issuedAt:Date.now(),expiresAt:Date.now()+3600000};
+  const issuedAt=Date.now();
+  const leaseInput={origin:'http://localhost',leaseId:randomUUID(),installationId:installation,venueId:venue,environment:'test' as const,publicKey,issuedAt,expiresAt:issuedAt+3600000};
   const lease=issuer.issue(leaseInput);
   function proof(action:'email-submit'|'email-status'|'email-cancel',body:any,overrides:{issuedAt?:number;leaseExpiresAt?:number}={}){
    const payload=encodeMachine({origin:'http://localhost',action,installationId:installation,operationId:action==='email-submit'?body.messageId:randomUUID(),issuedAt:overrides.issuedAt??Date.now(),lease:JSON.stringify(overrides.leaseExpiresAt?issuer.issue({...leaseInput,expiresAt:overrides.leaseExpiresAt}):lease),body:JSON.stringify(body)});

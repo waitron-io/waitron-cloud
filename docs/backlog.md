@@ -261,7 +261,16 @@ venue does not subscribe to remote access or backups.
   admit after resume without restarting. Exact retries, status and cancellation
   retain current authority and byte accounting. Admission and stop races keep the
   shared control lock through commit or rollback, including a reader proceeding
-  while stop waits. Worker gating and separate restore proofs remain open.
+  while stop waits. Two persistent local workers now pause claims and handoff
+  independently, resume without restarting and retain paused queue rows and spend.
+  A stopped handoff releases only its own queued claim. Messages already committed
+  as sending retain their real SMTP result, even if the connection starts after
+  stop succeeds. Stopped recovery still clears expired sending as uncertain and
+  fences late replies; Cloud verification, password reset and venue alerts still
+  deliver. The focused worker/account-mail command passes 125 checks, including
+  observed lock waits, process restart, cancellation and held SMTP replies; 19
+  deliberate breakages fail inspected assertions in a separate checkout.
+  Separate backup/restore and packaged release proofs remain open.
   Run `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec
   node --test --test-timeout=120000 test/relay-operator-stop.test.ts
   test/relay-messages.test.ts test/relay-admission-bounds.test.ts
@@ -342,16 +351,17 @@ notifications separately.
   [Run 38373683976](https://github.com/waitron-io/waitron-cloud/actions/runs/38373683976)
   on docs-only `7860981` failed registration and portal. Advancing each clock read
   by one millisecond makes the relay worker fixture reject its lease: its separate
-  `issuedAt` and `expiresAt` clock reads can exceed the one-hour limit. Read the
-  clock once when building that fixture; retain the production maximum and every
-  existing worker assertion. The Spanish/dark/390 authenticator journey also failed
+  `issuedAt` and `expiresAt` clock reads can exceed the one-hour limit. The worker
+  fixture now reads the clock once. Its advancing-clock regression passes and
+  restoring the separate reads fails; the production maximum and every existing
+  worker assertion remain. The Spanish/dark/390 authenticator journey also failed
   at its first factor sign-in. A controlled rollover after enrolment reproduces the
   same timeout with a real 401: the journey's previous-step code then names the
   already-consumed enrolment step. Choose an unused valid proof for that sign-in
   while retaining the separate replay/adjacent-step assertions and seven-second
   wait. The failed CI did not record its factor response or steps, so this is a
-  reproduced failure mechanism, not proof of that run's exact cause. Both fixture
-  corrections remain open; a passing rerun does not resolve them.
+  reproduced failure mechanism, not proof of that run's exact cause. The browser
+  correction remains open; a passing rerun does not resolve it.
   **Server-startup fixture grouping.** The plan merge's
   [run 38375993173](https://github.com/waitron-io/waitron-cloud/actions/runs/38375993173)
   timed out in the single server CLI settings/missing-migration test after 30 seconds.

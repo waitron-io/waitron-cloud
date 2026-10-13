@@ -1,8 +1,10 @@
 # Durable relay operator stop
 
 Status: reviewed implementation design. The control schema and transaction API are
-verified locally, along with the trusted CLI and live admission gate. Worker and
-separate restore proofs remain pending. Read the
+verified locally, along with the trusted CLI, live admission gate and worker
+claim/handoff gates. The focused worker/account-mail command passes 125 checks,
+and 19 deliberate breakages fail inspected assertions. Separate restore and
+packaged release proofs remain pending. Read the
 [plan](../plans/2026-10-13-relay-operator-stop.md) alongside this design.
 
 ## Purpose and inspected boundaries
