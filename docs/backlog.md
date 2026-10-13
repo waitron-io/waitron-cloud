@@ -446,7 +446,9 @@ notifications separately.
   covers storage, account controls and browser acceptance. Storage, API and the bilingual
   portal, operational key rotation and private stack configuration are implemented locally.
   The populated 34-to-35 upgrade/restore rehearsal and packaged stack clean-install,
-  restart, rebuild/upgrade and cleanup proofs pass with 35 migrations. The identity primitive
+  restart, rebuild/upgrade and cleanup proofs passed with 35 migrations for the
+  authenticator release. Current packaged proofs follow the selected release manifest.
+  The identity primitive
   encrypts account/version/purpose-bound
   secrets and returns every matching adjacent time step; migration 035 persists factor,
   session-bound enrolment, challenge, hashed recovery and replay state. Focused PostgreSQL
@@ -496,7 +498,8 @@ notifications separately.
   The historical upgrade defaults remain unchanged. The packaged stack proof passes
   on the complete implementation tree:
   `pnpm proof:local-stack`. Its receipt requires healthy services, retained data/identity,
-  35 migrations and zero leftover containers, volumes, networks or proof images.
+  the selected release's complete migration manifest and zero leftover containers,
+  volumes, networks or proof images.
   No production factor policy or key configuration is selected.
   Configure live email delivery and production factor policy,
   and define the wider platform role catalogue before public use. Shared login/request limits, secure
