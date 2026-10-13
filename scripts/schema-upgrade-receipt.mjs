@@ -122,6 +122,7 @@ try{
  const oldAccount=await startAccount(old,primary.url);checks.oldStarted=true;
  await tenantRequests(old,oldAccount,state);await stop(oldAccount.handle);
  // Freeze the recovery point with no running consumers; keys stay outside pg_dump.
+ const fullOldLedger=relayStop?(await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows:null;
  const beforeRows=relayStop?await storedRows(primary.pool):null,beforeRelay=relayStop?await relayState(primary.pool):null;
  const backup=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc'],{encoding:null});
  const pendingBefore=(await primary.pool.query('SELECT * FROM email_outbox WHERE id=$1',[state.messageId])).rows[0];
@@ -137,6 +138,7 @@ try{
   await until(()=>migration.done,'interrupted migration exit');assert.notEqual(migration.code,0);checks.migrationInterrupted=true;
  }finally{await lock.query('ROLLBACK');lock.release();}
  assert.deepEqual(await ledger(primary.pool),oldLedger);
+ if(relayStop)assert.deepEqual((await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,fullOldLedger);
  if(relayStop){
   assert.equal((await primary.pool.query("SELECT to_regclass('relay_control') AS table_name")).rows[0].table_name,null);
   assert.deepEqual(await storedRows(primary.pool),beforeRows);
@@ -152,6 +154,7 @@ try{
  const newLedger=await ledger(primary.pool);assert.equal(newLedger.length,relayStop?36:factor?35:27);checks.retryApplied=true;
  if(relayStop){
   assert.deepEqual(newLedger.slice(0,35),oldLedger);
+  assert.deepEqual((await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows.slice(0,35),fullOldLedger);
   assert.deepEqual(await storedRows(primary.pool),beforeRows);
   assert.deepEqual(await relayState(primary.pool),beforeRelay);checks.relayStatePreserved=true;
   assert.deepEqual(await identityAccountState(primary.pool),relayAccounts);checks.accountStatePreserved=true;
@@ -210,6 +213,7 @@ try{
  checks.oldRecovered=true;await stop(recoveredAccount.handle);
  if(relayStop){
   assert.deepEqual(await relayState(recovered.pool),beforeRelay);
+  assert.deepEqual((await recovered.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,fullOldLedger);
   assert.deepEqual(await identityAccountState(recovered.pool),relayAccounts);
   node(next,['packages/registration/src/migrate-cli.ts'],environment(recovered.url));
   assert.deepEqual((await ledger(recovered.pool)).slice(0,35),oldLedger);
@@ -220,9 +224,10 @@ try{
   run('docker',['exec','-i',containers[3],'pg_restore','-U','postgres','-d','cloud','--exit-on-error'],{input:stoppedBackup,encoding:null});
   assert.deepEqual(await ledger(restored.pool),newLedger);assert.deepEqual(await storedRows(restored.pool,true),stoppedRows);
   node(next,['packages/registration/src/migrate-cli.ts'],environment(restored.url));
+  assert.deepEqual(await storedRows(restored.pool,true),stoppedRows);
   const restarted=await startAccount(next,restored.url);await stop(restarted.handle);
   assert.deepEqual(JSON.parse(node(next,['packages/registration/src/relay-control-cli.ts','--status'],environment(restored.url))),{stopped:true});
-  assert.deepEqual(await storedRows(restored.pool,true),stoppedRows);checks.stopRestorePreserved=true;
+  checks.stopRestorePreserved=true;
   await stoppedRelay(next,restored.pool,relayProof,Number(smtp));checks.restoredStopEffective=true;
   await restoredRelay(next,restored.pool,relayProof,Number(smtp),async()=>{assert.deepEqual(JSON.parse(node(next,['packages/registration/src/relay-control-cli.ts','--resume'],environment(restored.url))),{stopped:false});});
   for(const name of ['restoredRelayKeys','restoredRelayWrongKeysRefused','restoredRelayMissingKeysRefused','resumeEffective'])checks[name]=true;
