@@ -289,3 +289,14 @@ test('legacy backfill keeps 103 recipients in statements of at most 100 rows', a
     assert.equal((await f.pool.query('SELECT count(*) FROM fixture_batch_sizes WHERE size>100')).rows[0].count, '0');
   } finally {await f.pool.query(`DROP EVENT TRIGGER IF EXISTS ${event}`); await f.close();}
 });
+test('a recovered historical incident with no opening creates no notification authority',async()=>{
+ const f=await fixture(release.migrate);
+ try{
+  const v=await f.venue(),venue=(await f.pool.query('SELECT venue_id FROM installations WHERE id=$1',[v.installation])).rows[0].venue_id;
+  const incident=randomUUID();await f.pool.query("INSERT INTO venue_incidents(id,venue_id,kind,status,revision) VALUES($1,$2,'disconnected','recovered',2)",[incident,venue]);await migrate(f.pool);
+  const episode=(await f.pool.query('SELECT * FROM venue_alert_episodes WHERE incident_id=$1',[incident])).rows[0];assert.equal(episode.legacy,true);assert.equal(episode.recovery_complete,true);assert.equal((await f.pool.query('SELECT count(*) FROM venue_alert_recipients WHERE episode_id=$1',[episode.id])).rows[0].count,'0');
+  const {MonitorWorker}=await import('../src/monitoring.ts');const worker=new MonitorWorker(f.pool,new EmailOutbox({activeKeyId:'proof',keys:{proof:randomBytes(32).toString('hex')}}),{quietSeconds:2,reminderSeconds:3});await worker.schedule();
+  for(let n=0;n<3;n++){await f.pool.query('UPDATE venue_monitors SET next_check_at=clock_timestamp()');await worker.runOnce();}
+  assert.equal((await f.pool.query('SELECT count(*) FROM service_alert_deliveries')).rows[0].count,'0');assert.equal((await f.pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'0');
+ }finally{await f.close();}
+});
