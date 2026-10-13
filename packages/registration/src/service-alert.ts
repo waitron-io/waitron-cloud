@@ -4,7 +4,7 @@ const incidentKinds=['disconnected','snapshot_stale','verification_failed','publ
 export type IncidentKind=typeof incidentKinds[number];
 export interface ServiceAlert extends AccountNotification {
  incidentId:string;revision:number;venueId:string;issue:IncidentKind;state:'open'|'recovered';
- checkedAt?:string;certificateNotAfter?:string;
+ checkedAt?:string;certificateNotAfter?:string;notification?:'reminder';
 }
 export interface ServiceAlertMailer {sendServiceAlert(message:ServiceAlert,context?:EmailDeliveryContext):Promise<void|EmailDeliveryReceipt>;}
 export function validServiceAlert(message:unknown):message is ServiceAlert {
@@ -12,7 +12,8 @@ export function validServiceAlert(message:unknown):message is ServiceAlert {
  const m=message as Record<string,unknown>,uuid=(v:unknown)=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
  const date=(v:unknown)=>typeof v==='string'&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v;
  if(!uuid(m.incidentId)||!uuid(m.venueId)||!Number.isSafeInteger(m.revision)||Number(m.revision)<=0||typeof m.issue!=='string'||!incidentKinds.includes(m.issue as IncidentKind)||typeof m.state!=='string'||!['open','recovered'].includes(m.state))return false;
- if(!Object.keys(m).every(k=>['email','locale','incidentId','revision','venueId','issue','state','checkedAt','certificateNotAfter'].includes(k)))return false;
+ if(!Object.keys(m).every(k=>['email','locale','incidentId','revision','venueId','issue','state','checkedAt','certificateNotAfter','notification'].includes(k)))return false;
+ if('notification' in m&&(m.notification!=='reminder'||m.state!=='open'))return false;
  const issue=m.issue as IncidentKind,route=issue.endsWith('_route_failed'),stale=issue.endsWith('_probe_stale'),certificate=issue.endsWith('_certificate_expiring');
  if(route&&(!date(m.checkedAt)||m.certificateNotAfter!==undefined))return false;
  if(stale&&!((m.checkedAt===undefined||date(m.checkedAt))&&m.certificateNotAfter===undefined))return false;

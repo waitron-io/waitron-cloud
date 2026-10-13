@@ -56,7 +56,9 @@ export class MonitorWorker {
     const expiring=!!certificate&&certificate.getTime()<=now.getTime()+this.#certificateWarningDays*86400000;
     await this.#transition(client,installation.id,monitor.venue_id,`${service}_certificate_expiring`,!!certificate,expiring,now,certificate&&checkedAt?{checkedAt,certificateNotAfter:certificate.toISOString()}:{});
    }
-   await client.query(`UPDATE venue_monitors SET checked_at=$2,next_check_at=LEAST($2::timestamptz+interval '1 minute',(SELECT min(e.opening_due_at) FROM venue_alert_episodes e JOIN venue_incidents i ON i.id=e.incident_id WHERE i.venue_id=$1 AND e.status='open' AND e.opening_processed_at IS NULL AND e.opening_due_at>$2)),contact_since=$3,snapshot_since=$4,failure_point_id=$5,failure_since=$6 WHERE venue_id=$1`,[monitor.venue_id,now,contactSince,snapshotSince,failurePoint,failureSince]);
+   await client.query(`UPDATE venue_monitors SET checked_at=$2,next_check_at=LEAST($2::timestamptz+interval '1 minute',
+    (SELECT min(e.opening_due_at) FROM venue_alert_episodes e JOIN venue_incidents i ON i.id=e.incident_id WHERE i.venue_id=$1 AND e.status='open' AND e.opening_processed_at IS NULL AND e.opening_due_at>$2),
+    (SELECT min(r.reminder_due_at) FROM venue_alert_recipients r JOIN venue_alert_episodes e ON e.id=r.episode_id JOIN venue_incidents i ON i.id=e.incident_id WHERE i.venue_id=$1 AND e.status='open' AND r.reminder_status='waiting' AND r.reminder_due_at>$2)),contact_since=$3,snapshot_since=$4,failure_point_id=$5,failure_since=$6 WHERE venue_id=$1`,[monitor.venue_id,now,contactSince,snapshotSince,failurePoint,failureSince]);
    return true;
   });}catch(error){
    // A rolled-back venue retries later so another due venue can still be observed.
@@ -94,6 +96,27 @@ export class MonitorWorker {
    await this.#enqueue(client,row,episode.id,recipients,'open',evidence);
    await client.query('UPDATE venue_alert_episodes SET opening_processed_at=$2 WHERE id=$1',[episode.id,now]);
   }
+  if(status==='open'&&episode.status==='open'&&episode.installation_id===installationId&&!episode.legacy&&episode.reminder_seconds>0){
+   const slots=(await client.query(`SELECT r.account_id,r.reminder_due_at,e.status AS opening_status,e.finished_at FROM venue_alert_recipients r
+    LEFT JOIN service_alert_deliveries d ON d.episode_id=r.episode_id AND d.account_id=r.account_id AND d.state='open' AND d.notification='transition'
+    LEFT JOIN email_outbox e ON e.id=d.outbox_id WHERE r.episode_id=$1 AND r.reminder_status='waiting' ORDER BY r.account_id`,[episode.id])).rows;
+   const eligible=await this.#eligible(client,venueId,kind,installationId,episode.id);
+   for(let offset=0;offset<slots.length;offset+=100){
+    const batch=slots.slice(offset,offset+100),ready:{id:string;email:string;locale:'en'|'es'}[]=[],updates:unknown[]=[],values:string[]=[];
+    for(const slot of batch){
+     // A committed opening receipt fixes this recipient's deadline once; retries and restarts cannot move it.
+     const deadline:Date|null=slot.reminder_due_at??(slot.opening_status==='sent'?new Date(slot.finished_at.getTime()+episode.reminder_seconds*1000):null);
+     let outcome='waiting';
+     if(deadline&&deadline<=now){
+      const recipient=eligible.find(r=>r.id===slot.account_id);
+      if(slot.opening_status==='sent'&&recipient){ready.push(recipient);outcome='queued';}else outcome='cancelled';
+     }else if(['failed','expired','cancelled'].includes(slot.opening_status))outcome='cancelled';
+     const base=updates.length;updates.push(slot.account_id,deadline,outcome);values.push(`($${base+2}::uuid,$${base+3}::timestamptz,$${base+4}::text)`);
+    }
+    await this.#enqueue(client,row,episode.id,ready,'open',evidence,'reminder');
+    await client.query(`UPDATE venue_alert_recipients r SET reminder_due_at=v.deadline,reminder_status=v.outcome FROM (VALUES ${values.join(',')}) v(account_id,deadline,outcome) WHERE r.episode_id=$1 AND r.account_id=v.account_id`,[episode.id,...updates]);
+   }
+  }
   if(changed&&status==='recovered'&&previous?.status==='open'){
    const recipients=await this.#eligible(client,venueId,kind,episode.installation_id,episode.id);
    const told=(await client.query(`SELECT d.account_id FROM service_alert_deliveries d JOIN email_outbox e ON e.id=d.outbox_id
@@ -116,17 +139,17 @@ export class MonitorWorker {
        AND EXISTS(SELECT 1 FROM remote_placements rp JOIN remote_hostnames h ON h.venue_id=rp.venue_id WHERE rp.installation_id=n.id AND rp.venue_id=v.id
         AND h.kind=CASE WHEN $2 LIKE 'public_%' THEN 'public' ELSE 'staff' END)))) ORDER BY a.id`,[venueId,kind,installationId,episodeId??null])).rows;
  }
- async #enqueue(client:PoolClient,row:{id:string;revision:number;venue_id:string;kind:IncidentKind},episodeId:string,recipients:{id:string;email:string;locale:'en'|'es'}[],state:'open'|'recovered',evidence:Pick<ServiceAlert,'checkedAt'|'certificateNotAfter'>){
+ async #enqueue(client:PoolClient,row:{id:string;revision:number;venue_id:string;kind:IncidentKind},episodeId:string,recipients:{id:string;email:string;locale:'en'|'es'}[],state:'open'|'recovered',evidence:Pick<ServiceAlert,'checkedAt'|'certificateNotAfter'>,notification?:'reminder'){
   for(let offset=0;offset<recipients.length;offset+=100){
    const batch=recipients.slice(offset,offset+100);
-   const messages:ServiceAlert[]=batch.map(recipient=>({email:recipient.email,locale:recipient.locale,incidentId:row.id,revision:row.revision,venueId:row.venue_id,issue:row.kind,state,...evidence}));
+   const messages:ServiceAlert[]=batch.map(recipient=>({email:recipient.email,locale:recipient.locale,incidentId:row.id,revision:row.revision,venueId:row.venue_id,issue:row.kind,state,...evidence,...(notification?{notification}:{})}));
    const outboxIds=await this.#outbox.enqueueServiceAlerts(client,messages);
    const parameters:unknown[]=[];
    const values=batch.map((recipient,index)=>{
-    const base=index*6;parameters.push(outboxIds[index],row.id,row.revision,state,recipient.id,episodeId);
-    return`($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6})`;
+    const base=index*7;parameters.push(outboxIds[index],row.id,row.revision,state,recipient.id,episodeId,notification??'transition');
+    return`($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7})`;
    });
-   await client.query(`INSERT INTO service_alert_deliveries(outbox_id,incident_id,revision,state,account_id,episode_id) VALUES ${values.join(',')}`,parameters);
+   await client.query(`INSERT INTO service_alert_deliveries(outbox_id,incident_id,revision,state,account_id,episode_id,notification) VALUES ${values.join(',')}`,parameters);
   }
  }
  async status(){return monitorStatus(this.#pool);}

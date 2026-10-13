@@ -811,8 +811,14 @@ notifications separately.
   progress past a locked installation and no historical mail after an upgrade with
   timings enabled. Guard deletion checks catch early delivery, omitted deadline
   equality, new recipients, replacement installations and repeated empty-set admission.
-  One reminder, late-receipt recovery, cleanup and packaged upgrade/restore proofs
-  remain open; this implementation branch has not completed review or CI.
+  The branch also queues one reminder per original recipient after their recorded
+  opening send. Local PostgreSQL and encrypted-message tests cover fixed recipient
+  deadlines, restart, unchanged incident revisions, refreshed evidence, English/Spanish
+  copy and transport retries that keep the same queue identity. Independent email
+  processes claim one reminder; final delivery checks refuse changes to ownership,
+  preferences, address, service, installation, incident occurrence or the opening receipt.
+  Late-receipt recovery, cleanup and packaged upgrade/restore proofs remain open;
+  this implementation branch has not completed review or CI.
   The [local monitor](local-monitoring.md) now records missing contact, stale snapshots
   and failed verification for configured test installations. The portal shows incident
   evidence and stale monitoring; owners can opt in to English/Spanish email alerts.
