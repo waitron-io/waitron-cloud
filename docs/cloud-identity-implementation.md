@@ -16,8 +16,9 @@ now resets passwords and revokes existing sessions. The [account HTTP API](../pa
 provides the account routes and serves the [bilingual portal](../README.md#run-the-account-portal).
 Optional passkeys are implemented in [the passkey slice](superpowers/specs/2026-09-26-cloud-passkeys-design.md),
 with password-confirmed enrolment/removal, account-scoped credentials and Chromium
-sign-in checks. Password login and email recovery remain available. Live delivery
-and MFA remain integration work before public use.
+sign-in checks. Password login and email recovery remain available. Optional [authenticator-app protection](authenticator-app.md) now adds a second step to
+password sign-in. Email reset keeps the factor and saved codes; successful factor changes
+end every session. Live delivery and production factor policy remain deployment work.
 
 Store only hashes of session and CSRF tokens. Keep Waitron's 30-minute sliding idle
 limit and passive-polling distinction. Add a 12-hour absolute limit for this internal

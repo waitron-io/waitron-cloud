@@ -1,3 +1,4 @@
+import {AuthenticatorController} from './authenticator-controller.ts';
 import {RecoveryController} from './recovery-controller.ts';
 import {RemoteController} from './remote-controller.ts';
 import {AlertController} from './alert-controller.ts';
@@ -39,6 +40,8 @@ export class PortalApp {
   alerts: AlertController;
   passkeys: PasskeyController;
   security: AccountSecurityController;
+  authenticator: AuthenticatorController;
+  factorCodes: string[] = [];
   usage: UsageController;
   diagnostics: DiagnosticController;
   #route = 0;
@@ -49,6 +52,7 @@ export class PortalApp {
     let saved: string | null = null;
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
     this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
+    this.authenticator = new AuthenticatorController(() => this.draw());
     this.passkeys = new PasskeyController(() => this.draw());
     this.security = new AccountSecurityController(() => this.draw(), () => {void this.session.check();});
     void this.passkeys.checkSupport();
@@ -77,7 +81,7 @@ export class PortalApp {
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); });
     document.addEventListener('pointerdown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.session.dispose(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.remote.account(undefined); this.alerts.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.remote.account(undefined); this.alerts.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -86,6 +90,8 @@ export class PortalApp {
   #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
+    this.authenticator.account(state.kind === 'authenticated' ? state.accountId : undefined);
+    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.authenticator.loaded) void this.authenticator.load();
     this.diagnostics.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.usage.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.security.account(state.kind === 'authenticated' ? state.accountId : undefined);
@@ -119,7 +125,7 @@ export class PortalApp {
   get waiting() {
     if (this.path === '/recover') return Math.max(this.recovery.waiting,this.backups.waiting,this.installations.waiting,Math.max(0,Math.ceil((this.session.retryAt-Date.now())/1000)));
     if (this.path === '/connect') return Math.max(this.pairing.waiting, Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)));
-    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt,this.alerts.retryAt,this.remote.retryAt,this.usage.retryAt,this.diagnostics.retryAt) : this.cooldownOperation === this.operation ? this.cooldownUntil : 0;
+    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt,this.alerts.retryAt,this.remote.retryAt,this.usage.retryAt,this.diagnostics.retryAt,this.authenticator.retryAt) : Math.max(this.cooldownOperation === this.operation ? this.cooldownUntil : 0, this.path === '/login' ? this.authenticator.retryAt : 0);
     return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
   }
   draw() {
@@ -131,6 +137,8 @@ export class PortalApp {
   }
   title(): string {
     const c = this.copy;
+    if (this.path === '/login' && this.factorCodes.length) return c.factorCodesTitle;
+    if (this.path === '/login' && this.authenticator.challenge) return c.factorTitle;
     if (this.path === '/recover') return c.recoveryTitle;
     if (this.path === '/connect') return c.connect;
     if (this.notice) return c[this.notice === 'signupReady' ? 'completeSignup' : this.notice === 'resetReady' ? 'reset' : 'login'];
@@ -142,7 +150,7 @@ export class PortalApp {
     return c.login;
   }
   navigate(path: string, push = true) {
-    this.#route++; this.path = path; this.passkeys.fence(); this.security.fence();
+    this.#route++; this.path = path; this.passkeys.fence(); this.security.fence(); this.authenticator.fence(); this.factorCodes = [];
     if (push) history.pushState(null, '', path);
     this.link = this.#capture();
     if (this.link.recoveryId || this.link.invalid) this.recovery.open(this.link.recoveryId);
@@ -160,6 +168,10 @@ export class PortalApp {
     event.preventDefault(); this.navigate(path);
   }
   readFields() {
+    for (const [name,key] of [['factorPassword','password'],['factorProof','proofCode'],['factorConfirmation','confirmation']] as const) {
+      const value=this.root.querySelector(`wt-input[name="${name}"]`)?.shadowRoot?.querySelector('input')?.value;
+      if(value!==undefined)this.authenticator[key]=value;
+    }
     const passkeyPassword=this.root.querySelector('wt-input[name="passkeyPassword"]')?.shadowRoot?.querySelector('input')?.value;
     if(passkeyPassword!==undefined)this.passkeys.password=passkeyPassword;
     const recoveryCode=this.root.querySelector('wt-input[name="recoveryCode"]')?.shadowRoot?.querySelector('input')?.value;if(recoveryCode!==undefined)this.recovery.code=recoveryCode;
@@ -189,6 +201,8 @@ export class PortalApp {
     if (this.pairing.error) this.#focusErrors(); else this.focusHeading();
   }
   async submit() {
+    if(this.path==='/login' && this.authenticator.challenge){await this.completeFactorLogin();return;}
+    if(this.path==='/login' && this.factorCodes.length)return;
     if(this.path==='/recover'){this.readFields();await this.recovery.inspect();return;}
     if (['/','/account'].includes(this.path)) return;
     if (this.path === '/connect') { await this.submitPairing(); return; }
@@ -207,30 +221,26 @@ export class PortalApp {
     }
     if (Object.keys(this.errors).length) { this.draw(); this.#focusErrors(); return; }
     if (this.link.invalid || (this.path === '/reset-password' && !this.link.token)) return;
+    if(this.path==='/login'){
+      const route=this.#route;const previouslyAnonymous=this.session.state.kind==='anonymous';const result=await this.authenticator.startLogin(f.email,f.password);this.fields.password='';
+      if(route!==this.#route)return;await this.#factorLoginResult(result,route,previouslyAnonymous);return;
+    }
     let path: string; let body: Record<string, string>;
-    if (this.path === '/login') { path = '/login'; body = {email: f.email, password: f.password}; }
-    else if (this.path === '/signup' && this.link.token) {
+    if (this.path === '/signup' && this.link.token) {
       path = '/signup/complete'; body = {token: this.link.token, password: f.password,
         legalBusinessName: f.legalBusinessName.trim(), organisationName: (this.differentOrg ? f.organisationName : f.legalBusinessName).trim(), countryCode: 'ES'};
     } else if (this.path === '/reset-password') { path = '/password-reset/complete'; body = {token: this.link.token!, password: f.password, locale: this.locale}; }
     else { path = this.path === '/signup' ? '/signup/request' : '/password-reset/request'; body = {email: f.email, locale: this.locale}; }
     this.pending = true; const route = this.#route;
-    const priorSession = {...this.session.state};
     this.draw();
     const result = await accountRequest(path, body);
     if (route !== this.#route) return;
     this.pending = false;
     if (result.ok) {
-      if (path === '/login') { this.session.dispose(); this.session = this.#session(); this.navigate(this.recovery.requestId ? '/recover' : this.pairing.requestId ? '/connect' : '/account'); return; }
       if (path.endsWith('/request')) { this.requested = true; this.cooldownOperation = this.operation; this.cooldownUntil = Date.now() + 60_000; }
       else { this.notice = path === '/signup/complete' ? 'signupReady' : 'resetReady'; this.link = {invalid: false}; this.fields.password = ''; }
     } else {
       this.cooldownOperation = this.operation; this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + result.retryAfterMs);
-      if (path === '/login' && (result.status === 0 || result.status === 503)) {
-        this.session.dispose(); this.session = this.#session(); await this.session.check();
-        if (route !== this.#route) return;
-        if (priorSession.kind === 'anonymous' && this.session.state.kind === 'authenticated') { this.navigate(this.recovery.requestId ? '/recover' : this.pairing.requestId ? '/connect' : '/account'); return; }
-      }
       if (result.code === 'password_compromised') this.errors.password = 'passwordCompromised';
       else this.error = result.code === 'link_unavailable' ? 'linkUnavailable'
         : result.code === 'credentials_invalid' ? 'credentials'
@@ -240,8 +250,29 @@ export class PortalApp {
     }
     this.draw(); if (this.error || Object.keys(this.errors).length) this.#focusErrors(); else this.focusHeading();
   }
+  async #factorLoginResult(result:'authenticated'|'factor'|'reconcile'|false,route:number,previouslyAnonymous:boolean) {
+    if(result==='authenticated'){this.session.dispose();this.session=this.#session();this.navigate(this.recovery.requestId?'/recover':this.pairing.requestId?'/connect':'/account');return;}
+    if(result==='reconcile'){
+      this.session.dispose();this.session=this.#session();await this.session.check();
+      if(route!==this.#route)return;
+      if(previouslyAnonymous&&this.session.state.kind==='authenticated'){this.navigate(this.recovery.requestId?'/recover':this.pairing.requestId?'/connect':'/account');return;}
+    }
+    this.draw();if(this.authenticator.error)this.#focusErrors();else this.focusHeading();
+  }
+  async completeFactorLogin(){this.readFields();const route=this.#route;const previouslyAnonymous=this.session.state.kind==='anonymous';const result=await this.authenticator.completeLogin();if(route===this.#route)await this.#factorLoginResult(result,route,previouslyAnonymous);}
+  async manageFactor(action:'begin'|'activate'|'regenerate'|'remove'|'cancel'){
+    this.readFields();const route=this.#route;
+    if(action==='begin'||action==='cancel'){await this.authenticator[action]();if(route===this.#route){this.draw();this.focusHeading();}return;}
+    const result=await this.authenticator[action]();if(route!==this.#route||!result)return;
+    const codes=typeof result==='object'&&result.active?[...result.recoveryCodes]:[];
+    this.session.dispose();this.session=this.#session();this.navigate('/login');
+    // Keep the committed one-time reply in this view after navigation fences all earlier authority.
+    this.factorCodes=codes;this.notice=result==='reconcile'?'factorChangeUncertain':result.active?'factorChanged':'factorRemoved';this.draw();this.focusHeading();
+    void this.session.check();
+  }
   async signInWithPasskey() {
     const route = this.#route;
+    this.authenticator.fence();this.factorCodes=[];
     const result = await this.passkeys.signIn();
     if (route !== this.#route || !result) return;
     this.session.dispose(); this.session = this.#session();
@@ -262,7 +293,7 @@ export class PortalApp {
   async revokeSession(id: string) { await this.security.revoke(id); }
   get logoutWaiting() { return Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)); }
   async logout() {
-    if (this.pending || this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.usage.pending) return;
+    if (this.pending || this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.usage.pending || this.authenticator.pending) return;
     this.pending = true; this.error = undefined; this.draw();
     const route = this.#route;
     const success = await this.session.logout();

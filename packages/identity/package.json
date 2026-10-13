@@ -9,5 +9,8 @@
   },
   "devDependencies": {
     "@types/pg": "^8.23.1"
+  },
+  "dependencies": {
+    "otplib": "13.5.0"
   }
 }

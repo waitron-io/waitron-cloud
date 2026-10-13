@@ -1,3 +1,4 @@
+import {authenticatorAccountScreen} from './authenticator-screen.ts';
 import {html, nothing} from 'lit';
 import '@waitron-io/ui-core/components/wt-button';
 import {passkeyAccountScreen} from './passkey-screen.ts';
@@ -27,6 +28,6 @@ export function accountSecurityScreen(app: PortalApp) {
           @click=${() => {void app.revokeSession(session.id);}}>${session.current ? c.sessionSignOut : c.sessionRevoke}</wt-button>
       </li>`)}</ul>
     </section>
-    ${passkeyAccountScreen(app)}
+    ${passkeyAccountScreen(app)}${authenticatorAccountScreen(app)}
   </section>`;
 }

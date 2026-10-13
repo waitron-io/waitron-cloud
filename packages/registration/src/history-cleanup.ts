@@ -100,18 +100,22 @@ export class HistoryCleanup {
       case 'sessions': return this.#simple(client, cutoff, limit, apply, {
         eligible: `SELECT count(*)::integer AS count FROM cloud_sessions s
           WHERE (s.ended_at<$1 OR (s.ended_at IS NULL AND LEAST(s.last_seen_at+(${IDLE_TIMEOUT_MS}*interval '1 millisecond'),s.absolute_expires_at)<$1))
-          AND NOT EXISTS(SELECT 1 FROM cloud_webauthn_ceremonies c WHERE c.session_token_hash=s.token_hash)`,
+          AND NOT EXISTS(SELECT 1 FROM cloud_webauthn_ceremonies c WHERE c.session_token_hash=s.token_hash)
+          AND NOT EXISTS(SELECT 1 FROM cloud_factor_enrolments f WHERE f.session_id=s.id)`,
         blocked: `SELECT count(*)::integer AS count FROM cloud_sessions s
           WHERE (s.ended_at<$1 OR (s.ended_at IS NULL AND LEAST(s.last_seen_at+(${IDLE_TIMEOUT_MS}*interval '1 millisecond'),s.absolute_expires_at)<$1))
-          AND EXISTS(SELECT 1 FROM cloud_webauthn_ceremonies c WHERE c.session_token_hash=s.token_hash)`,
+          AND (EXISTS(SELECT 1 FROM cloud_webauthn_ceremonies c WHERE c.session_token_hash=s.token_hash)
+            OR EXISTS(SELECT 1 FROM cloud_factor_enrolments f WHERE f.session_id=s.id))`,
         apply: `WITH selected AS(SELECT s.token_hash FROM cloud_sessions s
           WHERE (s.ended_at<$1 OR (s.ended_at IS NULL AND LEAST(s.last_seen_at+(${IDLE_TIMEOUT_MS}*interval '1 millisecond'),s.absolute_expires_at)<$1))
           AND NOT EXISTS(SELECT 1 FROM cloud_webauthn_ceremonies c WHERE c.session_token_hash=s.token_hash)
+          AND NOT EXISTS(SELECT 1 FROM cloud_factor_enrolments f WHERE f.session_id=s.id)
           ORDER BY COALESCE(s.ended_at,LEAST(s.last_seen_at+(${IDLE_TIMEOUT_MS}*interval '1 millisecond'),s.absolute_expires_at)),s.token_hash
           LIMIT $2 FOR UPDATE OF s SKIP LOCKED)
           DELETE FROM cloud_sessions s USING selected x WHERE s.token_hash=x.token_hash
           AND (s.ended_at<$1 OR (s.ended_at IS NULL AND LEAST(s.last_seen_at+(${IDLE_TIMEOUT_MS}*interval '1 millisecond'),s.absolute_expires_at)<$1))
-          AND NOT EXISTS(SELECT 1 FROM cloud_webauthn_ceremonies c WHERE c.session_token_hash=s.token_hash) RETURNING s.token_hash`,
+          AND NOT EXISTS(SELECT 1 FROM cloud_webauthn_ceremonies c WHERE c.session_token_hash=s.token_hash)
+          AND NOT EXISTS(SELECT 1 FROM cloud_factor_enrolments f WHERE f.session_id=s.id) RETURNING s.token_hash`,
       });
       case 'signupRequests': return this.#requestCategory(client, 'signup_requests', cutoff, limit, apply);
       case 'passwordResetRequests': return this.#requestCategory(client, 'password_reset_requests', cutoff, limit, apply);

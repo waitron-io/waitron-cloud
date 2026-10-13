@@ -6,10 +6,32 @@ commit `c9d80c59a30ab1ae7a4acc0a6999e6a342de924e`.
 | Cloud code/tests | Waitron source at that commit | Adaptation |
 | --- | --- | --- |
 | `src/secret-hash.ts`, `test/secret-hash.test.ts` | [secret-hash.ts](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/secret-hash.ts), [tests](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/secret-hash.test.ts) | Same salted scrypt format and Node default parameters. Asynchronous derivation, strict full-length hexadecimal parsing and Node's test runner. Original positive/negative assertions retained. |
-| `src/sessions.ts` login and registration's `test/identity.test.ts` | [manager-login.ts](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/manager-login.ts), [tests](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/manager-login.test.ts) | Adapted email/password flow, generic failures and one derivation for unknown, disabled or passwordless accounts. No by-ID login. Authenticator factors and their recovery codes are not copied; Cloud owns signup and email password recovery. |
+| `src/sessions.ts` login and registration's `test/identity.test.ts` | [manager-login.ts](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/manager-login.ts), [tests](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/manager-login.test.ts) | Adapted email/password flow, generic failures and one derivation for unknown, disabled or passwordless accounts. No by-ID login. Cloud owns signup and email password recovery; authenticator storage and login integration are separate Cloud adaptations. |
 | `src/sessions.ts` lifecycle and registration's `test/identity.test.ts` | [management-session.ts](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/management-session.ts), [tests](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/management-session.test.ts) | Preserve 30-minute idle expiry, passive reads, logout and current suspension checks. Use PostgreSQL wall time and row locks, hashed opaque tokens and a 12-hour absolute lifetime. Local roles and locale are not copied into Cloud sessions. |
 | Registration's `src/passkeys.ts`, `test/passkeys.test.ts` | [passkey.ts](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/passkey.ts), [tests](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/passkey.test.ts) | Independently adapted PostgreSQL ceremonies, opaque handles, session/CSRF/password-bound enrolment and generic failures. Failed ceremonies are consumed. |
 | `src/secret-hash.ts` and `src/sessions.ts` password checks | [verify-password.ts](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/verify-password.ts), [tests](https://github.com/clintongormley/waitron/blob/c9d80c59a30ab1ae7a4acc0a6999e6a342de924e/packages/identity/src/verify-password.test.ts) | Cloud calls its asynchronous secret verifier directly; password bounds belong to signup and account boundaries. |
+
+The authenticator cryptography in `src/authenticator-crypto.ts` and
+`test/authenticator-crypto.test.ts` adapts
+[totp.ts](https://github.com/clintongormley/waitron/blob/3d6b31ac6b2ff9fb9a62e4081e1afe50000963c4/packages/identity/src/totp.ts),
+[its tests](https://github.com/clintongormley/waitron/blob/3d6b31ac6b2ff9fb9a62e4081e1afe50000963c4/packages/identity/src/totp.test.ts),
+[mfa.ts](https://github.com/clintongormley/waitron/blob/3d6b31ac6b2ff9fb9a62e4081e1afe50000963c4/packages/identity/src/mfa.ts) and
+[encryption tests](https://github.com/clintongormley/waitron/blob/3d6b31ac6b2ff9fb9a62e4081e1afe50000963c4/packages/identity/src/mfa-encryption.test.ts).
+Malformed-input, key-version and tamper refusals are retained. Cloud pins otplib,
+returns every matched adjacent time step for transactional replay checks, and binds
+AES-256-GCM ciphertext to the account, factor version, purpose, pending identity and
+key ID. Cloud-owned registration stores now integrate these primitives with PostgreSQL
+account-first locks, durable attempts, hashed pre-session challenges, monotonic
+factor versions and transactional replay. Recovery codes are ten independent 128-bit
+values with account/version-bound hashes; consumed and superseded history is retained
+until a separate retention policy permits deletion. Email reset preserves the active
+factor and codes. Successful factor changes revoke all sessions.
+
+Registration's `test/password-login.test.ts` and `test/authenticator-factor.test.ts`
+also adapt applicable password/factor and generic-refusal assertions from
+[manager-login.test.ts](https://github.com/clintongormley/waitron/blob/3d6b31ac6b2ff9fb9a62e4081e1afe50000963c4/packages/identity/src/manager-login.test.ts).
+Cloud's browser, HTTP, concurrency, rotation and populated upgrade/restore checks
+extend that source; they do not change Waitron's local identity or fiscal flows.
 
 Cloud's registration `src/password-recovery.ts` and its tests have no Waitron
 identity-package counterpart. Maintain and test that Cloud-owned flow here.

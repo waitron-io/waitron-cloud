@@ -13,7 +13,7 @@ test('runtime roles receive only their explicit configuration',async()=>{
  const {config}=await configured(),database=`postgres://cloud:${config.database.password}@postgres:5432/cloud`;
  const expected={
   migrate:{DATABASE_URL:database},
-  account:{DATABASE_URL:database,CLOUD_RECOVERY_ACTIVE_KEY_ID:config.recovery.activeKeyId,CLOUD_RECOVERY_KEYS:JSON.stringify(config.recovery.keys),CLOUD_PAIRING_ACTIVE_KEY_ID:config.pairing.activeKeyId,CLOUD_PAIRING_KEYS:JSON.stringify(config.pairing.keys),CLOUD_EMAIL_ACTIVE_KEY_ID:'local-v1',CLOUD_EMAIL_KEYS:JSON.stringify(config.email.keys),CLOUD_PORTAL_ORIGIN:'http://localhost:3000',CLOUD_HTTP_RATE_KEY:config.http.rateKey,CLOUD_HTTP_HOST:'0.0.0.0',CLOUD_HTTP_PORT:'3000',CLOUD_PORTAL_ASSETS_DIR:'/app/apps/portal/dist',CLOUD_INSTALLATION_ISSUER_KEY:config.installation.issuerKey},
+  account:{DATABASE_URL:database,CLOUD_FACTOR_ACTIVE_KEY_ID:config.factor.activeKeyId,CLOUD_FACTOR_KEYS:JSON.stringify(config.factor.keys),CLOUD_RECOVERY_ACTIVE_KEY_ID:config.recovery.activeKeyId,CLOUD_RECOVERY_KEYS:JSON.stringify(config.recovery.keys),CLOUD_PAIRING_ACTIVE_KEY_ID:config.pairing.activeKeyId,CLOUD_PAIRING_KEYS:JSON.stringify(config.pairing.keys),CLOUD_EMAIL_ACTIVE_KEY_ID:'local-v1',CLOUD_EMAIL_KEYS:JSON.stringify(config.email.keys),CLOUD_PORTAL_ORIGIN:'http://localhost:3000',CLOUD_HTTP_RATE_KEY:config.http.rateKey,CLOUD_HTTP_HOST:'0.0.0.0',CLOUD_HTTP_PORT:'3000',CLOUD_PORTAL_ASSETS_DIR:'/app/apps/portal/dist',CLOUD_INSTALLATION_ISSUER_KEY:config.installation.issuerKey},
   email:{DATABASE_URL:database,CLOUD_EMAIL_ACTIVE_KEY_ID:'local-v1',CLOUD_EMAIL_KEYS:JSON.stringify(config.email.keys),CLOUD_PORTAL_ORIGIN:'http://localhost:3000',MAILPIT_SMTP_PORT:'1025',CLOUD_MAIL_TRANSPORT:'local'},
   monitor:{DATABASE_URL:database,CLOUD_EMAIL_ACTIVE_KEY_ID:'local-v1',CLOUD_EMAIL_KEYS:JSON.stringify(config.email.keys)},
   usage:{DATABASE_URL:database},probe:{DATABASE_URL:database},
@@ -90,4 +90,25 @@ test('only account receives an explicitly enabled staff certificate exchange',as
  const {config}=await configured();assert.equal(runtimeEnvironment('account',config).CLOUD_STAFF_CERTIFICATES,undefined);
  assert.equal(runtimeEnvironment('account',config,{CLOUD_STAFF_CERTIFICATES:'1'}).CLOUD_STAFF_CERTIFICATES,'1');
  for(const role of ['migrate','email','monitor','usage','probe','backup','gateway','manifest','reconcile'])assert.equal(runtimeEnvironment(role,config,{CLOUD_STAFF_CERTIFICATES:'1'}).CLOUD_STAFF_CERTIFICATES,undefined);
+});
+
+test('only account receives stored factor keys and an explicitly supplied factor policy',async()=>{
+ const {config}=await configured();
+ assert.ok(config.factor?.keys?.[config.factor?.activeKeyId]);
+ const env=runtimeEnvironment('account',config,{CLOUD_FACTOR_POLICY:'local-policy',CLOUD_FACTOR_KEYS:'foreign-keys',UNRELATED_SECRET:'private'});
+ assert.equal(env.CLOUD_FACTOR_ACTIVE_KEY_ID,config.factor.activeKeyId);
+ assert.deepEqual(JSON.parse(env.CLOUD_FACTOR_KEYS),config.factor.keys);
+ assert.equal(env.CLOUD_FACTOR_POLICY,'local-policy');assert.equal(env.UNRELATED_SECRET,undefined);
+ assert.equal(runtimeEnvironment('account',config).CLOUD_FACTOR_POLICY,undefined);
+ for(const role of ['migrate','email','monitor','usage','probe','backup','gateway','manifest','reconcile']){
+  const other=runtimeEnvironment(role,config,{CLOUD_FACTOR_POLICY:'local-policy'});
+  assert.equal(other.CLOUD_FACTOR_KEYS,undefined);assert.equal(other.CLOUD_FACTOR_POLICY,undefined);
+ }
+});
+
+test('older local configuration keeps its bytes and independent paths without inventing factor keys',async()=>{
+ const {path,config}=await configured();delete config.factor;
+ const bytes=JSON.stringify(config);await writeFile(join(path,'runtime.json'),bytes,{mode:0o600});
+ assert.deepEqual(await bootstrap(path),config);assert.deepEqual(await loadRuntime(path),config);
+ assert.equal(runtimeEnvironment('account',config).CLOUD_FACTOR_KEYS,undefined);
 });

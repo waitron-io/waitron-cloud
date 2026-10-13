@@ -15,7 +15,8 @@ import type {
   VerifyRegistrationResponseOpts,
 } from '@simplewebauthn/server';
 import { isoCBOR } from '@simplewebauthn/server/helpers';
-import { endSession, hashSecret, login } from '@waitron-cloud/identity';
+import { endSession, encryptFactorSecret, hashSecret, login, resolveSession } from '@waitron-cloud/identity';
+import {AuthenticatorFactorStore} from '../src/authenticator-factor.ts';
 import { migrate } from '../src/migrate.ts';
 import { PasskeyError, PasskeyStore, type PasskeyCeremonyAdapter } from '../src/passkeys.ts';
 import { transaction } from '../src/transaction.ts';
@@ -169,6 +170,23 @@ test('authentication options reveal no account and a verified discoverable crede
   assert.equal((await pool.query('SELECT counter FROM cloud_passkeys')).rows[0].counter, '1');
   assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count, '2');
   await expectPasskeyInvalid(store.authenticate(options.ceremonyId, authenticationResponse(response.id, handle)));
+});
+
+test('an enrolled authenticator with unavailable keys leaves passkey login and live account access independent',async()=>{
+  const session=await signIn(),registration=await store.registrationOptions(session.token,session.csrfToken,password);
+  const response=registrationResponse();await store.verifyRegistration(session.token,session.csrfToken,registration.ceremonyId,response);
+  const keys={activeKeyId:'fixture',keys:{fixture:'07'.repeat(32)}};
+  await pool.query(`INSERT INTO cloud_authenticator_factors(account_id,version,secret_generation,secret_envelope)
+    VALUES($1,1,$2,$3)`,[accountId,randomUUID(),encryptFactorSecret('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',keys,{accountId,version:1,purpose:'active'})]);
+  const options=await store.authenticationOptions();
+  const handle=(await pool.query('SELECT user_handle FROM cloud_passkey_users')).rows[0].user_handle.toString('base64url');
+  const authenticated=await store.authenticate(options.ceremonyId,authenticationResponse(response.id,handle));
+  assert.equal((await run(c=>resolveSession(c,authenticated.token))).accountId,accountId);
+  const factor=new AuthenticatorFactorStore(pool,null,{pendingLifetimeMs:300_000,enrolmentAttempts:3});
+  assert.deepEqual(await factor.status(authenticated.token),{active:true,version:1,recoveryCodesRemaining:0,available:false});
+  await assert.rejects(factor.remove({...authenticated,password}),
+    (e:unknown)=>!!e && typeof e==='object' && 'code' in e && e.code==='temporarily_unavailable');
+  assert.equal((await pool.query('SELECT version FROM cloud_authenticator_factors')).rows[0].version,1);
 });
 
 test('authentication rejects absent or cross-account user handles and consumes failed verification', async () => {

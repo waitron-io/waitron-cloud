@@ -1,6 +1,6 @@
 # Optional Cloud authenticator-app second factor
 
-**Status: approved for implementation.** The owner approved both policies on 2026-10-12. This document describes the design; the feature is not implemented yet.
+**Status: approved for implementation.** The owner approved both policies on 2026-10-12. This document records the approved design. The implementation and local checks are described in the [authenticator guide](../../authenticator-app.md). Production deployment remains separate.
 
 ## Intent and boundary
 

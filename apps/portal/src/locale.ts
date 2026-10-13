@@ -8,6 +8,18 @@ export function chooseLocale(saved: string | null, languages: readonly string[])
   return 'en';
 }
 const en = {
+  factorTitle:'Authenticator', factorIntro:'Add a code to password sign-in. Passkeys still work.',
+  factorOn:'Authenticator is on.', factorOff:'Authenticator is off.', factorEnable:'Set up authenticator', factorReplace:'Replace authenticator', factorRemove:'Remove authenticator', factorRegenerate:'New recovery codes',
+  factorPassword:'Current password', factorProofType:'Code type', factorTotp:'Authenticator code', factorRecovery:'Recovery code', factorProof:'Current code', factorConfirmation:'New authenticator code',
+  factorScan:'Scan this QR code in your authenticator app, or enter the secret below.', factorQR:'Authenticator setup QR code', factorActivate:'Confirm authenticator', factorCancel:'Cancel setup',
+  factorConfirmHelp:'Enter the new app’s code and your current password. Replacement also needs a fresh code from your old authenticator or a saved recovery code.',
+  factorSessions:'Changing your authenticator or recovery codes signs you out on every device.', factorRecoveryHelp:'Email password reset keeps this protection. Keep recovery codes or a passkey so you can still sign in if you lose your authenticator.',
+  factorRemaining:'Unused recovery codes:', factorLoginHelp:'Enter an authenticator code or an unused recovery code.', factorVerify:'Verify code', factorRestart:'Start sign-in again',
+  factorCodesTitle:'Save your recovery codes', factorCodesHelp:'Save these codes somewhere safe. Each works once with your password. You cannot view them again.', factorCodesSaved:'I have saved these codes',
+  factorChanged:'Your authenticator settings changed. Sign in again.', factorRemoved:'Your authenticator was removed. Sign in again.',
+  factorUnavailable:'Authenticator settings are temporarily unavailable.', factorLoginUncertain:'We could not confirm sign-in. Your session was checked. Start again if you are still signed out.',
+  factorChangeUncertain:'We could not confirm the change. Sign in again, check your authenticator settings, then create new recovery codes with fresh proof if needed.',
+
   recoveryTitle:"Recover a Cloud backup",
   recoveryIntro:"Enter the matching code shown on your replacement server. Choose the latest continuous recovery point or a verified snapshot, then return to that server to restore it.",
   recoveryLocal:"This local trial supports test venues only. Planned handover is not available yet.",
@@ -200,6 +212,18 @@ const en = {
 };
 export type Copy = typeof en;
 const es: Copy = {
+  factorTitle:'Autenticador', factorIntro:'Añade un código al acceso con contraseña. Las llaves de acceso siguen funcionando.',
+  factorOn:'El autenticador está activo.', factorOff:'El autenticador está desactivado.', factorEnable:'Configurar autenticador', factorReplace:'Cambiar autenticador', factorRemove:'Quitar autenticador', factorRegenerate:'Nuevos códigos de recuperación',
+  factorPassword:'Contraseña actual', factorProofType:'Tipo de código', factorTotp:'Código del autenticador', factorRecovery:'Código de recuperación', factorProof:'Código actual', factorConfirmation:'Código del nuevo autenticador',
+  factorScan:'Escanea este QR en tu aplicación de autenticación o introduce el secreto de abajo.', factorQR:'Código QR para configurar el autenticador', factorActivate:'Confirmar autenticador', factorCancel:'Cancelar configuración',
+  factorConfirmHelp:'Introduce el código de la nueva aplicación y tu contraseña actual. Para cambiarlo, necesitas otro código de tu antiguo autenticador o uno de recuperación guardado.',
+  factorSessions:'Cambiar el autenticador o los códigos de recuperación cierra todas tus sesiones.', factorRecoveryHelp:'Restablecer la contraseña por correo mantiene esta protección. Guarda códigos de recuperación o una llave de acceso por si pierdes el autenticador.',
+  factorRemaining:'Códigos de recuperación disponibles:', factorLoginHelp:'Introduce un código del autenticador o un código de recuperación sin usar.', factorVerify:'Verificar código', factorRestart:'Volver a iniciar sesión',
+  factorCodesTitle:'Guarda tus códigos de recuperación', factorCodesHelp:'Guarda estos códigos en un lugar seguro. Cada uno funciona una vez con tu contraseña. No podrás volver a verlos.', factorCodesSaved:'He guardado estos códigos',
+  factorChanged:'La configuración del autenticador ha cambiado. Vuelve a iniciar sesión.', factorRemoved:'Se ha quitado el autenticador. Vuelve a iniciar sesión.',
+  factorUnavailable:'La configuración del autenticador no está disponible temporalmente.', factorLoginUncertain:'No hemos confirmado el acceso. Se ha comprobado tu sesión. Vuelve a empezar si aún no has accedido.',
+  factorChangeUncertain:'No hemos confirmado el cambio. Vuelve a acceder, revisa el autenticador y crea nuevos códigos de recuperación con una prueba nueva si hace falta.',
+
   recoveryTitle:"Recuperar una copia de Cloud",
   recoveryIntro:"Introduce el código que aparece en el servidor de sustitución. Elige el último punto de recuperación continua o una instantánea verificada y vuelve a ese servidor para restaurarla.",
   recoveryLocal:"Esta prueba local solo admite locales de prueba. El traspaso planificado aún no está disponible.",

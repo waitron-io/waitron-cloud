@@ -7,7 +7,7 @@ import {
   type PasskeyCeremonyAdapter,
   type RegistrationResponseJSON,
 } from '@waitron-cloud/registration';
-import { hashSecret } from '@waitron-cloud/identity';
+import { encryptFactorSecret,hashSecret } from '@waitron-cloud/identity';
 import { createAccountApp } from '../src/app.ts';
 import { database } from './fixtures.ts';
 
@@ -127,6 +127,30 @@ test('HTTP passkey journey enrols, lists, authenticates once and removes with fr
   assert.equal((await request('/passkeys/remove', {id: created.id, password}, {headers})).status, 204);
   assert.deepEqual(await (await request('/passkeys', undefined, {headers: {cookie: session.header}})).json(), {passkeys: []});
   assert.equal((await request('/login', {email: owner.email, password})).status, 200);
+});
+
+test('passkey HTTP sign-in remains independent when an active factor has no usable key or policy',async()=>{
+  const owner=await account(),session=await signIn(owner.email),headers={cookie:session.header,'x-csrf-token':session.csrf};
+  const options=await request('/passkeys/registration/options',{password},{headers});assert.equal(options.status,200);
+  const registration=await options.json() as {ceremonyId:string;options:{user:{id:string}}},credential=registrationResponse();
+  assert.equal((await request('/passkeys/registration/verify',{ceremonyId:registration.ceremonyId,response:credential},{headers})).status,201);
+  const keys={activeKeyId:'factor',keys:{factor:randomBytes(32).toString('hex')}};
+  await db.pool.query('INSERT INTO cloud_authenticator_factors(account_id,version,secret_generation,secret_envelope) VALUES($1,1,$2,$3)',
+    [owner.accountId,randomUUID(),encryptFactorSecret('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',keys,{accountId:owner.accountId,version:1,purpose:'active'})]);
+  await db.pool.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1',[owner.accountId]);
+  app=createAccountApp({pool:db.pool,outbox:db.outbox,config:config(),passkeyAdapter:new FixtureAdapter(),factor:{keys:null,policy:null}});
+  const denied=await request('/login',{email:owner.email,password});assert.equal(denied.status,503);assert.equal(denied.headers.getSetCookie().length,0);
+  const authOptions=await request('/passkeys/authentication/options',{});assert.equal(authOptions.status,200);
+  const authentication=await authOptions.json() as {ceremonyId:string};
+  const signed=await request('/passkeys/authentication/verify',{ceremonyId:authentication.ceremonyId,response:authenticationResponse(credential.id,registration.options.user.id)});
+  assert.equal(signed.status,200);assert.deepEqual(await signed.json(),{accountId:owner.accountId});assert.equal(signed.headers.getSetCookie().length,2);
+  const live=cookies(signed);
+  assert.equal((await request('/session',undefined,{headers:{cookie:live.header}})).status,200);
+  const status=await request('/authenticator',undefined,{headers:{cookie:live.header}});assert.equal(status.status,200);
+  assert.deepEqual(await status.json(),{active:true,version:1,recoveryCodesRemaining:0,available:false});
+  const manage=await request('/authenticator/remove',{password},{headers:{cookie:live.header,'x-csrf-token':live.csrf}});
+  assert.equal(manage.status,503);assert.deepEqual(await manage.json(),{error:'temporarily_unavailable'});
+  assert.equal((await db.pool.query('SELECT count(*)::integer AS count FROM cloud_authenticator_factors WHERE secret_envelope IS NOT NULL')).rows[0].count,1);
 });
 
 test('passkey bodies are exact, bounded JSON and every mutation requires the configured Origin', async () => {

@@ -7,12 +7,16 @@ export function verifySchemaUpgradeReceipt(value){
  exact(value.driver,['head','dirty']);exact(value.releases,['old','new']);
  exact(value.timings,['upgradeMs','recoveryMs']);exact(value.cleanup,['containers','volumes','checkouts']);
  demand(typeof value.measuredAt==='string'&&Number.isFinite(Date.parse(value.measuredAt))&&new Date(value.measuredAt).toISOString()===value.measuredAt,'measuredAt');
- demand(value?.schemaVersion===1,'version');
+ demand([1,2].includes(value?.schemaVersion),'version');
  const sha=/^[0-9a-f]{40}$/,digest=/^[0-9a-f]{64}$/;
  demand(sha.test(value.driver?.head)&&value.driver.dirty===false,'driver');
  for(const role of ['old','new']){const release=value.releases?.[role];exact(release,['head','migrations','digest']);demand(sha.test(release?.head)&&digest.test(release?.digest)&&Number.isInteger(release?.migrations)&&release.migrations>0,role);}
  demand(value.releases.old.head!==value.releases.new.head&&value.releases.old.digest!==value.releases.new.digest&&value.releases.old.migrations<value.releases.new.migrations,'distinct schemas');
  const checks=['oldStarted','newRefusedOld','migrationInterrupted','rollbackComplete','newRefusedInterrupted','retryApplied','pairingUpgraded','oldRefusedNew','newStarted','identityPreserved','tenantsIsolated','completionRetry','pendingMailPreserved','mailDelivered','backupRestored','oldRecovered','wrongKeyRefused','upgradedUnchanged'];
+ if(value.schemaVersion===2){
+  demand(value.releases.old.migrations===34&&value.releases.new.migrations===35,'factor schemas');
+  checks.splice(checks.indexOf('pairingUpgraded'),1);checks.push('accountStatePreserved','factorEnrolled','factorRestored','factorMatchingKey','factorWrongKeyRefused','factorMissingKeyRefused','factorBindingRefused');
+ }
  exact(value.checks,checks);for(const key of checks)demand(value.checks[key]===true,key);
  for(const key of ['upgradeMs','recoveryMs'])demand(Number.isFinite(value.timings?.[key])&&value.timings[key]>=0,key);
  for(const key of ['containers','volumes','checkouts'])demand(value.cleanup?.[key]===0,key);

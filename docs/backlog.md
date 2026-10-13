@@ -1,6 +1,6 @@
 # Waitron Cloud backlog
 
-Updated 2026-10-12. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-10-13. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
@@ -379,8 +379,62 @@ notifications separately.
   The [optional authenticator-app design](superpowers/specs/2026-10-12-cloud-authenticator-factor-design.md)
   has approved email recovery and session policies: password reset keeps the factor, and
   factor changes end every session. Its [implementation plan](superpowers/plans/2026-10-12-cloud-authenticator-factor.md)
-  covers storage, account controls and browser acceptance. No authenticator feature is
-  implemented yet. Configure live email delivery, implement the approved second-factor design,
+  covers storage, account controls and browser acceptance. Storage, API and the bilingual
+  portal, operational key rotation and private stack configuration are implemented locally.
+  The populated 34-to-35 upgrade/restore rehearsal and packaged stack clean-install,
+  restart, rebuild/upgrade and cleanup proofs pass with 35 migrations. The identity primitive
+  encrypts account/version/purpose-bound
+  secrets and returns every matching adjacent time step; migration 035 persists factor,
+  session-bound enrolment, challenge, hashed recovery and replay state. Focused PostgreSQL
+  and cryptography checks cover constraints, ciphertext binding and preserved upgrade data.
+  Password challenges now keep you outside a session until a valid authenticator or unused
+  recovery code completes the check. Focused PostgreSQL tests cover concurrent completion,
+  durable attempt limits, stale credentials, code reuse and expiry during database waits:
+  `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test
+  test/password-login.test.ts test/identity.test.ts`. Account controls now require your live
+  session, current password and, for an active factor, fresh proof. Activation, replacement,
+  removal and recovery-code regeneration end every session together. Email reset preserves
+  the factor, unused codes and replay history but invalidates pending enrolments and login
+  challenges. Session cleanup retains factor-referenced rows until a separate retention
+  policy is approved. PostgreSQL checks cover concurrent changes, durable failed attempts,
+  passkey access during key outages, reset during password derivation and expiry after writes:
+  `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test
+  test/authenticator-factor.test.ts test/password-recovery.test.ts test/passkeys.test.ts
+  test/history-cleanup.test.ts`. The account API now returns a cookie-free second-step
+  challenge after password proof, accepts a single-use factor completion, and exposes
+  strict session/CSRF-protected account controls. Explicit factor policy supplies shared
+  account, challenge and IP limits; IP refusals spend no account or challenge allowance.
+  Separate factor keys and malformed-configuration handling preserve ordinary password
+  login, passkeys and live account access during an outage. HTTP checks cover strict
+  bodies, all session-backed route families, independent instances, real server restart,
+  generic errors and cookie clearing after committed changes:
+  `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test
+  test/authenticator-factor.test.ts test/account-http.test.ts test/passkeys.test.ts
+  test/account-security.test.ts test/rate-limit.test.ts test/server.test.ts`.
+  The portal keeps challenges, setup secrets and recovery codes in tab memory. Its QR code
+  is rendered locally. Successful changes show recovery codes once after signing you out;
+  lost replies check your session without automatically resending the consumed proof.
+  Browser checks cover English/Spanish, 390/1280 widths and light/dark themes: enrolment,
+  replacement, single-use codes, email reset with the factor retained, independent passkeys,
+  removal, cancellation, lost replies, keyboard focus, accessibility and temporary-state clearing:
+  `node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test
+  --test-timeout=120000 test/authenticator-browser.test.ts test/passkey-browser.test.ts
+  test/account-security-browser.test.ts test/session.test.ts`.
+  The [operator guide](authenticator-app.md) documents independent keys, explicit policy,
+  account-first re-encryption and retained-backup custody. Rotation tests preserve versions,
+  sessions and proof state, reject wrong/missing keys, and resume interrupted accounts:
+  `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test
+  test/authenticator-keys.test.ts`. The populated 34-to-35 receipt preserves credentials,
+  sessions and synthetic passkey rows, proves migration rollback/retry and both incompatible
+  consumer refusals, and restores factor state with matching/wrong/missing-key checks.
+  `node scripts/schema-upgrade-receipt.mjs /tmp/cloud-factor-upgrade.json --old
+  65c13f1402041931bdb244007f3cbc267ae61483 --new <full-implementation-commit>`.
+  The historical upgrade defaults remain unchanged. The packaged stack proof passes
+  on the complete implementation tree:
+  `pnpm proof:local-stack`. Its receipt requires healthy services, retained data/identity,
+  35 migrations and zero leftover containers, volumes, networks or proof images.
+  No production factor policy or key configuration is selected.
+  Configure live email delivery and production factor policy,
   and define the wider platform role catalogue before public use. Shared login/request limits, secure
   cookies and Origin/CSRF checks are implemented in the account API. A local streaming
   reverse-proxy test now exercises two real account instances with overwritten client
@@ -478,6 +532,14 @@ notifications separately.
   customer security trail before enabling it. Review
   database and module dependencies. Keep the source review current and port applicable
   security fixes with failing regression tests in each affected repository.
+  **Review follow-ups.** An early deadline check in
+  `packages/registration/src/authenticator-factor.ts` duplicates the final check;
+  deleting the early check leaves all 41 management tests passing, while deleting the
+  final check fails three late-expiry tests. Keep those behaviour checks when simplifying
+  the redundant guard. Concurrent review experiments also saw one `TimeoutError` in
+  the English/light/1280 authenticator browser journey. It passed twice in isolation;
+  the cause is unproved. On the next failure, capture its request/locator stage and
+  reproduce the cause before changing any assertion or deadline.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
   services, usage accounting, trials, failed payment and cancellation.
 - **Venue and node registration.** The agreed Waitron signup and connection journey is
@@ -596,7 +658,7 @@ notifications separately.
   details. The [reproducible local deployment](local-deployment.md) now packages the API,
   durable workers, PostgreSQL, Mailpit, TLS object storage and empty-route gateway in one
   loopback-only Compose stack. Its executable receipt proves clean installation, restart,
-  same-schema image recreation, 26 migrations, stable generated identity, retained database
+  same-schema image recreation, the current release migration manifest, stable generated identity, retained database
   and storage markers, and exact-project cleanup. The [database recovery drill](database-recovery.md)
   separately proves a physical standby promotion under restricted local credentials, exact
   operation replay, worker-claim recovery and tenant isolation, with zero owned resources

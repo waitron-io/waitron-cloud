@@ -61,7 +61,7 @@ beforeEach(async () => {
 
 test('migration remains repeatable after concurrent initial application', async () => {
   await migrate(pool);
-  const legacyNames=(await pool.query("SELECT name FROM schema_migrations WHERE name<>'034_relay_admission_bounds.sql' ORDER BY name")).rows.map(row=>row.name);
+  const legacyNames=(await pool.query("SELECT name FROM schema_migrations WHERE name<'034_relay_admission_bounds.sql' ORDER BY name")).rows.map(row=>row.name);
   assert.equal(legacyNames.length, 33);
   assert.equal(legacyNames.at(-8), '026_support_grants.sql');
   assert.equal(legacyNames.at(-7), '027_pairing_code_protection.sql');
@@ -71,8 +71,9 @@ test('migration remains repeatable after concurrent initial application', async 
   assert.equal(legacyNames.at(-3), '031_relay_grants.sql');
   assert.equal(legacyNames.at(-2), '032_relay_messages.sql');
   assert.equal(legacyNames.at(-1), '033_relay_worker.sql');
-  assert.equal(migrationNames.length,34);
-  assert.equal(migrationNames.at(-1),'034_relay_admission_bounds.sql');
+  assert.equal(migrationNames.length,35);
+  assert.equal(migrationNames.at(-2),'034_relay_admission_bounds.sql');
+  assert.equal(migrationNames.at(-1),'035_authenticator_factor.sql');
   assert.equal(await count('schema_migrations'), migrationNames.length);
 });
 

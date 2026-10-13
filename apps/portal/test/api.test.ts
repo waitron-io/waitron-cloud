@@ -83,3 +83,34 @@ test('account security requests validate session summaries and send CSRF on revo
   assert.equal((await accountRequest('/sessions/revoke',{id})).ok,true);
   assert.equal((options?.headers as Record<string,string>)['X-CSRF-Token'],'browser-proof');
 });
+
+test('authenticator responses use exact unions and matching status codes; management alone carries CSRF',async t=>{
+  const priorLocation=Object.getOwnPropertyDescriptor(globalThis,'location'),priorDocument=Object.getOwnPropertyDescriptor(globalThis,'document');
+  Object.defineProperty(globalThis,'location',{configurable:true,value:{protocol:'https:'}});
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{cookie:'__Host-cloud_csrf=browser-proof'}});
+  t.after(()=>{for(const [key,prior] of [['location',priorLocation],['document',priorDocument]] as const){if(prior)Object.defineProperty(globalThis,key,prior);else Reflect.deleteProperty(globalThis,key);}});
+  const token='A'.repeat(43),expiresAt='2030-01-01T00:00:00.000Z';
+  const challenge={factorRequired:true,challengeToken:token,expiresAt};
+  let value:unknown=challenge,status=202,options:RequestInit|undefined;
+  t.mock.method(globalThis,'fetch',async(_url:unknown,init?:RequestInit)=>{options=init;return status===204?new Response(null,{status}):Response.json(value,{status});});
+  assert.equal((await accountRequest('/login',{email:'owner@example.test',password:'current'})).ok,true);
+  assert.equal((options?.headers as Record<string,string>)['X-CSRF-Token'],undefined);
+  for(const bad of [{...challenge,accountId:'owner'},{...challenge,factorRequired:false},{...challenge,challengeToken:'x'},{...challenge,expiresAt:'bad'}]){value=bad;assert.equal((await accountRequest('/login',{})).ok,false);}
+  value=challenge;assert.equal((await accountRequest('/login/factor',{})).ok,false);status=200;assert.equal((await accountRequest('/login',{})).ok,false);
+  value={accountId:'owner'};status=202;assert.equal((await accountRequest('/login',{})).ok,false);
+  status=200;assert.equal((await accountRequest('/login/factor',{})).ok,true);
+  assert.equal((options?.headers as Record<string,string>)['X-CSRF-Token'],undefined);
+  value={active:true,version:1,recoveryCodesRemaining:10,available:true};assert.equal((await accountRequest('/authenticator')).ok,true);
+  for(const bad of [{active:true,version:0,recoveryCodesRemaining:10,available:true},{active:true,version:1,recoveryCodesRemaining:11,available:true},{active:true,version:1,recoveryCodesRemaining:10,available:true,secret:'private'}]){value=bad;assert.equal((await accountRequest('/authenticator')).ok,false);}
+  const begin={pendingToken:token,secret:'JBSWY3DPEHPK3PXP',uri:'otpauth://totp/Cloud?secret=JBSWY3DPEHPK3PXP',expiresAt};
+  value=begin;assert.equal((await accountRequest('/authenticator/begin',{password:'current'})).ok,true);
+  assert.equal((options?.headers as Record<string,string>)['X-CSRF-Token'],'browser-proof');
+  for(const bad of [{...begin,pendingToken:'x'},{...begin,expiresAt:'bad'}]){value=bad;assert.equal((await accountRequest('/authenticator/begin',{})).ok,false);}
+  for(const uri of ['https://totp/Cloud?secret=JBSWY3DPEHPK3PXP','otpauth://hotp/Cloud?secret=JBSWY3DPEHPK3PXP','otpauth://totp/Cloud?secret=OTHER','otpauth://user@totp/Cloud?secret=JBSWY3DPEHPK3PXP','otpauth://totp/Cloud?secret=JBSWY3DPEHPK3PXP#extra']){value={...begin,uri};assert.equal((await accountRequest('/authenticator/begin',{})).ok,false);}
+  const codes=Array.from({length:10},(_,i)=>i.toString(16).padStart(32,'0').toUpperCase());
+  value={status:'changed',active:true,recoveryCodes:codes};assert.equal((await accountRequest('/authenticator/activate',{})).ok,true);assert.equal((await accountRequest('/authenticator/regenerate',{})).ok,true);
+  value={status:'changed',active:true,recoveryCodes:[...codes.slice(1),codes[1]]};assert.equal((await accountRequest('/authenticator/activate',{})).ok,false);
+  value={status:'changed',active:true,recoveryCodes:[...codes.slice(1),'not-a-code']};assert.equal((await accountRequest('/authenticator/activate',{})).ok,false);
+  value={status:'changed',active:false};assert.equal((await accountRequest('/authenticator/remove',{})).ok,true);
+  status=204;assert.equal((await accountRequest('/authenticator/cancel',{pendingToken:token})).ok,true);
+});

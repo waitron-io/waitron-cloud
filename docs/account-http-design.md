@@ -38,7 +38,7 @@ All account routes live under `/api/account`. POST bodies must be JSON objects.
 | --- | --- | --- |
 | POST `/signup/request` | `email` | 202, `{ status: "accepted" }` |
 | POST `/signup/complete` | `token`, `password`, `organisationName`, `legalBusinessName`, `countryCode` | 201, account/organisation/business IDs; no session |
-| POST `/login` | `email`, `password` | 200, account ID; session and CSRF cookies |
+| POST `/login` | `email`, `password` | 200, account ID and cookies; or 202, bounded factor challenge with no cookies |
 | GET `/session` | Session cookie | 200, account ID and expiry; no idle extension |
 | POST `/session/activity` | Session cookie and CSRF header | 200, refreshed expiry, bounded by the existing absolute lifetime |
 | GET `/sessions` | Session cookie | 200, account-scoped live session summaries; no idle extension |
@@ -132,7 +132,7 @@ Do not run migrations automatically at server startup. Finish with one whole-bra
 Claude review and current-head CI, then land under the owner's standing instruction.
 
 Live email activation, provider delivery events, screens, compromised-password
-screening, MFA policy, ingress bot controls, production secrets and deployment/load
+screening, production factor policy, ingress bot controls, production secrets and deployment/load
 proof remain recorded launch requirements. This branch does not declare the portal
 ready for public signup.
 
@@ -147,3 +147,11 @@ Cloud retains its own cookie names, random session tokens and PostgreSQL stores.
 - [Hono body limits](https://hono.dev/docs/middleware/builtin/body-limit)
 - [OWASP authentication guidance](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)
 - [OWASP CSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
+
+## Optional authenticator protection
+
+The [authenticator guide](authenticator-app.md) defines the implemented password
+second step, account controls, separate key configuration and shared limits. Challenge
+tokens never grant session access. Password reset keeps the factor and saved codes;
+activation, replacement, removal and regeneration end all sessions. Passkeys remain
+independent. Production factor allowances and history retention require explicit policy.

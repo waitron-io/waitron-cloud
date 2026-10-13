@@ -4,7 +4,9 @@ import { request, type ClientRequest } from 'node:http';
 import { connect } from 'node:net';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { generateKeyPairSync } from 'node:crypto';
+import { generateKeyPairSync,randomBytes,randomUUID } from 'node:crypto';
+import {encryptFactorSecret,hashSecret} from '@waitron-cloud/identity';
+import {recoveryCodeHash} from '../../registration/src/password-login.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startAccountServer } from '../src/server.ts';
 import {migrationNames} from '@waitron-cloud/registration';
@@ -248,4 +250,41 @@ test('staff exchange CLI requires explicit configuration and an installation iss
   const status=await new Promise<number>((resolve,reject)=>{const req=request({host:'127.0.0.1',port,path:'/api/installations/staff-certificate-status',method:'POST',headers:{host:'localhost','content-type':'application/json'}},res=>{res.resume();res.on('end',()=>resolve(res.statusCode!));});req.on('error',reject);req.end('{}');});
   assert.equal(status,value==='1'?400:503);
  }finally{assert.equal((await running.stop()).code,0);}}
+});
+
+test('CLI factor configuration survives restart, uses its own keys and emits no secrets in diagnostics',async()=>{
+ const accountId=randomUUID(),email=`factor-${accountId}@example.test`,password='A distinct factor password',generation=randomUUID();
+ const keys={activeKeyId:'factor',keys:{factor:randomBytes(32).toString('hex')}};
+ const secret='GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',code=randomBytes(16).toString('hex').toUpperCase();
+ await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[accountId]);
+ await db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash) VALUES($1,$2,$3)',[accountId,email,await hashSecret(password)]);
+ await db.pool.query('INSERT INTO cloud_authenticator_factors(account_id,version,secret_generation,secret_envelope) VALUES($1,1,$2,$3)',
+  [accountId,generation,encryptFactorSecret(secret,keys,{accountId,version:1,purpose:'active'})]);
+ await db.pool.query('INSERT INTO cloud_factor_recovery_codes(account_id,factor_version,secret_generation,code_hash) VALUES($1,1,$2,$3)',[accountId,generation,recoveryCodeHash(accountId,1,code)]);
+ const policy={loginLifetimeMs:300000,pendingLifetimeMs:300000,challengeAttempts:5,enrolmentAttempts:5,
+  loginAccount:{limit:20,windowSeconds:300},completeIp:{limit:20,windowSeconds:300},completeAccount:{limit:20,windowSeconds:300},
+  completeChallenge:{limit:1,windowSeconds:300},manageIp:{limit:20,windowSeconds:300},manageAccount:{limit:20,windowSeconds:300}};
+ const env={CLOUD_FACTOR_ACTIVE_KEY_ID:'factor',CLOUD_FACTOR_KEYS:JSON.stringify(keys.keys),CLOUD_FACTOR_POLICY:JSON.stringify(policy)};
+ let running=cli(env),token='';
+ try {
+  let port=await running.ready();
+  const start=await send(port,'/login',JSON.stringify({email,password})).result;
+  assert.equal(start.status,202);assert.equal(start.headers['set-cookie'],undefined);assert.equal(start.headers['cache-control'],'no-store');
+  token=JSON.parse(start.body).challengeToken;
+  const bad=await send(port,'/login/factor',JSON.stringify({challengeToken:token,proof:{kind:'recovery',code:'f'.repeat(32)}})).result;
+  assert.equal(bad.status,401);assert.deepEqual(JSON.parse(bad.body),{error:'credentials_invalid'});
+  let ended=await running.stop();assert.equal(ended.code,0);assert.equal(ended.stderr,'');assert.match(ended.stdout,/^\{"status":"listening","port":\d+\}\n$/);
+  running=cli(env);port=await running.ready();
+  const blocked=await send(port,'/login/factor',JSON.stringify({challengeToken:token,proof:{kind:'recovery',code}})).result;
+  assert.equal(blocked.status,429);assert.equal(blocked.headers['set-cookie'],undefined);
+  ended=await running.stop();assert.equal(ended.code,0);assert.equal(ended.stderr,'');
+  running=cli({...env,CLOUD_FACTOR_KEYS:'private-factor-configuration-sentinel'});port=await running.ready();
+  const outage=await send(port,'/login',JSON.stringify({email,password})).result;
+  assert.equal(outage.status,503);assert.deepEqual(JSON.parse(outage.body),{error:'temporarily_unavailable'});assert.equal(outage.headers['set-cookie'],undefined);
+  const plainId=randomUUID(),plainEmail=`plain-${plainId}@example.test`;
+  await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[plainId]);
+  await db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash) VALUES($1,$2,$3)',[plainId,plainEmail,await hashSecret(password)]);
+  assert.equal((await send(port,'/login',JSON.stringify({email:plainEmail,password})).result).status,200);
+  ended=await running.stop();assert.equal(ended.code,0);assert.equal(ended.stderr,'');assert.match(ended.stdout,/^\{"status":"listening","port":\d+\}\n$/);
+ }finally{if(running.child.exitCode===null)await running.stop();}
 });

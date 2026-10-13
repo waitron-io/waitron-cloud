@@ -510,3 +510,23 @@ test('platform authorisation rejects a session that expires during a permission 
     await result;
   }
 });
+
+
+test('direct password login refuses an active authenticator without creating a session', async () => {
+  await pool.query(`INSERT INTO cloud_authenticator_factors
+    (account_id, version, secret_generation, secret_envelope) VALUES ($1, 1, $2, 'ciphertext')`, [accountId, randomUUID()]);
+  await expectCode(signIn(), 'credentials_invalid');
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count, '0');
+});
+
+
+test('password authority returns the locked credential fingerprint without issuing a session', async () => {
+  const identity = await import('@waitron-cloud/identity');
+  assert.equal(typeof identity.requirePasswordAuthority, 'function');
+  const row = (await pool.query('SELECT password_hash FROM cloud_credentials WHERE account_id = $1', [accountId])).rows[0];
+  for (const who of [{email: '  OWNER@EXAMPLE.TEST '}, {accountId}]) {
+    assert.deepEqual(await run(client => identity.requirePasswordAuthority(client, who, 'venue-owner-password', 'update')),
+      {accountId, passwordFingerprint: digest(row.password_hash)});
+  }
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count, '0');
+});

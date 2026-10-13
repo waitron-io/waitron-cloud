@@ -30,39 +30,42 @@ const isToken = (token: string) => typeof token === 'string' && TOKEN_FORMAT.tes
 
 /** The caller must run identity operations inside a transaction on this client. */
 export async function login(client: PoolClient, input: {email: string; password: string}): Promise<SessionCredentials> {
-  if (typeof input.email !== 'string' || input.email.length > 254 || typeof input.password !== 'string'
-    || Buffer.byteLength(input.password) > 1024) throw new IdentityError('credentials_invalid');
-  const email = input.email.trim().toLowerCase();
-  const lookup = await client.query(`SELECT c.account_id, c.password_hash FROM cloud_credentials c
-    JOIN cloud_accounts a ON a.id = c.account_id WHERE c.email = $1 AND a.disabled_at IS NULL`, [email]);
-  const accountId: string | undefined = lookup.rows[0]?.account_id;
-  const passwordHash: string | undefined = lookup.rows[0]?.password_hash ?? undefined;
-  const usable = passwordHash !== undefined && isSecretHash(passwordHash);
-  // Failed passwords pay for one derivation without waiting on account-specific row locks.
-  const correct = await verifySecret(input.password, usable ? passwordHash! : DUMMY_PASSWORD_HASH);
-  if (!accountId || !usable || !correct) throw new IdentityError('credentials_invalid');
-  // Account first, then credential/session rows: keep this order in account lifecycle operations.
-  const account = await client.query('SELECT id FROM cloud_accounts WHERE id = $1 AND disabled_at IS NULL FOR SHARE', [accountId]);
-  if (!account.rowCount) throw new IdentityError('credentials_invalid');
-  const credentials = await client.query('SELECT password_hash FROM cloud_credentials WHERE account_id = $1 AND email = $2 FOR SHARE', [accountId, email]);
-  // A password or account change during derivation/lock contention must invalidate this attempt.
-  if (credentials.rows[0]?.password_hash !== passwordHash) throw new IdentityError('credentials_invalid');
+  const {accountId} = await requirePasswordAuthority(client, {email: input.email}, input.password, 'share');
+  const factor = await client.query('SELECT 1 FROM cloud_authenticator_factors WHERE account_id = $1 AND secret_envelope IS NOT NULL FOR SHARE', [accountId]);
+  if (factor.rowCount) throw new IdentityError('credentials_invalid');
   return createSession(client, accountId);
 }
 
-export async function requireCurrentPassword(client: PoolClient, accountId: string, password: string): Promise<void> {
-  if (typeof accountId !== 'string' || typeof password !== 'string' || Buffer.byteLength(password) > 1024) {
+export async function requirePasswordAuthority(client: PoolClient, who: {email: string} | {accountId: string},
+  password: string, lock: 'share' | 'update'): Promise<{accountId: string; passwordFingerprint: string}> {
+  if (typeof password !== 'string' || Buffer.byteLength(password) > 1024
+    || ('email' in who ? typeof who.email !== 'string' || who.email.length > 254
+      : typeof who.accountId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(who.accountId))) {
     throw new IdentityError('credentials_invalid');
   }
-  const lookup = await client.query('SELECT password_hash FROM cloud_credentials WHERE account_id = $1', [accountId]);
+  const byEmail = 'email' in who;
+  const subject = byEmail ? who.email.trim().toLowerCase() : who.accountId;
+  const lookup = await client.query(`SELECT c.account_id, c.password_hash FROM cloud_credentials c
+    JOIN cloud_accounts a ON a.id = c.account_id
+    WHERE ${byEmail ? 'c.email' : 'c.account_id'} = $1 AND a.disabled_at IS NULL`, [subject]);
+  const accountId: string | undefined = lookup.rows[0]?.account_id;
   const passwordHash: string | undefined = lookup.rows[0]?.password_hash ?? undefined;
   const usable = passwordHash !== undefined && isSecretHash(passwordHash);
+  // Derive once before locking; unknown, disabled and passwordless accounts pay the same cost.
   const correct = await verifySecret(password, usable ? passwordHash! : DUMMY_PASSWORD_HASH);
-  if (!usable || !correct) throw new IdentityError('credentials_invalid');
-  const account = await client.query('SELECT id FROM cloud_accounts WHERE id = $1 AND disabled_at IS NULL FOR SHARE', [accountId]);
+  if (!accountId || !usable || !correct) throw new IdentityError('credentials_invalid');
+  const clause = lock === 'update' ? 'UPDATE' : 'SHARE';
+  const account = await client.query(`SELECT id FROM cloud_accounts WHERE id = $1 AND disabled_at IS NULL FOR ${clause}`, [accountId]);
   if (!account.rowCount) throw new IdentityError('credentials_invalid');
-  const credentials = await client.query('SELECT password_hash FROM cloud_credentials WHERE account_id = $1 FOR SHARE', [accountId]);
+  const credentials = await client.query(`SELECT password_hash FROM cloud_credentials
+    WHERE account_id = $1 ${byEmail ? 'AND email = $2' : ''} FOR ${clause}`, byEmail ? [accountId, subject] : [accountId]);
+  // Lock waits and expensive derivation cannot preserve a superseded credential snapshot.
   if (credentials.rows[0]?.password_hash !== passwordHash) throw new IdentityError('credentials_invalid');
+  return {accountId, passwordFingerprint: digest(passwordHash!)};
+}
+
+export async function requireCurrentPassword(client: PoolClient, accountId: string, password: string): Promise<void> {
+  await requirePasswordAuthority(client, {accountId}, password, 'share');
 }
 
 export async function createSession(client: PoolClient, accountId: string): Promise<SessionCredentials> {

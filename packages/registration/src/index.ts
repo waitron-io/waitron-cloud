@@ -277,3 +277,6 @@ export {RelayError} from './relay-grants.ts';
 export {RelayWorker,type RelayWorkerConfig} from './relay-worker.ts';
 
 export {RelayBounds,RelayBoundsError,type RelayBoundsConfig} from './relay-bounds.ts';
+
+export {PasswordLoginStore, FactorError, type FactorProof, type PasswordLoginPolicy, type PasswordLoginResult} from './password-login.ts';
+export {AuthenticatorFactorStore, FactorManagementError, type FactorAuthority, type FactorManagementPolicy} from './authenticator-factor.ts';
