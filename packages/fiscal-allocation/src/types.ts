@@ -168,6 +168,33 @@ export interface PaperHistoryInput {
   readonly consumptions: readonly SignedPaperValue<PaperConsumption>[];
   readonly transfers: readonly SignedPaperTransfer[];
 }
+export interface FiscalReportBody {
+  readonly venueId: string;
+  readonly scope: Scope;
+  readonly receipt: AllocationReceipt | null;
+  readonly paperHistory: PaperHistoryInput | null;
+  readonly activationEvidence: unknown;
+}
+export interface FiscalReportProof {
+  readonly payload: string;
+  readonly signature: string;
+}
+export interface FiscalReportClaims {
+  readonly version: 1;
+  readonly origin: string;
+  readonly action: 'report';
+  readonly installationId: string;
+  readonly operationId: string;
+  readonly issuedAt: number;
+  readonly lease: string;
+  readonly bodyDigest: string;
+  readonly body: FiscalReportBody;
+}
+export interface ReportResult {
+  readonly version: 1;
+  readonly state: 'matched' | 'conflict' | 'recorded';
+  readonly receiptId: string | null;
+}
 export type FiscalErrorCode =
   | 'invalid_input'
   | 'permission_denied'

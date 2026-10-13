@@ -66,6 +66,9 @@ importers:
       '@waitron-cloud/backups':
         specifier: workspace:*
         version: link:../backups
+      '@waitron-cloud/fiscal-allocation':
+        specifier: workspace:*
+        version: link:../fiscal-allocation
       '@waitron-cloud/identity':
         specifier: workspace:*
         version: link:../identity

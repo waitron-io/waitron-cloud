@@ -52,7 +52,11 @@ function same(a: unknown, b: unknown) {
 }
 function allocationScope(r: AllocationReceipt): Scope {
   const a = r.payload.allocation;
-  return { taxpayerNif: a.taxpayerNif, softwareId: a.softwareId, environment: a.environment };
+  return {
+    taxpayerNif: a.taxpayerNif,
+    softwareId: a.softwareId,
+    environment: a.environment,
+  };
 }
 interface Authority {
   accountId: string;
@@ -74,6 +78,7 @@ export class FiscalAllocationStore {
               ...a.verification,
               paperTrust: options.paperTrust ?? undefined,
               paperHistoryTrust: options.paperHistoryTrust,
+              machine: options.machine ?? undefined,
             },
             current: (...args) => a.current(...args),
             history: (...args) => a.history(...args),
@@ -84,7 +89,10 @@ export class FiscalAllocationStore {
     };
   }
   async #actor(c: PoolClient, token: string, csrf: string, venueId: string) {
-    const actor = await resolveSession(c, token, { csrfToken: csrf, touch: false });
+    const actor = await resolveSession(c, token, {
+      csrfToken: csrf,
+      touch: false,
+    });
     const candidate = (await c.query('SELECT organisation_id FROM venues WHERE id=$1', [venueId]))
       .rows[0];
     if (!candidate) fail('permission_denied');
@@ -104,7 +112,10 @@ export class FiscalAllocationStore {
     ).rows[0];
     if (!venue || venue.organisation_id !== candidate.organisation_id) fail('permission_denied');
     await resolveSession(c, token, { csrfToken: csrf, touch: false });
-    return { accountId: actor.accountId, environment: venue.environment as string };
+    return {
+      accountId: actor.accountId,
+      environment: venue.environment as string,
+    };
   }
   async #authorize(
     c: PoolClient,
@@ -142,8 +153,51 @@ export class FiscalAllocationStore {
     if (!this.#options.trust) fail('reservation_untrusted');
     return decodeReceipt(encodeReceipt(value as AllocationReceipt), this.#options.trust);
   }
+  // Rate transactions finish before domain locks; the mutation rechecks all authority afterward.
+  async authorizeRequest(
+    token: string,
+    csrf: string,
+    action: 'reserve' | 'consume' | 'abandon' | 'status' | 'list' | 'import-paper',
+    input: ReserveInput | ConsumeInput | AbandonInput | StatusInput | ListInput | PaperHistoryInput,
+  ): Promise<{ accountId: string; scope: Scope | null }> {
+    return transaction(this.#pool, async (c) => {
+      if (action === 'list' || action === 'status') {
+        const actor = await this.#actor(c, token, csrf, (input as StatusInput).venueId);
+        return { accountId: actor.accountId, scope: null };
+      }
+      let venueId: string, scope: Scope;
+      if (action === 'consume' || action === 'abandon') {
+        await resolveSession(c, token, { csrfToken: csrf, touch: false });
+        const row = (
+          await c.query(
+            'SELECT initial_receipt FROM fiscal_registry_allocations WHERE allocation_id=$1',
+            [(input as ConsumeInput).allocationId],
+          )
+        ).rows[0];
+        if (!row) fail('permission_denied');
+        const r = this.#receipt(row.initial_receipt);
+        venueId = r.payload.venueId;
+        scope = allocationScope(r);
+      } else {
+        venueId = (input as ReserveInput).venueId;
+        scope = (input as ReserveInput).scope;
+      }
+      const authority = await this.#authorize(
+        c,
+        token,
+        csrf,
+        venueId,
+        scope,
+        action === 'import-paper' ? 'import' : action === 'reserve' ? 'reserve' : 'consume',
+        'binding' in input ? input.binding : undefined,
+      );
+      if (action === 'reserve') authorizeCustody(authority.custody, input as ReserveInput);
+      return { accountId: authority.accountId, scope };
+    });
+  }
   async reserve(token: string, csrf: string, value: ReserveInput): Promise<AllocationReceipt> {
     const input = validateReserve(value);
+    await this.#remember(token, csrf, input.venueId, input.scope, 'reserve', input);
     return transaction(this.#pool, async (c) => {
       const before = await this.#authorize(
         c,
@@ -182,7 +236,10 @@ export class FiscalAllocationStore {
           allocationId: randomUUID(),
           ...input.scope,
           installationIdentity: identity,
-          series: input.bases.map((b) => ({ code: b.code + '-' + identity, purpose: b.purpose })),
+          series: input.bases.map((b) => ({
+            code: b.code + '-' + identity,
+            purpose: b.purpose,
+          })),
           source: 'cloud',
           reservationEvidence: {
             kind: 'cloud',
@@ -284,6 +341,17 @@ export class FiscalAllocationStore {
     input: ConsumeInput | AbandonInput,
     action: 'consume' | 'abandon',
   ): Promise<AllocationReceipt> {
+    const routing = (
+      await this.#pool.query(
+        'SELECT initial_receipt FROM fiscal_registry_allocations WHERE allocation_id=$1',
+        [input.allocationId],
+      )
+    ).rows[0];
+    if (routing) {
+      const r = this.#receipt(routing.initial_receipt),
+        p = r.payload;
+      await this.#remember(token, csrf, p.venueId, allocationScope(r), action, input);
+    }
     return transaction(this.#pool, async (c) => {
       // A preliminary venue lookup grants no authority; current account and ownership lock first.
       const routing = (
@@ -324,7 +392,9 @@ export class FiscalAllocationStore {
         await this.#authorize(c, token, csrf, venueId, scope, 'consume', input.binding);
         return this.#receipt(retry.receipt);
       }
-      const prior = history.events.filter((e) => e.allocationId === input.allocationId).at(-1);
+      const prior = history.events
+        .filter((e) => e.action !== 'report' && e.allocationId === input.allocationId)
+        .at(-1);
       if (
         !prior ||
         prior.receipt!.payload.state !== 'reserved' ||
@@ -410,6 +480,7 @@ export class FiscalAllocationStore {
     value: PaperHistoryInput,
   ): Promise<PaperImportResult> {
     const input = validatePaperHistory(value);
+    await this.#remember(token, csrf, input.venueId, input.scope, 'paper-import', input);
     return transaction(this.#pool, async (c) => {
       const before = await this.#authorize(c, token, csrf, input.venueId, input.scope, 'import');
       const caps = requireCapabilities(this.#options);
@@ -468,12 +539,113 @@ export class FiscalAllocationStore {
           [input.operationId, input.venueId],
         )
       ).rows[0];
-      if (!row) return { version: 1, state: 'unknown', receipt: null };
+      if (!row) {
+        const route = (
+          await c.query(
+            'SELECT scope FROM fiscal_registry_operation_routes WHERE operation_id=$1 AND venue_id=$2',
+            [input.operationId, input.venueId],
+          )
+        ).rows[0];
+        if (!route) return { version: 1, state: 'unknown', receipt: null };
+        const scope = route.scope as Scope;
+        await this.#authorize(c, token, csrf, input.venueId, scope, 'read');
+        if (!this.#options.continuity) fail('continuity_unavailable');
+        await this.#namespace(c, scope);
+        const history = await requireCurrentHistory(this.#options.continuity, scope, null);
+        await projectHistory(c, history);
+        await this.#authorize(c, token, csrf, input.venueId, scope, 'read');
+        const found = history.events.find((e) => e.operationId === input.operationId);
+        if (!found) return { version: 1, state: 'unknown', receipt: null };
+        if (!found.receipt || found.receipt.payload.venueId !== input.venueId)
+          fail('binding_conflict');
+        return {
+          version: 1,
+          state: 'recorded',
+          receipt: this.#receipt(found.receipt),
+        };
+      }
       const receipt = this.#receipt(row.result),
         scope = allocationScope(receipt);
       await this.#authorize(c, token, csrf, input.venueId, scope, 'read');
       await this.#authorize(c, token, csrf, input.venueId, scope, 'read');
       return { version: 1, state: 'recorded', receipt };
+    });
+  }
+  async #remember(
+    token: string,
+    csrf: string,
+    venueId: string,
+    scope: Scope,
+    action: 'reserve' | 'consume' | 'abandon' | 'paper-import',
+    input: ReserveInput | ConsumeInput | AbandonInput | PaperHistoryInput,
+  ) {
+    await transaction(this.#pool, async (c) => {
+      const actor = await this.#authorize(
+        c,
+        token,
+        csrf,
+        venueId,
+        scope,
+        action === 'paper-import' ? 'import' : action === 'reserve' ? 'reserve' : 'consume',
+        'binding' in input ? input.binding : undefined,
+      );
+      requireCapabilities(this.#options);
+      if (action === 'reserve') authorizeCustody(actor.custody, input as ReserveInput);
+      if (action === 'consume' || action === 'abandon') {
+        const initial = (
+          await c.query(
+            'SELECT initial_receipt FROM fiscal_registry_allocations WHERE allocation_id=$1',
+            [(input as ConsumeInput).allocationId],
+          )
+        ).rows[0];
+        if (!initial) fail('permission_denied');
+        const p = this.#receipt(initial.initial_receipt).payload;
+        if (!same(p.binding, (input as ConsumeInput).binding)) fail('binding_conflict');
+        if (action === 'consume') {
+          const x = input as ConsumeInput;
+          if (
+            !x.noParallelRecovery ||
+            (p.mode === 'recovery' && (!x.oldMachineOffline || x.oldMachineAbsent)) ||
+            (p.mode === 'initial-setup' && !x.oldMachineAbsent)
+          )
+            fail('invalid_input');
+        }
+      }
+      const row = {
+        operation_id: input.operationId,
+        venue_id: venueId,
+        account_id: actor.accountId,
+        scope,
+        action,
+        request_digest: requestDigest(input),
+      };
+      await c.query(
+        'INSERT INTO fiscal_registry_operation_routes(operation_id,venue_id,account_id,scope,action,request_digest) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING',
+        Object.values(row),
+      );
+      const existing = (
+        await c.query(
+          'SELECT to_jsonb(t) AS value FROM fiscal_registry_operation_routes t WHERE operation_id=$1',
+          [input.operationId],
+        )
+      ).rows[0]?.value;
+      // Terminal retries may be inspected by another current owner; the original actor stays retained.
+      if (
+        !same(existing, {
+          ...row,
+          account_id: action === 'reserve' ? actor.accountId : existing?.account_id,
+        })
+      )
+        fail('binding_conflict');
+      await this.#authorize(
+        c,
+        token,
+        csrf,
+        venueId,
+        scope,
+        action === 'paper-import' ? 'import' : action === 'reserve' ? 'reserve' : 'consume',
+        'binding' in input ? input.binding : undefined,
+      );
     });
   }
   #cursor(value: string | null, accountId: string, venueId: string, limit: number): string {

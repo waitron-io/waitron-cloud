@@ -30,6 +30,12 @@ import {
 } from './validation.ts';
 
 import { verifyPaperInput, checkPaperProgress, paperResult } from './paper-import.ts';
+import {
+  readFiscalReport,
+  historicalFiscalReport,
+  verifyReportEvidence,
+  reportResult,
+} from './machine-proof.ts';
 
 const genesis = '0'.repeat(64);
 const verified = new WeakSet<ContinuityHistory>();
@@ -177,6 +183,7 @@ function eventValue(authority: ContinuityAuthority, value: unknown, scope: Scope
   ]);
   const action = o.action;
   // Replay accepts only actions with a complete, checked projection.
+  if (action === 'report') return reportValue(authority, o, scope);
   if (action === 'paper-import') return paperValue(authority, o, scope);
   if (action === 'consume' || action === 'abandon') return terminalValue(authority, o, scope);
   if (action !== 'reserve') uncertain();
@@ -244,6 +251,45 @@ function eventValue(authority: ContinuityAuthority, value: unknown, scope: Scope
   if (historical.sequence !== e.sequence || historical.historyDigest !== eventDigest(e))
     uncertain();
   return snapshot(e);
+}
+function reportValue(
+  authority: ContinuityAuthority,
+  o: Record<string, unknown>,
+  scope: Scope,
+): RegistryEvent {
+  const c = historicalFiscalReport(
+    o.request,
+    authority.verification.machine,
+    Date.parse(timestamp(o.recordedAt)),
+  );
+  verifyReportEvidence(c, authority.verification);
+  const receipt = c.body.receipt;
+  if (
+    !same(o.scope, scope) ||
+    !same(c.body.scope, scope) ||
+    c.operationId !== o.operationId ||
+    o.requestDigest !== requestDigest(o.request) ||
+    o.receipt !== null ||
+    o.allocationId !== (receipt?.payload.allocation.allocationId ?? null) ||
+    !same(o.allocation, receipt?.payload.allocation ?? null) ||
+    !same(o.binding, receipt?.payload.binding ?? null)
+  )
+    uncertain();
+  return snapshot({
+    eventId: uuid(o.eventId),
+    scope: validateScope(o.scope),
+    sequence: decimal(o.sequence),
+    operationId: uuid(o.operationId),
+    action: 'report',
+    requestDigest: digest(o.requestDigest),
+    request: o.request,
+    allocationId: receipt?.payload.allocation.allocationId ?? null,
+    allocation: receipt?.payload.allocation ?? null,
+    binding: receipt?.payload.binding ?? null,
+    recordedAt: timestamp(o.recordedAt),
+    previousDigest: digest(o.previousDigest),
+    receipt: null,
+  });
 }
 function paperValue(
   authority: ContinuityAuthority,
@@ -395,7 +441,7 @@ export async function requireCurrentHistory(
         highWater++;
         allocations.add(allocation.allocationId);
         names.add(allocation.installationIdentity);
-      } else if (e.action !== 'paper-import') {
+      } else if (e.action !== 'paper-import' && e.action !== 'report') {
         const prior = latestAllocation.get(allocation.allocationId);
         if (
           !prior ||
@@ -407,7 +453,7 @@ export async function requireCurrentHistory(
         )
           uncertain();
       }
-      if (allocation) latestAllocation.set(allocation.allocationId, e);
+      if (allocation && e.action !== 'report') latestAllocation.set(allocation.allocationId, e);
       if (e.receipt && e.receipt.payload.continuity.cHighWater !== highWater) uncertain();
       operations.add(e.operationId);
       ids.add(e.eventId);
@@ -496,6 +542,8 @@ export async function appendEvent(
   digest(event.previousDigest);
   timestamp(event.recordedAt);
   const paper = event.action === 'paper-import';
+  const report = event.action === 'report';
+  if (report) reportValue(a, event as unknown as Record<string, unknown>, scope);
   const reservation = event.action === 'reserve';
   const request = reservation
     ? validateReserve(event.request)
@@ -505,16 +553,23 @@ export async function appendEvent(
         ? validateAbandon(event.request)
         : paper
           ? validatePaperHistory(event.request)
-          : null;
-  const allocation = paper ? null : validateAllocation(event.allocation),
-    binding = paper ? null : validateBinding(event.binding);
+          : report
+            ? historicalFiscalReport(
+                event.request,
+                a.verification.machine,
+                Date.parse(event.recordedAt),
+              )
+            : null;
+  const allocation =
+      paper || (report && event.allocation === null) ? null : validateAllocation(event.allocation),
+    binding = paper || (report && event.binding === null) ? null : validateBinding(event.binding);
   if (
     !request ||
     !same(event.scope, scope) ||
     request.operationId !== event.operationId ||
     event.allocationId !== (allocation?.allocationId ?? null) ||
-    (!paper && !same(binding, (request as import('./types.ts').ReserveInput).binding)) ||
-    event.requestDigest !== requestDigest(request)
+    (!paper && !report && !same(binding, (request as import('./types.ts').ReserveInput).binding)) ||
+    event.requestDigest !== requestDigest(report ? event.request : request)
   )
     throw new FiscalAllocationError('invalid_input');
   if (paper) {
@@ -542,6 +597,7 @@ export async function appendEvent(
       throw new FiscalAllocationError('invalid_input');
   } else if (
     !paper &&
+    !report &&
     (request as import('./types.ts').ConsumeInput).allocationId !== allocation!.allocationId
   )
     throw new FiscalAllocationError('invalid_input');
@@ -727,9 +783,14 @@ export async function projectHistory(
       allocation_id: e.allocationId,
       event: e,
       result:
-        e.action === 'paper-import'
-          ? paperResult(e.request as import('./types.ts').PaperHistoryInput)
-          : e.receipt,
+        e.action === 'report'
+          ? reportResult(
+              history.events.filter((prior) => BigInt(prior.sequence) < BigInt(e.sequence)),
+              readFiscalReport(e.request).body,
+            )
+          : e.action === 'paper-import'
+            ? paperResult(e.request as import('./types.ts').PaperHistoryInput)
+            : e.receipt,
     };
     await client.query(
       'INSERT INTO fiscal_registry_events(event_id,taxpayer_nif,software_id,environment,sequence,operation_id,action,request_digest,allocation_id,event,result) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT DO NOTHING',

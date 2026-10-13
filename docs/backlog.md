@@ -132,7 +132,7 @@ remains a separate exchange requiring both Cloud and local administrator proof.
 ## Fiscal allocation registry
 
 The [shared registry plan](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md)
-is scheduled for the Cloud service. On the current implementation branch, the
+defines the implemented Cloud service. The
 [contract and storage stage](fiscal-allocation-registry.md) defines strict signed
 receipts, complete series and binding snapshots, separate paper custody trust,
 explicit unavailable capabilities and append-only migration 038. Local tests
@@ -153,8 +153,15 @@ pages; and monotonic signed S/P imports with complete venue-transfer chains. Loc
 PostgreSQL tests cover independent authenticated workers, authority lost during a
 wait, omitted full series, ended entitlement with retained reads, old uploads,
 forged or consumed transfers, partial transfers and matching exact retries.
-Actual account and machine HTTP routes, lost-reply reconciliation and the
-whole-branch review/CI remain open on this branch. The phone
+Account HTTP routes require a full session, CSRF and current venue authority;
+shared PostgreSQL limits protect account and authorized namespace budgets. A
+durable routing hint recovers the exact outside receipt after a first-projection
+rollback. Machine reports verify the current installation key and active lease
+under revocation locks, retain exact retry results and record matching or
+conflicting paper evidence without activation or name issuance. Real listener
+tests exercise factor challenges, shared limits, revocation and expiry waits,
+discarded TCP replies, independent authority restart and failed PostgreSQL commits.
+The phone
 journey and Waitron adapter are separate dependent items. Production continuity
 storage, taxpayer custody and operator attribution, subscription policy and the
 signing-key custodian remain owner enablement gates; no production defaults are

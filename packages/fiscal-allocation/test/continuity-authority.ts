@@ -190,7 +190,7 @@ function append(claim: ContinuityClaim) {
     throw Object.assign(Error(), { code: 'invalid_input' });
   if (e.action === 'paper-import') {
     checkPaperProgress(state.events, e.request as import('../src/types.ts').PaperHistoryInput);
-  } else if (e.action !== 'reserve') {
+  } else if (e.action !== 'reserve' && e.action !== 'report') {
     const prior = state.events.filter((x) => x.allocationId === e.allocationId).at(-1);
     if (
       !prior ||

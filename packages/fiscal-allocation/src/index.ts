@@ -17,3 +17,9 @@ export {
 } from './validation.ts';
 
 export { FiscalAllocationStore } from './store.ts';
+export {
+  verifyFiscalReport,
+  readFiscalReport,
+  authenticateFiscalReport,
+  reportFiscalAllocation,
+} from './machine-proof.ts';

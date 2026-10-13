@@ -86,6 +86,10 @@ export interface ContinuityAuthority {
     readonly policy: RegistryPolicy;
     readonly paperTrust?: PaperTrust;
     readonly paperHistoryTrust?: ReadonlyMap<string, PaperTrust>;
+    readonly machine?: {
+      readonly origin: string;
+      readonly leaseTrust: ReadonlyMap<string, string>;
+    };
   };
   current(scope: Scope, nonce: string): Promise<ContinuityWitness>;
   claim(input: ContinuityClaim): Promise<ContinuityResult>;
@@ -101,6 +105,10 @@ export interface RegistryOptions {
   readonly paperTrust?: PaperTrust | null;
   readonly paperHistoryTrust?: ReadonlyMap<string, PaperTrust>;
   readonly policy?: RegistryPolicy | null;
+  readonly machine?: {
+    readonly origin: string;
+    readonly leaseTrust: ReadonlyMap<string, string>;
+  } | null;
 }
 export function requireCapabilities(options: RegistryOptions): Readonly<{
   entitlement: Entitlement;

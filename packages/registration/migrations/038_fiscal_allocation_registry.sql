@@ -79,3 +79,16 @@ CREATE TRIGGER fiscal_paper_immutable BEFORE UPDATE OR DELETE ON fiscal_registry
  FOR EACH ROW EXECUTE FUNCTION reject_fiscal_registry_mutation();
 CREATE TRIGGER fiscal_paper_no_truncate BEFORE TRUNCATE ON fiscal_registry_paper_events
  FOR EACH STATEMENT EXECUTE FUNCTION reject_fiscal_registry_mutation();
+-- This routing hint commits before the outside append; it cannot confer a claim or currentness.
+CREATE TABLE fiscal_registry_operation_routes (
+ operation_id uuid PRIMARY KEY,
+ venue_id uuid NOT NULL REFERENCES venues(id),
+ account_id uuid NOT NULL REFERENCES cloud_accounts(id),
+ scope jsonb NOT NULL CHECK(jsonb_typeof(scope)='object'),
+ action text NOT NULL CHECK(action IN ('reserve','consume','abandon','paper-import')),
+ request_digest text NOT NULL CHECK(request_digest ~ '^[0-9a-f]{64}$')
+);
+CREATE TRIGGER fiscal_routes_immutable BEFORE UPDATE OR DELETE ON fiscal_registry_operation_routes
+ FOR EACH ROW EXECUTE FUNCTION reject_fiscal_registry_mutation();
+CREATE TRIGGER fiscal_routes_no_truncate BEFORE TRUNCATE ON fiscal_registry_operation_routes
+ FOR EACH STATEMENT EXECUTE FUNCTION reject_fiscal_registry_mutation();

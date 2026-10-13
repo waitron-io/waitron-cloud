@@ -20,6 +20,7 @@ const tables = [
   'fiscal_registry_allocations',
   'fiscal_registry_events',
   'fiscal_registry_paper_events',
+  'fiscal_registry_operation_routes',
 ];
 async function oldState(pool: Pool) {
   const result: Record<string, unknown> = {};
@@ -161,6 +162,21 @@ test('runtime cannot update delete or truncate permanent names events or paper f
       `INSERT INTO fiscal_registry_paper_events(event_id,taxpayer_nif,software_id,environment,custodian_id,register_revision,block_digest,event_digest,fact) VALUES($1,'89890001K','WT','preproduction','custodian',1,$2,$3,$4)`,
       [randomUUID(), 'c'.repeat(64), 'd'.repeat(64), { fixture: 'immutable-paper-fact' }],
     );
+    await f.pool.query(
+      'INSERT INTO fiscal_registry_operation_routes(operation_id,venue_id,account_id,scope,action,request_digest) VALUES($1,$2,$3,$4,$5,$6)',
+      [
+        randomUUID(),
+        venue,
+        v.account,
+        {
+          taxpayerNif: '89890001K',
+          softwareId: 'WT',
+          environment: 'preproduction',
+        },
+        'reserve',
+        'e'.repeat(64),
+      ],
+    );
     const before = await Promise.all(
       tables.map(
         async (name) => (await f.pool.query(`SELECT to_jsonb(t) AS row FROM ${name} t`)).rows,
@@ -176,7 +192,7 @@ test('runtime cannot update delete or truncate permanent names events or paper f
       await client.query(`SET ROLE ${role}`);
       for (const name of tables)
         for (const sql of [
-          `UPDATE ${name} SET ${name === 'fiscal_registry_allocations' ? 'custody_version' : name === 'fiscal_registry_events' ? 'action' : 'custodian_id'}=${name === 'fiscal_registry_events' ? "'consume'" : "'changed'"}`,
+          `UPDATE ${name} SET ${name === 'fiscal_registry_allocations' ? 'custody_version' : name === 'fiscal_registry_events' || name === 'fiscal_registry_operation_routes' ? 'action' : 'custodian_id'}=${name === 'fiscal_registry_events' || name === 'fiscal_registry_operation_routes' ? "'consume'" : "'changed'"}`,
           `DELETE FROM ${name}`,
           `TRUNCATE ${name} CASCADE`,
         ])
@@ -223,7 +239,9 @@ test('namespace uniqueness crosses organisations and retained rows prevent venue
         await f.pool.query('SELECT venue_id FROM installations WHERE id=$1', [b.installation])
       ).rows[0].venue_id;
     const id = await allocation(f.pool, a.account, venue);
-    await assert.rejects(allocation(f.pool, b.account, other), { code: '23505' });
+    await assert.rejects(allocation(f.pool, b.account, other), {
+      code: '23505',
+    });
     assert.equal(
       (
         await f.pool.query(
@@ -265,7 +283,9 @@ test('SQL refuses out-of-range namespace counters and invalid or mismatched iden
       'C1000000',
       'E8ZZZZZZZZZZZZZZZZZZZZZZZZZ',
     ])
-      await assert.rejects(allocation(f.pool, v.account, venue, identity), { code: '23514' });
+      await assert.rejects(allocation(f.pool, v.account, venue, identity), {
+        code: '23514',
+      });
     const id = randomUUID();
     await assert.rejects(
       f.pool.query(
