@@ -822,7 +822,14 @@ notifications separately.
   telemetry, with AWS and Google implementations where needed. The local SeaweedFS
   storage contract now covers venue-scoped access, live key rotation, issued-credential
   expiry, versioning, interrupted uploads and concurrent conditional create/replace.
-  Repeat those checks with provider-native credentials against each selected live store.
+  The [Stockholm AWS sandbox rehearsal](aws-storage-rehearsal.md) now exercises those
+  storage boundaries with real assumed-role credentials, PostgreSQL-backed archive
+  publication/key rotation and real Waitron/Litestream restores. New S3 buckets need
+  explicit SSE-C enablement for the existing stream format. Cloud must extend its
+  managed-stream credential contract to carry and renew session tokens, coordinated
+  with Waitron, before using assumed roles through that adapter. Repeat the deployment
+  qualification in Spain and separately for Google; production custody, credential
+  delivery, web identity, retention, monitoring and activation remain open.
 - **Operations.** The [local operations status](operations-status.md) now combines
   control API liveness/readiness, queued work, monitoring, gateway, snapshot and usage
   evidence into versioned JSON, readiness exit states and low-cardinality Prometheus
@@ -1191,10 +1198,17 @@ The [ownership map](documentation-ownership.md) records what remains in Waitron.
   exactly one writer in eight-way create-only and compare-and-swap races, refuses stale
   replacements, retains accepted versions, isolates venue credentials, revokes a rotated
   key, refuses an expired issued credential and commits no partial interrupted upload.
-  Run the same conditional-write, credential and recovery checks against the actual AWS
-  and Google storage targets selected. The existing
+  A [one-day AWS Stockholm sandbox rehearsal](aws-storage-rehearsal.md) now proves
+  real S3 conditional-write races, stale-write refusal, version retention, two-prefix
+  isolation, role-session revocation/expiry and interrupted multipart cleanup. It
+  restores an older-key retained archive through PostgreSQL-backed Cloud verification
+  and Waitron, and a continuous Waitron database through Litestream. Its receipt
+  records the conservative US$1.37 pretax estimate, cleanup and scheduled KMS deletion;
+  charges were not read. This is no Spain-location or production-deployment claim.
+  Qualify the selected Spain deployment, managed credential delivery/renewal,
+  web identity and recovery journey; run a separate Google proof. The existing
   [prototype results](https://github.com/clintongormley/waitron/blob/830cf71fe854c7aa0b0d8c95078d3fe49ca05a10/docs/research/2026-09-16-sqlite-failover-prototype.md)
-  concern MinIO. They do not establish either production provider's behaviour.
+  concern MinIO and remain historical evidence.
 - **Promoted cloud generation and current pointer.** The local proof follows a signed
   `current.json` generation through Waitron's cold restore. It does not activate the
   replacement or prove that the replacement begins streaming a new generation. Add

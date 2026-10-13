@@ -1,0 +1,426 @@
+{
+  "version": 1,
+  "status": "completed-with-key-deletion-scheduled",
+  "scope": {
+    "provider": "aws",
+    "account": "399258987100",
+    "region": "eu-north-1",
+    "syntheticOnly": true,
+    "productionDeployment": false,
+    "activation": "not-performed",
+    "cloudWebIdentity": "not-exercised",
+    "spainLocationClaim": false
+  },
+  "cloudHead": "8b59faa8188a9b12c43e87ec370de8f0dc1c16eb",
+  "waitronHead": "441942398757c884af496f4166047e0ecbcfe2b2",
+  "estimatedBeforeCreationAt": "2026-10-13T22:45:07.356190+00:00",
+  "resources": {
+    "bucket": "waitron-rehearsal-cloud-d61-b490f6f984",
+    "roles": [
+      "waitron-rehearsal-cloud-d61-b490f6f984-a",
+      "waitron-rehearsal-cloud-d61-b490f6f984-b"
+    ],
+    "kmsKeyId": "c5169467-1f27-46d9-b8f9-4010cc3d95c7",
+    "kmsKeyArn": "arn:aws:kms:eu-north-1:399258987100:key/c5169467-1f27-46d9-b8f9-4010cc3d95c7",
+    "kmsTag": {
+      "project": "waitron-rehearsal"
+    },
+    "permissionsBoundary": "arn:aws:iam::399258987100:policy/lane-d-boundary",
+    "publicAccess": {
+      "PublicAccessBlockConfiguration": {
+        "BlockPublicAcls": true,
+        "IgnorePublicAcls": true,
+        "BlockPublicPolicy": true,
+        "RestrictPublicBuckets": true
+      }
+    },
+    "versioning": {
+      "Status": "Enabled"
+    }
+  },
+  "estimate": {
+    "currency": "USD",
+    "beforeTax": true,
+    "s3MonthlyStorageGB": 2,
+    "s3Writes": 10000,
+    "s3Reads": 10000,
+    "s3InternetDownloadGB": 2,
+    "s3USD": 0.28,
+    "kmsKeysForFullMonth": 1,
+    "kmsSymmetricRequests": 30000,
+    "kmsUSD": 1.09,
+    "totalUSD": 1.37,
+    "freeTierCredit": false,
+    "calculator": "https://calculator.aws/",
+    "billingRead": false,
+    "billingWaivedByOwner": true,
+    "actualCharges": "not-read; estimate only"
+  },
+  "limits": {
+    "durationHours": 24,
+    "storedVersionBytes": 1073741824,
+    "objectsAndVersions": 1000,
+    "s3Requests": 10000,
+    "kmsRequests": 10000,
+    "accountWideRequestMeter": false
+  },
+  "policies": [
+    {
+      "RoleName": "waitron-rehearsal-cloud-d61-b490f6f984-a",
+      "PolicyName": "waitron-rehearsal-venue",
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "s3:GetObject",
+              "s3:GetObjectVersion",
+              "s3:PutObject",
+              "s3:DeleteObject",
+              "s3:AbortMultipartUpload",
+              "s3:ListMultipartUploadParts"
+            ],
+            "Resource": "arn:aws:s3:::waitron-rehearsal-cloud-d61-b490f6f984/venue-a/*",
+            "Condition": {
+              "DateLessThan": {
+                "aws:CurrentTime": "2026-10-14T22:46:51.593378+00:00"
+              }
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "s3:ListBucket",
+              "s3:ListBucketVersions"
+            ],
+            "Resource": "arn:aws:s3:::waitron-rehearsal-cloud-d61-b490f6f984",
+            "Condition": {
+              "StringLike": {
+                "s3:prefix": "venue-a/*"
+              },
+              "DateLessThan": {
+                "aws:CurrentTime": "2026-10-14T22:46:51.593853+00:00"
+              }
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "kms:GenerateDataKey",
+              "kms:Decrypt",
+              "kms:Encrypt",
+              "kms:DescribeKey"
+            ],
+            "Resource": "arn:aws:kms:eu-north-1:399258987100:key/c5169467-1f27-46d9-b8f9-4010cc3d95c7",
+            "Condition": {
+              "StringEquals": {
+                "kms:ViaService": "s3.eu-north-1.amazonaws.com"
+              },
+              "StringLike": {
+                "kms:EncryptionContext:aws:s3:arn": "arn:aws:s3:::waitron-rehearsal-cloud-d61-b490f6f984/venue-a/*"
+              },
+              "DateLessThan": {
+                "aws:CurrentTime": "2026-10-14T22:46:51.593857+00:00"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "RoleName": "waitron-rehearsal-cloud-d61-b490f6f984-b",
+      "PolicyName": "waitron-rehearsal-venue",
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "s3:GetObject",
+              "s3:GetObjectVersion",
+              "s3:PutObject",
+              "s3:DeleteObject",
+              "s3:AbortMultipartUpload",
+              "s3:ListMultipartUploadParts"
+            ],
+            "Resource": "arn:aws:s3:::waitron-rehearsal-cloud-d61-b490f6f984/venue-b/*",
+            "Condition": {
+              "DateLessThan": {
+                "aws:CurrentTime": "2026-10-14T22:46:53.451199+00:00"
+              }
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "s3:ListBucket",
+              "s3:ListBucketVersions"
+            ],
+            "Resource": "arn:aws:s3:::waitron-rehearsal-cloud-d61-b490f6f984",
+            "Condition": {
+              "StringLike": {
+                "s3:prefix": "venue-b/*"
+              },
+              "DateLessThan": {
+                "aws:CurrentTime": "2026-10-14T22:46:53.451240+00:00"
+              }
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "kms:GenerateDataKey",
+              "kms:Decrypt",
+              "kms:Encrypt",
+              "kms:DescribeKey"
+            ],
+            "Resource": "arn:aws:kms:eu-north-1:399258987100:key/c5169467-1f27-46d9-b8f9-4010cc3d95c7",
+            "Condition": {
+              "StringEquals": {
+                "kms:ViaService": "s3.eu-north-1.amazonaws.com"
+              },
+              "StringLike": {
+                "kms:EncryptionContext:aws:s3:arn": "arn:aws:s3:::waitron-rehearsal-cloud-d61-b490f6f984/venue-b/*"
+              },
+              "DateLessThan": {
+                "aws:CurrentTime": "2026-10-14T22:46:53.451243+00:00"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "encryption": {
+    "newBucketDefault": {
+      "ServerSideEncryptionConfiguration": {
+        "Rules": [
+          {
+            "ApplyServerSideEncryptionByDefault": {
+              "SSEAlgorithm": "aws:kms",
+              "KMSMasterKeyID": "arn:aws:kms:eu-north-1:399258987100:key/c5169467-1f27-46d9-b8f9-4010cc3d95c7"
+            },
+            "BucketKeyEnabled": false,
+            "BlockedEncryptionTypes": {
+              "EncryptionType": [
+                "SSE-C"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "observedSseCRefusal": {
+      "at": "2026-10-13T22:48:11.167Z",
+      "name": "AccessDenied",
+      "message": "User: arn:aws:sts::399258987100:assumed-role/waitron-rehearsal-cloud-d61-b490f6f984-a/d61-encryption is not authorized to perform: s3:PutObject on resource: \"arn:aws:s3:::waitron-rehearsal-cloud-d61-b490f6f984/venue-a/sse-c-probe\" because this bucket has blocked upload requests that specify Server Side Encryption with Customer provided keys (SSE-C). Please specify a different server-side encryption type."
+    },
+    "explicitRehearsalSetting": {
+      "ServerSideEncryptionConfiguration": {
+        "Rules": [
+          {
+            "ApplyServerSideEncryptionByDefault": {
+              "SSEAlgorithm": "aws:kms",
+              "KMSMasterKeyID": "arn:aws:kms:eu-north-1:399258987100:key/c5169467-1f27-46d9-b8f9-4010cc3d95c7"
+            },
+            "BucketKeyEnabled": false,
+            "BlockedEncryptionTypes": {
+              "EncryptionType": [
+                "NONE"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "storage": {
+    "at": "2026-10-13T22:47:52.570Z",
+    "bucket": "waitron-rehearsal-cloud-d61-b490f6f984",
+    "region": "eu-north-1",
+    "requests": 59,
+    "uploadedBytes": 5243061,
+    "checks": [
+      {
+        "name": "both prefixes permit own encrypted read/write/list and refuse cross-prefix read/write/delete/list/versions and unscoped listing"
+      },
+      {
+        "name": "eight-way create and CAS each admit one writer; stale writer denied; accepted versions survive delete marker",
+        "createWinner": 0,
+        "casWinner": 3,
+        "acceptedVersions": [
+          "TVVCMXDNhRP3uqqa_GWNk5ckhiCCy_JF",
+          "fO5YGBktcl56mi4A6GdJT.kIeO3Ti0nQ"
+        ]
+      },
+      {
+        "name": "interrupted multipart upload publishes no object and abort removes its stored part"
+      },
+      {
+        "name": "revocation denies existing role session and a newly issued session works",
+        "cutoff": "2026-10-13T22:47:39.938Z"
+      }
+    ]
+  },
+  "restores": {
+    "cloudHead": "8b59faa8188a9b12c43e87ec370de8f0dc1c16eb",
+    "waitronHead": "441942398757c884af496f4166047e0ecbcfe2b2",
+    "region": "eu-north-1",
+    "bucket": "waitron-rehearsal-cloud-d61-b490f6f984",
+    "checks": [
+      {
+        "name": "real Waitron retained snapshot restores after application backup-key rotation; wrong active key leaves target absent",
+        "archiveBytes": 3402373,
+        "digest": "550105eb6ded8d3d0d15720c4953dccdce6f4609155dad1771d4fb88479073c7",
+        "oldKeyVersion": 1,
+        "activeKeyVersion": 2,
+        "postgresCatalogueVerified": true,
+        "wrongKeyRefusal": "recovery.passphrase_invalid",
+        "renewedOldCaptureVersion": 1,
+        "newCaptureVersion": 2,
+        "networkDenied": true,
+        "integrityOk": true,
+        "hooks": [
+          "fiscal-verifactu"
+        ],
+        "cloudCredentialPresent": false,
+        "staffKeyPresent": false
+      },
+      {
+        "name": "real Litestream continuous generation from Waitron database restores with exact changed venue and SQLite integrity",
+        "version": "0.5.17",
+        "generation": "venue-a/streams/2db39703-af58-402b-a2b3-ac768ae4b931",
+        "ltxCount": 4,
+        "uploadedBytes": 1085311,
+        "restoreMs": 2515.393458999999,
+        "missingKeyDenied": true,
+        "oldWrongKeyDenied": true,
+        "integrityOk": true,
+        "exactVenueMatched": true,
+        "postStartUpdateReplicated": true,
+        "activation": "not-performed"
+      }
+    ]
+  },
+  "managedStreamTokenBoundary": {
+    "at": "2026-10-13T22:54:34.350Z",
+    "sessionTokenShapeRejected": "backup.storage_grant",
+    "noBindingAfterRefusal": true,
+    "twoFieldControlAccepted": true,
+    "credentialValues": "synthetic only; no AWS call",
+    "productionCodeUnchanged": true
+  },
+  "preCleanup": {
+    "at": "2026-10-13T23:01:16.884223+00:00",
+    "bucket": "waitron-rehearsal-cloud-d61-b490f6f984",
+    "versionCount": 21,
+    "deleteMarkerCount": 4,
+    "storedVersionBytes": 26707702,
+    "incompleteUploads": []
+  },
+  "allowedRegionKeyInventory": {
+    "eu-north-1": {
+      "ownedKeyMatches": [
+        {
+          "KeyId": "c5169467-1f27-46d9-b8f9-4010cc3d95c7",
+          "KeyArn": "arn:aws:kms:eu-north-1:399258987100:key/c5169467-1f27-46d9-b8f9-4010cc3d95c7"
+        }
+      ],
+      "totalKeys": 1
+    },
+    "eu-south-2": {
+      "exit": 254,
+      "error": "aws: [ERROR]: An error occurred (UnrecognizedClientException) when calling the ListKeys operation: The security token included in the request is invalid."
+    }
+  },
+  "localFixtureCleanup": {
+    "allChildrenExited": true,
+    "allRootsRemoved": true
+  },
+  "probeArtifacts": [
+    {
+      "name": "storage-proof.mjs",
+      "sha256": "30cb983b1f06299d978adb9e41492bb8f275ecf939bef28db8ad86bdbc79ccbd"
+    },
+    {
+      "name": "restore-proof.mjs",
+      "sha256": "cb1bc8b6c2f6053e0c889a77b61f1b3f05ba4ccae60a9199bcd88d1b5b24ff3b"
+    },
+    {
+      "name": "managed-token-probe.mjs",
+      "sha256": "bc3fbecc9d15458c6ca6da9e5224a6d6e19bf23163f660864e31c251f5b5771b"
+    }
+  ],
+  "expiry": {
+    "expiresAt": "2026-10-13T23:01:51+00:00",
+    "checkedAt": "2026-10-13T23:01:54.180Z",
+    "before": true,
+    "after": {
+      "name": "ExpiredToken",
+      "status": 400
+    }
+  },
+  "cleanup": {
+    "startedAt": "2026-10-13T23:01:55.613625+00:00",
+    "bucket": "waitron-rehearsal-cloud-d61-b490f6f984",
+    "abortedUploads": 0,
+    "deletedVersions": 21,
+    "deletedMarkers": 4,
+    "deletedRoles": [
+      {
+        "name": "waitron-rehearsal-cloud-d61-b490f6f984-a",
+        "inlinePoliciesRemoved": [
+          "waitron-rehearsal-revoke",
+          "waitron-rehearsal-venue"
+        ],
+        "absenceVerified": "NoSuchEntity"
+      },
+      {
+        "name": "waitron-rehearsal-cloud-d61-b490f6f984-b",
+        "inlinePoliciesRemoved": [
+          "waitron-rehearsal-venue"
+        ],
+        "absenceVerified": "NoSuchEntity"
+      }
+    ],
+    "createdManagedPolicies": 0,
+    "emptyBucketVerified": true,
+    "bucketAbsent": true,
+    "remainingBucketNames": [],
+    "kms": {
+      "keyId": "c5169467-1f27-46d9-b8f9-4010cc3d95c7",
+      "state": "PendingDeletion",
+      "deletionDate": "2026-10-21T01:02:09.371000+02:00",
+      "pendingWindowDays": 7,
+      "scheduled": {
+        "KeyId": "arn:aws:kms:eu-north-1:399258987100:key/c5169467-1f27-46d9-b8f9-4010cc3d95c7",
+        "DeletionDate": "2026-10-21T01:02:09.371000+02:00",
+        "KeyState": "PendingDeletion",
+        "PendingWindowInDays": 7
+      },
+      "finalDeletionVerified": false
+    },
+    "finishedAt": "2026-10-13T23:02:09.767618+00:00"
+  },
+  "remainingQualification": [
+    "Spain deployment and region access",
+    "production managed-stream session-token delivery and renewal across Cloud/Waitron",
+    "deployed web-identity exchange",
+    "production key custody, retention and monitoring",
+    "Cloud guided recovery, final-write handover and Waitron activation",
+    "Google provider proof"
+  ],
+  "tools": {
+    "node": "v26.7.0",
+    "awsCli": "aws-cli/2.37.12 Python/3.14.8 Darwin/25.6.0 source/arm64",
+    "litestream": "0.5.17",
+    "awsS3Sdk": "3.1136.0"
+  },
+  "probeCommands": [
+    "node <retained-probes>/storage-proof.mjs",
+    "node scripts/test-postgres.mjs exec node <retained-probes>/restore-proof.mjs",
+    "node scripts/test-postgres.mjs exec node <retained-probes>/managed-token-probe.mjs"
+  ],
+  "probeSourceRetention": "Operator retains the probe programs and terminal receipts outside the product repository; this document records a measured run rather than installing a live-provider CI job."
+}
