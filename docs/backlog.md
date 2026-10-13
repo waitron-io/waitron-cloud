@@ -388,19 +388,19 @@ notifications separately.
   so its exact failure cause remains unproved; use the named case on a future failure.
 
 
-  **Open: one-second relay budget fixture.** The design-only
-  [merge run 38415818412](https://github.com/waitron-io/waitron-cloud/actions/runs/38415818412)
-  on `eee184da4aad2eeeacfe27c0d4e489b580410ef9` failed registration at
-  `test/relay-bounds.test.ts:168`. Its first submission raised `relay_unavailable`
-  at `src/relay-messages.ts:78`, the check refusing a budget window that expires
-  before admission commits. The test configures a one-second window. An unchanged
-  local focused run passes; adding a real PostgreSQL 1.1-second insert delay reproduces
-  the same guard failure, and restoring the fixture passes. All assertions and production
-  guards stay unchanged in that probe. CI did not record window timestamps, so its
-  exact cause remains unproved. Before monitoring implementation, add a permanent
-  controlled regression and correct the fixture while preserving key retirement,
-  exact-retry counts and the separate real rollover-refusal test. Keep the production
-  expiry guard and every existing assertion. No unchanged CI rerun is a fix.
+  **One-second relay budget fixture.** The key-retirement and rollover tests now
+  retry setup admissions at most ten times when the budget window ends before
+  admission commits. They keep the one-second window and every existing assertion.
+  A permanent PostgreSQL 1.1-second first-insert delay proves setup recovers only
+  after the expired attempt rolls back; the complete relay-bounds file passes 34
+  checks. Removing the production expiry guard in a disposable checkout fails both
+  the slow-insert rollback assertion and the original rollover-refusal assertion.
+  Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+  node --test test/relay-bounds.test.ts` for these checks.
+  The design-only [merge run 38415818412](https://github.com/waitron-io/waitron-cloud/actions/runs/38415818412)
+  failed at that expiry guard during first admission. A controlled delay reproduces
+  the failure, but CI did not record window timestamps, so its exact cause remains
+  unproved. Production guards and timing policies are unchanged.
 
 - **Shared UI.** [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519)
   implements `@waitron/ui-core` in Waitron with seven account controls, theme tokens
