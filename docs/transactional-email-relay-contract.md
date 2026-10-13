@@ -535,6 +535,9 @@ SQL digest before acting; it neither migrates nor starts delivery. A missing row
 incompatible release or failed database operation exits with a fixed error and no
 success JSON. Status reports only the stored flag. It does not report readiness or
 enable relay configuration. Ordinary startup still leaves relay routes and delivery off.
+If a command fails or its reply is lost, use `--status` to check the stored flag
+before deciding what to do next. A failed acknowledgement does not prove that its
+database write rolled back. You can repeat stop or resume without changing their effect.
 
 Stop waits for admission and worker transactions already holding the control lock
 to commit or roll back. Its success line acknowledges the committed stop. From that
@@ -542,6 +545,10 @@ point, new message IDs receive `403 relay_disabled` without relay spend, and que
 work cannot acquire a claim or enter sending. Exact retries, status and cancellation
 still check current authority. A worker stopped between claim and handoff releases
 only its own queued claim, preserving content, attempts and counts.
+
+The worker also leaves expired queued messages unchanged while stopped. An
+authenticated status or cancellation request still enforces expiry and clears
+their ciphertext. Resuming lets the worker process queued expiry again.
 
 Sending is the point at which the worker commits its intent to hand mail to SMTP.
 If that commit happens first, its SMTP connection may begin after stop succeeds.
