@@ -246,8 +246,10 @@ venue does not subscribe to remote access or backups.
   and [local acceptance commands](transactional-email-relay-contract.md#exercise-shared-admission-bounds).
   Choose production budgets and recipient-key custody before enablement; normal
   startup still has no relay configuration. The immutable local policy deliberately
-  refuses mismatched limits rather than resetting budgets. Policy replacement and
-  the operator stop switch remain separate work. Measure admission-lock contention
+  refuses mismatched limits rather than resetting budgets. Policy replacement remains separate work. The
+  [reviewed operator-stop design](superpowers/specs/2026-10-13-relay-operator-stop-design.md)
+  and [implementation plan](superpowers/plans/2026-10-13-relay-operator-stop.md)
+  cover durable local control; implementation and runtime proofs remain open. Measure admission-lock contention
   before production enablement: status, cancellation and retries share that lock.
   Separately queue Waitron's durable caller/status work before a joint
   local proof.
