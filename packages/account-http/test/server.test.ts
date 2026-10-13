@@ -147,19 +147,21 @@ function cli(overrides: NodeJS.ProcessEnv = {}) {
     assert.equal(child.exitCode, null, stderr); return JSON.parse(stdout.trim()).port as number;
   }, async stop() {child.kill('SIGTERM'); return exited;}};
 }
-test('CLI fails closed with fixed diagnostics for invalid settings and absent migration', async () => {
+test('CLI fails closed with fixed diagnostics for invalid settings', async () => {
   for (const overrides of [{CLOUD_HTTP_RATE_KEY: ''}, {CLOUD_EMAIL_KEYS: 'private-secret'}, {CLOUD_HTTP_TRUSTED_PROXY_IPS: '*'},
     {NODE_ENV: 'production'}, {DATABASE_URL: ''}, {CLOUD_HTTP_PORT: '-1'}, {CLOUD_PORTAL_ASSETS_DIR: '/missing-cloud-portal-build'}]) {
     const outcome = await cli(overrides).exited;
     assert.equal(outcome.code, 1); assert.equal(outcome.stdout, '');
     assert.equal(outcome.stderr, 'Account server failed; check database, migrations and configuration\n');
   }
-  for (const migration of migrationNames.slice(6)) {
+});
+for (const migration of migrationNames.slice(6)) {
+test(`CLI fails closed when migration ${migration} is absent`, async () => {
   const saved = await db.pool.query('DELETE FROM schema_migrations WHERE name = $1 RETURNING *', [migration]);
   try {assert.equal((await cli().exited).code, 1); assert.equal((await db.pool.query('SELECT count(*) FROM schema_migrations WHERE name = $1', [migration])).rows[0].count, '0');}
   finally {await db.pool.query('INSERT INTO schema_migrations(name, digest) VALUES ($1, $2)', [saved.rows[0].name, saved.rows[0].digest]);}
-  }
 });
+}
 test('CLI rejects malformed installation issuer trust without exposing its value',async()=>{
  const privateKey=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url');
  for(const overrides of [{CLOUD_INSTALLATION_ISSUER_KEY:privateKey,CLOUD_INSTALLATION_TRUSTED_KEYS:'["private-trust-sentinel"]'},{CLOUD_INSTALLATION_ISSUER_KEY:'',CLOUD_INSTALLATION_TRUSTED_KEYS:'[]'}]){

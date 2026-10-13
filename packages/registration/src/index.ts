@@ -273,6 +273,7 @@ export {pairingCodeKeysFromEnv,upgradePairingCodes,type PairingCodeKeys} from '.
 export {RelayMessages,type RelayAdmissionConfig,type RelayAction} from './relay-messages.ts';
 export {RelayMessageError,RelayKeys} from './relay-payload.ts';
 export {RelayError} from './relay-grants.ts';
+export {RelayControl, type RelayControlStatus} from './relay-control.ts';
 
 export {RelayWorker,type RelayWorkerConfig} from './relay-worker.ts';
 

@@ -1,6 +1,7 @@
 # Durable relay operator stop
 
-Status: reviewed implementation design; implementation and runtime proofs are pending. Read the
+Status: reviewed implementation design. The control schema and transaction API are
+verified locally; CLI, admission, worker and separate restore proofs remain pending. Read the
 [plan](../plans/2026-10-13-relay-operator-stop.md) alongside this design.
 
 ## Purpose and inspected boundaries

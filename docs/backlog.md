@@ -249,7 +249,13 @@ venue does not subscribe to remote access or backups.
   refuses mismatched limits rather than resetting budgets. Policy replacement remains separate work. The
   [reviewed operator-stop design](superpowers/specs/2026-10-13-relay-operator-stop-design.md)
   and [implementation plan](superpowers/plans/2026-10-13-relay-operator-stop.md)
-  cover durable local control; implementation and runtime proofs remain open. Measure admission-lock contention
+  cover durable local control. The stored flag and transaction API now pass
+  focused PostgreSQL checks for committed stop/resume, missing-state refusal and
+  shared-reader ordering. Migration 036 preserves populated release-35 account,
+  factor and relay state through concurrent/repeated upgrade and interrupted
+  rollback/retry. CLI, admission, worker and separate restore proofs remain open.
+  Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+  node --test test/relay-control.test.ts test/relay-control-migration.test.ts`. Measure admission-lock contention
   before production enablement: status, cancellation and retries share that lock.
   Separately queue Waitron's durable caller/status work before a joint
   local proof.
@@ -333,6 +339,14 @@ notifications separately.
   wait. The failed CI did not record its factor response or steps, so this is a
   reproduced failure mechanism, not proof of that run's exact cause. Both fixture
   corrections remain open; a passing rerun does not resolve them.
+  **Server-startup fixture grouping.** The plan merge's
+  [run 38375993173](https://github.com/waitron-io/waitron-cloud/actions/runs/38375993173)
+  timed out in the single server CLI settings/missing-migration test after 30 seconds.
+  Its unchanged local run takes 14.9 seconds; adding one second to each real child
+  startup reproduces that timeout. Each missing migration now has its own named test,
+  keeping all original refusal/ledger assertions and the existing 20-second child
+  and 30-second test deadlines. The controlled slow-start run passes all 31 cases. Individual startup timings were absent from CI,
+  so its exact failure cause remains unproved; use the named case on a future failure.
 
 - **Shared UI.** [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519)
   implements `@waitron/ui-core` in Waitron with seven account controls, theme tokens

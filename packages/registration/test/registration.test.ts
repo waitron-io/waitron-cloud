@@ -71,9 +71,12 @@ test('migration remains repeatable after concurrent initial application', async 
   assert.equal(legacyNames.at(-3), '031_relay_grants.sql');
   assert.equal(legacyNames.at(-2), '032_relay_messages.sql');
   assert.equal(legacyNames.at(-1), '033_relay_worker.sql');
-  assert.equal(migrationNames.length,35);
-  assert.equal(migrationNames.at(-2),'034_relay_admission_bounds.sql');
-  assert.equal(migrationNames.at(-1),'035_authenticator_factor.sql');
+  assert.deepEqual(legacyNames, migrationNames.slice(0,33));
+  assert.equal(migrationNames.slice(0,35).length,35);
+  assert.equal(migrationNames[33],'034_relay_admission_bounds.sql');
+  assert.equal(migrationNames[34],'035_authenticator_factor.sql');
+  assert.equal(migrationNames.length,36);
+  assert.equal(migrationNames.at(-1),'036_relay_operator_stop.sql');
   assert.equal(await count('schema_migrations'), migrationNames.length);
 });
 
