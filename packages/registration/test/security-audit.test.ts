@@ -1,3 +1,4 @@
+import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {after, before, beforeEach, test} from 'node:test';
@@ -19,7 +20,7 @@ let owner:string,other:string,organisation:string,foreignOrganisation:string,ven
 before(async()=>{await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);});
 after(async()=>{await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();});
 beforeEach(async()=>{
- await pool.query('TRUNCATE organisations,cloud_accounts CASCADE');
+ await resetSchema(pool);
  owner=randomUUID();other=randomUUID();organisation=randomUUID();foreignOrganisation=randomUUID();venue=randomUUID();
  await pool.query('INSERT INTO cloud_accounts(id) VALUES($1),($2)',[owner,other]);
  await pool.query('INSERT INTO organisations(id,name) VALUES($1,$2),($3,$4)',[organisation,'Owner Org',foreignOrganisation,'Foreign Org']);

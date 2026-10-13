@@ -129,6 +129,26 @@ committed writes with lost replies, session expiry, retry delays and account iso
 Next, configure live mail delivery and the deployment/account-security controls below. Pairing
 remains a separate exchange requiring both Cloud and local administrator proof.
 
+## Fiscal allocation registry
+
+The [shared registry plan](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md)
+is scheduled for the Cloud service. On the current implementation branch, the
+[contract and storage stage](fiscal-allocation-registry.md) defines strict signed
+receipts, complete series and binding snapshots, separate paper custody trust,
+explicit unavailable capabilities and append-only migration 038. Local tests
+exercise the actual fiscal validator, populated concurrent 37-to-38 upgrades,
+interrupted migration rollback, namespace uniqueness, retained runtime history
+and exact schema gates. Production authority is unavailable.
+
+Independent current history and writer exclusion, live session/custody/entitlement
+checks, monotonic paper import, actual account and machine HTTP routes, lost-reply
+reconciliation and the whole-branch review/CI remain open on this branch. The phone
+journey and Waitron adapter are separate dependent items. Production continuity
+storage, taxpayer custody and operator attribution, subscription policy and the
+signing-key custodian remain owner enablement gates; no production defaults are
+selected. Fiscal records, invoice hashes and Waitron's allocation code stay outside
+this Cloud change.
+
 ## Initial focus
 
 - Launch first in Spain on AWS. AWS documents Europe (Spain) as `eu-south-2` and
@@ -343,7 +363,7 @@ notifications separately.
 
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. CI runs type checking, each of the five
-  existing receipt suites and all eight package suites in parallel, with a
+  existing receipt suites and all workspace package suites in parallel, with a
   ten-minute limit per work job. Browser packages install Chromium with at most
   two attempts, each bounded to 120 seconds plus ten seconds to stop it. Main
   pushes use a unique concurrency group per run so a later merge cannot cancel

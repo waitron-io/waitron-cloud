@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {request as httpRequest} from 'node:http';
 import {generateKeyPairSync,randomUUID,sign} from 'node:crypto';
@@ -23,7 +24,7 @@ function machine(){const keys=generateKeyPairSync('ed25519');const c:PairingClai
 const choice=(m:ReturnType<typeof machine>)=>({requestId:m.c.requestId,code:m.c.code,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId});
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
-  await db.pool.query('TRUNCATE pairing_requests, account_rate_limits, signup_requests, email_outbox, organisations, cloud_accounts CASCADE');app=createAccountApp({pool:db.pool,outbox:db.outbox,config:settings()});
+  await resetSchema(db.pool);app=createAccountApp({pool:db.pool,outbox:db.outbox,config:settings()});
   const signup=new SignupStore(db.pool,db.outbox);await signup.request('owner@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert.ok('token' in mail);
   owner=await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Café Sol SL',countryCode:'ES'});
   const logged=await request('/api/account/login',{email:'owner@example.test',password},{origin});assert.equal(logged.status,200);

@@ -1,3 +1,4 @@
+import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {createHash, createHmac, randomUUID} from 'node:crypto';
 import {after, before, beforeEach, test} from 'node:test';
@@ -56,7 +57,7 @@ async function loginChallenge() {
 before(async () => {await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);});
 after(async () => {await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();});
 beforeEach(async () => {
-  await pool.query('TRUNCATE cloud_accounts,password_reset_requests,email_outbox CASCADE');
+  await resetSchema(pool);
   await pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[accountId]);
   await pool.query(`INSERT INTO cloud_credentials(account_id,email,password_hash,email_verified_at)
     VALUES($1,$2,$3,clock_timestamp())`,[accountId,email,await hashSecret(password)]);

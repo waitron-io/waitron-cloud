@@ -1,3 +1,4 @@
+import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import { createCipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -37,7 +38,7 @@ const row = async () => (await pool.query('SELECT * FROM email_outbox ORDER BY c
 const due = () => pool.query("UPDATE email_outbox SET available_at = clock_timestamp() - interval '1 second'");
 before(async () => { await admin.query(`CREATE SCHEMA ${schema}`); await migrate(pool); });
 after(async () => { await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end(); });
-beforeEach(async () => { delivered.length = 0; await pool.query('TRUNCATE signup_requests, email_outbox, cloud_accounts, organisations CASCADE'); });
+beforeEach(async () => { delivered.length = 0; await resetSchema(pool); });
 async function clean() { await pool.query('DELETE FROM email_outbox'); }
 
 test('rollback removes the message with its request; commit stores no plaintext token or recipient', async () => {

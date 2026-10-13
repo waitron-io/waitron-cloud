@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {createHmac, generateKeyPairSync, randomBytes, randomUUID} from 'node:crypto';
 import {after, before, beforeEach, test} from 'node:test';
@@ -30,7 +31,7 @@ function application(factor:FactorOptions={keys,policy},pool:Pool=db.pool) {
 }
 before(async()=>{db=await database();});
 after(async()=>db?.close());
-beforeEach(async()=>{await db.pool.query('TRUNCATE account_rate_limits, organisations, cloud_accounts CASCADE');app=application();});
+beforeEach(async()=>{await resetSchema(db.pool);app=application();});
 function request(path:string,body?:unknown,options:{app?:typeof app;headers?:Record<string,string>;method?:string;peer?:string;raw?:string}={}) {
   const headers=new Headers({origin,'content-type':'application/json',...options.headers});
   return (options.app??app).request(`${origin}/api/account${path}`,{method:options.method??(body===undefined&&options.raw===undefined?'GET':'POST'),headers,

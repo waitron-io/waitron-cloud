@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {after, before, beforeEach, test} from 'node:test';
@@ -15,7 +16,7 @@ const config = () => ({portalOrigin: origin, production: true, rateKey: db.rateK
 before(async () => { db = await database(); });
 after(async () => db?.close());
 beforeEach(async () => {
-  await db.pool.query('TRUNCATE account_rate_limits, organisations, cloud_accounts CASCADE');
+  await resetSchema(db.pool);
   app = createAccountApp({pool: db.pool, outbox: db.outbox, config: config()});
 });
 

@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {after,before,beforeEach,test} from 'node:test';
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
@@ -28,7 +29,7 @@ async function renew(target=id){const bytes=encodeMachine({origin,action:'renew'
 function metadata(bytes:Buffer){return {...receipt(bytes),capturedAt:new Date().toISOString(),retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}};}
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
- await db.pool.query('TRUNCATE account_rate_limits,signup_requests,email_outbox,organisations,cloud_accounts CASCADE');data.clear();grants.length=0;grantHook=async()=>{};putHook=async()=>{};
+ await resetSchema(db.pool);data.clear();grants.length=0;grantHook=async()=>{};putHook=async()=>{};
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('capture@example.test');const m=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in m);
  const owner=await signup.complete(m.token,{password:'A long enough test password',organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
  const r=new RegistrationStore(db.pool);const ids=[];

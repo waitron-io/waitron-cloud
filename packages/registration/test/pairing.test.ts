@@ -1,3 +1,4 @@
+import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
@@ -22,7 +23,7 @@ const unavailable=(p:Promise<unknown>)=>assert.rejects(p,/pairing_unavailable/);
 before(async()=>{db=await database();store=new PairingStore(db.pool);other=new PairingStore(db.secondPool);});
 after(async()=>db?.close());
 beforeEach(async()=>{
-  await db.pool.query('TRUNCATE pairing_requests, signup_requests, email_outbox, organisations, cloud_accounts CASCADE');
+  await resetSchema(db.pool);
   const signup=new SignupStore(db.pool,db.outbox);await signup.request('owner@example.test');
   const queued=(await db.pool.query('SELECT * FROM email_outbox')).rows[0];const mail=db.outbox.open(queued);assert.ok('token' in mail);
   owner=await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Café Sol SL',countryCode:'ES'});

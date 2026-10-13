@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from "node:assert/strict";
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from "node:crypto";
 import {after,before,test} from "node:test";
@@ -16,7 +17,7 @@ const origin="https://cloud.test";
 function target(){const key=generateKeyPairSync("ed25519"),id=randomUUID(),code="12345678";return {id,code,publicKey:key.publicKey.export({type:"spki",format:"der"}).toString("base64url"),request(action:"start"|"status"){const bytes=requestPayload(origin,id,action,this.publicKey,code,Date.now());return {payload:bytes.toString("base64url"),signature:sign(null,bytes,key.privateKey).toString("base64url")};},proof(action:"info"|"read"|"restored",digest=""){const bytes=recoveryPayload(origin,id,action,digest,Date.now());return {payload:bytes.toString("base64url"),signature:sign(null,bytes,key.privateKey).toString("base64url")};}};}
 function pointer(localVenueId:string,nodeId:string,key:ReturnType<typeof generateKeyPairSync>["privateKey"],generation:string,writtenAt:string){const body={venueId:localVenueId,term:2,nodeId,generation,writtenAt},message=`{"pointer":{"generation":"${generation}","nodeId":"${nodeId}","term":2,"venueId":"${localVenueId}","writtenAt":"${writtenAt}"},"purpose":"waitron.stream.pointer.v1"}`;return Buffer.from(JSON.stringify({body,signature:sign(null,Buffer.from(message),key).toString("base64")}));}
 test("continuous approval freezes fresh verified evidence and target metadata contains no authority",async()=>{
- await db.pool.query("TRUNCATE signup_requests,email_outbox,organisations,cloud_accounts CASCADE");
+ await resetSchema(db.pool);
  const email=`continuous-${randomUUID()}@example.test`,password="A long enough continuous password",signup=new SignupStore(db.pool,db.outbox);await signup.request(email);const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox")).rows[0]);assert("token" in mail);
  const owner=await signup.complete(mail.token,{password,organisationName:"Continuous",legalBusinessName:"Continuous SL",countryCode:"ES"}),session=await transaction(db.pool,client=>login(client,{email,password})),registration=new RegistrationStore(db.pool),installationKey=generateKeyPairSync("ed25519"),localVenueId=randomUUID();
  const binding={operationId:randomUUID(),installationKey:installationKey.publicKey.export({type:"spki",format:"der"}).toString("base64url"),localVenueId,environment:"test",organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId} as const;await registration.start(binding);await registration.approveCloud(binding,owner.accountId);await registration.approveLocal(binding,randomUUID());const installed=await registration.complete(binding);

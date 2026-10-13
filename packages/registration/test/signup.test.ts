@@ -1,3 +1,4 @@
+import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -34,7 +35,7 @@ async function expectCode(action: Promise<unknown>, code: string) {
 }
 before(async () => { await admin.query(`CREATE SCHEMA ${schema}`); await migrate(pool); });
 after(async () => { await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end(); });
-beforeEach(async () => { messages.length = 0; await pool.query('TRUNCATE cloud_accounts, organisations, signup_requests, email_outbox CASCADE'); });
+beforeEach(async () => { messages.length = 0; await resetSchema(pool); });
 
 test('signup sends a committed hashed token and creates nothing before email proof', async () => {
   const sender = signupAndDeliver(pool, { async sendVerification(message) {

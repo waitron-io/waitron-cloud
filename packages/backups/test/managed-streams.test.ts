@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from "node:assert/strict";
 import {
   generateKeyPairSync,
@@ -61,9 +62,7 @@ beforeEach(async () => {
   provisionWait = undefined;
   readWait = undefined;
   provisionFailure = undefined;
-  await db.pool.query(
-    "TRUNCATE signup_requests,email_outbox,organisations,cloud_accounts CASCADE",
-  );
+  await resetSchema(db.pool);
 });
 
 async function installed(label: string) {

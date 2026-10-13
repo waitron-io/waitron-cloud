@@ -1,3 +1,4 @@
+import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, randomBytes, randomUUID, sign } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
@@ -102,7 +103,7 @@ after(async () => {
   await admin.end();
 });
 beforeEach(async () => {
-  await pool.query('TRUNCATE cloud_accounts CASCADE');
+  await resetSchema(pool);
   await pool.query('INSERT INTO cloud_accounts (id) VALUES ($1)', [accountId]);
   await pool.query('INSERT INTO cloud_credentials (account_id, email, password_hash) VALUES ($1, $2, $3)',
     [accountId, 'owner@example.test', await hashSecret(password)]);

@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
@@ -71,9 +72,7 @@ beforeEach(async () => {
   failDelete = false;
   stages = 0;
   disposals = 0;
-  await db.pool.query(
-    "TRUNCATE signup_requests,email_outbox,organisations,cloud_accounts CASCADE",
-  );
+  await resetSchema(db.pool);
   const signup = new SignupStore(db.pool, db.outbox);
   await signup.request("backup@example.test");
   const mail = db.outbox.open(

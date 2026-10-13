@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
@@ -14,7 +15,7 @@ let owner:string,member:string,organisation:string,venue:string,installation:str
 let ownerSession:{token:string;csrfToken:string},memberSession:{token:string;csrfToken:string};
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
- await db.pool.query('TRUNCATE account_rate_limits,organisations,cloud_accounts CASCADE');
+ await resetSchema(db.pool);
  owner=id();member=id();organisation=id();venue=id();installation=id();foreignInstallation=id();
  const business=id(),foreignOrganisation=id(),foreignBusiness=id(),foreignVenue=id();
  await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1),($2)',[owner,member]);

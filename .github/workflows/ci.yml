@@ -63,6 +63,7 @@ jobs:
       matrix:
         package:
           - '@waitron-cloud/registration'
+          - '@waitron-cloud/fiscal-allocation'
           - '@waitron-cloud/backups'
           - '@waitron-cloud/account-http'
           - '@waitron-cloud/identity'
@@ -74,7 +75,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           # Registration runs populated upgrades with pinned historical runners.
-          fetch-depth: ${{ matrix.package == '@waitron-cloud/registration' && '0' || '1' }}
+          fetch-depth: ${{ (matrix.package == '@waitron-cloud/registration' || matrix.package == '@waitron-cloud/fiscal-allocation') && '0' || '1' }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v5
         with:

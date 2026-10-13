@@ -1,3 +1,4 @@
+import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
@@ -29,7 +30,7 @@ async function snapshot(){
 before(async()=>{await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);});
 after(async()=>{await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();});
 beforeEach(async()=>{
-  await pool.query('TRUNCATE cloud_accounts CASCADE');
+  await resetSchema(pool);
   for(const accountId of accounts){
     await pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[accountId]);
     await pool.query(`INSERT INTO cloud_authenticator_factors(account_id,version,secret_generation,secret_envelope) VALUES($1,2,$2,$3)`,
@@ -75,7 +76,7 @@ test('retry must verify current-key ciphertext rather than skipping unreadable r
   assert.deepEqual(await snapshot(),before);
 });
 test('an empty database still requires a valid current key',async()=>{
-  await pool.query('TRUNCATE cloud_accounts CASCADE');
+  await resetSchema(pool);
   for(const config of [null,{activeKeyId:'missing',keys:{old:old.keys.old}},{activeKeyId:'next',keys:{next:'invalid'}}])await assert.rejects(rotate(config),/factor_unavailable/);
 });
 test('CLI refuses incomplete, extra and changed migration ledgers before touching ciphertext',async()=>{

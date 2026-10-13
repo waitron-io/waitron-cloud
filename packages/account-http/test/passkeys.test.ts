@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
@@ -56,7 +57,7 @@ class FixtureAdapter implements PasskeyCeremonyAdapter {
 before(async () => { db = await database(); });
 after(async () => db?.close());
 beforeEach(async () => {
-  await db.pool.query('TRUNCATE account_rate_limits, organisations, cloud_accounts CASCADE');
+  await resetSchema(db.pool);
   app = createAccountApp({pool: db.pool, outbox: db.outbox, config: config(), passkeyAdapter: new FixtureAdapter()});
 });
 function request(path: string, body?: unknown, options: {headers?: Record<string, string>; peer?: string; method?: string; raw?: string} = {}) {
