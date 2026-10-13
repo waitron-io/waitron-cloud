@@ -270,7 +270,17 @@ venue does not subscribe to remote access or backups.
   deliver. The focused worker/account-mail command passes 125 checks, including
   observed lock waits, process restart, cancellation and held SMTP replies; 19
   deliberate breakages fail inspected assertions in a separate checkout.
-  Separate backup/restore and packaged release proofs remain open.
+  The explicit 35-to-36 rehearsal now passes all 28 version-3 checks: interrupted
+  migration rolls back, every populated old row and complete ledger survives,
+  stop persists across restart, and a separate stopped backup restores stopped.
+  Matching external keys permit status, cancellation and exact retries; wrong or
+  missing keys refuse, and resume delivers only to local Mailpit. A separately
+  restored pre-stop backup initializes not-stopped after upgrade; the stopped source
+  stays unchanged. Fifteen receipt/parser and eight real database/key breakages fail
+  their assertions; restored proof passes with zero owned resources remaining.
+  The packaged release proof and whole-branch review/current-head CI remain pending.
+  See the [trusted stop command](transactional-email-relay-contract.md#stop-and-resume-the-local-relay)
+  and [version-3 rehearsal](database-recovery.md#rehearse-the-relay-stop-upgrade).
   Run `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec
   node --test --test-timeout=120000 test/relay-operator-stop.test.ts
   test/relay-messages.test.ts test/relay-admission-bounds.test.ts

@@ -516,6 +516,46 @@ Suppression is currently a trusted local administration API; authenticated
 provider event ingestion remains open. Waitron's durable caller, the joint local
 proof, production abuse bounds, policy and provider selection are still required.
 
+## Stop and resume the local relay
+
+When you need to pause relay mail, use the trusted database command. It changes a
+stored flag across running API and worker instances without restarting them:
+
+```sh
+pnpm --silent relay:control --stop
+# {"stopped":true}
+pnpm --silent relay:control --status
+# {"stopped":true}
+pnpm --silent relay:control --resume
+# {"stopped":false}
+```
+
+Supply your existing `DATABASE_URL`. The command checks every migration name and
+SQL digest before acting; it neither migrates nor starts delivery. A missing row,
+incompatible release or failed database operation exits with a fixed error and no
+success JSON. Status reports only the stored flag. It does not report readiness or
+enable relay configuration. Ordinary startup still leaves relay routes and delivery off.
+
+Stop waits for admission and worker transactions already holding the control lock
+to commit or roll back. Its success line acknowledges the committed stop. From that
+point, new message IDs receive `403 relay_disabled` without relay spend, and queued
+work cannot acquire a claim or enter sending. Exact retries, status and cancellation
+still check current authority. A worker stopped between claim and handoff releases
+only its own queued claim, preserving content, attempts and counts.
+
+Sending is the point at which the worker commits its intent to hand mail to SMTP.
+If that commit happens first, its SMTP connection may begin after stop succeeds.
+Stop cannot recall it. Accepted, refused, delayed and uncertain results remain
+truthful, and expired sending leases still become uncertain. Cloud verification,
+password reset and venue alerts remain independent of the relay flag.
+
+The flag survives restart and is captured in backups. A stopped backup restores
+stopped; a release-35 backup initializes not-stopped when upgraded. An earlier backup
+cannot recover a later stop. If you need a restored relay paused, run stop before
+starting an explicitly configured relay. Keep payload, replay, suppression and
+recipient-counter keys outside the backup and restore their retained versions.
+See the [upgrade and recovery rehearsal](database-recovery.md#rehearse-the-relay-stop-upgrade).
+
 ## Decisions before production
 
 Keep the relay disabled by default globally and per grant, including after upgrades
