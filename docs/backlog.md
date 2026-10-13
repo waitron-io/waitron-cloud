@@ -165,6 +165,9 @@ Indexed venue/operation queries avoid whole-table tenant scans. Current custody
 checks protect both receipt pages and post-append consumption; fresh signed machine
 authentication recovers the same immutable operation after a proof expires. Paper
 import status records completion without inventing a Cloud receipt.
+Registration tests run in three CI file shards after the first full job
+hit its ten-minute limit while checks were still passing; every case, the
+30-second test deadline and ten-minute job deadline remain.
 The phone
 journey and Waitron adapter are separate dependent items. Production continuity
 storage, taxpayer custody and operator attribution, subscription policy and the

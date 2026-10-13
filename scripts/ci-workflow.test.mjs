@@ -33,6 +33,14 @@ test('all existing receipt suites and the workflow guard run in CI', () => {
   assert.match(receipts, /run: pnpm \$\{\{ matrix.suite \}\}/);
   assert.match(job('typecheck'), /run: node --test scripts\/ci-workflow.test.mjs/);
 });
+test('registration runs all three file shards without relaxing test or job deadlines', () => {
+  const packages = job('packages');
+  assert.match(packages, /shard: \[1\]/);
+  for (const shard of [2, 3]) assert.match(packages, new RegExp(`package: '@waitron-cloud/registration'\\n\\s+shard: ${shard}`));
+  assert.match(packages, /if: matrix.package != '@waitron-cloud\/registration'\n\s+run: node scripts\/test-postgres.mjs --filter/);
+  assert.match(packages, /if: matrix.package == '@waitron-cloud\/registration'\n\s+run: node scripts\/test-postgres.mjs exec pnpm --dir packages\/registration exec node --test --test-timeout=30000 --test-shard=\$\{\{ matrix.shard \}\}\/3 "test\/\*\.test\.ts"/);
+  assert.match(packages, /timeout-minutes: 10/);
+});
 
 test('browser setup is limited to browser packages and bounded across two attempts', () => {
   const packages = job('packages');

@@ -55,12 +55,13 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: pnpm ${{ matrix.suite }}
   packages:
-    name: package (${{ matrix.package }})
+    name: package (${{ matrix.package }}${{ matrix.package == '@waitron-cloud/registration' && format(', shard {0}/3', matrix.shard) || '' }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
+        shard: [1]
         package:
           - '@waitron-cloud/registration'
           - '@waitron-cloud/fiscal-allocation'
@@ -71,6 +72,11 @@ jobs:
           - '@waitron-cloud/remote-access'
           - '@waitron-cloud/portal'
           - '@waitron-cloud/ui-smoke'
+        include:
+          - package: '@waitron-cloud/registration'
+            shard: 2
+          - package: '@waitron-cloud/registration'
+            shard: 3
     steps:
       - uses: actions/checkout@v5
         with:
@@ -96,7 +102,10 @@ jobs:
             if [ "$attempt" -eq 2 ]; then exit 1; fi
             sleep 5
           done
-      - run: node scripts/test-postgres.mjs --filter ${{ matrix.package }} test
+      - if: matrix.package != '@waitron-cloud/registration'
+        run: node scripts/test-postgres.mjs --filter ${{ matrix.package }} test
+      - if: matrix.package == '@waitron-cloud/registration'
+        run: node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=30000 --test-shard=${{ matrix.shard }}/3 "test/*.test.ts"
   summary:
     if: ${{ always() }}
     needs: [typecheck, receipts, packages]
