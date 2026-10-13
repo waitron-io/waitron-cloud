@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {existsSync,readFileSync} from 'node:fs';
 import {verifyGatewayReconnectionReceipt} from './verify-gateway-reconnection-receipt.mjs';
 
 const trial=(pair,strategy)=>({pair,strategy,handshakeAgeSeconds:30,gatewayReadyMs:500,
@@ -11,6 +12,12 @@ const receipt=()=>({version:1,cloudHead:'a'.repeat(40),cloudDirty:false,liveReso
  environment:{imageId:'sha256:'+'b'.repeat(64),kernel:'Linux fixture',docker:'fixture'},
  trials:[trial('traffic','control'),trial('traffic','peer-traffic'),trial('reset','control'),trial('reset','peer-reset')],
  cleanup:{containersRemaining:0,networkRemoved:true,imageRemoved:true,temporaryFilesRemoved:true}});
+
+test('published local measurement retains complete paired evidence',()=>{
+ const file=new URL('../docs/receipts/gateway-reconnection-2026-10-13.json',import.meta.url);
+ assert.equal(existsSync(file),true,'The versioned measurement receipt is missing');
+ assert.doesNotThrow(()=>verifyGatewayReconnectionReceipt(JSON.parse(readFileSync(file,'utf8'))));
+});
 
 test('accepts paired real HTTPS recovery evidence without choosing a recovery target',()=>{
  assert.equal(verifyGatewayReconnectionReceipt(receipt()).trials.length,4);
