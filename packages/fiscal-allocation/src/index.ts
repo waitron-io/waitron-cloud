@@ -15,3 +15,5 @@ export {
   validatePaperHistory,
   mapEnvironment,
 } from './validation.ts';
+
+export { FiscalAllocationStore } from './store.ts';

@@ -37,7 +37,23 @@ const authority: ContinuityAuthority = {
   claim: (input) => request('claim', input),
 };
 try {
-  if (config.action === 'fence')
+  if (config.action === 'store-reserve') {
+    const { Pool } = await import('pg');
+    const { FiscalAllocationStore } = await import('../src/store.ts');
+    const { testOptions } = await import('./store-fixture.ts');
+    const pool = new Pool(config.input.connection);
+    try {
+      const store = new FiscalAllocationStore(pool, testOptions(authority));
+      console.log(
+        JSON.stringify({
+          pid: process.pid,
+          receipt: await store.reserve(config.input.token, config.input.csrf, config.input.input),
+        }),
+      );
+    } finally {
+      await pool.end();
+    }
+  } else if (config.action === 'fence')
     console.log(JSON.stringify({ grant: await fenceWriter(authority, scope) }));
   else {
     const { input, accountId, grant } = config.input;

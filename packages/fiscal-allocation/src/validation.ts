@@ -16,6 +16,10 @@ import type {
   PaperConsumption,
   PaperTransfer,
   PaperAllocation,
+  ConsumeInput,
+  AbandonInput,
+  StatusInput,
+  ListInput,
 } from './types.ts';
 export function fail(code: 'invalid_input' | 'binding_conflict' = 'invalid_input'): never {
   throw new FiscalAllocationError(code);
@@ -191,6 +195,68 @@ export function validateIdentity(value: unknown): string {
   )
     fail();
   return value;
+}
+export function validateAbandon(value: unknown): AbandonInput {
+  bounded(value, 16384);
+  const o = record(value, ['version', 'operationId', 'allocationId', 'binding']);
+  if (o.version !== 1) fail();
+  return snapshot({
+    version: 1,
+    operationId: uuid(o.operationId),
+    allocationId: uuid(o.allocationId),
+    binding: validateBinding(o.binding),
+  });
+}
+export function validateConsume(value: unknown): ConsumeInput {
+  bounded(value, 16384);
+  const o = record(value, [
+    'version',
+    'operationId',
+    'allocationId',
+    'binding',
+    'oldMachineOffline',
+    'oldMachineAbsent',
+    'noParallelRecovery',
+    'confirmedAt',
+  ]);
+  if (
+    o.version !== 1 ||
+    typeof o.oldMachineOffline !== 'boolean' ||
+    typeof o.oldMachineAbsent !== 'boolean' ||
+    o.noParallelRecovery !== true
+  )
+    fail();
+  return snapshot({
+    version: 1,
+    operationId: uuid(o.operationId),
+    allocationId: uuid(o.allocationId),
+    binding: validateBinding(o.binding),
+    oldMachineOffline: o.oldMachineOffline,
+    oldMachineAbsent: o.oldMachineAbsent,
+    noParallelRecovery: true,
+    confirmedAt: timestamp(o.confirmedAt),
+  });
+}
+export function validateStatus(value: unknown): StatusInput {
+  const o = record(value, ['version', 'venueId', 'operationId']);
+  if (o.version !== 1) fail();
+  return snapshot({ version: 1, venueId: uuid(o.venueId), operationId: uuid(o.operationId) });
+}
+export function validateList(value: unknown): ListInput {
+  const o = record(value, ['version', 'venueId', 'cursor', 'limit']);
+  if (
+    o.version !== 1 ||
+    !Number.isSafeInteger(o.limit) ||
+    Number(o.limit) < 1 ||
+    Number(o.limit) > 50
+  )
+    fail();
+  return snapshot({
+    version: 1,
+    venueId: uuid(o.venueId),
+    cursor: o.cursor === null ? null : text(o.cursor, 4096),
+    limit: Number(o.limit),
+  });
 }
 // This complete synthetic record tests format compatibility, never taxpayer custody or a live invoice.
 export function fiscalCandidate(scope: Scope, identity: string, invoice: string): AltaInput {

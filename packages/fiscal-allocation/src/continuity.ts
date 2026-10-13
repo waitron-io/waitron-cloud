@@ -16,6 +16,9 @@ import {
   validateAllocation,
   validateBinding,
   validateReserve,
+  validateConsume,
+  validateAbandon,
+  validatePaperHistory,
   record,
   uuid,
   decimal,
@@ -25,6 +28,8 @@ import {
   encoded,
   snapshot,
 } from './validation.ts';
+
+import { verifyPaperInput, checkPaperProgress, paperResult } from './paper-import.ts';
 
 const genesis = '0'.repeat(64);
 const verified = new WeakSet<ContinuityHistory>();
@@ -172,6 +177,8 @@ function eventValue(authority: ContinuityAuthority, value: unknown, scope: Scope
   ]);
   const action = o.action;
   // Replay accepts only actions with a complete, checked projection.
+  if (action === 'paper-import') return paperValue(authority, o, scope);
+  if (action === 'consume' || action === 'abandon') return terminalValue(authority, o, scope);
   if (action !== 'reserve') uncertain();
   const request = validateReserve(o.request),
     allocation = validateAllocation(o.allocation),
@@ -238,6 +245,102 @@ function eventValue(authority: ContinuityAuthority, value: unknown, scope: Scope
     uncertain();
   return snapshot(e);
 }
+function paperValue(
+  authority: ContinuityAuthority,
+  o: Record<string, unknown>,
+  scope: Scope,
+): RegistryEvent {
+  const request = validatePaperHistory(o.request);
+  const trust =
+    authority.verification.paperHistoryTrust?.get(request.custodyVersion) ??
+    authority.verification.paperTrust;
+  verifyPaperInput(request, trust);
+  if (
+    o.allocationId !== null ||
+    o.allocation !== null ||
+    o.binding !== null ||
+    o.receipt !== null ||
+    !same(request.scope, scope) ||
+    !same(o.scope, scope) ||
+    request.operationId !== o.operationId ||
+    o.requestDigest !== requestDigest(request)
+  )
+    uncertain();
+  return snapshot({
+    eventId: uuid(o.eventId),
+    scope: validateScope(o.scope),
+    sequence: decimal(o.sequence),
+    operationId: uuid(o.operationId),
+    action: 'paper-import',
+    requestDigest: digest(o.requestDigest),
+    request,
+    allocationId: null,
+    allocation: null,
+    binding: null,
+    recordedAt: timestamp(o.recordedAt),
+    previousDigest: digest(o.previousDigest),
+    receipt: null,
+  });
+}
+function terminalValue(
+  authority: ContinuityAuthority,
+  o: Record<string, unknown>,
+  scope: Scope,
+): RegistryEvent {
+  const action = o.action as 'consume' | 'abandon';
+  const request = action === 'consume' ? validateConsume(o.request) : validateAbandon(o.request);
+  const allocation = validateAllocation(o.allocation),
+    binding = validateBinding(o.binding);
+  const receipt = decodeReceipt(
+    encodeReceipt(o.receipt as import('./types.ts').AllocationReceipt),
+    authority.verification.receipts,
+  );
+  const e: RegistryEvent = {
+    eventId: uuid(o.eventId),
+    scope: validateScope(o.scope),
+    sequence: decimal(o.sequence),
+    operationId: uuid(o.operationId),
+    action,
+    requestDigest: digest(o.requestDigest),
+    request,
+    allocationId: uuid(o.allocationId),
+    allocation,
+    binding,
+    recordedAt: timestamp(o.recordedAt),
+    previousDigest: digest(o.previousDigest),
+    receipt,
+  };
+  const p = receipt.payload;
+  if (
+    !same(e.scope, scope) ||
+    request.operationId !== e.operationId ||
+    request.allocationId !== e.allocationId ||
+    e.allocationId !== allocation.allocationId ||
+    e.requestDigest !== requestDigest(request) ||
+    !same(request.binding, binding) ||
+    !same(p.binding, binding) ||
+    !same(p.allocation, allocation) ||
+    p.recordedAt !== e.recordedAt ||
+    p.state !== (action === 'consume' ? 'consumed' : 'abandoned')
+  )
+    uncertain();
+  if (action === 'consume') {
+    const x = request as import('./types.ts').ConsumeInput;
+    const approval = {
+      version: 1,
+      ...x.binding,
+      oldMachineOffline: x.oldMachineOffline,
+      oldMachineAbsent: x.oldMachineAbsent,
+      noParallelRecovery: x.noParallelRecovery,
+      confirmedAt: x.confirmedAt,
+    };
+    if (!same(p.approval, approval)) uncertain();
+  }
+  const historical = witness(authority, p.continuity, scope);
+  if (historical.sequence !== e.sequence || historical.historyDigest !== eventDigest(e))
+    uncertain();
+  return snapshot(e);
+}
 export async function requireCurrentHistory(
   authority: ContinuityAuthority | null,
   scope: Scope,
@@ -270,7 +373,8 @@ export async function requireCurrentHistory(
     const operations = new Set<string>(),
       allocations = new Set<string>(),
       names = new Set<string>(),
-      ids = new Set<string>();
+      ids = new Set<string>(),
+      latestAllocation = new Map<string, RegistryEvent>();
     for (let i = 0; i < events.length; i++) {
       const e = events[i]!,
         allocation = e.allocation!;
@@ -278,17 +382,34 @@ export async function requireCurrentHistory(
         e.sequence !== String(i + 1) ||
         e.previousDigest !== previous ||
         operations.has(e.operationId) ||
-        ids.has(e.eventId) ||
-        allocations.has(allocation.allocationId) ||
-        names.has(allocation.installationIdentity) ||
-        allocation.installationIdentity !== 'C' + String(highWater + 1).padStart(6, '0')
+        ids.has(e.eventId)
       )
         uncertain();
-      highWater++;
-      if (e.receipt!.payload.continuity.cHighWater !== highWater) uncertain();
+      if (e.action === 'reserve') {
+        if (
+          allocations.has(allocation.allocationId) ||
+          names.has(allocation.installationIdentity) ||
+          allocation.installationIdentity !== 'C' + String(highWater + 1).padStart(6, '0')
+        )
+          uncertain();
+        highWater++;
+        allocations.add(allocation.allocationId);
+        names.add(allocation.installationIdentity);
+      } else if (e.action !== 'paper-import') {
+        const prior = latestAllocation.get(allocation.allocationId);
+        if (
+          !prior ||
+          prior.receipt!.payload.state !== 'reserved' ||
+          !same(prior.allocation, allocation) ||
+          !same(prior.binding, e.binding) ||
+          prior.receipt!.payload.venueId !== e.receipt!.payload.venueId ||
+          prior.receipt!.payload.mode !== e.receipt!.payload.mode
+        )
+          uncertain();
+      }
+      if (allocation) latestAllocation.set(allocation.allocationId, e);
+      if (e.receipt && e.receipt.payload.continuity.cHighWater !== highWater) uncertain();
       operations.add(e.operationId);
-      allocations.add(allocation.allocationId);
-      names.add(allocation.installationIdentity);
       ids.add(e.eventId);
       previous = eventDigest(e);
     }
@@ -301,10 +422,14 @@ export async function requireCurrentHistory(
           current.cHighWater !== latest.cHighWater))
     )
       uncertain();
+    checkPaperProgress(events);
     const currentPrefix = events.find((e) => e.sequence === current.sequence);
     if (
       current.historyDigest !== (currentPrefix ? eventDigest(currentPrefix) : genesis) ||
-      current.cHighWater !== (currentPrefix?.receipt?.payload.continuity.cHighWater ?? 0)
+      current.cHighWater !==
+        events.filter(
+          (e) => e.action === 'reserve' && BigInt(e.sequence) <= BigInt(current.sequence),
+        ).length
     )
       uncertain();
     const history = snapshot({ events, witness: latest });
@@ -370,24 +495,54 @@ export async function appendEvent(
   decimal(event.sequence);
   digest(event.previousDigest);
   timestamp(event.recordedAt);
-  const request = validateReserve(event.request),
-    allocation = validateAllocation(event.allocation),
-    binding = validateBinding(event.binding);
+  const paper = event.action === 'paper-import';
+  const reservation = event.action === 'reserve';
+  const request = reservation
+    ? validateReserve(event.request)
+    : event.action === 'consume'
+      ? validateConsume(event.request)
+      : event.action === 'abandon'
+        ? validateAbandon(event.request)
+        : paper
+          ? validatePaperHistory(event.request)
+          : null;
+  const allocation = paper ? null : validateAllocation(event.allocation),
+    binding = paper ? null : validateBinding(event.binding);
   if (
-    event.action !== 'reserve' ||
+    !request ||
     !same(event.scope, scope) ||
-    !same(request.scope, scope) ||
     request.operationId !== event.operationId ||
-    event.allocationId !== allocation.allocationId ||
-    !same(binding, request.binding) ||
-    event.requestDigest !== requestDigest(request) ||
-    !same(
-      allocation.series,
-      request.bases.map((b) => ({
-        code: b.code + '-' + allocation.installationIdentity,
-        purpose: b.purpose,
-      })),
+    event.allocationId !== (allocation?.allocationId ?? null) ||
+    (!paper && !same(binding, (request as import('./types.ts').ReserveInput).binding)) ||
+    event.requestDigest !== requestDigest(request)
+  )
+    throw new FiscalAllocationError('invalid_input');
+  if (paper) {
+    verifyPaperInput(request as import('./types.ts').PaperHistoryInput, a.verification.paperTrust);
+    if (
+      event.receipt !== null ||
+      event.binding !== null ||
+      event.allocation !== null ||
+      !same((request as import('./types.ts').PaperHistoryInput).scope, scope)
     )
+      throw new FiscalAllocationError('invalid_input');
+  }
+  if (reservation) {
+    const r = request as import('./types.ts').ReserveInput;
+    if (
+      !same(r.scope, scope) ||
+      !same(
+        allocation!.series,
+        r.bases.map((b) => ({
+          code: b.code + '-' + allocation!.installationIdentity,
+          purpose: b.purpose,
+        })),
+      )
+    )
+      throw new FiscalAllocationError('invalid_input');
+  } else if (
+    !paper &&
+    (request as import('./types.ts').ConsumeInput).allocationId !== allocation!.allocationId
   )
     throw new FiscalAllocationError('invalid_input');
   const history = await requireCurrentHistory(a, scope, grant);
@@ -397,22 +552,27 @@ export async function appendEvent(
       throw new FiscalAllocationError('binding_conflict');
     return { event: prior, receipt: prior.receipt!, witness: history.witness };
   }
+  if (paper) checkPaperProgress(history.events, request as import('./types.ts').PaperHistoryInput);
   const predecessor = history.events.find(
     (e) => BigInt(e.sequence) + 1n === BigInt(event.sequence),
   );
   if (
     BigInt(event.sequence) <= BigInt(history.witness.sequence) &&
     event.previousDigest === (predecessor ? eventDigest(predecessor) : genesis) &&
-    event.allocation?.installationIdentity ===
-      'C' + String((predecessor?.receipt?.payload.continuity.cHighWater ?? 0) + 1).padStart(6, '0')
+    (!reservation ||
+      event.allocation?.installationIdentity ===
+        'C' +
+          String((predecessor?.receipt?.payload.continuity.cHighWater ?? 0) + 1).padStart(6, '0'))
   )
     throw new FiscalAllocationError('allocation_unavailable');
-  if (history.witness.cHighWater === 999999) throw new FiscalAllocationError('space_exhausted');
+  if (reservation && history.witness.cHighWater === 999999)
+    throw new FiscalAllocationError('space_exhausted');
   if (
     event.sequence !== String(BigInt(history.witness.sequence) + 1n) ||
     event.previousDigest !== history.witness.historyDigest ||
-    event.allocation?.installationIdentity !==
-      'C' + String(history.witness.cHighWater + 1).padStart(6, '0') ||
+    (reservation &&
+      event.allocation?.installationIdentity !==
+        'C' + String(history.witness.cHighWater + 1).padStart(6, '0')) ||
     event.requestDigest !== requestDigest(event.request)
   )
     uncertain();
@@ -494,37 +654,67 @@ export async function projectHistory(
     BigInt(local.sequence) > BigInt(w.sequence) ||
     BigInt(local.writer_fence) > BigInt(w.writerFence) ||
     local.history_digest !== (prefix ? eventDigest(prefix) : genesis) ||
-    local.c_high_water !== (prefix ? prefix.receipt!.payload.continuity.cHighWater : 0)
+    local.c_high_water !==
+      history.events.filter(
+        (e) => e.action === 'reserve' && BigInt(e.sequence) <= BigInt(local.sequence),
+      ).length
   )
     uncertain();
   for (const e of history.events) {
-    const p = e.receipt!.payload,
+    const p = e.receipt?.payload,
       a = e.allocation!;
-    const row = {
-      allocation_id: a.allocationId,
-      taxpayer_nif: scope.taxpayerNif,
-      software_id: scope.softwareId,
-      environment: scope.environment,
-      installation_identity: a.installationIdentity,
-      venue_id: p.venueId,
-      account_id: p.cloudAccountId,
-      allocation: a,
-      binding: e.binding,
-      custody_version: p.custodyVersion,
-      entitlement_version: p.entitlementVersion,
-      initial_receipt: e.receipt,
-    };
-    await client.query(
-      'INSERT INTO fiscal_registry_allocations(allocation_id,taxpayer_nif,software_id,environment,installation_identity,venue_id,account_id,allocation,binding,custody_version,entitlement_version,initial_receipt) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT DO NOTHING',
-      Object.values(row),
-    );
-    const existing = (
+    if (e.action === 'reserve') {
+      const row = {
+        allocation_id: a.allocationId,
+        taxpayer_nif: scope.taxpayerNif,
+        software_id: scope.softwareId,
+        environment: scope.environment,
+        installation_identity: a.installationIdentity,
+        venue_id: p!.venueId,
+        account_id: p!.cloudAccountId,
+        allocation: a,
+        binding: e.binding,
+        custody_version: p!.custodyVersion,
+        entitlement_version: p!.entitlementVersion,
+        initial_receipt: e.receipt,
+      };
       await client.query(
-        'SELECT to_jsonb(t) AS value FROM fiscal_registry_allocations t WHERE allocation_id=$1',
-        [a.allocationId],
-      )
-    ).rows[0]?.value;
-    if (!same(existing, row)) uncertain();
+        'INSERT INTO fiscal_registry_allocations(allocation_id,taxpayer_nif,software_id,environment,installation_identity,venue_id,account_id,allocation,binding,custody_version,entitlement_version,initial_receipt) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT DO NOTHING',
+        Object.values(row),
+      );
+      const existing = (
+        await client.query(
+          'SELECT to_jsonb(t) AS value FROM fiscal_registry_allocations t WHERE allocation_id=$1',
+          [a.allocationId],
+        )
+      ).rows[0]?.value;
+      if (!same(existing, row)) uncertain();
+    }
+    if (e.action === 'paper-import') {
+      const x = e.request as import('./types.ts').PaperHistoryInput;
+      const fact = {
+        event_id: e.eventId,
+        taxpayer_nif: scope.taxpayerNif,
+        software_id: scope.softwareId,
+        environment: scope.environment,
+        custodian_id: x.block.payload.custodianId,
+        register_revision: x.registerRevision,
+        block_digest: requestDigest(x.block.payload),
+        event_digest: e.requestDigest,
+        fact: x,
+      };
+      await client.query(
+        'INSERT INTO fiscal_registry_paper_events(event_id,taxpayer_nif,software_id,environment,custodian_id,register_revision,block_digest,event_digest,fact) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING',
+        Object.values(fact),
+      );
+      const existing = (
+        await client.query(
+          "SELECT to_jsonb(t)||jsonb_build_object('register_revision',register_revision::text) AS value FROM fiscal_registry_paper_events t WHERE event_id=$1",
+          [e.eventId],
+        )
+      ).rows[0]?.value;
+      if (!same(existing, fact)) uncertain();
+    }
     const expected = {
       event_id: e.eventId,
       taxpayer_nif: scope.taxpayerNif,
@@ -536,7 +726,10 @@ export async function projectHistory(
       request_digest: e.requestDigest,
       allocation_id: e.allocationId,
       event: e,
-      result: e.receipt,
+      result:
+        e.action === 'paper-import'
+          ? paperResult(e.request as import('./types.ts').PaperHistoryInput)
+          : e.receipt,
     };
     await client.query(
       'INSERT INTO fiscal_registry_events(event_id,taxpayer_nif,software_id,environment,sequence,operation_id,action,request_digest,allocation_id,event,result) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT DO NOTHING',
@@ -558,7 +751,7 @@ export async function projectHistory(
   ).rows[0];
   if (
     counts.events !== String(history.events.length) ||
-    counts.allocations !== String(history.events.length)
+    counts.allocations !== String(history.events.filter((e) => e.action === 'reserve').length)
   )
     uncertain();
   fresh();

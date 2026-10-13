@@ -71,7 +71,7 @@ export interface ContinuityClaim {
 }
 export interface ContinuityResult {
   readonly event: RegistryEvent;
-  readonly receipt: AllocationReceipt;
+  readonly receipt: AllocationReceipt | null;
   readonly witness: ContinuityWitness;
 }
 export interface ContinuityHistory {
@@ -84,6 +84,8 @@ export interface ContinuityAuthority {
     readonly keys: ReadonlyMap<string, string>;
     readonly receipts: ReceiptTrust;
     readonly policy: RegistryPolicy;
+    readonly paperTrust?: PaperTrust;
+    readonly paperHistoryTrust?: ReadonlyMap<string, PaperTrust>;
   };
   current(scope: Scope, nonce: string): Promise<ContinuityWitness>;
   claim(input: ContinuityClaim): Promise<ContinuityResult>;
@@ -97,6 +99,7 @@ export interface RegistryOptions {
   readonly signer?: ReceiptSigner | null;
   readonly trust?: ReceiptTrust | null;
   readonly paperTrust?: PaperTrust | null;
+  readonly paperHistoryTrust?: ReadonlyMap<string, PaperTrust>;
   readonly policy?: RegistryPolicy | null;
 }
 export function requireCapabilities(options: RegistryOptions): Readonly<{

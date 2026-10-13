@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash, createPrivateKey, sign, randomUUID } from 'node:crypto';
 import { canonical, signReceipt } from '../src/evidence.ts';
+import { checkPaperProgress } from '../src/paper-import.ts';
 import { key, scope, payload } from './fixtures.ts';
 import type { RegistryEvent, WriterGrant, ContinuityClaim } from '../src/policy.ts';
 import type { ContinuityWitness, ReserveInput } from '../src/types.ts';
@@ -176,21 +177,37 @@ function append(claim: ContinuityClaim) {
   if (
     e.sequence !== String(state.events.length + 1) ||
     e.previousDigest !== state.digest ||
-    e.allocation?.installationIdentity !== 'C' + String(state.highWater + 1).padStart(6, '0')
+    (e.action === 'reserve' &&
+      e.allocation?.installationIdentity !== 'C' + String(state.highWater + 1).padStart(6, '0'))
   )
     throw Object.assign(Error(), { code: 'history_uncertain' });
   if (
     e.requestDigest !== hashed(e.request) ||
     claim.requestDigest !== e.requestDigest ||
     claim.operationId !== e.operationId ||
-    e.allocationId !== e.allocation?.allocationId
+    e.allocationId !== (e.allocation?.allocationId ?? null)
   )
     throw Object.assign(Error(), { code: 'invalid_input' });
-  const p = e.receipt!.payload;
+  if (e.action === 'paper-import') {
+    checkPaperProgress(state.events, e.request as import('../src/types.ts').PaperHistoryInput);
+  } else if (e.action !== 'reserve') {
+    const prior = state.events.filter((x) => x.allocationId === e.allocationId).at(-1);
+    if (
+      !prior ||
+      prior.receipt!.payload.state !== 'reserved' ||
+      !['consume', 'abandon'].includes(e.action) ||
+      canonical(prior.allocation) !== canonical(e.allocation) ||
+      canonical(prior.binding) !== canonical(e.binding)
+    )
+      throw Object.assign(Error(), { code: 'binding_conflict' });
+  }
+  const p = e.receipt?.payload;
   state.digest = hashed(['waitron.fiscal-continuity-event', 1, core(e)]);
-  state.highWater++;
+  if (e.action === 'reserve') state.highWater++;
   state.events.push(e);
-  const receipt = signReceipt({ ...p, continuity: witness('event-' + e.sequence) }, state.signer);
+  const receipt = p
+    ? signReceipt({ ...p, continuity: witness('event-' + e.sequence) }, state.signer)
+    : null;
   (e as { receipt: unknown }).receipt = receipt;
   save();
   return { event: e, receipt, witness: witness('append') };

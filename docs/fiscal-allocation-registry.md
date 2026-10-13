@@ -7,8 +7,8 @@ signing key. All of those capabilities are unavailable by default.
 
 The contract and storage stages define the receipt format and the PostgreSQL
 projection. The current-history stage checks a signed outside journal and excludes
-previous writers. Authenticated reservation, paper import and HTTP services remain
-to be implemented. The
+previous writers. Authenticated reservation, consumption, retained reads and paper imports now
+use those checked facts. HTTP services remain to be implemented. The
 [shared implementation plan](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md)
 owns those stages and the later phone and Waitron journeys.
 
@@ -72,10 +72,65 @@ node scripts/test-postgres.mjs exec pnpm --dir packages/fiscal-allocation exec \
 
 Supply the authority ID, pinned public keys, receipt trust and explicit bounded
 timing policy through the injected adapter's `verification` configuration. No
-runtime adapter or production values are supplied. This stage replays Cloud
-reservation events; other journal actions refuse until their full replay rules
-are implemented. The fixture proves local process recovery, not independent
+runtime adapter or production values are supplied. Replay checks reservations, terminal consumption or abandonment, and linked
+paper imports. Machine report events remain unavailable until their full replay
+rules are implemented. The fixture proves local process recovery, not independent
 production storage or failure domains.
+
+## Require current authority for each operation
+
+Your full Cloud session and CSRF proof must still be valid after database locks
+and outside requests finish. Organisation ownership controls which venue you
+can inspect. The configured custody adapter establishes the taxpayer namespace,
+local operator binding and complete series bases; a self-submitted NIF supplies
+none of that authority. A reservation cannot omit your configured full series.
+Changed bases require a fresh allocation before consumption.
+
+The store locks the account and session before membership, venue and adapter
+rows, then the taxpayer namespace. Two authenticated Node workers for separate
+organisations reserve distinct C names within that one namespace. Neither can
+read the other's venue receipts. Repeating an identical operation returns the
+same signed receipt; changing its binding or bases refuses another claim.
+
+Consumption or abandonment is permanent. Recovery consumption records the exact
+old-machine isolation and no-parallel-recovery confirmation; initial setup
+requires absence. The signed result records the currently authenticated Cloud
+actor while preserving the original allocation and its full binding. This
+confirmation does not establish that the old selling machine was fenced.
+
+The entitlement adapter controls issuance and retained access separately. The
+local fixture denies new reservations after entitlement ends while permitting
+current authorised receipt reads. List cursors have signatures bound to your
+account, venue and page size. Their stable positions span namespace histories,
+whose sequence numbers may coincide.
+
+## Import paper facts without freeing omitted names
+
+A paper import preserves the entire signed block and its linked register revision.
+It adds S/P reservations, consumption facts or signed venue transfers; it issues
+no new identity. A stale exact retry returns its original acknowledgement. A new
+upload cannot erase a previous consumption merely by omitting it, or transfer an
+already consumed identity. A partial transfer keeps the original block and moves
+only the named allocations.
+
+Supply current paper public keys and custody version separately from Cloud receipt
+trust. Explicit `paperHistoryTrust` can retain prior-version public keys for journal
+replay. A new key re-signing an old block cannot change the register's custody
+version. The current transfer format binds venue ownership; a qualified signed
+key/custodian transfer format remains an owner enablement gate. The store refuses
+that version change until the gated format and policy are supplied.
+
+Run the authenticated store and paper checks from the Cloud checkout:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/fiscal-allocation exec \
+  node --test --test-timeout=30000 test/store.test.ts test/paper-import.test.ts
+```
+
+These checks use actual PostgreSQL locks and a separate persisted authority
+process. The session-expiry case confirms that an outside append stays occupied
+while expired authority receives no receipt and the local transaction rolls back.
+No production continuity, custody, entitlement or signing adapter is enabled.
 
 ## Keep the complete signed receipt
 

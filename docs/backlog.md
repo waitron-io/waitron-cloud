@@ -147,9 +147,14 @@ cannot be reissued, the previous writer is refused, and lost replies or failed
 database commits reconcile the same signed result. The external fixture survives
 process restart; no production continuity provider is supplied.
 
-Live session/custody/entitlement checks, monotonic paper import, actual account and
-machine HTTP routes, lost-reply reconciliation and the whole-branch review/CI remain
-open on this branch. The phone
+The authenticated store stage adds current session, venue ownership, custody and
+entitlement rechecks; terminal consumption and abandonment; signed bounded receipt
+pages; and monotonic signed S/P imports with complete venue-transfer chains. Local
+PostgreSQL tests cover independent authenticated workers, authority lost during a
+wait, omitted full series, ended entitlement with retained reads, old uploads,
+forged or consumed transfers, partial transfers and matching exact retries.
+Actual account and machine HTTP routes, lost-reply reconciliation and the
+whole-branch review/CI remain open on this branch. The phone
 journey and Waitron adapter are separate dependent items. Production continuity
 storage, taxpayer custody and operator attribution, subscription policy and the
 signing-key custodian remain owner enablement gates; no production defaults are
