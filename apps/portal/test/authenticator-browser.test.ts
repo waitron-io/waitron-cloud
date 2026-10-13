@@ -76,6 +76,16 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
       if(loss==='whole'){await page.getByRole('heading',{name:c.login,exact:true}).waitFor();await login(newPassword);await recovery(codes[2]!);}await page.getByText(c.accountIntro).waitFor();if(loss==='whole')await page.getByRole('button',{name:c.signout,exact:true}).click();}
     await authority(codes[3],newPassword);await page.getByRole('button',{name:c.factorRemove,exact:true}).click();await page.getByText(c.factorRemoved,{exact:true}).waitFor();await login(newPassword);await page.getByText(c.accountIntro).waitFor();await page.getByText(c.factorOff,{exact:true}).waitFor();
     assert.deepEqual(errors,[]);assert.deepEqual([...requestOrigins],[f.origin]);
+  }catch(error){
+    const rates=[];
+    for(const scope of ['all-ip','login-ip']){
+      const key=createHmac('sha256',Buffer.from(f.db.rateKey,'hex')).update(JSON.stringify([scope,'127.0.0.1'])).digest('hex');
+      rates.push({scope,rows:(await f.db.pool.query('SELECT attempts,expires_at FROM account_rate_limits WHERE key=$1',[key])).rows});
+    }
+    throw new Error(JSON.stringify({outcomes:outcomes.slice(-24),heading:await page.locator('h1').textContent(),
+      alerts:await page.locator('[role=alert]').allTextContents(),rates,
+      activeSessions:(await f.db.pool.query('SELECT count(*) FROM cloud_sessions WHERE account_id=$1 AND ended_at IS NULL',[owner.id])).rows[0].count,
+      activeFactors:(await f.db.pool.query('SELECT count(*) FROM cloud_authenticator_factors WHERE account_id=$1',[owner.id])).rows[0].count}),{cause:error});
   }finally{await virtual.close();await context.close();await f.close();}
  });
 

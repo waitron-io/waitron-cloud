@@ -712,6 +712,9 @@ notifications separately.
   --test --test-timeout=120000 test/sign-in-session-race.test.ts`. Existing authentication
   checks, browser assertions and deadlines remain. If another timeout occurs, capture
   its request/locator stage and reproduce that cause before changing a check or deadline.
+  The authenticator browser matrix retains recent response paths/statuses, headings,
+  alerts, scoped IP counters and live session/factor counts when it fails, preserving
+  the original exception even if collecting diagnostics fails.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
   services, usage accounting, trials, failed payment and cancellation.
 - **Venue and node registration.** The agreed Waitron signup and connection journey is
