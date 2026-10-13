@@ -11,12 +11,12 @@ export async function monitoringState(pool){
  return value;
 }
 async function due(pool,venue){await pool.query("UPDATE venue_monitors SET next_check_at=CASE WHEN venue_id=$1 THEN clock_timestamp() ELSE clock_timestamp()+interval '1 day' END",[venue]);}
-export async function legacyMonitoring(root,pool){
+export async function legacyMonitoring(root,pool,email){
  const {MonitorWorker}=await source(root,'packages/registration/src/monitoring.ts');
  const {EmailOutbox}=await source(root,'packages/registration/src/email-outbox.ts');
  // Legacy rows are already processed with both captured timings off, independently of new config.
  const before=(await pool.query('SELECT outbox_id FROM service_alert_deliveries ORDER BY outbox_id')).rows;
- const worker=new MonitorWorker(pool,new EmailOutbox({activeKeyId:'unused',keys:{unused:randomBytes(32).toString('hex')}}),{quietSeconds:120,reminderSeconds:180});
+ const worker=new MonitorWorker(pool,new EmailOutbox(email),{quietSeconds:120,reminderSeconds:180});
  await worker.schedule();
  const venues=(await pool.query('SELECT venue_id FROM venue_monitors ORDER BY venue_id')).rows;
  for(const row of venues){await due(pool,row.venue_id);await worker.runOnce();}

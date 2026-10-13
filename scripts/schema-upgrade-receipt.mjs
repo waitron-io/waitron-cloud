@@ -171,7 +171,6 @@ try{
   assert.deepEqual((await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows.slice(0,36),fullOldLedger);
   await primary.pool.query("INSERT INTO schema_migrations(name,digest) VALUES('038_fixture_future.sql',$1)",['0'.repeat(64)]);
   try{await startAccount(next,primary.url,true);}finally{await primary.pool.query("DELETE FROM schema_migrations WHERE name='038_fixture_future.sql'");}
-  checks.legacyNoRetroactiveMail=await legacyMonitoring(next,primary.pool);
  }
  if(relayStop){
   assert.deepEqual(newLedger.slice(0,35),oldLedger);
@@ -199,6 +198,7 @@ try{
  assert.equal((await primary.pool.query('SELECT status FROM email_outbox WHERE id=$1',[state.messageId])).rows[0].status,'sent');
  assert.equal((await(await fetch(`http://127.0.0.1:${mailPort}/api/v1/messages`)).json()).total,1);checks.mailDelivered=true;
  await stop(newAccount.handle);
+ if(monitoringQuiet)checks.legacyNoRetroactiveMail=await legacyMonitoring(next,primary.pool,email);
  let factorProof,factorBackup,factorBefore,stoppedBackup,stoppedRows,fullNewLedger;
  if(relayStop){
   const command=mode=>JSON.parse(node(next,['packages/registration/src/relay-control-cli.ts',mode],environment(primary.url)));
@@ -216,6 +216,7 @@ try{
  }
  timings.upgradeMs=Date.now()-upgradeStart;
  if(monitoringQuiet){email.smtpPort=Number(smtp);monitoringProof=await seedMonitoring(next,primary.pool,state,email);monitoringBefore=await monitoringState(primary.pool);monitoringBackup=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc'],{encoding:null});}
+ const upgradedMonitoringDigest=monitoringQuiet?digest(await storedRows(primary.pool,true)):null;
  const upgradedRelayDigest=relayStop?digest({ledger:(await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,rows:await storedRows(primary.pool,true)}):null;
  const upgradedDigest=digest({ledger:await ledger(primary.pool),identity:await identity(primary.pool),mail:(await primary.pool.query('SELECT * FROM email_outbox ORDER BY id')).rows,pairing:(await primary.pool.query('SELECT * FROM pairing_requests ORDER BY id')).rows});
  console.log(JSON.stringify({phase:'restore'}));
@@ -235,7 +236,7 @@ try{
  checks.oldRecovered=true;await stop(recoveredAccount.handle);
  if(monitoringQuiet){
   assert.deepEqual(await relayState(recovered.pool),beforeRelay);assert.deepEqual(await identityAccountState(recovered.pool),relayAccounts);
-  node(next,['packages/registration/src/migrate-cli.ts'],environment(recovered.url));checks.oldBackupUpgradeNoRetroactiveMail=await legacyMonitoring(next,recovered.pool);
+  node(next,['packages/registration/src/migrate-cli.ts'],environment(recovered.url));checks.oldBackupUpgradeNoRetroactiveMail=await legacyMonitoring(next,recovered.pool,email);
   const restored=await database(containers[3]);run('docker',['exec','-i',containers[3],'pg_restore','-U','postgres','-d','cloud','--exit-on-error'],{input:monitoringBackup,encoding:null});
   assert.deepEqual(await ledger(restored.pool),newLedger);assert.equal(digest(await monitoringState(restored.pool)),digest(monitoringBefore));checks.newBackupRestored=true;
   assert.deepEqual(await relayState(restored.pool),beforeRelay);assert.deepEqual(await identityAccountState(restored.pool),relayAccounts);
@@ -273,6 +274,7 @@ try{
   for(const name of ['factorMatchingKey','factorWrongKeyRefused','factorMissingKeyRefused','factorBindingRefused'])checks[name]=true;
  }
  timings.recoveryMs=Date.now()-recoveryStart;
+ if(monitoringQuiet)assert.equal(digest(await storedRows(primary.pool,true)),upgradedMonitoringDigest);
  if(relayStop)assert.equal(digest({ledger:(await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,rows:await storedRows(primary.pool,true)}),upgradedRelayDigest);
  assert.equal(digest({ledger:await ledger(primary.pool),identity:await identity(primary.pool),mail:(await primary.pool.query('SELECT * FROM email_outbox ORDER BY id')).rows,pairing:(await primary.pool.query('SELECT * FROM pairing_requests ORDER BY id')).rows}),upgradedDigest);checks.upgradedUnchanged=true;
  receipt={schemaVersion:monitoringQuiet?4:relayStop?3:factor?2:1,driver:{head:git('rev-parse','HEAD'),dirty:git('status','--porcelain')!==''},releases:{old:{head:oldHead,migrations:oldLedger.length,digest:digest(oldLedger)},new:{head:newHead,migrations:newLedger.length,digest:digest(newLedger)}},checks,timings,measuredAt:new Date().toISOString(),limitations:[monitoringQuiet?'Only the supplied 36-to-37 pair, synthetic accounts/factors/relay and monitoring state, PostgreSQL 18 and local Mailpit; no provider or customer data.':relayStop?'Only the supplied 35-to-36 pair, populated synthetic account/factor/relay state, PostgreSQL 18 and local Mailpit; no provider or customer data.':factor?'Only the supplied 34-to-35 pair, synthetic passkey rows, PostgreSQL 18 and local Mailpit; no provider or customer data.':'Only this pinned 26-to-27 pair, PostgreSQL 18 and local Mailpit; no provider or customer data.','Consumers run as real host Node processes through the current deployment gate; historical binaries have no intrinsic future-schema gate. Container image rebuild remains the separate local-stack proof.','Consumers stop during migration; no mixed-version or online upgrade, downgrade migration, traffic routing or availability target.','Recovery restores the pre-upgrade logical backup and matching external keys into another database; post-backup writes are not recovered.',...(monitoringQuiet?['A separate post-upgrade backup preserves captured notification deadlines and recipients; restored workers refuse wrong or missing email keys. A valid late sent receipt authorizes one recovery; uncertainty and inbox delivery remain outside this receipt.']:[]),...(relayStop?['The stopped backup is restored separately with matching external relay keys; an older pre-stop backup starts not-stopped after upgrade. Ordinary consumer startup remains relay-off.']:[])]};
