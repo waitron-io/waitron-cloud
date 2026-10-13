@@ -36,3 +36,11 @@ test('relay stop receipts require every separate upgrade and recovery proof for 
   const v=structuredClone(valid);change(v);assert.throws(()=>verify(v),/schema_upgrade_receipt/);
  }
 });
+test('monitoring receipt requires the separate 36-to-37 upgrade and both restored backups',async()=>{
+ const {verifySchemaUpgradeReceipt:verify}=await import(path.href);
+ const names=['oldStarted','newRefusedOld','migrationInterrupted','rollbackComplete','newRefusedInterrupted','retryApplied','oldRefusedNew','newStarted','identityPreserved','tenantsIsolated','completionRetry','pendingMailPreserved','mailDelivered','backupRestored','oldRecovered','wrongKeyRefused','upgradedUnchanged','accountStatePreserved','relayStatePreserved','legacyNoRetroactiveMail','deadlinesPreserved','recipientSnapshotPreserved','lateReceiptRecovery','newBackupRestored','restoredMatchingKeys','restoredWrongKeysRefused','restoredMissingKeysRefused','oldBackupUpgradeNoRetroactiveMail'];
+ const valid={schemaVersion:4,measuredAt:'2026-10-13T18:00:00.000Z',driver:{head:'c'.repeat(40),dirty:false},releases:{old:{head:'a'.repeat(40),migrations:36,digest:'a'.repeat(64)},new:{head:'b'.repeat(40),migrations:37,digest:'b'.repeat(64)}},checks:Object.fromEntries(names.map(name=>[name,true])),timings:{upgradeMs:1,recoveryMs:2},cleanup:{containers:0,volumes:0,checkouts:0},limitations:['Synthetic local state and two separate backups.']};
+ assert.equal(verify(valid),valid);
+ for(const key of names)for(const change of [v=>delete v.checks[key],v=>v.checks[key]=false]){const v=structuredClone(valid);change(v);assert.throws(()=>verify(v),/schema_upgrade_receipt/,key);}
+ for(const change of [v=>v.schemaVersion=3,v=>v.releases.old.migrations=35,v=>v.releases.new.migrations=38,v=>v.releases.new.head=v.releases.old.head,v=>v.releases.old.head='main',v=>v.checks.pairingUpgraded=true,v=>v.checks.secret='private',v=>v.cleanup.checkouts=1,v=>v.cleanup.containers=1,v=>v.cleanup.volumes=1,v=>v.driver.key='private']){const v=structuredClone(valid);change(v);assert.throws(()=>verify(v),/schema_upgrade_receipt/);}
+});

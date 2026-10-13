@@ -63,3 +63,13 @@ test('backup orchestration has Docker authority and an explicit bounded verifier
  assert.ok(service.volumes.some(volume=>volume.target==='/var/run/docker.sock'));
  assert.ok(!service.volumes.some(volume=>volume.target==='/waitron'));
 });
+
+test('compose monitor timings default off and overrides stay monitor-only',()=>{
+ const base=configuration().services['monitor-worker'].environment;
+ assert.equal(base.CLOUD_MONITOR_QUIET_SECONDS,'0');assert.equal(base.CLOUD_MONITOR_REMINDER_SECONDS,'0');
+ const services=JSON.parse(execFileSync('docker',['compose','--profile','backups','--profile','remote-reconciliation','config','--format','json'],{encoding:'utf8',env:{...process.env,CLOUD_MONITOR_QUIET_SECONDS:'2',CLOUD_MONITOR_REMINDER_SECONDS:'3'}})).services;
+ assert.equal(services['monitor-worker'].environment.CLOUD_MONITOR_QUIET_SECONDS,'2');assert.equal(services['monitor-worker'].environment.CLOUD_MONITOR_REMINDER_SECONDS,'3');
+ for(const [name,service] of Object.entries(services))if(name!=='monitor-worker'){
+  assert.equal(service.environment?.CLOUD_MONITOR_QUIET_SECONDS,undefined,name);assert.equal(service.environment?.CLOUD_MONITOR_REMINDER_SECONDS,undefined,name);
+ }
+});

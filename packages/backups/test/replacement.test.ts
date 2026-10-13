@@ -216,3 +216,14 @@ test('relay admission racing owner-confirmed replacement cannot retain authority
  if(admission.status==='rejected')assert.equal(admission.reason.code,'grant_unavailable');else assert.equal(admission.value.status.state,'queued');
  await assert.rejects(relay.execute('email-submit',envelope),(e:any)=>e.code==='grant_unavailable');
 });
+
+test('replacement cancels the old disconnected episode in its approval transaction',async()=>{
+ const f=await ready();await db.pool.query("INSERT INTO account_alert_preferences(account_id,enabled,locale) VALUES($1,true,'en')",[f.owner.accountId]);
+ await db.pool.query("UPDATE installations SET last_contact_at=clock_timestamp()-interval '1 day' WHERE id=$1",[f.installed.installationId]);
+ const monitor=new MonitorWorker(db.pool,db.outbox,{quietSeconds:2,reminderSeconds:3});await monitor.schedule();
+ await db.pool.query("UPDATE venue_monitors SET next_check_at=CASE WHEN venue_id=$1 THEN clock_timestamp() ELSE clock_timestamp()+interval '1 day' END",[f.installed.venueId]);await monitor.runOnce();
+ const e=(await db.pool.query("SELECT e.* FROM venue_alert_episodes e JOIN venue_incidents i ON i.id=e.incident_id WHERE i.venue_id=$1 AND i.kind='disconnected'",[f.installed.venueId])).rows[0];assert(e);
+ await f.store.machine('prepare',f.envelope('prepare'));await f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f));
+ const stopped=(await db.pool.query('SELECT * FROM venue_alert_episodes WHERE id=$1',[e.id])).rows[0];assert.equal(stopped.status,'suppressed');assert.equal(stopped.recovery_complete,true);
+ const slot=(await db.pool.query('SELECT * FROM venue_alert_recipients WHERE episode_id=$1',[e.id])).rows[0];assert.equal(slot.reminder_status,'cancelled');assert.equal(slot.recovery_status,'cancelled');
+});

@@ -797,10 +797,22 @@ notifications separately.
   data. Stale health is shown as unknown and the permission is rechecked before release.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
-  The reviewed [quiet-period and reminder design](superpowers/specs/2026-10-13-monitoring-quiet-escalation-design.md)
-  and [implementation plan](superpowers/plans/2026-10-13-monitoring-quiet-escalation.md)
-  define optional delayed opening mail and one reminder, both disabled by default.
-  Implementation and timing, recovery and upgrade proofs remain open.
+  Optional quiet periods and one still-open reminder are implemented with both timings
+  disabled by default. Each incident opening captures its original recipients and fixed
+  database deadlines. The portal remains immediate; brief incidents recover silently.
+  Local PostgreSQL and independent-process tests cover concurrent delivery, current
+  authority/evidence, late accepted-opening recovery, replacement/suppression/reopening,
+  protected bounded cleanup and rollback of a second 100-recipient batch. Encrypted mail
+  retains English/Spanish rendering and retries use one durable notification identity.
+  A populated 36-to-37 rehearsal proves interrupted migration rollback, repeated/concurrent
+  retry, unchanged old account/factor/relay state and both pre-upgrade and post-upgrade
+  backups. Restored deadlines/recipients remain fixed and wrong/missing email keys refuse
+  delivery. SMTP uncertain acceptance can still duplicate sends. The
+  [design](superpowers/specs/2026-10-13-monitoring-quiet-escalation-design.md) and
+  [plan](superpowers/plans/2026-10-13-monitoring-quiet-escalation.md) record the scope;
+  the local packaged install, restart and rebuilt upgrade each use all 37 migrations
+  and leave no project containers, networks, volumes or image. Production quiet/reminder
+  thresholds, external checks, wider escalation and rollout policy remain open.
   The [local monitor](local-monitoring.md) now records missing contact, stale snapshots
   and failed verification for configured test installations. The portal shows incident
   evidence and stale monitoring; owners can opt in to English/Spanish email alerts.
@@ -844,7 +856,7 @@ notifications separately.
   write refusal, with 26 label combinations and empty project cleanup.
   Next: choose the terminal-delivery cutoff, repeat the receipt and aggregate checks in
   the selected deployment environment, and add external representative checks,
-  escalation/quiet periods and rollout pause criteria.
+  production quiet/reminder thresholds, wider escalation and rollout pause criteria.
 - **Usage metering.** Cloud now records immutable organisation-scoped events for
   snapshot storage and transfer, completed installation operations, accepted monitoring
   probes and terminal administrative alert outcomes. Bounded reconciliation repairs

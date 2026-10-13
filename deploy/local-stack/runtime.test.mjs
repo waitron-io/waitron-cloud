@@ -112,3 +112,13 @@ test('older local configuration keeps its bytes and independent paths without in
  assert.deepEqual(await bootstrap(path),config);assert.deepEqual(await loadRuntime(path),config);
  assert.equal(runtimeEnvironment('account',config).CLOUD_FACTOR_KEYS,undefined);
 });
+
+test('monitor alone receives explicit quiet and reminder settings',async()=>{
+ const {config}=await configured(),settings={CLOUD_MONITOR_QUIET_SECONDS:'2',CLOUD_MONITOR_REMINDER_SECONDS:'3',UNRELATED_SECRET:'private'};
+ const env=runtimeEnvironment('monitor',config,settings);
+ assert.equal(env.CLOUD_MONITOR_QUIET_SECONDS,'2');assert.equal(env.CLOUD_MONITOR_REMINDER_SECONDS,'3');assert.equal(env.UNRELATED_SECRET,undefined);
+ for(const role of ['migrate','account','email','usage','probe','backup','gateway','manifest','reconcile']){
+  const other=runtimeEnvironment(role,config,settings);assert.equal(other.CLOUD_MONITOR_QUIET_SECONDS,undefined);assert.equal(other.CLOUD_MONITOR_REMINDER_SECONDS,undefined);
+ }
+ assert.equal(runtimeEnvironment('monitor',config).CLOUD_MONITOR_QUIET_SECONDS,undefined);
+});

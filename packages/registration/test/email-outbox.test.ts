@@ -450,3 +450,13 @@ test('service alert batches preserve input order and reject invalid input atomic
   await assert.rejects(transaction(pool,client=>outbox.enqueueServiceAlerts(client,Array.from({length:101},()=>messages[0]!))),/Invalid queued email/);
   assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'2');
 });
+
+test('encrypted service alerts retain legacy transitions and the reminder discriminator',async()=>{
+ const base={email:'owner@example.test',incidentId:randomUUID(),venueId:randomUUID(),revision:1,issue:'disconnected' as const};
+ const messages=[{...base,state:'open' as const},{...base,state:'recovered' as const},{...base,state:'open' as const,notification:'reminder' as const}];
+ const ids=await transaction(pool,client=>outbox.enqueueServiceAlerts(client,messages));
+ const records=(await pool.query('SELECT * FROM email_outbox WHERE id=ANY($1::uuid[])',[ids])).rows;
+ assert.deepEqual(ids.map(id=>outbox.open(records.find(record=>record.id===id))),messages);
+ assert(records.every(record=>!record.payload.includes(Buffer.from('reminder'))));
+ await assert.rejects(transaction(pool,client=>outbox.enqueueServiceAlerts(client,[{...base,state:'recovered',notification:'reminder'}])),/Invalid queued email/);
+});

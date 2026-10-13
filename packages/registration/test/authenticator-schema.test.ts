@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {after, before, beforeEach, test} from 'node:test';
 import {Pool} from 'pg';
-import {migrate,migrationNames} from '../src/migrate.ts';
+import {migrationRelease} from './fixtures/migration-release.ts';
+const release = await migrationRelease(36);
+const {migrate,names:migrationNames} = release;
 import {hashSecret} from '@waitron-cloud/identity';
 
 const schema = `factor_schema_${randomUUID().replaceAll('-', '')}`;
@@ -11,7 +13,7 @@ const pool = new Pool({connectionString: process.env.TEST_DATABASE_URL, options:
 const account = randomUUID(), other = randomUUID(), session = randomUUID();
 const hash = 'ab'.repeat(32), fingerprint = 'cd'.repeat(32), generation = randomUUID();
 before(async () => {await admin.query(`CREATE SCHEMA ${schema}`); await migrate(pool);});
-after(async () => {await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end();});
+after(async () => {await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end(); await release.close();});
 beforeEach(async () => {
   await pool.query('TRUNCATE cloud_accounts CASCADE');
   await pool.query('INSERT INTO cloud_accounts(id) VALUES($1),($2)', [account, other]);

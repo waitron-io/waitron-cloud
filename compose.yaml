@@ -123,6 +123,9 @@ services:
   monitor-worker:
     <<: *cloud
     command: ["node", "deploy/local-stack/runtime.mjs", "monitor"]
+    environment:
+      CLOUD_MONITOR_QUIET_SECONDS: ${CLOUD_MONITOR_QUIET_SECONDS:-0}
+      CLOUD_MONITOR_REMINDER_SECONDS: ${CLOUD_MONITOR_REMINDER_SECONDS:-0}
     depends_on:
       mailpit:
         condition: service_healthy

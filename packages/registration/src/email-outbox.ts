@@ -42,7 +42,7 @@ export class EmailOutbox {
     const expiresAt:Date=(await client.query("SELECT clock_timestamp()+interval '1 day' AS expiry")).rows[0].expiry;
     const rows=messages.map(message=>{
       if(normaliseEmail(message?.email)!==message?.email||(message.locale!==undefined&&!validLocale(message.locale))||!validServiceAlert(message))throw new Error('Invalid queued email');
-      const id=randomUUID(),nonce=randomBytes(12),content:ServiceAlert={email:message.email,locale:message.locale,incidentId:message.incidentId,revision:message.revision,venueId:message.venueId,issue:message.issue,state:message.state,...(message.checkedAt?{checkedAt:message.checkedAt}:{}),...(message.certificateNotAfter?{certificateNotAfter:message.certificateNotAfter}:{})};
+      const id=randomUUID(),nonce=randomBytes(12),content:ServiceAlert={email:message.email,locale:message.locale,incidentId:message.incidentId,revision:message.revision,venueId:message.venueId,issue:message.issue,state:message.state,...(message.checkedAt?{checkedAt:message.checkedAt}:{}),...(message.certificateNotAfter?{certificateNotAfter:message.certificateNotAfter}:{}),...(message.notification?{notification:message.notification}:{})};
       if(content.locale===undefined)delete content.locale;
       const cipher=createCipheriv('aes-256-gcm',this.#keys.get(this.#active)!,nonce);cipher.setAAD(aad(id,'service_alert',this.#active));
       const encrypted=Buffer.concat([cipher.update(JSON.stringify(content),'utf8'),cipher.final()]);
@@ -181,19 +181,26 @@ export class EmailWorker {
     if(row.kind==='service_alert'){
       if(!validServiceAlert(message))return false;
       const live=(await this.#pool.query(`SELECT p.locale FROM service_alert_deliveries d JOIN email_outbox e ON e.id=d.outbox_id JOIN venue_incidents i ON i.id=d.incident_id
+        LEFT JOIN venue_alert_episodes episode ON episode.id=d.episode_id
         JOIN venues v ON v.id=i.venue_id JOIN installations n ON n.venue_id=v.id
         JOIN organisation_memberships m ON m.organisation_id=v.organisation_id AND m.account_id=d.account_id
         JOIN cloud_accounts a ON a.id=d.account_id JOIN cloud_credentials c ON c.account_id=a.id
         JOIN account_alert_preferences p ON p.account_id=a.id
         WHERE d.outbox_id=$1 AND e.claim_id=$8 AND e.status='processing' AND e.lease_until>clock_timestamp() AND e.expires_at>clock_timestamp() AND i.id=$2 AND i.revision=$3 AND d.revision=i.revision AND i.venue_id=$4 AND i.kind=$5 AND i.status=$6 AND d.state=i.status
+          AND d.notification=$9
+          AND (d.episode_id IS NULL OR (episode.incident_id=i.id AND episode.installation_id=n.id AND episode.status=i.status
+           AND CASE WHEN i.status='open' THEN episode.opening_revision=i.revision ELSE episode.recovery_revision=i.revision END
+           AND EXISTS(SELECT 1 FROM venue_alert_recipients r WHERE r.episode_id=episode.id AND r.account_id=d.account_id)))
+          AND (($9<>'reminder' AND i.status<>'recovered') OR EXISTS(SELECT 1 FROM service_alert_deliveries opening JOIN email_outbox sent ON sent.id=opening.outbox_id
+           WHERE ((d.episode_id IS NOT NULL AND opening.episode_id=d.episode_id) OR (d.episode_id IS NULL AND opening.incident_id=d.incident_id AND opening.revision=d.revision-1)) AND opening.account_id=d.account_id AND opening.state='open' AND opening.notification='transition' AND sent.status='sent'))
           AND m.is_owner AND a.disabled_at IS NULL AND c.email_verified_at IS NOT NULL AND c.email=$7 AND p.enabled
-          AND v.environment='test' AND n.revoked_at IS NULL
+          AND v.environment='test' AND n.revoked_at IS NULL AND n.superseded_by IS NULL
           AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured'
             AND (i.kind='disconnected' OR (i.kind IN ('snapshot_stale','verification_failed') AND s.service='retained_snapshots')
              OR (i.kind IN ('public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale','public_certificate_expiring','staff_certificate_expiring') AND s.service='remote_access'
               AND EXISTS(SELECT 1 FROM remote_placements rp JOIN remote_hostnames h ON h.venue_id=rp.venue_id WHERE rp.installation_id=n.id AND rp.venue_id=v.id
                AND h.kind=CASE WHEN i.kind LIKE 'public_%' THEN 'public' ELSE 'staff' END))))`,
-        [row.id,message.incidentId,message.revision,message.venueId,message.issue,message.state,message.email,row.claim_id])).rows[0];
+        [row.id,message.incidentId,message.revision,message.venueId,message.issue,message.state,message.email,row.claim_id,message.notification??'transition'])).rows[0];
       if(!live)return false;
       message.locale=live.locale;return true;
     }

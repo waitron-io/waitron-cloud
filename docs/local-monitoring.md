@@ -42,7 +42,7 @@ service again; known old contact or snapshot evidence retains its age.
 
 ## Run the monitor
 
-Apply migrations through `017_remote_probe_observations.sql`. Configure `DATABASE_URL` and the
+Apply every migration through `037_monitoring_quiet_escalation.sql`. Configure `DATABASE_URL` and the
 same `CLOUD_EMAIL_KEYS` and `CLOUD_EMAIL_ACTIVE_KEY_ID` used by the account email queue.
 The monitor encrypts notification payloads using those keys. It needs no backup master
 key, storage credentials or SMTP credentials.
@@ -128,30 +128,81 @@ pnpm mail:up
 CLOUD_MAIL_TRANSPORT=local pnpm mail:worker
 ```
 
+## Delay brief incidents and send one reminder
+
+You can leave an incident visible in the portal while waiting to see whether it clears
+before sending mail. Both timing options default to `0`, which disables that option.
+For a local rehearsal, supply seconds only to the monitor:
+
+```sh
+CLOUD_MONITOR_QUIET_SECONDS=120 \
+CLOUD_MONITOR_REMINDER_SECONDS=180 \
+pnpm monitor:worker
+```
+
+This example waits two minutes before opening mail and allows one reminder three minutes
+after each recipient's opening is recorded as sent. These are fixture values, not production
+recommendations. Each setting accepts an integer from `0` to `604800`; blank, negative,
+fractional or larger values stop the worker. The incident appears immediately regardless
+of the email delay. A brief incident that recovers during the wait sends no email.
+
+Each uninterrupted open period captures its timing settings and eligible account IDs.
+Its opening deadline uses PostgreSQL's opening time. Each reminder deadline uses that
+recipient's committed opening send time. Restarting workers or changing configuration
+leaves those deadlines fixed. A deadline makes mail eligible for the next monitor scan;
+it does not promise delivery at that instant. An owner added or enabled during the wait
+receives future incidents instead of this incident's opening, reminder or recovery.
+
 ## Delivery rules
 
-Repeated scans and worker restarts do not queue the same incident transition twice.
-Each recipient has a unique record for that incident revision. Recovery mail goes only
-to current owners whose opening message was recorded as sent. New owners and people
-opting in mid-incident can see the current status in the portal and receive future alerts.
-One transition encrypts and inserts recipient messages in groups of at most 100. The
-matching delivery rows use the same bound and transaction, so a failed group rolls back
-the incident and every message instead of leaving a partial fan-out.
+Repeated scans, concurrent workers and restarts keep one queue identity for each recipient
+and notification in an open period. One optional reminder requires the same recipient's
+recorded sent opening and a still-open incident. Recovery mail also requires that sent
+opening. If a send already accepted by the mail transport finishes after the monitor sees
+recovery, a later scan creates the missing recovery notice once. An uncertain send or a
+stale worker claim cannot authorize it. Recovery, suppression or replacement cancels future
+work; a later failure starts a new open period with a fresh recipient list and deadlines.
 
-Before handing an alert to the transport, the email worker rechecks its delivery claim,
-current ownership, account status, verified email address, preference,
-service configuration, current public or staff route, revocation and incident revision.
-An obsolete message is cancelled.
-Language is refreshed from your current preference at sending time, so changing it
-does not discard a queued alert. Run the monitor and mail worker from the same updated
-checkout. Messages expire after 24 hours and use the existing bounded email retries. They contain
-a venue identifier, a fixed explanation and an account link, with no backup keys, object
-paths or archive content.
+Recipient snapshots, outbox messages and delivery links use groups of at most 100 in one
+transaction. A failed group rolls back the whole observation and every notification slot.
+Before enqueueing delayed mail and immediately before transport handoff, workers recheck
+current ownership, account status, verified matching address, preference, service, route,
+original installation and incident revision. Messages that have become obsolete are
+cancelled. Language follows your current preference at sending time.
 
-A provider may accept a message before a later preference change or incident recovery.
-That message cannot be recalled. A crash or uncertain SMTP response after acceptance
-can also cause a duplicate on retry. Queue deduplication does not remove that transport
-limitation.
+A recorded send means the queue worker committed its valid claim's `sent` outcome. It does
+not prove inbox delivery, and optional SMTP metadata is not required. A provider can accept
+mail before a connection fails or the process stops, so retries may duplicate it. One reminder
+means one durable queue identity, with the existing transport retries, rather than exactly one
+SMTP delivery. Monitoring mail remains independent of Cloud account recovery and the venue
+email relay.
+
+Upgrading existing incidents creates no historical opening or reminder, even when you enable
+these timings. Existing queued openings remain readable with their original external email
+keys, and a late recorded send can still authorize recovery. Keep those keys separately from
+your database backup. Cleanup protects opening receipts while reminders or recovery still
+need them and until usage reconciliation records terminal outcomes. It uses your explicitly
+supplied history cutoff; no retention duration is selected for you.
+
+## Rehearse the monitoring schema upgrade
+
+Run the populated upgrade against a clean committed implementation. The old revision
+below has 36 migrations; the new revision must have 37:
+
+```sh
+node scripts/schema-upgrade-receipt.mjs /tmp/cloud-monitoring-upgrade.json \
+  --monitoring-quiet \
+  --old d681db284ac8babeffb9f1029c2c32f8dc47701c \
+  --new "$(git rev-parse HEAD)"
+node scripts/verify-schema-upgrade-receipt.mjs /tmp/cloud-monitoring-upgrade.json
+```
+
+The version 4 receipt requires a populated interrupted/retried upgrade and two separate
+backup restores. It checks original account, factor and relay state, unchanged notification
+deadlines and recipient lists, late sent-opening recovery, and wrong/missing email-key
+refusal. It also checks that the source database stays unchanged and that every resource
+created by the proof is removed. This uses local PostgreSQL and Mailpit only. It establishes
+neither an online upgrade nor recovery of writes made after a backup.
 
 ## Evidence and next deployment work
 

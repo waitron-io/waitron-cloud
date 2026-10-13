@@ -1,17 +1,17 @@
 import {Pool} from 'pg';
 import {EmailOutbox} from './email-outbox.ts';
 import {MonitorWorker,monitorStatus} from './monitoring.ts';
+import {monitorConfigFromEnv} from './monitor-config.ts';
 import {runWorkerLoop} from './worker-loop.ts';
 let pool:Pool|undefined;
 const stop=new AbortController(),shutdown=()=>stop.abort();
 const workerConcurrency=4;
 class MonitorConfigurationError extends Error{}
-function configuredInteger(name:string,fallback:number,max:number){const raw=process.env[name];if(raw===undefined)return fallback;const value=Number(raw);if(!Number.isInteger(value)||value<1||value>max)throw new MonitorConfigurationError();return value;}
 process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
 try{
  const args=process.argv.slice(2),mode=args[0];
  if(args.length>1||(mode&&!['--once','--status'].includes(mode))||!process.env.DATABASE_URL)throw Error();
- const monitorConfig={probeStaleSeconds:configuredInteger('CLOUD_REMOTE_PROBE_STALE_SECONDS',300,86400),certificateWarningDays:configuredInteger('CLOUD_REMOTE_CERTIFICATE_WARNING_DAYS',30,3650)};
+ let monitorConfig;try{monitorConfig=monitorConfigFromEnv(process.env);}catch{throw new MonitorConfigurationError();}
  pool=new Pool({connectionString:process.env.DATABASE_URL,max:workerConcurrency+1,connectionTimeoutMillis:5000,statement_timeout:10000});
  pool.on('error',()=>{console.error('Monitor database connection failed; retrying');});
  await pool.query('SELECT checked_at,next_check_at FROM venue_monitors LIMIT 0');

@@ -49,6 +49,22 @@ async function server(options: SMTPServerOptions = {}) {
 }
 const readable = (raw: string) => raw.replace(/=\r\n/g, '').replace(/=3D/g, '=');
 
+test('reminders render through verified local TLS with stable delivery IDs',async()=>{
+ const smtp=await server();
+ try{
+  const mailer=createSmtpAccountMailer({...base,port:smtp.port},{ca:cert});
+  for(const locale of ['en','es'] as const){
+   const delivery=context(),venueId=randomUUID();
+   const receipt=await mailer.sendServiceAlert({email:'reminder@example.test',locale,incidentId:randomUUID(),venueId,revision:1,issue:'disconnected',state:'open',notification:'reminder'},delivery);
+   assert.equal(receipt.messageId,`<${delivery.deliveryId}@example.test>`);const captured=smtp.data.at(-1)!;assert.equal(captured.secure,true);assert.deepEqual(captured.to,['reminder@example.test']);
+   // The MIME body uses base64 for accented Spanish text.
+   const body=captured.raw.split(/\r\n\r\n/).slice(1).join('\r\n\r\n'),text=/Content-Transfer-Encoding: base64/i.test(captured.raw)?Buffer.from(body.replaceAll(/\s/g,''),'base64').toString():readable(body);
+   assert(text.includes(locale==='en'?'This issue is still open. Check your account for current service status.':'Esta incidencia sigue abierta. Consulta el estado actual de los servicios en tu cuenta.'));assert(text.includes(venueId));assert(text.includes('https://cloud.example.test/account'));assert(!text.includes('notification'));
+  }
+  assert.equal(smtp.data.length,2);
+ }finally{await smtp.close();}
+});
+
 test('production adapter authenticates over verified TLS and sends all account messages with stable IDs', async () => {
   const smtp = await server(); const oldEnv = process.env.NODE_ENV;
   try {
