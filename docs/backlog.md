@@ -817,7 +817,12 @@ notifications separately.
   copy and transport retries that keep the same queue identity. Independent email
   processes claim one reminder; final delivery checks refuse changes to ownership,
   preferences, address, service, installation, incident occurrence or the opening receipt.
-  Late-receipt recovery, cleanup and packaged upgrade/restore proofs remain open;
+  Later scans now reconcile accepted opening receipts that finish after recovery.
+  Local PostgreSQL tests cover one recovery after concurrent scans/restart, no recovery
+  from uncertain or stale claims, replacement/suppression/reopening cancellation,
+  receipt protection through queued recovery, bounded cleanup after metering and
+  rollback of each second 100-recipient batch. Reminders use the existing immutable
+  usage source once per terminal outcome. Packaged upgrade/restore proofs remain open;
   this implementation branch has not completed review or CI.
   The [local monitor](local-monitoring.md) now records missing contact, stale snapshots
   and failed verification for configured test installations. The portal shows incident

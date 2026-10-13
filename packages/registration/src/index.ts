@@ -263,7 +263,7 @@ export {PairingError,verifyPairingProof,pairingPayload,type PairingClaims} from 
 export {InstallationStore,type InstallationView,type DesiredService} from './installations.ts';
 export {InstallationError,createLeaseIssuer,createLeaseTrust,readMachineClaims,encodeMachine,verifyMachine,verifyLease,type MachineAction,type SignedEnvelope,type LeaseIssuer} from './installation-proof.ts';
 
-export {MonitorWorker,monitorStatus} from './monitoring.ts';
+export {MonitorWorker,suppressAlertEpisode,monitorStatus} from './monitoring.ts';
 export type {ServiceAlert,ServiceAlertMailer,IncidentKind} from './service-alert.ts';
 export {HistoryCleanup, historyCleanupCategories, parseHistoryCleanupPolicy} from './history-cleanup.ts';
 export type {HistoryCleanupCategory, HistoryCleanupCategoryReport, HistoryCleanupPolicy, HistoryCleanupReport} from './history-cleanup.ts';

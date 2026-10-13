@@ -205,8 +205,20 @@ export class HistoryCleanup {
 
   async #emailDeliveries(client: PoolClient, cutoff: string, limit: number, apply: boolean) {
     const terminal = `e.status IN ('sent','expired','cancelled','failed') AND e.finished_at<$1`;
+    // Take settled episode locks before delivery locks, matching the monitor's order.
+    // An unfinished episode retains receipts even when its incident is already recovered.
+    const settled=apply?(await client.query(`SELECT episode.id FROM venue_alert_episodes episode WHERE episode.status<>'open' AND episode.recovery_complete
+      AND (episode.opened_at<$2 OR EXISTS(SELECT 1 FROM service_alert_deliveries aged JOIN email_outbox mail ON mail.id=aged.outbox_id WHERE aged.episode_id=episode.id AND mail.finished_at<$2))
+      AND NOT EXISTS(SELECT 1 FROM service_alert_deliveries d JOIN email_outbox mail ON mail.id=d.outbox_id
+       WHERE d.episode_id=episode.id AND (mail.status IN ('pending','processing') OR NOT EXISTS(SELECT 1 FROM usage_events u
+        WHERE u.event_type='message.service_alert_'||mail.status AND u.source_kind='service_alert' AND u.source_reference=mail.id::text)))
+      ORDER BY episode.opened_at,episode.id LIMIT $1 FOR UPDATE OF episode SKIP LOCKED`,[Math.min(limit,100),cutoff])).rows.map(r=>r.id as string):[];
     const currentIncident = `EXISTS(SELECT 1 FROM service_alert_deliveries d JOIN venue_incidents i ON i.id=d.incident_id
-      WHERE d.outbox_id=e.id AND i.status='open')`;
+      LEFT JOIN venue_alert_episodes episode ON episode.id=d.episode_id
+      WHERE d.outbox_id=e.id AND (i.status='open' OR (episode.id IS NOT NULL AND (NOT episode.recovery_complete OR episode.status='open'
+       OR EXISTS(SELECT 1 FROM service_alert_deliveries other JOIN email_outbox mail ON mail.id=other.outbox_id WHERE other.episode_id=episode.id
+        AND (mail.status IN ('pending','processing') OR NOT EXISTS(SELECT 1 FROM usage_events u WHERE u.event_type='message.service_alert_'||mail.status
+         AND u.source_kind='service_alert' AND u.source_reference=mail.id::text)))))))`;
     const metered = `(NOT EXISTS(SELECT 1 FROM service_alert_deliveries d WHERE d.outbox_id=e.id)
       OR EXISTS(SELECT 1 FROM usage_events u WHERE u.event_type='message.service_alert_'||e.status
        AND u.source_kind='service_alert' AND u.source_reference=e.id::text))`;
@@ -216,7 +228,8 @@ export class HistoryCleanup {
     if (apply) {
       const alerts = await client.query<{id: string}>(`SELECT e.id FROM email_outbox e
         JOIN service_alert_deliveries d ON d.outbox_id=e.id WHERE ${terminal} AND NOT ${currentIncident} AND ${metered}
-        ORDER BY e.finished_at,e.id LIMIT $2 FOR UPDATE OF e,d SKIP LOCKED`, [cutoff, limit]);
+        AND (d.episode_id IS NULL OR d.episode_id=ANY($3::uuid[]))
+        ORDER BY e.finished_at,e.id LIMIT $2 FOR UPDATE OF e,d SKIP LOCKED`, [cutoff, limit, settled]);
       const ids = alerts.rows.map(row => row.id);
       if (ids.length < limit) {
         const plain = await client.query<{id: string}>(`SELECT e.id FROM email_outbox e WHERE ${terminal}
@@ -233,7 +246,18 @@ export class HistoryCleanup {
         deleted = result.rowCount ?? 0;
       }
     }
-    return {cutoff, eligible, blocked, deleted, hasMore: apply ? eligible > deleted : eligible > 0};
+    if(apply&&settled.length){
+      await client.query(`WITH selected AS(SELECT r.episode_id,r.account_id FROM venue_alert_recipients r JOIN venue_alert_episodes episode ON episode.id=r.episode_id
+       WHERE episode.id=ANY($1::uuid[]) AND episode.opened_at<$2 AND NOT EXISTS(SELECT 1 FROM service_alert_deliveries d WHERE d.episode_id=episode.id)
+       ORDER BY r.episode_id,r.account_id LIMIT $3 FOR UPDATE OF r SKIP LOCKED)
+       DELETE FROM venue_alert_recipients r USING selected s WHERE r.episode_id=s.episode_id AND r.account_id=s.account_id`,[settled,cutoff,Math.min(limit,100)]);
+      await client.query(`DELETE FROM venue_alert_episodes episode WHERE episode.id=ANY($1::uuid[]) AND episode.opened_at<$2
+       AND NOT EXISTS(SELECT 1 FROM service_alert_deliveries d WHERE d.episode_id=episode.id)
+       AND NOT EXISTS(SELECT 1 FROM venue_alert_recipients r WHERE r.episode_id=episode.id)`,[settled,cutoff]);
+    }
+    const schedules=await count(client,`SELECT count(*)::integer AS count FROM venue_alert_episodes episode WHERE episode.opened_at<$1 AND episode.status<>'open' AND episode.recovery_complete
+      AND NOT EXISTS(SELECT 1 FROM service_alert_deliveries d WHERE d.episode_id=episode.id)`,[cutoff]);
+    return {cutoff, eligible, blocked, deleted, hasMore: (apply ? eligible > deleted : eligible > 0) || schedules > 0};
   }
 
   async #recoveryHistory(client: PoolClient, cutoff: string, limit: number, apply: boolean) {

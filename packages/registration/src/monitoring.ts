@@ -75,6 +75,8 @@ export class MonitorWorker {
    ON CONFLICT(venue_id,kind) DO UPDATE SET status=EXCLUDED.status,revision=venue_incidents.revision+1,
    opened_at=CASE WHEN EXCLUDED.status='open' THEN EXCLUDED.opened_at ELSE venue_incidents.opened_at END,changed_at=EXCLUDED.changed_at RETURNING *`,[venueId,kind,status,now])).rows[0]:previous;
   if(changed&&status==='open'){
+   const obsolete=(await client.query("SELECT id FROM venue_alert_episodes WHERE incident_id=$1 AND status<>'suppressed' ORDER BY opening_revision FOR UPDATE",[row.id])).rows;
+   for(const old of obsolete)await suppressAlertEpisode(client,old.id,now);
    const episode=(await client.query(`INSERT INTO venue_alert_episodes(incident_id,installation_id,opening_revision,opened_at,quiet_seconds,reminder_seconds,opening_due_at,status)
     VALUES($1,$2,$3,$4,$5,$6,$4::timestamptz+$5::integer*interval '1 second','open') RETURNING *`,[row.id,installationId,row.revision,row.opened_at,this.#quietSeconds,this.#reminderSeconds])).rows[0];
    const recipients=await this.#eligible(client,venueId,kind,installationId);
@@ -84,13 +86,15 @@ export class MonitorWorker {
      SELECT $1,id,$3,'waiting' FROM unnest($2::uuid[]) id`,[episode.id,accounts,this.#reminderSeconds===0?'cancelled':'waiting']);
    }
   }
-  const episode=(await client.query(`SELECT * FROM venue_alert_episodes WHERE incident_id=$1 AND opening_revision=$2 FOR UPDATE`,[row.id,status==='open'?row.revision:changed&&previous?.status==='open'?previous.revision:row.revision-1])).rows[0];
+  const episode=(await client.query(`SELECT * FROM venue_alert_episodes WHERE incident_id=$1 AND ($2::integer IS NULL OR opening_revision=$2) ORDER BY opening_revision DESC LIMIT 1 FOR UPDATE`,[row.id,status==='open'?row.revision:null])).rows[0];
   if(!episode)return;
-  if(changed&&status!=='open'){
-   await client.query(`UPDATE venue_alert_episodes SET status=$2,recovery_revision=$3,opening_processed_at=COALESCE(opening_processed_at,$4),recovery_complete=$5 WHERE id=$1`,[episode.id,status,status==='recovered'?row.revision:null,now,status==='suppressed']);
-   await client.query(`UPDATE venue_alert_recipients SET reminder_status=CASE WHEN reminder_status='waiting' THEN 'cancelled' ELSE reminder_status END,
-    recovery_status=CASE WHEN $2='suppressed' AND recovery_status='waiting' THEN 'cancelled' ELSE recovery_status END WHERE episode_id=$1`,[episode.id,status]);
+  if(status==='suppressed'||episode.installation_id!==installationId){
+   await suppressAlertEpisode(client,episode.id,now);return;
   }
+  if(changed&&status==='recovered'){
+   await client.query(`UPDATE venue_alert_episodes SET status='recovered',recovery_revision=$2,opening_processed_at=COALESCE(opening_processed_at,$3) WHERE id=$1`,[episode.id,row.revision,now]);
+  }
+  if(status==='recovered')await cancelEpisodeMail(client,episode.id,true);
   if(status==='open'&&episode.status==='open'&&episode.installation_id===installationId&&episode.opening_processed_at===null&&episode.opening_due_at<=now){
    const recipients=await this.#eligible(client,venueId,kind,installationId,episode.id);
    await this.#enqueue(client,row,episode.id,recipients,'open',evidence);
@@ -117,13 +121,32 @@ export class MonitorWorker {
     await client.query(`UPDATE venue_alert_recipients r SET reminder_due_at=v.deadline,reminder_status=v.outcome FROM (VALUES ${values.join(',')}) v(account_id,deadline,outcome) WHERE r.episode_id=$1 AND r.account_id=v.account_id`,[episode.id,...updates]);
    }
   }
-  if(changed&&status==='recovered'&&previous?.status==='open'){
+  if(status==='recovered'&&episode.installation_id===installationId){
    const recipients=await this.#eligible(client,venueId,kind,episode.installation_id,episode.id);
-   const told=(await client.query(`SELECT d.account_id FROM service_alert_deliveries d JOIN email_outbox e ON e.id=d.outbox_id
-    WHERE d.episode_id=$1 AND d.state='open' AND d.notification='transition' AND e.status='sent'`,[episode.id])).rows.map(r=>r.account_id);
-   const notified=recipients.filter(r=>told.includes(r.id));
-   await this.#enqueue(client,row,episode.id,notified,'recovered',evidence);
-   for(let offset=0;offset<notified.length;offset+=100)await client.query("UPDATE venue_alert_recipients SET recovery_status='queued' WHERE episode_id=$1 AND account_id=ANY($2::uuid[])",[episode.id,notified.slice(offset,offset+100).map(r=>r.id)]);
+   const slots=(await client.query(`SELECT r.*,opened.status AS opening_status,recovered.status AS recovery_outcome FROM venue_alert_recipients r
+    LEFT JOIN service_alert_deliveries d ON d.episode_id=r.episode_id AND d.account_id=r.account_id AND d.state='open' AND d.notification='transition'
+    LEFT JOIN email_outbox opened ON opened.id=d.outbox_id
+    LEFT JOIN service_alert_deliveries recovery ON recovery.episode_id=r.episode_id AND recovery.account_id=r.account_id AND recovery.state='recovered'
+    LEFT JOIN email_outbox recovered ON recovered.id=recovery.outbox_id WHERE r.episode_id=$1 ORDER BY r.account_id`,[episode.id])).rows;
+   for(let offset=0;offset<slots.length;offset+=100){
+    const batch=slots.slice(offset,offset+100),ready:{id:string;email:string;locale:'en'|'es'}[]=[],updates:unknown[]=[],values:string[]=[];
+    for(const slot of batch){
+     let recovery=slot.recovery_status;
+     if(recovery==='waiting'){
+      const recipient=recipients.find(r=>r.id===slot.account_id);
+      if(!recipient)recovery='cancelled';
+      else if(slot.opening_status==='sent'){ready.push(recipient);recovery='queued';}
+      else if(!['pending','processing'].includes(slot.opening_status))recovery='cancelled';
+     }else if(recovery==='queued'&&!['pending','processing'].includes(slot.recovery_outcome))recovery='done';
+     const base=updates.length;updates.push(slot.account_id,recovery);values.push(`($${base+2}::uuid,$${base+3}::text)`);
+    }
+    await this.#enqueue(client,row,episode.id,ready,'recovered',evidence);
+    await client.query(`UPDATE venue_alert_recipients r SET reminder_status=CASE WHEN reminder_status IN ('waiting','queued') THEN 'cancelled' ELSE reminder_status END,recovery_status=v.outcome
+     FROM (VALUES ${values.join(',')}) v(account_id,outcome) WHERE r.episode_id=$1 AND r.account_id=v.account_id`,[episode.id,...updates]);
+   }
+   // Processing openings may still commit a truthful sent receipt after recovery.
+   await client.query(`UPDATE venue_alert_episodes SET recovery_complete=NOT EXISTS(SELECT 1 FROM venue_alert_recipients WHERE episode_id=$1 AND recovery_status IN ('waiting','queued'))
+    AND NOT EXISTS(SELECT 1 FROM service_alert_deliveries d JOIN email_outbox e ON e.id=d.outbox_id WHERE d.episode_id=$1 AND e.status IN ('pending','processing')) WHERE id=$1`,[episode.id]);
   }
  }
  async #eligible(client:PoolClient,venueId:string,kind:IncidentKind,installationId:string,episodeId?:string):Promise<{id:string;email:string;locale:'en'|'es'}[]>{
@@ -159,4 +182,20 @@ export async function monitorStatus(pool:Pool){
   count(*) FILTER(WHERE checked_at IS NULL OR checked_at<=clock_timestamp()-interval '5 minutes')::integer AS unknown,min(checked_at) AS oldest_check_at FROM venue_monitors`)).rows[0];
  const incidents=(await pool.query("SELECT count(*)::integer AS count FROM venue_incidents WHERE status='open'")).rows[0].count;
  return {venues:row.venues,due:row.due,unknown:row.unknown,incidents,oldestCheckAt:row.oldest_check_at?.toISOString()??null};
+}
+
+async function cancelEpisodeMail(client:PoolClient,episodeId:string,openOnly:boolean){
+ while(true){
+  const cancelled=await client.query(`WITH pending AS(SELECT e.id FROM email_outbox e JOIN service_alert_deliveries d ON d.outbox_id=e.id
+   WHERE d.episode_id=$1 AND e.status='pending' AND (NOT $2::boolean OR d.state='open') ORDER BY e.id LIMIT 100 FOR UPDATE OF e SKIP LOCKED)
+   UPDATE email_outbox e SET status='cancelled',payload=NULL,key_id=NULL,claim_id=NULL,lease_until=NULL,finished_at=clock_timestamp() FROM pending WHERE e.id=pending.id`,[episodeId,openOnly]);
+  if(!cancelled.rowCount)break;
+ }
+}
+export async function suppressAlertEpisode(client:PoolClient,episodeId:string,now:Date){
+ await client.query("UPDATE venue_alert_episodes SET status='suppressed',recovery_revision=NULL,opening_processed_at=COALESCE(opening_processed_at,$2),recovery_complete=true WHERE id=$1",[episodeId,now]);
+ const accounts=(await client.query('SELECT account_id FROM venue_alert_recipients WHERE episode_id=$1 ORDER BY account_id',[episodeId])).rows;
+ for(let offset=0;offset<accounts.length;offset+=100)await client.query(`UPDATE venue_alert_recipients SET reminder_status=CASE WHEN reminder_status IN ('waiting','queued') THEN 'cancelled' ELSE reminder_status END,
+  recovery_status=CASE WHEN recovery_status IN ('waiting','queued') THEN 'cancelled' ELSE recovery_status END WHERE episode_id=$1 AND account_id=ANY($2::uuid[])`,[episodeId,accounts.slice(offset,offset+100).map(r=>r.account_id)]);
+ await cancelEpisodeMail(client,episodeId,false);
 }

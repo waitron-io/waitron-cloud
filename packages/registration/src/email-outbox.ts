@@ -191,8 +191,8 @@ export class EmailWorker {
           AND (d.episode_id IS NULL OR (episode.incident_id=i.id AND episode.installation_id=n.id AND episode.status=i.status
            AND CASE WHEN i.status='open' THEN episode.opening_revision=i.revision ELSE episode.recovery_revision=i.revision END
            AND EXISTS(SELECT 1 FROM venue_alert_recipients r WHERE r.episode_id=episode.id AND r.account_id=d.account_id)))
-          AND ($9<>'reminder' OR EXISTS(SELECT 1 FROM service_alert_deliveries opening JOIN email_outbox sent ON sent.id=opening.outbox_id
-           WHERE opening.episode_id=d.episode_id AND opening.account_id=d.account_id AND opening.state='open' AND opening.notification='transition' AND sent.status='sent'))
+          AND (($9<>'reminder' AND i.status<>'recovered') OR EXISTS(SELECT 1 FROM service_alert_deliveries opening JOIN email_outbox sent ON sent.id=opening.outbox_id
+           WHERE ((d.episode_id IS NOT NULL AND opening.episode_id=d.episode_id) OR (d.episode_id IS NULL AND opening.incident_id=d.incident_id AND opening.revision=d.revision-1)) AND opening.account_id=d.account_id AND opening.state='open' AND opening.notification='transition' AND sent.status='sent'))
           AND m.is_owner AND a.disabled_at IS NULL AND c.email_verified_at IS NOT NULL AND c.email=$7 AND p.enabled
           AND v.environment='test' AND n.revoked_at IS NULL AND n.superseded_by IS NULL
           AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured'
