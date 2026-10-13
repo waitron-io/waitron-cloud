@@ -2,10 +2,13 @@ import assert from 'node:assert/strict';
 import {createHash, randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {setTimeout as delay} from 'node:timers/promises';
-import test from 'node:test';
+import test, {after} from 'node:test';
 import type {Pool} from 'pg';
 import * as registration from '../src/index.ts';
-import {migrate, migrationNames} from '../src/migrate.ts';
+import {migrationRelease} from './fixtures/migration-release.ts';
+const release = await migrationRelease(36);
+const {migrate, names: migrationNames} = release;
+after(() => release.close());
 import {fixture} from './fixtures/relay-worker.ts';
 
 const {checkConsumerSchema} = await import(new URL('../../../deploy/local-stack/runtime.mjs', import.meta.url).href);
@@ -44,7 +47,7 @@ async function populate(f: Awaited<ReturnType<typeof fixture>>) {
 }
 
 test('036 preserves every populated release-35 row and digest across concurrent repeated upgrade', async () => {
-  const f = await fixture();
+  const f = await fixture(release.migrate);
   try {
     assert.equal(migrationNames.at(-1), '036_relay_operator_stop.sql');
     await populate(f); await removeControl(f.pool);
@@ -59,7 +62,7 @@ test('036 preserves every populated release-35 row and digest across concurrent 
     assert.equal(upgraded.length, 36);
     assert.equal(upgraded[35].name, '036_relay_operator_stop.sql');
     for (const row of upgraded) {
-      assert.equal(row.digest, createHash('sha256').update(await readFile(new URL('../migrations/' + row.name, import.meta.url))).digest('hex'));
+      assert.equal(row.digest, createHash('sha256').update(await readFile(new URL('packages/registration/migrations/' + row.name, 'file://' + release.root + '/'))).digest('hex'));
     }
     assert.deepEqual((await f.pool.query('SELECT * FROM relay_control')).rows, [{singleton: true, stopped: false}]);
     const control = new registration.RelayControl(f.pool);
@@ -71,7 +74,7 @@ test('036 preserves every populated release-35 row and digest across concurrent 
 });
 
 test('cancelled 036 ledger insert rolls back its table and every old row before retry', async () => {
-  const f = await fixture(), held = await f.pool.connect();
+  const f = await fixture(release.migrate), held = await f.pool.connect();
   let run: Promise<void> | undefined;
   try {
     assert.equal(migrationNames.at(-1), '036_relay_operator_stop.sql');
@@ -105,11 +108,11 @@ test('cancelled 036 ledger insert rolls back its table and every old row before 
 });
 
 test('release-36 consumer and recovery gates refuse historical future missing and changed ledgers', async () => {
-  const f = await fixture();
+  const f = await fixture(release.migrate);
   try {
-    const root = new URL('../../../', import.meta.url).pathname;
-    assert.equal(hasReleaseMigrationCount('36'), true);
-    for (const count of ['33', '34', '35', '37']) assert.equal(hasReleaseMigrationCount(count), false);
+    const root = release.root;
+    assert.equal(hasReleaseMigrationCount('36', release.names), true);
+    for (const count of ['33', '34', '35', '37']) assert.equal(hasReleaseMigrationCount(count, release.names), false);
     await checkConsumerSchema(f.pool, root);
     const tail = (await f.pool.query("SELECT * FROM schema_migrations WHERE name='036_relay_operator_stop.sql'")).rows[0];
     await f.pool.query("DELETE FROM schema_migrations WHERE name='036_relay_operator_stop.sql'");

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
-import test from 'node:test';
+import test, {after} from 'node:test';
+import {migrationRelease} from './fixtures/migration-release.ts';
+const release = await migrationRelease(36);
+after(() => release.close());
 import {migrate,migrationNames} from '../src/migrate.ts';
 import {fixture} from './fixtures/relay-worker.ts';
 import {RelayBounds} from '../src/relay-bounds.ts';
@@ -18,7 +21,7 @@ async function removeBounds(f:Awaited<ReturnType<typeof fixture>>){
  await f.pool.query("DELETE FROM schema_migrations WHERE name='034_relay_admission_bounds.sql'");
 }
 test('existing 33-migration ciphertext upgrade is repeatable and concurrent; over-cap draining works',async()=>{
- const f=await fixture();try{
+ const f=await fixture(release.migrate);try{
   const v=await f.venue(),a=await v.submit(),b=await v.submit();
   await f.pool.query("UPDATE relay_messages SET state='sending',claim_id=gen_random_uuid(),lease_until=clock_timestamp()+interval '1 minute' WHERE message_id=$1",[b.messageId]);
   const before=(await f.pool.query('SELECT * FROM relay_messages ORDER BY message_id')).rows;
@@ -39,7 +42,7 @@ test('existing 33-migration ciphertext upgrade is repeatable and concurrent; ove
  }finally{await f.close();}
 });
 test('interrupted bounds DDL rolls back ledger and tables, then retry succeeds',async()=>{
- const f=await fixture(),block=await f.pool.connect();let run:Promise<void>|undefined;
+ const f=await fixture(release.migrate),block=await f.pool.connect();let run:Promise<void>|undefined;
  try{
   await removeBounds(f);await block.query('BEGIN');await block.query('LOCK TABLE relay_messages IN ACCESS EXCLUSIVE MODE');
   run=migrate(f.pool);void run.catch(()=>{});
@@ -51,13 +54,13 @@ test('interrupted bounds DDL rolls back ledger and tables, then retry succeeds',
   assert.ok(pid,'migration reached table lock');await block.query('SELECT pg_cancel_backend($1)',[pid]);await assert.rejects(run,{code:'57014'});
   assert.equal((await block.query("SELECT to_regclass('relay_bounds_policy') AS table")).rows[0].table,null);
   assert.equal((await block.query("SELECT count(*) FROM schema_migrations WHERE name='034_relay_admission_bounds.sql'")).rows[0].count,'0');
-  await block.query('COMMIT');await migrate(f.pool);assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'36');
+  await block.query('COMMIT');await migrate(f.pool);assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'37');
  }finally{await block.query('ROLLBACK');block.release();await run?.catch(()=>{});await f.close();}
 });
 test('current release consumer and recovery gates reject missing, future or changed manifests',async()=>{
  const f=await fixture();try{
   const root=new URL('../../../',import.meta.url).pathname;
-  await checkConsumerSchema(f.pool,root);assert.equal(hasReleaseMigrationCount('36'),true);assert.equal(hasReleaseMigrationCount('33'),false);assert.equal(hasReleaseMigrationCount('34'),false);assert.equal(hasReleaseMigrationCount('35'),false);assert.equal(hasReleaseMigrationCount('37'),false);
+  await checkConsumerSchema(f.pool,root);assert.equal(hasReleaseMigrationCount('37'),true);assert.equal(hasReleaseMigrationCount('33'),false);assert.equal(hasReleaseMigrationCount('34'),false);assert.equal(hasReleaseMigrationCount('35'),false);assert.equal(hasReleaseMigrationCount('36'),false);
   const prior=(await f.pool.query("SELECT * FROM schema_migrations WHERE name='034_relay_admission_bounds.sql'")).rows[0];
   await f.pool.query("DELETE FROM schema_migrations WHERE name='034_relay_admission_bounds.sql'");await assert.rejects(checkConsumerSchema(f.pool,root),/schema_incompatible/);
   await f.pool.query('INSERT INTO schema_migrations(name,digest) VALUES($1,$2)',[prior.name,'changed']);await assert.rejects(checkConsumerSchema(f.pool,root),/schema_incompatible/);
@@ -66,7 +69,7 @@ test('current release consumer and recovery gates reject missing, future or chan
 });
 test('pre-upgrade backup restores separately with external keys while upgraded source stays intact',async()=>{
  const {execFile,spawn}=await import('node:child_process');const {promisify}=await import('node:util');const {Pool}=await import('pg');
- const exec=promisify(execFile),f=await fixture();let restored:InstanceType<typeof Pool>|undefined;
+ const exec=promisify(execFile),f=await fixture(release.migrate);let restored:InstanceType<typeof Pool>|undefined;
  const restoredSchema=f.schema+'_restore';
  try{
   const v=await f.venue(),body=await v.submit();const original=await f.row(body.messageId);await removeBounds(f);
@@ -80,7 +83,7 @@ test('pre-upgrade backup restores separately with external keys while upgraded s
   assert.equal((await restored.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'33');
   const copy=(await restored.query('SELECT * FROM relay_messages WHERE message_id=$1',[body.messageId])).rows[0];assert.deepEqual(copy.payload,original.payload);
   const {RelayKeys}=await import('../src/relay-payload.ts');assert.equal(new RelayKeys(f.relay.payloadKeys).open(copy).recipient,body.recipient);
-  await migrate(f.pool);assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'36');
+  await migrate(f.pool);assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'37');
   assert.equal((await restored.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'33');assert.deepEqual((await f.row(body.messageId)).payload,original.payload);
  }finally{await restored?.end();await f.pool.query(`DROP SCHEMA IF EXISTS ${restoredSchema} CASCADE`);await f.close();}
 });

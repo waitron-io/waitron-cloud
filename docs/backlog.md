@@ -800,7 +800,11 @@ notifications separately.
   The reviewed [quiet-period and reminder design](superpowers/specs/2026-10-13-monitoring-quiet-escalation-design.md)
   and [implementation plan](superpowers/plans/2026-10-13-monitoring-quiet-escalation.md)
   define optional delayed opening mail and one reminder, both disabled by default.
-  Implementation and timing, recovery and upgrade proofs remain open.
+  The database foundation is implemented on `feat/monitoring-quiet-escalation`: an
+  append-only upgrade preserves old delivery data and records each incident opening
+  with its original recipients. Local tests cover rollback, concurrent retry, older
+  release gates and batches of at most 100 recipients. Notification scheduling,
+  timing, recovery and packaged upgrade/restore proofs remain open.
   The [local monitor](local-monitoring.md) now records missing contact, stale snapshots
   and failed verification for configured test installations. The portal shows incident
   evidence and stale monitoring; owners can opt in to English/Spanish email alerts.

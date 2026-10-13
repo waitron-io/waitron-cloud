@@ -72,6 +72,9 @@ jobs:
           - '@waitron-cloud/ui-smoke'
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Registration runs populated upgrades with pinned historical runners.
+          fetch-depth: ${{ matrix.package == '@waitron-cloud/registration' && '0' || '1' }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v5
         with:
