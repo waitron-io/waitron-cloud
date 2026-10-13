@@ -253,9 +253,14 @@ venue does not subscribe to remote access or backups.
   focused PostgreSQL checks for committed stop/resume, missing-state refusal and
   shared-reader ordering. Migration 036 preserves populated release-35 account,
   factor and relay state through concurrent/repeated upgrade and interrupted
-  rollback/retry. CLI, admission, worker and separate restore proofs remain open.
+  rollback/retry. The trusted local stop/resume/status command validates every
+  migration name and digest, returns one JSON line after commit and bounds database
+  waits. Its subprocess/PostgreSQL checks cover failed commits, cancellation,
+  preserved queue state and silent root/package forwarding. Admission, worker and
+  separate restore proofs remain open.
   Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
-  node --test test/relay-control.test.ts test/relay-control-migration.test.ts`. Measure admission-lock contention
+  node --test test/relay-control.test.ts test/relay-control-migration.test.ts
+  test/relay-control-cli.test.ts`. Measure admission-lock contention
   before production enablement: status, cancellation and retries share that lock.
   Separately queue Waitron's durable caller/status work before a joint
   local proof.

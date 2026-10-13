@@ -36,7 +36,7 @@ mutations fail their owning assertions. The restored candidate passes 45 checks.
 The release consumer CLI fixture also keeps every original assertion and deadline
 while giving each missing migration its own test; all 31 cases pass with a controlled
 one-second startup cost, and deleting its manifest guard fails the 036 case.
-CLI control, admission, worker, upgrade/restore and branch completion remain below.
+Admission, worker, upgrade/restore and branch completion remain below; Task 2 records CLI proof.
 
 **Create:** registration `migrations/036_relay_operator_stop.sql`, `src/relay-control.ts`, `test/relay-control.test.ts`, `test/relay-control-migration.test.ts`.
 **Modify:** registration `src/{migrate,index}.ts`, `test/{registration,relay-bounds-migration,authenticator-schema}.test.ts`.
@@ -50,14 +50,22 @@ CLI control, admission, worker, upgrade/restore and branch completion remain bel
 
 ## Task 2: Trusted local stop/resume/status command
 
+Complete locally: 21 CLI checks pass, along with the five control and nine existing
+authenticator-key checks. Eighteen independent mutations fail their intended
+assertions. Two redundant checks survive deletion: URL parsing still refuses a
+missing environment value, and the transaction deadline still bounds a single
+ledger-read statement. Removing both statement/transaction bounds fails that read;
+removing the transaction bound alone fails the cumulative-wait check. Both configured
+deadlines remain. The restored CLI passes all 21 checks.
+
 **Create:** `packages/registration/src/relay-control-cli.ts`, `packages/registration/test/relay-control-cli.test.ts`.
 **Modify:** root and registration `package.json` scripts.
 **Interface:** `pnpm --silent relay:control --stop|--resume|--status`; silent nested forwarding and one exact JSON line `{stopped:boolean}`. Fixed error text and exit 1 from the spec; no auto-migration or worker start.
 
-- [ ] Add subprocess tests `control commands acknowledge only committed state` and `control command refuses invalid configuration without leaks`. Assert all three modes, repeat calls, root/package forwarding, stop persistence in fresh processes, queued work unchanged, and no SMTP. Reject no argument, extra/unknown flags, missing/malformed/unreachable DATABASE_URL, missing control, and missing/extra/changed ledger entries. Seed URL/password/SQL-error/customer sentinels and assert neither stream contains them.
-- [ ] Hold a SHARE lock and observe CLI stop's UPDATE wait; assert no success output before release. Inject a deferred update failure, assert exit 1/no JSON and unchanged flag. Cancel a blocked command transaction and prove locks release; test connection/statement/whole-transaction deadlines and pool cleanup. For the cumulative deadline, use two fixture statements each shorter than 10 seconds whose total exceeds 10 seconds, observing their database wait events. A failed resume must leave true.
-- [ ] Run C3 RED; implement CLI following `authenticator-keys-cli.ts`'s complete ledger/digest validation and `usage-reconcile-cli.ts`'s 5-second connect/10-second statement and transaction bounds (one connection, no watch mode). Success prints only after awaited API commit. Rerun GREEN.
-- [ ] Controls: remove each argument/environment guard, bypass ledger count/name/digest checks separately, print before COMMIT, swallow write/commit failure, expose raw caught error or extra status fields, remove connection/statement/whole-transaction deadlines independently; owning tests fail, restored C3 passes. Commit: `feat: add trusted local relay control command`.
+- [x] Add subprocess tests `control commands acknowledge only committed state` and `control command refuses invalid configuration without leaks`. Assert all three modes, repeat calls, root/package forwarding, stop persistence in fresh processes, queued work unchanged, and no SMTP. Reject no argument, extra/unknown flags, missing/malformed/unreachable DATABASE_URL, missing control, and missing/extra/changed ledger entries. Seed URL/password/SQL-error/customer sentinels and assert neither stream contains them.
+- [x] Hold a SHARE lock and observe CLI stop's UPDATE wait; assert no success output before release. Inject a deferred update failure, assert exit 1/no JSON and unchanged flag. Cancel a blocked command transaction and prove locks release; test connection/statement/whole-transaction deadlines and pool cleanup. For the cumulative deadline, use two fixture statements each shorter than 10 seconds whose total exceeds 10 seconds, observing their database wait events. A failed resume must leave true.
+- [x] Run C3 RED; implement CLI following `authenticator-keys-cli.ts`'s complete ledger/digest validation and `usage-reconcile-cli.ts`'s 5-second connect/10-second statement and transaction bounds (one connection, no watch mode). Success prints only after awaited API commit. Rerun GREEN.
+- [x] Controls: remove argument/environment guards, bypass ledger count/name/digest checks separately, print before COMMIT, swallow write/commit failure, expose raw caught error or extra status fields, remove database deadlines and pool cleanup. The 18 effective breakages fail assertions; the two overlapping checks are recorded above rather than claimed independently necessary. Restored C3 passes. Commit: `feat: add trusted local relay control command`.
 
 ## Task 3: Live admission gate without disrupting replay
 

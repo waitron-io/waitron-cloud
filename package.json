@@ -33,6 +33,7 @@
     "db:migrate": "pnpm --filter @waitron-cloud/registration db:migrate",
     "history:cleanup": "pnpm --dir packages/registration history:cleanup",
     "usage:reconcile": "pnpm --dir packages/registration usage:reconcile",
+    "relay:control": "pnpm --silent --dir packages/registration relay:control",
     "operations:status": "node --env-file-if-exists=.env packages/operations/src/cli.ts",
     "local-stack:up": "node scripts/local-stack-lifecycle.mjs up",
     "local-stack:upgrade": "node scripts/local-stack-lifecycle.mjs upgrade",
