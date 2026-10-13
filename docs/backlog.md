@@ -246,8 +246,10 @@ venue does not subscribe to remote access or backups.
   and [local acceptance commands](transactional-email-relay-contract.md#exercise-shared-admission-bounds).
   Choose production budgets and recipient-key custody before enablement; normal
   startup still has no relay configuration. The immutable local policy deliberately
-  refuses mismatched limits rather than resetting budgets. Policy replacement and
-  the operator stop switch remain separate work. Measure admission-lock contention
+  refuses mismatched limits rather than resetting budgets. Policy replacement remains separate work. The
+  [reviewed operator-stop design](superpowers/specs/2026-10-13-relay-operator-stop-design.md)
+  and [implementation plan](superpowers/plans/2026-10-13-relay-operator-stop.md)
+  cover durable local control; implementation and runtime proofs remain open. Measure admission-lock contention
   before production enablement: status, cancellation and retries share that lock.
   Separately queue Waitron's durable caller/status work before a joint
   local proof.
@@ -317,6 +319,20 @@ notifications separately.
   whether a package needs further splitting. This is a working target the
   owner can change. The budget remains separate from intermittent fixture
   failures; more time is not a diagnosis of a failing assertion.
+  **Two fixture failures reproduced after the authenticator merge.**
+  [Run 38373683976](https://github.com/waitron-io/waitron-cloud/actions/runs/38373683976)
+  on docs-only `7860981` failed registration and portal. Advancing each clock read
+  by one millisecond makes the relay worker fixture reject its lease: its separate
+  `issuedAt` and `expiresAt` clock reads can exceed the one-hour limit. Read the
+  clock once when building that fixture; retain the production maximum and every
+  existing worker assertion. The Spanish/dark/390 authenticator journey also failed
+  at its first factor sign-in. A controlled rollover after enrolment reproduces the
+  same timeout with a real 401: the journey's previous-step code then names the
+  already-consumed enrolment step. Choose an unused valid proof for that sign-in
+  while retaining the separate replay/adjacent-step assertions and seven-second
+  wait. The failed CI did not record its factor response or steps, so this is a
+  reproduced failure mechanism, not proof of that run's exact cause. Both fixture
+  corrections remain open; a passing rerun does not resolve them.
 
 - **Shared UI.** [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519)
   implements `@waitron/ui-core` in Waitron with seven account controls, theme tokens
