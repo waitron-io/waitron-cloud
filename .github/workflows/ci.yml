@@ -26,7 +26,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: node --test scripts/ci-workflow.test.mjs scripts/identity-upstream.test.mjs
+      - run: node --test scripts/ci-workflow.test.mjs scripts/identity-upstream.test.mjs scripts/verify-gateway-reconnection-receipt.test.mjs
       - run: pnpm typecheck
   receipts:
     name: receipt (${{ matrix.suite }})

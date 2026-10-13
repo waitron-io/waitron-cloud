@@ -395,9 +395,17 @@ its old kernel session was not available in the replacement gateway, so it recon
 the normal WireGuard rekey window. The clean 2026-09-27 complete-milestone run replaced the
 same local gateway in 14,967 ms and published encrypted snapshots for both venues before
 and after replacement while its peers were freshly established. The timing depends on rekey
-state, so neither result is a production availability target. Define a launch target and
-test an explicit peer-side rekey strategy before promising faster recovery. LAN access
-remains independent. Live provider DNS and
+state, so neither result is a production availability target. The
+[paired gateway comparison](gateway-reconnection-measurements.md) now measures a
+30-second-old peer handshake: unchanged-peer controls recovered in 105.912 and
+105.845 seconds, a peer-originated packet in 19.189 seconds, and explicit peer
+removal/re-addition plus a packet in 4.297 seconds. All trials preserve the gateway
+key and endpoint and require fresh trusted HTTPS with the intended venue body,
+unchanged certificate and newer handshakes. The versioned receipt records the
+clean measurement source and empty fixture cleanup. Repeat with an authenticated
+Waitron appliance trigger, active connections and the selected deployment before
+choosing or promising a faster recovery target. LAN access remains independent.
+Live provider DNS and
 ACME credentials, production key storage, CSR/chain transport, appliance installation,
 automatic customer appliance setup and deployment hardening still need their own
 implementation and validation before customers can subscribe. The local account portal

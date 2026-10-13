@@ -829,9 +829,16 @@ notifications separately.
   now persists real observations while breaking one venue route and the whole gateway,
   proves recovery, stale/invalid-certificate handling, current control contact, portal and
   Mailpit evidence, cross-venue isolation and delivery deduplication, and emits a versioned
-  timing receipt. A mature unchanged local WireGuard peer recovered from gateway replacement
-  after about 111 seconds at its normal rekey window; choose and prove a launch recovery target and any
-  faster peer-side rekey strategy before making an availability promise. The portal now shows
+  timing receipt. The [paired gateway comparison](gateway-reconnection-measurements.md)
+  now preserves key and endpoint while replacing a gateway with a 30-second-old
+  peer handshake. Its unchanged-peer controls recovered in 105.912 and 105.845 seconds;
+  one peer-originated ping recovered in 19.189 seconds, and explicit peer removal/re-addition
+  plus a ping in 4.297 seconds. Each result requires fresh trusted HTTPS, the intended
+  response body, an unchanged certificate and newer handshakes at both ends. The
+  versioned receipt includes empty cleanup and CI refusal checks. These are single
+  local observations, not deployment targets. Waitron still needs a scoped automatic
+  appliance trigger and joint outage/active-connection proof; choose and prove the
+  launch recovery target before making an availability promise. The portal now shows
   separate redacted public/staff evidence and certificate warnings in English and Spanish.
   Opted-in owners receive bilingual remote
   incident and recovery messages; delivery rechecks route authority, and opt-out or
