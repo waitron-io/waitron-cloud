@@ -184,6 +184,26 @@ your database backup. Cleanup protects opening receipts while reminders or recov
 need them and until usage reconciliation records terminal outcomes. It uses your explicitly
 supplied history cutoff; no retention duration is selected for you.
 
+## Rehearse the monitoring schema upgrade
+
+Run the populated upgrade against a clean committed implementation. The old revision
+below has 36 migrations; the new revision must have 37:
+
+```sh
+node scripts/schema-upgrade-receipt.mjs /tmp/cloud-monitoring-upgrade.json \
+  --monitoring-quiet \
+  --old d681db284ac8babeffb9f1029c2c32f8dc47701c \
+  --new "$(git rev-parse HEAD)"
+node scripts/verify-schema-upgrade-receipt.mjs /tmp/cloud-monitoring-upgrade.json
+```
+
+The version 4 receipt requires a populated interrupted/retried upgrade and two separate
+backup restores. It checks original account, factor and relay state, unchanged notification
+deadlines and recipient lists, late sent-opening recovery, and wrong/missing email-key
+refusal. It also checks that the source database stays unchanged and that every resource
+created by the proof is removed. This uses local PostgreSQL and Mailpit only. It establishes
+neither an online upgrade nor recovery of writes made after a backup.
+
 ## Evidence and next deployment work
 
 PostgreSQL tests cover clock boundaries, concurrent monitors, rollback, restart,

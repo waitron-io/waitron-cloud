@@ -810,7 +810,9 @@ notifications separately.
   delivery. SMTP uncertain acceptance can still duplicate sends. The
   [design](superpowers/specs/2026-10-13-monitoring-quiet-escalation-design.md) and
   [plan](superpowers/plans/2026-10-13-monitoring-quiet-escalation.md) record the scope;
-  whole-branch review, CI and the packaged lifecycle proof remain pending on this branch.
+  the local packaged install, restart and rebuilt upgrade each use all 37 migrations
+  and leave no project containers, networks, volumes or image. Production quiet/reminder
+  thresholds, external checks, wider escalation and rollout policy remain open.
   The [local monitor](local-monitoring.md) now records missing contact, stale snapshots
   and failed verification for configured test installations. The portal shows incident
   evidence and stale monitoring; owners can opt in to English/Spanish email alerts.
