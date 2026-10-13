@@ -93,6 +93,7 @@ services:
     <<: *cloud
     environment:
       CLOUD_STAFF_CERTIFICATES: ${CLOUD_STAFF_CERTIFICATES:-0}
+      CLOUD_FACTOR_POLICY: ${CLOUD_FACTOR_POLICY:-}
     command: ["node", "deploy/local-stack/runtime.mjs", "account"]
     depends_on:
       migrate:

@@ -12,3 +12,15 @@ test('receipt rejects absent evidence, equal schemas, unpinned releases and leak
  }
  for(const key of Object.keys(valid.checks)){const value=structuredClone(valid);value.checks[key]=false;assert.throws(()=>verify(value),/schema_upgrade_receipt/,key);}
 });
+
+test('authenticator upgrade receipts require 34-to-35 state preservation and each restored-key check without relabelling history',async()=>{
+ const {verifySchemaUpgradeReceipt:verify}=await import(path.href);
+ const valid={schemaVersion:2,measuredAt:'2026-10-13T08:00:00.000Z',driver:{head:'c'.repeat(40),dirty:false},releases:{old:{head:'a'.repeat(40),migrations:34,digest:'a'.repeat(64)},new:{head:'b'.repeat(40),migrations:35,digest:'b'.repeat(64)}},checks:{oldStarted:true,newRefusedOld:true,migrationInterrupted:true,rollbackComplete:true,newRefusedInterrupted:true,retryApplied:true,oldRefusedNew:true,newStarted:true,identityPreserved:true,tenantsIsolated:true,completionRetry:true,pendingMailPreserved:true,mailDelivered:true,backupRestored:true,oldRecovered:true,wrongKeyRefused:true,upgradedUnchanged:true,accountStatePreserved:true,factorEnrolled:true,factorRestored:true,factorMatchingKey:true,factorWrongKeyRefused:true,factorMissingKeyRefused:true,factorBindingRefused:true},timings:{upgradeMs:1,recoveryMs:2},cleanup:{containers:0,volumes:0,checkouts:0},limitations:['Synthetic local upgrade and logical backups only.']};
+ assert.equal(verify(valid),valid);
+ for(const key of Object.keys(valid.checks)){
+  for(const change of [v=>delete v.checks[key],v=>v.checks[key]=false]){const v=structuredClone(valid);change(v);assert.throws(()=>verify(v),/schema_upgrade_receipt/,key);}
+ }
+ for(const change of [v=>v.schemaVersion=1,v=>v.releases.old.migrations=33,v=>v.releases.new.migrations=36,v=>v.checks.factorSecret='private',v=>v.cleanup.volumes=1]){
+  const v=structuredClone(valid);change(v);assert.throws(()=>verify(v),/schema_upgrade_receipt/);
+ }
+});

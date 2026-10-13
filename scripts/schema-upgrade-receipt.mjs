@@ -9,16 +9,18 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
-import {source,seed,digest,identity,ledger,completionRetry} from './schema-upgrade-fixture.mjs';
+import {source,seed,digest,identity,ledger,completionRetry,upgradeRevisions,seedAccountState,accountState,factorState,enrolFactor,restoredFactor} from './schema-upgrade-fixture.mjs';
 import {verifySchemaUpgradeReceipt} from './verify-schema-upgrade-receipt.mjs';
 
 const driver=resolve(fileURLToPath(new URL('..',import.meta.url)));
-const oldHead='9a56d0122bf6872a0200735a7b1e3a23ad4f825c',newHead='eafd97ad5ac51563e91c821d4c957ef996e5d3fb';
+const {oldHead,newHead,factor}=upgradeRevisions(process.argv.slice(3));
 const output=resolve(process.argv[2]??'/tmp/cloud-schema-upgrade-receipt.json');
-if(process.argv.length>3)throw Error('Usage: schema-upgrade-receipt.mjs [receipt.json]');
+
 const {Pool}=createRequire(new URL('../packages/registration/package.json',import.meta.url))('pg');
 const root=await mkdtemp(join(tmpdir(),'cloud-schema-upgrade-')),old=join(root,'old'),next=join(root,'new');
 const id=randomUUID().slice(0,8),containers=[`cloud-upgrade-${id}`,`cloud-recovery-${id}`,`cloud-upgrade-mail-${id}`];
+if(factor)containers.push(`cloud-factor-recovery-${id}`);
+const factorKeys={activeKeyId:'factor-v1',keys:{'factor-v1':randomBytes(32).toString('hex')}};
 const password=randomBytes(24).toString('hex'),email={activeKeyId:'upgrade-v1',keys:{'upgrade-v1':randomBytes(32).toString('hex')}};
 const pairing={activeKeyId:'pairing-v1',keys:{'pairing-v1':randomBytes(32).toString('hex')}};
 const rateKey=randomBytes(32).toString('hex'),issuer=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url');
@@ -98,27 +100,32 @@ async function tenantRequests(root,account,state){
 }
 try{
  await rm(output,{force:true});
+ console.log(JSON.stringify({phase:'checkouts',oldHead,newHead}));
  for(const [path,head] of [[old,oldHead],[next,newHead]]){
   run('git',['clone','--quiet','--no-hardlinks','--no-checkout',driver,path]);run('git',['checkout','--quiet','--detach',head],{cwd:path});
   run('pnpm',['install','--frozen-lockfile'],{cwd:path,timeout:180000});
  }
+ console.log(JSON.stringify({phase:'databases'}));
  const primary=await database(containers[0]);
  docker('run','-d','--name',containers[2],'-p','127.0.0.1::1025','-p','127.0.0.1::8025','axllent/mailpit:v1.31.1');
  for(const mount of JSON.parse(docker('inspect',containers[2]))[0].Mounts)if(mount.Type==='volume')volumes.push(mount.Name);
  const smtp=docker('port',containers[2],'1025/tcp').split(':').at(-1),mailPort=docker('port',containers[2],'8025/tcp').split(':').at(-1);
  await until(async()=>{try{return(await fetch(`http://127.0.0.1:${mailPort}/api/v1/messages`)).ok;}catch{return false;}},'mailpit');
  node(old,['packages/registration/src/migrate-cli.ts'],environment(primary.url));
- const state=await seed(old,primary.pool,email),beforeIdentity=await identity(primary.pool),oldLedger=await ledger(primary.pool);
- assert.equal(oldLedger.length,26);
+ const state=await seed(old,primary.pool,email,factor?pairing:undefined);
+ if(factor)await seedAccountState(old,primary.pool,state);
+ const beforeAccounts=factor?await accountState(primary.pool):null,beforeIdentity=await identity(primary.pool),oldLedger=await ledger(primary.pool);
+ assert.equal(oldLedger.length,factor?34:26);
  const oldAccount=await startAccount(old,primary.url);checks.oldStarted=true;
  await tenantRequests(old,oldAccount,state);await stop(oldAccount.handle);
  // Freeze the recovery point with no running consumers; keys stay outside pg_dump.
  const backup=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc'],{encoding:null});
  const pendingBefore=(await primary.pool.query('SELECT * FROM email_outbox WHERE id=$1',[state.messageId])).rows[0];
  checks.newRefusedOld=await startAccount(next,primary.url,true);
+ console.log(JSON.stringify({phase:'upgrade'}));
  const upgradeStart=Date.now(),lock=await primary.pool.connect();
  try{
-  await lock.query('BEGIN');await lock.query('LOCK TABLE pairing_requests IN ACCESS SHARE MODE');
+  await lock.query('BEGIN');await lock.query(factor?'LOCK TABLE cloud_sessions IN ACCESS SHARE MODE':'LOCK TABLE pairing_requests IN ACCESS SHARE MODE');
   const migration=child(next,['packages/registration/src/migrate-cli.ts'],{...environment(primary.url),PGAPPNAME:`upgrade-${id}`});
   const blocked=await until(async()=>{const result=await primary.pool.query("SELECT pid FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[`upgrade-${id}`]);return result.rows[0];},'migration blocked on schema lock');
   await primary.pool.query('SELECT pg_terminate_backend($1)',[blocked.pid]);
@@ -126,15 +133,19 @@ try{
  }finally{await lock.query('ROLLBACK');lock.release();}
  assert.deepEqual(await ledger(primary.pool),oldLedger);
  const constraint=(await primary.pool.query("SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conname='pairing_requests_code_hash_check'")).rows[0].definition;
- assert.equal(constraint.includes('v1:'),false);checks.rollbackComplete=true;
+ assert.equal(constraint.includes('v1:'),factor);
+ if(factor)assert.equal((await primary.pool.query("SELECT to_regclass('cloud_authenticator_factors') AS table_name")).rows[0].table_name,null);
+ checks.rollbackComplete=true;
  checks.newRefusedInterrupted=await startAccount(next,primary.url,true);
  node(next,['packages/registration/src/migrate-cli.ts'],environment(primary.url));
  node(next,['packages/registration/src/migrate-cli.ts'],environment(primary.url));
- const newLedger=await ledger(primary.pool);assert.equal(newLedger.length,27);checks.retryApplied=true;
+ const newLedger=await ledger(primary.pool);assert.equal(newLedger.length,factor?35:27);checks.retryApplied=true;
+ if(!factor){
  assert.equal(JSON.parse(node(next,['packages/registration/src/pairing-codes-cli.ts','--once'],environment(primary.url))).upgraded,1);
  assert.equal(JSON.parse(node(next,['packages/registration/src/pairing-codes-cli.ts','--once'],environment(primary.url))).upgraded,0);
  const {PairingStore}=await source(next,'packages/registration/src/pairing.ts');
  assert.equal((await new PairingStore(primary.pool,pairing).start(state.pending)).state,'awaiting_cloud');checks.pairingUpgraded=true;
+ }else{assert.deepEqual(await accountState(primary.pool),beforeAccounts);checks.accountStatePreserved=true;}
  checks.oldRefusedNew=await startAccount(old,primary.url,true);
  const newAccount=await startAccount(next,primary.url);checks.newStarted=true;
  assert.deepEqual(await identity(primary.pool),beforeIdentity);checks.identityPreserved=true;
@@ -146,8 +157,15 @@ try{
  node(next,[gate,'packages/registration/src/email-worker-cli.ts','--once'],mailEnv);
  assert.equal((await primary.pool.query('SELECT status FROM email_outbox WHERE id=$1',[state.messageId])).rows[0].status,'sent');
  assert.equal((await(await fetch(`http://127.0.0.1:${mailPort}/api/v1/messages`)).json()).total,1);checks.mailDelivered=true;
- await stop(newAccount.handle);timings.upgradeMs=Date.now()-upgradeStart;
+ await stop(newAccount.handle);
+ let factorProof,factorBackup,factorBefore;
+ if(factor){
+  factorProof=await enrolFactor(next,primary.pool,state,factorKeys);checks.factorEnrolled=true;factorBefore=await factorState(primary.pool);
+  factorBackup=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc'],{encoding:null});
+ }
+ timings.upgradeMs=Date.now()-upgradeStart;
  const upgradedDigest=digest({ledger:await ledger(primary.pool),identity:await identity(primary.pool),mail:(await primary.pool.query('SELECT * FROM email_outbox ORDER BY id')).rows,pairing:(await primary.pool.query('SELECT * FROM pairing_requests ORDER BY id')).rows});
+ console.log(JSON.stringify({phase:'restore'}));
  const recoveryStart=Date.now(),recovered=await database(containers[1]);
  run('docker',['exec','-i',containers[1],'pg_restore','-U','postgres','-d','cloud','--exit-on-error'],{input:backup,encoding:null});
  assert.deepEqual(await ledger(recovered.pool),oldLedger);assert.deepEqual(await identity(recovered.pool),beforeIdentity);checks.backupRestored=true;
@@ -158,12 +176,21 @@ try{
  assert.equal(new EmailOutbox(email).open(restoredMail).email,'upgrade-one@example.test');checks.wrongKeyRefused=true;
  const recoveredAccount=await startAccount(old,recovered.url);
  await tenantRequests(old,recoveredAccount,state);await completionRetry(old,recovered.pool,state);
- const oldPairing=await source(old,'packages/registration/src/pairing.ts');assert.equal((await new oldPairing.PairingStore(recovered.pool).start(state.pending)).state,'awaiting_cloud');
+ const oldPairing=await source(old,'packages/registration/src/pairing.ts');assert.equal((await new oldPairing.PairingStore(recovered.pool,factor?pairing:undefined).start(state.pending)).state,'awaiting_cloud');
  node(old,[gate,'packages/registration/src/email-worker-cli.ts','--once'],{...mailEnv,DATABASE_URL:recovered.url});
  assert.equal((await recovered.pool.query('SELECT status FROM email_outbox WHERE id=$1',[state.messageId])).rows[0].status,'sent');
- checks.oldRecovered=true;await stop(recoveredAccount.handle);timings.recoveryMs=Date.now()-recoveryStart;
+ checks.oldRecovered=true;await stop(recoveredAccount.handle);
+ if(factor){
+  assert.deepEqual(await accountState(recovered.pool),beforeAccounts);
+  const restored=await database(containers[3]);
+  run('docker',['exec','-i',containers[3],'pg_restore','-U','postgres','-d','cloud','--exit-on-error'],{input:factorBackup,encoding:null});
+  assert.deepEqual(await factorState(restored.pool),factorBefore);checks.factorRestored=true;
+  await restoredFactor(next,restored.pool,factorProof,factorKeys);
+  for(const name of ['factorMatchingKey','factorWrongKeyRefused','factorMissingKeyRefused','factorBindingRefused'])checks[name]=true;
+ }
+ timings.recoveryMs=Date.now()-recoveryStart;
  assert.equal(digest({ledger:await ledger(primary.pool),identity:await identity(primary.pool),mail:(await primary.pool.query('SELECT * FROM email_outbox ORDER BY id')).rows,pairing:(await primary.pool.query('SELECT * FROM pairing_requests ORDER BY id')).rows}),upgradedDigest);checks.upgradedUnchanged=true;
- receipt={schemaVersion:1,driver:{head:git('rev-parse','HEAD'),dirty:git('status','--porcelain')!==''},releases:{old:{head:oldHead,migrations:oldLedger.length,digest:digest(oldLedger)},new:{head:newHead,migrations:newLedger.length,digest:digest(newLedger)}},checks,timings,measuredAt:new Date().toISOString(),limitations:['Only this pinned 26-to-27 pair, PostgreSQL 18 and local Mailpit; no provider or customer data.','Consumers run as real host Node processes through the current deployment gate; historical binaries have no intrinsic future-schema gate. Container image rebuild remains the separate local-stack proof.','Consumers stop during migration; no mixed-version or online upgrade, downgrade migration, traffic routing or availability target.','Recovery restores the pre-upgrade logical backup and matching external keys into another database; post-backup writes are not recovered.']};
+ receipt={schemaVersion:factor?2:1,driver:{head:git('rev-parse','HEAD'),dirty:git('status','--porcelain')!==''},releases:{old:{head:oldHead,migrations:oldLedger.length,digest:digest(oldLedger)},new:{head:newHead,migrations:newLedger.length,digest:digest(newLedger)}},checks,timings,measuredAt:new Date().toISOString(),limitations:[factor?'Only the supplied 34-to-35 pair, synthetic passkey rows, PostgreSQL 18 and local Mailpit; no provider or customer data.':'Only this pinned 26-to-27 pair, PostgreSQL 18 and local Mailpit; no provider or customer data.','Consumers run as real host Node processes through the current deployment gate; historical binaries have no intrinsic future-schema gate. Container image rebuild remains the separate local-stack proof.','Consumers stop during migration; no mixed-version or online upgrade, downgrade migration, traffic routing or availability target.','Recovery restores the pre-upgrade logical backup and matching external keys into another database; post-backup writes are not recovered.']};
 }catch(error){failure=error;}
 finally{
  for(const handle of handles)await stop(handle);
