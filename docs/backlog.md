@@ -797,33 +797,20 @@ notifications separately.
   data. Stale health is shown as unknown and the permission is rechecked before release.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
-  The reviewed [quiet-period and reminder design](superpowers/specs/2026-10-13-monitoring-quiet-escalation-design.md)
-  and [implementation plan](superpowers/plans/2026-10-13-monitoring-quiet-escalation.md)
-  define optional delayed opening mail and one reminder, both disabled by default.
-  The database foundation is implemented on `feat/monitoring-quiet-escalation`: an
-  append-only upgrade preserves old delivery data and records each incident opening
-  with its original recipients. Local tests cover rollback, concurrent retry, older
-  release gates and batches of at most 100 recipients. The same branch now validates
-  optional monitor timings, captures original eligible accounts and delays opening mail
-  without hiding the incident in the portal. Local PostgreSQL and separate-process
-  tests prove silent blip recovery, unchanged deadlines after restart/configuration
-  changes, refreshed evidence and authority, one opening under concurrent monitors,
-  progress past a locked installation and no historical mail after an upgrade with
-  timings enabled. Guard deletion checks catch early delivery, omitted deadline
-  equality, new recipients, replacement installations and repeated empty-set admission.
-  The branch also queues one reminder per original recipient after their recorded
-  opening send. Local PostgreSQL and encrypted-message tests cover fixed recipient
-  deadlines, restart, unchanged incident revisions, refreshed evidence, English/Spanish
-  copy and transport retries that keep the same queue identity. Independent email
-  processes claim one reminder; final delivery checks refuse changes to ownership,
-  preferences, address, service, installation, incident occurrence or the opening receipt.
-  Later scans now reconcile accepted opening receipts that finish after recovery.
-  Local PostgreSQL tests cover one recovery after concurrent scans/restart, no recovery
-  from uncertain or stale claims, replacement/suppression/reopening cancellation,
-  receipt protection through queued recovery, bounded cleanup after metering and
-  rollback of each second 100-recipient batch. Reminders use the existing immutable
-  usage source once per terminal outcome. Packaged upgrade/restore proofs remain open;
-  this implementation branch has not completed review or CI.
+  Optional quiet periods and one still-open reminder are implemented with both timings
+  disabled by default. Each incident opening captures its original recipients and fixed
+  database deadlines. The portal remains immediate; brief incidents recover silently.
+  Local PostgreSQL and independent-process tests cover concurrent delivery, current
+  authority/evidence, late accepted-opening recovery, replacement/suppression/reopening,
+  protected bounded cleanup and rollback of a second 100-recipient batch. Encrypted mail
+  retains English/Spanish rendering and retries use one durable notification identity.
+  A populated 36-to-37 rehearsal proves interrupted migration rollback, repeated/concurrent
+  retry, unchanged old account/factor/relay state and both pre-upgrade and post-upgrade
+  backups. Restored deadlines/recipients remain fixed and wrong/missing email keys refuse
+  delivery. SMTP uncertain acceptance can still duplicate sends. The
+  [design](superpowers/specs/2026-10-13-monitoring-quiet-escalation-design.md) and
+  [plan](superpowers/plans/2026-10-13-monitoring-quiet-escalation.md) record the scope;
+  whole-branch review, CI and the packaged lifecycle proof remain pending on this branch.
   The [local monitor](local-monitoring.md) now records missing contact, stale snapshots
   and failed verification for configured test installations. The portal shows incident
   evidence and stale monitoring; owners can opt in to English/Spanish email alerts.
@@ -867,7 +854,7 @@ notifications separately.
   write refusal, with 26 label combinations and empty project cleanup.
   Next: choose the terminal-delivery cutoff, repeat the receipt and aggregate checks in
   the selected deployment environment, and add external representative checks,
-  escalation/quiet periods and rollout pause criteria.
+  production quiet/reminder thresholds, wider escalation and rollout pause criteria.
 - **Usage metering.** Cloud now records immutable organisation-scoped events for
   snapshot storage and transfer, completed installation operations, accepted monitoring
   probes and terminal administrative alert outcomes. Bounded reconciliation repairs
