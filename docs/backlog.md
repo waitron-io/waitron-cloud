@@ -256,8 +256,16 @@ venue does not subscribe to remote access or backups.
   rollback/retry. The trusted local stop/resume/status command validates every
   migration name and digest, returns one JSON line after commit and bounds database
   waits. Its subprocess/PostgreSQL checks cover failed commits, cancellation,
-  preserved queue state and silent root/package forwarding. Admission, worker and
-  separate restore proofs remain open.
+  preserved queue state and silent root/package forwarding. Two running HTTP
+  processes now refuse new message IDs while stopped without relay spend, then
+  admit after resume without restarting. Exact retries, status and cancellation
+  retain current authority and byte accounting. Admission and stop races keep the
+  shared control lock through commit or rollback, including a reader proceeding
+  while stop waits. Worker gating and separate restore proofs remain open.
+  Run `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec
+  node --test --test-timeout=120000 test/relay-operator-stop.test.ts
+  test/relay-messages.test.ts test/relay-admission-bounds.test.ts
+  test/relay-disabled.test.ts` for the local admission checks.
   Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
   node --test test/relay-control.test.ts test/relay-control-migration.test.ts
   test/relay-control-cli.test.ts`. Measure admission-lock contention

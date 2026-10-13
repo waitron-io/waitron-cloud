@@ -69,16 +69,25 @@ deadlines remain. The restored CLI passes all 21 checks.
 
 ## Task 3: Live admission gate without disrupting replay
 
+Complete locally: C4 passes 61 checks, including 20 new live-process tests.
+Sixteen deliberate breakages fail their owning assertions; the restored candidate
+passes all 20 new tests. Removing only the reservation lease check still refuses
+expired leases through admission’s later deadline check; removing both is detected.
+A queued stop writer does not prevent another SHARE reader from proceeding. The
+race tests observe that reader at the account lock and prove stop still waits for
+its transaction. No previous authority, replay or deadline assertion changes.
+
+
 **Modify:** `packages/registration/src/relay-messages.ts`.
 **Create:** `packages/account-http/test/relay-operator-stop.test.ts`.
 **Extend:** account-http `test/fixtures/{relay,relay-http-process}.ts` only as needed for independently labelled processes and cleanup; retain `relay-process.ts` restart assertions.
 **Interface:** Existing `RelayMessages.execute` and HTTP replies stay unchanged; submit uses Task 1's SHARE at entry, then checks stopped/missing message before any reservation.
 
-- [ ] Add `two live APIs refuse new mail without relay spend`: run two real HTTP processes against one schema; admit before stop, invoke local control, deny new IDs on both with exact 403 body, snapshot unchanged reservations/messages/bounds/windows/tally. Hold an account-authority/allowance lock and prove stopped new submit still returns 403 without reaching or waiting on reservation. Resume and admit on both without restart. Restart both while stopped and repeat refusal. Assert configured initial usability and unconfigured routes still 404 after stop/resume.
-- [ ] Add `stopped status cancel and exact replay retain authority`: lost-reply exact submit gives 200/current state; conflicting body gives 409; status/cancel work on queued and sending/terminal rows, observed queued expiry clears bytes exactly once. Revoked grant/account/owner/installation, stale revision/key/lease, missing/foreign IDs and forged proofs retain refusal; no extra spend. Missing control yields fixed 503 for submit, including replay, while status/cancel still work. Run existing grants/admission assertions unchanged.
-- [ ] Add both admission races. Stop first: hold control UPDATE with stopped=true, launch submit, observe its SHARE wait, commit stop, assert 403/no spend. Admission first: hold message/bounds fixture lock, observe submit waiting there after its control SHARE, launch stop and observe UPDATE blocked by submit PID; release admission, assert its 202 COMMIT precedes stop success, then both APIs refuse new IDs. A cancelled/failed submit releases SHARE and rolls back spend. Include queued writer then a second reader; assert any admitted work commits before acknowledged stop.
-- [ ] Run C4 RED; prefix only submit transactions with control lock, branch on stopped/no row under message lock, keep replay/status/cancel/reserve unchanged; rerun GREEN.
-- [ ] Controls: remove new-submit refusal; move it after reservation (the locked-authority test must detect the wait); replace admission SHARE with plain read; release SHARE before commit; bypass existing replay/current-authority checks individually. Require intended no-spend/ordering/authority assertions to fail, then restore/pass. Commit: `feat: gate new relay admission on durable stop`.
+- [x] Add `two live APIs refuse new mail without relay spend`: run two real HTTP processes against one schema; admit before stop, invoke local control, deny new IDs on both with exact 403 body, snapshot unchanged reservations/messages/bounds/windows/tally. Hold an account-authority/allowance lock and prove stopped new submit still returns 403 without reaching or waiting on reservation. Resume and admit on both without restart. Restart both while stopped and repeat refusal. Assert configured initial usability and unconfigured routes still 404 after stop/resume.
+- [x] Add `stopped status cancel and exact replay retain authority`: lost-reply exact submit gives 200/current state; conflicting body gives 409; status/cancel work on queued and sending/terminal rows, observed queued expiry clears bytes exactly once. Revoked grant/account/owner/installation, stale revision/key/lease, missing/foreign IDs and forged proofs retain refusal; no extra spend. Missing control yields fixed 503 for submit, including replay, while status/cancel still work. Run existing grants/admission assertions unchanged.
+- [x] Add both admission races. Stop first: hold control UPDATE with stopped=true, launch submit, observe its SHARE wait, commit stop, assert 403/no spend. Admission first: hold message/bounds fixture lock, observe submit waiting there after its control SHARE, launch stop and observe UPDATE blocked by submit PID; release admission, assert its 202 COMMIT precedes stop success, then both APIs refuse new IDs. A cancelled/failed submit releases SHARE and rolls back spend. Include queued writer then a second reader; assert any admitted work commits before acknowledged stop.
+- [x] Run C4 RED; prefix only submit transactions with control lock, branch on stopped/no row under message lock, keep replay/status/cancel/reserve unchanged; rerun GREEN.
+- [x] Controls: remove new-submit refusal; move it after reservation (the locked-authority test must detect the wait); replace admission SHARE with plain read; release SHARE before commit; bypass existing replay/current-authority checks individually. Require intended no-spend/ordering/authority assertions to fail, then restore/pass. Commit: `feat: gate new relay admission on durable stop`.
 
 ## Task 4: Gate claims and sending independently
 

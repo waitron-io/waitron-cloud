@@ -5,6 +5,7 @@ import {createLeaseTrust,InstallationError,verifyLease,verifyMachine,type LeaseI
 import {RelayError,RelayGrantStore,type RelayConfig} from './relay-grants.ts';
 import {RelayKeys,relayBody,messageError,type RelayBody,type RelayKeyConfig,type RelayPayloadBinding} from './relay-payload.ts';
 import {transaction} from './transaction.ts';
+import {RelayControl} from './relay-control.ts';
 export type RelayAction='email-submit'|'email-status'|'email-cancel';
 export interface RelayAdmissionConfig {mode:'local-proof';grants:RelayConfig;payloadKeys:RelayKeyConfig;replayKeys:RelayKeyConfig;bounds:RelayBoundsConfig}
 interface MessageRow extends RelayPayloadBinding {binding:string;replay_key_id:string;payload:Buffer|null;state:string;status_revision:number;reason:string|null;expires_at:Date}
@@ -24,9 +25,11 @@ export class RelayMessages {
   const claims=await this.authenticate(action,envelope),body=relayBody(claims.body,action==='email-submit');
   if(action==='email-submit'&&claims.operationId!==body.messageId)messageError('invalid_message');
   return transaction(this.#pool,async client=>{
-   // Serialize the missing row as well as replays before taking D45's authority/allowance locks.
+   const control=action==='email-submit'?await new RelayControl(this.#pool).lock(client):undefined;
+   // Serialize the missing row as well as replays before taking authority/allowance locks.
    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('relay-message:'||$1||':'||$2,0))",[claims.installationId,body.messageId]);
    let row=(await client.query<MessageRow>('SELECT * FROM relay_messages WHERE installation_id=$1 AND message_id=$2',[claims.installationId,body.messageId])).rows[0];
+   if(control?.stopped&&!row)throw new RelayError('relay_disabled');
    if(action!=='email-submit'&&!row)messageError('grant_unavailable');
    const submitted=body as RelayBody;
    const grantId=action==='email-submit'?submitted.grantId:row!.grant_id,revision=action==='email-submit'?submitted.grantRevision:row!.grant_revision;
