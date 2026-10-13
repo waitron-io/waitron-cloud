@@ -98,9 +98,10 @@ try{
   if(strategy==='peer-traffic')trafficReply=await ping();
   if(strategy==='peer-reset'){
    docker('exec',peer,'wg','set','wg-cloud','peer',gatewayKey.publicKey,'remove');
+   peerResetApplied=docker('exec',peer,'wg','show','wg-cloud','peers')==='';assert.equal(peerResetApplied,true);
+   // Persistent keepalive can establish a fresh handshake immediately after re-addition.
    docker('exec',peer,'wg','set','wg-cloud','peer',gatewayKey.publicKey,'endpoint',priorEndpoint,
     'allowed-ips','10.77.17.1/32','persistent-keepalive','25');
-   peerResetApplied=handshake(peer)===0;assert.equal(peerResetApplied,true);
    trafficReply=await ping();
   }
   const actionMs=Date.now()-actionStarted;
