@@ -1,3 +1,4 @@
+import type {RegistryOptions} from '../../../packages/fiscal-allocation/src/policy.ts';
 import type {FactorConfig} from '../../../packages/account-http/src/config.ts';
 import type {CaptureOptions} from '../../../packages/backups/src/captures.ts';
 import {generateKeyPairSync} from 'node:crypto';
@@ -23,7 +24,7 @@ export async function addVirtualAuthenticator(context: BrowserContext, page: Pag
     await session.detach().catch(() => undefined);
   }};
 }
-export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?:(name:string)=>Promise<string[]>,factor?:FactorConfig) {
+export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?:(name:string)=>Promise<string[]>,factor?:FactorConfig,fiscalAllocation?:RegistryOptions) {
   const db = await database();
   const reserved = createServer();
   await new Promise<void>(resolve => reserved.listen(0, '127.0.0.1', resolve));
@@ -35,7 +36,7 @@ export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?
   let browser: Browser | undefined;
   try {
     const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
-    running = await startAccountServer({captures,remoteResolve,factor,leaseIssuer:issuer,pool: db.pool, outbox: db.outbox, port: address.port,
+    running = await startAccountServer({captures,remoteResolve,factor,fiscalAllocation,leaseIssuer:issuer,pool: db.pool, outbox: db.outbox, port: address.port,
       config: {portalOrigin: origin, production: false, rateKey: db.rateKey, trustedProxyIps: []},
       portalAssets: await loadPortalAssets(new URL('../dist', import.meta.url).pathname)});
     browser = await chromium.launch({headless: true});

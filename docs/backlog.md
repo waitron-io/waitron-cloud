@@ -168,8 +168,14 @@ import status records completion without inventing a Cloud receipt.
 Registration tests run in three CI file shards after the first full job
 hit its ten-minute limit while checks were still passing; every case, the
 30-second test deadline and ten-minute job deadline remain.
-The phone
-journey and Waitron adapter are separate dependent items. Production continuity
+The phone journey at `/fiscal-allocations` now reserves and explicitly consumes
+identities, reconciles uncertain replies using the same operation, exports the
+complete signed manual packet, pages retained receipts and imports existing signed
+paper history. Local real-server/browser tests cover English and Spanish, light
+and dark, 390 and 1280 pixels, with accessibility checks in ready, uncertain,
+error and retained states. On-prem venues need no managed backup to use the journey.
+Browser validation checks structure; local recovery must verify cryptographic
+trust and authority before activation. The Waitron adapter remains a dependent item. Production continuity
 storage, taxpayer custody and operator attribution, subscription policy and the
 signing-key custodian remain owner enablement gates. Before enabling recovery,
 qualify how the service discovers custody-approved namespaces when an old database
