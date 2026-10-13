@@ -532,6 +532,14 @@ notifications separately.
   customer security trail before enabling it. Review
   database and module dependencies. Keep the source review current and port applicable
   security fixes with failing regression tests in each affected repository.
+  **Review follow-ups.** An early deadline check in
+  `packages/registration/src/authenticator-factor.ts` duplicates the final check;
+  deleting the early check leaves all 41 management tests passing, while deleting the
+  final check fails three late-expiry tests. Keep those behaviour checks when simplifying
+  the redundant guard. Concurrent review experiments also saw one `TimeoutError` in
+  the English/light/1280 authenticator browser journey. It passed twice in isolation;
+  the cause is unproved. On the next failure, capture its request/locator stage and
+  reproduce the cause before changing any assertion or deadline.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
   services, usage accounting, trials, failed payment and cancellation.
 - **Venue and node registration.** The agreed Waitron signup and connection journey is
