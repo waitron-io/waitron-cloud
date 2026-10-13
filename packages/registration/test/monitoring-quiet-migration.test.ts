@@ -5,16 +5,19 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {after, test} from 'node:test';
 import type {Pool} from 'pg';
 import {EmailOutbox} from '../src/email-outbox.ts';
-import {migrate, migrationNames} from '../src/migrate.ts';
 import {transaction} from '../src/transaction.ts';
-import {fixture} from './fixtures/relay-worker.ts';
+import {fixture as currentFixture} from './fixtures/relay-worker.ts';
 import {migrationRelease} from './fixtures/migration-release.ts';
 
 const release = await migrationRelease(36);
+const target = await migrationRelease(37);
+const {migrate,names:migrationNames}=target;
+const fixture=(initialise=migrate)=>currentFixture(initialise);
+after(()=>target.close());
 after(() => release.close());
 const {checkConsumerSchema} = await import(new URL('../../../deploy/local-stack/runtime.mjs', import.meta.url).href);
-const {hasReleaseMigrationCount} = await import(new URL('../../../scripts/database-recovery-migrations.mjs', import.meta.url).href);
-const root = new URL('../../../', import.meta.url).pathname;
+const {hasReleaseMigrationCount} = await import(new URL('scripts/database-recovery-migrations.mjs','file://'+target.root+'/').href);
+const root = target.root;
 
 async function seed(f: Awaited<ReturnType<typeof fixture>>) {
   const outbox = new EmailOutbox({activeKeyId: 'fixture', keys: {fixture: randomBytes(32).toString('hex')}});

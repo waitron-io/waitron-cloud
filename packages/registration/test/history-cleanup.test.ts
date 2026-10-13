@@ -1,3 +1,4 @@
+import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
@@ -38,7 +39,7 @@ after(async () => {
   await admin.end();
 });
 beforeEach(async () => {
-  await pool.query('TRUNCATE organisations, cloud_accounts, email_outbox CASCADE');
+  await resetSchema(pool);
   await pool.query('INSERT INTO cloud_accounts(id) VALUES($1)', [accountId]);
   await pool.query('INSERT INTO organisations(id) VALUES($1)', [organisationId]);
   await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)', [businessId, organisationId]);

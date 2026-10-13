@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {before,after,beforeEach,test} from 'node:test';
 import type {HttpBindings} from '@hono/node-server';
@@ -15,7 +16,7 @@ async function account(email:string){
  cookie=login.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;
 }
 beforeEach(async()=>{
- await db.pool.query('TRUNCATE account_rate_limits,signup_requests,email_outbox,organisations,cloud_accounts CASCADE');
+ await resetSchema(db.pool);
  app=createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});await account('alerts@example.test');
 });
 function request(body?:unknown,headers:Record<string,string>={}){return app.request(origin+'/api/account/alerts',{method:body===undefined?'GET':'POST',headers:{origin,cookie,'x-csrf-token':csrf,'content-type':'application/json',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})},bindings);}

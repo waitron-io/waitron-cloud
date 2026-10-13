@@ -1,3 +1,4 @@
+import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
@@ -19,10 +20,11 @@ const store=new SupportGrantStore(pool,config),disabledStore=new SupportGrantSto
 let owner:string,secondOwner:string,member:string,platform:string,organisation:string,foreignOrganisation:string,venue:string,foreignVenue:string;
 let ownerSession:SessionCredentials,secondOwnerSession:SessionCredentials,memberSession:SessionCredentials;
 
-before(async()=>{await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);await pool.query('CREATE TABLE support_test_markers(id uuid PRIMARY KEY, value text NOT NULL)');});
+before(async()=>{await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);});
 after(async()=>{await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();});
 beforeEach(async()=>{
- await pool.query('TRUNCATE organisations,cloud_accounts CASCADE');
+ await resetSchema(pool);
+ await pool.query('CREATE TABLE support_test_markers(id uuid PRIMARY KEY, value text NOT NULL)');
  await pool.query('TRUNCATE support_test_markers');
  owner=randomUUID();secondOwner=randomUUID();member=randomUUID();platform=randomUUID();organisation=randomUUID();foreignOrganisation=randomUUID();venue=randomUUID();foreignVenue=randomUUID();
  await pool.query('INSERT INTO cloud_accounts(id) VALUES($1),($2),($3),($4)',[owner,secondOwner,member,platform]);

@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {generateKeyPairSync, randomBytes, randomUUID, sign} from 'node:crypto';
@@ -88,7 +89,7 @@ after(async () => {
 });
 
 beforeEach(async () => {
-  await db.pool.query('TRUNCATE account_rate_limits, email_outbox, signup_requests, password_reset_requests, organisations, cloud_accounts CASCADE');
+  await resetSchema(db.pool);
   const email = `owner-${randomUUID()}@example.test`;
   const signup = new SignupStore(db.pool, db.outbox);
   await signup.request(email);

@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import {venueOverview} from '../src/venue-overview.ts';
 import {BackupCatalogue} from '../../backups/src/catalogue.ts';
 import {BackupKeyVault} from '../../backups/src/keys.ts';
@@ -20,7 +21,7 @@ function proof(action:MachineAction,lease?:SignedEnvelope){const bytes=encodeMac
 const browser=(action:string,body?:unknown,headers:Record<string,string>={})=>request('/api/account/installations'+action,body,{origin,cookie,'x-csrf-token':csrf,...headers});
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
- await db.pool.query('TRUNCATE account_rate_limits,signup_requests,email_outbox,organisations,cloud_accounts CASCADE');
+ await resetSchema(db.pool);
  app=createAccountApp({pool:db.pool,outbox:db.outbox,config:config(),leaseIssuer:issuer});
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('owner@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert.ok('token' in mail);
  const owner=await signup.complete(mail.token,{password,organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});

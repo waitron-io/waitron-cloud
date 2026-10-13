@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
@@ -15,7 +16,7 @@ const options=()=>({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,pr
 const request=async(action:string,extra:Record<string,string>={},headers:Record<string,string>={})=>app.request(origin+'/api/account/remote-access/'+action,{method:'POST',headers:{origin,cookie,'content-type':'application/json','x-csrf-token':csrf,...headers},body:JSON.stringify({installationId:venue.installationId,...extra})},bindings);
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
- await db.pool.query('TRUNCATE account_rate_limits,signup_requests,email_outbox,organisations,cloud_accounts,remote_cells CASCADE');
+ await resetSchema(db.pool);
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('owner@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
  owner=await signup.complete(mail.token,{password,organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
  const r=new RegistrationStore(db.pool),b={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};await r.start(b);await r.approveCloud(b,owner.accountId);await r.approveLocal(b,randomUUID());venue=await r.complete(b);

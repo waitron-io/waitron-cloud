@@ -324,3 +324,22 @@ two actions, renews its lease, polls with backoff, discards replies after local
 configuration/revocation/key changes, invokes the install command and reloads TLS.
 Its process scheduling and crash recovery are not supplied by this Cloud change.
 The local proof calls the existing Waitron commands explicitly.
+
+## Fiscal allocation and reconciliation endpoint
+
+Cloud now implements the [fiscal registry HTTP contract](fiscal-allocation-registry.md#call-the-account-service-and-recover-a-lost-reply).
+Your full Cloud session can reserve, consume, abandon, inspect and import signed
+paper facts through the six account POST routes. Missing production custody,
+entitlement, independent continuity or signing capabilities still refuse.
+
+An installation can report signed Cloud or paper evidence through
+`/api/installations/fiscal-allocations/report`. Cloud verifies its current key and
+active registration lease under revocation locks. The result records matching,
+conflicting or previously unimported evidence; it never activates the installation
+or releases an occupied identity. An exact retry recovers the retained result
+when the outside append survived a failed PostgreSQL commit.
+
+Waitron's local recovery adapter and the joint HTTP/client qualification remain
+to be implemented in their separately owned tasks. Preserve the complete consumed
+receipt and local authenticated recovery checks. Cloud operator attribution is
+not local operator authentication, and no registry call belongs on the sale path.

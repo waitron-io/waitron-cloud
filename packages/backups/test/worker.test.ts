@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import {execFile} from 'node:child_process';
 import {Readable} from 'node:stream';
 import {promisify} from 'node:util';
@@ -17,7 +18,7 @@ let failDelete=false,restores=0,restore:()=>Promise<void>;
 const storage=()=>({async read(key:string){const bytes=objects.get(key);if(!bytes)throw Error('missing');return bytes;},async put(key:string,bytes:Uint8Array){objects.set(key,Buffer.from(bytes));return receipt(bytes);},async remove(key:string){if(failDelete)throw Error('unavailable');objects.delete(key);}});
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
- await db.pool.query('TRUNCATE signup_requests,email_outbox,organisations,cloud_accounts CASCADE');objects.clear();failDelete=false;restores=0;restore=async()=>{restores++;};
+ await resetSchema(db.pool);objects.clear();failDelete=false;restores=0;restore=async()=>{restores++;};
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('worker@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
  const owner=await signup.complete(mail.token,{password:'A sufficiently long password',organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'}),r=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await r.start(binding);await r.approveCloud(binding,owner.accountId);await r.approveLocal(binding,randomUUID());venue=await r.complete(binding);

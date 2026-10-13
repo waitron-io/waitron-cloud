@@ -11,6 +11,7 @@ const revisions = {
   34: 'ff6535c4644db9888f1aa93e733b8aff124e8b5f',
   35: 'e6fc1e22f9395a1c87909a0064fd93f3611caa66',
   36: 'd681db284ac8babeffb9f1029c2c32f8dc47701c',
+  37: '08c30216e4b415689f5d82b2b7f878af8d8bca7e',
 } as const;
 const exec = promisify(execFile);
 const releases = new Map<number, Promise<Release>>();

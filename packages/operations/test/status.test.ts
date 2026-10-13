@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {randomUUID} from 'node:crypto';
@@ -9,7 +10,7 @@ let db:Awaited<ReturnType<typeof database>>;
 before(async()=>{db=await database();});
 after(async()=>db?.close());
 beforeEach(async()=>{
- await db.pool.query('TRUNCATE organisations,cloud_accounts,remote_cells CASCADE');
+ await resetSchema(db.pool);
  await db.pool.query('UPDATE usage_reconciliation_sources SET last_attempted_at=clock_timestamp(),caught_up_at=clock_timestamp()');
 });
 

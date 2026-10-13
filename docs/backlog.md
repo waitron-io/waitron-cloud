@@ -129,6 +129,56 @@ committed writes with lost replies, session expiry, retry delays and account iso
 Next, configure live mail delivery and the deployment/account-security controls below. Pairing
 remains a separate exchange requiring both Cloud and local administrator proof.
 
+## Fiscal allocation registry
+
+The [shared registry plan](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md)
+defines the implemented Cloud service. The
+[contract and storage stage](fiscal-allocation-registry.md) defines strict signed
+receipts, complete series and binding snapshots, separate paper custody trust,
+explicit unavailable capabilities and append-only migration 038. Local tests
+exercise the actual fiscal validator, populated concurrent 37-to-38 upgrades,
+interrupted migration rollback, namespace uniqueness, retained runtime history
+and exact schema gates. Production authority is unavailable.
+
+The current-history stage adds challenged signed journal reads, signed expiring
+writer grants, exact full-history replay and permanent unknown outcomes. Local
+PostgreSQL dump/restore and independent Node workers prove that missing C000042
+cannot be reissued, the previous writer is refused, and lost replies or failed
+database commits reconcile the same signed result. The external fixture survives
+process restart; no production continuity provider is supplied.
+
+The authenticated store stage adds current session, venue ownership, custody and
+entitlement rechecks; terminal consumption and abandonment; signed bounded receipt
+pages; and monotonic signed S/P imports with complete venue-transfer chains. Local
+PostgreSQL tests cover independent authenticated workers, authority lost during a
+wait, omitted full series, ended entitlement with retained reads, old uploads,
+forged or consumed transfers, partial transfers and matching exact retries.
+Account HTTP routes require a full session, CSRF and current venue authority;
+shared PostgreSQL limits protect account and authorized namespace budgets. A
+durable routing hint recovers the exact outside receipt after a first-projection
+rollback. Machine reports verify the current installation key and active lease
+under revocation locks, retain exact retry results and record matching or
+conflicting paper evidence without activation or name issuance. Real listener
+tests exercise factor challenges, shared limits, revocation and expiry waits,
+discarded TCP replies, independent authority restart and failed PostgreSQL commits.
+Indexed venue/operation queries avoid whole-table tenant scans. Current custody
+checks protect both receipt pages and post-append consumption; fresh signed machine
+authentication recovers the same immutable operation after a proof expires. Paper
+import status records completion without inventing a Cloud receipt.
+Registration tests run in three CI file shards after the first full job
+hit its ten-minute limit while checks were still passing; every case, the
+30-second test deadline and ten-minute job deadline remain.
+The phone
+journey and Waitron adapter are separate dependent items. Production continuity
+storage, taxpayer custody and operator attribution, subscription policy and the
+signing-key custodian remain owner enablement gates. Before enabling recovery,
+qualify how the service discovers custody-approved namespaces when an old database
+backup lacks both allocations and routing hints, and measure full-journal replay
+and indexed paging with launch-scale history. Permanent-versus-retryable error
+copy and duplicate adjacent status authority calls remain small follow-ups; no production defaults are
+selected. Fiscal records, invoice hashes and Waitron's allocation code stay outside
+this Cloud change.
+
 ## Initial focus
 
 - Launch first in Spain on AWS. AWS documents Europe (Spain) as `eu-south-2` and
@@ -343,7 +393,7 @@ notifications separately.
 
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. CI runs type checking, each of the five
-  existing receipt suites and all eight package suites in parallel, with a
+  existing receipt suites and all workspace package suites in parallel, with a
   ten-minute limit per work job. Browser packages install Chromium with at most
   two attempts, each bounded to 120 seconds plus ten seconds to stop it. Main
   pushes use a unique concurrency group per run so a later merge cannot cancel

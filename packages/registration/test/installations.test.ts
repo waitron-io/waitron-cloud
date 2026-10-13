@@ -1,3 +1,4 @@
+import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID,sign} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
@@ -25,7 +26,7 @@ const config=(target=a,lease?:SignedEnvelope)=>store.execute('configuration',req
 before(async()=>{db=await database();store=new InstallationStore(db.pool,issuer,origin);other=new InstallationStore(db.secondPool,issuer,origin);});
 after(async()=>db?.close());
 beforeEach(async()=>{
-  await db.pool.query('TRUNCATE signup_requests,email_outbox,organisations,cloud_accounts CASCADE');
+  await resetSchema(db.pool);
   const signup=new SignupStore(db.pool,db.outbox);await signup.request('owner@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert.ok('token' in mail);
   owner=await signup.complete(mail.token,{password,organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
   session=await transaction(db.pool,c=>login(c,{email:'owner@example.test',password}));a=await installation();b=await installation();

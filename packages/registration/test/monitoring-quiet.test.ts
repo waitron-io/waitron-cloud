@@ -1,3 +1,4 @@
+import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {migrationRelease} from './fixtures/migration-release.ts';
@@ -19,7 +20,7 @@ let db:Awaited<ReturnType<typeof database>>,monitor:MonitorWorker;
 let owner:{accountId:string;organisationId:string;legalBusinessId:string},venue:{installationId:string;venueId:string};
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
- await db.pool.query('TRUNCATE signup_requests,email_outbox,organisations,cloud_accounts,remote_cells CASCADE');
+ await resetSchema(db.pool);
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('quiet@example.test');
  const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
  owner=await signup.complete(mail.token,{password:'A sufficiently long password',organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});

@@ -1,3 +1,4 @@
+import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
@@ -23,7 +24,7 @@ after(async()=>{
  await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();
 });
 beforeEach(async()=>{
- await pool.query('TRUNCATE organisations CASCADE');
+ await resetSchema(pool);
  await pool.query('UPDATE usage_reconciliation_sources SET last_attempted_at=NULL,caught_up_at=NULL');
  for(const item of [first,second]){
   await pool.query('INSERT INTO organisations(id) VALUES($1)',[item.organisation]);

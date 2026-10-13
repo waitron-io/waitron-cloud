@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import {Pool} from 'pg';
 import {BackupCatalogue} from '../../backups/src/catalogue.ts';
 import {BackupKeyVault} from '../../backups/src/keys.ts';
@@ -17,7 +18,7 @@ function request(body:unknown,headers:Record<string,string>={},path='/api/accoun
 }
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
- await db.pool.query('TRUNCATE account_rate_limits,signup_requests,email_outbox,organisations,cloud_accounts CASCADE');
+ await resetSchema(db.pool);
  app=createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('owner@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
  const owner=await signup.complete(mail.token,{password,organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'}),registration=new RegistrationStore(db.pool);venues=[];

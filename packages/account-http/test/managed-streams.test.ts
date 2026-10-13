@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from "node:assert/strict";
 import {generateKeyPairSync,randomBytes,randomUUID,sign,type KeyObject} from "node:crypto";
 import {after,before,beforeEach,test} from "node:test";
@@ -33,7 +34,7 @@ function configuration(revision:number){return {revision,localVenueId,sourceNode
 function signedPointer(nodeId:string,key:KeyObject){const body={venueId:localVenueId,term:3,nodeId,generation:`gen-3-${nodeId}-20260925T190000Z`,writtenAt:"2026-09-25T19:01:00.000Z"};const message=`{"pointer":{"generation":"${body.generation}","nodeId":"${body.nodeId}","term":3,"venueId":"${body.venueId}","writtenAt":"${body.writtenAt}"},"purpose":"waitron.stream.pointer.v1"}`;return Buffer.from(JSON.stringify({body,signature:sign(null,Buffer.from(message),key).toString("base64")}));}
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
- await db.pool.query("TRUNCATE account_rate_limits,signup_requests,email_outbox,organisations,cloud_accounts CASCADE");objects.clear();provisions.clear();provisionHook=async()=>{};
+ await resetSchema(db.pool);objects.clear();provisions.clear();provisionHook=async()=>{};
  const signup=new SignupStore(db.pool,db.outbox);await signup.request("managed-stream@example.test");const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox")).rows[0]);assert("token" in mail);
  const owner=await signup.complete(mail.token,{password:"A long enough managed stream password",organisationName:"Managed stream",legalBusinessName:"Managed stream SL",countryCode:"ES"}),registration=new RegistrationStore(db.pool),results=[];
  for(const key of [installationKey,otherInstallationKey]){const binding={operationId:randomUUID(),installationKey:key.publicKey.export({type:"spki",format:"der"}).toString("base64url"),localVenueId:randomUUID(),environment:"test",organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId} as const;await registration.start(binding);await registration.approveCloud(binding,owner.accountId);await registration.approveLocal(binding,randomUUID());results.push({...await registration.complete(binding),localVenueId:binding.localVenueId});}

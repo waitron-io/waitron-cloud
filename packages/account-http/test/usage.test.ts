@@ -1,3 +1,4 @@
+import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
@@ -13,7 +14,7 @@ let owner:string,member:string,organisation:string,foreignOrganisation:string,ve
 let session:{token:string;csrfToken:string},memberSession:{token:string;csrfToken:string};
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
- await db.pool.query('TRUNCATE account_rate_limits,organisations,cloud_accounts CASCADE');
+ await resetSchema(db.pool);
  await db.pool.query('UPDATE usage_reconciliation_sources SET last_attempted_at=NULL,caught_up_at=NULL');
  owner=randomUUID();member=randomUUID();organisation=randomUUID();foreignOrganisation=randomUUID();venue=randomUUID();
  const business=randomUUID(),foreignBusiness=randomUUID(),foreignVenue=randomUUID();

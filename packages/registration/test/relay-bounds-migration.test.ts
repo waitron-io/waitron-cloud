@@ -4,13 +4,16 @@ import {readFile} from 'node:fs/promises';
 import test, {after} from 'node:test';
 import {migrationRelease} from './fixtures/migration-release.ts';
 const release = await migrationRelease(36);
+const target = await migrationRelease(37);
+const {migrate,names:migrationNames}=target;
+const fixture=(initialise=migrate)=>currentFixture(initialise);
+after(()=>target.close());
 after(() => release.close());
-import {migrate,migrationNames} from '../src/migrate.ts';
-import {fixture} from './fixtures/relay-worker.ts';
+import {fixture as currentFixture} from './fixtures/relay-worker.ts';
 import {RelayBounds} from '../src/relay-bounds.ts';
 import {transaction} from '../src/transaction.ts';
 const {checkConsumerSchema}=await import(new URL('../../../deploy/local-stack/runtime.mjs',import.meta.url).href);
-const {hasReleaseMigrationCount}=await import(new URL('../../../scripts/database-recovery-migrations.mjs',import.meta.url).href);
+const {hasReleaseMigrationCount}=await import(new URL('scripts/database-recovery-migrations.mjs','file://'+target.root+'/').href);
 
 async function removeBounds(f:Awaited<ReturnType<typeof fixture>>){
  await f.pool.query('DROP TABLE relay_control');
@@ -59,7 +62,7 @@ test('interrupted bounds DDL rolls back ledger and tables, then retry succeeds',
 });
 test('current release consumer and recovery gates reject missing, future or changed manifests',async()=>{
  const f=await fixture();try{
-  const root=new URL('../../../',import.meta.url).pathname;
+  const root=target.root;
   await checkConsumerSchema(f.pool,root);assert.equal(hasReleaseMigrationCount('37'),true);assert.equal(hasReleaseMigrationCount('33'),false);assert.equal(hasReleaseMigrationCount('34'),false);assert.equal(hasReleaseMigrationCount('35'),false);assert.equal(hasReleaseMigrationCount('36'),false);
   const prior=(await f.pool.query("SELECT * FROM schema_migrations WHERE name='034_relay_admission_bounds.sql'")).rows[0];
   await f.pool.query("DELETE FROM schema_migrations WHERE name='034_relay_admission_bounds.sql'");await assert.rejects(checkConsumerSchema(f.pool,root),/schema_incompatible/);

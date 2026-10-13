@@ -1,3 +1,4 @@
+import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -50,7 +51,7 @@ after(async () => {
   await admin.end();
 });
 beforeEach(async () => {
-  await pool.query('TRUNCATE organisations, cloud_accounts CASCADE');
+  await resetSchema(pool);
   await pool.query('INSERT INTO cloud_accounts (id) VALUES ($1)', [accountId]);
   await pool.query('INSERT INTO organisations (id) VALUES ($1), ($2)', [organisationId, secondOrganisationId]);
   await pool.query('INSERT INTO legal_businesses (id, organisation_id) VALUES ($1, $2), ($3, $4)',
@@ -75,9 +76,10 @@ test('migration remains repeatable after concurrent initial application', async 
   assert.equal(migrationNames.slice(0,35).length,35);
   assert.equal(migrationNames[33],'034_relay_admission_bounds.sql');
   assert.equal(migrationNames[34],'035_authenticator_factor.sql');
-  assert.equal(migrationNames.length,37);
+  assert.equal(migrationNames.length,38);
   assert.equal(migrationNames[35],'036_relay_operator_stop.sql');
-  assert.equal(migrationNames.at(-1),'037_monitoring_quiet_escalation.sql');
+  assert.equal(migrationNames[36],'037_monitoring_quiet_escalation.sql');
+  assert.equal(migrationNames.at(-1),'038_fiscal_allocation_registry.sql');
   assert.equal(await count('schema_migrations'), migrationNames.length);
 });
 
