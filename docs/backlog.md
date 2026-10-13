@@ -278,7 +278,8 @@ venue does not subscribe to remote access or backups.
   restored pre-stop backup initializes not-stopped after upgrade; the stopped source
   stays unchanged. Fifteen receipt/parser and eight real database/key breakages fail
   their assertions; restored proof passes with zero owned resources remaining.
-  The packaged release proof and whole-branch review/current-head CI remain pending.
+  Packaged local install, restart and rebuilt upgrade also pass with 36 migrations
+  and zero leftover resources.
   See the [trusted stop command](transactional-email-relay-contract.md#stop-and-resume-the-local-relay)
   and [version-3 rehearsal](database-recovery.md#rehearse-the-relay-stop-upgrade).
   Run `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec
