@@ -61,6 +61,9 @@ CREATE TABLE fiscal_registry_paper_events (
  FOREIGN KEY(taxpayer_nif,software_id,environment) REFERENCES fiscal_registry_scopes,
  UNIQUE(taxpayer_nif,software_id,environment,custodian_id,register_revision)
 );
+CREATE INDEX fiscal_events_venue_allocation_sequence ON fiscal_registry_events
+ ((result->'payload'->>'venueId'),allocation_id,sequence DESC);
+CREATE INDEX fiscal_events_operation ON fiscal_registry_events(operation_id);
 -- Name claims and the signed facts survive abandonment, subscription end and incomplete restores.
 CREATE FUNCTION reject_fiscal_registry_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

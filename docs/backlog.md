@@ -161,10 +161,18 @@ under revocation locks, retain exact retry results and record matching or
 conflicting paper evidence without activation or name issuance. Real listener
 tests exercise factor challenges, shared limits, revocation and expiry waits,
 discarded TCP replies, independent authority restart and failed PostgreSQL commits.
+Indexed venue/operation queries avoid whole-table tenant scans. Current custody
+checks protect both receipt pages and post-append consumption; fresh signed machine
+authentication recovers the same immutable operation after a proof expires. Paper
+import status records completion without inventing a Cloud receipt.
 The phone
 journey and Waitron adapter are separate dependent items. Production continuity
 storage, taxpayer custody and operator attribution, subscription policy and the
-signing-key custodian remain owner enablement gates; no production defaults are
+signing-key custodian remain owner enablement gates. Before enabling recovery,
+qualify how the service discovers custody-approved namespaces when an old database
+backup lacks both allocations and routing hints, and measure full-journal replay
+and indexed paging with launch-scale history. Permanent-versus-retryable error
+copy and duplicate adjacent status authority calls remain small follow-ups; no production defaults are
 selected. Fiscal records, invoice hashes and Waitron's allocation code stay outside
 this Cloud change.
 

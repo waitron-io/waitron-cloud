@@ -568,6 +568,13 @@ test('matched and conflicting signed paper reports retain outcomes without impor
     };
     const imported = await s.request('import-paper', input, { port });
     assert.equal(imported.status, 200);
+    const importedStatus = await s.request(
+      'status',
+      { version: 1, venueId: s.v.id, operationId: input.operationId },
+      { port },
+    );
+    assert.equal(importedStatus.status, 200);
+    assert.deepEqual(await importedStatus.json(), { version: 1, state: 'recorded', receipt: null });
     const body = {
       venueId: s.v.id,
       scope,
@@ -859,6 +866,115 @@ test('a machine signature cannot authorize a forged registration lease signature
     assert.equal(
       (await s.a.request('history', { scope, afterSequence: '0', nonce: 'test' })).events.length,
       2,
+    );
+  } finally {
+    await s.close();
+  }
+});
+test('verified owners of one taxpayer share its budget while unproved custody cannot spend it', async () => {
+  const s = await fixture();
+  try {
+    const other = await s.venue(),
+      headers = {
+        cookie: `cloud_session=${other.session.token}`,
+        'x-csrf-token': other.session.csrfToken,
+      };
+    assert.deepEqual(other.input.scope, s.v.input.scope);
+    await s.f.pool.query('UPDATE fiscal_test_authority SET custody=false WHERE account_id=$1', [
+      other.account,
+    ]);
+    for (let n = 0; n < 11; n++)
+      await refusal(
+        await s.request('reserve', other.input, { headers }),
+        503,
+        'custody_unavailable',
+      );
+    await s.f.pool.query('UPDATE fiscal_test_authority SET custody=true WHERE account_id=$1', [
+      other.account,
+    ]);
+    for (let n = 0; n < 10; n++)
+      assert.equal((await s.request('reserve', other.input, { headers })).status, 200);
+    await refusal(await s.request('reserve', s.v.input), 429, 'rate_limited');
+    assert.equal(
+      (await s.a.request('history', { scope, afterSequence: '0', nonce: 'test' })).events.length,
+      1,
+    );
+  } finally {
+    await s.close();
+  }
+});
+test('session deletion waits for an in-flight reservation rather than bypassing its authority lock', async () => {
+  const s = await fixture(),
+    held = await s.f.pool.connect();
+  let response: Promise<Response> | undefined, deletion: Promise<unknown> | undefined;
+  try {
+    await held.query('BEGIN');
+    await held.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+      canonical(['fiscal-namespace', scope]),
+    ]);
+    response = s.request('reserve', s.v.input);
+    assert.match(await blocked(s.f.pool), /pg_advisory_xact_lock/);
+    deletion = s.f.pool.query('DELETE FROM cloud_sessions WHERE account_id=$1', [s.v.account]);
+    const deadline = Date.now() + 3000;
+    let blockedDelete = false;
+    while (Date.now() < deadline && !blockedDelete)
+      blockedDelete = !!(
+        await s.f.pool.query(
+          "SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'DELETE FROM cloud_sessions%'",
+          [s.f.schema],
+        )
+      ).rowCount;
+    assert.equal(blockedDelete, true, 'deletion must wait for the current session lock');
+    await held.query('COMMIT');
+    assert.equal((await response).status, 200);
+    await deletion;
+    await refusal(
+      await s.request('status', {
+        version: 1,
+        venueId: s.v.id,
+        operationId: s.v.input.operationId,
+      }),
+      401,
+      'unauthenticated',
+    );
+    assert.equal(
+      (await s.a.request('history', { scope, afterSequence: '0', nonce: 'test' })).events.length,
+      1,
+    );
+  } finally {
+    await held.query('ROLLBACK');
+    held.release();
+    await response;
+    await deletion;
+    await s.close();
+  }
+});
+test('a fresh machine proof recovers the same operation after the original proof expires', async () => {
+  const s = await fixture();
+  try {
+    const r = await consumed(s),
+      body = {
+        venueId: s.v.id,
+        scope,
+        receipt: r,
+        paperHistory: null,
+        activationEvidence: { result: 'committed' },
+      },
+      operationId = randomUUID(),
+      issuedAt = Date.now() - 58000;
+    const original = s.proof(body, { operationId, issuedAt });
+    const response = await s.report(original);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    while (Date.now() <= issuedAt + 60000) await s.f.pool.query('SELECT clock_timestamp()');
+    await refusal(await s.report(original), 401, 'invalid_proof');
+    await s.a.restart();
+    const retry = await s.report(s.proof(body, { operationId }));
+    assert.equal(retry.status, 200);
+    assert.deepEqual(await retry.json(), result);
+    assert.equal(
+      (await s.a.request('history', { scope, afterSequence: '0', nonce: 'test' })).events.length,
+      3,
     );
   } finally {
     await s.close();

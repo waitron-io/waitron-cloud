@@ -556,6 +556,11 @@ export class FiscalAllocationStore {
         await this.#authorize(c, token, csrf, input.venueId, scope, 'read');
         const found = history.events.find((e) => e.operationId === input.operationId);
         if (!found) return { version: 1, state: 'unknown', receipt: null };
+        if (found.action === 'paper-import') {
+          if ((found.request as PaperHistoryInput).venueId !== input.venueId)
+            fail('binding_conflict');
+          return { version: 1, state: 'recorded', receipt: null };
+        }
         if (!found.receipt || found.receipt.payload.venueId !== input.venueId)
           fail('binding_conflict');
         return {

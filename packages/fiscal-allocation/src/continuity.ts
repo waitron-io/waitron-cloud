@@ -35,6 +35,7 @@ import {
   historicalFiscalReport,
   verifyReportEvidence,
   reportResult,
+  reportRequestDigest,
 } from './machine-proof.ts';
 
 const genesis = '0'.repeat(64);
@@ -268,7 +269,7 @@ function reportValue(
     !same(o.scope, scope) ||
     !same(c.body.scope, scope) ||
     c.operationId !== o.operationId ||
-    o.requestDigest !== requestDigest(o.request) ||
+    o.requestDigest !== reportRequestDigest(c) ||
     o.receipt !== null ||
     o.allocationId !== (receipt?.payload.allocation.allocationId ?? null) ||
     !same(o.allocation, receipt?.payload.allocation ?? null) ||
@@ -569,7 +570,10 @@ export async function appendEvent(
     request.operationId !== event.operationId ||
     event.allocationId !== (allocation?.allocationId ?? null) ||
     (!paper && !report && !same(binding, (request as import('./types.ts').ReserveInput).binding)) ||
-    event.requestDigest !== requestDigest(report ? event.request : request)
+    event.requestDigest !==
+      (report
+        ? reportRequestDigest(request as import('./types.ts').FiscalReportClaims)
+        : requestDigest(request))
   )
     throw new FiscalAllocationError('invalid_input');
   if (paper) {
@@ -629,7 +633,8 @@ export async function appendEvent(
     (reservation &&
       event.allocation?.installationIdentity !==
         'C' + String(history.witness.cHighWater + 1).padStart(6, '0')) ||
-    event.requestDigest !== requestDigest(event.request)
+    event.requestDigest !==
+      (report ? reportRequestDigest(readFiscalReport(event.request)) : requestDigest(event.request))
   )
     uncertain();
   let failed = false,

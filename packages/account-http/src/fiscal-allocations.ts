@@ -13,15 +13,12 @@ import {
   validateStatus,
   validateList,
   validatePaperHistory,
-} from '../../fiscal-allocation/src/validation.ts';
+} from '@waitron-cloud/fiscal-allocation';
 import { AccountHttpError } from './errors.ts';
 import { readBoundedJsonObject } from './request.ts';
 import { readSessionCookie } from './cookies.ts';
 import type { RateRule } from './rate-limit.ts';
-import {
-  authenticateFiscalReport,
-  reportFiscalAllocation,
-} from '@waitron-cloud/fiscal-allocation';
+import { authenticateFiscalReport, reportFiscalAllocation } from '@waitron-cloud/fiscal-allocation';
 
 export interface FiscalHttpOptions {
   pool: Pool;

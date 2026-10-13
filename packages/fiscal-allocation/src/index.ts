@@ -11,6 +11,10 @@ export {
 } from './continuity.ts';
 export {
   validateReserve,
+  validateConsume,
+  validateAbandon,
+  validateStatus,
+  validateList,
   validateAllocation,
   validatePaperHistory,
   mapEnvironment,

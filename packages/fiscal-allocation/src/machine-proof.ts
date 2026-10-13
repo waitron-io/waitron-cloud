@@ -33,6 +33,18 @@ function invalid(): never {
 function same(a: unknown, b: unknown) {
   return canonical(a) === canonical(b);
 }
+// Renewed authentication cannot change an operation's evidence or installation binding.
+export function reportRequestDigest(c: FiscalReportClaims): string {
+  return requestDigest([
+    'waitron.fiscal-report-operation',
+    1,
+    c.origin,
+    c.action,
+    c.installationId,
+    c.operationId,
+    c.bodyDigest,
+  ]);
+}
 export function readFiscalReport(value: unknown): FiscalReportClaims {
   try {
     const e = record(value, ['payload', 'signature']),
@@ -281,7 +293,7 @@ export async function reportFiscalAllocation(
     active.check();
     const prior = history.events.find((e) => e.operationId === claims.operationId);
     if (prior) {
-      if (prior.action !== 'report' || prior.requestDigest !== requestDigest(proof))
+      if (prior.action !== 'report' || prior.requestDigest !== reportRequestDigest(claims))
         throw new FiscalAllocationError('binding_conflict');
       return reportResult(
         history.events.filter((e) => BigInt(e.sequence) < BigInt(prior.sequence)),
@@ -295,7 +307,7 @@ export async function reportFiscalAllocation(
       sequence: String(BigInt(history.witness.sequence) + 1n),
       operationId: claims.operationId,
       action: 'report',
-      requestDigest: requestDigest(proof),
+      requestDigest: reportRequestDigest(claims),
       request: proof,
       allocationId: receipt?.payload.allocation.allocationId ?? null,
       allocation: receipt?.payload.allocation ?? null,

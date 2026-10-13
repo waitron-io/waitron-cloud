@@ -8,6 +8,7 @@ import { checkPaperProgress } from '../src/paper-import.ts';
 import { key, scope, payload } from './fixtures.ts';
 import type { RegistryEvent, WriterGrant, ContinuityClaim } from '../src/policy.ts';
 import type { ContinuityWitness, ReserveInput } from '../src/types.ts';
+import { readFiscalReport, reportRequestDigest } from '../src/machine-proof.ts';
 
 const directory = process.argv[2]!;
 const file = join(directory, 'authority.json');
@@ -182,7 +183,10 @@ function append(claim: ContinuityClaim) {
   )
     throw Object.assign(Error(), { code: 'history_uncertain' });
   if (
-    e.requestDigest !== hashed(e.request) ||
+    e.requestDigest !==
+      (e.action === 'report'
+        ? reportRequestDigest(readFiscalReport(e.request))
+        : hashed(e.request)) ||
     claim.requestDigest !== e.requestDigest ||
     claim.operationId !== e.operationId ||
     e.allocationId !== (e.allocation?.allocationId ?? null)

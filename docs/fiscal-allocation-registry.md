@@ -187,7 +187,15 @@ Preserve the operation ID and the complete request when you lose a reply. Call
 what to do next. A routing hint commits before the independent append, so status
 can recover the outside receipt even when its first PostgreSQL projection rolled
 back. The hint supplies no allocation authority. An unknown result never permits
-reuse of an identity.
+reuse of an identity. Query status before consuming or abandoning an allocation
+whose reservation reply was lost. A by-ID terminal request carries no receipt or
+namespace, so an absent local allocation receives the same permission refusal as
+an inaccessible allocation. If an old database backup also lacks the routing
+hint, reconcile independently current custody-approved namespace history before
+retrying. Production recovery must qualify how it discovers those namespaces;
+the current synthetic build supplies no unscoped allocation lookup. A recorded
+paper import has a null receipt; repeat the original import to recover its exact
+acknowledgement.
 
 Every account route requires your current full session, CSRF proof and exact
 portal origin. A pending authenticator challenge is insufficient. Requests use
@@ -199,7 +207,7 @@ no-store caching; a response must fit within 256 KiB.
 | `reserve` | Complete namespace, bases, venue and binding | Signed reserved receipt |
 | `consume` | Allocation, binding and isolation or absence confirmation | Signed consumed receipt |
 | `abandon` | Allocation and binding | Signed permanently abandoned receipt |
-| `status` | Version, venue and operation ID | Recorded receipt, or unknown |
+| `status` | Version, venue and operation ID | Recorded operation and receipt when applicable, or unknown |
 | `list` | Version, venue, signed cursor and page limit | Retained receipt page |
 | `import-paper` | Complete signed block and linked register facts | Original import acknowledgement |
 
@@ -247,8 +255,12 @@ receipt returns `conflict`. An exact imported paper history returns `matched`;
 a changed signed allocation or consumption returns `conflict`; other verified
 paper evidence returns `recorded` without importing it. Results have the shape
 `{"version":1,"state":"matched","receiptId":"..."}`; paper results use null for
-the receipt ID. Exact report retries retain the original result, including after
-an outside append followed by a failed PostgreSQL commit.
+the receipt ID. Report retries retain the original result, including after
+an outside append followed by a failed PostgreSQL commit. Sign a fresh proof when
+the original proof expires, keeping the origin, action, installation, operation ID
+and complete body unchanged. Authentication time and lease renewal do not create
+a new operation; changed evidence conflicts. The original signed proof stays in
+the journal for historical verification.
 
 Supply the report origin and retained registration lease public keys through the
 explicit `machine` option. Historical journal replay verifies the original proof
