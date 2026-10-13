@@ -71,11 +71,11 @@ async function refusal(response:Response,status:number,error:string) {
   assert.equal(response.status,status);assert.deepEqual(await response.json(),{error});
   assert.equal(response.headers.get('cache-control'),'no-store');assert.equal(response.headers.getSetCookie().length,0);
 }
-function totp(secret:string) {
+function totp(secret:string,offsetSteps=0) {
   const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
   const bits=[...secret].map(ch=>alphabet.indexOf(ch).toString(2).padStart(5,'0')).join('');
   const decoded=Buffer.from(bits.match(/.{8}/g)!.map(byte=>parseInt(byte,2)));
-  const counter=Buffer.alloc(8);counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)));
+  const counter=Buffer.alloc(8);counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)+offsetSteps));
   const digest=createHmac('sha1',decoded).update(counter).digest(),offset=digest[19]!&15;
   return ((digest.readUInt32BE(offset)&0x7fffffff)%1000000).toString().padStart(6,'0');
 }
@@ -108,21 +108,27 @@ test('challenge tokens cannot access any session-backed route family',async()=>{
   assert.equal(await count(),0);
 });
 
-test('management activates once, returns codes once, revokes every session and clears cookies',async()=>{
+for(const activationOffset of [0,-1])test('management activates once, returns codes once, revokes every session and clears cookies'+(activationOffset?' with previous-step enrolment':''),async()=>{
   const owner=await account(),headers=await signIn(owner.email),other=await signIn(owner.email);
   const status=await request('/authenticator',undefined,{headers});assert.equal(status.status,200);
   assert.deepEqual(await status.json(),{active:false,version:0,recoveryCodesRemaining:0,available:true});
   const begin=await request('/authenticator/begin',{password},{headers});assert.equal(begin.status,200);
   const pending=await begin.json() as {pendingToken:string;secret:string;uri:string;expiresAt:string};
   assert.deepEqual(Object.keys(pending).sort(),['expiresAt','pendingToken','secret','uri']);assert.match(pending.uri,/^otpauth:\/\/totp\//);
-  const changed=await request('/authenticator/activate',{password,pendingToken:pending.pendingToken,code:totp(pending.secret)},{headers});
+  // A previous-step fixture needs time to activate before that step leaves the accepted window.
+  if(activationOffset){
+    const now=(await db.pool.query('SELECT clock_timestamp() AS now')).rows[0].now.getTime();
+    if(now%30000>25000)await delay(30000-now%30000);
+  }
+  const activationCode=totp(pending.secret,activationOffset);
+  const changed=await request('/authenticator/activate',{password,pendingToken:pending.pendingToken,code:activationCode},{headers});
   assert.equal(changed.status,200);const body=await changed.json() as {status:string;active:boolean;recoveryCodes:string[]};
   assert.deepEqual(Object.keys(body).sort(),['active','recoveryCodes','status']);assert.equal(body.status,'changed');assert.equal(body.active,true);
   assert.equal(body.recoveryCodes.length,10);assert.ok(body.recoveryCodes.every(c=>/^[A-F0-9]{32}$/.test(c)));
   assert.ok(changed.headers.getSetCookie().every(line=>/Max-Age=0/i.test(line)));assert.equal(changed.headers.getSetCookie().length,2);
   for(const session of [headers,other])assert.equal((await request('/session',undefined,{headers:session})).status,401);
   const token=await challenge(owner.email);
-  await refusal(await request('/login/factor',{challengeToken:token,proof:{kind:'totp',code:totp(pending.secret)}}),401,'credentials_invalid');
+  await refusal(await request('/login/factor',{challengeToken:token,proof:{kind:'totp',code:activationCode}}),401,'credentials_invalid');
   const signed=await request('/login/factor',{challengeToken:token,proof:recovery(body.recoveryCodes[0]!)});assert.equal(signed.status,200);
   const live=cookies(signed),liveStatus=await request('/authenticator',undefined,{headers:live});
   assert.deepEqual(await liveStatus.json(),{active:true,version:1,recoveryCodesRemaining:9,available:true});

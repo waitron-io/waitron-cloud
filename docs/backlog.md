@@ -388,6 +388,21 @@ notifications separately.
   so its exact failure cause remains unproved; use the named case on a future failure.
 
 
+  **HTTP authenticator replay fixture.** The management journey retains the exact
+  activation code for its replay refusal, instead of computing a potentially fresh
+  code after the 30-second period changes. A previous-step enrolment variant
+  reproduces the old `200 != 401` failure and passes with that correction. All
+  existing replay, session, recovery-code and cookie assertions and the 30-second
+  test deadline remain. The complete HTTP authenticator file passes 16 checks;
+  bypassing replay refusal in a disposable checkout fails both management variants
+  at their unchanged 401 assertions. Run
+  `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec
+  node --test --test-timeout=30000 test/authenticator-factor.test.ts`.
+  [Run 38419110801](https://github.com/waitron-io/waitron-cloud/actions/runs/38419110801)
+  failed that assertion. CI did not record the two code periods, so its exact cause
+  remains unproved. Production authentication code and accepted code periods stay
+  unchanged.
+
   **One-second relay budget fixture.** The key-retirement and rollover tests now
   retry setup admissions at most ten times when the budget window ends before
   admission commits. They keep the one-second window and every existing assertion.
