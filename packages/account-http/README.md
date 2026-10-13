@@ -113,7 +113,7 @@ parameters remain rejected, so tokens belong only in completion bodies.
 | --- | --- | --- |
 | POST `/signup/request` | `{"email":"owner@example.test"}` | 202 `{"status":"accepted"}` |
 | POST `/signup/complete` | `{"token":"<emailed token>","password":"a long unique password","organisationName":"Casa Norte","legalBusinessName":"Casa Norte SL","countryCode":"ES"}` | 201 `{"accountId":"<uuid>","organisationId":"<uuid>","legalBusinessId":"<uuid>"}` |
-| POST `/login` | `{"email":"owner@example.test","password":"a long unique password"}` | 200 `{"accountId":"<uuid>"}`, with session and CSRF cookies |
+| POST `/login` | `{"email":"owner@example.test","password":"a long unique password"}` | 200 `{"accountId":"<uuid>"}` with cookies, or 202 factor challenge without cookies |
 | GET `/session` | No body; session cookie | 200 `{"accountId":"<uuid>","expiresAt":"<ISO timestamp>"}` |
 | POST `/session/activity` | `{}`, session cookie and `X-CSRF-Token` | 200 `{"accountId":"<uuid>","expiresAt":"<ISO timestamp>"}` |
 | GET `/sessions` | No body; session cookie | 200 with this account's live session IDs, creation, last-use and expiry times, and current-session marker |
@@ -224,7 +224,7 @@ All responses disable caching and referrer forwarding, and set `nosniff`. Errors
 | --- | --- | --- |
 | 400 | `invalid_input`, `link_unavailable`, `password_compromised` | Invalid shape, ambiguous cookies, unusable completion token or a password present in the configured corpus |
 | 401 | `credentials_invalid`, `unauthenticated`, `session_expired` | Login failed, no usable session, or a previously live session reached its deadline |
-| 403 | `forbidden` | Wrong origin/host or missing/incorrect session CSRF proof |
+| 403 | `forbidden`, `credentials_invalid` | Wrong origin/host, missing/incorrect CSRF, or refused authenticator management authority |
 | 404 / 405 | `not_found` / `method_not_allowed` | Unknown path or wrong method |
 | 408 / 413 / 415 / 431 | `invalid_input` | Receive timeout, body too large, unsupported encoding/type or headers too large |
 | 429 | `rate_limited` | Shared request allowance exhausted; obey `Retry-After` |
@@ -513,3 +513,11 @@ See the [wire contract](../../docs/superpowers/specs/2026-09-24-customer-recover
 and [local walkthrough](../../docs/local-backups.md#recover-a-test-venue-without-copying-keys).
 These endpoints refuse production venues and continuous records. Recovery reports do
 not enrol a replacement, change routing or establish permission to trade.
+
+## Optional authenticator app
+
+See the [authenticator guide](../../docs/authenticator-app.md) for enrolment, second-step
+password sign-in, account controls, separate factor keys, explicit shared limits, rotation
+and recovery. A 202 password reply is a challenge rather than a session; only successful
+`POST /api/account/login/factor` sets cookies. Password reset keeps the factor and unused
+codes. Successful factor changes end all sessions; passkeys remain independent.

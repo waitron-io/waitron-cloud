@@ -20,7 +20,18 @@ The authenticator cryptography in `src/authenticator-crypto.ts` and
 Malformed-input, key-version and tamper refusals are retained. Cloud pins otplib,
 returns every matched adjacent time step for transactional replay checks, and binds
 AES-256-GCM ciphertext to the account, factor version, purpose, pending identity and
-key ID. Recovery storage and account flows are not implemented by this primitive.
+key ID. Cloud-owned registration stores now integrate these primitives with PostgreSQL
+account-first locks, durable attempts, hashed pre-session challenges, monotonic
+factor versions and transactional replay. Recovery codes are ten independent 128-bit
+values with account/version-bound hashes; consumed and superseded history is retained
+until a separate retention policy permits deletion. Email reset preserves the active
+factor and codes. Successful factor changes revoke all sessions.
+
+Registration's `test/password-login.test.ts` and `test/authenticator-factor.test.ts`
+also adapt applicable password/factor and generic-refusal assertions from
+[manager-login.test.ts](https://github.com/clintongormley/waitron/blob/3d6b31ac6b2ff9fb9a62e4081e1afe50000963c4/packages/identity/src/manager-login.test.ts).
+Cloud's browser, HTTP, concurrency, rotation and populated upgrade/restore checks
+extend that source; they do not change Waitron's local identity or fiscal flows.
 
 Cloud's registration `src/password-recovery.ts` and its tests have no Waitron
 identity-package counterpart. Maintain and test that Cloud-owned flow here.

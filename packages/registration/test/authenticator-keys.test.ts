@@ -74,6 +74,10 @@ test('retry must verify current-key ciphertext rather than skipping unreadable r
   await assert.rejects(rotate({activeKeyId:'next',keys:{old:old.keys.old,next:'ff'.repeat(32)}}),/factor_unavailable/);
   assert.deepEqual(await snapshot(),before);
 });
+test('an empty database still requires a valid current key',async()=>{
+  await pool.query('TRUNCATE cloud_accounts CASCADE');
+  for(const config of [null,{activeKeyId:'missing',keys:{old:old.keys.old}},{activeKeyId:'next',keys:{next:'invalid'}}])await assert.rejects(rotate(config),/factor_unavailable/);
+});
 test('CLI refuses incomplete, extra and changed migration ledgers before touching ciphertext',async()=>{
   const env={...process.env,DATABASE_URL:process.env.TEST_DATABASE_URL,PGOPTIONS:`-c search_path=${schema}`,CLOUD_FACTOR_ACTIVE_KEY_ID:'next',CLOUD_FACTOR_KEYS:JSON.stringify(keys.keys)};
   const path=new URL('../src/authenticator-keys-cli.ts',import.meta.url).pathname,before=await snapshot();

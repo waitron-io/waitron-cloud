@@ -97,3 +97,31 @@ This recovers the named pre-upgrade point. Writes accepted after that backup are
 from the restored old version. The local proof does not switch production traffic or
 choose whether losing those writes is acceptable. Define that decision, your provider's
 backup procedure and secret recovery before using an old-release recovery in production.
+
+## Rehearse the authenticator upgrade
+
+Use explicit, full commit IDs to test the populated 34-to-35 release pair. The old
+revision is the approved-design release; the new revision must contain the complete
+factor implementation. Start from a clean checkout:
+
+```sh
+node scripts/schema-upgrade-receipt.mjs /tmp/cloud-factor-upgrade.json --old 65c13f1402041931bdb244007f3cbc267ae61483 --new <full-implementation-commit>
+node scripts/verify-schema-upgrade-receipt.mjs /tmp/cloud-factor-upgrade.json
+```
+
+This creates a separately versioned receipt. Omitting the revision options retains
+the historical 26-to-27 defaults and checks above. The new receipt checks existing
+passwords, sessions, permissions and synthetic passkey rows before and after upgrade;
+real passkey sign-in remains covered by the portal's Chromium suite.
+
+The rehearsal stops consumers, proves refusal in both incompatible directions,
+interrupts migration 035 while it waits for the session table, checks complete rollback,
+and retries. It enrols an authenticator after upgrade, takes a second logical backup
+and restores the encrypted factor and proof state into another database. Matching
+external keys permit recovery-code sign-in exactly once; missing or wrong keys refuse
+both completion methods. Swapped account binding refuses decryption. The upgraded
+source database stays unchanged, and the receipt requires zero owned leftover resources.
+
+These are local PostgreSQL 18 and Mailpit checks with synthetic data. Retain the
+factor key ring separately from each backup and follow the [rotation procedure](authenticator-app.md#rotate-and-recover-encryption-keys).
+They do not test provider backups, production traffic switching or customer data.

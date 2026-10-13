@@ -380,8 +380,9 @@ notifications separately.
   has approved email recovery and session policies: password reset keeps the factor, and
   factor changes end every session. Its [implementation plan](superpowers/plans/2026-10-12-cloud-authenticator-factor.md)
   covers storage, account controls and browser acceptance. Storage, API and the bilingual
-  portal are implemented locally; operational key rotation, stack configuration and
-  populated upgrade/restore acceptance remain. The identity primitive encrypts account/version/purpose-bound
+  portal, operational key rotation and private stack configuration are implemented locally.
+  The populated 34-to-35 upgrade/restore rehearsal passes; the packaged stack runtime
+  proof remains pending because Docker stalls resolving its external build frontend. The identity primitive encrypts account/version/purpose-bound
   secrets and returns every matching adjacent time step; migration 035 persists factor,
   session-bound enrolment, challenge, hashed recovery and replay state. Focused PostgreSQL
   and cryptography checks cover constraints, ciphertext binding and preserved upgrade data.
@@ -418,9 +419,19 @@ notifications separately.
   `node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test
   --test-timeout=120000 test/authenticator-browser.test.ts test/passkey-browser.test.ts
   test/account-security-browser.test.ts test/session.test.ts`.
-  Operational rotation, local-stack configuration and populated upgrade/restore checks remain
-  before the cohesive implementation PR. No production factor policy or key configuration is selected.
-  Configure live email delivery, implement the remaining second-factor plan,
+  The [operator guide](authenticator-app.md) documents independent keys, explicit policy,
+  account-first re-encryption and retained-backup custody. Rotation tests preserve versions,
+  sessions and proof state, reject wrong/missing keys, and resume interrupted accounts:
+  `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test
+  test/authenticator-keys.test.ts`. The populated 34-to-35 receipt preserves credentials,
+  sessions and synthetic passkey rows, proves migration rollback/retry and both incompatible
+  consumer refusals, and restores factor state with matching/wrong/missing-key checks.
+  `node scripts/schema-upgrade-receipt.mjs /tmp/cloud-factor-upgrade.json --old
+  65c13f1402041931bdb244007f3cbc267ae61483 --new <full-implementation-commit>`.
+  The historical upgrade defaults remain unchanged. Packaged stack runtime proof is still
+  required: tag, digest and anonymous Docker frontend probes timed out locally, while a
+  minimal built-in-frontend check passed. No production factor policy or key configuration is selected.
+  Configure live email delivery and production factor policy,
   and define the wider platform role catalogue before public use. Shared login/request limits, secure
   cookies and Origin/CSRF checks are implemented in the account API. A local streaming
   reverse-proxy test now exercises two real account instances with overwritten client

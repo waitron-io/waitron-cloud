@@ -78,7 +78,7 @@ test('bootstrap persists an independent factor key and refuses a malformed suppl
  const directory=await root(),config=await bootstrap(directory);
  assert.match(config.factor?.keys?.[config.factor?.activeKeyId]??'',/^[0-9a-f]{64}$/);
  const factor=config.factor.keys[config.factor.activeKeyId];
- for(const key of [config.email.keys['local-v1'],config.pairing.keys['local-v1'],config.recovery.keys['local-v1'],config.http.rateKey,config.backup.masterKey])assert.notEqual(factor,key);
+ for(const key of [config.database.password,config.email.keys['local-v1'],config.pairing.keys['local-v1'],config.recovery.keys['local-v1'],config.http.rateKey,config.backup.masterKey])assert.notEqual(factor,key);
  assert.deepEqual((await bootstrap(directory)).factor,config.factor);
  config.factor={activeKeyId:'missing',keys:{}};const bytes=JSON.stringify(config);
  await writeFile(join(directory,'runtime.json'),bytes,{mode:0o600});
