@@ -3,6 +3,7 @@ import {randomBytes,randomUUID} from 'node:crypto';
 import test from 'node:test';
 import {fixture} from './fixtures/relay-worker.ts';
 import {RelayMessages} from '../src/relay-messages.ts';
+import {RelayBoundsError} from '../src/relay-bounds.ts';
 
 // Removing shared reservations permits the third account to spend the same recipient budget.
 function bounds(change:Record<string,unknown>={}){
@@ -18,6 +19,14 @@ async function submit(f:any,v:any,recipient:string,id=randomUUID(),kind='passwor
  const body:any={version:1,messageId:id,grantId:v.grant.id,grantRevision:v.grant.revision,class:kind,recipient,displayName:'Ána',locale:'es-ES',timeZone:'Europe/Madrid',expiresAt:new Date(Date.now()+1800000).toISOString(),token:randomBytes(32).toString('base64url')};
  if(kind==='email_change'){delete body.token;body.code='123456';body.codeExpiresAt=new Date(Date.now()+600000).toISOString();}
  return {body,result:await f.messages.execute('email-submit',v.proof('email-submit',body))};
+}
+// Setup needs a committed admission; a one-second window may end before its INSERT finishes.
+async function shortWindowAdmission<T>(admit:()=>Promise<T>):Promise<T>{
+ for(let attempt=0;;attempt++){
+  try{return await admit();}catch(error){
+   if(!(error instanceof RelayBoundsError)||error.code!=='relay_unavailable'||attempt===9)throw error;
+  }
+ }
 }
 test('recipient counts are shared across accounts and exact retries spend nothing',async()=>{
  const f=await configured();try{
@@ -155,22 +164,28 @@ test('bounds client methods refuse autocommit and status exposes only aggregate 
 test('counter rollover during byte wait rolls back the old window and fresh retry succeeds',async()=>{
  const f=await configured({windowSeconds:1,recipientLimit:100}),lock=await f.pool.connect();let pending:Promise<unknown>|undefined;
  try{
-  const v=await f.venue();await submit(f,v,'baseline@example.test');
+  const v=await f.venue();await shortWindowAdmission(()=>submit(f,v,'baseline@example.test'));
   const body={version:1,messageId:randomUUID(),grantId:v.grant.id,grantRevision:1,class:'password_reset',recipient:'rollover@example.test',displayName:'Ana',locale:'es',timeZone:'UTC',expiresAt:new Date(Date.now()+1800000).toISOString(),token:randomBytes(32).toString('base64url')};
   const before=(await f.pool.query('SELECT bytes::text FROM relay_queue_bytes')).rows[0].bytes;
   await lock.query('BEGIN');await lock.query('SELECT 1 FROM relay_queue_bytes FOR UPDATE');
   pending=f.messages.execute('email-submit',v.proof('email-submit',body));void pending.catch(()=>{});await waitForLock(f,'INSERT INTO relay_messages');
   await new Promise(r=>setTimeout(r,1100));await lock.query('COMMIT');await assert.rejects(pending,{code:'relay_unavailable'});
   assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count,'1');assert.equal((await f.pool.query('SELECT bytes::text FROM relay_queue_bytes')).rows[0].bytes,before);
-  assert.equal((await f.messages.execute('email-submit',v.proof('email-submit',body))).created,true);
+  assert.equal((await shortWindowAdmission(()=>f.messages.execute('email-submit',v.proof('email-submit',body)))).created,true);
  }finally{await lock.query('ROLLBACK');lock.release();await pending?.catch(()=>{});await f.close();}
 });
-test('expired windows allow recipient key retirement and retries after rollover reserve no new units',async()=>{
+for(const slowInitialInsert of [false,true])test('expired windows allow recipient key retirement and retries after rollover reserve no new units'+(slowInitialInsert?' after a slow initial insert':''),async()=>{
  const f=await configured({windowSeconds:1}),v=await f.venue();try{
-  const first=await submit(f,v,'ana@example.test');await new Promise(r=>setTimeout(r,1100));
+  if(slowInitialInsert)await f.pool.query(`CREATE SEQUENCE fixture_insert_attempt;
+   CREATE FUNCTION fixture_slow_initial_submit() RETURNS trigger LANGUAGE plpgsql AS $$
+   BEGIN IF nextval('fixture_insert_attempt')=1 THEN PERFORM pg_sleep(1.1);END IF;RETURN NEW;END$$;
+   CREATE TRIGGER fixture_slow_initial_submit BEFORE INSERT ON relay_messages FOR EACH ROW EXECUTE FUNCTION fixture_slow_initial_submit()`);
+  const first=await shortWindowAdmission(()=>submit(f,v,'ana@example.test'));
+  if(slowInitialInsert)assert.ok(Number((await f.pool.query('SELECT last_value FROM fixture_insert_attempt')).rows[0].last_value)>=2,'the expired first admission must roll back before setup succeeds');
+  await new Promise(r=>setTimeout(r,1100));
   const messages=new RelayMessages(f.pool,f.issuer,'http://localhost',{...f.config,bounds:{...f.config.bounds,recipientKeys:{activeKeyId:'b2',keys:{b2:randomBytes(32).toString('hex')}}}});
   assert.equal((await messages.execute('email-submit',v.proof('email-submit',first.body))).created,false);
-  const second=await submit({...f,messages},v,'ana@example.test');assert.equal(second.result.created,true);
+  const second=await shortWindowAdmission(()=>submit({...f,messages},v,'ana@example.test'));assert.equal(second.result.created,true);
   assert.deepEqual((await f.pool.query('SELECT key_id FROM relay_bounds_windows')).rows,[{key_id:'b2'}]);
   assert.equal((await f.pool.query("SELECT count::text FROM relay_bounds_counters WHERE kind='recipient'")).rows[0].count,'1');
   assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count,'2');

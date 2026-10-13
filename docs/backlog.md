@@ -387,6 +387,36 @@ notifications separately.
   and 30-second test deadlines. The controlled slow-start run passes all 31 cases. Individual startup timings were absent from CI,
   so its exact failure cause remains unproved; use the named case on a future failure.
 
+
+  **HTTP authenticator replay fixture.** The management journey retains the exact
+  activation code for its replay refusal, instead of computing a potentially fresh
+  code after the 30-second period changes. A previous-step enrolment variant
+  reproduces the old `200 != 401` failure and passes with that correction. All
+  existing replay, session, recovery-code and cookie assertions and the 30-second
+  test deadline remain. The complete HTTP authenticator file passes 16 checks;
+  bypassing replay refusal in a disposable checkout fails both management variants
+  at their unchanged 401 assertions. Run
+  `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec
+  node --test --test-timeout=30000 test/authenticator-factor.test.ts`.
+  [Run 38419110801](https://github.com/waitron-io/waitron-cloud/actions/runs/38419110801)
+  failed that assertion. CI did not record the two code periods, so its exact cause
+  remains unproved. Production authentication code and accepted code periods stay
+  unchanged.
+
+  **One-second relay budget fixture.** The key-retirement and rollover tests now
+  retry setup admissions at most ten times when the budget window ends before
+  admission commits. They keep the one-second window and every existing assertion.
+  A permanent PostgreSQL 1.1-second first-insert delay proves setup recovers only
+  after the expired attempt rolls back; the complete relay-bounds file passes 34
+  checks. Removing the production expiry guard in a disposable checkout fails both
+  the slow-insert rollback assertion and the original rollover-refusal assertion.
+  Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+  node --test test/relay-bounds.test.ts` for these checks.
+  The design-only [merge run 38415818412](https://github.com/waitron-io/waitron-cloud/actions/runs/38415818412)
+  failed at that expiry guard during first admission. A controlled delay reproduces
+  the failure, but CI did not record window timestamps, so its exact cause remains
+  unproved. Production guards and timing policies are unchanged.
+
 - **Shared UI.** [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519)
   implements `@waitron/ui-core` in Waitron with seven account controls, theme tokens
   and common helpers. Existing `@waitron/ui` imports re-export the same implementation;
