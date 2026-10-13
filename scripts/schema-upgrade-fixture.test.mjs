@@ -17,3 +17,10 @@ test('upgrade fixture generates six-digit SHA1 codes from independent RFC 6238 v
  const secret='GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
  assert.equal(fixture.factorCode(secret,59000),'287082');assert.equal(fixture.factorCode(secret,1111111109000),'081804');
 });
+test('relay stop upgrades require their own mode and two distinct pinned revisions',()=>{
+ const pair=['--old','a'.repeat(40),'--new','b'.repeat(40)];
+ const want={oldHead:'a'.repeat(40),newHead:'b'.repeat(40),factor:false,relayStop:true};
+ assert.deepEqual(fixture.upgradeRevisions(['--relay-stop',...pair]),want);
+ assert.deepEqual(fixture.upgradeRevisions([...pair,'--relay-stop']),want);
+ for(const args of [['--relay-stop'],['--relay-stop','--old','a'.repeat(40)],['--relay-stop','--old','main','--new','b'.repeat(40)],['--relay-stop','--old','a'.repeat(40),'--new','a'.repeat(40)],['--relay-stop','--relay-stop',...pair],['--relay-stop','--factor',...pair],['--relay-stop',...pair,'--force']])assert.throws(()=>fixture.upgradeRevisions(args),/revisions/);
+});

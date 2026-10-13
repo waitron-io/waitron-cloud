@@ -8,7 +8,8 @@
     "test": "node --test --test-timeout=30000 test/*.test.ts",
     "db:migrate": "node src/migrate-cli.ts",
     "history:cleanup": "node src/history-cleanup-cli.ts",
-    "usage:reconcile": "node src/usage-reconcile-cli.ts"
+    "usage:reconcile": "node src/usage-reconcile-cli.ts",
+    "relay:control": "node src/relay-control-cli.ts"
   },
   "dependencies": {
     "@simplewebauthn/server": "14.0.3",

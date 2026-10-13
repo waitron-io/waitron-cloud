@@ -125,3 +125,40 @@ source database stays unchanged, and the receipt requires zero owned leftover re
 These are local PostgreSQL 18 and Mailpit checks with synthetic data. Retain the
 factor key ring separately from each backup and follow the [rotation procedure](authenticator-app.md#rotate-and-recover-encryption-keys).
 They do not test provider backups, production traffic switching or customer data.
+
+## Rehearse the relay stop upgrade
+
+To prove that a stop survives recovery, test release 35 and your complete release-36
+candidate from a clean checkout. Use full commit IDs:
+
+```sh
+node scripts/schema-upgrade-receipt.mjs /tmp/cloud-relay-stop-upgrade.json --relay-stop --old 3215320c4869177e518e53cedb19da1858862ff6 --new <full-implementation-commit>
+node scripts/verify-schema-upgrade-receipt.mjs /tmp/cloud-relay-stop-upgrade.json
+```
+
+This explicit mode produces receipt version 3 for exactly 35-to-36. The default
+26-to-27 proof and explicit 34-to-35 authenticator proof retain their own receipt
+versions and checks.
+
+The rehearsal seeds account and authenticator state alongside encrypted queued,
+delayed, claimed, sending and terminal relay messages. It stops consumers, saves a
+pre-upgrade backup, and interrupts migration 036 at an observed migration-ledger
+lock. Rollback preserves every old row and ledger entry. Repeated upgrade preserves
+the populated data and all 35 earlier migration digests, then initializes the flag
+not-stopped. The trusted CLI stops the source, and restart and repeat migration
+preserve that stop.
+
+A second backup captures the stopped source. A separate restored database retains
+the stop through migration and restart: new admissions and worker claims refuse,
+while current-authority status, exact retries and cancellation remain usable.
+Matching external keys decrypt retained content; wrong or missing payload and replay
+keys refuse it. Missing historical suppression keys also refuse handoff after resume.
+With matching keys, resume permits admission and delivery to local Mailpit.
+
+The pre-upgrade backup is restored separately under the old consumer gate, then
+upgraded to release 36 with an initial not-stopped flag. The source database stays
+unchanged throughout both recoveries. The receipt requires zero remaining owned
+containers, volumes and checkouts. This proves local logical backups with synthetic
+data, not provider recovery or permission to enable delivery. An earlier backup
+cannot contain a later stop; [stop a restored relay](transactional-email-relay-contract.md#stop-and-resume-the-local-relay)
+before starting configured consumers if you need it paused.

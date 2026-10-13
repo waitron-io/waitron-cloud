@@ -249,7 +249,46 @@ venue does not subscribe to remote access or backups.
   refuses mismatched limits rather than resetting budgets. Policy replacement remains separate work. The
   [reviewed operator-stop design](superpowers/specs/2026-10-13-relay-operator-stop-design.md)
   and [implementation plan](superpowers/plans/2026-10-13-relay-operator-stop.md)
-  cover durable local control; implementation and runtime proofs remain open. Measure admission-lock contention
+  cover durable local control. The stored flag and transaction API now pass
+  focused PostgreSQL checks for committed stop/resume, missing-state refusal and
+  shared-reader ordering. Migration 036 preserves populated release-35 account,
+  factor and relay state through concurrent/repeated upgrade and interrupted
+  rollback/retry. The trusted local stop/resume/status command validates every
+  migration name and digest, returns one JSON line after commit and bounds database
+  waits. Its subprocess/PostgreSQL checks cover failed commits, cancellation,
+  preserved queue state and silent root/package forwarding. Two running HTTP
+  processes now refuse new message IDs while stopped without relay spend, then
+  admit after resume without restarting. Exact retries, status and cancellation
+  retain current authority and byte accounting. Admission and stop races keep the
+  shared control lock through commit or rollback, including a reader proceeding
+  while stop waits. Two persistent local workers now pause claims and handoff
+  independently, resume without restarting and retain paused queue rows and spend.
+  A stopped handoff releases only its own queued claim. Messages already committed
+  as sending retain their real SMTP result, even if the connection starts after
+  stop succeeds. Stopped recovery still clears expired sending as uncertain and
+  fences late replies; Cloud verification, password reset and venue alerts still
+  deliver. The focused worker/account-mail command passes 125 checks, including
+  observed lock waits, process restart, cancellation and held SMTP replies; 19
+  deliberate breakages fail inspected assertions in a separate checkout.
+  The explicit 35-to-36 rehearsal now passes all 28 version-3 checks: interrupted
+  migration rolls back, every populated old row and complete ledger survives,
+  stop persists across restart, and a separate stopped backup restores stopped.
+  Matching external keys permit status, cancellation and exact retries; wrong or
+  missing keys refuse, and resume delivers only to local Mailpit. A separately
+  restored pre-stop backup initializes not-stopped after upgrade; the stopped source
+  stays unchanged. Fifteen receipt/parser and eight real database/key breakages fail
+  their assertions; restored proof passes with zero owned resources remaining.
+  Packaged local install, restart and rebuilt upgrade also pass with 36 migrations
+  and zero leftover resources.
+  See the [trusted stop command](transactional-email-relay-contract.md#stop-and-resume-the-local-relay)
+  and [version-3 rehearsal](database-recovery.md#rehearse-the-relay-stop-upgrade).
+  Run `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec
+  node --test --test-timeout=120000 test/relay-operator-stop.test.ts
+  test/relay-messages.test.ts test/relay-admission-bounds.test.ts
+  test/relay-disabled.test.ts` for the local admission checks.
+  Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+  node --test test/relay-control.test.ts test/relay-control-migration.test.ts
+  test/relay-control-cli.test.ts`. Measure admission-lock contention
   before production enablement: status, cancellation and retries share that lock.
   Separately queue Waitron's durable caller/status work before a joint
   local proof.
@@ -323,16 +362,30 @@ notifications separately.
   [Run 38373683976](https://github.com/waitron-io/waitron-cloud/actions/runs/38373683976)
   on docs-only `7860981` failed registration and portal. Advancing each clock read
   by one millisecond makes the relay worker fixture reject its lease: its separate
-  `issuedAt` and `expiresAt` clock reads can exceed the one-hour limit. Read the
-  clock once when building that fixture; retain the production maximum and every
-  existing worker assertion. The Spanish/dark/390 authenticator journey also failed
+  `issuedAt` and `expiresAt` clock reads can exceed the one-hour limit. The worker
+  fixture now reads the clock once. Its advancing-clock regression passes and
+  restoring the separate reads fails; the production maximum and every existing
+  worker assertion remain. The Spanish/dark/390 authenticator journey also failed
   at its first factor sign-in. A controlled rollover after enrolment reproduces the
   same timeout with a real 401: the journey's previous-step code then names the
-  already-consumed enrolment step. Choose an unused valid proof for that sign-in
-  while retaining the separate replay/adjacent-step assertions and seven-second
-  wait. The failed CI did not record its factor response or steps, so this is a
-  reproduced failure mechanism, not proof of that run's exact cause. Both fixture
-  corrections remain open; a passing rerun does not resolve them.
+  already-consumed enrolment step. The first sign-in fixture now uses a valid
+  code for the next 30-second period, which the existing verification window
+  accepts. A real browser/PostgreSQL regression observes the clock advance
+  after enrolment, signs in with that fresh code, refuses the consumed enrolment
+  code, then accepts an unused code from the previous period after the next clock
+  advance.
+  It fails with 401 before the fixture correction and passes afterward. All original
+  journey assertions and the seven-second waits remain. The failed CI did not record
+  its factor response or steps, so the reproduced mechanism does not establish that
+  historical run's exact cause; collect the failing response on any future failure.
+  **Server-startup fixture grouping.** The plan merge's
+  [run 38375993173](https://github.com/waitron-io/waitron-cloud/actions/runs/38375993173)
+  timed out in the single server CLI settings/missing-migration test after 30 seconds.
+  Its unchanged local run takes 14.9 seconds; adding one second to each real child
+  startup reproduces that timeout. Each missing migration now has its own named test,
+  keeping all original refusal/ledger assertions and the existing 20-second child
+  and 30-second test deadlines. The controlled slow-start run passes all 31 cases. Individual startup timings were absent from CI,
+  so its exact failure cause remains unproved; use the named case on a future failure.
 
 - **Shared UI.** [Waitron PR #519](https://github.com/clintongormley/waitron/pull/519)
   implements `@waitron/ui-core` in Waitron with seven account controls, theme tokens
@@ -398,7 +451,9 @@ notifications separately.
   covers storage, account controls and browser acceptance. Storage, API and the bilingual
   portal, operational key rotation and private stack configuration are implemented locally.
   The populated 34-to-35 upgrade/restore rehearsal and packaged stack clean-install,
-  restart, rebuild/upgrade and cleanup proofs pass with 35 migrations. The identity primitive
+  restart, rebuild/upgrade and cleanup proofs passed with 35 migrations for the
+  authenticator release. Current packaged proofs follow the selected release manifest.
+  The identity primitive
   encrypts account/version/purpose-bound
   secrets and returns every matching adjacent time step; migration 035 persists factor,
   session-bound enrolment, challenge, hashed recovery and replay state. Focused PostgreSQL
@@ -448,7 +503,8 @@ notifications separately.
   The historical upgrade defaults remain unchanged. The packaged stack proof passes
   on the complete implementation tree:
   `pnpm proof:local-stack`. Its receipt requires healthy services, retained data/identity,
-  35 migrations and zero leftover containers, volumes, networks or proof images.
+  the selected release's complete migration manifest and zero leftover containers,
+  volumes, networks or proof images.
   No production factor policy or key configuration is selected.
   Configure live email delivery and production factor policy,
   and define the wider platform role catalogue before public use. Shared login/request limits, secure

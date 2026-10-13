@@ -24,3 +24,15 @@ test('authenticator upgrade receipts require 34-to-35 state preservation and eac
   const v=structuredClone(valid);change(v);assert.throws(()=>verify(v),/schema_upgrade_receipt/);
  }
 });
+
+test('relay stop receipts require every separate upgrade and recovery proof for exactly 35-to-36',async()=>{
+ const {verifySchemaUpgradeReceipt:verify}=await import(path.href);
+ const valid={schemaVersion:3,measuredAt:'2026-10-13T08:00:00.000Z',driver:{head:'c'.repeat(40),dirty:false},releases:{old:{head:'a'.repeat(40),migrations:35,digest:'a'.repeat(64)},new:{head:'b'.repeat(40),migrations:36,digest:'b'.repeat(64)}},checks:{oldStarted:true,newRefusedOld:true,migrationInterrupted:true,rollbackComplete:true,newRefusedInterrupted:true,retryApplied:true,oldRefusedNew:true,newStarted:true,identityPreserved:true,tenantsIsolated:true,completionRetry:true,pendingMailPreserved:true,mailDelivered:true,backupRestored:true,oldRecovered:true,wrongKeyRefused:true,upgradedUnchanged:true,accountStatePreserved:true,relayStatePreserved:true,defaultRunning:true,stopRestartPreserved:true,stopRestorePreserved:true,restoredRelayKeys:true,restoredRelayWrongKeysRefused:true,restoredRelayMissingKeysRefused:true,restoredStopEffective:true,oldBackupUpgradeDefault:true,resumeEffective:true},timings:{upgradeMs:1,recoveryMs:2},cleanup:{containers:0,volumes:0,checkouts:0},limitations:['Synthetic local upgrade and two separate logical backups only.']};
+ assert.equal(verify(valid),valid);
+ for(const key of Object.keys(valid.checks))for(const change of [v=>delete v.checks[key],v=>v.checks[key]=false]){
+  const v=structuredClone(valid);change(v);assert.throws(()=>verify(v),/schema_upgrade_receipt/,key);
+ }
+ for(const change of [v=>v.schemaVersion=2,v=>v.releases.old.migrations=34,v=>v.releases.new.migrations=37,v=>v.releases.new.head=v.releases.old.head,v=>v.releases.old.head='main',v=>v.checks.pairingUpgraded=true,v=>v.checks.secret='private',v=>v.cleanup.checkouts=1,v=>v.driver.secret='private',v=>delete v.checks]){
+  const v=structuredClone(valid);change(v);assert.throws(()=>verify(v),/schema_upgrade_receipt/);
+ }
+});

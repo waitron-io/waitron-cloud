@@ -53,11 +53,11 @@ export async function relayFixture(){
   });
  }
  const children=new Set<ReturnType<typeof spawn>>();
- async function second(config:unknown=relay){
+ async function second(config:unknown=relay,applicationName=db.schema){
   const child=spawn(process.execPath,['test/fixtures/relay-http-process.ts'],{env:process.env,stdio:['pipe','pipe','pipe']});children.add(child);
   const exited=new Promise<void>((resolve,reject)=>{child.once('error',reject);child.once('exit',()=>{children.delete(child);resolve();});});
   let error='',text='';child.stderr!.on('data',b=>error+=b);
-  child.stdin!.end(JSON.stringify({schema:db.schema,issuerKey,config,origin,keys:db.keys,rateKey:db.rateKey}));
+  child.stdin!.end(JSON.stringify({schema:db.schema,applicationName,issuerKey,config,origin,keys:db.keys,rateKey:db.rateKey}));
   const port=await Promise.race([new Promise<number>(resolve=>child.stdout!.on('data',b=>{text+=b;if(text.includes('\n'))resolve(JSON.parse(text.split('\n')[0]!).port);})),exited.then(()=>{throw Error('HTTP child exited: '+error);})]);
   return {request:(action:string,envelope:unknown)=>request(action,envelope,{},port),close:async()=>{child.kill('SIGTERM');await exited;}};
  }

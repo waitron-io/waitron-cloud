@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {after, before, beforeEach, test} from 'node:test';
 import {Pool} from 'pg';
-import {migrate} from '../src/migrate.ts';
+import {migrate,migrationNames} from '../src/migrate.ts';
 import {hashSecret} from '@waitron-cloud/identity';
 
 const schema = `factor_schema_${randomUUID().replaceAll('-', '')}`;
@@ -46,6 +46,8 @@ test('migration persists independent factor, challenge, recovery and replay stat
 });
 test('populated 34-to-35 upgrade preserves credentials, permissions and sessions', async () => {
   await present('cloud_authenticator_factors');
+  await pool.query('DROP TABLE relay_control');
+  await pool.query("DELETE FROM schema_migrations WHERE name='036_relay_operator_stop.sql'");
   await pool.query(`DROP TABLE cloud_factor_enrolments,cloud_factor_login_challenges,
     cloud_factor_recovery_codes,cloud_factor_replays,cloud_authenticator_factors;
     ALTER TABLE cloud_sessions DROP CONSTRAINT cloud_sessions_factor_account_unique`);
@@ -54,7 +56,11 @@ test('populated 34-to-35 upgrade preserves credentials, permissions and sessions
   const tables = ['cloud_credentials', 'platform_permissions', 'cloud_sessions'];
   const before = await Promise.all(tables.map(table => pool.query(`SELECT * FROM ${table}`)));
   await migrate(pool);
-  assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '35');
+  const ledger=(await pool.query('SELECT name FROM schema_migrations ORDER BY name')).rows.map(row=>row.name);
+  assert.equal(ledger.slice(0,35).length,35);
+  assert.deepEqual(ledger.slice(0,35),migrationNames.slice(0,35));
+  assert.equal(ledger.length,36);
+  assert.equal(ledger.at(-1),'036_relay_operator_stop.sql');
   for (const [i, table] of tables.entries()) {
     assert.deepEqual((await pool.query(`SELECT * FROM ${table}`)).rows, before[i]!.rows);
   }
