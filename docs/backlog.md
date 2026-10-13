@@ -803,8 +803,16 @@ notifications separately.
   The database foundation is implemented on `feat/monitoring-quiet-escalation`: an
   append-only upgrade preserves old delivery data and records each incident opening
   with its original recipients. Local tests cover rollback, concurrent retry, older
-  release gates and batches of at most 100 recipients. Notification scheduling,
-  timing, recovery and packaged upgrade/restore proofs remain open.
+  release gates and batches of at most 100 recipients. The same branch now validates
+  optional monitor timings, captures original eligible accounts and delays opening mail
+  without hiding the incident in the portal. Local PostgreSQL and separate-process
+  tests prove silent blip recovery, unchanged deadlines after restart/configuration
+  changes, refreshed evidence and authority, one opening under concurrent monitors,
+  progress past a locked installation and no historical mail after an upgrade with
+  timings enabled. Guard deletion checks catch early delivery, omitted deadline
+  equality, new recipients, replacement installations and repeated empty-set admission.
+  One reminder, late-receipt recovery, cleanup and packaged upgrade/restore proofs
+  remain open; this implementation branch has not completed review or CI.
   The [local monitor](local-monitoring.md) now records missing contact, stale snapshots
   and failed verification for configured test installations. The portal shows incident
   evidence and stale monitoring; owners can opt in to English/Spanish email alerts.
