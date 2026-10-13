@@ -767,6 +767,10 @@ notifications separately.
   data. Stale health is shown as unknown and the permission is rechecked before release.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
+  The reviewed [quiet-period and reminder design](superpowers/specs/2026-10-13-monitoring-quiet-escalation-design.md)
+  and [implementation plan](superpowers/plans/2026-10-13-monitoring-quiet-escalation.md)
+  define optional delayed opening mail and one reminder, both disabled by default.
+  Implementation and timing, recovery and upgrade proofs remain open.
   The [local monitor](local-monitoring.md) now records missing contact, stale snapshots
   and failed verification for configured test installations. The portal shows incident
   evidence and stale monitoring; owners can opt in to English/Spanish email alerts.
