@@ -18,7 +18,7 @@ KMS key and two temporary IAM roles. A role is an AWS identity that issues tempo
 credentials. Each role retained the owner's `lane-d-boundary` permissions limit and
 had a read-back policy for one venue prefix and the named KMS key. KMS use was
 restricted to S3 and that prefix's encryption context. Public-access blocking stayed
-enabled. No account permission or shared boundary was changed.
+enabled. The rehearsal used the operator's existing permissions and shared boundary.
 
 The operator used the externally supplied `waitron-rehearsal` profile. Venue
 credentials came from ordinary `sts assume-role` calls with 900-second sessions.
