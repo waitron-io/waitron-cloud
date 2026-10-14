@@ -165,7 +165,7 @@ Indexed venue/operation queries avoid whole-table tenant scans. Current custody
 checks protect both receipt pages and post-append consumption; fresh signed machine
 authentication recovers the same immutable operation after a proof expires. Paper
 import status records completion without inventing a Cloud receipt.
-Registration tests run in six CI file shards. Every case and the 30-second
+Registration tests run in seven CI file shards. Every case and the 30-second
 test deadline remain; work jobs stop after eight minutes.
 The phone journey at `/fiscal-allocations` now reserves and explicitly consumes
 identities, reconciles uncertain replies using the same operation, exports the
@@ -405,7 +405,7 @@ notifications separately.
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. CI runs type checking, each of the five
   existing receipt suites and all workspace package suites in parallel. Registration
-  uses six file shards, account HTTP and portal use three each, and backups uses
+  uses seven file shards, account HTTP and portal use three each, and backups uses
   two. The other packages keep one job each. Each file runs once, with its original
   assertions and test deadline. The authenticator clock-rollover case has its own
   portal file so sharding can separate its two real clock waits from the main

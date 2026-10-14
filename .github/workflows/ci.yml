@@ -76,22 +76,25 @@ jobs:
         include:
           - package: '@waitron-cloud/registration'
             shard: 1
-            shards: 6
+            shards: 7
           - package: '@waitron-cloud/registration'
             shard: 2
-            shards: 6
+            shards: 7
           - package: '@waitron-cloud/registration'
             shard: 3
-            shards: 6
+            shards: 7
           - package: '@waitron-cloud/registration'
             shard: 4
-            shards: 6
+            shards: 7
           - package: '@waitron-cloud/registration'
             shard: 5
-            shards: 6
+            shards: 7
           - package: '@waitron-cloud/registration'
             shard: 6
-            shards: 6
+            shards: 7
+          - package: '@waitron-cloud/registration'
+            shard: 7
+            shards: 7
           - package: '@waitron-cloud/account-http'
             shard: 1
             shards: 3
