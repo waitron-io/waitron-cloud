@@ -603,7 +603,7 @@ notifications separately.
   replacement, single-use codes, email reset with the factor retained, independent passkeys,
   removal, cancellation, lost replies, keyboard focus, accessibility and temporary-state clearing:
   `node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test
-  --test-timeout=120000 test/authenticator-browser.test.ts test/passkey-browser.test.ts
+  --test-timeout=120000 test/authenticator-browser.test.ts test/authenticator-rollover.test.ts test/passkey-browser.test.ts
   test/account-security-browser.test.ts test/session.test.ts`.
   The [operator guide](authenticator-app.md) documents independent keys, explicit policy,
   account-first re-encryption and retained-backup custody. Rotation tests preserve versions,
