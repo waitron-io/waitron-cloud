@@ -413,7 +413,16 @@ notifications separately.
   passing repeats alone do not explain a failure. See [the ordering receipt](#portal-lost-reply-test-ordering).
 
 - **CI execution budget.** You can read one summary job and the individual package
-  and receipt jobs to check a candidate. CI selects changed workspace packages and every package that depends on them,
+  and receipt jobs to check a candidate. The reviewed
+  [precise-selection design](superpowers/specs/2026-10-14-precise-ci-selection.md)
+  and [implementation plan](superpowers/plans/2026-10-14-precise-ci-selection.md)
+  define how documentation, scripts, configuration, resolved lockfile changes and
+  receipt inputs can select their actual checks. Implementation and five real
+  scratch pull request controls remain open. The plan also requires measured
+  grouping to reduce the full run toward 55 rounded job-minutes while keeping
+  each work job near five minutes. The current two sampled full runs use 72 and
+  73 minutes; these are timestamp-based rounding estimates, not invoices.
+  CI still selects changed workspace packages and every package that depends on them,
   including test dependencies and direct sibling source/fixture reads absent from
   manifests. Identity therefore selects all nine packages in the current graph;
   portal alone remains isolated. Root, unknown and empty changes run everything.
