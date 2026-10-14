@@ -429,10 +429,17 @@ notifications separately.
   dependents locally; changes to shared configuration need all package suites.
   On an 18-core local runner, the unsplit registration suite exhausts PostgreSQL's
   shared lock table while resetting disposable schemas (`53200: out of shared
-  memory`). Run all suites with two files at a time, matching CI's runner, using
-  `node scripts/test-postgres.mjs -r --workspace-concurrency=1 run test --test-concurrency=2`.
-  The fixture's default lock capacity for a full local parallel run remains open;
-  preserve every assertion when addressing it.
+  memory`). For a full local package run, put `--test-concurrency=2` before the
+  file list, for example
+  `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-concurrency=2 --test-timeout=30000 'test/*.test.ts'`.
+  Keep the package's original test deadline and any build step. Appending the
+  concurrency option to the package script leaves it after the files and does
+  not limit this runner. The fixture's default lock capacity for a full local
+  parallel run remains open; preserve every assertion when addressing it.
+  The migration batch-size fixture now confines its database-wide DDL trigger
+  to its own schema. A second populated fixture proves that other tests can
+  migrate while it is active; the original 103-recipient and 100-row batch
+  assertions remain.
   This budget is separate from intermittent fixture failures; more time is not
   a diagnosis of a failing assertion.
   **Two fixture failures reproduced after the authenticator merge.**
