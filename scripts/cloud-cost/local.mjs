@@ -80,8 +80,11 @@ function git(codeRoot, argv, input) {
   return result.stdout;
 }
 const sourceFile = path => !/\.(test|spec)\.[cm]?[jt]sx?$/.test(path)
-  && !path.split('/').some(p => p.startsWith('.') || ['node_modules', 'dist', 'build', 'runtime', 'credentials'].includes(p))
+  && !path.split('/').some((p, i) => p.startsWith('.') || ['node_modules', 'dist', 'build', 'runtime'].includes(p)
+    || (p === 'credentials' && !(i === 1 && path.startsWith('packages/credentials/'))))
   && (['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json'].includes(path)
+    || /^packages\/[a-z0-9-]+\/drizzle\/(?:[0-9]{4}_[a-z0-9_]+\.sql|meta\/_journal\.json)$/.test(path)
+    || path === 'packages/migrations/migrations.manifest.json'
     || (/^(packages|apps|tooling)\//.test(path) && ((/\/(src|scripts|migrations)\//.test(path) && /\.(ts|tsx|js|mjs|cjs|sql|css|html)$/.test(path))
       || /\/(package|tsconfig(?:\.[a-z]+)?)\.json$/.test(path))));
 

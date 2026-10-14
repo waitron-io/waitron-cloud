@@ -178,6 +178,40 @@ function isolatedInspect(f) {
       NetworkSettings: { Networks: { 'cloud-cost-fixture': { NetworkID: 'a'.repeat(64) } },
         Ports: { '8080/tcp': [{ HostIp: '127.0.0.1', HostPort: '49152' }] } }, Mounts: [] }] };
 }
+// Omitting public migration journals makes a fresh replay fail before it can record a sale.
+test('codeCopyKeepsMigrationRuntimeInputsWithoutRecordedData', async t => {
+  const f = fixture(t); const code = join(f.source, 'code');
+  mkdirSync(join(code, 'packages/db/drizzle/meta'), { recursive: true });
+  mkdirSync(join(code, 'packages/migrations/src'), { recursive: true });
+  mkdirSync(join(code, 'packages/credentials/drizzle/meta'), { recursive: true });
+  mkdirSync(join(code, 'packages/credentials/src'), { recursive: true });
+  writeFileSync(join(code, 'package.json'), '{}');
+  writeFileSync(join(code, 'packages/migrations/src/index.ts'), 'export {};');
+  const runtime = {
+    'packages/db/drizzle/0000_baseline.sql': 'CREATE TABLE example(id INTEGER);',
+    'packages/db/drizzle/meta/_journal.json': '{"entries":[]}',
+    'packages/migrations/migrations.manifest.json': '[]',
+    'packages/credentials/drizzle/0000_baseline.sql': 'CREATE TABLE vault(id INTEGER);',
+    'packages/credentials/drizzle/meta/_journal.json': '{"entries":[]}',
+    'packages/credentials/src/index.ts': 'export {};',
+  };
+  for (const [path, content] of Object.entries(runtime)) writeFileSync(join(code, path), content);
+  for (const path of ['packages/db/drizzle/meta/0000_snapshot.json', 'packages/db/drizzle/recorded.json', 'packages/migrations/private.json'])
+    writeFileSync(join(code, path), 'RAW_CANARY');
+  execFileSync('git', ['init', '-q', code]); execFileSync('git', ['-C', code, 'add', '.']);
+  execFileSync('git', ['-C', code, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qs', '-m', 'Synthetic migrations']);
+  const journal = JSON.parse(readFileSync(f.journal.path, 'utf8')); journal.codeSource = code;
+  writeFileSync(f.journal.path, JSON.stringify(journal));
+  const copy = await local.prepareCodeCopy({ ...f, codeRoot: code });
+  try {
+    for (const [path, content] of Object.entries(runtime)) {
+      assert.equal(existsSync(join(copy.codeRoot, path)), true, path);
+      assert.equal(readFileSync(join(copy.codeRoot, path), 'utf8'), content);
+    }
+    for (const path of ['packages/db/drizzle/meta/0000_snapshot.json', 'packages/db/drizzle/recorded.json', 'packages/migrations/private.json'])
+      assert.equal(existsSync(join(copy.codeRoot, path)), false, path);
+  } finally { await copy.close(); }
+});
 test('isolationRefusesExternalNetworksHostsPortsPrivilegesAndMounts', t => {
   available('validateIsolationInspect'); const f = fixture(t);
   mkdirSync(join(f.root, 'code-copy')); mkdirSync(join(f.root, 'state'));

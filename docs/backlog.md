@@ -1093,7 +1093,12 @@ notifications separately.
   stops only its own child on cancellation. A real Docker check proves that the
   Node sandbox allows connections inside the container while refusing Internet, metadata-service and
   external DNS traffic. Configuration checks reject extra networks, host access,
-  broad mounts and writable copied code. The complete isolated service stack,
+  broad mounts and writable copied code. Synthetic sales now pass through the pinned
+  Waitron sale writer inside that isolated container. The checks confirm invoice
+  numbering, linked fiscal hashes, immutable records, rollback after a refused
+  payment and completion of admitted sales before the database closes. The copied
+  public migration files prepare a fresh venue; private credentials and recorded data stay
+  excluded. The complete isolated service stack,
   offline calculator, private local sales replay, measured storage and remote traffic,
   and synthetic-only AWS comparison
   remain open. Keep raw venue data on the Mac, distinguish measured
