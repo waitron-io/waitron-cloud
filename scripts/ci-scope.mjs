@@ -1,8 +1,9 @@
 import {execFileSync} from 'node:child_process';
-import {readFileSync, readdirSync} from 'node:fs';
-import {relative, resolve} from 'node:path';
+import {readFileSync, readdirSync, realpathSync} from 'node:fs';
+import {dirname, join, relative, resolve} from 'node:path';
 
 export function loadWorkspace(root = process.cwd()) {
+  root=realpathSync(root);
   const members = JSON.parse(execFileSync('pnpm', ['ls','-r','--depth','-1','--json'], {cwd:root, encoding:'utf8'}));
   if (!Array.isArray(members) || members.length < 2) throw new Error('Workspace discovery selected no packages');
   const packages = members.filter(member => resolve(member.path) !== resolve(root)).map(member => ({
@@ -10,6 +11,33 @@ export function loadWorkspace(root = process.cwd()) {
     directory:relative(root,member.path),
   }));
   if (!packages.length || new Set(packages.map(pkg=>pkg.name)).size !== packages.length) throw new Error('Invalid workspace members');
+  // Tests may import sibling source and fixtures directly rather than through manifests.
+  // Include those file consumers so a scoped PR cannot hide a broken sibling fixture.
+  for (const pkg of packages) {
+    const dependencies = new Set();
+    const visit = directory => {
+      for (const entry of readdirSync(directory,{withFileTypes:true})) {
+        const file=join(directory,entry.name);
+        if (entry.isDirectory()) {
+          if (!['node_modules','dist','.git','coverage'].includes(entry.name)) visit(file);
+        } else if (/\.[cm]?[jt]sx?$/.test(entry.name)) {
+          const source=readFileSync(file,'utf8');
+          for (const match of source.matchAll(/['"`]([^'"`\n]+)['"`]/g)) {
+            const prefix=match[1].split('${')[0];
+            const relativePath=prefix.startsWith('./') || prefix.startsWith('../');
+            const target=relativePath ? relative(root,resolve(dirname(file),prefix)) : prefix;
+            const owner=packages.find(other=>target===other.directory || target.startsWith(`${other.directory}/`) || prefix===other.name || prefix.startsWith(`${other.name}/`));
+            if (owner && owner.name!==pkg.name) dependencies.add(owner.name);
+            else if (relativePath && match[1].includes('${') && !target.startsWith(`${pkg.directory}/`)) {
+              for (const other of packages) dependencies.add(other.name);
+            }
+          }
+        }
+      }
+    };
+    visit(join(root,pkg.directory));
+    pkg.pathDependencies=Object.fromEntries([...dependencies].map(name=>[name,'file']));
+  }
   return packages;
 }
 
@@ -27,7 +55,7 @@ export function scopeForPaths(paths, workspace) {
   do {
     previous = selected.size;
     for (const pkg of workspace) {
-      const dependencies = {...pkg.dependencies, ...pkg.devDependencies, ...pkg.optionalDependencies, ...pkg.peerDependencies};
+      const dependencies = {...pkg.pathDependencies, ...pkg.dependencies, ...pkg.devDependencies, ...pkg.optionalDependencies, ...pkg.peerDependencies};
       if (Object.keys(dependencies).some(name=>selected.has(name))) selected.add(pkg.name);
     }
   } while (previous !== selected.size);

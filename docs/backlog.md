@@ -404,7 +404,9 @@ notifications separately.
 
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. CI selects changed workspace packages and every package that depends on them,
-  including test dependencies. Root, unknown and empty changes run everything.
+  including test dependencies and direct sibling source/fixture reads absent from
+  manifests. Identity therefore selects all nine packages in the current graph;
+  portal alone remains isolated. Root, unknown and empty changes run everything.
   Type checking stays whole-workspace because backend manifests share the root
   TypeScript input. Backend changes run all five receipt suites conservatively;
   portal alone runs local-stack, and isolated ui-smoke needs no receipt. Registration
