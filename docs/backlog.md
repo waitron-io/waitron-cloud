@@ -694,10 +694,15 @@ notifications separately.
   `packages/registration/src/authenticator-factor.ts` duplicates the final check;
   deleting the early check leaves all 41 management tests passing, while deleting the
   final check fails three late-expiry tests. Keep those behaviour checks when simplifying
-  the redundant guard. Concurrent review experiments also saw one `TimeoutError` in
-  the English/light/1280 authenticator browser journey. It passed twice in isolation;
-  the cause is unproved. On the next failure, capture its request/locator stage and
-  reproduce the cause before changing any assertion or deadline.
+  the redundant guard. You can sign in immediately after an authenticator change even
+  when its ended-session read arrives late. The portal clears the old account from its
+  controllers before showing the login form, so that read cannot cancel your new sign-in.
+  Two controlled real PostgreSQL/Chromium cases reproduce the former seven-second
+  timeout after removal with a password and after a lost regeneration reply with a
+  passkey. Run `node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node
+  --test --test-timeout=120000 test/sign-in-session-race.test.ts`. Existing authentication
+  checks, browser assertions and deadlines remain. If another timeout occurs, capture
+  its request/locator stage and reproduce that cause before changing a check or deadline.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
   services, usage accounting, trials, failed payment and cancellation.
 - **Venue and node registration.** The agreed Waitron signup and connection journey is
