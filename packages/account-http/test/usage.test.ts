@@ -16,7 +16,8 @@ before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
  await resetSchema(db.pool);
  await db.pool.query('UPDATE usage_reconciliation_sources SET last_attempted_at=NULL,caught_up_at=NULL');
- owner=randomUUID();member=randomUUID();organisation=randomUUID();foreignOrganisation=randomUUID();venue=randomUUID();
+ // The returned organisation identifier must not overlap the foreign-counter marker.
+ owner=randomUUID();member=randomUUID();organisation='12345678-1234-4234-8234-123456789abc';foreignOrganisation=randomUUID();venue=randomUUID();
  const business=randomUUID(),foreignBusiness=randomUUID(),foreignVenue=randomUUID();
  await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1),($2)',[owner,member]);
  await db.pool.query("INSERT INTO organisations(id,name) VALUES($1,'Owner Org'),($2,'Foreign Org')",[organisation,foreignOrganisation]);
@@ -57,4 +58,16 @@ test('usage route requires its exact boundary, current ownership and account all
  await db.pool.query('DELETE FROM account_rate_limits');
  await db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[owner]);
  assert.equal((await call({organisationId:organisation})).status,403);
+});
+
+test('a permitted organisation identifier may contain the foreign counter digits without mixing totals',async()=>{
+ const withCounterDigits='12345999-1234-4234-8234-123456789abc';
+ await db.pool.query("INSERT INTO organisations(id,name) VALUES($1,'Other Owner Org')",[withCounterDigits]);
+ await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,can_register_venues,is_owner) VALUES($1,$2,true,true)',[owner,withCounterDigits]);
+ await transaction(db.pool,client=>recordUsageEvent(client,{organisationId:withCounterDigits,venueId:null,type:'backup.storage_added_bytes',quantity:41n,sourceKind:'backup_point',sourceReference:randomUUID(),occurredAt:'2026-09-26T12:00:00.000Z'}));
+ const response=await call({organisationId:withCounterDigits});assert.equal(response.status,200,await response.clone().text());
+ const summary=await response.json() as {organisationId:string;storage:{currentBytes:string}};
+ assert.equal(summary.organisationId,withCounterDigits);assert.equal(summary.storage.currentBytes,'41');
+ for(const value of [session.token,session.csrfToken,foreignOrganisation])assert.equal(JSON.stringify(summary).includes(value),false);
+ assert.equal((await call({organisationId:withCounterDigits},memberSession)).status,403);
 });

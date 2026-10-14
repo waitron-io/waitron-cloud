@@ -451,6 +451,12 @@ notifications separately.
   to its own schema. A second populated fixture proves that other tests can
   migrate while it is active; the original 103-recipient and 100-row batch
   assertions remain.
+  The usage privacy fixture now uses an owned organisation identifier distinct
+  from the foreign-count marker `999`. A valid identifier containing those digits
+  reproduces the old false privacy alarm; an added HTTP case proves that such an
+  owned identifier remains allowed while foreign totals and credentials stay out.
+  Every original privacy and ownership assertion remains unchanged. The natural
+  local failure did not record the matching value, so its exact cause stays unproved.
   This budget is separate from intermittent fixture failures; more time is not
   a diagnosis of a failing assertion.
   **Two fixture failures reproduced after the authenticator merge.**
