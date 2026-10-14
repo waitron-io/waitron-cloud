@@ -121,3 +121,24 @@ test('a reservation receipt must name the submitted operation before the control
  const wrong=signReceipt({...reserved.payload,allocation:{...reserved.payload.allocation,reservationEvidence:{kind:'cloud',authorityId:'fixture-authority',reservationId:randomUUID(),reservationSequence:'42'}}},signer);
  const c=controller(async()=>({ok:true,value:wrong}));c.choose(reserve());await c.reserve(reserve());assert(c.uncertain);assert.equal(c.receipt,undefined);
 });
+test('editing a definitely refused reservation uses a fresh operation but keeps unchanged retries exact',async()=>{
+ const calls:Record<string,unknown>[]=[];const c=controller(async(p,b)=>{assert(p.endsWith('/reserve'));calls.push(structuredClone(b!));return {ok:false,status:503,code:'continuity_unavailable',retryAfterMs:0};});
+ c.choose(reserve());await c.reserve(reserve());await c.reserve(reserve());assert.equal(calls[0]?.operationId,calls[1]?.operationId);
+ c.choose({...reserve(),binding:{...binding,operatorId:'corrected-operator'}});await c.reserve(c.selection!);assert.notEqual(calls[2]?.operationId,calls[0]?.operationId);assert.deepEqual(calls[2]?.binding,{...binding,operatorId:'corrected-operator'});
+});
+for(const action of ['reserve','consume'] as const)test(`unknown ${action} status permits only an explicit identical resend`,async()=>{
+ const calls:{path:string;body?:Record<string,unknown>}[]=[];let delivered=false;
+ const c=controller(async(p,b)=>{calls.push({path:p,body:structuredClone(b)});if(p.endsWith('/status'))return {ok:true,value:{version:1,state:'unknown',receipt:null}};if(!delivered){delivered=true;return fail;}return {ok:true,value:action==='reserve'?reserved:consumed};});ready(c);const input=action==='reserve'?reserve():consumeInput();await c[action](input as never);assert.equal(c.canRetryPending,false);await c.retryPending();assert.equal(calls.length,1);await c.reconcile();assert(c.uncertain);assert(c.canRetryPending);await c.retryPending();assert.deepEqual(calls[2],calls[0]);assert.equal(c.uncertain,false);assert.equal(c.receipt?.payload.state,action==='reserve'?'reserved':'consumed');
+});
+for(const code of ['space_exhausted','allocation_unavailable','reservation_untrusted'])test(`${code} retains its exact pending operation for status and an identical resend`,async()=>{
+ const c=controller(async()=>({ok:false,status:503,code,retryAfterMs:0}));c.choose(reserve());await c.reserve(reserve());assert(c.uncertain);assert.equal(c.pendingRequest?.input.operationId,reserve().operationId);assert.equal(c.canRetryPending,false);
+});
+test('reading history cannot hide the warning while a write outcome is uncertain',async()=>{
+ const c=controller(async p=>p.endsWith('/list')?{ok:true,value:{version:1,items:[],nextCursor:null}}:fail);c.choose(reserve());await c.reserve(reserve());await c.load(null);assert(c.uncertain);assert.equal(c.error,'fiscalUncertain');
+});
+test('the actual account client refuses unexpected installation environments before venue selection',async t=>{
+ const {accountRequest}=await import('../src/api.ts');
+ const installation={installationId:venueId,venueId,organisationId:venueId,legalBusinessId:venueId,environment:'test',revision:0,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,services:['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'unconfigured',health:'unknown',failure:null,observedAt:null}))};
+ let environment='test';t.mock.method(globalThis,'fetch',async()=>Response.json({installations:[{...installation,environment}]}));
+ assert.equal((await accountRequest('/installations')).ok,true);environment='staging';assert.equal((await accountRequest('/installations')).ok,false);environment='production';assert.equal((await accountRequest('/installations')).ok,true);
+});

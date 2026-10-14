@@ -8,6 +8,7 @@ export function chooseLocale(saved: string | null, languages: readonly string[])
   return 'en';
 }
 const en = {
+  fiscalRetry:'Resend original request',
   fiscalTitle:'Fiscal recovery receipts',
   fiscalIntro:'Reserve fresh identities, then consume the reservation before taking its signed receipt to local recovery.',
   fiscalLocalChecks:'Complete local recovery checks before trading. This receipt does not stop the old server or recover missing invoices.',
@@ -267,6 +268,7 @@ const en = {
 };
 export type Copy = typeof en;
 const es: Copy = {
+  fiscalRetry:'Reenviar solicitud original',
   fiscalTitle:'Justificantes de recuperación fiscal',
   fiscalIntro:'Reserva identidades nuevas y consume la reserva antes de llevar el justificante firmado a la recuperación local.',
   fiscalLocalChecks:'Completa las comprobaciones locales antes de vender. Este justificante no detiene el servidor antiguo ni recupera facturas perdidas.',

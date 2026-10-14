@@ -26,8 +26,10 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   const session=await transaction(db,c=>createSession(c,owner.accountId));
   const context=await f.browser.newContext({locale,colorScheme:theme,viewport:{width,height:900}}),page=await context.newPage();page.setDefaultTimeout(6000);const c=translations[locale];page.on('pageerror',e=>console.error('FISCAL_BROWSER_ERROR',e.message));
   await context.addCookies([{name:'cloud_session',value:session.token,url:f.origin,httpOnly:true},{name:'cloud_csrf',value:session.csrfToken,url:f.origin}]);
+  const reserveBodies:string[]=[];page.on('request',r=>{if(r.url().endsWith('/api/account/fiscal-allocations/reserve'))reserveBodies.push(r.postData()!);});
   const responses:{path:string;status:number}[]=[];page.on('response',r=>{if(r.url().includes('/fiscal-allocations'))responses.push({path:new URL(r.url()).pathname,status:r.status()});});
-  await page.goto(f.origin+'/fiscal-allocations');await page.getByRole('heading',{name:c.fiscalTitle,exact:true}).waitFor();
+  let aborted=false;await page.route('**/api/account/session',async route=>{if(!aborted){aborted=true;await route.abort();}else await route.continue();});
+  await page.goto(f.origin+'/fiscal-allocations');await page.getByRole('button',{name:c.retry,exact:true}).click();await page.getByRole('heading',{name:c.fiscalTitle,exact:true}).waitFor();
   await page.getByLabel(c.recoveryOrganisation,{exact:true}).selectOption(owner.organisationId);
   await page.getByLabel(c.fiscalVenue,{exact:true}).selectOption(v.venueId);
   await page.locator('wt-input[name=fiscalNif] input').fill(scope.taxpayerNif);await page.locator('wt-input[name=fiscalSoftware] input').fill(scope.softwareId);
@@ -40,8 +42,10 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(process.env.FISCAL_PORTAL_RECEIPT_DIR){await mkdir(process.env.FISCAL_PORTAL_RECEIPT_DIR,{recursive:true});await page.screenshot({path:process.env.FISCAL_PORTAL_RECEIPT_DIR+`/${locale}-${theme}-${width}-${state}.png`,fullPage:true});}
   };
   await check('ready');
+  let reserveBlocked=true;await page.route('**/api/account/fiscal-allocations/reserve',async route=>{if(reserveBlocked){reserveBlocked=false;await route.abort();}else await route.continue();});
   f.loseAccountReply('/fiscal-allocations/reserve','body');await page.getByRole('button',{name:c.fiscalReserve,exact:true}).click();await page.getByRole('alert').filter({hasText:c.fiscalUncertain}).waitFor({timeout:20000});await check('uncertain');
-  await page.getByRole('button',{name:c.fiscalReconcile,exact:true}).click();await page.getByText(c.fiscalReserved,{exact:true}).waitFor();
+  await page.getByRole('button',{name:c.fiscalReconcile,exact:true}).click();await page.getByRole('button',{name:c.fiscalRetry,exact:true}).waitFor();await check('unknown');await page.getByRole('button',{name:c.fiscalRetry,exact:true}).click();await page.getByRole('alert').filter({hasText:c.fiscalUncertain}).waitFor({timeout:20000});
+  await page.getByRole('button',{name:c.fiscalReconcile,exact:true}).click();assert.equal(reserveBodies.length,2);assert.equal(reserveBodies[1],reserveBodies[0]);await page.getByText(c.fiscalReserved,{exact:true}).waitFor();
   assert.equal((await db.query('SELECT count(*)::int AS n FROM fiscal_registry_allocations')).rows[0].n,1);
   for(const label of [c.fiscalStandard,c.fiscalFull,c.fiscalRectificative])assert(await page.getByText(label,{exact:true}).count()>0);
   const consume=page.getByRole('button',{name:c.fiscalConsume,exact:true});assert(await consume.isDisabled());

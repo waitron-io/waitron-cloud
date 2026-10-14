@@ -298,8 +298,11 @@ complete local authority. Cloud cannot attest that you stopped the old server or
 recover missing invoices.
 
 If a write reply is lost, use **Check uncertain result**. The page keeps its original
-operation until status resolves it; an unknown status never permits a new operation.
-Navigation or an account change clears the view. Return to the venue's retained
+operation until status resolves it. If status is unknown, resend that exact request
+with **Resend original request**. Its operation ID and frozen contents stay unchanged,
+so a delayed original write and a resend cannot claim two names. While this page
+retains the uncertain request, it blocks a different operation. Navigation or an
+account change clears the view; an earlier name remains occupied even if you leave. Return to the venue's retained
 receipts to inspect recorded results. You can page and download retained consumed
 receipts after issuance entitlement ends, with current authorised access.
 

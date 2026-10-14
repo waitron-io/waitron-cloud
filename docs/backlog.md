@@ -1,6 +1,6 @@
 # Waitron Cloud backlog
 
-Updated 2026-10-13. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-10-14. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
