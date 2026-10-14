@@ -272,7 +272,9 @@ export class PortalApp {
     if(action==='begin'||action==='cancel'){await this.authenticator[action]();if(route===this.#route){this.draw();this.focusHeading();}return;}
     const result=await this.authenticator[action]();if(route!==this.#route||!result)return;
     const codes=typeof result==='object'&&result.active?[...result.recoveryCodes]:[];
-    this.session.dispose();this.session=this.#session();this.navigate('/login');
+    this.session.dispose();this.session=this.#session();
+    // Clear ended account authority before the login view can start another sign-in.
+    this.#sessionChanged(this.session.state);this.navigate('/login');
     // Keep the committed one-time reply in this view after navigation fences all earlier authority.
     this.factorCodes=codes;this.notice=result==='reconcile'?'factorChangeUncertain':result.active?'factorChanged':'factorRemoved';this.draw();this.focusHeading();
     void this.session.check();
