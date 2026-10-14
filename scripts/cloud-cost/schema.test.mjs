@@ -42,6 +42,13 @@ test('unknownIsNotZero', () => {
   refused(() => validateInput(input({ status: 'measured' })));
   refused(() => validateInput(input({ value: -1, status: 'assumed' })));
 });
+test('fractionalTaskCpuIsAResourceRatherThanHours', () => {
+  const cpu = input({ id: 'cpu-count', value: 0.25, unit: 'vCPU', status: 'assumed', source: 'assumption:topology-assumption',
+    reason: 'topology-assumption', bounds: { low: 0.25, base: 0.25, high: 1, assumption: 'topology-assumption' } });
+  assert.doesNotThrow(() => validateInput(cpu));
+  assert.equal(validateInput(cpu).value, 0.25);
+  refused(() => validateInput({ ...cpu, value: -1 }));
+});
 test('priceNeedsRegionSkuUnitDate', () => {
   assert.equal(validateInput(price()).value, 0.01);
   for (const key of ['sku', 'rateCode', 'region', 'unit', 'retrievedAt', 'effectiveAt', 'source']) {

@@ -1083,7 +1083,11 @@ notifications separately.
   the runtime roles and wider candidates, and the [public price snapshot](cost-model/prices.json)
   records dated Spain, Stockholm and global rates with explicit gaps. Anonymous
   export validation rejects unknown fields and source/scratch overlap. These inputs
-  establish no measured venue cost. The arithmetic, offline calculator, private local
+  establish no measured venue cost. The pure calculations now cover aggregate request
+  tiers, explicit resource capacities, dated growth and calendar retention, including
+  protected recovery copies. Synthetic local HTTP checks reconcile retries, denied
+  calls and interrupted transfers with a streaming meter; unknown billing dimensions
+  and unreconciled attempts leave gaps. The offline calculator, private local
   sales replay, measured storage and remote traffic, and synthetic-only AWS comparison
   remain open. Keep raw venue data on the Mac, distinguish measured
   usage from extrapolation, and compare list-price usage separately from credits.

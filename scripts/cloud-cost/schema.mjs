@@ -23,7 +23,7 @@ const baseKeys = ['id', 'value', 'status', 'source', 'unit', 'scope', 'region', 
 const priceKeys = ['service', 'product', 'sku', 'rateCode', 'attributes', 'currency', 'tier', 'minimum', 'rounding', 'retrievedAt', 'quote'];
 const units = ['count', 'bytes', 'byte-seconds', 'seconds', 'months', 'hours', 'GB', 'GiB', 'GB-Mo', 'Hrs', 'Hours',
   'hour', 'hours', 'Requests', 'API Requests', 'Keys', 'Secrets', 'Queries', 'GB-month', 'LCU-Hrs',
-  'vCPU-Hours', 'GB-Hours', 'Metrics', 'Alarms', 'USD', 'minutes', 'GiBps-mo', 'IOPS-Mo', 'HostedZone', 'Mo', 'Events', 'Runs', 'Budget-days', 'Message', 'MBPS-Mo', 'Count'];
+  'vCPU', 'vCPU-Hours', 'GB-Hours', 'Metrics', 'Alarms', 'USD', 'minutes', 'GiBps-mo', 'IOPS-Mo', 'HostedZone', 'Mo', 'Events', 'Runs', 'Budget-days', 'Message', 'MBPS-Mo', 'Count'];
 
 function closed(value, keys) {
   requireThat(value !== null && typeof value === 'object' && !Array.isArray(value));
