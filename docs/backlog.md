@@ -179,9 +179,17 @@ reserve validation, consumption approval, signed manual packets and retained
 browser receipts. Tagged key operators must match the recovery event and target
 node; malformed objects and person substitutions refuse. Focused contract and
 real HTTP tests cover those boundaries, and eight browser cases cover retained
-key-event packets in both languages, themes and widths. The actual Waitron-client
-joint test still needs the separately pinned adapter candidate. The Waitron adapter
-remains a dependent item. Production continuity
+key-event packets in both languages, themes and widths. The actual PostgreSQL joint test now pins Waitron adapter candidate
+`65baf730d99faa08ddbfce15edde8e886314987b`. Its 15 cases cover real account status,
+independent verification of Cloud's signed packet, source/target/event/operator and
+full-purpose refusals, missing trust, reserved-state refusal, retained read access,
+session/CSRF refusals, complete manual activation and a matched machine report.
+A lost committed report reply retries the same operation with fresh authentication;
+the independent journal returns a retained result without sending again and refuses
+changed evidence. These are local synthetic fixtures, with no production policy enabled.
+The test uses an explicitly pinned installed Waitron checkout, or fetches and installs
+that public commit in its own temporary directory. The separately owned Waitron
+adapter still needs its reviews, CI and landing. Production continuity
 storage, taxpayer custody and operator attribution, subscription policy and the
 signing-key custodian remain owner enablement gates. Before enabling recovery,
 qualify how the service discovers custody-approved namespaces when an old database
