@@ -275,6 +275,53 @@ node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec \
   node --test --test-timeout=30000 test/fiscal-allocations.test.ts
 ```
 
-The phone journey and the actual Waitron recovery adapter remain separate work.
+## Reserve from your phone
+
+Open **Fiscal recovery receipts** from your Cloud account, or visit
+`/fiscal-allocations`. Choose your venue, then enter its taxpayer NIF, software ID,
+complete series bases and purposes, recovery event, local operator reference,
+source and target server, and incident record. Your custodian must have established
+these details independently. Cloud sign-in and a typed NIF supply no taxpayer or
+operator authority. An on-prem venue needs no managed Cloud backup.
+
+Reserve the complete identity set before confirming consumption. For recovery,
+confirm that the old server is out of service and no parallel recovery is running.
+Initial setup requires confirmation that no previous server exists. Consumption
+permanently occupies the names; it does not itself activate your replacement.
+
+Download the consumed **signed manual packet** and take it to local recovery.
+The packet contains the entire signed receipt, including the series, binding,
+approval and outside history witness. A reserved or uncertain result has no usable
+packet download. The browser checks exact structure and preserves canonical bytes;
+your local recovery verifier still has to verify the signature, trusted issuer and
+complete local authority. Cloud cannot attest that you stopped the old server or
+recover missing invoices.
+
+If a write reply is lost, use **Check uncertain result**. The page keeps its original
+operation until status resolves it. If status is unknown, resend that exact request
+with **Resend original request**. Its operation ID and frozen contents stay unchanged,
+so a delayed original write and a resend cannot claim two names. While this page
+retains the uncertain request, it blocks a different operation. Navigation or an
+account change clears the view; an earlier name remains occupied even if you leave. Return to the venue's retained
+receipts to inspect recorded results. You can page and download retained consumed
+receipts after issuance entitlement ends, with current authorised access.
+
+For paper use, paste the complete signed history export supplied by your custodian
+into **Current signed paper history (JSON)** and import it. Preserve its original
+block, consumption and transfer objects. Importing records existing facts and
+allocates no C or P names. The current master register governs use; a reprint may
+be stale. Forged or conflicting evidence refuses without changing the earlier
+history.
+
+Run the controller and real-server browser checks:
+
+```sh
+node --test --test-timeout=30000 apps/portal/test/fiscal-allocation-controller.test.ts
+pnpm --filter @waitron-cloud/portal build
+node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec \
+  node --test --test-timeout=120000 test/fiscal-allocation-browser.test.ts
+```
+
+The actual Waitron recovery adapter remains separate work.
 A machine report never grants a name, changes consumption, activates trading or
 proves that the old selling machine stopped.
