@@ -1079,9 +1079,13 @@ notifications separately.
   and [implementation plan](superpowers/plans/2026-10-14-cloud-cost-model.md) define
   how you can compare the AWS platform cost with no venues and the additional cost
   at 1, 10, 100 and 1,000 venues. Production resource sizes and availability choices
-  remain assumptions. The priced model, offline calculator, private local sales
-  replay, measured storage and remote traffic, and synthetic-only AWS comparison
-  remain to be implemented. Keep raw venue data on the Mac, distinguish measured
+  remain assumptions. The [resource inventory](cost-model/inventory.json) covers
+  the runtime roles and wider candidates, and the [public price snapshot](cost-model/prices.json)
+  records dated Spain, Stockholm and global rates with explicit gaps. Anonymous
+  export validation rejects unknown fields and source/scratch overlap. These inputs
+  establish no measured venue cost. The arithmetic, offline calculator, private local
+  sales replay, measured storage and remote traffic, and synthetic-only AWS comparison
+  remain open. Keep raw venue data on the Mac, distinguish measured
   usage from extrapolation, and compare list-price usage separately from credits.
   Storage-only evidence cannot validate the fixed infrastructure or fleet capacity.
 
