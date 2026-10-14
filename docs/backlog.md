@@ -495,6 +495,15 @@ notifications separately.
   memory`). For a full local package run, put `--test-concurrency=2` before the
   file list, for example
   `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-concurrency=2 --test-timeout=30000 'test/*.test.ts'`.
+  The full unsplit account HTTP suite also reports PostgreSQL `53200` during
+  disposable migration setup on this Mac: the D72 run completed 292 cases with
+  82 failures, including the unchanged signup, origin, session and rate-limit
+  fixtures. Use the same two-file limit for full local database package runs;
+  retain every file, original deadline and portal build. A failed fiscal HTTP
+  fixture setup also left its local continuity-authority child open after the
+  last test; the run printed its final failures after that recorded child was
+  stopped. Make fixture construction close acquired resources on setup failure
+  in `packages/fiscal-allocation/test/store-fixture.ts` and its HTTP wrapper.
   Keep the package's original test deadline and any build step. Appending the
   concurrency option to the package script leaves it after the files and does
   not limit this runner. The fixture's default lock capacity for a full local

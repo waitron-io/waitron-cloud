@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createPrivateKey, sign } from 'node:crypto';
 import { validateReserve, validatePaperConsumption } from '../src/validation.ts';
-import { signReceipt, encodeReceipt, decodeReceipt } from '../src/evidence.ts';
+import { signReceipt, encodeReceipt, decodeReceipt, paperSigningBytes, verifyPaperValue } from '../src/evidence.ts';
 import { reserve, payload, key, date, allocationId } from './fixtures.ts';
 
 const operator = { kind: 'recovery-key' as const, nodeId: 'replacement-node', eventId: 'restore-event' };
@@ -52,4 +53,22 @@ test('paper consumption retains the same exact recovery-key binding', () => {
   const value = { version: 1, custodianId: 'custodian-1', blockDigest: 'a'.repeat(64), allocationId,
     ...binding, consumedAt: date };
   assert.deepEqual(validatePaperConsumption(value).operatorId, operator);
+});
+
+test('signed paper consumption preserves key-event bytes and refuses person substitution', () => {
+  const signer = key(), value = { version: 1, custodianId: 'custodian-1', blockDigest: 'a'.repeat(64), allocationId,
+    ...binding, consumedAt: date };
+  const bytes = paperSigningBytes(value);
+  assert.deepEqual(JSON.parse(bytes.toString()), ['waitron.paper-consumption', 1, 'custodian-1', 'a'.repeat(64),
+    '10000000-0000-4000-8000-000000000003', 'restore-event',
+    { kind: 'recovery-key', nodeId: 'replacement-node', eventId: 'restore-event' },
+    'source-1', 'replacement-node', 'incident-1', '2026-10-13T10:00:00.000Z']);
+  const signed = { payload: value, signature: sign(null, bytes, createPrivateKey({ key: Buffer.from(signer.privateKey, 'base64url'), type: 'pkcs8', format: 'der' })).toString('base64url') };
+  const trust = { custodianId: 'custodian-1', custodyVersion: 'custody-1', keys: new Map([[signer.keyId, signer.publicKey]]) };
+  assert.doesNotThrow(() => verifyPaperValue(signed, signer.keyId, 'custody-1', trust));
+  assert.doesNotThrow(() => verifyPaperValue({ ...signed, payload: { ...value, operatorId: {
+    eventId: 'restore-event', nodeId: 'replacement-node', kind: 'recovery-key',
+  } } }, signer.keyId, 'custody-1', trust));
+  assert.throws(() => verifyPaperValue({ ...signed, payload: { ...value, operatorId: 'local-administrator' } }, signer.keyId, 'custody-1', trust), { code: 'reservation_untrusted' });
+  assert.throws(() => verifyPaperValue({ ...signed, payload: { ...value, operatorId: { ...operator, eventId: 'other' } } }, signer.keyId, 'custody-1', trust), { code: 'reservation_untrusted' });
 });
