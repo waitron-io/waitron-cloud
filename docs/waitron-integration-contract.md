@@ -343,3 +343,161 @@ Waitron's local recovery adapter and the joint HTTP/client qualification remain
 to be implemented in their separately owned tasks. Preserve the complete consumed
 receipt and local authenticated recovery checks. Cloud operator attribution is
 not local operator authentication, and no registry call belongs on the sale path.
+
+## Translate all, version 1
+
+Designed 2026-10-14; not implemented. The product design is in
+[the Cloud spec](superpowers/specs/2026-10-14-translate-all-design.md) and in Waitron's
+`docs/superpowers/specs/2026-10-14-translate-all-design.md`. This section is the wire contract
+both sides build against.
+
+Four machine actions use the existing `waitron-cloud-machine-v1` envelope and a current control
+lease: POST to `/api/installations/translation-submit`, `translation-status`,
+`translation-collect` and `translation-release`. The signed action is the final path segment.
+The existing 60-second proof window, one-hour lease, per-installation and per-IP limits, and the
+refusal of browser Origin headers apply.
+
+### Seeing the service
+
+The `configuration` reply returns exactly three services today, and Waitron refuses any other
+count. A `configuration` request whose signed body carries `"servicesVersion": 2` receives a fourth
+entry, `content_translation`, in the same shape as the other three. A request without it keeps
+receiving exactly three. Every connected installation has `content_translation` switched on until
+the allowance replaces free use.
+
+### Submit: a signed fingerprint of a larger body
+
+A job body is larger than the 4,096-character signed body allows, so submit sends it beside the
+envelope:
+
+```json
+{ "payload": "...", "signature": "...", "body": "<the job as a JSON string>" }
+```
+
+The signed body is the fingerprint, not the job:
+
+```json
+{ "version": 1, "jobSha256": "<SHA-256 hex of the UTF-8 bytes of body>", "jobBytes": 183402 }
+```
+
+Cloud checks `jobBytes` and `jobSha256` against `body` before parsing it. A body over 1 MiB, or
+holding more than 1,000 items, is refused with 413 `translation_job_too_large`. The job:
+
+```json
+{
+  "version": 1,
+  "country": "ES",
+  "languages": { "default": "ca", "enabled": ["ca", "es", "en"] },
+  "items": [
+    {
+      "ref": "variant:812",
+      "kind": "variant",
+      "family": "product:640",
+      "category": "TAP BEERS",
+      "staffName": "PINTA",
+      "existing": { "en": "Pint" },
+      "missing": ["ca", "es"]
+    }
+  ],
+  "houseStyle": [
+    { "kind": "product", "staffName": "CARAJILLO", "names": { "ca": "Cigaló", "es": "Carajillo" } }
+  ]
+}
+```
+
+- `ref` is the box's own identifier for the item, opaque to Cloud.
+- `family` names the item a variant, options label or menu section belongs to; it equals `ref`
+  for an item that heads its own family.
+- `category` is the family head's first category, or `null`.
+- `missing` lists the languages to write; `existing` holds the venue's text in other languages,
+  which the service never changes.
+- `houseStyle` holds at most 300 saved names.
+
+Keep the full submit body and operation ID until the result is known. After a lost reply, sign the
+same fingerprint with the same operation ID, a fresh proof time and a live lease: Cloud returns the
+same job rather than making another.
+
+The reply:
+
+```json
+{ "version": 1, "jobId": "00000000-0000-4000-8000-000000000010", "state": "queued", "total": 358 }
+```
+
+### Status, collect and release
+
+Each signs `{"version":1,"jobId":"<uuid>"}` with a fresh operation ID.
+
+**Status** returns:
+
+```json
+{ "version": 1, "jobId": "...", "state": "running", "total": 358, "done": 180, "failed": 0 }
+```
+
+`state` is one of `queued`, `running`, `done`, `partly_done`, `failed`, `collected` or `expired`.
+Poll every five seconds at most.
+
+**Collect**, once the state is `done` or `partly_done`, returns:
+
+```json
+{
+  "version": 1,
+  "jobId": "...",
+  "state": "done",
+  "results": [
+    {
+      "ref": "variant:812",
+      "names": { "ca": "Pinta", "es": "Pinta" },
+      "placeholder": false,
+      "corrections": []
+    },
+    {
+      "ref": "product:977",
+      "names": { "ca": "Zurito", "es": "Zurito", "en": "Zurito (small draught beer)" },
+      "placeholder": false,
+      "corrections": [ { "field": "internal", "wrong": "ZURRITO", "right": "ZURITO" } ]
+    }
+  ],
+  "failed": ["product:1021"]
+}
+```
+
+`names` holds only languages listed in the item's `missing`. `placeholder: true` comes with empty
+`names`. `corrections[].field` is `internal` or a language code; a correction to a language the
+venue entered is a suggestion only. The box must drop:
+
+- a result whose `ref` it did not send;
+- a name for a language that was not missing.
+
+**Release** tells Cloud the box has stored the results. Cloud deletes the job's body and results and
+returns `{"version":1,"jobId":"...","state":"collected"}`. Release is idempotent. An uncollected
+job's body and results are deleted 24 hours after it finished, and its state becomes `expired`.
+
+### Refusals
+
+| HTTP | Code | When | Waitron's code |
+|---|---|---|---|
+| 400 | `invalid_request` | A body field is invalid. | — |
+| 401 | (existing) | The envelope, proof or lease is invalid. | `cloud.unavailable` |
+| 403 | `translation_consent_required` | The account has not agreed to the named language-model providers. | `content.suggestion_consent_required` |
+| 403 | (existing) | The installation is revoked or not entitled. | existing Cloud codes |
+| 404 | `translation_job_not_found` | Another installation's job, or an unknown ID. | — |
+| 409 | `translation_job_running` | A job is already queued or running for the venue. | `content.suggestion_job_running` |
+| 409 | `translation_limit_reached` | The estimate exceeds what is left of the cap. Carries `fits`, how many items would fit. | `content.suggestion_limit_reached` |
+| 409 | `translation_not_ready` | Collect before `done` or `partly_done`. | — |
+| 410 | `translation_expired` | The results were deleted after 24 hours. | `content.suggestion_expired` |
+| 413 | `translation_job_too_large` | Over 1 MiB or 1,000 items. | — |
+
+A `failed` job's status carries `"reason": "provider_unavailable"`; Waitron shows it as
+`content.suggestion_service_unavailable`.
+
+### Shared test vectors
+
+The first implementation task on each side adds the signing test vectors to this section, generated
+from fixed keys:
+
+- a valid submit;
+- the same submit with one byte of `body` changed;
+- a `jobBytes` that does not match;
+- a replayed operation ID with a different fingerprint.
+
+Waitron's signer and Cloud's verifier both test against them.
