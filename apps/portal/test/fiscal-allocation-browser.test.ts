@@ -44,6 +44,9 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await check('ready');
   let reserveBlocked=true;await page.route('**/api/account/fiscal-allocations/reserve',async route=>{if(reserveBlocked){reserveBlocked=false;await route.abort();}else await route.continue();});
   f.loseAccountReply('/fiscal-allocations/reserve','body');await page.getByRole('button',{name:c.fiscalReserve,exact:true}).click();await page.getByRole('alert').filter({hasText:c.fiscalUncertain}).waitFor({timeout:20000});await check('uncertain');
+  await page.route('**/api/account/fiscal-allocations/list',route=>route.fulfill({status:429,contentType:'application/json',body:JSON.stringify({error:'rate_limited'})}));
+  await page.getByRole('button',{name:c.fiscalHistoryRefresh,exact:true}).click();const limitedAlert=page.getByRole('alert').filter({hasText:c.limited});await limitedAlert.waitFor();
+  assert((await limitedAlert.textContent())!.includes(c.fiscalUncertain),'a refused history read must retain the uncertain-result warning');await check('limited');await page.unroute('**/api/account/fiscal-allocations/list');
   await page.getByRole('button',{name:c.fiscalReconcile,exact:true}).click();await page.getByRole('button',{name:c.fiscalRetry,exact:true}).waitFor();await check('unknown');await page.getByRole('button',{name:c.fiscalRetry,exact:true}).click();await page.getByRole('alert').filter({hasText:c.fiscalUncertain}).waitFor({timeout:20000});
   await page.getByRole('button',{name:c.fiscalReconcile,exact:true}).click();assert.equal(reserveBodies.length,2);assert.equal(reserveBodies[1],reserveBodies[0]);await page.getByText(c.fiscalReserved,{exact:true}).waitFor();
   assert.equal((await db.query('SELECT count(*)::int AS n FROM fiscal_registry_allocations')).rows[0].n,1);
@@ -81,6 +84,9 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   assert.equal(await page.getByRole('status').filter({hasText:c.cooldown}).count(),0,'a countdown must not suggest retrying an exhausted namespace');
   await page.getByRole('status').filter({hasText:c.fiscalCooldown}).waitFor();assert(await page.getByRole('button',{name:c.fiscalReconcile,exact:true}).isDisabled());
   assert.equal(await page.getByRole('button',{name:c.fiscalDownload,exact:true}).count(),0);assert.equal(await page.getByRole('button',{name:c.fiscalRetry,exact:true}).count(),0);await check('exhausted');
+  await page.route('**/api/account/signup/request',route=>route.fulfill({status:429,contentType:'application/json',headers:{'retry-after':'60'},body:JSON.stringify({error:'rate_limited'})}));
+  await page.goto(f.origin+'/signup');const emailField=page.locator('input[name=email]');await emailField.waitFor();await emailField.fill('new-owner@example.test');await page.getByRole('button',{name:c.continue,exact:true}).click();
+  await page.getByRole('status').filter({hasText:c.cooldown}).waitFor();assert.equal(await page.getByRole('status').filter({hasText:c.fiscalCooldown}).count(),0);assert(await page.getByRole('button',{name:c.continue,exact:true}).isDisabled());await check('account-countdown');
   if(process.env.FISCAL_PORTAL_RECEIPT_DIR)await writeFile(process.env.FISCAL_PORTAL_RECEIPT_DIR+`/${locale}-${theme}-${width}.json`,JSON.stringify({responses,viewport:await page.evaluate(()=>({width:innerWidth,height:innerHeight,background:getComputedStyle(document.body).backgroundColor,text:getComputedStyle(document.body).color})),packet,receipt:stored},null,2));
  }finally{await f?.close();await a.close();}
 });

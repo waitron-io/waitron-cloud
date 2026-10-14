@@ -223,7 +223,9 @@ curl "$CLOUD_ORIGIN/api/account/fiscal-allocations/status" \
 The loopback example uses the development cookie name. HTTPS uses
 `__Host-cloud_session`. An unrecorded operation answers
 `{"version":1,"state":"unknown","receipt":null}`. Disabled configuration answers
-503. Invalid input answers 400, missing session 401, denied authority 403, changed
+503; unavailable authority, exhausted identities and unverifiable signed evidence
+also use 503. Read the error code and reconcile an unresolved write before resending.
+Invalid input answers 400, missing session 401, denied authority 403, changed
 operation binding 409, and an exhausted request budget 429 with `Retry-After`.
 
 All instances share PostgreSQL rate counters: 60 fiscal requests per IP per

@@ -71,7 +71,7 @@ export class FiscalAllocationController{
   if(result.ok&&validAllocationStatus(result.value)&&result.value.state==='recorded'&&result.value.receipt&&this.#result(result.value.receipt,request)){this.uncertain=false;this.pendingRequest=undefined;this.error=undefined;}
   else if(result.ok&&validAllocationStatus(result.value)&&result.value.state==='recorded'&&result.value.receipt===null&&request.action==='import-paper'){
    this.uncertain=false;this.pendingRequest=undefined;await this.#write(request);return;
-  }else{if(!result.ok)this.#failure(result);this.uncertain=true;this.canRetryPending=result.ok&&validAllocationStatus(result.value)&&result.value.state==='unknown';if(result.ok)this.error='fiscalUncertain';}
+  }else{if(!result.ok)this.#failure(result);this.uncertain=true;this.canRetryPending=result.ok&&validAllocationStatus(result.value)&&result.value.state==='unknown';if(result.ok&&!['fiscalExhausted','fiscalTrust'].includes(this.error??''))this.error='fiscalUncertain';}
   this.#changed();
  }
  async retryPending(){if(!this.#available()||!this.uncertain||!this.canRetryPending||!this.pendingRequest)return;await this.#write(this.pendingRequest);}
