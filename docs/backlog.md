@@ -697,9 +697,12 @@ notifications separately.
   the redundant guard. You can sign in immediately after an authenticator change even
   when its ended-session read arrives late. The portal clears the old account from its
   controllers before showing the login form, so that read cannot cancel your new sign-in.
-  Two controlled real PostgreSQL/Chromium cases reproduce the former seven-second
-  timeout after removal with a password and after a lost regeneration reply with a
-  passkey. Run `node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node
+  Two controlled real PostgreSQL/Chromium cases show sign-in failing to complete
+  after removal with a password and after a lost regeneration reply with a passkey.
+  Removing the account reset restores both failures at the existing seven-second
+  browser wait. The earlier English/light/1280 journey timeout and the two later
+  CI failures were not traced to this precise reply ordering; keep that historical
+  attribution open. Run `node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node
   --test --test-timeout=120000 test/sign-in-session-race.test.ts`. Existing authentication
   checks, browser assertions and deadlines remain. If another timeout occurs, capture
   its request/locator stage and reproduce that cause before changing a check or deadline.
