@@ -1087,8 +1087,15 @@ notifications separately.
   tiers, explicit resource capacities, dated growth and calendar retention, including
   protected recovery copies. Synthetic local HTTP checks reconcile retries, denied
   calls and interrupted transfers with a streaming meter; unknown billing dimensions
-  and unreconciled attempts leave gaps. The offline calculator, private local
-  sales replay, measured storage and remote traffic, and synthetic-only AWS comparison
+  and unreconciled attempts leave gaps. Replay preparation now uses online SQLite
+  copies that include committed writes still in the transaction log, preserves the
+  source, excludes credentials and recorded fixtures from the pinned code copy, and
+  stops only its own child on cancellation. A real Docker check proves that the
+  Node sandbox allows connections inside the container while refusing Internet, metadata-service and
+  external DNS traffic. Configuration checks reject extra networks, host access,
+  broad mounts and writable copied code. The complete isolated service stack,
+  offline calculator, private local sales replay, measured storage and remote traffic,
+  and synthetic-only AWS comparison
   remain open. Keep raw venue data on the Mac, distinguish measured
   usage from extrapolation, and compare list-price usage separately from credits.
   Storage-only evidence cannot validate the fixed infrastructure or fleet capacity.
