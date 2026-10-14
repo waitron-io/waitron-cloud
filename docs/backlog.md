@@ -174,7 +174,14 @@ paper history. Local real-server/browser tests cover English and Spanish, light
 and dark, 390 and 1280 pixels, with accessibility checks in ready, uncertain,
 error and retained states. On-prem venues need no managed backup to use the journey.
 Browser validation checks structure; local recovery must verify cryptographic
-trust and authority before activation. The Waitron adapter remains a dependent item. Production continuity
+trust and authority before activation. Cloud now preserves the exact person or recovery-key event operator through
+reserve validation, consumption approval, signed manual packets and retained
+browser receipts. Tagged key operators must match the recovery event and target
+node; malformed objects and person substitutions refuse. Focused contract and
+real HTTP tests cover those boundaries, and eight browser cases cover retained
+key-event packets in both languages, themes and widths. The actual Waitron-client
+joint test still needs the separately pinned adapter candidate. The Waitron adapter
+remains a dependent item. Production continuity
 storage, taxpayer custody and operator attribution, subscription policy and the
 signing-key custodian remain owner enablement gates. Before enabling recovery,
 qualify how the service discovers custody-approved namespaces when an old database
@@ -186,6 +193,10 @@ The page retains status checking and exact-request resends; temporary continuity
 failures still suggest a later retry. Controller checks and real-server Chromium
 journeys cover both themes at 390 and 1280 pixels. The exhaustion browser response
 is synthetic; the untrusted-paper response comes from the real signed-evidence check.
+The retained receipt's disabled draft purpose selectors display Standard for
+all three bases in the D72 key-event browser captures, while the signed receipt
+list correctly displays Standard, Full and Rectificative. Qualify and correct
+that draft display separately without changing signed bases or purposes.
 Duplicate adjacent status authority calls remain a small follow-up; no production defaults are
 selected. Fiscal records, invoice hashes and Waitron's allocation code stay outside
 this Cloud change.
@@ -484,6 +495,15 @@ notifications separately.
   memory`). For a full local package run, put `--test-concurrency=2` before the
   file list, for example
   `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-concurrency=2 --test-timeout=30000 'test/*.test.ts'`.
+  The full unsplit account HTTP suite also reports PostgreSQL `53200` during
+  disposable migration setup on this Mac: the D72 run completed 292 cases with
+  82 failures, including the unchanged signup, origin, session and rate-limit
+  fixtures. Use the same two-file limit for full local database package runs;
+  retain every file, original deadline and portal build. A failed fiscal HTTP
+  fixture setup also left its local continuity-authority child open after the
+  last test; the run printed its final failures after that recorded child was
+  stopped. Make fixture construction close acquired resources on setup failure
+  in `packages/fiscal-allocation/test/store-fixture.ts` and its HTTP wrapper.
   Keep the package's original test deadline and any build step. Appending the
   concurrency option to the package script leaves it after the files and does
   not limit this runner. The fixture's default lock capacity for a full local

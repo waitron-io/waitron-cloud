@@ -8,9 +8,14 @@ export interface SeriesBase {
   readonly code: string;
   readonly purpose: 'standard' | 'full' | 'rectificative';
 }
+export type OperationOperator = string | {
+  readonly kind: 'recovery-key';
+  readonly nodeId: string;
+  readonly eventId: string;
+};
 export interface ClaimBinding {
   readonly eventId: string;
-  readonly operatorId: string;
+  readonly operatorId: OperationOperator;
   readonly sourceId: string;
   readonly targetNodeId: string;
   readonly incidentEvidence: string;

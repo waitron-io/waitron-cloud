@@ -145,6 +145,14 @@ lowercase SHA-256 of the public key's SPKI DER bytes. Supply public SPKI and pri
 PKCS8 DER keys as unpadded base64url strings through explicit injected configuration.
 The package stores no private key in PostgreSQL or a receipt.
 
+If you authenticate local recovery with a recovery key, keep `binding.operatorId`
+as `{kind:"recovery-key",nodeId:"replacement-node",eventId:"restore-event"}`.
+Its `nodeId` must equal `binding.targetNodeId`, and its `eventId` must equal
+`binding.eventId`. Cloud preserves that exact object in the signed receipt and
+consumption approval. A person operator remains a nonempty string. Neither form
+contains the recovery secret or establishes custody by itself; your configured
+custody adapter must verify the complete local binding.
+
 The payload binds the namespace, complete series, event, operator, source, target,
 mode, account, venue, custody and entitlement versions, and continuity witness.
 A consumed receipt also binds the complete isolation or initial-setup confirmation.
