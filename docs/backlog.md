@@ -395,6 +395,16 @@ notifications separately.
 
 ## Platform work to scope
 
+- **Operating cost.** The [cost-model design](superpowers/specs/2026-10-14-cloud-cost-model-design.md)
+  and [implementation plan](superpowers/plans/2026-10-14-cloud-cost-model.md) define
+  how you can compare the AWS platform cost with no venues and the additional cost
+  at 1, 10, 100 and 1,000 venues. Production resource sizes and availability choices
+  remain assumptions. The priced model, offline calculator, private local sales
+  replay, measured storage and remote traffic, and synthetic-only AWS comparison
+  remain to be implemented. Keep raw venue data on the Mac, distinguish measured
+  usage from extrapolation, and compare list-price usage separately from credits.
+  Storage-only evidence cannot validate the fixed infrastructure or fleet capacity.
+
 - **Future remote DNS lost-reply browser failures.** The reproduced reconciliation
   stall is resolved by [PR #102](https://github.com/waitron-io/waitron-cloud/pull/102).
   If the saved-name assertion fails again, use the bounded request/status events,
