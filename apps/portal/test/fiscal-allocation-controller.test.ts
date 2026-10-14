@@ -142,3 +142,18 @@ test('the actual account client refuses unexpected installation environments bef
  let environment='test';t.mock.method(globalThis,'fetch',async()=>Response.json({installations:[{...installation,environment}]}));
  assert.equal((await accountRequest('/installations')).ok,true);environment='staging';assert.equal((await accountRequest('/installations')).ok,false);environment='production';assert.equal((await accountRequest('/installations')).ok,true);
 });
+for(const [code,guidance] of [['space_exhausted','fiscalExhausted'],['reservation_untrusted','fiscalTrust']] as const){
+ test(`${code} gives custodian guidance while preserving the uncertain write and exact retry`,async()=>{
+  const calls:{path:string;body?:Record<string,unknown>}[]=[];
+  const c=controller(async(path,body)=>{calls.push({path,body:structuredClone(body)});return path.endsWith('/status')?{ok:true,value:{version:1,state:'unknown',receipt:null}}:{ok:false,status:503,code,retryAfterMs:0};});
+  c.choose(reserve());await c.reserve(reserve());
+  assert.equal(c.error,guidance);assert(c.uncertain);assert.equal(c.canRetryPending,false);assert.equal(c.packet,undefined);
+  const original=structuredClone(c.pendingRequest);await c.reserve({...reserve(),operationId:randomUUID()});await c.retryPending();assert.equal(calls.length,1);assert.deepEqual(c.pendingRequest,original);
+  await c.reconcile();assert(c.uncertain);assert(c.canRetryPending);await c.retryPending();assert.deepEqual(calls[2],calls[0]);assert.equal(c.error,guidance);assert(c.uncertain);
+ });
+ test(`${code} on a read does not suggest a temporary outage or discard the pending write`,async()=>{
+  const c=controller(async path=>path.endsWith('/list')?{ok:false,status:503,code,retryAfterMs:0}:fail);
+  c.choose(reserve());await c.reserve(reserve());const original=structuredClone(c.pendingRequest);await c.load(null);
+  assert.equal(c.error,guidance);assert(c.uncertain);assert.deepEqual(c.pendingRequest,original);assert.equal(c.canRetryPending,false);
+ });
+}

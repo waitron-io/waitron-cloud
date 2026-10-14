@@ -62,8 +62,25 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   const history={version:1,operationId:randomUUID(),venueId:v.venueId,scope,custodyVersion:'custody-1',registerRevision:'1',previousDigest:'0'.repeat(64),block:{payload:block,signature:sign(null,paperSigningBytes(block),createPrivateKey({key:Buffer.from(paperKey.privateKey,'base64url'),format:'der',type:'pkcs8'})).toString('base64url')},consumptions:[],transfers:[]};
   const input=page.getByLabel(c.fiscalPaper,{exact:true});await input.fill(JSON.stringify(history));await page.getByRole('button',{name:c.fiscalImport,exact:true}).click();await page.getByText(c.fiscalImported,{exact:true}).waitFor();
   for(const bad of [{...history,operationId:randomUUID(),registerRevision:'0'},{...history,operationId:randomUUID(),block:{...history.block,signature:Buffer.alloc(64,2).toString('base64url')}}]){await input.fill(JSON.stringify(bad));await page.getByRole('button',{name:c.fiscalImport,exact:true}).click();await page.getByRole('alert').waitFor();}
+  const trustAlert=page.getByRole('alert').filter({hasText:c.fiscalTrust});await trustAlert.waitFor();
+  assert((await trustAlert.textContent())!.includes(c.fiscalUncertain),'unverified evidence must retain the uncertain-result warning');
+  assert(!(await trustAlert.textContent())!.includes(c.unavailable));await check('untrusted');
   assert.equal((await db.query('SELECT count(*)::int AS n FROM fiscal_registry_allocations')).rows[0].n,1);assert.equal((await db.query('SELECT count(*)::int AS n FROM backup_locations')).rows[0].n,0);
   assert(!(await page.content()).includes(paperKey.privateKey));
+  // Exhaustion needs a synthetic response; the fixture does not issue a million identities.
+  await page.unroute('**/api/account/fiscal-allocations/reserve');
+  await page.route('**/api/account/fiscal-allocations/reserve',route=>route.fulfill({status:503,contentType:'application/json',headers:{'retry-after':'60'},body:JSON.stringify({error:'space_exhausted'})}));
+  await page.goto(f.origin+'/fiscal-allocations');await page.getByRole('heading',{name:c.fiscalTitle,exact:true}).waitFor();
+  await page.getByLabel(c.recoveryOrganisation,{exact:true}).selectOption(owner.organisationId);await page.getByLabel(c.fiscalVenue,{exact:true}).selectOption(v.venueId);
+  await page.locator('wt-input[name=fiscalNif] input').fill(scope.taxpayerNif);await page.locator('wt-input[name=fiscalSoftware] input').fill(scope.softwareId);
+  for(const field of ['eventId','operatorId','sourceId','targetNodeId','incidentEvidence'] as const)await page.locator(`wt-input[name=${field}] input`).fill(binding[field]);
+  await page.locator('wt-input[name=base-0] input').fill('A');await page.getByRole('button',{name:c.fiscalReserve,exact:true}).click();
+  const exhaustedAlert=page.getByRole('alert').filter({hasText:c.fiscalExhausted});await exhaustedAlert.waitFor();
+  assert((await exhaustedAlert.textContent())!.includes(c.fiscalUncertain),'exhaustion must retain the uncertain-result warning');
+  assert(!(await exhaustedAlert.textContent())!.includes(c.unavailable));
+  assert.equal(await page.getByRole('status').filter({hasText:c.cooldown}).count(),0,'a countdown must not suggest retrying an exhausted namespace');
+  await page.getByRole('status').filter({hasText:c.fiscalCooldown}).waitFor();assert(await page.getByRole('button',{name:c.fiscalReconcile,exact:true}).isDisabled());
+  assert.equal(await page.getByRole('button',{name:c.fiscalDownload,exact:true}).count(),0);assert.equal(await page.getByRole('button',{name:c.fiscalRetry,exact:true}).count(),0);await check('exhausted');
   if(process.env.FISCAL_PORTAL_RECEIPT_DIR)await writeFile(process.env.FISCAL_PORTAL_RECEIPT_DIR+`/${locale}-${theme}-${width}.json`,JSON.stringify({responses,viewport:await page.evaluate(()=>({width:innerWidth,height:innerHeight,background:getComputedStyle(document.body).backgroundColor,text:getComputedStyle(document.body).color})),packet,receipt:stored},null,2));
  }finally{await f?.close();await a.close();}
 });

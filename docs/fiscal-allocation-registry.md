@@ -306,6 +306,13 @@ account change clears the view; an earlier name remains occupied even if you lea
 receipts to inspect recorded results. You can page and download retained consumed
 receipts after issuance entitlement ends, with current authorised access.
 
+If no unused identities remain, or signed evidence cannot be verified, contact
+your custodian. Retrying alone cannot supply new names or trusted evidence. An
+unresolved write still needs **Check uncertain result** first; the error does not
+prove that nothing was recorded. A temporary outside-register outage instead
+suggests a later retry. The countdown tells you when you can continue; it does
+not promise that waiting will resolve a permanent error.
+
 For paper use, paste the complete signed history export supplied by your custodian
 into **Current signed paper history (JSON)** and import it. Preserve its original
 block, consumption and transfer objects. Importing records existing facts and
