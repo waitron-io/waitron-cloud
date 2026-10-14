@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [main]
+    branches: [main, ci/d67-proof-20261014-1129]
   pull_request:
 permissions:
   contents: read
