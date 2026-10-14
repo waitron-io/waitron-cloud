@@ -36,6 +36,15 @@ milestone:
   runtime and replication roles. It covers a physical standby, exact operation replay,
   worker-claim recovery and tenant isolation.
 
+A separate [AWS storage rehearsal](aws-storage-rehearsal.md) on 14 October 2026 uses
+a real Stockholm sandbox, ordinary assumed-role sessions and synthetic data. It
+proves S3 conditional writes, prefix isolation, session revocation/expiry, interrupted
+multipart cleanup and local Waitron archive/Litestream restores. Its receipt records
+the estimate and cleanup, including scheduled KMS deletion; account charges were not
+read. It does not qualify Spain residency, the deployed credential adapter, the
+guided recovery journey or production activation. The local milestone evidence in
+the table above retains its original scope.
+
 On the audit date, GitHub Actions run
 [`36294635800`](https://github.com/waitron-io/waitron-cloud/actions/runs/36294635800)
 completed successfully on the exact main SHA above. It ran the workspace typecheck,

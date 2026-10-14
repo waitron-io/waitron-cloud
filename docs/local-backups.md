@@ -340,8 +340,14 @@ isolated verifier. The local managed-key drill now proves backup of the Cloud ma
 reopen every retained backup-key version after restart. The real recovery receipt separately
 restores an older key-version snapshot after rotation. Neither proof chooses a vault provider
 or adds an in-place rewrap. Run the
-same provider tests against the selected Spain-region store before any deployment;
-this local result does not establish AWS or Google behavior. Production still needs
+same provider tests against the selected Spain-region store before any deployment.
+The separate [AWS Stockholm sandbox rehearsal](aws-storage-rehearsal.md) now proves
+real S3 storage boundaries and local archive/continuous restoration, including actual
+role-session expiry and revocation. New buckets require explicit SSE-C enablement for
+the existing stream format. The rehearsal supplied the assumed-role session token
+directly; the managed-stream credential interface still needs token delivery and
+renewal, coordinated with Waitron. It makes no Spain-location or Google claim.
+Production still needs
 dynamic writer and reader credential delivery and revocation, live DNS and ACME,
 production secret custody and deployment, plus the same scoped rotation, expiry,
 versioning, interruption and conditional-write checks against each selected provider.
