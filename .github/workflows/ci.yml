@@ -6,16 +6,48 @@ on:
 permissions:
   contents: read
   packages: read
+  actions: read
+  pull-requests: read
 concurrency:
   # Every main merge needs its own run, even when several merges arrive together.
   group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+      typecheck: ${{ steps.plan.outputs.typecheck }}
+      packages: ${{ steps.plan.outputs.packages }}
+      receipts: ${{ steps.plan.outputs.receipts }}
+      package_matrix: ${{ steps.plan.outputs.package_matrix }}
+      receipt_matrix: ${{ steps.plan.outputs.receipt_matrix }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          # No dependency install means there may be no package store to cache.
+          package-manager-cache: false
+      # Cloud cannot enforce up-to-date branches: only equal git trees may reuse CI.
+      - id: plan
+        run: node scripts/ci-plan.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   typecheck:
+    needs: changes
+    if: needs.changes.outputs.typecheck == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v5
         with:
@@ -26,23 +58,21 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: node --test scripts/ci-workflow.test.mjs scripts/identity-upstream.test.mjs scripts/verify-gateway-reconnection-receipt.test.mjs
+      - run: node --test scripts/ci-*.test.mjs scripts/identity-upstream.test.mjs scripts/verify-gateway-reconnection-receipt.test.mjs
       - run: pnpm typecheck
   receipts:
+    needs: changes
+    if: needs.changes.outputs.receipts == 'true'
     name: receipt (${{ matrix.suite }})
     runs-on: ubuntu-latest
     timeout-minutes: 8
     strategy:
       fail-fast: false
-      matrix:
-        suite:
-          - test:two-venue-milestone-receipt
-          - test:backup-capacity
-          - test:public-gateway-limits
-          - test:local-stack
-          - test:database-recovery-receipt
+      matrix: ${{ fromJSON(needs.changes.outputs.receipt_matrix) }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v5
         with:
@@ -55,73 +85,18 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: pnpm ${{ matrix.suite }}
   packages:
+    needs: changes
+    if: needs.changes.outputs.packages == 'true'
     name: package (${{ matrix.package }}${{ matrix.shards && format(', shard {0}/{1}', matrix.shard, matrix.shards) || '' }})
     runs-on: ubuntu-latest
     timeout-minutes: 8
     strategy:
       fail-fast: false
-      matrix:
-        shard: [1]
-        package:
-          - '@waitron-cloud/registration'
-          - '@waitron-cloud/fiscal-allocation'
-          - '@waitron-cloud/backups'
-          - '@waitron-cloud/account-http'
-          - '@waitron-cloud/identity'
-          - '@waitron-cloud/operations'
-          - '@waitron-cloud/remote-access'
-          - '@waitron-cloud/portal'
-          - '@waitron-cloud/ui-smoke'
-        # Node partitions the sorted file list; each file runs in exactly one shard.
-        include:
-          - package: '@waitron-cloud/registration'
-            shard: 1
-            shards: 7
-          - package: '@waitron-cloud/registration'
-            shard: 2
-            shards: 7
-          - package: '@waitron-cloud/registration'
-            shard: 3
-            shards: 7
-          - package: '@waitron-cloud/registration'
-            shard: 4
-            shards: 7
-          - package: '@waitron-cloud/registration'
-            shard: 5
-            shards: 7
-          - package: '@waitron-cloud/registration'
-            shard: 6
-            shards: 7
-          - package: '@waitron-cloud/registration'
-            shard: 7
-            shards: 7
-          - package: '@waitron-cloud/account-http'
-            shard: 1
-            shards: 3
-          - package: '@waitron-cloud/account-http'
-            shard: 2
-            shards: 3
-          - package: '@waitron-cloud/account-http'
-            shard: 3
-            shards: 3
-          - package: '@waitron-cloud/backups'
-            shard: 1
-            shards: 2
-          - package: '@waitron-cloud/backups'
-            shard: 2
-            shards: 2
-          - package: '@waitron-cloud/portal'
-            shard: 1
-            shards: 3
-          - package: '@waitron-cloud/portal'
-            shard: 2
-            shards: 3
-          - package: '@waitron-cloud/portal'
-            shard: 3
-            shards: 3
+      matrix: ${{ fromJSON(needs.changes.outputs.package_matrix) }}
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           # Registration runs populated upgrades with pinned historical runners.
           fetch-depth: ${{ (matrix.package == '@waitron-cloud/registration' || matrix.package == '@waitron-cloud/fiscal-allocation') && '0' || '1' }}
       - uses: pnpm/action-setup@v6
@@ -152,16 +127,16 @@ jobs:
         run: node scripts/test-postgres.mjs exec pnpm --filter ${{ matrix.package }} exec node --test --test-timeout=${{ matrix.package == '@waitron-cloud/portal' && '120000' || '30000' }} --test-shard=${{ matrix.shard }}/${{ matrix.shards }} "test/*.test.ts"
   summary:
     if: ${{ always() }}
-    needs: [typecheck, receipts, packages]
+    needs: [changes, typecheck, receipts, packages]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Require every job to succeed
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Require precisely the planned jobs
         env:
-          TYPECHECK: ${{ needs.typecheck.result }}
-          RECEIPTS: ${{ needs.receipts.result }}
-          PACKAGES: ${{ needs.packages.result }}
-        run: |
-          for result in "$TYPECHECK" "$RECEIPTS" "$PACKAGES"; do
-            [ "$result" = success ] || exit 1
-          done
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_PLAN: ${{ needs.changes.outputs.plan }}
+          CI_RESULTS: ${{ toJSON(needs) }}
+        run: node scripts/ci-summary.mjs
