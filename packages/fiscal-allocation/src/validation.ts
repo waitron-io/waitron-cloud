@@ -1,6 +1,7 @@
 import { buildAltaRecord, validate, type AltaInput } from '@waitron/verifactu';
 import { FiscalAllocationError } from './types.ts';
 import type {
+  OperationOperator,
   Scope,
   Environment,
   SeriesBase,
@@ -117,11 +118,27 @@ export function validateBinding(value: unknown): ClaimBinding {
     'targetNodeId',
     'incidentEvidence',
   ]);
+  const eventId = text(o.eventId),
+    targetNodeId = text(o.targetNodeId);
+  let operatorId: OperationOperator;
+  if (typeof o.operatorId === 'string') operatorId = text(o.operatorId);
+  else {
+    const operator = record(o.operatorId, ['kind', 'nodeId', 'eventId']);
+    const nodeId = text(operator.nodeId),
+      operatorEventId = text(operator.eventId);
+    if (
+      operator.kind !== 'recovery-key' ||
+      nodeId !== targetNodeId ||
+      operatorEventId !== eventId
+    )
+      fail();
+    operatorId = { kind: 'recovery-key', nodeId, eventId: operatorEventId };
+  }
   return snapshot({
-    eventId: text(o.eventId),
-    operatorId: text(o.operatorId),
+    eventId,
+    operatorId,
     sourceId: text(o.sourceId),
-    targetNodeId: text(o.targetNodeId),
+    targetNodeId,
     incidentEvidence: text(o.incidentEvidence),
   });
 }
@@ -468,9 +485,16 @@ export function validatePayload(value: unknown): ReceiptPayload {
       incidentEvidence: a.incidentEvidence,
     });
     if (
-      Object.keys(binding).some(
-        (k) => ab[k as keyof ClaimBinding] !== binding[k as keyof ClaimBinding],
-      ) ||
+      Object.keys(binding).some((k) => {
+          const left = ab[k as keyof ClaimBinding],
+            right = binding[k as keyof ClaimBinding];
+          if (typeof left === 'string' || typeof right === 'string') return left !== right;
+          return (
+            left.kind !== right.kind ||
+            left.nodeId !== right.nodeId ||
+            left.eventId !== right.eventId
+          );
+        }) ||
       (o.mode === 'recovery' && (!a.oldMachineOffline || a.oldMachineAbsent)) ||
       (o.mode === 'initial-setup' && !a.oldMachineAbsent)
     )
