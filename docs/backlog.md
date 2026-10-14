@@ -1039,9 +1039,14 @@ notifications separately.
   survives and verifies later work. Two real Waitron snapshots at revision
   `00496fcd182a5c2c9189cc3faf0f8f22d3baf8ac` restore with 1024 MiB memory and 256 MiB scratch.
   See [the containment receipt and limits](backup-verifier-containment.md).
-  Container-test image preparation has a separate 150-second setup budget around its
-  120-second Docker command limit; individual test deadlines and containment assertions
-  stay unchanged. A controlled 31-second build delay reproduces the former setup timeout.
+  Both container-verifier and database-worker image preparation have a separate
+  150-second setup budget around their 120-second Docker command limit; individual
+  test deadlines and containment assertions stay unchanged. A controlled 31-second
+  build delay reproduces the former setup timeout. Separate CI jobs give each file
+  a fresh Docker build cache. The database-worker CI case reached its 30-second
+  deadline, but did not record the build duration separately. The same controlled
+  build delay now passes its unchanged 30-second worker test after image preparation
+  moves into the setup hook; the historical CI stage timings remain unproved.
   Production host/kernel isolation, hostile native exploits, fleet sizing and large archives remain
   unverified; the process-only development adapter still lacks these total-resource bounds.
   The verifier distinguishes bounded infrastructure failures from archive verdicts:
