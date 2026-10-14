@@ -23,7 +23,7 @@ export function createPlan(event, context, workspace, git, api) {
   } else if (!event.forced && event.commits?.length===1 && event.before) {
     try {
       if (git('rev-parse',`${context.sha}^`).trim()===event.before) {
-        reuse = findReuse(context,api,sha=>git('rev-parse',`${sha}^{tree}`).trim());
+        reuse = findReuse(context,api,sha=>git('rev-parse',`${sha}^{tree}`).trim(), message=>{reason=`${message}: full suite`;});
       }
     } catch { /* Failed evidence leaves the full suite selected. */ }
   }
