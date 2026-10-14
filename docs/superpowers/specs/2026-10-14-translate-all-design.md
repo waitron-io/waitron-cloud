@@ -19,9 +19,9 @@ request and its collected results.
 ## Owner decisions this design follows (2026-10-14)
 
 1. **Free for now, for any connected installation**, with a per-venue spending cap as a safety
-   limit. A monthly allowance, recorded so that billing can use it later, replaces this before the
-   first live venue. There is no billing in this repository yet (`docs/backlog.md`); this design
-   adds none.
+   limit: **$5 per venue per calendar month (UTC) — proposed, owner to confirm.** A monthly
+   allowance, recorded so that billing can use it later, replaces this before the first live venue.
+   There is no billing in this repository yet (`docs/backlog.md`); this design adds none.
 2. **Cloud keeps nothing but usage counts.** The menu and the results are deleted once the box has
    collected them, or after 24 hours. No name ever enters a log.
 3. **The prompt rules stay language-neutral.** A rule written for one language was tried and dropped
@@ -79,7 +79,7 @@ box ◄─status──      │                     ▲
 box ◄─collect─      │                     │ leases
 box ──release─►     ▼                     │
               translation-worker ──batches──► OpenAI Responses API
-                       └──usage event──► usage metering
+                       └──usage events─► usage metering
 ```
 
 A new workspace package, `packages/translation`, holds the domain: job store, batching, prompt
@@ -97,9 +97,23 @@ request and response shapes, and the error codes the box sees, are in the contra
 A job body is far larger than the signed request allows: the signed body is refused over 4,096
 characters (`readMachineClaims`, `installation-proof.ts`). `translation-submit` therefore signs a
 SHA-256 fingerprint of the job body and its length, and sends the body beside the envelope. Cloud
-checks the fingerprint before it parses anything. The job body is capped at 1 MiB and 1,000 items; a
-bigger menu arrives as consecutive jobs (the cap counts items, each with all its missing languages). The contract publishes test vectors, so that Waitron's
-signer and Cloud's verifier test against the same cases.
+checks the fingerprint before it parses anything; a mismatch is refused like any other invalid
+proof. The job body is capped at 1 MiB and 1,000 items; a bigger menu arrives as consecutive jobs
+(the cap counts items, each with all its missing languages). The contract publishes test vectors,
+so that Waitron's signer and Cloud's verifier test against the same cases.
+
+**Submit has its own request limits.** Every account route today reads its body through one reader
+that refuses more than 16 KiB or a body not received within 5 seconds
+(`packages/account-http/src/request.ts:6,15,22`), and the server's own request time limit is 5
+seconds (`packages/account-http/src/server.ts:37`). A 1 MiB job, escaped as a JSON string inside
+the envelope, can be twice that, so submit accepts a request of up to 2 MiB plus 16 KiB, received
+within 60 seconds. Status, collect and release keep 16 KiB and 5 seconds. The exact numbers and
+refusals are in the contract.
+
+**Context items.** When the box sends a member of a family (a variant, an options label, a menu
+section) but not its head, because the head's own names are complete or an earlier job of the
+same run sent it, it sends the head with no languages to write. The model sees it as context; Cloud never returns names or a failure for it, and
+it does not count towards the job's total or the cap estimate.
 
 Polling every five seconds is 12 requests a minute, inside the existing limit of 30 a minute per
 installation (`packages/account-http/README.md`).
@@ -108,9 +122,16 @@ installation (`packages/account-http/README.md`).
 
 `installation_services.service` is fixed to three values by a CHECK constraint
 (`packages/registration/migrations/001_registration.sql`). A migration adds `content_translation`,
-and every connected installation gets it switched on (decision 1). The status reply's fourth
-service needs the negotiated protocol version the contract defines; Waitron refuses an unexpected
-service count today.
+and every connected installation gets it with state `ready`, which means available (decision 1).
+Waitron refuses an unexpected service count today, so only a `configuration` reply to a request
+signed with `servicesVersion: 2` carries the fourth service; `renew` and `report` replies are
+unchanged. The contract has the exact shapes.
+
+Several Cloud readers assume three services, or treat any service that is switched on as a reason
+to monitor a venue: the monitoring schedule, alert delivery, operations status, diagnostics, the
+venue overview and the portal's service lists. Translation is `ready` for every installation, so
+each of those readers counts only the three original services; otherwise every connected venue
+would start being monitored and alerted.
 
 ## Jobs
 
@@ -118,6 +139,7 @@ service count today.
 
 - installation and venue;
 - state: `queued`, `running`, `done`, `partly_done`, `failed`, `collected`, `expired`;
+- for a `partly_done` or `failed` job, its reason (the contract's list);
 - name counts: total, done, failed;
 - cost so far, in micro-US-dollars;
 - the model and prompt version that served it;
@@ -127,37 +149,51 @@ It stays as the usage record.
 
 **`translation_job_bodies`** holds the job's body and its results, keyed by job. A row is deleted on
 `translation-release`, or by a sweep 24 hours after the job finished, which also moves an
-uncollected job to `expired`.
+uncollected job to `expired`. A job that never finishes (no worker ran for a day) is swept 24 hours
+after it was submitted.
 
 **One open job per venue.** A second submit while one is queued or running is refused with
 `translation_job_running`, and the box shows the open one's progress.
 
+**The cap is checked at submit.** Cloud estimates the job's cost from its number of items with
+languages to write, at a stored rate per item, initially twice the trial's measured rate. If the estimate exceeds what is
+left of the venue's cap this calendar month, submit is refused with `translation_limit_reached`,
+carrying how many items would fit. The worker also stops a running job at the cap (below).
+
 ## The worker
 
-1. **Lease a queued job and estimate its cost.** If the estimate exceeds what is left of the
-   venue's cap this calendar month, refuse the job up front (`translation_limit_reached`, with how
-   many items would fit). The estimate uses a stored rate per item, initially twice the trial's
-   measured rate.
+1. **Lease a queued job.** The cap was already checked against the estimate at submit. If the
+   venue's consent was withdrawn since, the job ends `failed` with reason `consent_required` and
+   no provider is called.
 2. **Batch.** Keep each family together: a product with its variants, an options list with its
-   labels, a menu with its sections. Then fill batches of about 90 items, category by category; an
-   item carries all of its missing languages. A product in several categories goes with the first one
-   the box sends. A family bigger than 90 items stays whole.
+   labels, a menu with its sections, including a head sent only as context. Then fill batches of
+   about 90 items, category by category; an item carries all of its missing languages. A product
+   has one category (Waitron's `products.category_id`), and a variant goes with its product's. A
+   family bigger than 90 items stays whole.
 3. **First pass:** each batch goes to `gpt-6-luna` at low reasoning effort, through the Responses
    API with `store: false`. Up to four batches run side by side for one job; the trial sent 12 side
    by side without a refusal on 2026-10-14.
 4. **Check the reply.** It must be valid JSON naming every product in the batch once, with every
-   requested language filled unless the product is a placeholder. A reply that fails the check is
-   retried.
+   requested language filled unless the product is a placeholder. A context item needs no entry, and
+   anything written for it is dropped. A reply that fails the check is retried.
 5. **Review pass:** each checked batch goes to `gpt-6-luna` at medium effort with the review prompt.
    Its changes are merged under the rules in "Review merge". A failed review keeps the first-pass
    names, because the review only ever improves a batch.
-6. **Retry.** A batch gets up to three attempts, waiting 2 s, 8 s and then 30 s, or the provider's
-   `Retry-After` when it sends one. A batch that still fails marks its names failed, and the job
-   finishes `partly_done`; if every batch fails it is `failed`.
+6. **Retry.** Each pass of a batch makes up to four calls: the first, then three retries after
+   2 s, 8 s and 30 s, or after the provider's `Retry-After` (capped at 60 s) when it sends one. A
+   batch whose first pass still fails marks its items failed, and the job finishes `partly_done`
+   with reason `provider_failed`; if every batch fails it is `failed` with reason
+   `provider_unavailable`.
 7. **Stop at the cap.** Actual cost is added after every call, from the reply's token usage at
-   stored prices. Reaching the cap stops the job `partly_done`.
-8. **Record** one usage event per job when it finishes: names done, tokens and cost, with no names.
-   This adds a usage event type and source kind to `packages/registration/src/usage-metering.ts`.
+   stored prices. Reaching the cap stops the job: `partly_done` with reason `limit_reached`, or
+   `failed` with that reason if nothing was done yet. Batches already sent finish, so a job can
+   pass the cap by at most those calls.
+8. **Record usage** when the job finishes. A usage event holds one quantity
+   (`packages/registration/migrations/025_usage_metering.sql:12`, and its one-quantity rule at
+   `:29`; `src/usage-metering.ts:75`), so a finished job records up to four events: items done,
+   input tokens, output tokens and cost, each only when above zero, all naming the job and none
+   carrying a name. This adds four usage event types and a source kind to
+   `packages/registration/src/usage-metering.ts`.
 
 ### Review merge
 
@@ -227,10 +263,11 @@ provider and model that served it.
 - **Each provider's own terms** on training, retention and where data is processed are quoted from
   its own published pages, with the date read, before that provider serves a job. Only OpenAI's are
   quoted so far (above).
-- **Consent comes before the first job.** The account owner agrees in the portal that the venue's
-  menu text may be sent to the named providers. The email relay's account consent is the pattern
+- **Consent comes before the first job.** The account owner agrees, on the portal's account page
+  (`/account`, in the venue's entry), that the venue's menu text may be sent to the named
+  providers. The email relay's account consent is the pattern
   (`docs/transactional-email-relay-contract.md`). Until consent is recorded, `translation-submit`
-  is refused with `translation_consent_required`, and the box links to the portal.
+  is refused with `translation_consent_required`, and the box links to that page.
 
 ## Quality check
 
@@ -255,17 +292,24 @@ Before release, two further measurements:
 
 - **Signature:** a changed body, a changed length, a replayed operation and an expired lease are each
   refused; a retried operation returns its first result. The contract's test vectors pass.
+- **Request limits:** a 1 MiB job inside a 2 MiB request is accepted at submit, a larger one is
+  refused as too large, and the other three actions keep 16 KiB and 5 seconds.
+- **Job body:** a context item is accepted only when it heads the family of an item with languages
+  to write, and never appears in the results or the failed list.
 - **Batching:** families are never split; a family over 90 stays whole; categories stay together;
   1,000 items produce the expected batches.
 - **The worker, against a fake OpenAI server:**
   - timeouts, malformed JSON, a missing product and a 429 with `Retry-After` each retry, then end
-    `partly_done`;
-  - all batches failing ends `failed`;
+    `partly_done` with reason `provider_failed`;
+  - all batches failing ends `failed` with reason `provider_unavailable`;
   - a failed review keeps first-pass names.
-- **Cap:** refused up front with the count that fits; stopped mid-job; the month boundary.
+- **Cap:** refused at submit with the count that fits; stopped mid-job with reason
+  `limit_reached`; the month boundary.
+- **Fourth service:** every reader that decides monitoring, alerts or the services shown ignores a
+  ready `content_translation`.
 - **Retention:** release deletes the body row; the sweep deletes after 24 hours and marks the job
   `expired`. A test reads the worker's and the API's log output for a job and finds no name from it.
-- **Usage:** one event per finished job, with no names.
+- **Usage:** up to four events per finished job, one quantity each, with no names.
 
 ## Open items
 
