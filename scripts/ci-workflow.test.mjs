@@ -68,3 +68,7 @@ test('all work gates follow the planner and every checkout tests the exact PR he
   assert.match(job('changes'),/fetch-depth: 0/);
   assert.match(job('changes'),/run: node scripts\/ci-plan.mjs/);
 });
+
+test('planner disables automatic caching because it creates no package store to save',()=>{
+  assert.match(job('changes'),/package-manager-cache: false/);
+});

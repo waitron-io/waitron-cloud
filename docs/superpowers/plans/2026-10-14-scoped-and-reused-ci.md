@@ -10,7 +10,7 @@
 
 ### Scope and outputs
 
-- Add a bounded `changes` job before work, with full git history and Node 26. Grant only additional `actions: read` and `pull-requests: read` for evidence reads; keep existing read permissions.
+- Add a bounded `changes` job before work, with full git history and Node 26. Disable automatic package caching in this job because it never installs dependencies. Grant only additional `actions: read` and `pull-requests: read` for evidence reads; keep existing read permissions.
 - PR scope uses the event's exact base/head SHAs and their merge base, never moving branch names or pnpm's changed-since filter. Every job checks out the exact PR head SHA. This makes the successful run head name the tested source rather than a synthetic merge commit.
 - Discover workspace directories from `pnpm-workspace.yaml` through validated pnpm workspace inventory; read their manifests, excluding the root. Require unique names and declared test scripts; invalid discovery fails the planner.
 - Attribute NUL-delimited git paths to the innermost package directory. Include both paths of renames and deletions. Build reverse dependency edges from `dependencies`, `devDependencies`, `optionalDependencies` and `peerDependencies` referencing workspace members. Supplement them with sibling source/fixture paths, workspace names and root package paths found in quoted source literals. A relative template whose package cannot be determined adds every member as a possible dependency. Generated output and dependencies are excluded from that scan.

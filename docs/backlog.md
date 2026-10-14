@@ -429,6 +429,12 @@ notifications separately.
   when its complete job records and exact git tree match; uncertain evidence or
   a behind merge runs everything. Direct and multiple-commit pushes run everything.
   Local regressions exercise the real summary command and both squash-merge trees.
+  The planner explicitly disables setup-node's automatic package cache because
+  it does not install dependencies. The lockfile control selected all 20 package
+  jobs, then reproduced a missing-store failure in the cache-saving cleanup step
+  ([run 38546606743](https://github.com/waitron-io/waitron-cloud/actions/runs/38546606743)).
+  setup-node describes its input as “Set to false to disable automatic caching”
+  ([action definition](https://github.com/actions/setup-node/blob/v5/action.yml), read 2026-10-14).
   Real Actions proof and cost measurements are still in progress; do not infer
   production savings from the local checks.
   [Run 38500339948](https://github.com/waitron-io/waitron-cloud/actions/runs/38500339948)
