@@ -403,8 +403,11 @@ notifications separately.
   passing repeats alone do not explain a failure. See [the ordering receipt](#portal-lost-reply-test-ordering).
 
 - **CI execution budget.** You can read one summary job and the individual package
-  and receipt jobs to check a candidate. CI runs type checking, each of the five
-  existing receipt suites and all workspace package suites in parallel. Registration
+  and receipt jobs to check a candidate. CI selects changed workspace packages and every package that depends on them,
+  including test dependencies. Root, unknown and empty changes run everything.
+  Type checking stays whole-workspace because backend manifests share the root
+  TypeScript input. Backend changes run all five receipt suites conservatively;
+  portal alone runs local-stack, and isolated ui-smoke needs no receipt. Registration
   uses seven file shards, account HTTP and portal use three each, and backups uses
   two. The other packages keep one job each. Each file runs once, with its original
   assertions and test deadline. The authenticator clock-rollover case has its own
@@ -417,9 +420,15 @@ notifications separately.
   120 seconds plus ten seconds to stop it. Main pushes use a unique concurrency
   group per run so a later merge cannot cancel an earlier merge's checks;
   superseded pull request runs still cancel. The workflow text guard checks shard
-  completeness and deadlines; it also executes the summary shell command with
-  successful, failed, skipped, cancelled and missing prerequisite results.
-  The summary refuses any unsuccessful prerequisite, including any failed shard.
+  completeness and deadlines. The summary checks actual job records against the
+  plan, refusing missing, duplicated, cancelled, unfinished or failed required
+  jobs. Only unnecessary work may be skipped. Every PR job checks out its exact
+  head SHA. A merge can reuse the latest successful same-workflow head run only
+  when its complete job records and exact git tree match; uncertain evidence or
+  a behind merge runs everything. Direct and multiple-commit pushes run everything.
+  Local regressions exercise the real summary command and both squash-merge trees.
+  Real Actions proof and cost measurements are still in progress; do not infer
+  production savings from the local checks.
   [Run 38500339948](https://github.com/waitron-io/waitron-cloud/actions/runs/38500339948)
   on `9bb8e8644d5ce9993fffa3f7ec13170d81de5ae4` took 9m45s in portal and
   9m02s in account HTTP before this split. The package logs counted 1,476 tests;
