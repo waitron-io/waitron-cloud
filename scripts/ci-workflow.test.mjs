@@ -38,7 +38,7 @@ test('slow packages run every file shard with their original test deadlines', ()
   const packages = job('packages');
   assert.match(packages, /shard: \[1\]/);
   for (const [name, count, directory] of [
-    ['registration', 5, 'packages/registration'],
+    ['registration', 6, 'packages/registration'],
     ['account-http', 3, 'packages/account-http'],
     ['backups', 2, 'packages/backups'],
     ['portal', 3, 'apps/portal'],
