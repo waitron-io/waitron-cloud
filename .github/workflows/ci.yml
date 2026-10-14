@@ -13,7 +13,7 @@ concurrency:
 jobs:
   typecheck:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v6
@@ -31,7 +31,7 @@ jobs:
   receipts:
     name: receipt (${{ matrix.suite }})
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
     strategy:
       fail-fast: false
       matrix:
@@ -55,9 +55,9 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: pnpm ${{ matrix.suite }}
   packages:
-    name: package (${{ matrix.package }}${{ matrix.package == '@waitron-cloud/registration' && format(', shard {0}/3', matrix.shard) || '' }})
+    name: package (${{ matrix.package }}${{ matrix.shards && format(', shard {0}/{1}', matrix.shard, matrix.shards) || '' }})
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
     strategy:
       fail-fast: false
       matrix:
@@ -72,11 +72,47 @@ jobs:
           - '@waitron-cloud/remote-access'
           - '@waitron-cloud/portal'
           - '@waitron-cloud/ui-smoke'
+        # Node partitions the sorted file list; each file runs in exactly one shard.
         include:
           - package: '@waitron-cloud/registration'
+            shard: 1
+            shards: 5
+          - package: '@waitron-cloud/registration'
             shard: 2
+            shards: 5
           - package: '@waitron-cloud/registration'
             shard: 3
+            shards: 5
+          - package: '@waitron-cloud/registration'
+            shard: 4
+            shards: 5
+          - package: '@waitron-cloud/registration'
+            shard: 5
+            shards: 5
+          - package: '@waitron-cloud/account-http'
+            shard: 1
+            shards: 3
+          - package: '@waitron-cloud/account-http'
+            shard: 2
+            shards: 3
+          - package: '@waitron-cloud/account-http'
+            shard: 3
+            shards: 3
+          - package: '@waitron-cloud/backups'
+            shard: 1
+            shards: 2
+          - package: '@waitron-cloud/backups'
+            shard: 2
+            shards: 2
+          - package: '@waitron-cloud/portal'
+            shard: 1
+            shards: 3
+          - package: '@waitron-cloud/portal'
+            shard: 2
+            shards: 3
+          - package: '@waitron-cloud/portal'
+            shard: 3
+            shards: 3
     steps:
       - uses: actions/checkout@v5
         with:
@@ -102,10 +138,12 @@ jobs:
             if [ "$attempt" -eq 2 ]; then exit 1; fi
             sleep 5
           done
-      - if: matrix.package != '@waitron-cloud/registration'
+      - if: ${{ !matrix.shards }}
         run: node scripts/test-postgres.mjs --filter ${{ matrix.package }} test
-      - if: matrix.package == '@waitron-cloud/registration'
-        run: node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=30000 --test-shard=${{ matrix.shard }}/3 "test/*.test.ts"
+      - if: matrix.package == '@waitron-cloud/portal'
+        run: pnpm --filter ${{ matrix.package }} build
+      - if: matrix.shards
+        run: node scripts/test-postgres.mjs exec pnpm --filter ${{ matrix.package }} exec node --test --test-timeout=${{ matrix.package == '@waitron-cloud/portal' && '120000' || '30000' }} --test-shard=${{ matrix.shard }}/${{ matrix.shards }} "test/*.test.ts"
   summary:
     if: ${{ always() }}
     needs: [typecheck, receipts, packages]
