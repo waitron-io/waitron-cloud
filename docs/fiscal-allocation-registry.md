@@ -223,7 +223,9 @@ curl "$CLOUD_ORIGIN/api/account/fiscal-allocations/status" \
 The loopback example uses the development cookie name. HTTPS uses
 `__Host-cloud_session`. An unrecorded operation answers
 `{"version":1,"state":"unknown","receipt":null}`. Disabled configuration answers
-503. Invalid input answers 400, missing session 401, denied authority 403, changed
+503; unavailable authority, exhausted identities and unverifiable signed evidence
+also use 503. Read the error code and reconcile an unresolved write before resending.
+Invalid input answers 400, missing session 401, denied authority 403, changed
 operation binding 409, and an exhausted request budget 429 with `Retry-After`.
 
 All instances share PostgreSQL rate counters: 60 fiscal requests per IP per
@@ -305,6 +307,13 @@ retains the uncertain request, it blocks a different operation. Navigation or an
 account change clears the view; an earlier name remains occupied even if you leave. Return to the venue's retained
 receipts to inspect recorded results. You can page and download retained consumed
 receipts after issuance entitlement ends, with current authorised access.
+
+If no unused identities remain, or signed evidence cannot be verified, contact
+your custodian. Retrying alone cannot supply new names or trusted evidence. An
+unresolved write still needs **Check uncertain result** first; the error does not
+prove that nothing was recorded. A temporary outside-register outage instead
+suggests a later retry. The countdown tells you when you can continue; it does
+not promise that waiting will resolve a permanent error.
 
 For paper use, paste the complete signed history export supplied by your custodian
 into **Current signed paper history (JSON)** and import it. Preserve its original

@@ -180,8 +180,14 @@ storage, taxpayer custody and operator attribution, subscription policy and the
 signing-key custodian remain owner enablement gates. Before enabling recovery,
 qualify how the service discovers custody-approved namespaces when an old database
 backup lacks both allocations and routing hints, and measure full-journal replay
-and indexed paging with launch-scale history. Permanent-versus-retryable error
-copy and duplicate adjacent status authority calls remain small follow-ups; no production defaults are
+and indexed paging with launch-scale history. Exhausted identity space and
+unverified signed evidence now direct you to your custodian in English and Spanish,
+alongside the original uncertain-result warning when a write is unresolved.
+The page retains status checking and exact-request resends; temporary continuity
+failures still suggest a later retry. Controller checks and real-server Chromium
+journeys cover both themes at 390 and 1280 pixels. The exhaustion browser response
+is synthetic; the untrusted-paper response comes from the real signed-evidence check.
+Duplicate adjacent status authority calls remain a small follow-up; no production defaults are
 selected. Fiscal records, invoice hashes and Waitron's allocation code stay outside
 this Cloud change.
 

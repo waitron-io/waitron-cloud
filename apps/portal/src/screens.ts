@@ -68,6 +68,6 @@ export function screen(app: PortalApp) {
         <wt-form-error-summary tabindex="-1" .heading=${c.errors} .errors=${errors}></wt-form-error-summary>
         ${content}
         ${app.error === 'uncertain' || app.error === 'linkUnavailable' ? html`<nav>${link('/login', c.login)} ${link(retryLink, c.requestLink)}</nav>` : nothing}
-        ${app.waiting ? html`<p class="help" role="status">${c.cooldown} ${app.waiting} ${c.seconds}</p>` : nothing}
+        ${app.waiting ? html`<p class="help" role="status">${app.path==='/fiscal-allocations'?c.fiscalCooldown:c.cooldown} ${app.waiting} ${c.seconds}</p>` : nothing}
       </form></wt-card></main>`;
 }

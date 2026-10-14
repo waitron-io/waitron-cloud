@@ -21,7 +21,7 @@ export class FiscalAllocationController{
  get packet(){return !this.uncertain&&this.receipt?.payload.state==='consumed'?manualPacket(this.receipt):undefined;}
  #available(){return !!this.#account&&!!this.venueId&&!this.pending&&!this.waiting;}
  #matches(r:unknown,currentActor=true):r is AllocationReceipt{return validAllocationReceipt(r)&&r.payload.venueId===this.venueId&&(!currentActor||r.payload.cloudAccountId===this.#account);}
- #failure(r:Extract<ApiResult<unknown>,{ok:false}>){this.retryAt=Math.max(this.retryAt,Date.now()+r.retryAfterMs);this.error=r.status===429?'limited':r.status===401?'pairSession':r.status===403?'forbidden':r.code==='entitlement_unavailable'?'fiscalEntitlement':r.code==='custody_unavailable'?'fiscalCustody':r.code==='continuity_unavailable'?'fiscalContinuity':r.code==='binding_conflict'?'fiscalConflict':r.code==='invalid_input'||r.code==='reservation_untrusted'?'fiscalInvalid':'unavailable';
+ #failure(r:Extract<ApiResult<unknown>,{ok:false}>){this.retryAt=Math.max(this.retryAt,Date.now()+r.retryAfterMs);this.error=r.status===429?'limited':r.status===401?'pairSession':r.status===403?'forbidden':r.code==='entitlement_unavailable'?'fiscalEntitlement':r.code==='custody_unavailable'?'fiscalCustody':r.code==='continuity_unavailable'?'fiscalContinuity':r.code==='binding_conflict'?'fiscalConflict':r.code==='space_exhausted'?'fiscalExhausted':r.code==='reservation_untrusted'?'fiscalTrust':r.code==='invalid_input'?'fiscalInvalid':'unavailable';
   if(r.status===401||r.status===403){this.receipt=undefined;this.page=undefined;this.imported=undefined;this.#confirmations();}
  }
  async reserve(input:ReserveInput){
@@ -61,7 +61,7 @@ export class FiscalAllocationController{
   else{
    if(!result.ok)this.#failure(result);else this.error='fiscalUncertain';
    this.uncertain=result.ok||result.status===0||result.code==='unexpected_response'||result.code==='history_uncertain'||(result.status>=500&&!['entitlement_unavailable','custody_unavailable','continuity_unavailable'].includes(result.code));
-   if(this.uncertain)this.error='fiscalUncertain';else this.pendingRequest=undefined;
+   if(this.uncertain){if(result.ok||!['space_exhausted','reservation_untrusted'].includes(result.code))this.error='fiscalUncertain';}else this.pendingRequest=undefined;
   }
   this.#changed();
  }
@@ -71,7 +71,7 @@ export class FiscalAllocationController{
   if(result.ok&&validAllocationStatus(result.value)&&result.value.state==='recorded'&&result.value.receipt&&this.#result(result.value.receipt,request)){this.uncertain=false;this.pendingRequest=undefined;this.error=undefined;}
   else if(result.ok&&validAllocationStatus(result.value)&&result.value.state==='recorded'&&result.value.receipt===null&&request.action==='import-paper'){
    this.uncertain=false;this.pendingRequest=undefined;await this.#write(request);return;
-  }else{if(!result.ok)this.#failure(result);this.uncertain=true;this.canRetryPending=result.ok&&validAllocationStatus(result.value)&&result.value.state==='unknown';if(result.ok)this.error='fiscalUncertain';}
+  }else{if(!result.ok)this.#failure(result);this.uncertain=true;this.canRetryPending=result.ok&&validAllocationStatus(result.value)&&result.value.state==='unknown';if(result.ok&&!['fiscalExhausted','fiscalTrust'].includes(this.error??''))this.error='fiscalUncertain';}
   this.#changed();
  }
  async retryPending(){if(!this.#available()||!this.uncertain||!this.canRetryPending||!this.pendingRequest)return;await this.#write(this.pendingRequest);}

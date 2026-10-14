@@ -8,6 +8,7 @@ export function chooseLocale(saved: string | null, languages: readonly string[])
   return 'en';
 }
 const en = {
+  fiscalCooldown:'You can continue in',
   fiscalRetry:'Resend original request',
   fiscalTitle:'Fiscal recovery receipts',
   fiscalIntro:'Reserve fresh identities, then consume the reservation before taking its signed receipt to local recovery.',
@@ -48,6 +49,8 @@ const en = {
   fiscalCustody:'Taxpayer or operator authority is unavailable. Check with your custodian.',
   fiscalContinuity:'The current outside register is unavailable. Try again shortly.',
   fiscalEntitlement:'New reservations are unavailable. You can still inspect retained receipts.',
+  fiscalExhausted:'No unused identities remain. Contact your custodian.',
+  fiscalTrust:'Signed evidence could not be verified. Contact your custodian.',
   fiscalConflict:'This evidence conflicts with recorded history. Check with your custodian.',
   fiscalInvalid:'Check the fields and signed evidence.',
   fiscalRequired:'Enter a valid value.',
@@ -268,6 +271,7 @@ const en = {
 };
 export type Copy = typeof en;
 const es: Copy = {
+  fiscalCooldown:'Puedes continuar en',
   fiscalRetry:'Reenviar solicitud original',
   fiscalTitle:'Justificantes de recuperación fiscal',
   fiscalIntro:'Reserva identidades nuevas y consume la reserva antes de llevar el justificante firmado a la recuperación local.',
@@ -308,6 +312,8 @@ const es: Copy = {
   fiscalCustody:'La autoridad del contribuyente u operador no está disponible. Consulta al custodio.',
   fiscalContinuity:'El registro externo actual no está disponible. Vuelve a intentarlo pronto.',
   fiscalEntitlement:'No hay nuevas reservas disponibles. Puedes consultar los justificantes conservados.',
+  fiscalExhausted:'No quedan identidades libres. Consulta al custodio.',
+  fiscalTrust:'No se pudo verificar la prueba firmada. Consulta al custodio.',
   fiscalConflict:'Esta prueba contradice el historial registrado. Consulta al custodio.',
   fiscalInvalid:'Comprueba los campos y la prueba firmada.',
   fiscalRequired:'Introduce un valor válido.',
