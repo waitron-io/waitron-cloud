@@ -91,10 +91,11 @@ test('a competing pairing cannot transfer the same local venue to another instal
 test('expiry after waiting for membership lock rolls back pairing and registration',async()=>{
   const a=machine();await store.start(a);await approve(a);const block=await db.secondPool.connect();await block.query('BEGIN');
   await block.query('SELECT 1 FROM organisation_memberships FOR UPDATE');
-  await db.pool.query("UPDATE pairing_requests SET expires_at=clock_timestamp()+interval '100 milliseconds'");
+  // Observe the lock while authority is valid, then use the database clock for expiry.
+  const expiresAt=(await db.pool.query("UPDATE pairing_requests SET expires_at=clock_timestamp()+interval '5 seconds' RETURNING expires_at")).rows[0].expires_at;
   const pending=unavailable(store.complete(completion(a)));
   let blocked=false;
-  try { for(let i=0;i<100;i++){if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[db.schema])).rowCount){blocked=true;break;}await new Promise(r=>setTimeout(r,10));} await new Promise(r=>setTimeout(r,150)); }
+  try { for(let i=0;i<100;i++){if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[db.schema])).rowCount){blocked=true;break;}await new Promise(r=>setTimeout(r,10));} await db.secondPool.query("SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM ($1::timestamptz-clock_timestamp())))+0.05)",[expiresAt]); }
   finally {await block.query('COMMIT');block.release();}
   await pending;assert.equal(blocked,true);assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');
 });
