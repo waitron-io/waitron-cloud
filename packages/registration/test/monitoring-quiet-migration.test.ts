@@ -273,6 +273,7 @@ test('legacy backfill keeps 103 recipients in statements of at most 100 rows', a
        INSERT INTO fixture_batch_sizes VALUES(TG_TABLE_NAME,size); RETURN NULL;
       END $$;
       CREATE FUNCTION fixture_monitor_ddl() RETURNS event_trigger LANGUAGE plpgsql AS $$ BEGIN
+       IF current_schema() IS DISTINCT FROM '${f.schema}' THEN RETURN; END IF;
        IF to_regclass('venue_alert_recipients') IS NOT NULL AND NOT EXISTS (
         SELECT 1 FROM pg_trigger WHERE tgrelid=to_regclass('venue_alert_recipients') AND tgname='fixture_recipient_batch'
        ) THEN
@@ -283,6 +284,13 @@ test('legacy backfill keeps 103 recipients in statements of at most 100 rows', a
       CREATE EVENT TRIGGER ${event} ON ddl_command_end WHEN TAG IN ('CREATE TABLE') EXECUTE FUNCTION fixture_monitor_ddl();
       CREATE TRIGGER fixture_delivery_batch AFTER UPDATE ON service_alert_deliveries REFERENCING NEW TABLE AS fixture_new_rows
        FOR EACH STATEMENT EXECUTE FUNCTION fixture_monitor_batch()`);
+    await assert.doesNotReject(async () => {
+      const neighbour = await fixture();
+      try {
+        assert.equal((await neighbour.pool.query(`SELECT count(*) FROM pg_trigger
+          WHERE tgrelid='venue_alert_recipients'::regclass AND tgname='fixture_recipient_batch'`)).rows[0].count, '0');
+      } finally {await neighbour.close();}
+    }, 'the database-wide fixture trigger must leave another test schema alone');
     await migrate(f.pool);
     const episode = (await f.pool.query('SELECT id FROM venue_alert_episodes WHERE incident_id=$1', [record.incident])).rows[0].id;
     assert.equal((await f.pool.query('SELECT count(*) FROM venue_alert_recipients WHERE episode_id=$1', [episode])).rows[0].count, '103');

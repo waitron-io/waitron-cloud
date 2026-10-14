@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {DatabaseSync} from 'node:sqlite';
-import {test} from 'node:test';
+import {before,after,test} from 'node:test';
 import {SignupStore,RegistrationStore} from '@waitron-cloud/registration';
 import {database} from '../../account-http/test/fixtures.ts';
 import {BackupCatalogue} from '../src/catalogue.ts';
@@ -15,9 +15,14 @@ import {receipt} from '../src/storage.ts';
 import {BackupWorker,type RestoreVerifier} from '../src/worker.ts';
 import {createContainerWaitronVerifier} from '../src/container-verifier.ts';
 
-test('database worker survives resource failures, preserves venue identity and verifies later work',async()=>{
- const owner='worker-'+randomUUID(),image='cloud-verifier-test:'+owner,root=fileURLToPath(new URL('../../../',import.meta.url)),docker=(...args:string[])=>execFileSync('docker',args,{encoding:'utf8',timeout:120000,stdio:['pipe','pipe','pipe']}).trim();
+const owner='worker-'+randomUUID(),image='cloud-verifier-test:'+owner,root=fileURLToPath(new URL('../../../',import.meta.url)),docker=(...args:string[])=>execFileSync('docker',args,{encoding:'utf8',timeout:120000,stdio:['pipe','pipe','pipe']}).trim();
+// Image preparation has the Docker command's own budget before the worker deadline starts.
+before(()=>{
  docker('build','-q','-t',image,'-f',join(root,'packages/backups/test/container-fixture/Dockerfile'),root);
+},{timeout:150000});
+after(()=>{const ids=docker('ps','-aq','--filter','label=cloud.backup-verifier.owner='+owner).split(/\s+/).filter(Boolean);if(ids.length)docker('rm','-f',...ids);docker('image','rm',image);});
+
+test('database worker survives resource failures, preserves venue identity and verifies later work',async()=>{
  const db=await database(),scratch=await mkdtemp(join(tmpdir(),'container-worker-')),objects=new Map<string,Buffer>();
  try{
   const path=join(scratch,'source.db'),sqlite=new DatabaseSync(path);sqlite.exec('CREATE TABLE proof(value TEXT)');sqlite.close();const body=await readFile(path);
@@ -45,5 +50,5 @@ test('database worker survives resource failures, preserves venue identity and v
   }
   assert.deepEqual((await db.pool.query('SELECT venue_id,count(*)::int AS count FROM backup_points GROUP BY venue_id ORDER BY count')).rows,[{venue_id:venues[1]!.venueId,count:1},{venue_id:venues[0]!.venueId,count:4}]);
   assert.equal((await worker.status()).failures,3);
- }finally{await db.close();await rm(scratch,{recursive:true,force:true});const ids=docker('ps','-aq','--filter','label=cloud.backup-verifier.owner='+owner).split(/\s+/).filter(Boolean);if(ids.length)docker('rm','-f',...ids);docker('image','rm',image);}
+ }finally{await db.close();await rm(scratch,{recursive:true,force:true});}
 });

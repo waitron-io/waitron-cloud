@@ -165,9 +165,8 @@ Indexed venue/operation queries avoid whole-table tenant scans. Current custody
 checks protect both receipt pages and post-append consumption; fresh signed machine
 authentication recovers the same immutable operation after a proof expires. Paper
 import status records completion without inventing a Cloud receipt.
-Registration tests run in three CI file shards after the first full job
-hit its ten-minute limit while checks were still passing; every case, the
-30-second test deadline and ten-minute job deadline remain.
+Registration tests run in seven CI file shards. Every case and the 30-second
+test deadline remain; work jobs stop after eight minutes.
 The phone journey at `/fiscal-allocations` now reserves and explicitly consumes
 identities, reconciles uncertain replies using the same operation, exports the
 complete signed manual packet, pages retained receipts and imports existing signed
@@ -405,21 +404,44 @@ notifications separately.
 
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. CI runs type checking, each of the five
-  existing receipt suites and all workspace package suites in parallel, with a
-  ten-minute limit per work job. Browser packages install Chromium with at most
-  two attempts, each bounded to 120 seconds plus ten seconds to stop it. Main
-  pushes use a unique concurrency group per run so a later merge cannot cancel
-  an earlier merge's checks; superseded pull request runs still cancel.
-  The workflow text guard runs in the typecheck job. Individual test deadlines
-  and assertions are unchanged. The previous main
-  [run 36878576466](https://github.com/waitron-io/waitron-cloud/actions/runs/36878576466)
-  on `741dd7d1241d6b66d32ff711734469741e9c7cb0` spent 14m19s in its single
-  job, including 13m04s in `pnpm test`. Registration, backups and account HTTP
-  took about 180, 195 and 185 seconds respectively; portal took 155 seconds.
-  Aim for about four minutes per job and measure real runs before deciding
-  whether a package needs further splitting. This is a working target the
-  owner can change. The budget remains separate from intermittent fixture
-  failures; more time is not a diagnosis of a failing assertion.
+  existing receipt suites and all workspace package suites in parallel. Registration
+  uses seven file shards, account HTTP and portal use three each, and backups uses
+  two. The other packages keep one job each. Each file runs once, with its original
+  assertions and test deadline. The authenticator clock-rollover case has its own
+  portal file so sharding can separate its two real clock waits from the main
+  authenticator journey. All work jobs have an eight-minute limit; the target is
+  at most five minutes per job and about ten minutes for the whole run, including
+  setup and queueing. Measure both the candidate and its merge before claiming the
+  target is met.
+  Browser packages install Chromium with at most two attempts, each bounded to
+  120 seconds plus ten seconds to stop it. Main pushes use a unique concurrency
+  group per run so a later merge cannot cancel an earlier merge's checks;
+  superseded pull request runs still cancel. The workflow text guard checks shard
+  completeness and deadlines; it also executes the summary shell command with
+  successful, failed, skipped, cancelled and missing prerequisite results.
+  The summary refuses any unsuccessful prerequisite, including any failed shard.
+  [Run 38500339948](https://github.com/waitron-io/waitron-cloud/actions/runs/38500339948)
+  on `9bb8e8644d5ce9993fffa3f7ec13170d81de5ae4` took 9m45s in portal and
+  9m02s in account HTTP before this split. The package logs counted 1,476 tests;
+  compare the sum of every shard's count with each package's original count.
+  Whole-package coverage must remain whole-package if a package later enables it.
+  Before you push, run the complete suites of every changed package and its
+  dependents locally; changes to shared configuration need all package suites.
+  On an 18-core local runner, the unsplit registration suite exhausts PostgreSQL's
+  shared lock table while resetting disposable schemas (`53200: out of shared
+  memory`). For a full local package run, put `--test-concurrency=2` before the
+  file list, for example
+  `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-concurrency=2 --test-timeout=30000 'test/*.test.ts'`.
+  Keep the package's original test deadline and any build step. Appending the
+  concurrency option to the package script leaves it after the files and does
+  not limit this runner. The fixture's default lock capacity for a full local
+  parallel run remains open; preserve every assertion when addressing it.
+  The migration batch-size fixture now confines its database-wide DDL trigger
+  to its own schema. A second populated fixture proves that other tests can
+  migrate while it is active; the original 103-recipient and 100-row batch
+  assertions remain.
+  This budget is separate from intermittent fixture failures; more time is not
+  a diagnosis of a failing assertion.
   **Two fixture failures reproduced after the authenticator merge.**
   [Run 38373683976](https://github.com/waitron-io/waitron-cloud/actions/runs/38373683976)
   on docs-only `7860981` failed registration and portal. Advancing each clock read
@@ -581,7 +603,7 @@ notifications separately.
   replacement, single-use codes, email reset with the factor retained, independent passkeys,
   removal, cancellation, lost replies, keyboard focus, accessibility and temporary-state clearing:
   `node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test
-  --test-timeout=120000 test/authenticator-browser.test.ts test/passkey-browser.test.ts
+  --test-timeout=120000 test/authenticator-browser.test.ts test/authenticator-rollover.test.ts test/passkey-browser.test.ts
   test/account-security-browser.test.ts test/session.test.ts`.
   The [operator guide](authenticator-app.md) documents independent keys, explicit policy,
   account-first re-encryption and retained-backup custody. Rotation tests preserve versions,
@@ -1017,9 +1039,14 @@ notifications separately.
   survives and verifies later work. Two real Waitron snapshots at revision
   `00496fcd182a5c2c9189cc3faf0f8f22d3baf8ac` restore with 1024 MiB memory and 256 MiB scratch.
   See [the containment receipt and limits](backup-verifier-containment.md).
-  Container-test image preparation has a separate 150-second setup budget around its
-  120-second Docker command limit; individual test deadlines and containment assertions
-  stay unchanged. A controlled 31-second build delay reproduces the former setup timeout.
+  Both container-verifier and database-worker image preparation have a separate
+  150-second setup budget around their 120-second Docker command limit; individual
+  test deadlines and containment assertions stay unchanged. A controlled 31-second
+  build delay reproduces the former setup timeout. Separate CI jobs give each file
+  a fresh Docker build cache. The database-worker CI case reached its 30-second
+  deadline, but did not record the build duration separately. The same controlled
+  build delay now passes its unchanged 30-second worker test after image preparation
+  moves into the setup hook; the historical CI stage timings remain unproved.
   Production host/kernel isolation, hostile native exploits, fleet sizing and large archives remain
   unverified; the process-only development adapter still lacks these total-resource bounds.
   The verifier distinguishes bounded infrastructure failures from archive verdicts:
