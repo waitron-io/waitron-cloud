@@ -36,13 +36,21 @@ test('executed summary consumes needs objects and the current job API, refusing 
     const fixture=join(root,'jobs.json');
     const gh=join(root,'gh');
     writeFileSync(gh,'#!/bin/sh\n[ "$1" = api ] || exit 2\ncat "$CI_FIXTURE"\n',{mode:0o700});
-    const plan={packages:[{package:'@waitron-cloud/operations',shard:1}],receipts:[],typecheck:true,reuse:null};
-    const results={changes:{result:'success'},typecheck:{result:'success'},packages:{result:'success'},receipts:{result:'skipped'}};
-    const jobs=['changes','typecheck','package (@waitron-cloud/operations)'].map(name=>({name,status:'completed',conclusion:'success'}));
+    const plan={packages:[{package:'@waitron-cloud/operations',shard:1}],receipts:['test:local-stack'],typecheck:true,reuse:null};
+    const results={changes:{result:'success'},typecheck:{result:'success'},packages:{result:'success'},receipts:{result:'success'}};
+    const jobs=['changes','typecheck','package (@waitron-cloud/operations)','receipt (test:local-stack)'].map(name=>({name,status:'completed',conclusion:'success'}));
     const env={...process.env,PATH:`${root}:${process.env.PATH}`,CI_FIXTURE:fixture,CI_PLAN:JSON.stringify(plan),CI_RESULTS:JSON.stringify(results),GITHUB_REPOSITORY:repository,GITHUB_RUN_ID:'42'};
     const run=()=>spawnSync(process.execPath,['scripts/ci-summary.mjs'],{env,encoding:'utf8'});
     writeFileSync(fixture,JSON.stringify([{jobs}]));assert.equal(run().status,0);
     writeFileSync(fixture,JSON.stringify([{jobs:jobs.slice(0,-1)}]));const missing=run();assert.equal(missing.status,1);assert.match(missing.stderr,/Missing or duplicate job/);
+    writeFileSync(fixture,JSON.stringify([{jobs}]));
+    for (const group of ['changes','typecheck','packages','receipts']) {
+      for (const result of ['failure','cancelled','skipped','','queued','in_progress']) {
+        env.CI_RESULTS=JSON.stringify({...results,[group]:{result}});
+        assert.equal(run().status,1,`${group}=${result} must refuse success`);
+      }
+    }
+    env.CI_RESULTS=JSON.stringify(results);
     writeFileSync(gh,'#!/bin/sh\nexit 1\n',{mode:0o700});assert.equal(run().status,1);
   } finally {rmSync(root,{recursive:true,force:true});}
 });
