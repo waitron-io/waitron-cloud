@@ -21,7 +21,7 @@ test('receipt selector fixtures retain their assertions after dependency inputs 
     }
     git('add', '-A'); git('commit', '-s', '-qm', 'Change dependency fixture inputs');
     const env = {...process.env}; delete env.NODE_TEST_CONTEXT;
-    const result = spawnSync('node', ['--test', '--test-reporter=tap', '--test-name-pattern=unrelated package changes omit',
+    const result = spawnSync('node', ['--test', '--test-reporter=tap', '--test-concurrency=1', '--test-name-pattern=unrelated package changes omit',
       'scripts/ci-capacity-receipt.test.mjs', 'scripts/ci-database-receipt.test.mjs',
       'scripts/ci-gateway-receipt.test.mjs', 'scripts/ci-local-stack-receipt.test.mjs'],
     {cwd: root, env, encoding: 'utf8', timeout: 60_000});

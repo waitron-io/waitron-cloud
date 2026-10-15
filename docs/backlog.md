@@ -531,7 +531,7 @@ notifications separately.
   saved audited dependency inputs, so an unrelated manifest or lock edit does not
   invalidate their positive test setup. Their original omission and refusal
   assertions remain; a separate real-clone regression changes every workspace
-  manifest and the lockfile before running the four positive checks. Actual
+  manifest and the lockfile before running the four positive checks sequentially. Actual
   dependency changes still retain every receipt in the production planner.
   The parser's current-lock inventory check still pins 215 package/snapshot
   records and the original importer counts. A new dependency record needs an

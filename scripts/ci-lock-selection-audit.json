@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "inputSha256": "22b3ecbb8b734c6bd02486604290361b8c896f7b5405e4bbfa91c3d2239a95d6",
+  "inputSha256": "09d694cfa52cdf9a917f79c8cbce0994cebc32b6704fb52cd371543a456577af",
   "manifests": {
     "apps/portal/package.json": "d50ea3ff6254050ace02a8739ae7b83130f8e4a75dc4a2ea6c5b40380aab6d76",
     "packages/account-http/package.json": "2741c09445a8141969a5f5f051144eb61f8c762ff9afb7c4433b4e9bab681811",
