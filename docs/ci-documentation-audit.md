@@ -49,3 +49,5 @@ When a documentation-only pull request passes and its merge has the identical
 tree, the main run reuses that result and also skips package suites. This proves
 the same documented selection, rather than rerunning previously unchanged code.
 It does not establish that an unrelated failing or intermittent test has recovered.
+
+Scratch selection proof, not for merging.
