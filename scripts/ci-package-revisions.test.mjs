@@ -409,7 +409,10 @@ test('missing helper evidence in either tree retains every package', () => fixtu
   const base = commit();
   write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
   const head = commit();
-  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'portal']);
+  const validRead = (...args) => git(...args);
+  validRead.readBlobs = ids => packageInputs.readGitBlobs(ids,
+    input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input}));
+  assert.deepEqual(plan(base, head, validRead).packages.map(row => row.package), ['catalogue', 'portal']);
   const id = git('rev-parse', `${base}:scripts/adapter.mjs`).trim();
   for (const revision of [1, 2]) {
     let current = 0;
