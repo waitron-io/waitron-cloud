@@ -520,7 +520,8 @@ notifications separately.
   They do not launch the deployed service stack. Changed or missing readers,
   new directory entries, installation hooks, attributes or overrides keep the checks.
   Unknown/full changes retain all five;
-  unaudited portal work retains local-stack, and isolated ui-smoke needs no receipt. Registration
+  portal source changes also omit local-stack when its audit holds, otherwise they
+  retain it. Isolated ui-smoke needs no receipt. Registration
   uses seven file shards, account HTTP and portal use three each, and backups uses
   two. The other packages keep one job each. Selected receipt suites share one
   setup and run in one job. The runner validates every selected suite before
