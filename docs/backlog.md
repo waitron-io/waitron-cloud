@@ -513,11 +513,17 @@ notifications separately.
   accepts at most two MiB, while production Git reads retain their one-MiB cap.
   Shared records are hashed once. The graph has a 500,000-visit limit and the
   complete comparison hashes at most 32 MiB of serialized input per lockfile.
-  These diagnostics still select
-  the full suite: package and root-file reader coverage must be established before
-  the resolved sets can narrow execution. Formatting-only lock changes also keep
-  full work. Lockfile selection, wider package precision and their real controls
-  remain open. The plan also requires measured
+  A lockfile-only PR can select the affected packages and their saved source/helper
+  consumers when both revisions match the complete other-input audit in
+  `scripts/ci-lock-selection-audit.json`. The audit pins every other tracked file,
+  including manifests, installation policy, root readers and documentation. A new
+  reader invalidates it until you review the inputs again. The selected packages
+  include consumers from both saved revisions; all compiler and receipt checks
+  still run. Root dependency changes, changed workspace membership, formatting-only
+  locks, mixed paths, missing evidence and stale audits retain full work. This
+  bounded route does not yet cover dependency additions that also edit a manifest
+  or eliminate the need to renew complete-input certificates. Wider lock/root
+  selection, package precision and their real scratch controls remain open. The plan also requires measured
   grouping to reduce the full run toward 55 rounded job-minutes while keeping
   each work job near five minutes. The historical D66/D67 full-run samples used 72 and
   73 minutes; these are timestamp-based rounding estimates, not invoices.

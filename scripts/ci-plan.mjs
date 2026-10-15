@@ -1,18 +1,20 @@
 import {execFileSync} from 'node:child_process';
 import {appendFileSync, readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
-import {loadWorkspace, scopeForPaths, workPlan} from './ci-scope.mjs';
+import {loadWorkspace, scopeForPaths, workPlan, receiptSuites} from './ci-scope.mjs';
 import {findReuse} from './ci-reuse.mjs';
 import {documentationPlan} from './ci-docs.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
 import {scriptPlan} from './ci-scripts.mjs';
 import {scopeForRevisions, readGitBlobs} from './ci-package-revisions.mjs';
 import {describeLockChanges} from './ci-lock.mjs';
+import {lockPackageScope} from './ci-lock-selection.mjs';
 
 export function createPlan(event, context, workspace, git, api) {
   let scope = scopeForPaths([],workspace);
   let reuse = null;
   let revisions;
+  let lockSelection;
   let reason = 'Unverified merge or unknown diff: full suite';
   if (event.pull_request) {
     try {
@@ -30,7 +32,11 @@ export function createPlan(event, context, workspace, git, api) {
         if (scripts) return {packages: [], receipts: [], typecheck: false, reuse: null, scripts, reason: `Audited root script: ${paths.join(', ')}`};
       } catch { /* Missing or stale reader evidence keeps the existing full fallback. */ }
       scope = scopeForPaths(paths,workspace);
-      if (!scope.full && scope.packages.length < workspace.length) {
+      if (paths.length === 1 && paths[0] === 'pnpm-lock.yaml') {
+        try { lockSelection = lockPackageScope(mergeBase, head.sha, workspace, git); scope = lockSelection.scope; }
+        catch { /* Unproved root or package readers retain full lockfile work. */ }
+      }
+      if (!lockSelection && !scope.full && scope.packages.length < workspace.length) {
         try {
           const revisions = scopeForRevisions(paths, workspace, mergeBase, head.sha, git);
           scope.packages = [...new Set([...scope.packages, ...revisions.packages])].sort();
@@ -43,7 +49,7 @@ export function createPlan(event, context, workspace, git, api) {
       }
       revisions = {base:mergeBase, head:head.sha};
       if (!reason.startsWith('Unverified package revisions:')) reason = scope.full ? `Shared, unaudited or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
-      if (paths.includes('pnpm-lock.yaml')) reason += `; ${describeLockChanges(mergeBase, head.sha, git)}`;
+      if (paths.includes('pnpm-lock.yaml')) reason += `; ${lockSelection?.reason ?? describeLockChanges(mergeBase, head.sha, git)}`;
     } catch {
       reason = 'Cannot determine PR diff: full suite';
     }
@@ -56,7 +62,8 @@ export function createPlan(event, context, workspace, git, api) {
   }
   if (reuse) return {packages:[],receipts:[],typecheck:false,reuse,reason:`same tree as PR head ${reuse.sha}, run ${reuse.runId}`};
   const work = workPlan(scope,workspace);
-  if (revisions) {
+  if (lockSelection) work.receipts = [...receiptSuites];
+  if (revisions && !lockSelection) {
     const selection = receiptPlan(work.receipts, scope, revisions.base, revisions.head, git);
     work.receipts = selection.receipts;
     if (selection.reason) reason += `; ${selection.reason}`;
