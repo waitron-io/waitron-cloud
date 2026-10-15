@@ -227,6 +227,19 @@ isolated runs and a diagnostic full run did not reproduce that original failure;
 its exact historical cause remains unproved. If this test fails again, use its
 boundary diagnostics before changing authority checks or deadlines.
 
+**Continuity fixture diagnostics.** A package-only CI-selection control passed
+131 of 133 fiscal tests: `continuity.test.ts` reached an absent worker receipt in
+the replacement-fence case, and the 150 ms witness case did not observe its
+projection waiting on the held PostgreSQL lock. The same fiscal tree passed all
+133 tests in the candidate gate. An isolated diagnostic run passed both cases
+and observed the lock after 15 ms, then refused projection after 192 ms. These
+passes do not explain the original failures. The machine also ran concurrent
+review mutations; resource pressure is an assumption, not an established cause.
+Before changing either check, capture the worker's returned code before receipt
+access and the witness-verification, projection, lock and refusal times. Keep the
+writer/witness policies, lock observation, identity and refusal assertions intact.
+Do not overlap a large review mutation batch with full package qualification.
+
 ## Initial focus
 
 - Launch first in Spain on AWS. AWS documents Europe (Spain) as `eu-south-2` and
@@ -489,7 +502,10 @@ notifications separately.
   targets, validator, migration-count helper, migration module, transaction helper,
   installation inputs and CI wiring. The suite checks syntax and validators; it
   does not execute the physical recovery drill. Changed imports or missing evidence
-  keep the receipt. The shared installation check preserves the capacity guards.
+  keep the receipt. Any tracked `.gitattributes` file also keeps capacity and
+  database-recovery checks: checkout encoding can change a reader without changing
+  its stored Git hash. A fresh-clone control proves the UTF-16 import failure.
+  The shared installation check preserves the earlier capacity guards.
   The local-stack and public-gateway receipts remain conservative for backend work. Unknown/full changes retain all five;
   portal alone runs local-stack, and isolated ui-smoke needs no receipt. Registration
   uses seven file shards, account HTTP and portal use three each, and backups uses

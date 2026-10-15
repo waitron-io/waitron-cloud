@@ -25,7 +25,7 @@ export function assertInstallationInputs(entries) {
   assert.ok(entries.every(entry => !/(?:^|\/)node_modules(?:\/|$)/.test(entry.split('\t')[1])), 'Tracked dependency overrides invalidate the audit');
   const installation = entries.filter(entry => {
     const path = entry.split('\t')[1];
-    return path && ((!path.includes('/') && !path.endsWith('.md')) || /(?:^|\/)package\.json$/.test(path) || /^(?:packages|apps)\/[^/]+\/(?:\.npmrc|\.pnpmfile\.cjs)$/.test(path));
+    return path && ((!path.includes('/') && !path.endsWith('.md')) || /(?:^|\/)\.gitattributes$/.test(path) || /(?:^|\/)package\.json$/.test(path) || /^(?:packages|apps)\/[^/]+\/(?:\.npmrc|\.pnpmfile\.cjs)$/.test(path));
   });
   assert.deepEqual(installation, installInputs, 'Unaudited dependency installation inputs');
 }

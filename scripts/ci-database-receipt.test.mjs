@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
-import {chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
+import {execFileSync, spawnSync} from 'node:child_process';
+import {chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import test from 'node:test';
@@ -144,4 +144,64 @@ for (const [name, path, value] of [
     rmSync(join(root, path));
     assert.deepEqual(select(base, commit()).receipts, receiptSuites);
   }, change);
+});
+
+
+test('package-scoped installation hooks in either revision retain database recovery', () => {
+  for (const path of ['packages/registration/.npmrc', 'packages/registration/.pnpmfile.cjs']) {
+    fixture(({root, base, head, select, commit}) => {
+      writeFileSync(join(root, path), path.endsWith('.npmrc') ? 'node-linker=hoisted\n' : 'module.exports = {hooks: {}};\n');
+      const changed = commit();
+      assert.deepEqual(select(base, changed).receipts, receiptSuites, path);
+      assert.deepEqual(select(changed, head).receipts, receiptSuites, path);
+    });
+  }
+});
+
+test('combined audits retain earlier omissions and ignore unrelated top-level prose', () => {
+  fixture(({select}) => {
+    assert.deepEqual(select().receipts, ['test:public-gateway-limits', 'test:local-stack']);
+  }, root => {
+    writeFileSync(join(root, 'README.md'), '# Receipt fixture\n');
+    for (const path of [
+      'packages/backups/src/object-transfer.ts', 'packages/backups/src/storage.ts',
+      'scripts/backup-capacity-fixture.mjs', 'scripts/backup-capacity-fixture.test.mjs',
+      'scripts/cloud-two-venue-milestone-receipt.mjs', 'scripts/managed-recovery-receipt.fixture.mjs',
+      'scripts/milestone-proof-helpers.mjs', 'scripts/milestone-proof-helpers.test.mjs',
+      'scripts/verify-backup-capacity-receipt.mjs', 'scripts/verify-backup-capacity-receipt.test.mjs',
+      'scripts/verify-backup-transfer-receipt.mjs', 'scripts/verify-backup-transfer-receipt.test.mjs',
+      'scripts/verify-managed-recovery-receipt.mjs', 'scripts/verify-managed-recovery-receipt.test.mjs',
+      'scripts/verify-two-venue-milestone-receipt.mjs', 'scripts/verify-two-venue-milestone-receipt.test.mjs',
+    ]) {
+      mkdirSync(dirname(join(root, path)), {recursive: true});
+      copyFileSync(path, join(root, path));
+    }
+  });
+});
+
+
+test('checkout attributes in either revision keep the receipt even when stored reader hashes match', () => {
+  fixture(({root, git, base, head, select}) => {
+    const path = 'packages/registration/.gitattributes';
+    writeFileSync(join(root, path), 'src/migrate.ts working-tree-encoding=UTF-16LE\n');
+    git('add', path); git('commit', '-s', '-qm', 'Change checkout encoding');
+    const changed = git('rev-parse', 'HEAD').trim();
+    assert.equal(git('ls-tree', base, 'packages/registration/src/migrate.ts'), git('ls-tree', changed, 'packages/registration/src/migrate.ts'));
+    assert.deepEqual(select(base, changed).receipts, receiptSuites);
+    assert.deepEqual(select(changed, head).receipts, receiptSuites);
+    const checkout = join(root, 'encoded-checkout');
+    execFileSync('git', ['clone', '--no-hardlinks', root, checkout], {stdio: 'pipe'});
+    assert.equal(readFileSync(join(checkout, 'packages/registration/src/migrate.ts')).subarray(0, 8).toString('hex'), '69006d0070006f00');
+    const env = {...process.env};
+    // A separate test runner must not inherit the parent's child-runner marker.
+    delete env.NODE_TEST_CONTEXT;
+    const command = ['--test', 'scripts/database-recovery-migrations.test.mjs'];
+    const result = spawnSync(process.execPath, command, {cwd: checkout, encoding: 'utf8', env});
+    assert.notEqual(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout + result.stderr, /migrate\.ts|INVALID_TYPESCRIPT/);
+    copyFileSync('packages/registration/src/migrate.ts', join(checkout, 'packages/registration/src/migrate.ts'));
+    const restored = spawnSync(process.execPath, command, {cwd: checkout, encoding: 'utf8', env});
+    assert.equal(restored.status, 0, restored.stdout + restored.stderr);
+    assert.match(restored.stdout, /pass 4/);
+  });
 });
