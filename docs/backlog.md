@@ -239,6 +239,12 @@ Before changing either check, capture the worker's returned code before receipt
 access and the witness-verification, projection, lock and refusal times. Keep the
 writer/witness policies, lock observation, identity and refusal assertions intact.
 Do not overlap a large review mutation batch with full package qualification.
+A later local full fiscal run also reached the old-backup case's 30-second
+deadline and missed the same lock observation. A diagnostic-only run completed
+that backup case in 5,238 ms, observed the lock after 25 ms and refused expired
+history after 206 ms. These passes do not resolve the failures. Keep the dump,
+restore and worker-result stages when that case fails again; preserve both
+the 30-second deadline and the 150 ms witness policy.
 
 ## Initial focus
 
@@ -531,7 +537,10 @@ notifications separately.
   saved audited dependency inputs, so an unrelated manifest or lock edit does not
   invalidate their positive test setup. Their original omission and refusal
   assertions remain; a separate real-clone regression changes every workspace
-  manifest and the lockfile before running the four positive checks sequentially. Actual
+  manifest and the lockfile before running the four positive checks sequentially.
+  It requires all four test names, so a passing file with no matching test cannot
+  substitute for coverage. The saved manifest metadata must match its reviewed
+  nondependency fields in the audit. Actual
   dependency changes still retain every receipt in the production planner.
   The parser's current-lock inventory check still pins 215 package/snapshot
   records and the original importer counts. A new dependency record needs an
