@@ -1262,6 +1262,17 @@ notifications separately.
   network isolation, without activating a primary or contacting fiscal/payment services. Define the external-key format extension
   rather than assuming it exists in the inspected manifest v1.
 
+## Portal session test startup
+
+A local full portal run during the receipt-selection work passed 195 of 196
+cases, but `test/session.test.ts:59` timed out after three seconds waiting for the
+initial signed-in screen. Running that file separately passed both cases. The
+portal, backend and database harness sources match the preceding main revision;
+that comparison does not explain the failure. The failed run recorded no initial
+request/response or browser-error trace. Capture those boundaries, the rendered
+heading and fake-clock time if it fails again before attributing a cause or
+changing any check. The assertions and deadlines remain unchanged.
+
 ## Portal lost-reply test ordering
 
 - **Resolved: reconciliation stalled after the reply was dropped.**
