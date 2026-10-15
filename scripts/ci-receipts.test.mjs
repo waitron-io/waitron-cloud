@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, symlinkSync} from 'node:fs';
+import {chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import test from 'node:test';
@@ -27,6 +27,8 @@ function fixture(run, alter = () => {}) {
   const git = (...args) => execFileSync('git', args, {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
   try {
     git('init', '-q');
+    git('config', 'user.name', 'CI test');
+    git('config', 'user.email', 'ci@example.test');
     for (const path of [...inputs, 'package.json']) {
       mkdirSync(dirname(join(root, path)), {recursive: true});
       copyFileSync(path, join(root, path));
@@ -110,4 +112,18 @@ test('restoring a reader in the head cannot hide unaudited base inputs', () => {
     const head = git('rev-parse', 'HEAD').trim();
     assert.deepEqual(receiptPlan(receiptSuites, {full: false}, base, head, git).receipts, receiptSuites);
   }, root => writeFileSync(join(root, inputs[1]), '// Unaudited base reader\n'));
+});
+
+test('floating revisions and incomplete inventories cannot omit receipt work', () => {
+  fixture(({git, base, head}) => {
+    for (const [old, next] of [['HEAD', head], [base, 'HEAD']]) {
+      assert.deepEqual(receiptPlan(receiptSuites, {full: false}, old, next, git).receipts, receiptSuites);
+    }
+    const incomplete = (...args) => args[0] === 'ls-tree' ? git(...args) + 'unfinished tree entry' : git(...args);
+    assert.deepEqual(receiptPlan(receiptSuites, {full: false}, base, head, incomplete).receipts, receiptSuites);
+  });
+});
+
+test('a changed file mode invalidates the audit even when its contents match', () => {
+  fixture(({plan}) => assert.deepEqual(plan().receipts, receiptSuites), root => chmodSync(join(root, inputs[1]), 0o755));
 });

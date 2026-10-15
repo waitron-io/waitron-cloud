@@ -77,8 +77,8 @@ export function workPlan(scope, workspace, root = process.cwd()) {
     } else packages.push({package:name,shard:1});
   }
   if (!packages.length) throw new Error('Scope selected no tests');
-  // Receipt fixtures import backend packages and deployment helpers. Any backend change
-  // runs all receipts, including ones whose inputs are assembled dynamically.
+  // The baseline covers unbounded backend and deployment inputs. The PR planner
+  // may omit a receipt only with unchanged audited inputs in both revisions.
   const backend = scope.packages.some(name=>workspace.find(pkg=>pkg.name===name).directory.startsWith('packages/') && name !== '@waitron-cloud/ui-smoke');
   return {packages, receipts:scope.full || backend ? receiptSuites : scope.packages.includes('@waitron-cloud/portal') ? ['test:local-stack'] : [], typecheck:true};
 }
