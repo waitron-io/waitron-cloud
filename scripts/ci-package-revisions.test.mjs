@@ -409,6 +409,7 @@ test('missing helper evidence in either tree retains every package', () => fixtu
   const base = commit();
   write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
   const head = commit();
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'portal']);
   const id = git('rev-parse', `${base}:scripts/adapter.mjs`).trim();
   for (const revision of [1, 2]) {
     let current = 0;
@@ -422,4 +423,54 @@ test('missing helper evidence in either tree retains every package', () => fixtu
     assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
     assert.match(result.reason, /Unverified package revisions:.*Missing batched package input: scripts\/adapter.mjs.*full package suite/s);
   }
+}));
+
+
+test('directory helper entry points retain package readers', () => {
+  for (const entry of ['index.mjs', 'index.ts']) fixture(({root, git, write, commit}) => {
+    write(`scripts/helpers/${entry}`, "import '../catalogue-adapter.mjs';\n");
+    write('scripts/catalogue-adapter.mjs', "import '../packages/catalogue/src/index.mjs';\n");
+    write('packages/portal/src/index.mjs', "import '../../../scripts/helpers';\n");
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+      {full: false, packages: ['catalogue', 'portal']});
+  });
+});
+
+test('JavaScript and JSX helper imports retain TSX source readers', () => {
+  for (const extension of ['js', 'jsx']) fixture(({root, git, write, commit}) => {
+    write('scripts/adapter.tsx', "import '../packages/catalogue/src/index.mjs';\n");
+    write('packages/portal/src/index.mjs', `import '../../../scripts/adapter.${extension}';\n`);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+      {full: false, packages: ['catalogue', 'portal']});
+  });
+});
+
+test('mixed quote marks cannot hide package imports or helper chains', () => fixture(({root, git, write, commit}) => {
+  write('packages/gateway/src/index.mjs', `const text = "it's"; import '../../catalogue/src/index.mjs';\n`);
+  write('scripts/adapter.mjs', `const text = "it's"; import '../packages/catalogue/src/index.mjs';\n`);
+  write('packages/portal/src/index.mjs', `const text = "it's"; import '../../../scripts/adapter.mjs';\n`);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.deepEqual(scopeForPaths(['packages/catalogue/src/index.mjs'], loadWorkspace(root)),
+    {full: false, packages: ['catalogue', 'gateway']});
+  assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+    {full: false, packages: ['catalogue', 'gateway', 'portal']});
+}));
+
+
+test('quoted generated programs retain the broad scanner consumer floor', () => fixture(({root, git, write, commit}) => {
+  write('scripts/adapter.mjs', "const program = `const text=\"it's\"; import '../packages/catalogue/src/index.mjs';`;\n");
+  write('packages/portal/src/index.mjs', "import '../../../scripts/adapter.mjs';\n");
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+    {full: false, packages: ['catalogue', 'portal']});
 }));

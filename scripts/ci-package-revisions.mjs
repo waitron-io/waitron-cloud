@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {posix} from 'node:path';
-import {sourceDependencies, scopeForPaths} from './ci-scope.mjs';
+import {sourceDependencies, scopeForPaths, quotedReferences} from './ci-scope.mjs';
 
 function workspaceAt(sha, workspace, git) {
   assert.match(sha, /^[a-f0-9]{40}$/);
@@ -52,12 +52,11 @@ function workspaceAt(sha, workspace, git) {
     // Visit saved helper sources too; a cycle must not expand the queue forever.
     for (let index = 0; index < sources.length; index++) {
       const source = sources[index];
-      for (const match of source.source.matchAll(/['"`]([^'"`\n]+)['"`]/g)) {
-        const value = match[1];
+      for (const value of quotedReferences(source.source)) {
         const target = value.startsWith('.') ? posix.normalize(posix.join(posix.dirname(source.path), value)) : value;
         if (packages.some(other => target.startsWith(`${other.directory}/`))) continue;
-        for (const path of [target, target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'),
-          ...['.mjs', '.cjs', '.js', '.ts', '.mts', '.cts', '.tsx', '.jsx'].map(ext => target + ext)]) {
+        for (const path of [target, target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'), target.replace(/\.jsx?$/, '.tsx'),
+          ...['.mjs', '.cjs', '.js', '.ts', '.mts', '.cts', '.tsx', '.jsx'].flatMap(ext => [target + ext, posix.join(target, 'index' + ext)])]) {
           if (!modules.has(path) || visited.has(path)) continue;
           visited.add(path);
           sources.push({path, source: modules.get(path)});

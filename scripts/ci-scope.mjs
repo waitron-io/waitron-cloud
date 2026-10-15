@@ -3,16 +3,23 @@ import {execFileSync} from 'node:child_process';
 import {readFileSync, readdirSync, realpathSync} from 'node:fs';
 import {dirname, join, relative, resolve} from 'node:path';
 
+export function* quotedReferences(source) {
+  // Generated fixture programs contain nested quoted paths. The broad scan keeps
+  // those readers while the matching-delimiter scan also handles mixed quotes.
+  for (const match of source.matchAll(/['"`]([^'"`\n]+)['"`]/g)) yield match[1];
+  for (const match of source.matchAll(/(['"`])((?:\\[^\n]|(?!\1)[^\\\n])+)\1/g)) yield match[2];
+}
+
 export function sourceDependencies(pkg, packages, sources, root = process.cwd()) {
   const dependencies = new Set();
   for (const {path, source} of sources) {
-    for (const match of source.matchAll(/['"`]([^'"`\n]+)['"`]/g)) {
-      const prefix=match[1].split('${')[0];
+    for (const value of quotedReferences(source)) {
+      const prefix=value.split('${')[0];
       const relativePath=prefix.startsWith('./') || prefix.startsWith('../');
       const target=relativePath ? relative(root,resolve(root,dirname(path),prefix)) : prefix;
       const owner=packages.find(other=>target===other.directory || target.startsWith(`${other.directory}/`) || prefix===other.name || prefix.startsWith(`${other.name}/`));
       if (owner && owner.name!==pkg.name) dependencies.add(owner.name);
-      else if (relativePath && match[1].includes('${') && !target.startsWith(`${pkg.directory}/`)) {
+      else if (relativePath && value.includes('${') && !target.startsWith(`${pkg.directory}/`)) {
         for (const other of packages) dependencies.add(other.name);
       }
     }
