@@ -9,7 +9,7 @@ import {createPlan} from './ci-plan.mjs';
 
 const policy = 'scripts/ci-lock-selection-audit.json';
 
-function fixture(run) {
+function fixture(run, unrelatedDirectory = 'packages/unrelated') {
   const root = mkdtempSync(join(tmpdir(), 'cloud-lock-selection-'));
   const git = (...args) => execFileSync('git', args, {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
   const write = (path, text) => {mkdirSync(join(root, path, '..'), {recursive: true}); writeFileSync(join(root, path), text);};
@@ -21,8 +21,12 @@ function fixture(run) {
     packages: {'adapter@1.0.0': {resolution: {integrity: 'sha512-YQ=='}}, 'leaf@1.0.0': {resolution: {integrity: 'sha512-Yg=='}}},
     snapshots: {'adapter@1.0.0': {dependencies: {leaf: '1.0.0'}}, 'leaf@1.0.0': {}},
   };
+  if (unrelatedDirectory !== 'packages/unrelated') {
+    delete lock.importers['packages/unrelated'];
+    lock.importers[unrelatedDirectory] = {};
+  }
   const save = () => write('pnpm-lock.yaml', Object.entries(lock).map(([key, value]) => `${key}: ${JSON.stringify(value)}\n`).join(''));
-  const workspace = ['catalogue', 'page', 'unrelated'].map(name => ({name, directory: `packages/${name}`, scripts: {test: 'node --test'}}));
+  const workspace = ['catalogue', 'page', 'unrelated'].map(name => ({name, directory: name === 'unrelated' ? unrelatedDirectory : `packages/${name}`, scripts: {test: 'node --test'}}));
   const audit = () => {
     git('add', '.');
     const entries = git('ls-files', '--stage', '-z').split('\0').filter(Boolean).map(entry => entry.replace(/ 0\t/, '\t'));
@@ -82,16 +86,17 @@ test('stale, missing or malformed reader audit in either tree retains the full s
   const base = commit();
   lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
   const head = commit();
-  for (const sha of [base, head]) for (const fault of ['missing', 'digest', 'version', 'symlink', 'inventory']) {
+  for (const sha of [base, head]) for (const fault of ['missing', 'digest', 'version', 'symlink', 'lock-symlink', 'inventory']) {
     const read = (...args) => {
       if (args[0] === 'show' && args[1] === `${sha}:${policy}`) {
         if (fault === 'missing') throw Error('Missing audit');
         if (fault === 'digest') return JSON.stringify({version: 1, inputSha256: '0'.repeat(64)});
-        if (fault === 'version') return JSON.stringify({version: 2, inputSha256: '0'.repeat(64)});
+        if (fault === 'version') return JSON.stringify({...JSON.parse(git(...args)), version: 2});
       }
       if (args[0] === 'ls-tree' && args.includes(sha) && args.includes('--full-tree')) {
         if (fault === 'inventory') return 'malformed\0';
         if (fault === 'symlink') return git(...args).replace(/100644(?= blob [a-f0-9]+\tscripts\/ci-lock-selection-audit.json)/, '120000');
+        if (fault === 'lock-symlink') return git(...args).replace(/100644(?= blob [a-f0-9]+\tpnpm-lock.yaml)/, '120000');
       }
       return git(...args);
     };
@@ -103,6 +108,15 @@ test('stale, missing or malformed reader audit in either tree retains the full s
   assertSelected(plan(base, refreshed), ['catalogue', 'page', 'unrelated']);
 }));
 
+test('an isolated application lock change retains all five receipts as well as the compiler', () => fixture(({lock, save, commit, plan}) => {
+  lock.importers['apps/desk'] = {dependencies: {view: {specifier: '^1.0.0', version: '1.0.0'}}};
+  lock.packages['view@1.0.0'] = {resolution: {integrity: 'sha512-dmlldw=='}};
+  lock.snapshots['view@1.0.0'] = {}; save();
+  const base = commit();
+  lock.packages['view@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+  assertSelected(plan(base, commit()), ['unrelated']);
+}, 'apps/desk'));
+
 test('root, unknown or removed importers and no-op locks remain full even with valid audits', () => {
   for (const change of [
     ({lock}) => {lock.importers['.'] = {dependencies: {leaf: {specifier: '1.0.0', version: '1.0.0'}}};},
@@ -112,7 +126,9 @@ test('root, unknown or removed importers and no-op locks remain full even with v
   ]) fixture(({lock, save, write, commit, plan}) => {
     const base = commit(); change({lock}); save();
     write('pnpm-lock.yaml', '# Lock change\n' + Object.entries(lock).map(([key, value]) => `${key}: ${JSON.stringify(value)}\n`).join(''));
-    assertSelected(plan(base, commit()), ['catalogue', 'page', 'unrelated']);
+    const result = plan(base, commit());
+    assertSelected(result, ['catalogue', 'page', 'unrelated']);
+    assert.doesNotMatch(result.reason, /audited package selection/);
   });
 });
 
