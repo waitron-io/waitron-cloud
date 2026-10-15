@@ -5,6 +5,7 @@ import {loadWorkspace, scopeForPaths, workPlan} from './ci-scope.mjs';
 import {findReuse} from './ci-reuse.mjs';
 import {documentationPlan} from './ci-docs.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
+import {scriptPlan} from './ci-scripts.mjs';
 
 export function createPlan(event, context, workspace, git, api) {
   let scope = scopeForPaths([],workspace);
@@ -22,6 +23,10 @@ export function createPlan(event, context, workspace, git, api) {
         const documentation = documentationPlan(paths, mergeBase, head.sha, git);
         if (documentation) return {packages:[], receipts:[], typecheck:false, reuse:null, documentation, reason:`Audited unread Markdown: ${paths.join(', ')}`};
       } catch { /* Missing or stale audit evidence keeps the existing full fallback. */ }
+      try {
+        const scripts = scriptPlan(paths, mergeBase, head.sha, git);
+        if (scripts) return {packages: [], receipts: [], typecheck: false, reuse: null, scripts, reason: `Audited root script: ${paths.join(', ')}`};
+      } catch { /* Missing or stale reader evidence keeps the existing full fallback. */ }
       scope = scopeForPaths(paths,workspace);
       revisions = {base:mergeBase, head:head.sha};
       reason = scope.full ? `Shared, unaudited or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
@@ -61,6 +66,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const outputs = {
     plan:JSON.stringify(plan), typecheck:String(plan.typecheck),
     documentation:String(Boolean(plan.documentation)),
+    scripts:String(Boolean(plan.scripts)),
     packages:String(plan.packages.length>0), receipts:String(plan.receipts.length>0),
     package_matrix:JSON.stringify({include:plan.packages.length ? plan.packages : [{package:'unused',shard:1}]}),
   };

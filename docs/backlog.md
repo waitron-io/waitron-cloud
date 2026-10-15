@@ -477,8 +477,16 @@ notifications separately.
   Adding, changing or removing an executable, configuration or other tracked input
   invalidates the exemption until you audit the readers again and renew the
   certificate. The identity source map and gateway JSON reader remain covered by
-  their existing full checks. Root-script, lockfile, remaining receipt and package
-  selection, measured grouping and their real scratch controls remain open. The plan also requires measured
+  their existing full checks. An isolated change to `scripts/identity-upstream.mjs`
+  or its behavioral test now selects only syntax checks and that test, without
+  package, receipt or compiler work. Both saved Git trees must match the complete
+  other-input digest in `scripts/ci-scripts-audit.json`; a new reader, changed
+  installation input, missing test, symbolic link or stale audit retains full work.
+  Mixed changes also retain the existing fallback. The script job verifies the
+  exact checkout and changed paths, and the summary requires its successful result.
+  The audit covers the helper's only executable consumer, its own spawned test;
+  the source-map default still takes the existing full route. Other root scripts,
+  configuration, lockfiles, package precision and their real controls remain open. The plan also requires measured
   grouping to reduce the full run toward 55 rounded job-minutes while keeping
   each work job near five minutes. The historical D66/D67 full-run samples used 72 and
   73 minutes; these are timestamp-based rounding estimates, not invoices.

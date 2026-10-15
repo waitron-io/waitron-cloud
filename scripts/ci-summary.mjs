@@ -4,11 +4,14 @@ import {pathToFileURL} from 'node:url';
 import {assertDocumentation} from './ci-docs.mjs';
 import {packageMembers} from './ci-package-groups.mjs';
 import {assertReceiptSuites} from './ci-run-receipts.mjs';
+import {assertScriptWork} from './ci-scripts.mjs';
 
 export function assertSummary(plan, results, jobs) {
   assert.equal(results.changes, 'success', 'CI planner must succeed');
   assert.ok(Array.isArray(plan.packages) && Array.isArray(plan.receipts) && typeof plan.typecheck === 'boolean', 'Missing CI plan');
-  if (plan.reuse) {
+  if (plan.scripts) {
+    assertScriptWork(plan);
+  } else if (plan.reuse) {
     assert.ok(!plan.documentation, 'Reuse cannot declare document work');
     assert.match(plan.reuse.sha, /^[a-f0-9]{40}$/);
     assert.ok(Number.isSafeInteger(plan.reuse.runId) && plan.reuse.runId > 0);
@@ -23,6 +26,10 @@ export function assertSummary(plan, results, jobs) {
     assert.equal(plan.typecheck, true);
   }
   const expected = ['changes'];
+  if (plan.scripts) expected.push('scripts');
+  if (plan.scripts || results.scripts !== undefined) {
+    assert.equal(results.scripts, plan.scripts ? 'success' : 'skipped', 'scripts did not match its plan');
+  }
   if (plan.documentation) expected.push('documentation');
   if (plan.documentation || results.documentation !== undefined) {
     assert.equal(results.documentation, plan.documentation ? 'success' : 'skipped', 'documentation did not match its plan');
@@ -61,7 +68,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const results = Object.fromEntries(Object.entries(JSON.parse(process.env.CI_RESULTS)).map(([name,job])=>[name,job.result]));
     const pages = JSON.parse(execFileSync('gh', ['api','--paginate','--slurp',`repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/jobs?filter=latest&per_page=100`], {encoding:'utf8',timeout:30_000}));
     assertSummary(plan,results,pages.flatMap(page=>page.jobs));
-    console.log(plan.reuse ? `same tree as PR head ${plan.reuse.sha}, run ${plan.reuse.runId}` : plan.documentation ? `Passed 1 document check (${plan.documentation.paths.length} paths)` : `Passed ${plan.packages.length} package jobs and ${plan.receipts.length} receipts`);
+    console.log(plan.reuse ? `same tree as PR head ${plan.reuse.sha}, run ${plan.reuse.runId}` : plan.documentation ? `Passed 1 document check (${plan.documentation.paths.length} paths)` : plan.scripts ? 'Passed root script checks' : `Passed ${plan.packages.length} package jobs and ${plan.receipts.length} receipts`);
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;
