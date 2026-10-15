@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
+import {chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import test from 'node:test';
@@ -31,7 +31,7 @@ function fixture(run) {
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
     const base = git('rev-parse', 'HEAD').trim();
     writeFileSync(join(root, 'packages/registration/src/local-stack-control.ts'), 'export const control = true;\n');
-    const commit = () => {git('add', '-f', '.'); git('commit', '-s', '-qm', 'Change receipt input'); return git('rev-parse', 'HEAD').trim();};
+    const commit = (paths = ['.']) => {git('add', '-f', ...paths); git('commit', '-s', '-qm', 'Change receipt input'); return git('rev-parse', 'HEAD').trim();};
     const head = commit();
     const select = (old = base, next = head, execute = git, scope = {full: false}) => receiptPlan(receiptSuites, scope, old, next, execute);
     run({root, git, base, head, commit, select});
@@ -92,7 +92,13 @@ test('installation, checkout encoding and dependency overrides in either revisio
     ]) {
       git('reset', '--hard', head); git('clean', '-fdq');
       mkdirSync(dirname(join(root, path)), {recursive: true}); writeFileSync(join(root, path), value);
-      const changed = commit();
+      if (path === 'scripts/.gitattributes') {
+        // Force Git to reconsider unchanged bytes if staging accidentally includes readers.
+        const touched = new Date(Date.now() + 2000);
+        utimesSync(join(root, 'scripts/backup-capacity-fixture.mjs'), touched, touched);
+      }
+      const changed = commit(path === 'scripts/.gitattributes' ? [path] : ['.']);
+      if (path === 'scripts/.gitattributes') assert.equal(git('ls-tree', head, 'scripts/backup-capacity-fixture.mjs'), git('ls-tree', changed, 'scripts/backup-capacity-fixture.mjs'));
       assert.ok(select(base, changed).receipts.includes(suite), path);
       assert.ok(select(changed, head).receipts.includes(suite), `old ${path}`);
     }
