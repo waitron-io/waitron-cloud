@@ -51,7 +51,7 @@ test('browser setup is limited to browser packages and bounded across two attemp
 });
 test('strict summary always runs and receives the plan and every dependency result',()=>{
   assert.match(job('summary'),/if: \$\{\{ always\(\) \}\}/);
-  assert.match(job('summary'),/needs: \[changes, typecheck, receipts, packages, documentation\]/);
+  assert.match(job('summary'),/needs: \[changes, typecheck, receipts, packages, documentation, scripts\]/);
   assert.match(job('summary'),/CI_PLAN: \$\{\{ needs.changes.outputs.plan \}\}/);
   assert.match(job('summary'),/CI_RESULTS: \$\{\{ toJSON\(needs\) \}\}/);
   assert.match(job('summary'),/run: node scripts\/ci-summary.mjs/);
@@ -92,4 +92,17 @@ test('short package groups share one database harness and receive the exact matr
   assert.match(packages, /if: matrix.members\n\s+run: node scripts\/test-postgres.mjs exec node scripts\/ci-run-package-group.mjs/);
   assert.match(packages, /CI_PACKAGE_GROUP: \$\{\{ toJSON\(matrix\) \}\}/);
   assert.match(packages, /if: \$\{\{ !matrix.shards && !matrix.members \}\}/);
+});
+
+test('audited root scripts run their own immutable checks without package installation', () => {
+  assert.match(job('changes'), /scripts: \$\{\{ steps.plan.outputs.scripts \}\}/);
+  assert.match(job('scripts'), /needs: changes/);
+  assert.match(job('scripts'), /if: needs.changes.outputs.scripts == 'true'/);
+  assert.match(job('scripts'), /ref: \$\{\{ github.event.pull_request.head.sha \|\| github.sha \}\}/);
+  assert.match(job('scripts'), /fetch-depth: 0/);
+  assert.match(job('scripts'), /timeout-minutes: 2/);
+  assert.match(job('scripts'), /package-manager-cache: false/);
+  assert.match(job('scripts'), /run: node scripts\/ci-scripts.mjs/);
+  assert.match(job('scripts'), /CI_PLAN: \$\{\{ needs.changes.outputs.plan \}\}/);
+  assert.doesNotMatch(job('scripts'), /pnpm install|test-postgres/);
 });

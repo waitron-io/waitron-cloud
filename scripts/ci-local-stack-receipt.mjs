@@ -9,7 +9,7 @@ const suite = 'test:local-stack';
 const auditedInputs = [
   '100644 blob f283a731c4f2a605200d48cd7e8f5ddc3c4360cd\tscripts/ci-run-package-group.mjs',
   '100644 blob a986ac7c5f620f7dc05d3529a2db576108b3cd49\tscripts/ci-package-groups.mjs',
-  '100644 blob 894cb562fca9291ae0c705f4fbc93f8eb4dadeb1\t.github/workflows/ci.yml',
+  '100644 blob de89cdf8bc9c614cf6c573449a937cb7728f8d09\t.github/workflows/ci.yml',
   '100644 blob a7776e95aa79764b5d00ff8b2bf983ab501d102e\tpackages/operations/src/metrics.ts',
   '100644 blob e06930b7229ac44a14187f449a582497e9df177d\tpackages/registration/src/migrate.ts',
   '100644 blob 499fc6c5da992a85931d8e9b3b1c8ed7bb7bbf46\tpackages/registration/src/transaction.ts',
