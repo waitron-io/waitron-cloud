@@ -160,10 +160,13 @@ test('package-scoped installation hooks in either revision retain public gateway
   }
 });
 
-test('checkout attributes in either revision retain gateway checks', () => {
-  fixture(({root, base, head, select, commit}) => {
-    writeFileSync(join(root, 'packages/remote-access/.gitattributes'), 'src/public-gate.ts working-tree-encoding=UTF-16LE\n');
-    const changed = commit();
+test('checkout attributes in either revision retain gateway checks without changing stored reader blobs', () => {
+  fixture(({root, git, base, head, select}) => {
+    const path = 'packages/remote-access/.gitattributes';
+    writeFileSync(join(root, path), 'src/public-gate.ts working-tree-encoding=UTF-16LE\n');
+    git('add', path); git('commit', '-s', '-qm', 'Change gateway checkout encoding');
+    const changed = git('rev-parse', 'HEAD').trim();
+    assert.equal(git('ls-tree', base, 'packages/remote-access/src/public-gate.ts'), git('ls-tree', changed, 'packages/remote-access/src/public-gate.ts'));
     assert.deepEqual(select(base, changed).receipts, receiptSuites);
     assert.deepEqual(select(changed, head).receipts, receiptSuites);
   });
