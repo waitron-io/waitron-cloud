@@ -466,7 +466,12 @@ notifications separately.
   revisions retain its audited regular-file inputs, test command and CI wiring.
   These tests exercise validators and receipt composition; their guarded CLI
   blocks do not launch backend proofs when imported. Changed, missing or linked
-  readers and unsupported evidence keep that receipt. The other four receipts
+  readers and unsupported evidence keep that receipt. Package-only changes also
+  omit the backup-capacity receipt when both revisions retain its audited TLS
+  fixture, two backup source files, validators, installation inputs and CI wiring.
+  Root installation files and workspace manifests must match the complete audited
+  inventory, so new install hooks or packages keep the receipt. Changed storage
+  or transfer code still runs the real TLS checks. The other three receipts
   remain conservative for backend work. Unknown/full changes retain all five;
   portal alone runs local-stack, and isolated ui-smoke needs no receipt. Registration
   uses seven file shards, account HTTP and portal use three each, and backups uses
