@@ -493,7 +493,17 @@ notifications separately.
   exact checkout and changed paths, and the summary requires its successful result.
   The identity audit covers that helper's only executable consumer, its own spawned test;
   the source-map default still takes the existing full route. Other root scripts,
-  configuration and their real controls remain open. A lockfile PR now reports
+  configuration and their real controls remain open. The immutable package graph
+  also follows quoted references through shared JavaScript and TypeScript helpers
+  outside package directories, including helper chains and cycles. It retains
+  readers from both saved revisions, resolves directory index helpers and maps
+  emitted JavaScript and JSX helper paths to TypeScript sources. Matching quote
+  delimiters retain paths after apostrophes while the broader scan preserves
+  paths embedded in generated fixture programs. Only reached helpers add package
+  links. Every tracked JavaScript or TypeScript source is read as evidence, so an
+  unreadable, linked or oversized source keeps all package tests even when it is
+  not reached. Reading only reached sources remains an efficiency follow-up.
+  This is not a complete resolver for computed inputs or root-file selection. A lockfile PR now reports
   which workspace dependency sets changed by comparing both saved revisions.
   The bounded version 9 parser follows indirect, optional and workspace-linked
   dependencies, retaining separate peer variants and their package metadata.

@@ -15,7 +15,7 @@ const auditedInputs = [
   '100644 blob 499fc6c5da992a85931d8e9b3b1c8ed7bb7bbf46\tpackages/registration/src/transaction.ts',
   '100644 blob 3b9b040fb57c302e36bb91ccca2d7099dde5a5df\tpackages/remote-access/src/manifest.ts',
   '100644 blob 6798c4293890db910a5e1a179486d47133780d70\tscripts/ci-run-receipts.mjs',
-  '100644 blob 57b00a90d067dfd239d378b03b254f5ae4c4891e\tscripts/ci-scope.mjs',
+  '100644 blob a8e639db9004f362aabb26ad4371fb01885c4dff\tscripts/ci-scope.mjs',
   '100644 blob 47212306f96eab384e924a109df54cf538724712\tscripts/local-stack-compose.mjs',
   '100644 blob 934507c9ffbd92ea5e18977d5709b78a93ede37b\tscripts/local-stack-compose.test.mjs',
   '100644 blob 8e54dcf26a5d541514504ca7913df8f8846fd868\tscripts/local-stack-lifecycle.mjs',

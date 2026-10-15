@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {sourceDependencies, scopeForPaths} from './ci-scope.mjs';
+import {posix} from 'node:path';
+import {sourceDependencies, scopeForPaths, quotedReferences} from './ci-scope.mjs';
 
 function workspaceAt(sha, workspace, git) {
   assert.match(sha, /^[a-f0-9]{40}$/);
@@ -17,8 +18,7 @@ function workspaceAt(sha, workspace, git) {
     files.set(path, {mode, type, id});
   }
   const inputs = [...files].filter(([path]) => path === 'pnpm-workspace.yaml' ||
-    workspace.some(pkg => path.startsWith(`${pkg.directory}/`) &&
-      (path === `${pkg.directory}/package.json` || /\.[cm]?[jt]sx?$/.test(path))));
+    /\.[cm]?[jt]sx?$/.test(path) || workspace.some(pkg => path === `${pkg.directory}/package.json`));
   const blobs = git.readBlobs?.([...new Set(inputs.map(([, file]) => file.id))]);
   const read = path => {
     const file = files.get(path);
@@ -38,13 +38,30 @@ function workspaceAt(sha, workspace, git) {
     assert.equal(manifest.scripts?.test, pkg.scripts?.test, 'Workspace test command changed');
     return {...manifest, directory: pkg.directory};
   });
+  const modules = new Map([...files.keys()].filter(path => /\.[cm]?[jt]sx?$/.test(path)).map(path => [path, read(path)]));
   for (const pkg of packages) {
     const sources = [];
     for (const [path, file] of files) {
       if (!path.startsWith(`${pkg.directory}/`)) continue;
       assert.ok(file.type === 'blob' && ['100644', '100755'].includes(file.mode), `Nonregular workspace input: ${path}`);
       assert.ok(!path.split('/').some(part => ['node_modules', '.git'].includes(part)), 'Tracked dependency override');
-      if (/\.[cm]?[jt]sx?$/.test(path)) sources.push({path, source: read(path)});
+      if (/\.[cm]?[jt]sx?$/.test(path)) sources.push({path, source: modules.get(path)});
+    }
+    const visited = new Set(sources.map(source => source.path));
+    // A shared helper can read a sibling without the package naming that sibling.
+    // Visit saved helper sources too; a cycle must not expand the queue forever.
+    for (let index = 0; index < sources.length; index++) {
+      const source = sources[index];
+      for (const value of quotedReferences(source.source)) {
+        const target = value.startsWith('.') ? posix.normalize(posix.join(posix.dirname(source.path), value)) : value;
+        if (packages.some(other => target.startsWith(`${other.directory}/`))) continue;
+        for (const path of [target, target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'), target.replace(/\.jsx?$/, '.tsx'),
+          ...['.mjs', '.cjs', '.js', '.ts', '.mts', '.cts', '.tsx', '.jsx'].flatMap(ext => [target + ext, posix.join(target, 'index' + ext)])]) {
+          if (!modules.has(path) || visited.has(path)) continue;
+          visited.add(path);
+          sources.push({path, source: modules.get(path)});
+        }
+      }
     }
     pkg.pathDependencies = sourceDependencies(pkg, packages, sources);
   }
