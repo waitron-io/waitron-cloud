@@ -11,7 +11,7 @@ const auditedInputs = [
   '100644 blob a8e639db9004f362aabb26ad4371fb01885c4dff\tscripts/ci-scope.mjs',
   '100644 blob de89cdf8bc9c614cf6c573449a937cb7728f8d09\t.github/workflows/ci.yml',
   '100644 blob c497f12cf9a96298962ce3546e5a70ed423527b6\t.npmrc',
-  '100644 blob f4fd86edd4238a024a8662af045989d51c9f3acc\tpackage.json',
+  '100644 blob 0c35d25a6cdcf1dd286a209be5051e211df6a797\tpackage.json',
   '100644 blob ab4c519931d4a7aafd65f347deec0acf88bf213d\tpackages/backups/package.json',
   '100644 blob 385b39585d41a0e04492a77c4c1095823ad24e50\tpackages/backups/src/object-transfer.ts',
   '100644 blob b3d34989fe2833749ddc6a892c150ea0fecc2df0\tpackages/backups/src/storage.ts',
