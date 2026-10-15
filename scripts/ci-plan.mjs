@@ -30,10 +30,14 @@ export function createPlan(event, context, workspace, git, api) {
       } catch { /* Missing or stale reader evidence keeps the existing full fallback. */ }
       scope = scopeForPaths(paths,workspace);
       if (!scope.full && scope.packages.length < workspace.length) {
-        try { scope = scopeForRevisions(paths, workspace, mergeBase, head.sha, git); }
+        try {
+          const revisions = scopeForRevisions(paths, workspace, mergeBase, head.sha, git);
+          scope.packages = [...new Set([...scope.packages, ...revisions.packages])].sort();
+        }
         catch (error) {
-          scope = scopeForPaths([], workspace);
-          reason = `Unverified package revisions: ${error.message}: full suite (${paths.join(', ')})`;
+          // Package evidence cannot invalidate an independent receipt audit.
+          scope.packages = scopeForPaths([], workspace).packages;
+          reason = `Unverified package revisions: ${error.message}: full package suite (${paths.join(', ')})`;
         }
       }
       revisions = {base:mergeBase, head:head.sha};

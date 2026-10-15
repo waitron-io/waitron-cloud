@@ -25,9 +25,9 @@ function fixture(run) {
       write(`packages/${name}/package.json`, JSON.stringify({name, private: true, scripts: {test: 'node --test'}}));
       write(`packages/${name}/src/index.mjs`, 'export const value = 1;\n');
     }
-    const plan = (base, head, call = git) => createPlan(
+    const plan = (base, head, call = git, members = loadWorkspace(root)) => createPlan(
       {pull_request: {base: {sha: base}, head: {sha: head}}},
-      {sha: head, repository: 'waitron-io/waitron-cloud'}, loadWorkspace(root), call,
+      {sha: head, repository: 'waitron-io/waitron-cloud'}, members, call,
       () => {throw Error('No API expected');});
     run({root, git, write, commit, plan});
   } finally {rmSync(root, {recursive: true, force: true});}
@@ -88,6 +88,15 @@ test('the head graph contributes new transitive consumers independently of chang
     {full: false, packages: ['catalogue', 'gateway', 'portal']});
 }));
 
+test('revision evidence cannot remove a package already selected by the caller graph', () => fixture(({root, git, write, commit, plan}) => {
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  const members = loadWorkspace(root);
+  members.find(pkg => pkg.name === 'portal').pathDependencies = {catalogue: 'file'};
+  assert.deepEqual(plan(base, head, git, members).packages.map(row => row.package), ['catalogue', 'portal']);
+}));
+
 test('immutable source discovery retains named, root-relative and opaque sibling readers', () => fixture(({root, git, write, commit}) => {
   write('packages/gateway/src/index.mjs', "import 'catalogue';\n");
   write('packages/portal/src/index.mjs', "const input = 'packages/gateway/src/index.mjs';\n");
@@ -118,7 +127,7 @@ test('missing or malformed evidence from either revision selects every package a
       };
       const result = plan(base, head, read);
       assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], `${sha} ${fault}`);
-      assert.match(result.reason, /Unverified package revisions:.*full suite/s);
+      assert.match(result.reason, /Unverified package revisions:.*full package suite/s);
       assert.equal(result.receipts.length, 5);
     }
   }
@@ -139,7 +148,8 @@ test('unsupported discovery, membership and checkout inputs keep full work', () 
     // Supply an unsupported committed object independently of the checkout.
     // The planner's package-only diff still must refuse that snapshot's evidence.
     const read = (...args) => {
-      if (args[0] === 'show' && args[1] === `${head}:${path}`) return content;
+      const identity = path.endsWith('package.json') && JSON.parse(content).name === 'renamed-portal';
+      if (args[0] === 'show' && (args[1] === `${head}:${path}` || identity && args[1] === `${base}:${path}`)) return content;
       if (args[0] === 'ls-tree' && args.at(-1) === head && !git(...args).includes(`\t${path}\0`)) {
         return git(...args) + `100644 blob ${'e'.repeat(40)}\t${path}\0`;
       }
@@ -147,7 +157,7 @@ test('unsupported discovery, membership and checkout inputs keep full work', () 
     };
     const result = plan(base, head, read);
     assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], path);
-    assert.match(result.reason, /Unverified package revisions:.*full suite/s);
+    assert.match(result.reason, /Unverified package revisions:.*full package suite/s);
   });
 });
 
@@ -157,7 +167,7 @@ test('symbolic links, submodules and tracked dependency overrides cannot earn na
     ['120000', 'blob', 'packages/portal/package.json'],
     ['120000', 'blob', 'packages/portal/src/linked.mjs'],
     ['160000', 'commit', 'packages/portal/reader'],
-    ['100644', 'blob', 'packages/portal/node_modules/reader.mjs'],
+    ['100644', 'blob', 'packages/portal/node_modules/reader.json'],
   ]) fixture(({git, write, commit, plan}) => {
     const base = commit();
     write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
@@ -169,6 +179,6 @@ test('symbolic links, submodules and tracked dependency overrides cannot earn na
     };
     const result = plan(base, head, read);
     assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], path);
-    assert.match(result.reason, /Unverified package revisions:.*full suite/s);
+    assert.match(result.reason, /Unverified package revisions:.*full package suite/s);
   });
 });

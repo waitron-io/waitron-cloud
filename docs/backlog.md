@@ -504,7 +504,9 @@ notifications separately.
   by local edits. The existing quoted-path discovery also retains named, root-relative
   and uncertain sibling-template readers. Missing blobs, incomplete inventories,
   changed workspace membership or test commands, checkout attributes, links and
-  tracked dependency overrides keep full work with a reason. Workspace discovery
+  tracked dependency overrides keep all package suites with a reason. Initial package
+  selection remains a conservative floor; an independent receipt audit may still omit
+  a receipt when its own immutable evidence holds. Workspace discovery
   currently recognises only the repository's two explicit package-directory patterns;
   other policies keep full work. This does not resolve the plan's broader dynamic
   input and directory rules. Identity still selects all nine packages in the current graph;
