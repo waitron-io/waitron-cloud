@@ -452,7 +452,7 @@ notifications separately.
   Adding, changing or removing an executable, configuration or other tracked input
   invalidates the exemption until you audit the readers again and renew the
   certificate. The identity source map and gateway JSON reader remain covered by
-  their existing full checks. Root-script, lockfile, precise receipt and package
+  their existing full checks. Root-script, lockfile, remaining receipt and package
   selection, measured grouping and their real scratch controls remain open. The plan also requires measured
   grouping to reduce the full run toward 55 rounded job-minutes while keeping
   each work job near five minutes. The current two sampled full runs use 72 and
@@ -462,7 +462,12 @@ notifications separately.
   manifests. Identity therefore selects all nine packages in the current graph;
   portal alone remains isolated. Unaudited root, unknown and empty changes run everything.
   Type checking stays whole-workspace because backend manifests share the root
-  TypeScript input. Backend changes run all five receipt suites conservatively;
+  TypeScript input. Package-only changes omit the two-venue milestone receipt when both immutable
+  revisions retain its audited regular-file inputs, test command and CI wiring.
+  These tests exercise validators and receipt composition; their guarded CLI
+  blocks do not launch backend proofs when imported. Changed, missing or linked
+  readers and unsupported evidence keep that receipt. The other four receipts
+  remain conservative for backend work. Unknown/full changes retain all five;
   portal alone runs local-stack, and isolated ui-smoke needs no receipt. Registration
   uses seven file shards, account HTTP and portal use three each, and backups uses
   two. The other packages keep one job each. Each file runs once, with its original
