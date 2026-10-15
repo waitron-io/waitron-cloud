@@ -20,6 +20,7 @@ function fixture(run) {
     git('init', '-b', 'main'); git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
     write('package.json', JSON.stringify({name: 'revision-fixture', private: true}));
     write('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n  - 'apps/*'\n");
+    write('zz-inventory-tail.txt', 'Unrelated inventory tail.\n');
     for (const name of ['catalogue', 'gateway', 'portal', 'unrelated']) {
       write(`packages/${name}/package.json`, JSON.stringify({name, private: true, scripts: {test: 'node --test'}}));
       write(`packages/${name}/src/index.mjs`, 'export const value = 1;\n');
@@ -152,6 +153,8 @@ test('unsupported discovery, membership and checkout inputs keep full work', () 
 
 test('symbolic links, submodules and tracked dependency overrides cannot earn narrow selection', () => {
   for (const [mode, type, path] of [
+    ['120000', 'blob', 'pnpm-workspace.yaml'],
+    ['120000', 'blob', 'packages/portal/package.json'],
     ['120000', 'blob', 'packages/portal/src/linked.mjs'],
     ['160000', 'commit', 'packages/portal/reader'],
     ['100644', 'blob', 'packages/portal/node_modules/reader.mjs'],
@@ -159,8 +162,11 @@ test('symbolic links, submodules and tracked dependency overrides cannot earn na
     const base = commit();
     write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
     const head = commit();
-    const read = (...args) => args[0] === 'ls-tree' && args.at(-1) === head
-      ? git(...args) + `${mode} ${type} ${'e'.repeat(40)}\t${path}\0` : git(...args);
+    const read = (...args) => {
+      if (args[0] !== 'ls-tree' || args.at(-1) !== head) return git(...args);
+      const entries = git(...args).split('\0').filter(entry => entry && !entry.endsWith(`\t${path}`));
+      return entries.join('\0') + `\0${mode} ${type} ${'e'.repeat(40)}\t${path}\0`;
+    };
     const result = plan(base, head, read);
     assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], path);
     assert.match(result.reason, /Unverified package revisions:.*full suite/s);
