@@ -333,3 +333,93 @@ test('real source symlinks and submodules retain full package work with a batch 
     assert.match(result.reason, /Unverified package revisions:.*full package suite/s);
   });
 });
+
+
+test('package changes retain consumers reached through root helpers in both revisions', () => fixture(({root, git, write, commit, plan}) => {
+  write('scripts/catalogue-adapter.mjs', "import '../packages/catalogue/src/index.mjs';\n");
+  write('scripts/adapter-entry.mjs', "import './catalogue-adapter.mjs';\n");
+  write('packages/portal/src/index.mjs', "import '../../../scripts/adapter-entry.mjs';\n");
+  const base = commit();
+  write('scripts/catalogue-adapter.mjs', 'export const value = 2;\n');
+  const head = commit();
+  // Query the provider alone so the helper edit cannot force a full diff fallback.
+  assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+    {full: false, packages: ['catalogue', 'portal']});
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const providerHead = commit();
+  const result = plan(base, providerHead, (...args) => args[0] === 'diff'
+    ? 'packages/catalogue/src/index.mjs\0' : git(...args));
+  assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'portal']);
+}));
+
+test('head-only root helper readers include transitive package dependents and terminate cycles', () => fixture(({root, git, write, commit}) => {
+  const base = commit();
+  write('scripts/adapter.mjs', "import './cycle.mjs'; import '../packages/catalogue/src/index.mjs';\n");
+  write('scripts/cycle.mjs', "import './adapter.mjs';\n");
+  write('packages/gateway/src/index.mjs', "import '../../../scripts/adapter.mjs';\n");
+  write('packages/portal/src/index.mjs', "import '../../gateway/src/index.mjs';\n");
+  const head = commit();
+  assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+    {full: false, packages: ['catalogue', 'gateway', 'portal']});
+}));
+
+
+test('typed helper imports retain their source readers when emitted JavaScript paths are used', () => fixture(({root, git, write, commit}) => {
+  write('scripts/adapter.ts', "import '../packages/catalogue/src/index.mjs';\n");
+  write('packages/portal/src/index.mjs', "import '../../../scripts/adapter.js';\n");
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+    {full: false, packages: ['catalogue', 'portal']});
+}));
+
+
+test('unreferenced helpers do not add package consumers', () => fixture(({root, git, write, commit}) => {
+  write('scripts/unused.mjs', "import '../packages/catalogue/src/index.mjs';\n");
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+    {full: false, packages: ['catalogue']});
+}));
+
+test('the planner command follows immutable helper readers despite dirty source and batches both trees', () => fixture(({root, git, write, commit}) => {
+  write('scripts/adapter.mjs', "import '../packages/catalogue/src/index.mjs';\n");
+  write('packages/portal/src/index.mjs', "import '../../../scripts/adapter.mjs';\n");
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  write('scripts/adapter.mjs', 'export const value = 3;\n');
+  const event = join(root, 'event.json'), output = join(root, 'outputs.txt'), trace = join(root, 'git-trace.log');
+  writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
+  execFileSync(process.execPath, [new URL('./ci-plan.mjs', import.meta.url).pathname], {
+    cwd: root, env: {...process.env, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output, GITHUB_SHA: head,
+      GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_REF_NAME: 'fixture', GIT_TRACE: trace},
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const result = JSON.parse(readFileSync(output, 'utf8').split('\n').find(line => line.startsWith('plan=')).slice(5));
+  assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'portal']);
+  assert.equal((readFileSync(trace, 'utf8').match(/built-in: git cat-file --batch\n/g) ?? []).length, 2);
+}));
+
+test('missing helper evidence in either tree retains every package', () => fixture(({root, git, write, commit, plan}) => {
+  write('scripts/adapter.mjs', "import '../packages/catalogue/src/index.mjs';\n");
+  write('packages/portal/src/index.mjs', "import '../../../scripts/adapter.mjs';\n");
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  const id = git('rev-parse', `${base}:scripts/adapter.mjs`).trim();
+  for (const revision of [1, 2]) {
+    let current = 0;
+    const read = (...args) => git(...args);
+    read.readBlobs = ids => {
+      const result = packageInputs.readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input}));
+      if (++current === revision) result.delete(id);
+      return result;
+    };
+    const result = plan(base, head, read);
+    assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+    assert.match(result.reason, /Unverified package revisions:.*Missing batched package input: scripts\/adapter.mjs.*full package suite/s);
+  }
+}));
