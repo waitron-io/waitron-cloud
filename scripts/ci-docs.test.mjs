@@ -84,9 +84,13 @@ test('mixed documents and portal code retain the full fallback', () => fixture((
 
 test('document command reads exact immutable blobs and rejects invalid UTF-8, NUL, missing newline and symlinks', () => fixture(({root, git, put, commit, plan}) => {
   put('docs/backlog.md', '# Valid\n');
+  put('docs/second.md', '# Second\n');
   const selected = plan(commit());
   const run = value => spawnSync(process.execPath, [checker], {cwd: root, env: {...process.env, CI_PLAN: JSON.stringify(value)}, encoding: 'utf8'});
   assert.equal(run(selected).status, 0);
+  const omitted = run({...selected, documentation: {...selected.documentation, paths: ['docs/backlog.md']}});
+  assert.equal(omitted.status, 1);
+  assert.match(omitted.stderr, /omits changed inputs/);
   put('docs/backlog.md', 'uncommitted invalid content');
   assert.equal(run(selected).status, 0, 'working tree cannot replace the selected immutable blob');
   for (const content of ['missing newline', 'NUL\0\n', Buffer.from([0xff, 0x0a])]) {
@@ -110,6 +114,10 @@ test('strict summary requires the audited document job and refuses malformed emp
   for (const result of ['skipped', 'failure', 'cancelled', 'in_progress']) assert.throws(() => assertSummary(plan, {...results, documentation: result}, jobs));
   assert.throws(() => assertSummary(plan, results, jobs.slice(0, 1)));
   assert.throws(() => assertSummary(plan, results, [...jobs, jobs[1]]));
+  for (const conclusion of ['failure', 'cancelled', 'skipped']) {
+    assert.throws(() => assertSummary(plan, results, [jobs[0], {...jobs[1], conclusion}]));
+  }
+  assert.throws(() => assertSummary(plan, results, [jobs[0], {...jobs[1], status: 'in_progress'}]));
   for (const invalid of [{...documentation, paths: []}, {...documentation, paths: ['scripts/a.mjs']}, {...documentation, head: 'bad'}]) {
     assert.throws(() => assertSummary({...plan, documentation: invalid}, results, jobs));
   }
