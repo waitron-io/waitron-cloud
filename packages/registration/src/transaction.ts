@@ -23,3 +23,5 @@ export async function transaction<T>(pool: Pool, action: (client: PoolClient) =>
     client.removeListener('error', onError);
   }
 }
+
+// Receipt-selection control: registration remains a backend consumer.
