@@ -37,7 +37,8 @@ const workspace = loadWorkspace();
 const expected = receiptSuites.filter(name => name !== suite);
 function fixture(run, alter = () => {}) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-capacity-inputs-'));
-  const git = (...args) => execFileSync('git', args, {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+  // Disposable repositories must have no background writer racing their removal.
+  const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
   try {
     git('init', '-q');
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');

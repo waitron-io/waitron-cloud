@@ -26,9 +26,10 @@ const files = [
 const directories = ['deploy/local-stack', 'packages/registration/migrations'];
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-local-stack-inputs-'));
-  const git = (...args) => execFileSync('git', args, {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+  // Disposable repositories must have no background writer racing their removal.
+  const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
   try {
-    execFileSync('git', ['clone', '--shared', '--quiet', '--no-checkout', process.cwd(), root], {stdio: 'pipe'});
+    execFileSync('git', ['-c', 'maintenance.auto=false', 'clone', '--shared', '--quiet', '--no-checkout', process.cwd(), root], {stdio: 'pipe'});
     git('checkout', '--quiet', 'HEAD', '--', '.');
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
     seedReceiptDependencyInputs(root);

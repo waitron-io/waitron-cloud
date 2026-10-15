@@ -553,6 +553,18 @@ notifications separately.
   substitute for coverage. The saved manifest metadata must match its reviewed
   nondependency fields in the audit. Actual
   dependency changes still retain every receipt in the production planner.
+  Four receipt-selector fixtures now disable automatic Git maintenance for their
+  temporary repositories, including their clone commands, so detached maintenance
+  cannot write while those repositories are removed. Four real-child checks trace
+  the original positive tests and require their commits to execute without an
+  automatic maintenance child. The old behavior fails all four checks; their
+  existing receipt assertions remain unchanged. In
+  [run 38824736788](https://github.com/waitron-io/waitron-cloud/actions/runs/38824736788),
+  262 of 263 root checks passed before the database-input fixture's cleanup failed
+  with `ENOTEMPTY`. Local Git tracing confirms detached maintenance in those
+  fixtures, but that historical log does not identify the writer. This removes a
+  verified background writer without changing deletion, selection or fiscal policy;
+  capture any further cleanup failure before attributing its cause.
   The parser's current-lock inventory check still pins 215 package/snapshot
   records and the original importer counts. A new dependency record needs an
   explicitly reviewed inventory update. The disposable
