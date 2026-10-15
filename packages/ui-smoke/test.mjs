@@ -1,3 +1,4 @@
+// CI selection control: this comment leaves both browser tests intact.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
