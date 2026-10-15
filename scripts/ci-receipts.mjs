@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {capacityReceiptPlan} from './ci-capacity-receipt.mjs';
 
 const suite = 'test:two-venue-milestone-receipt';
 const command = 'node --test scripts/milestone-proof-helpers.test.mjs scripts/verify-managed-recovery-receipt.test.mjs scripts/verify-two-venue-milestone-receipt.test.mjs';
@@ -19,7 +20,7 @@ const auditedInputs = [
   '100644 blob c9c926755c5a6a80653c2c8b0e07f3a2376a6f84\tscripts/verify-two-venue-milestone-receipt.test.mjs',
 ];
 
-export function receiptPlan(receipts, scope, base, head, git) {
+function milestoneReceiptPlan(receipts, scope, base, head, git) {
   if (scope.full || !receipts.includes(suite)) return {receipts};
   try {
     for (const sha of [base, head]) {
@@ -35,4 +36,10 @@ export function receiptPlan(receipts, scope, base, head, git) {
   } catch (error) {
     return {receipts, reason: `Kept milestone receipt: ${error.message}`};
   }
+}
+
+export function receiptPlan(receipts, scope, base, head, git) {
+  const milestone = milestoneReceiptPlan(receipts, scope, base, head, git);
+  const capacity = capacityReceiptPlan(milestone.receipts, scope, base, head, git);
+  return {receipts: capacity.receipts, reason: [milestone.reason, capacity.reason].filter(Boolean).join('; ')};
 }

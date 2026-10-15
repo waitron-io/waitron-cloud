@@ -215,6 +215,17 @@ Duplicate adjacent status authority calls remain a small follow-up; no productio
 selected. Fiscal records, invoice hashes and Waitron's allocation code stay outside
 this Cloud change.
 
+**Open: fiscal session-expiry test ordering.** A full local run of
+`packages/fiscal-allocation/test/store.test.ts:479` passed the session refusal
+but found zero permanent names instead of one. Its 300 ms session deadline
+starts before reservation reaches the external append. An isolated run passed;
+a disposable probe that paused 350 ms before reservation reproduced the same
+failure and recorded that the append callback never started. That establishes
+a timing risk, not the cause of the original run, which recorded no entry times.
+Record the authorization and append boundaries on recurrence, then arrange expiry
+inside the append callback while retaining the session refusal, one permanent name
+and zero projected events. Do not weaken the existing authority checks.
+
 ## Initial focus
 
 - Launch first in Spain on AWS. AWS documents Europe (Spain) as `eu-south-2` and
@@ -466,7 +477,13 @@ notifications separately.
   revisions retain its audited regular-file inputs, test command and CI wiring.
   These tests exercise validators and receipt composition; their guarded CLI
   blocks do not launch backend proofs when imported. Changed, missing or linked
-  readers and unsupported evidence keep that receipt. The other four receipts
+  readers and unsupported evidence keep that receipt. Package-only changes also
+  omit the backup-capacity receipt when both revisions retain its audited TLS
+  fixture, two backup source files, validators, installation inputs and CI wiring.
+  Root installation files and all tracked package manifests must match the complete
+  audited inventory, so nested manifests, new install hooks or packages keep the
+  receipt. Tracked dependency overrides under `node_modules` also keep it. Changed storage
+  or transfer code still runs the real TLS checks. The other three receipts
   remain conservative for backend work. Unknown/full changes retain all five;
   portal alone runs local-stack, and isolated ui-smoke needs no receipt. Registration
   uses seven file shards, account HTTP and portal use three each, and backups uses
