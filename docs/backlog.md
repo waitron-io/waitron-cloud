@@ -550,7 +550,11 @@ notifications separately.
   declarations. A workspace inventory check refuses an unaccounted compiler
   command or configuration. Individual package commands remain available. Measure
   the full CI job before attributing any billed saving; the new behavioral checks
-  also take time. Package-only changes omit the two-venue milestone receipt when both immutable
+  also take time. The disposable real-tree review confirms backend test files
+  still fail compilation when broken. Add that test-directory probe to the
+  automated controls, which currently inject backend source errors only. Missing
+  package compiler scripts and the equivalent `--project` spelling already fail
+  the inventory or trace checks, but need clearer test diagnostics. Package-only changes omit the two-venue milestone receipt when both immutable
   revisions retain its audited regular-file inputs, test command and CI wiring.
   These tests exercise validators and receipt composition; their guarded CLI
   blocks do not launch backend proofs when imported. Changed, missing or linked
