@@ -18,6 +18,7 @@ const context = { taxpayerNif: '89890001K', softwareId: 'WT', environment: 'prep
   reauthentication: { operatorId: approval.operatorId, eventId: approval.eventId }, authority: { kind: 'cloud', trust, receipt: c.receipt } };
 const client = (account = c.account) => createCloudFiscalAllocationClient({ origin: c.origin, environment: 'dev', account });
 let reportConfiguration;
+let reportRequests;
 
 async function activate() {
   const dbApi = await load('packages/db/src/index.ts');
@@ -52,6 +53,7 @@ async function activate() {
     const operation = await fiscal.readCloudAllocationReport(db, { nodeId: TENANT_A.nodeId, locationId: TENANT_A.locationId }, { receiptPath, trust });
     const journal = join(c.root, 'journal'); await mkdir(journal);
     let requests = 0;
+    reportRequests = () => requests;
     const transport = { async report(proof) { requests++; return client().report(proof); } };
     reportConfiguration = { directory: journal, operation, transport, authenticate: async () => c.authentication };
     const report = await reconcileCloudFiscalAllocation(reportConfiguration);
@@ -103,9 +105,13 @@ async function run(action, input) {
     return { firstError, recovered, requests, authentications, sameOperation: proofs[0][5] === proofs[1][5] && JSON.stringify(proofs[0][9]) === JSON.stringify(proofs[1][9]) && proofs[0][6] !== proofs[1][6] };
   }
   if (action === 'conflict') {
+    const before = reportRequests();
+    let refusal;
     try { await reconcileCloudFiscalAllocation({ ...reportConfiguration, operation: { ...reportConfiguration.operation, body: { ...reportConfiguration.operation.body, activationEvidence: { changed: true } } } }); }
-    catch (error) { return { error: error.code }; }
-    throw Error('changed report unexpectedly accepted');
+    catch (error) { refusal = error.code; }
+    if (!refusal) throw Error('changed report unexpectedly accepted');
+    const repeated = await reconcileCloudFiscalAllocation(reportConfiguration);
+    return { error: refusal, repeated, requests: reportRequests() - before };
   }
   throw Error('unknown joint command');
 }

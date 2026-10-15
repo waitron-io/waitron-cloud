@@ -32,6 +32,7 @@ export async function jointFixture() {
   let server: Awaited<ReturnType<typeof startAccountServer>> | undefined;
   let child: ReturnType<typeof spawn> | undefined;
   let exit: Promise<void> | undefined;
+  const responses: { path: string; status: number }[] = [];
   const pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
   async function close() {
     if (child) {
@@ -63,6 +64,9 @@ export async function jointFixture() {
       outbox: new EmailOutbox({ activeKeyId: 'test', keys: { test: 'ab'.repeat(32) } }),
       config: { portalOrigin: origin, production: false, rateKey: randomBytes(32).toString('hex'), trustedProxyIps: [] },
       port, fiscalAllocation: { ...cloud.options, machine: { origin, leaseTrust: createLeaseTrust(cloud.f.issuer) } },
+    });
+    server.server.on('request', (request, response) => {
+      response.once('finish', () => responses.push({ path: request.url ?? '', status: response.statusCode }));
     });
     const binding = { ...v.input.binding, eventId: 'joint-restore', targetNodeId: 'a0000000-0000-4000-8000-000000000008',
       operatorId: { kind: 'recovery-key', nodeId: 'a0000000-0000-4000-8000-000000000008', eventId: 'joint-restore' } };
@@ -112,6 +116,6 @@ export async function jointFixture() {
       child!.stdin!.write(JSON.stringify({ id, action, input }) + '\n');
     });
     await call('ready', {});
-    return { cloud, receipt, reserved, call, close };
+    return { cloud, receipt, reserved, responses, call, close };
   } catch (error) { await close(); throw error; }
 }

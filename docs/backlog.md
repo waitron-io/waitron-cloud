@@ -189,7 +189,13 @@ the independent journal returns a retained result without sending again and refu
 changed evidence. These are local synthetic fixtures, with no production policy enabled.
 The test uses an explicitly pinned installed Waitron checkout, or fetches and installs
 that public commit in its own temporary directory. Waitron
-owns the adapter and its delivery. Production continuity
+owns the adapter and its delivery. The joint fixture now observes actual HTTP
+401/403 responses and checks that a conflicting report leaves its retained result
+usable without another send. Its report cases share one activation; independently
+runnable name-filter cases and removal of the temporary port's release/rebind
+interval remain fixture follow-ups. The installed-checkout override verifies the
+tracked tree; its dependencies and untracked files are developer supplied.
+Production continuity
 storage, taxpayer custody and operator attribution, subscription policy and the
 signing-key custodian remain owner enablement gates. Before enabling recovery,
 qualify how the service discovers custody-approved namespaces when an old database

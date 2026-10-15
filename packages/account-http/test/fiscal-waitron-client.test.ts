@@ -41,8 +41,13 @@ test('pinned Waitron client retains read access after entitlement ends', async (
   } finally { await f.cloud.f.pool.query('UPDATE fiscal_test_authority SET entitlement=true'); }
 });
 test('real Cloud session and CSRF refusals reach the pinned Waitron client', async () => {
+  const before = f.responses?.length ?? 0;
   for (const field of ['cookie', 'csrfToken'])
     assert.deepEqual(await f.call('status', { field }), { error: 'cloud.unavailable' });
+  assert.deepEqual(f.responses?.slice(before) ?? [], [
+    { path: '/api/account/fiscal-allocations/status', status: 401 },
+    { path: '/api/account/fiscal-allocations/status', status: 403 },
+  ]);
 });
 test('Cloud receipt activates through Waitron manual preparation and reports its committed result once', async () => {
   const result = await f.call('activate', {});
@@ -58,6 +63,8 @@ test('Cloud receipt activates through Waitron manual preparation and reports its
 test('Waitron journal refuses changed report evidence without replacing the Cloud result', async () => {
   const result = await f.call('conflict', {});
   assert.equal(result.error, 'cloud.binding_conflict');
+  assert.deepEqual(result.repeated, { version: 1, state: 'matched', receiptId: f.receipt.payload.receiptId });
+  assert.equal(result.requests, 0);
 });
 
 test('Waitron refuses an altered signature on an otherwise unchanged genuine Cloud receipt', async () => {
