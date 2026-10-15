@@ -20,13 +20,13 @@ function parseYaml(source,fail) {
     if(text.includes('\t'))fail(`Unsupported tab indentation at line ${index+1}`);
     const indent=text.match(/^ */)[0].length;
     if(indent%2)fail(`Ambiguous indentation at line ${index+1}`);
-    return {indent,text:text.slice(indent).trimEnd(),line:index+1};
+    return {indent,text:text.slice(indent).replace(/ +$/, ''),line:index+1};
   }).filter(row=>row.text && !row.text.startsWith('#'));
   if(lines.length>50000)fail('Input size exceeds 50000 lines');
   let cursor=0;
   const inline=(source,depth=0)=>{
     let index=0;
-    const whitespace=()=>{while(/\s/.test(source[index]??'') && index<source.length)index++;};
+    const whitespace=()=>{while(source[index]===' ')index++;};
     const quoted=()=>{
       const start=index,quote=source[index++];let result='';
       while(index<source.length) {
@@ -43,17 +43,19 @@ function parseYaml(source,fail) {
       }
       fail('Unterminated quoted scalar');
     };
-    const key=()=>{
+    const key=(blockKey=false)=>{
       whitespace();let result;
-      if(['"',"'"].includes(source[index]))result=quoted();
+      const quotedKey=['"',"'"].includes(source[index]);
+      if(quotedKey)result=quoted();
       else {
         const start=index;
         while(index<source.length && source[index]!==':' && !/[{},\[\]]/.test(source[index]))index++;
-        result=source.slice(start,index).trim();
+        result=source.slice(start,index).replace(/^ +| +$/g, '');
         if(!/^[a-zA-Z0-9_./@()-]+$/.test(result))fail(`Unsupported map key ${result}`);
       }
       if(!result || result==='<<')fail('Unsupported merge or empty map key');
       whitespace();if(source[index++]!==':')fail(`Unsupported map key ${result}`);
+      if((blockKey || !quotedKey) && index<source.length && source[index]!==' ')fail('Missing map value separation');
       return result;
     };
     const value=level=>{
@@ -75,15 +77,15 @@ function parseYaml(source,fail) {
       }
       if(['"',"'"].includes(first))return quoted();
       const start=index;
-      while(index<source.length && !/[{},\[\]]/.test(source[index]) && !(source[index]==='#' && (index===start || /\s/.test(source[index-1]))))index++;
-      const result=source.slice(start,index).trim();
-      if(!result || /^[&*!|>%?]/.test(result) || /^[-:]\s/.test(result) || /:\s/.test(result))fail(`Unsupported scalar ${result}`);
+      while(index<source.length && !/[{},\[\]]/.test(source[index]) && !(source[index]==='#' && (index===start || source[index-1]===' ')))index++;
+      const result=source.slice(start,index).replace(/^ +| +$/g, '');
+      if(!result || /^[&*!|>%?]/.test(result) || /^[-:] /.test(result) || /: /.test(result))fail(`Unsupported scalar ${result}`);
       if(result==='true')return true;if(result==='false')return false;
       if(result==='null' || result==='~')return null;
       if(/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(result))return Number(result);
       return result;
     };
-    const name=()=>key();
+    const name=()=>key(true);
     const finish=()=>{
       whitespace();if(index<source.length && source[index]!=='#')fail(`Trailing unsupported input ${source.slice(index)}`);
     };
@@ -207,12 +209,22 @@ export function parseLock(source,path='pnpm-lock.yaml') {
     if(!Object.hasOwn(data.snapshots,key))fail(`Missing snapshot ${key}`);
     return {snapshot:key};
   };
+  let fingerprintBytes=0;
+  const fingerprint=value=>{
+    const encoded=JSON.stringify(canonical(value));
+    fingerprintBytes+=Buffer.byteLength(encoded);
+    if(fingerprintBytes>32*1024*1024)fail('Resolved fingerprint input size exceeds 32 MiB');
+    return createHash('sha256').update(encoded).digest('hex');
+  };
+  // Hash shared records once; closures retain identities and their complete record digests.
+  const recordHashes=Object.fromEntries(['importers','snapshots','packages'].map(kind=>
+    [kind,Object.fromEntries(Object.entries(data[kind]).map(([key,value])=>[key,fingerprint(value)]))]));
   const closures=Object.create(null),usedSnapshots=new Set(),usedMetadata=new Set();
   let steps=0;
   for(const id of Object.keys(data.importers).sort()) {
     const importers=new Set(),snapshots=new Set(),metadata=new Set(),pending=[{importer:id}];
     while(pending.length) {
-      if(++steps>500000)fail('Resolved graph size exceeds 500000 edges');
+      if(++steps>500000)fail('Resolved graph size exceeds 500000 visits');
       const next=pending.pop();
       if(next.importer!==undefined) {
         if(importers.has(next.importer))continue;importers.add(next.importer);
@@ -226,8 +238,8 @@ export function parseLock(source,path='pnpm-lock.yaml') {
       }
     }
     const importerIds=[...importers].sort(),snapshotIds=[...snapshots].sort(),metadataIds=[...metadata].sort();
-    const inputs={importers:importerIds.map(key=>[key,data.importers[key]]),snapshots:snapshotIds.map(key=>[key,data.snapshots[key]]),packages:metadataIds.map(key=>[key,data.packages[key]])};
-    closures[id]={importers:importerIds,snapshots:snapshotIds,packages:metadataIds,fingerprint:createHash('sha256').update(JSON.stringify(canonical(inputs))).digest('hex')};
+    const inputs={importers:importerIds.map(key=>[key,recordHashes.importers[key]]),snapshots:snapshotIds.map(key=>[key,recordHashes.snapshots[key]]),packages:metadataIds.map(key=>[key,recordHashes.packages[key]])};
+    closures[id]={importers:importerIds,snapshots:snapshotIds,packages:metadataIds,fingerprint:fingerprint(inputs)};
     for(const key of snapshots)usedSnapshots.add(key);for(const key of metadata)usedMetadata.add(key);
   }
   for(const key of Object.keys(data.snapshots))if(!usedSnapshots.has(key))fail(`Unexplained orphan snapshot ${key}`);

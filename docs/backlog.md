@@ -498,7 +498,12 @@ notifications separately.
   The bounded version 9 parser follows indirect, optional and workspace-linked
   dependencies, retaining separate peer variants and their package metadata.
   Duplicate keys, missing or unused records, unsupported syntax and incomplete
-  evidence cannot produce a partial comparison. These diagnostics still select
+  evidence cannot produce a partial comparison. YAML separation uses ordinary
+  spaces; other Unicode spaces remain part of scalar values. The direct parser
+  accepts at most two MiB, while production Git reads retain their one-MiB cap.
+  Shared records are hashed once. The graph has a 500,000-visit limit and the
+  complete comparison hashes at most 32 MiB of serialized input per lockfile.
+  These diagnostics still select
   the full suite: package and root-file reader coverage must be established before
   the resolved sets can narrow execution. Formatting-only lock changes also keep
   full work. Lockfile selection, wider package precision and their real controls

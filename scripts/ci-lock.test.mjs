@@ -215,3 +215,69 @@ test('an otherwise valid lock cannot hide trailing input after a complete flow v
   const source = encode(fixture()).replace(/\n$/, ' ignored\n');
   assert.throws(() => parseLock(source), /pnpm-lock.yaml: Trailing unsupported input ignored/);
 });
+
+test('non-ASCII blank characters remain part of a plain YAML scalar', () => {
+  const before = fixture(), after = fixture();
+  after.importers['packages/provider'].dependencies.alpha.specifier = '1.0.0\u00a0';
+  const block = encode(after).replace('"specifier":"1.0.0 "', '"specifier": 1.0.0 ');
+  assert.deepEqual(changedImporters(parse(before), parseLock(block)).importers, ['packages/consumer', 'packages/provider']);
+  for (const tail of [' ', ' ', ' ']) {
+    const source = encode(before).replace('"integrity":"sha512-YQ=="', `"integrity": sha512-YQ==${tail}`);
+    assert.throws(() => parseLock(source), /Invalid integrity/);
+  }
+  const line = encode(before).replace('"integrity":"sha512-YQ=="', '"integrity": sha512-YQ== ');
+  assert.throws(() => parseLock(line), /Invalid integrity/);
+  const leading = encode(before).replace('"integrity":"sha512-YQ=="', '"integrity":  sha512-YQ==');
+  assert.throws(() => parseLock(leading), /Invalid integrity/);
+  const blockRecord = `packages:
+  compiler@1.0.0:
+    resolution: {integrity: sha512-Yw==}
+  alpha@1.0.0:
+    resolution:
+      integrity: sha512-YQ== 
+  leaf@1.0.0:
+    resolution: {integrity: sha512-bA==}
+  beta@1.0.0:
+    resolution: {integrity: sha512-Yg==}`;
+  assert.throws(() => parseLock(encode(before).replace(/^packages:.*$/m, blockRecord)), /Invalid integrity/);
+});
+
+test('plain block and flow keys require YAML separation before a nonempty value', () => {
+  const source = encode(fixture());
+  assert.throws(() => parseLock(source.replace('lockfileVersion: ', 'lockfileVersion:')), /separation/);
+  const settings = 'settings: {autoInstallPeers:true, excludeLinksFromLockfile: false}';
+  assert.throws(() => parseLock(source.replace(/^settings:.*$/m, settings)), /separation/);
+});
+
+test('importer optional dependencies retain all consumers even when another importer keeps the record reachable', () => {
+  const before = fixture();
+  before.importers['packages/provider'].optionalDependencies = {beta: {specifier: '1.0.0', version: '1.0.0'}};
+  const after = structuredClone(before);
+  after.packages['beta@1.0.0'].hasBin = true;
+  assert.deepEqual(delta(before, after).importers, ['packages/consumer', 'packages/provider', 'packages/unrelated']);
+});
+
+test('indented YAML nesting is bounded independently of flow nesting', () => {
+  const source = Array.from({length: 36}, (_, index) => '  '.repeat(index) + 'nested:').join('\n') + '\n' + '  '.repeat(36) + 'value: true\n';
+  assert.throws(() => parseLock(source), /depth exceeds 32/);
+});
+
+test('dense linked importer graphs stop at the visit budget', () => {
+  const value = fixture();
+  value.importers = {'.': {}}; value.packages = {}; value.snapshots = {};
+  for (let index = 0; index < 80; index++) {
+    const dependencies = Object.fromEntries(Array.from({length: 80}, (_, other) => [`member${other}`, {specifier: 'workspace:*', version: `link:../member${other}`} ]));
+    value.importers[`packages/member${index}`] = {dependencies};
+  }
+  assert.throws(() => parse(value), /Resolved graph size exceeds 500000/);
+});
+
+test('long linked importer identities cannot cause unbounded fingerprint expansion', () => {
+  const value = fixture();
+  value.importers = {'.': {}}; value.packages = {}; value.snapshots = {};
+  const ids = Array.from({length: 400}, (_, index) => `member${index}-` + 'x'.repeat(200));
+  for (let index = 0; index < ids.length; index++) value.importers[`packages/${ids[index]}`] = {
+    dependencies: {next: {specifier: 'workspace:*', version: `link:../${ids[(index + 1) % ids.length]}`}},
+  };
+  assert.throws(() => parse(value), /fingerprint input size exceeds 32 MiB/);
+});

@@ -65,7 +65,7 @@ test('formatting-only locks report no resolved changes and keep full root work',
   assert.match(result.reason, /pnpm-lock.yaml: resolved dependency inputs unchanged/);
 }));
 
-test('unsupported or missing lock evidence in either revision keeps every suite with a named diagnostic', () => fixture(({lock, save, git, commit, plan}) => {
+test('unsupported or missing lock evidence in either revision keeps every suite with an unavailable-evidence diagnostic', () => fixture(({lock, save, git, commit, plan}) => {
   const base = commit();
   lock.packages['leaf@1.0.0'].hasBin = true; save();
   const head = commit();
