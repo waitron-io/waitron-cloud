@@ -6,7 +6,7 @@ import {findReuse} from './ci-reuse.mjs';
 import {documentationPlan} from './ci-docs.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
 import {scriptPlan} from './ci-scripts.mjs';
-import {scopeForRevisions} from './ci-package-revisions.mjs';
+import {scopeForRevisions, readGitBlobs} from './ci-package-revisions.mjs';
 
 export function createPlan(event, context, workspace, git, api) {
   let scope = scopeForPaths([],workspace);
@@ -73,6 +73,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
     return execFileSync('git',args,{encoding:'utf8',timeout:30_000,stdio:['ignore','pipe','pipe']});
   };
+  git.readBlobs = readGitBlobs;
   const api = path => JSON.parse(execFileSync('gh',['api',path],{encoding:'utf8',timeout:30_000,stdio:['ignore','pipe','ignore']}));
   const plan = createPlan(event,context,loadWorkspace(),git,api);
   const outputs = {

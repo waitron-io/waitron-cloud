@@ -508,8 +508,13 @@ notifications separately.
   selection remains a conservative floor; an independent receipt audit may still omit
   a receipt when its own immutable evidence holds. Workspace discovery
   currently recognises only the repository's two explicit package-directory patterns;
-  other policies keep full work. The reader currently starts one Git process per source
-  blob in each revision; batching those reads remains a CI-planning performance follow-up.
+  other policies keep full work. The planner reads the required policy, manifests and source
+  blobs in one Git batch per saved revision, deduplicating identical objects. It checks
+  each object's identity, byte length, separator and content hash before using the source.
+  The old one-MiB per-file limit remains; each batch also has a 64-MiB output limit
+  and a 30-second deadline. Missing, malformed, oversized, slow or corrupt batch
+  evidence keeps all package suites with a reason. Existing callers without a
+  batch reader retain individual reads.
   This does not resolve the plan's broader dynamic
   input and directory rules. Identity still selects all nine packages in the current graph;
   portal alone remains isolated. Unaudited root, unknown and empty changes run everything.
