@@ -3,13 +3,13 @@ import {execFileSync} from 'node:child_process';
 import {readFileSync, readdirSync, realpathSync} from 'node:fs';
 import {dirname, join, relative, resolve} from 'node:path';
 
-export function sourceDependencies(pkg, packages, sources) {
+export function sourceDependencies(pkg, packages, sources, root = process.cwd()) {
   const dependencies = new Set();
   for (const {path, source} of sources) {
     for (const match of source.matchAll(/['"`]([^'"`\n]+)['"`]/g)) {
       const prefix=match[1].split('${')[0];
       const relativePath=prefix.startsWith('./') || prefix.startsWith('../');
-      const target=relativePath ? relative('/',resolve('/',dirname(path),prefix)) : prefix;
+      const target=relativePath ? relative(root,resolve(root,dirname(path),prefix)) : prefix;
       const owner=packages.find(other=>target===other.directory || target.startsWith(`${other.directory}/`) || prefix===other.name || prefix.startsWith(`${other.name}/`));
       if (owner && owner.name!==pkg.name) dependencies.add(owner.name);
       else if (relativePath && match[1].includes('${') && !target.startsWith(`${pkg.directory}/`)) {
@@ -44,7 +44,7 @@ export function loadWorkspace(root = process.cwd()) {
       }
     };
     visit(join(root,pkg.directory));
-    pkg.pathDependencies=sourceDependencies(pkg,packages,sources);
+    pkg.pathDependencies=sourceDependencies(pkg,packages,sources,root);
   }
   return packages;
 }

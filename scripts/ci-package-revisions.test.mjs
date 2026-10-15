@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
 import {createPlan} from './ci-plan.mjs';
-import {loadWorkspace} from './ci-scope.mjs';
+import {loadWorkspace, scopeForPaths} from './ci-scope.mjs';
 import {scopeForRevisions} from './ci-package-revisions.mjs';
 
 function fixture(run) {
@@ -47,11 +47,11 @@ test('a removed sibling import keeps its former transitive consumers selected', 
   assert.equal(result.typecheck, true);
 }));
 
-test('committed new readers remain selected when dirty source hides their imports', () => fixture(({write, commit, plan}) => {
-  const base = commit();
-  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+test('an unchanged committed transitive reader survives dirty local import removal', () => fixture(({write, commit, plan}) => {
   write('packages/gateway/src/index.mjs', "import '../../catalogue/src/index.mjs';\n");
   write('packages/portal/src/index.mjs', "import '../../gateway/src/index.mjs';\n");
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
   const head = commit();
   write('packages/portal/src/index.mjs', 'export const value = 3;\n');
   assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'gateway', 'portal']);
@@ -128,6 +128,7 @@ test('missing or malformed evidence from either revision selects every package a
       const result = plan(base, head, read);
       assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], `${sha} ${fault}`);
       assert.match(result.reason, /Unverified package revisions:.*full package suite/s);
+      if (fault === 'malformed-tree') assert.match(result.reason, /Malformed package tree inventory/);
       assert.equal(result.receipts.length, 5);
     }
   }
@@ -160,6 +161,20 @@ test('unsupported discovery, membership and checkout inputs keep full work', () 
     assert.match(result.reason, /Unverified package revisions:.*full package suite/s);
   });
 });
+
+test('revision graph callers cannot substitute mutable Git revision names for commit IDs', () => fixture(({root, git, commit}) => {
+  const sha = commit(), members = loadWorkspace(root);
+  for (const [base, head] of [['HEAD', sha], [sha, 'HEAD']]) {
+    assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], members, base, head, git), {code: 'ERR_ASSERTION'});
+  }
+}));
+
+test('a path above the repository cannot become a sibling package input', () => fixture(({root, write, commit}) => {
+  write('packages/gateway/src/index.mjs', "import '../../../../packages/catalogue/src/index.mjs';\n");
+  commit();
+  assert.deepEqual(scopeForPaths(['packages/catalogue/src/index.mjs'], loadWorkspace(root)),
+    {full: false, packages: ['catalogue']});
+}));
 
 test('symbolic links, submodules and tracked dependency overrides cannot earn narrow selection', () => {
   for (const [mode, type, path] of [

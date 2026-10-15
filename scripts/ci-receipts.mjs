@@ -13,7 +13,7 @@ const auditedInputs = [
   '100644 blob f283a731c4f2a605200d48cd7e8f5ddc3c4360cd\tscripts/ci-run-package-group.mjs',
   '100644 blob a986ac7c5f620f7dc05d3529a2db576108b3cd49\tscripts/ci-package-groups.mjs',
   '100644 blob 6798c4293890db910a5e1a179486d47133780d70\tscripts/ci-run-receipts.mjs',
-  '100644 blob b13594ed42a6505dc2629b6ad4614cfd834761c6\tscripts/ci-scope.mjs',
+  '100644 blob 57b00a90d067dfd239d378b03b254f5ae4c4891e\tscripts/ci-scope.mjs',
   '100644 blob de89cdf8bc9c614cf6c573449a937cb7728f8d09\t.github/workflows/ci.yml',
   '100644 blob 498083173ee9995b076e8fa6ab6c68d34496182a\tscripts/cloud-two-venue-milestone-receipt.mjs',
   '100644 blob 8236607cb5a5e5b00ab32dbc1e6bce08dc0e4cff\tscripts/managed-recovery-receipt.fixture.mjs',

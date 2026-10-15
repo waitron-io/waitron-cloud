@@ -508,7 +508,9 @@ notifications separately.
   selection remains a conservative floor; an independent receipt audit may still omit
   a receipt when its own immutable evidence holds. Workspace discovery
   currently recognises only the repository's two explicit package-directory patterns;
-  other policies keep full work. This does not resolve the plan's broader dynamic
+  other policies keep full work. The reader currently starts one Git process per source
+  blob in each revision; batching those reads remains a CI-planning performance follow-up.
+  This does not resolve the plan's broader dynamic
   input and directory rules. Identity still selects all nine packages in the current graph;
   portal alone remains isolated. Unaudited root, unknown and empty changes run everything.
   Type checking stays whole-workspace because backend manifests share the root
