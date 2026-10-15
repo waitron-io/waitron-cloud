@@ -516,8 +516,9 @@ notifications separately.
   A lockfile-only PR can select the affected packages and their saved source/helper
   consumers when both revisions match the complete other-input audit in
   `scripts/ci-lock-selection-audit.json`. The audit pins every other tracked file,
-  including manifests, installation policy, root readers and documentation. A new
-  reader invalidates it until you review the inputs again. The selected packages
+  including manifests, installation policy, root readers and documentation. Any
+  change to those inputs invalidates it until you review them again; follow the
+  [lockfile audit procedure](ci-lockfile-audit.md). The selected packages
   include consumers from both saved revisions; all compiler and receipt checks
   still run. Root dependency changes, changed workspace membership, formatting-only
   locks, mixed paths, missing evidence and stale audits retain full work. This
