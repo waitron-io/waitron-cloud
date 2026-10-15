@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {capacityReceiptPlan} from './ci-capacity-receipt.mjs';
+import {databaseReceiptPlan} from './ci-database-receipt.mjs';
 
 const suite = 'test:two-venue-milestone-receipt';
 const command = 'node --test scripts/milestone-proof-helpers.test.mjs scripts/verify-managed-recovery-receipt.test.mjs scripts/verify-two-venue-milestone-receipt.test.mjs';
@@ -41,5 +42,6 @@ function milestoneReceiptPlan(receipts, scope, base, head, git) {
 export function receiptPlan(receipts, scope, base, head, git) {
   const milestone = milestoneReceiptPlan(receipts, scope, base, head, git);
   const capacity = capacityReceiptPlan(milestone.receipts, scope, base, head, git);
-  return {receipts: capacity.receipts, reason: [milestone.reason, capacity.reason].filter(Boolean).join('; ')};
+  const database = databaseReceiptPlan(capacity.receipts, scope, base, head, git);
+  return {receipts: database.receipts, reason: [milestone.reason, capacity.reason, database.reason].filter(Boolean).join('; ')};
 }

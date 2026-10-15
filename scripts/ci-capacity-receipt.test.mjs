@@ -144,3 +144,15 @@ for (const [name, path, value] of [
     assert.deepEqual(select(base, commit()).receipts, receiptSuites);
   }, change);
 });
+
+
+test('package checkout attributes in either revision retain capacity', () => {
+  fixture(({root, git, base, head, select}) => {
+    const path = 'packages/backups/.gitattributes';
+    writeFileSync(join(root, path), 'src/storage.ts working-tree-encoding=UTF-16LE\n');
+    git('add', path); git('commit', '-s', '-qm', 'Change backup checkout encoding');
+    const changed = git('rev-parse', 'HEAD').trim();
+    assert.deepEqual(select(base, changed).receipts, receiptSuites);
+    assert.deepEqual(select(changed, head).receipts, receiptSuites);
+  });
+});

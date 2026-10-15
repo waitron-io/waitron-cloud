@@ -11,7 +11,7 @@ test('PR planner uses exact SHAs and NUL paths, preserving spaces and both renam
   const git=(...args)=>{calls.push(args);return args[0]==='merge-base'?base:'apps/portal/test/a b.ts\0packages/identity/old.ts\0';};
   const plan=createPlan({pull_request:{head:{sha:head},base:{sha:base}}},{sha:head,repository,branch:'main'},workspace,git,api);
   assert.equal(plan.packages.length,20);
-  assert.deepEqual(calls,[['merge-base',base,head],['diff','--name-only','--no-renames','-z',base,head],['ls-tree','-rz','--full-tree',base],['ls-tree','-rz','--full-tree',base]]);
+  assert.deepEqual(calls,[['merge-base',base,head],['diff','--name-only','--no-renames','-z',base,head],['ls-tree','-rz','--full-tree',base],['ls-tree','-rz','--full-tree',base],['ls-tree','-rz','--full-tree',base]]);
 });
 test('every direct, multi-commit, unknown and failed-evidence push falls back to the full twenty jobs', () => {
   for (const event of [{}, {before,commits:[{},{}]}, {before,commits:[{}],forced:true}, {before,commits:[{}]}]) {
