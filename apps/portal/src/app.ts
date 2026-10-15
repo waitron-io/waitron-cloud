@@ -312,3 +312,5 @@ export class PortalApp {
     this.pending = false; this.draw();
   }
 }
+
+// Selection proof: exercise the unchanged portal suite.
