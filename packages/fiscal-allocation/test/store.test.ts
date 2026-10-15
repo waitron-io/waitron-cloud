@@ -7,6 +7,7 @@ import { requireCurrentHistory } from '../src/continuity.ts';
 import { scope, bases, binding, payload } from './fixtures.ts';
 import { storeFixture, blocked } from './store-fixture.ts';
 import { retain } from './continuity-fixture.ts';
+import type { PoolClient } from 'pg';
 import type { AllocationReceipt } from '../src/types.ts';
 
 const refused = (code: string) => (e: { code?: string }) => {
@@ -476,46 +477,77 @@ test('ownership revoked while waiting on its row prevents receipt disclosure', a
     await s.close();
   }
 });
-test('session expiry during external append burns the name and prevents receipt disclosure', async () => {
-  const s = await storeFixture();
-  try {
-    const v = await s.venue();
-    await s.f.pool.query(
-      "UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '300 milliseconds' WHERE account_id=$1",
-      [v.account],
-    );
-    const original = s.options.continuity!;
-    const store = new FiscalAllocationStore(s.f.pool, {
-      ...s.options,
-      continuity: {
-        ...original,
-        async claim(input) {
-          const result = await original.claim(input);
-          while (
-            (
-              await s.f.pool.query(
-                'SELECT clock_timestamp()>=absolute_expires_at AS expired FROM cloud_sessions WHERE account_id=$1',
-                [v.account],
-              )
-            ).rows[0].expired !== true
-          ) {}
-          return result;
+for (const delayMs of [0, 350]) {
+  test('session expiry during external append burns the name and prevents receipt disclosure' +
+    (delayMs ? ' after a slow start' : ''), async (t) => {
+    const s = await storeFixture();
+    const boundaries: unknown[] = [];
+    const started = performance.now();
+    try {
+      const v = await s.venue();
+      let client: PoolClient | undefined;
+      let appendCount = 0;
+      const appendState: { enteredExpired?: boolean; returnedExpired?: boolean } = {};
+      const mark = async (stage: string, c: Pick<PoolClient, 'query'> = s.f.pool) => {
+        const state = (await c.query(
+          'SELECT clock_timestamp() AS now, absolute_expires_at, clock_timestamp()>=absolute_expires_at AS expired FROM cloud_sessions WHERE account_id=$1',
+          [v.account],
+        )).rows[0];
+        boundaries.push({ stage, elapsedMs: performance.now() - started, ...state });
+        return state.expired;
+      };
+      const original = s.options.continuity!;
+      const store = new FiscalAllocationStore(s.f.pool, {
+        ...s.options,
+        entitlement: {
+          async check(c, ...args) {
+            client = c;
+            await mark('authorization', c);
+            return s.options.entitlement!.check(c, ...args);
+          },
         },
-      },
-    });
-    await assert.rejects(
-      store.reserve(v.session.token, v.session.csrfToken, v.input),
-      refused('session_expired'),
-    );
-    assert.equal((await requireCurrentHistory(original, scope, null)).witness.cHighWater, 1);
-    assert.equal(
-      (await s.f.pool.query('SELECT count(*)::int AS n FROM fiscal_registry_events')).rows[0].n,
-      0,
-    );
-  } finally {
-    await s.close();
-  }
-});
+        continuity: {
+          ...original,
+          async claim(input) {
+            assert.ok(client);
+            appendState.enteredExpired = await mark('append-entered', client);
+            appendCount++;
+            const result = await original.claim(input);
+            await mark('append-committed', client);
+            // The reservation holds the session row lock, so expire it on that same client.
+            // Expiry starts after the real append; setup speed cannot move it before authorization.
+            await client.query(
+              "UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()-interval '1 millisecond' WHERE account_id=$1",
+              [v.account],
+            );
+            appendState.returnedExpired = await mark('expired-after-append', client);
+            return result;
+          },
+        },
+      });
+      if (delayMs) await s.f.pool.query('SELECT pg_sleep($1)', [delayMs / 1000]);
+      await mark('before-reserve');
+      await assert.rejects(
+        store.reserve(v.session.token, v.session.csrfToken, v.input),
+        (error: { code?: string }) => {
+          boundaries.push({ stage: 'refused', code: error.code });
+          return refused('session_expired')(error);
+        },
+      );
+      assert.equal((await requireCurrentHistory(original, scope, null)).witness.cHighWater, 1);
+      assert.equal(
+        (await s.f.pool.query('SELECT count(*)::int AS n FROM fiscal_registry_events')).rows[0].n,
+        0,
+      );
+      assert.equal(appendCount, 1);
+      // Reconciliation can recover a committed append even if its callback throws.
+      assert.deepEqual(appendState, { enteredExpired: false, returnedExpired: true });
+    } finally {
+      t.diagnostic(JSON.stringify(boundaries));
+      await s.close();
+    }
+  });
+}
 test('missing session and wrong CSRF cannot claim names', async () => {
   const s = await storeFixture();
   try {
