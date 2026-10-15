@@ -4,10 +4,12 @@ import {pathToFileURL} from 'node:url';
 import {loadWorkspace, scopeForPaths, workPlan} from './ci-scope.mjs';
 import {findReuse} from './ci-reuse.mjs';
 import {documentationPlan} from './ci-docs.mjs';
+import {receiptPlan} from './ci-receipts.mjs';
 
 export function createPlan(event, context, workspace, git, api) {
   let scope = scopeForPaths([],workspace);
   let reuse = null;
+  let revisions;
   let reason = 'Unverified merge or unknown diff: full suite';
   if (event.pull_request) {
     try {
@@ -21,6 +23,7 @@ export function createPlan(event, context, workspace, git, api) {
         if (documentation) return {packages:[], receipts:[], typecheck:false, reuse:null, documentation, reason:`Audited unread Markdown: ${paths.join(', ')}`};
       } catch { /* Missing or stale audit evidence keeps the existing full fallback. */ }
       scope = scopeForPaths(paths,workspace);
+      revisions = {base:mergeBase, head:head.sha};
       reason = scope.full ? `Shared, unaudited or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
     } catch {
       reason = 'Cannot determine PR diff: full suite';
@@ -33,7 +36,13 @@ export function createPlan(event, context, workspace, git, api) {
     } catch { /* Failed evidence leaves the full suite selected. */ }
   }
   if (reuse) return {packages:[],receipts:[],typecheck:false,reuse,reason:`same tree as PR head ${reuse.sha}, run ${reuse.runId}`};
-  return {...workPlan(scope,workspace),reuse:null,reason};
+  const work = workPlan(scope,workspace);
+  if (revisions) {
+    const selection = receiptPlan(work.receipts, scope, revisions.base, revisions.head, git);
+    work.receipts = selection.receipts;
+    if (selection.reason) reason += `; ${selection.reason}`;
+  }
+  return {...work,reuse:null,reason};
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
