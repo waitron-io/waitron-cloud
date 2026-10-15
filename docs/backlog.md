@@ -215,6 +215,17 @@ Duplicate adjacent status authority calls remain a small follow-up; no productio
 selected. Fiscal records, invoice hashes and Waitron's allocation code stay outside
 this Cloud change.
 
+**Open: fiscal session-expiry test ordering.** A full local run of
+`packages/fiscal-allocation/test/store.test.ts:479` passed the session refusal
+but found zero permanent names instead of one. Its 300 ms session deadline
+starts before reservation reaches the external append. An isolated run passed;
+a disposable probe that paused 350 ms before reservation reproduced the same
+failure and recorded that the append callback never started. That establishes
+a timing risk, not the cause of the original run, which recorded no entry times.
+Record the authorization and append boundaries on recurrence, then arrange expiry
+inside the append callback while retaining the session refusal, one permanent name
+and zero projected events. Do not weaken the existing authority checks.
+
 ## Initial focus
 
 - Launch first in Spain on AWS. AWS documents Europe (Spain) as `eu-south-2` and
