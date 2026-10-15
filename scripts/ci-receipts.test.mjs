@@ -102,3 +102,12 @@ test('the audited inputs must also match the head revision when called with pack
     assert.deepEqual(receiptPlan(receiptSuites, {full: false}, base, head, incomplete).receipts, receiptSuites);
   });
 });
+
+test('restoring a reader in the head cannot hide unaudited base inputs', () => {
+  fixture(({root, git, base}) => {
+    copyFileSync(inputs[1], join(root, inputs[1]));
+    git('add', '.'); git('commit', '-s', '-qm', 'Restore audited head reader');
+    const head = git('rev-parse', 'HEAD').trim();
+    assert.deepEqual(receiptPlan(receiptSuites, {full: false}, base, head, git).receipts, receiptSuites);
+  }, root => writeFileSync(join(root, inputs[1]), '// Unaudited base reader\n'));
+});
