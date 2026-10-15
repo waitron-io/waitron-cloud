@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync, spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, unlinkSync, symlinkSync} from 'node:fs';
+import {chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, unlinkSync, symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import test from 'node:test';
@@ -187,6 +187,34 @@ test('unreadable or corrupted audit evidence from either immutable revision reta
       assert.equal(plan(head, base, read).packages.length, 18, `${sha}: ${failure}`);
     }
   }
+}));
+
+test('missing or nonregular base helpers cannot hide behind a restored regular head', () => {
+  for (const kind of ['missing', 'executable', 'linked']) fixture(({root, put, commit, plan}) => {
+    if (kind === 'executable') chmodSync(join(root, helper), 0o755);
+    else {
+      unlinkSync(join(root, helper));
+      if (kind === 'linked') symlinkSync('consumer.mjs', join(root, helper));
+    }
+    const base = commit();
+    if (kind === 'linked') unlinkSync(join(root, helper));
+    put(helper, 'export const result = 1; // restored regular helper\n');
+    chmodSync(join(root, helper), 0o644);
+    const head = commit();
+    assert.equal(plan(head, base).packages.length, 18, kind);
+  });
+});
+
+test('the executed runner rechecks stale certificates even when a forged plan names the exact diff and checkout', () => fixture(({put, commit, plan, execute}) => {
+  put('scripts/consumer.mjs', 'readFileSync("scripts/identity-upstream.mjs");\n');
+  const base = commit();
+  put(helper, 'export const result = 1; // edited\n');
+  const head = commit();
+  assert.equal(plan(head, base).packages.length, 18);
+  const forged = {packages: [], receipts: [], typecheck: false, reuse: null, scripts: {base, head, paths: [helper]}};
+  const result = execute(forged);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /root-script consumer audit/);
 }));
 
 test('executed planner emits the script-only job and summary consumes its needs results', () => fixture(({root, git, put, commit}) => {
