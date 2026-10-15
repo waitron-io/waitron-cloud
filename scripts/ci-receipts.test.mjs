@@ -22,6 +22,7 @@ const inputs = [
   'scripts/verify-two-venue-milestone-receipt.mjs',
   'scripts/verify-two-venue-milestone-receipt.test.mjs',
   'scripts/ci-run-receipts.mjs',
+  'scripts/ci-package-groups.mjs', 'scripts/ci-run-package-group.mjs',
   'scripts/ci-scope.mjs',
 ];
 function fixture(run, alter = () => {}) {
@@ -51,7 +52,7 @@ test('backend-only changes omit the unchanged pure milestone receipt and preserv
   fixture(({plan}) => {
     const result = plan();
     assert.deepEqual(result.receipts, ['test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt']);
-    assert.equal(result.packages.length, 19);
+    assert.equal(result.packages.length, 18);
     assert.equal(result.typecheck, true);
     assert.match(result.reason, /unchanged audited milestone inputs/i);
   });
@@ -82,7 +83,7 @@ test('mixed input changes and unknown diffs preserve every receipt', () => {
     const head = git('rev-parse', 'HEAD').trim();
     const result = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git, () => {});
     assert.deepEqual(result.receipts, receiptSuites);
-    assert.equal(result.packages.length, 20);
+    assert.equal(result.packages.length, 18);
     const missing = (...args) => args[0] === 'ls-tree' ? (() => { throw Error('Missing tree'); })() : git(...args);
     assert.deepEqual(createPlan({pull_request: {base: {sha: base}, head: {sha: git('rev-parse', 'HEAD^').trim()}}}, {}, workspace, missing, () => {}).receipts, receiptSuites);
   });

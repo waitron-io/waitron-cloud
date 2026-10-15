@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 import {assertDocumentation} from './ci-docs.mjs';
+import {packageMembers} from './ci-package-groups.mjs';
 import {assertReceiptSuites} from './ci-run-receipts.mjs';
 
 export function assertSummary(plan, results, jobs) {
@@ -27,6 +28,12 @@ export function assertSummary(plan, results, jobs) {
     assert.equal(results.documentation, plan.documentation ? 'success' : 'skipped', 'documentation did not match its plan');
   }
   if (plan.typecheck) expected.push('typecheck');
+  const logicalPackages = plan.packages.flatMap(row => packageMembers(row).map(name => `${name}:${row.shard}`));
+  assert.equal(new Set(logicalPackages).size, logicalPackages.length, 'Duplicate package execution');
+  const groupedPackages = plan.packages.filter(row => Object.hasOwn(row, 'members')).flatMap(packageMembers);
+  for (const name of groupedPackages) {
+    assert.equal(plan.packages.filter(row => packageMembers(row).includes(name)).length, 1, 'Duplicate package execution');
+  }
   for (const row of plan.packages) expected.push(`package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`);
   if (plan.receipts.length) {
     assertReceiptSuites(plan.receipts);

@@ -29,6 +29,7 @@ const inputs = [
   'scripts/verify-backup-transfer-receipt.mjs', 'scripts/verify-backup-transfer-receipt.test.mjs',
   'scripts/verify-backup-capacity-receipt.mjs', 'scripts/verify-backup-capacity-receipt.test.mjs',
   'scripts/ci-run-receipts.mjs',
+  'scripts/ci-package-groups.mjs', 'scripts/ci-run-package-group.mjs',
   'scripts/ci-scope.mjs',
 ];
 const workspace = loadWorkspace();
@@ -61,7 +62,7 @@ test('unrelated package changes omit capacity while retaining packages, types an
     assert.deepEqual(select().receipts, expected);
     const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git, () => {throw Error('No reuse');});
     assert.deepEqual(plan.receipts, expected);
-    assert.equal(plan.packages.length, 19);
+    assert.equal(plan.packages.length, 18);
     assert.equal(plan.typecheck, true);
     assert.match(plan.reason, /omitted capacity receipt.*both revisions/i);
   });

@@ -7,13 +7,15 @@ const suite = 'test:local-stack';
 // to cover wildcard test discovery and directory reads, including new entries.
 // Changed readers, installation inputs or execution wiring require a new audit.
 const auditedInputs = [
-  '100644 blob 91bd1b06d5bacbdeaa06b35f2ff3b9916bf00879\t.github/workflows/ci.yml',
+  '100644 blob f283a731c4f2a605200d48cd7e8f5ddc3c4360cd\tscripts/ci-run-package-group.mjs',
+  '100644 blob a986ac7c5f620f7dc05d3529a2db576108b3cd49\tscripts/ci-package-groups.mjs',
+  '100644 blob 894cb562fca9291ae0c705f4fbc93f8eb4dadeb1\t.github/workflows/ci.yml',
   '100644 blob a7776e95aa79764b5d00ff8b2bf983ab501d102e\tpackages/operations/src/metrics.ts',
   '100644 blob e06930b7229ac44a14187f449a582497e9df177d\tpackages/registration/src/migrate.ts',
   '100644 blob 499fc6c5da992a85931d8e9b3b1c8ed7bb7bbf46\tpackages/registration/src/transaction.ts',
   '100644 blob 3b9b040fb57c302e36bb91ccca2d7099dde5a5df\tpackages/remote-access/src/manifest.ts',
   '100644 blob 6798c4293890db910a5e1a179486d47133780d70\tscripts/ci-run-receipts.mjs',
-  '100644 blob 41b94a2f7b581207e2d1d4c9dc1ddf1593aabe2d\tscripts/ci-scope.mjs',
+  '100644 blob f27a1562a2f67e7785cfcedc095b3fa854b0f4b2\tscripts/ci-scope.mjs',
   '100644 blob 47212306f96eab384e924a109df54cf538724712\tscripts/local-stack-compose.mjs',
   '100644 blob 934507c9ffbd92ea5e18977d5709b78a93ede37b\tscripts/local-stack-compose.test.mjs',
   '100644 blob 8e54dcf26a5d541514504ca7913df8f8846fd868\tscripts/local-stack-lifecycle.mjs',

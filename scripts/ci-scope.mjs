@@ -1,3 +1,4 @@
+import {groupShortPackages} from './ci-package-groups.mjs';
 import {execFileSync} from 'node:child_process';
 import {readFileSync, readdirSync, realpathSync} from 'node:fs';
 import {dirname, join, relative, resolve} from 'node:path';
@@ -80,5 +81,5 @@ export function workPlan(scope, workspace, root = process.cwd()) {
   // The baseline covers unbounded backend and deployment inputs. The PR planner
   // may omit a receipt only with unchanged audited inputs in both revisions.
   const backend = scope.packages.some(name=>workspace.find(pkg=>pkg.name===name).directory.startsWith('packages/') && name !== '@waitron-cloud/ui-smoke');
-  return {packages, receipts:scope.full || backend ? receiptSuites : scope.packages.includes('@waitron-cloud/portal') ? ['test:local-stack'] : [], typecheck:true};
+  return {packages:groupShortPackages(packages), receipts:scope.full || backend ? receiptSuites : scope.packages.includes('@waitron-cloud/portal') ? ['test:local-stack'] : [], typecheck:true};
 }

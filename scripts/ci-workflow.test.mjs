@@ -13,7 +13,7 @@ test('main merges keep independent runs while superseded pull request runs cance
 test('every discovered workspace test package runs through the planned database matrix',()=>{
   const members=loadWorkspace();
   const full=workPlan(scopeForPaths(['pnpm-lock.yaml'],members),members);
-  assert.deepEqual([...new Set(full.packages.map(row=>row.package))].sort(),members.map(pkg=>pkg.name).sort());
+  assert.deepEqual([...new Set(full.packages.flatMap(row=>row.members ?? [row.package]))].sort(),members.map(pkg=>pkg.name).sort());
   assert.match(job('packages'),/fail-fast: false/);
   assert.match(job('packages'),/matrix: \$\{\{ fromJSON\(needs.changes.outputs.package_matrix\) \}\}/);
   assert.match(job('packages'),/node scripts\/test-postgres.mjs --filter \$\{\{ matrix.package \}\} test/);
@@ -34,7 +34,7 @@ test('slow packages run every file shard with their original test deadlines',()=
     assert.ok(rows.every(row=>row.shards===count));
   }
   const packages=job('packages');
-  assert.match(packages,/if: \$\{\{ !matrix.shards \}\}\n\s+run: node scripts\/test-postgres.mjs --filter/);
+  assert.match(packages,/if: \$\{\{ !matrix.shards && !matrix.members \}\}\n\s+run: node scripts\/test-postgres.mjs --filter/);
   assert.match(packages,/if: matrix.package == '@waitron-cloud\/portal'\n\s+run: pnpm --filter \$\{\{ matrix.package \}\} build/);
   assert.match(packages,/if: matrix.shards\n\s+run: node scripts\/test-postgres.mjs exec pnpm --filter \$\{\{ matrix.package \}\} exec node --test --test-timeout=\$\{\{ matrix.package == '@waitron-cloud\/portal' && '120000' \|\| '30000' \}\} --test-shard=\$\{\{ matrix.shard \}\}\/\$\{\{ matrix.shards \}\} "test\/\*\.test\.ts"/);
 });
@@ -85,4 +85,11 @@ test('selected receipt suites share one setup and receive the exact plan', () =>
   assert.doesNotMatch(job('receipts'), /matrix:|strategy:/);
   assert.match(job('receipts'), /run: node scripts\/ci-run-receipts.mjs/);
   assert.match(job('receipts'), /CI_PLAN: \$\{\{ needs.changes.outputs.plan \}\}/);
+});
+
+test('short package groups share one database harness and receive the exact matrix row', () => {
+  const packages = job('packages');
+  assert.match(packages, /if: matrix.members\n\s+run: node scripts\/test-postgres.mjs exec node scripts\/ci-run-package-group.mjs/);
+  assert.match(packages, /CI_PACKAGE_GROUP: \$\{\{ toJSON\(matrix\) \}\}/);
+  assert.match(packages, /if: \$\{\{ !matrix.shards && !matrix.members \}\}/);
 });
