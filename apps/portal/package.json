@@ -19,7 +19,7 @@
     "@waitron-cloud/account-http": "workspace:*",
     "@waitron-cloud/identity": "workspace:*",
     "@waitron-cloud/registration": "workspace:*",
-    "axe-core": "4.13.0",
+    "axe-core": "4.10.3",
     "esbuild": "0.28.2",
     "pg": "^8.23.0",
     "playwright": "1.63.0"
