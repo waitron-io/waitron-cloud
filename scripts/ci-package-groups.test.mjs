@@ -63,7 +63,7 @@ test('a failed package fails the group while later selected packages still run',
   });
 });
 
-const invalid = [null, {}, {package: members.join(' + '), shard: 1}, row([]), row([members[0]]), row([...members, members[0]]), row([members[1], members[0]]),
+const invalid = [null, {}, {package: members[0], shard: 1}, {package: members.join(' + '), shard: 1}, row([]), row([members[0]]), row([...members, members[0]]), row([members[1], members[0]]),
   row([members[0], '@waitron-cloud/portal']), {...row(members), package: 'forged'}, {...row(members), shard: 2},
   {...row(members), shards: 3}, {...row(members), command: 'proof:local-stack'}];
 test('group runner rejects empty, duplicate, unknown, reordered, partial and forged rows before executing', () => {
@@ -93,7 +93,7 @@ test('summary validates grouped members and requires the successful exact group 
   const results = {changes: 'success', typecheck: 'success', packages: 'success', receipts: 'skipped'};
   const jobs = ['changes', 'typecheck', `package (${group.package})`].map(name => ({name, status: 'completed', conclusion: 'success'}));
   assert.doesNotThrow(() => assertSummary(plan, results, jobs));
-  for (const forged of invalid.filter(value => value !== null)) {
+  for (const forged of invalid.filter(value => value !== null && value.package !== members[0])) {
     const altered = jobs.map(item => item.name.startsWith('package (') ? {...item, name: `package (${forged.package})`} : item);
     assert.throws(() => assertSummary({...plan, packages: [forged]}, results, altered));
   }
