@@ -39,8 +39,8 @@ test('slow packages run every file shard with their original test deadlines',()=
   assert.match(packages,/if: matrix.shards\n\s+run: node scripts\/test-postgres.mjs exec pnpm --filter \$\{\{ matrix.package \}\} exec node --test --test-timeout=\$\{\{ matrix.package == '@waitron-cloud\/portal' && '120000' \|\| '30000' \}\} --test-shard=\$\{\{ matrix.shard \}\}\/\$\{\{ matrix.shards \}\} "test\/\*\.test\.ts"/);
 });
 test('work jobs stop within eight minutes and planner/summary within two',()=>{
-  for (const name of ['typecheck','receipts','packages']) assert.match(job(name),/timeout-minutes: 8/);
-  for (const name of ['changes','summary','documentation']) assert.match(job(name),/timeout-minutes: 2/);
+  for (const name of ['typecheck','receipts','packages']) assert.match(job(name),/^    timeout-minutes: 8$/m);
+  for (const name of ['changes','summary','documentation']) assert.match(job(name),/^    timeout-minutes: 2$/m);
 });
 test('browser setup is limited to browser packages and bounded across two attempts',()=>{
   const packages=job('packages');
