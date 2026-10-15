@@ -11,6 +11,7 @@ import {loadWorkspace, receiptSuites} from './ci-scope.mjs';
 const suite = 'test:local-stack';
 const workspace = loadWorkspace();
 const files = [
+  'scripts/ci-package-groups.mjs', 'scripts/ci-run-package-group.mjs',
   'scripts/ci-run-receipts.mjs', 'scripts/ci-scope.mjs', '.github/workflows/ci.yml',
   'packages/operations/src/metrics.ts', 'packages/remote-access/src/manifest.ts',
   'packages/registration/src/migrate.ts', 'packages/registration/src/transaction.ts',
@@ -43,7 +44,7 @@ test('unrelated package changes omit all audited receipts and retain actual pack
     assert.deepEqual(select().receipts, []);
     const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git, () => {throw Error('No reuse');});
     assert.deepEqual(plan.receipts, []);
-    assert.equal(plan.packages.length, 19);
+    assert.equal(plan.packages.length, 18);
     assert.equal(plan.typecheck, true);
     assert.match(plan.reason, /omitted local.stack receipt.*both revisions/i);
   });

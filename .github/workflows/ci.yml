@@ -134,8 +134,12 @@ jobs:
             if [ "$attempt" -eq 2 ]; then exit 1; fi
             sleep 5
           done
-      - if: ${{ !matrix.shards }}
+      - if: ${{ !matrix.shards && !matrix.members }}
         run: node scripts/test-postgres.mjs --filter ${{ matrix.package }} test
+      - if: matrix.members
+        run: node scripts/test-postgres.mjs exec node scripts/ci-run-package-group.mjs
+        env:
+          CI_PACKAGE_GROUP: ${{ toJSON(matrix) }}
       - if: matrix.package == '@waitron-cloud/portal'
         run: pnpm --filter ${{ matrix.package }} build
       - if: matrix.shards

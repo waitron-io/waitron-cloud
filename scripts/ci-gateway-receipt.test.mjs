@@ -30,6 +30,7 @@ const inputs = [
   'scripts/public-gateway-limits-receipt-fixture.mjs',
   'scripts/verify-public-gateway-limits-receipt.mjs', 'scripts/verify-public-gateway-limits-receipt.test.mjs',
   'scripts/ci-run-receipts.mjs',
+  'scripts/ci-package-groups.mjs', 'scripts/ci-run-package-group.mjs',
   'scripts/ci-scope.mjs',
 ];
 const workspace = loadWorkspace();
@@ -62,7 +63,7 @@ test('unrelated package changes omit public gateway while retaining packages, ty
     assert.deepEqual(select().receipts, expected);
     const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git, () => {throw Error('No reuse');});
     assert.deepEqual(plan.receipts, expected);
-    assert.equal(plan.packages.length, 19);
+    assert.equal(plan.packages.length, 18);
     assert.equal(plan.typecheck, true);
     assert.match(plan.reason, /omitted public gateway receipt.*both revisions/i);
   });
@@ -180,7 +181,7 @@ test('changed public gate and fallback page select gateway checks in actual pack
       assert.deepEqual(select(base, head).receipts, receiptSuites);
       const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git, () => {});
       assert.ok(plan.receipts.includes(suite));
-      assert.ok(plan.packages.some(row => row.package === '@waitron-cloud/remote-access'));
+      assert.ok(plan.packages.some(row => (row.members ?? [row.package]).includes('@waitron-cloud/remote-access')));
     });
   }
 });

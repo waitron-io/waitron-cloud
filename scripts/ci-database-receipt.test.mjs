@@ -30,6 +30,7 @@ const inputs = [
   'scripts/database-recovery-migrations.mjs', 'scripts/database-recovery-migrations.test.mjs',
   'scripts/verify-database-recovery-receipt.mjs', 'scripts/verify-database-recovery-receipt.test.mjs',
   'scripts/ci-run-receipts.mjs',
+  'scripts/ci-package-groups.mjs', 'scripts/ci-run-package-group.mjs',
   'scripts/ci-scope.mjs',
 ];
 const workspace = loadWorkspace();
@@ -62,7 +63,7 @@ test('unrelated package changes omit database recovery while retaining packages,
     assert.deepEqual(select().receipts, expected);
     const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git, () => {throw Error('No reuse');});
     assert.deepEqual(plan.receipts, expected);
-    assert.equal(plan.packages.length, 19);
+    assert.equal(plan.packages.length, 18);
     assert.equal(plan.typecheck, true);
     assert.match(plan.reason, /omitted database recovery receipt.*both revisions/i);
   });

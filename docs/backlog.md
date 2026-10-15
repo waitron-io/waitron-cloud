@@ -523,7 +523,12 @@ notifications separately.
   portal source changes also omit local-stack when its audit holds, otherwise they
   retain it. Isolated ui-smoke needs no receipt. Registration
   uses seven file shards, account HTTP and portal use three each, and backups uses
-  two. The other packages keep one job each. Selected receipt suites share one
+  two. Selected identity, operations and remote-access suites share one job when at
+  least two are needed. Each keeps its full package command and deadline, runs
+  once in sequence, and reports its own result. One PostgreSQL/Mailpit setup
+  serves the group; a failure fails the job while later suites still run. The
+  summary refuses malformed groups and overlapping package execution. Other
+  packages keep one job each. Selected receipt suites share one
   setup and run in one job. The runner validates every selected suite before
   execution, runs each once and continues after a failure so later results remain
   visible. Any failed suite fails the job; the summary requires that job to
@@ -557,9 +562,9 @@ notifications separately.
   ([run 38546606743](https://github.com/waitron-io/waitron-cloud/actions/runs/38546606743)).
   setup-node describes its input as “Set to false to disable automatic caching”
   ([action definition](https://github.com/actions/setup-node/blob/v5/action.yml), read 2026-10-14).
-  Real Actions controls now prove portal-only selection (three nonempty shards,
+  Historical Actions controls proved portal-only selection (three nonempty shards,
   180 tests), identity's complete consumer set (all nine packages), and lockfile
-  fallback (all 20 package jobs and five receipts). The corrected cold-lockfile
+  fallback (then all 20 package jobs and five receipts). The corrected cold-lockfile
   [run 38548997181](https://github.com/waitron-io/waitron-cloud/actions/runs/38548997181)
   passes all 28 jobs and all 1,477 package tests, including the added usage case.
   The [current scratch merge](https://github.com/waitron-io/waitron-cloud/actions/runs/38547672978)
