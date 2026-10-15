@@ -10,7 +10,7 @@ const auditedInputs = [
   '100644 blob a986ac7c5f620f7dc05d3529a2db576108b3cd49\tscripts/ci-package-groups.mjs',
   '100644 blob 6798c4293890db910a5e1a179486d47133780d70\tscripts/ci-run-receipts.mjs',
   '100644 blob a8e639db9004f362aabb26ad4371fb01885c4dff\tscripts/ci-scope.mjs',
-  '100644 blob de89cdf8bc9c614cf6c573449a937cb7728f8d09\t.github/workflows/ci.yml',
+  '100644 blob 6dd88448dffd6cbe14a72ba4d3b24fbc21e6801d\t.github/workflows/ci.yml',
   '100644 blob 1f2ce2487e4344c25808f2e7a0dc022c09e818bb\tpackages/remote-access/src/public-gate.ts',
   '100644 blob 19f8152c87c79b3de48b298b32eebf93cd02ef02\tpackages/remote-access/src/public-unavailable.ts',
   '100644 blob e5a0fb1ca44c628cbc92299bb9f6ba4cd4f4c987\tscripts/public-gateway-limits.mjs',

@@ -572,7 +572,18 @@ notifications separately.
   still fail compilation when broken. Add that test-directory probe to the
   automated controls, which currently inject backend source errors only. Missing
   package compiler scripts and the equivalent `--project` spelling already fail
-  the inventory or trace checks, but need clearer test diagnostics. Package-only changes omit the two-venue milestone receipt when both immutable
+  the inventory or trace checks, but need clearer test diagnostics. Bootstrap setup now gives npm
+  registry requests 15 seconds with one retry after one second, so a stalled
+  tarball fetch cannot consume minutes before tests start. A real local `npm ci`
+  against a held tarball request exceeds 35 seconds under the defaults and fails
+  in about 31 seconds with these settings, after two attempts. The setup action
+  receives this policy in every CI job; project installation, auditing and all
+  test/job deadlines stay unchanged. This is a per-request limit, not a total
+  bootstrap deadline. In run 38803777952, bootstrap npm reported a five-minute
+  installation and the account shard was later cancelled before completing.
+  Its log does not identify the slow request, so do not attribute it to a
+  particular registry endpoint or to a product test. Preserve bootstrap timing
+  and npm diagnostics if setup overruns recur. Package-only changes omit the two-venue milestone receipt when both immutable
   revisions retain its audited regular-file inputs, test command and CI wiring.
   These tests exercise validators and receipt composition; their guarded CLI
   blocks do not launch backend proofs when imported. Changed, missing or linked

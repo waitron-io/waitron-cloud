@@ -30,6 +30,10 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - uses: pnpm/action-setup@v6
+        env:
+          npm_config_fetch_timeout: '15000'
+          npm_config_fetch_retries: '1'
+          npm_config_fetch_retry_mintimeout: '1000'
       - uses: actions/setup-node@v5
         with:
           node-version: '26'
@@ -84,6 +88,10 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: pnpm/action-setup@v6
+        env:
+          npm_config_fetch_timeout: '15000'
+          npm_config_fetch_retries: '1'
+          npm_config_fetch_retry_mintimeout: '1000'
       - uses: actions/setup-node@v5
         with:
           node-version: '26'
@@ -105,6 +113,10 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: pnpm/action-setup@v6
+        env:
+          npm_config_fetch_timeout: '15000'
+          npm_config_fetch_retries: '1'
+          npm_config_fetch_retry_mintimeout: '1000'
       - uses: actions/setup-node@v5
         with:
           node-version: '26'
@@ -133,6 +145,10 @@ jobs:
           # Registration runs populated upgrades with pinned historical runners.
           fetch-depth: ${{ (matrix.package == '@waitron-cloud/registration' || matrix.package == '@waitron-cloud/fiscal-allocation') && '0' || '1' }}
       - uses: pnpm/action-setup@v6
+        env:
+          npm_config_fetch_timeout: '15000'
+          npm_config_fetch_retries: '1'
+          npm_config_fetch_retry_mintimeout: '1000'
       - uses: actions/setup-node@v5
         with:
           node-version: '26'
