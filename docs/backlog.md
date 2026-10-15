@@ -220,7 +220,8 @@ on the reservation's own PostgreSQL client after the real external append commit
 Both the normal case and a 350 ms pre-reservation pause retain the strict
 `session_expired` refusal, one permanent name and zero projected events. Boundary
 diagnostics record database time, expiry and authorization/append stages without
-credentials. The earlier 300 ms setup deadline failed under the controlled pause:
+credentials. Boundary assertions run after reservation settles, so append
+reconciliation cannot swallow them. The earlier 300 ms setup deadline failed under the controlled pause:
 it expired before authorization and the append never began. Twelve unchanged
 isolated runs and a diagnostic full run did not reproduce that original failure;
 its exact historical cause remains unproved. If this test fails again, use its

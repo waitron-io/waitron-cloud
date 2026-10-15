@@ -487,6 +487,7 @@ for (const delayMs of [0, 350]) {
       const v = await s.venue();
       let client: PoolClient | undefined;
       let appendCount = 0;
+      const appendState: { enteredExpired?: boolean; returnedExpired?: boolean } = {};
       const mark = async (stage: string, c: Pick<PoolClient, 'query'> = s.f.pool) => {
         const state = (await c.query(
           'SELECT clock_timestamp() AS now, absolute_expires_at, clock_timestamp()>=absolute_expires_at AS expired FROM cloud_sessions WHERE account_id=$1',
@@ -509,7 +510,7 @@ for (const delayMs of [0, 350]) {
           ...original,
           async claim(input) {
             assert.ok(client);
-            assert.equal(await mark('append-entered', client), false);
+            appendState.enteredExpired = await mark('append-entered', client);
             appendCount++;
             const result = await original.claim(input);
             await mark('append-committed', client);
@@ -519,7 +520,7 @@ for (const delayMs of [0, 350]) {
               "UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()-interval '1 millisecond' WHERE account_id=$1",
               [v.account],
             );
-            assert.equal(await mark('expired-after-append', client), true);
+            appendState.returnedExpired = await mark('expired-after-append', client);
             return result;
           },
         },
@@ -539,6 +540,8 @@ for (const delayMs of [0, 350]) {
         0,
       );
       assert.equal(appendCount, 1);
+      // Reconciliation can recover a committed append even if its callback throws.
+      assert.deepEqual(appendState, { enteredExpired: false, returnedExpired: true });
     } finally {
       t.diagnostic(JSON.stringify(boundaries));
       await s.close();
