@@ -63,7 +63,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     documentation:String(Boolean(plan.documentation)),
     packages:String(plan.packages.length>0), receipts:String(plan.receipts.length>0),
     package_matrix:JSON.stringify({include:plan.packages.length ? plan.packages : [{package:'unused',shard:1}]}),
-    receipt_matrix:JSON.stringify({suite:plan.receipts.length ? plan.receipts : ['unused']}),
   };
   appendFileSync(process.env.GITHUB_OUTPUT,Object.entries(outputs).map(([key,value])=>`${key}=${value}\n`).join(''));
   console.log(plan.reason);

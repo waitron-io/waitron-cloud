@@ -8,7 +8,7 @@ const command = 'node --test scripts/milestone-proof-helpers.test.mjs scripts/ve
 // file-reader CLI blocks are guarded and do not run when the tests import them.
 // Changed readers or execution wiring require a new audit before omitting work.
 const auditedInputs = [
-  '100644 blob e57300de069beb99f9baeca01220ba13ca64c566\t.github/workflows/ci.yml',
+  '100644 blob 91bd1b06d5bacbdeaa06b35f2ff3b9916bf00879\t.github/workflows/ci.yml',
   '100644 blob 498083173ee9995b076e8fa6ab6c68d34496182a\tscripts/cloud-two-venue-milestone-receipt.mjs',
   '100644 blob 8236607cb5a5e5b00ab32dbc1e6bce08dc0e4cff\tscripts/managed-recovery-receipt.fixture.mjs',
   '100644 blob f121f0fd23d7089e299183cb8c837d1592ee69e4\tscripts/milestone-proof-helpers.mjs',

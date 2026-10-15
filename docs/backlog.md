@@ -509,7 +509,14 @@ notifications separately.
   The local-stack and public-gateway receipts remain conservative for backend work. Unknown/full changes retain all five;
   portal alone runs local-stack, and isolated ui-smoke needs no receipt. Registration
   uses seven file shards, account HTTP and portal use three each, and backups uses
-  two. The other packages keep one job each. Each file runs once, with its original
+  two. The other packages keep one job each. Selected receipt suites share one
+  setup and run in one job. The runner validates every selected suite before
+  execution, runs each once and continues after a failure so later results remain
+  visible. Any failed suite fails the job; the summary requires that job to
+  complete successfully. The five receipt commands and all their assertions stay
+  intact. Compare actual rounded minutes with the preceding five-job sample
+  before claiming a saving; the full-run budget and other grouping work remain
+  open. Each file runs once, with its original
   assertions and test deadline. The authenticator clock-rollover case has its own
   portal file so sharding can separate its two real clock waits from the main
   authenticator journey. All work jobs have an eight-minute limit; the target is

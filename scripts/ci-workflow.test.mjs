@@ -21,9 +21,8 @@ test('every discovered workspace test package runs through the planned database 
 });
 test('all existing receipt suites and workflow guards remain available in CI',()=>{
   assert.deepEqual(receiptSuites,['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt']);
-  assert.match(job('receipts'),/fail-fast: false/);
-  assert.match(job('receipts'),/matrix: \$\{\{ fromJSON\(needs.changes.outputs.receipt_matrix\) \}\}/);
-  assert.match(job('receipts'),/run: pnpm \$\{\{ matrix.suite \}\}/);
+  assert.match(job('receipts'),/run: node scripts\/ci-run-receipts.mjs/);
+  assert.match(job('receipts'),/CI_PLAN: \$\{\{ needs.changes.outputs.plan \}\}/);
   assert.match(job('typecheck'),/run: node --test scripts\/ci-\*\.test.mjs scripts\/identity-upstream.test.mjs scripts\/verify-gateway-reconnection-receipt.test.mjs/);
 });
 test('slow packages run every file shard with their original test deadlines',()=>{
@@ -80,4 +79,10 @@ test('audited document job checks immutable prose without installing workspace d
   assert.match(job('documentation'), /CI_PLAN: \$\{\{ needs.changes.outputs.plan \}\}/);
   assert.match(job('documentation'), /package-manager-cache: false/);
   assert.doesNotMatch(job('documentation'), /pnpm install|test-postgres/);
+});
+
+test('selected receipt suites share one setup and receive the exact plan', () => {
+  assert.doesNotMatch(job('receipts'), /matrix:|strategy:/);
+  assert.match(job('receipts'), /run: node scripts\/ci-run-receipts.mjs/);
+  assert.match(job('receipts'), /CI_PLAN: \$\{\{ needs.changes.outputs.plan \}\}/);
 });

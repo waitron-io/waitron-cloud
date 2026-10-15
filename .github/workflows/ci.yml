@@ -23,7 +23,6 @@ jobs:
       receipts: ${{ steps.plan.outputs.receipts }}
       documentation: ${{ steps.plan.outputs.documentation }}
       package_matrix: ${{ steps.plan.outputs.package_matrix }}
-      receipt_matrix: ${{ steps.plan.outputs.receipt_matrix }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -81,12 +80,8 @@ jobs:
   receipts:
     needs: changes
     if: needs.changes.outputs.receipts == 'true'
-    name: receipt (${{ matrix.suite }})
     runs-on: ubuntu-latest
     timeout-minutes: 8
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.changes.outputs.receipt_matrix) }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -101,7 +96,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: pnpm ${{ matrix.suite }}
+      - run: node scripts/ci-run-receipts.mjs
+        env:
+          CI_PLAN: ${{ needs.changes.outputs.plan }}
   packages:
     needs: changes
     if: needs.changes.outputs.packages == 'true'

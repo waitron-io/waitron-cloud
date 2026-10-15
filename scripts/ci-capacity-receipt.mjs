@@ -5,7 +5,7 @@ const suite = 'test:backup-capacity';
 // The TLS fixture creates its data; the SDK may also read host configuration.
 // Repository imports, dependency installation and execution wiring retain this audit.
 const auditedInputs = [
-  '100644 blob e57300de069beb99f9baeca01220ba13ca64c566\t.github/workflows/ci.yml',
+  '100644 blob 91bd1b06d5bacbdeaa06b35f2ff3b9916bf00879\t.github/workflows/ci.yml',
   '100644 blob c497f12cf9a96298962ce3546e5a70ed423527b6\t.npmrc',
   '100644 blob f4fd86edd4238a024a8662af045989d51c9f3acc\tpackage.json',
   '100644 blob ab4c519931d4a7aafd65f347deec0acf88bf213d\tpackages/backups/package.json',
