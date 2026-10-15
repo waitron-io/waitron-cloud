@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
+import {assertDocumentation} from './ci-docs.mjs';
 
 export function assertSummary(plan, results, jobs) {
   assert.equal(results.changes, 'success', 'CI planner must succeed');
   assert.ok(Array.isArray(plan.packages) && Array.isArray(plan.receipts) && typeof plan.typecheck === 'boolean', 'Missing CI plan');
   if (plan.reuse) {
+    assert.ok(!plan.documentation, 'Reuse cannot declare document work');
     assert.match(plan.reuse.sha, /^[a-f0-9]{40}$/);
     assert.ok(Number.isSafeInteger(plan.reuse.runId) && plan.reuse.runId > 0);
+    assert.equal(plan.packages.length + plan.receipts.length, 0);
+    assert.equal(plan.typecheck, false);
+  } else if (plan.documentation) {
+    assertDocumentation(plan.documentation);
     assert.equal(plan.packages.length + plan.receipts.length, 0);
     assert.equal(plan.typecheck, false);
   } else {
@@ -15,6 +21,10 @@ export function assertSummary(plan, results, jobs) {
     assert.equal(plan.typecheck, true);
   }
   const expected = ['changes'];
+  if (plan.documentation) expected.push('documentation');
+  if (plan.documentation || results.documentation !== undefined) {
+    assert.equal(results.documentation, plan.documentation ? 'success' : 'skipped', 'documentation did not match its plan');
+  }
   if (plan.typecheck) expected.push('typecheck');
   for (const row of plan.packages) expected.push(`package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`);
   for (const suite of plan.receipts) expected.push(`receipt (${suite})`);

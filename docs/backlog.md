@@ -442,15 +442,25 @@ notifications separately.
   [precise-selection design](superpowers/specs/2026-10-14-precise-ci-selection.md)
   and [implementation plan](superpowers/plans/2026-10-14-precise-ci-selection.md)
   define how documentation, scripts, configuration, resolved lockfile changes and
-  receipt inputs can select their actual checks. Implementation and five real
-  scratch pull request controls remain open. The plan also requires measured
+  receipt inputs can select their actual checks. The first implementation selects
+  one Markdown check for a documentation-only change under `docs/` (excluding
+  receipts) or at the repository root when both immutable trees match the audited
+  non-document input inventory in `scripts/ci-docs-audit.json`. The check reads the
+  selected git blobs and requires valid UTF-8, no NUL and a final newline; deleted
+  regular documents are accepted. Package Markdown, receipt data, mixed changes
+  and missing or stale audit evidence retain the existing selection or full fallback.
+  Adding, changing or removing an executable, configuration or other tracked input
+  invalidates the exemption until you audit the readers again and renew the
+  certificate. The identity source map and gateway JSON reader remain covered by
+  their existing full checks. Root-script, lockfile, precise receipt and package
+  selection, measured grouping and their real scratch controls remain open. The plan also requires measured
   grouping to reduce the full run toward 55 rounded job-minutes while keeping
   each work job near five minutes. The current two sampled full runs use 72 and
   73 minutes; these are timestamp-based rounding estimates, not invoices.
   CI still selects changed workspace packages and every package that depends on them,
   including test dependencies and direct sibling source/fixture reads absent from
   manifests. Identity therefore selects all nine packages in the current graph;
-  portal alone remains isolated. Root, unknown and empty changes run everything.
+  portal alone remains isolated. Unaudited root, unknown and empty changes run everything.
   Type checking stays whole-workspace because backend manifests share the root
   TypeScript input. Backend changes run all five receipt suites conservatively;
   portal alone runs local-stack, and isolated ui-smoke needs no receipt. Registration
