@@ -10,6 +10,8 @@ import {loadWorkspace, receiptSuites} from './ci-scope.mjs';
 
 const suite = 'test:backup-capacity';
 const inputs = [
+  'scripts/ci-run-receipts.mjs',
+  'scripts/ci-scope.mjs',
   '.dockerignore',
   '.env.example',
   '.gitignore',

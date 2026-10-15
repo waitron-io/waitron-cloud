@@ -10,6 +10,8 @@ import {loadWorkspace, receiptSuites} from './ci-scope.mjs';
 
 const workspace = loadWorkspace();
 const inputs = [
+  'scripts/ci-run-receipts.mjs',
+  'scripts/ci-scope.mjs',
   '.github/workflows/ci.yml',
   'scripts/cloud-two-venue-milestone-receipt.mjs',
   'scripts/managed-recovery-receipt.fixture.mjs',

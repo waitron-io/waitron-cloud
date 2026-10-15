@@ -13,7 +13,7 @@ function fixture(run) {
     const execute = (receipts, extra = {}) => spawnSync(process.execPath, ['scripts/ci-run-receipts.mjs'], {
       encoding: 'utf8', env: {...process.env, PATH: `${root}:${process.env.PATH}`, RECEIPT_CALLS: log, CI_PLAN: JSON.stringify({receipts}), ...extra},
     });
-    run({execute, calls: () => existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : []});
+    run({execute, pnpm: join(root, 'pnpm'), calls: () => existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : []});
   } finally { rmSync(root, {recursive: true, force: true}); }
 }
 
@@ -49,5 +49,19 @@ test('malformed, empty, duplicate and unknown receipt lists fail before starting
   fixture(({execute, calls}) => {
     assert.equal(execute([], {CI_PLAN: '{'}).status, 1);
     assert.deepEqual(calls(), []);
+  });
+});
+
+test('a command killed by a signal and a command that cannot start fail the grouped job', () => {
+  fixture(({execute, calls, pnpm}) => {
+    writeFileSync(pnpm, '#!/bin/sh\nkill -TERM $$\n', {mode: 0o700});
+    const signalled = execute(['test:local-stack']);
+    assert.equal(signalled.status, 1);
+    assert.match(signalled.stderr, /test:local-stack failed: SIGTERM/);
+    assert.deepEqual(calls(), []);
+    rmSync(pnpm);
+    const missing = execute(['test:local-stack'], {PATH: pnpm});
+    assert.equal(missing.status, 1);
+    assert.match(missing.stderr, /test:local-stack failed:.*ENOENT/);
   });
 });
