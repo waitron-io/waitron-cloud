@@ -527,7 +527,17 @@ notifications separately.
   that edit does not change a resolved importer. Manifest scripts, package identity
   and every nondependency field stay audited. Version 1 remains supported for
   lock-only updates. This route still requires explicit reader review before
-  renewing complete-input certificates. Wider lock/root
+  renewing complete-input certificates. Receipt-selector test fixtures seed eleven
+  saved audited dependency inputs, so an unrelated manifest or lock edit does not
+  invalidate their positive test setup. Their original omission and refusal
+  assertions remain; a separate real-clone regression changes every workspace
+  manifest and the lockfile before running the four positive checks. Actual
+  dependency changes still retain every receipt in the production planner.
+  The parser's current-lock inventory check still pins 215 package/snapshot
+  records and the original importer counts. A new dependency record needs an
+  explicitly reviewed inventory update; the remaining dependency-only Actions
+  control can use a resolved version replacement with unchanged counts.
+  Wider lock/root
   selection, package precision and their real scratch controls remain open. Review follow-ups: the
   audit-version and inner path filters lack independent removal controls; other
   refusals currently mask their removal. The regular-file defenses have a paired

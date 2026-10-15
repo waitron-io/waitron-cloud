@@ -4,6 +4,7 @@ import {chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writ
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import test from 'node:test';
+import {seedReceiptDependencyInputs} from './ci-dependency-fixture.mjs';
 import {createPlan} from './ci-plan.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
 import {loadWorkspace, receiptSuites} from './ci-scope.mjs';
@@ -30,6 +31,10 @@ function fixture(run) {
     execFileSync('git', ['clone', '--shared', '--quiet', '--no-checkout', process.cwd(), root], {stdio: 'pipe'});
     git('checkout', '--quiet', 'HEAD', '--', '.');
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
+    seedReceiptDependencyInputs(root);
+    if (git('status', '--porcelain').trim()) {
+      git('add', '-A'); git('commit', '-s', '-qm', 'Seed audited dependency inputs');
+    }
     const base = git('rev-parse', 'HEAD').trim();
     writeFileSync(join(root, 'packages/registration/src/local-stack-control.ts'), 'export const control = true;\n');
     const commit = (paths = ['.']) => {git('add', '-f', ...paths); git('commit', '-s', '-qm', 'Change receipt input'); return git('rev-parse', 'HEAD').trim();};

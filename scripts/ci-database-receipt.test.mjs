@@ -4,6 +4,7 @@ import {chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, s
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import test from 'node:test';
+import {copyReceiptFixtureInput} from './ci-dependency-fixture.mjs';
 import {createPlan} from './ci-plan.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
 import {loadWorkspace, receiptSuites} from './ci-scope.mjs';
@@ -43,7 +44,7 @@ function fixture(run, alter = () => {}) {
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
     for (const path of inputs) {
       mkdirSync(dirname(join(root, path)), {recursive: true});
-      copyFileSync(path, join(root, path));
+      copyReceiptFixtureInput(path, join(root, path));
     }
     alter(root);
     git('add', '-f', '.'); git('commit', '-s', '-qm', 'Seed database recovery inputs');
