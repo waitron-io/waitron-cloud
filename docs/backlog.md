@@ -491,7 +491,7 @@ notifications separately.
   family, so changes spanning both families also retain full work.
   Mixed changes also retain the existing fallback. The script job verifies the
   exact checkout and changed paths, and the summary requires its successful result.
-  The audit covers the helper's only executable consumer, its own spawned test;
+  The identity audit covers that helper's only executable consumer, its own spawned test;
   the source-map default still takes the existing full route. Other root scripts,
   configuration, lockfiles, package precision and their real controls remain open. The plan also requires measured
   grouping to reduce the full run toward 55 rounded job-minutes while keeping
