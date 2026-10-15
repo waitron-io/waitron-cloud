@@ -482,9 +482,16 @@ notifications separately.
   package, receipt or compiler work. Both saved Git trees must match the complete
   other-input digest in `scripts/ci-scripts-audit.json`; a new reader, changed
   installation input, missing test, symbolic link or stale audit retains full work.
+  The gateway-reconnection validator and its behavioral test have a separate
+  audited exemption. Their script job checks both files and the measurement
+  generator for syntax, then runs the unchanged validator tests. It does not
+  launch the measurement generator. Both saved trees must match the gateway
+  other-input digest, including the published receipt and generator. Changed
+  readers or installation inputs retain full work. Each family pins the other
+  family, so changes spanning both families also retain full work.
   Mixed changes also retain the existing fallback. The script job verifies the
   exact checkout and changed paths, and the summary requires its successful result.
-  The audit covers the helper's only executable consumer, its own spawned test;
+  The identity audit covers that helper's only executable consumer, its own spawned test;
   the source-map default still takes the existing full route. Other root scripts,
   configuration, lockfiles, package precision and their real controls remain open. The plan also requires measured
   grouping to reduce the full run toward 55 rounded job-minutes while keeping
