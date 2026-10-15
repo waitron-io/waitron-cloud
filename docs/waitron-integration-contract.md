@@ -339,7 +339,10 @@ conflicting or previously unimported evidence; it never activates the installati
 or releases an occupied identity. An exact retry recovers the retained result
 when the outside append survived a failed PostgreSQL commit.
 
-Waitron's local recovery adapter and the joint HTTP/client qualification remain
-to be implemented in their separately owned tasks. Preserve the complete consumed
+The [joint HTTP/client test](fiscal-allocation-registry.md#qualify-the-pinned-waitron-client)
+now exercises the real Cloud PostgreSQL service with the separately pinned Waitron
+adapter. Its consumed packet passes local manual preparation and its committed
+result returns as a signed machine report. Waitron owns and lands its adapter
+independently. Preserve the complete consumed
 receipt and local authenticated recovery checks. Cloud operator attribution is
 not local operator authentication, and no registry call belongs on the sale path.

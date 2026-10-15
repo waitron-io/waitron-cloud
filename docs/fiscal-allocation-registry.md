@@ -339,6 +339,37 @@ node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec \
   node --test --test-timeout=120000 test/fiscal-allocation-browser.test.ts
 ```
 
-The actual Waitron recovery adapter remains separate work.
-A machine report never grants a name, changes consumption, activates trading or
+The separately owned Waitron adapter is qualified by the joint test below; its
+own review, CI and landing still govern delivery. A machine report never grants a name, changes consumption, activates trading or
 proves that the old selling machine stopped.
+
+
+## Qualify the pinned Waitron client
+
+Run the joint test to check the actual Cloud PostgreSQL service against Waitron
+adapter commit `2293a60a311e20b227029782ba75048ee1fff241`:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec \
+  node --test --test-timeout=120000 test/fiscal-waitron-client.test.ts
+```
+
+The fixture fetches that exact public commit, installs its locked dependencies,
+and removes its temporary checkout when it finishes. For an already installed
+checkout at that commit, set `WAITRON_FISCAL_TEST_CANDIDATE` to its absolute path.
+Tracked edits or a different commit refuse; the fixture writes its venue and
+outside evidence in a separate temporary directory.
+
+The 15 cases check consumed packets, all three series purposes, recovery-key
+operator binding, signature and local-context refusals, retained read access and
+session/CSRF failures. Manual preparation activates the complete signed identity
+through local operation authority; the module then collects its committed report.
+A discarded committed HTTP reply retries the same operation and body with fresh
+machine authentication. The journal returns a retained result without another
+send, refuses changed evidence and excludes the private key, lease and account
+cookie. The PostgreSQL event count checks that retries do not duplicate reports.
+
+These synthetic fixtures supply explicit custody, entitlement, continuity and
+signer trust. They select no production policy. Waitron's archive/bucket restore,
+offline paper and sale-path checks belong to its separately owned adapter tests;
+this joint command qualifies the actual Cloud boundary and manual preparation.

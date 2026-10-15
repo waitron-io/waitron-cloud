@@ -179,9 +179,23 @@ reserve validation, consumption approval, signed manual packets and retained
 browser receipts. Tagged key operators must match the recovery event and target
 node; malformed objects and person substitutions refuse. Focused contract and
 real HTTP tests cover those boundaries, and eight browser cases cover retained
-key-event packets in both languages, themes and widths. The actual Waitron-client
-joint test still needs the separately pinned adapter candidate. The Waitron adapter
-remains a dependent item. Production continuity
+key-event packets in both languages, themes and widths. The actual PostgreSQL joint test now pins Waitron adapter candidate
+`2293a60a311e20b227029782ba75048ee1fff241`. Its 15 cases cover real account status,
+independent verification of Cloud's signed packet, source/target/event/operator and
+full-purpose refusals, missing trust, reserved-state refusal, retained read access,
+session/CSRF refusals, complete manual activation and a matched machine report.
+A lost committed report reply retries the same operation with fresh authentication;
+the independent journal returns a retained result without sending again and refuses
+changed evidence. These are local synthetic fixtures, with no production policy enabled.
+The test uses an explicitly pinned installed Waitron checkout, or fetches and installs
+that public commit in its own temporary directory. Waitron
+owns the adapter and its delivery. The joint fixture now observes actual HTTP
+401/403 responses and checks that a conflicting report leaves its retained result
+usable without another send. Its report cases share one activation; independently
+runnable name-filter cases and removal of the temporary port's release/rebind
+interval remain fixture follow-ups. The installed-checkout override verifies the
+tracked tree; its dependencies and untracked files are developer supplied.
+Production continuity
 storage, taxpayer custody and operator attribution, subscription policy and the
 signing-key custodian remain owner enablement gates. Before enabling recovery,
 qualify how the service discovers custody-approved namespaces when an old database
