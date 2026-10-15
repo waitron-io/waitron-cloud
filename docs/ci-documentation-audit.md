@@ -40,10 +40,11 @@ and the certificate itself, retain every other complete NUL-terminated record in
 git's order, then hash their concatenation with SHA-256. Set `version` to `1` and
 `inputSha256` to that digest. Commit the certificate with the reviewed code.
 
-The certificate does not exempt package Markdown or receipt data. Root scripts,
-lockfile changes, finer receipt selection and measured job grouping remain later
-parts of the precise-selection plan. The existing equal-tree merge reuse remains
-in place.
+The certificate does not exempt package Markdown or receipt data. Selected root
+scripts and receipt suites have separate input audits. A lockfile-only change has
+its own [bounded package-selection audit](ci-lockfile-audit.md). Wider path
+selection and measured job grouping remain open in the precise-selection plan.
+The existing equal-tree merge reuse remains in place.
 
 When a documentation-only pull request passes and its merge has the identical
 tree, the main run reuses that result and also skips package suites. This proves
