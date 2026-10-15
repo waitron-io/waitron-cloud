@@ -531,7 +531,7 @@ notifications separately.
   superseded pull request runs still cancel. The workflow text guard checks shard
   completeness and deadlines. The summary checks actual job records against the
   plan, refusing missing, duplicated, cancelled, unfinished or failed required
-  jobs. Only unnecessary work may be skipped. Every PR job checks out its exact
+  jobs, and any unexpected executed job. Unused job families must finish skipped. Only unnecessary work may be skipped. Every PR job checks out its exact
   head SHA. A merge can reuse the latest successful same-workflow head run only
   when its complete job records and exact git tree match; uncertain evidence or
   a behind merge runs everything. Direct and multiple-commit pushes run everything.

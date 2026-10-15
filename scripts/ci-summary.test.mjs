@@ -48,3 +48,17 @@ test('selected receipts require exactly one successful grouped job', () => {
     assert.throws(() => assertSummary({...grouped, receipts}, required, [...jobs, receiptJob]));
   }
 });
+
+test('summary rejects unexpected executed jobs while allowing unused skipped families and itself', () => {
+  const self = {name: 'summary', status: 'in_progress', conclusion: null};
+  const unused = {name: 'documentation', status: 'completed', conclusion: 'skipped'};
+  assert.doesNotThrow(() => assertSummary(plan, results, [...jobs, unused, self]));
+  for (const extra of [
+    {name: 'legacy', status: 'completed', conclusion: 'success'},
+    {name: 'legacy', status: 'completed', conclusion: 'failure'},
+    {name: 'legacy', status: 'completed', conclusion: 'cancelled'},
+    {name: 'legacy', status: 'queued', conclusion: null},
+    {name: 'legacy', status: 'in_progress', conclusion: null},
+    {name: 'documentation', status: 'queued', conclusion: 'skipped'},
+  ]) assert.throws(() => assertSummary(plan, results, [...jobs, self, extra]), /Unexpected executed job/);
+});

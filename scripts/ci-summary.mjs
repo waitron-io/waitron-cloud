@@ -36,6 +36,10 @@ export function assertSummary(plan, results, jobs) {
   for (const [group,required] of [['typecheck',plan.typecheck],['packages',plan.packages.length>0],['receipts',plan.receipts.length>0]]) {
     assert.equal(results[group], required ? 'success' : 'skipped', `${group} did not match its plan`);
   }
+  for (const job of jobs) {
+    if (job.name === 'summary' || expected.includes(job.name)) continue;
+    assert.ok(job.status === 'completed' && job.conclusion === 'skipped', `Unexpected executed job: ${job.name}`);
+  }
   for (const name of expected) {
     const matches = jobs.filter(job=>job.name===name);
     assert.equal(matches.length, 1, `Missing or duplicate job: ${name}`);
