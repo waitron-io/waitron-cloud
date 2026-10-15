@@ -6,6 +6,7 @@ import {findReuse} from './ci-reuse.mjs';
 import {documentationPlan} from './ci-docs.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
 import {scriptPlan} from './ci-scripts.mjs';
+import {scopeForRevisions} from './ci-package-revisions.mjs';
 
 export function createPlan(event, context, workspace, git, api) {
   let scope = scopeForPaths([],workspace);
@@ -28,8 +29,19 @@ export function createPlan(event, context, workspace, git, api) {
         if (scripts) return {packages: [], receipts: [], typecheck: false, reuse: null, scripts, reason: `Audited root script: ${paths.join(', ')}`};
       } catch { /* Missing or stale reader evidence keeps the existing full fallback. */ }
       scope = scopeForPaths(paths,workspace);
+      if (!scope.full && scope.packages.length < workspace.length) {
+        try {
+          const revisions = scopeForRevisions(paths, workspace, mergeBase, head.sha, git);
+          scope.packages = [...new Set([...scope.packages, ...revisions.packages])].sort();
+        }
+        catch (error) {
+          // Package evidence cannot invalidate an independent receipt audit.
+          scope.packages = scopeForPaths([], workspace).packages;
+          reason = `Unverified package revisions: ${error.message}: full package suite (${paths.join(', ')})`;
+        }
+      }
       revisions = {base:mergeBase, head:head.sha};
-      reason = scope.full ? `Shared, unaudited or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
+      if (!reason.startsWith('Unverified package revisions:')) reason = scope.full ? `Shared, unaudited or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
     } catch {
       reason = 'Cannot determine PR diff: full suite';
     }
