@@ -9,7 +9,7 @@ const auditedInputs = [
   '100644 blob a986ac7c5f620f7dc05d3529a2db576108b3cd49\tscripts/ci-package-groups.mjs',
   '100644 blob 6798c4293890db910a5e1a179486d47133780d70\tscripts/ci-run-receipts.mjs',
   '100644 blob a8e639db9004f362aabb26ad4371fb01885c4dff\tscripts/ci-scope.mjs',
-  '100644 blob de89cdf8bc9c614cf6c573449a937cb7728f8d09\t.github/workflows/ci.yml',
+  '100644 blob 6dd88448dffd6cbe14a72ba4d3b24fbc21e6801d\t.github/workflows/ci.yml',
   '100644 blob c497f12cf9a96298962ce3546e5a70ed423527b6\t.npmrc',
   '100644 blob 0c35d25a6cdcf1dd286a209be5051e211df6a797\tpackage.json',
   '100644 blob ab4c519931d4a7aafd65f347deec0acf88bf213d\tpackages/backups/package.json',

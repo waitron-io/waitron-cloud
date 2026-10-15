@@ -513,18 +513,29 @@ notifications separately.
   accepts at most two MiB, while production Git reads retain their one-MiB cap.
   Shared records are hashed once. The graph has a 500,000-visit limit and the
   complete comparison hashes at most 32 MiB of serialized input per lockfile.
-  A lockfile-only PR can select the affected packages and their saved source/helper
+  A lockfile PR, alone or with workspace manifest dependency edits, can select the
+  affected packages and their saved source/helper
   consumers when both revisions match the complete other-input audit in
-  `scripts/ci-lock-selection-audit.json`. The audit pins every other tracked file,
-  including manifests, installation policy, root readers and documentation. Any
+  `scripts/ci-lock-selection-audit.json`. Version 2 pins each manifest with its four dependency fields removed and every
+  other tracked file, including installation policy, root readers and documentation. Any
   change to those inputs invalidates it until you review them again; follow the
   [lockfile audit procedure](ci-lockfile-audit.md). The selected packages
   include consumers from both saved revisions; all compiler and receipt checks
   still run. Root dependency changes, changed workspace membership, formatting-only
-  locks, mixed paths, missing evidence and stale audits retain full work. This
-  bounded route does not yet cover dependency additions that also edit a manifest
-  or eliminate the need to renew complete-input certificates. Wider lock/root
-  selection, package precision and their real scratch controls remain open. The plan also requires measured
+  locks, unrelated mixed paths, missing evidence and stale audits retain full work.
+  Every changed manifest selects its package and its old/new consumers even if
+  that edit does not change a resolved importer. Manifest scripts, package identity
+  and every nondependency field stay audited. Version 1 remains supported for
+  lock-only updates. This route still requires explicit reader review before
+  renewing complete-input certificates. Wider lock/root
+  selection, package precision and their real scratch controls remain open. Review follow-ups: the
+  audit-version and inner path filters lack independent removal controls; other
+  refusals currently mask their removal. The regular-file defenses have a paired
+  removal control. Keep the refusal assertions when simplifying these redundant
+  checks. Keep the renewal recipe's explicit manifest patterns aligned with
+  discovered workspace members; a mismatch currently retains full work. Add
+  changed manifest owners to the lock-specific reason when improving diagnostics;
+  the preceding selected-package list already includes them. The plan also requires measured
   grouping to reduce the full run toward 55 rounded job-minutes while keeping
   each work job near five minutes. The historical D66/D67 full-run samples used 72 and
   73 minutes; these are timestamp-based rounding estimates, not invoices.
@@ -561,7 +572,18 @@ notifications separately.
   still fail compilation when broken. Add that test-directory probe to the
   automated controls, which currently inject backend source errors only. Missing
   package compiler scripts and the equivalent `--project` spelling already fail
-  the inventory or trace checks, but need clearer test diagnostics. Package-only changes omit the two-venue milestone receipt when both immutable
+  the inventory or trace checks, but need clearer test diagnostics. Bootstrap setup now gives npm
+  registry requests 15 seconds with one retry after one second, so a stalled
+  tarball fetch cannot consume minutes before tests start. A real local `npm ci`
+  against a held tarball request exceeds 35 seconds under the defaults and fails
+  in about 31 seconds with these settings, after two attempts. The setup action
+  receives this policy in every CI job; project installation, auditing and all
+  test/job deadlines stay unchanged. This is a per-request limit, not a total
+  bootstrap deadline. In run 38803777952, bootstrap npm reported a five-minute
+  installation and the account shard was later cancelled before completing.
+  Its log does not identify the slow request, so do not attribute it to a
+  particular registry endpoint or to a product test. Preserve bootstrap timing
+  and npm diagnostics if setup overruns recur. Package-only changes omit the two-venue milestone receipt when both immutable
   revisions retain its audited regular-file inputs, test command and CI wiring.
   These tests exercise validators and receipt composition; their guarded CLI
   blocks do not launch backend proofs when imported. Changed, missing or linked
