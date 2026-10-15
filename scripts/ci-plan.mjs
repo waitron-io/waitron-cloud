@@ -32,8 +32,8 @@ export function createPlan(event, context, workspace, git, api) {
         if (scripts) return {packages: [], receipts: [], typecheck: false, reuse: null, scripts, reason: `Audited root script: ${paths.join(', ')}`};
       } catch { /* Missing or stale reader evidence keeps the existing full fallback. */ }
       scope = scopeForPaths(paths,workspace);
-      if (paths.length === 1 && paths[0] === 'pnpm-lock.yaml') {
-        try { lockSelection = lockPackageScope(mergeBase, head.sha, workspace, git); scope = lockSelection.scope; }
+      if (paths.includes('pnpm-lock.yaml') && paths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
+        try { lockSelection = lockPackageScope(mergeBase, head.sha, workspace, git, paths); scope = lockSelection.scope; }
         catch { /* Unproved root or package readers retain full lockfile work. */ }
       }
       if (!lockSelection && !scope.full && scope.packages.length < workspace.length) {

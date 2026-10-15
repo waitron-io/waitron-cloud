@@ -513,17 +513,21 @@ notifications separately.
   accepts at most two MiB, while production Git reads retain their one-MiB cap.
   Shared records are hashed once. The graph has a 500,000-visit limit and the
   complete comparison hashes at most 32 MiB of serialized input per lockfile.
-  A lockfile-only PR can select the affected packages and their saved source/helper
+  A lockfile PR, alone or with workspace manifest dependency edits, can select the
+  affected packages and their saved source/helper
   consumers when both revisions match the complete other-input audit in
-  `scripts/ci-lock-selection-audit.json`. The audit pins every other tracked file,
-  including manifests, installation policy, root readers and documentation. Any
+  `scripts/ci-lock-selection-audit.json`. Version 2 pins each manifest with its four dependency fields removed and every
+  other tracked file, including installation policy, root readers and documentation. Any
   change to those inputs invalidates it until you review them again; follow the
   [lockfile audit procedure](ci-lockfile-audit.md). The selected packages
   include consumers from both saved revisions; all compiler and receipt checks
   still run. Root dependency changes, changed workspace membership, formatting-only
-  locks, mixed paths, missing evidence and stale audits retain full work. This
-  bounded route does not yet cover dependency additions that also edit a manifest
-  or eliminate the need to renew complete-input certificates. Wider lock/root
+  locks, unrelated mixed paths, missing evidence and stale audits retain full work.
+  Every changed manifest selects its package and its old/new consumers even if
+  that edit does not change a resolved importer. Manifest scripts, package identity
+  and every nondependency field stay audited. Version 1 remains supported for
+  lock-only updates. This route still requires explicit reader review before
+  renewing complete-input certificates. Wider lock/root
   selection, package precision and their real scratch controls remain open. The plan also requires measured
   grouping to reduce the full run toward 55 rounded job-minutes while keeping
   each work job near five minutes. The historical D66/D67 full-run samples used 72 and
