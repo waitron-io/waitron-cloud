@@ -342,7 +342,7 @@ when the outside append survived a failed PostgreSQL commit.
 The [joint HTTP/client test](fiscal-allocation-registry.md#qualify-the-pinned-waitron-client)
 now exercises the real Cloud PostgreSQL service with the separately pinned Waitron
 adapter. Its consumed packet passes local manual preparation and its committed
-result returns as a signed machine report. Waitron's adapter remains separately
-owned until its reviews, CI and landing complete. Preserve the complete consumed
+result returns as a signed machine report. Waitron owns and lands its adapter
+independently. Preserve the complete consumed
 receipt and local authenticated recovery checks. Cloud operator attribution is
 not local operator authentication, and no registry call belongs on the sale path.

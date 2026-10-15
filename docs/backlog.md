@@ -188,8 +188,8 @@ A lost committed report reply retries the same operation with fresh authenticati
 the independent journal returns a retained result without sending again and refuses
 changed evidence. These are local synthetic fixtures, with no production policy enabled.
 The test uses an explicitly pinned installed Waitron checkout, or fetches and installs
-that public commit in its own temporary directory. The separately owned Waitron
-adapter still needs its reviews, CI and landing. Production continuity
+that public commit in its own temporary directory. Waitron
+owns the adapter and its delivery. Production continuity
 storage, taxpayer custody and operator attribution, subscription policy and the
 signing-key custodian remain owner enablement gates. Before enabling recovery,
 qualify how the service discovers custody-approved namespaces when an old database
