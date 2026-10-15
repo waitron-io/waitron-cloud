@@ -562,9 +562,9 @@ notifications separately.
   ([run 38546606743](https://github.com/waitron-io/waitron-cloud/actions/runs/38546606743)).
   setup-node describes its input as “Set to false to disable automatic caching”
   ([action definition](https://github.com/actions/setup-node/blob/v5/action.yml), read 2026-10-14).
-  Real Actions controls now prove portal-only selection (three nonempty shards,
+  Historical Actions controls proved portal-only selection (three nonempty shards,
   180 tests), identity's complete consumer set (all nine packages), and lockfile
-  fallback (all 20 package jobs and five receipts). The corrected cold-lockfile
+  fallback (then all 20 package jobs and five receipts). The corrected cold-lockfile
   [run 38548997181](https://github.com/waitron-io/waitron-cloud/actions/runs/38548997181)
   passes all 28 jobs and all 1,477 package tests, including the added usage case.
   The [current scratch merge](https://github.com/waitron-io/waitron-cloud/actions/runs/38547672978)
