@@ -480,7 +480,7 @@ notifications separately.
   their existing full checks. Root-script, lockfile, remaining receipt and package
   selection, measured grouping and their real scratch controls remain open. The plan also requires measured
   grouping to reduce the full run toward 55 rounded job-minutes while keeping
-  each work job near five minutes. The current two sampled full runs use 72 and
+  each work job near five minutes. The historical D66/D67 full-run samples used 72 and
   73 minutes; these are timestamp-based rounding estimates, not invoices.
   CI still selects changed workspace packages and every package that depends on them,
   including test dependencies and direct sibling source/fixture reads absent from
