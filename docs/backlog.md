@@ -542,8 +542,19 @@ notifications separately.
   This does not resolve the plan's broader dynamic
   input and directory rules. Identity still selects all nine packages in the current graph;
   portal alone remains isolated. Unaudited root, unknown and empty changes run everything.
-  Type checking stays whole-workspace because backend manifests share the root
-  TypeScript input. Package-only changes omit the two-venue milestone receipt when both immutable
+  Type checking stays whole-workspace. The root command compiles the shared
+  backend configuration once, then runs the portal and UI-smoke configurations.
+  The seven backend package commands use the same root configuration, so repeating
+  them does not check additional sources. Real-compiler controls retain errors in
+  every backend package, a newly added package, portal source/tests and UI
+  declarations. A workspace inventory check refuses an unaccounted compiler
+  command or configuration. Individual package commands remain available. Measure
+  the full CI job before attributing any billed saving; the new behavioral checks
+  also take time. The disposable real-tree review confirms backend test files
+  still fail compilation when broken. Add that test-directory probe to the
+  automated controls, which currently inject backend source errors only. Missing
+  package compiler scripts and the equivalent `--project` spelling already fail
+  the inventory or trace checks, but need clearer test diagnostics. Package-only changes omit the two-venue milestone receipt when both immutable
   revisions retain its audited regular-file inputs, test command and CI wiring.
   These tests exercise validators and receipt composition; their guarded CLI
   blocks do not launch backend proofs when imported. Changed, missing or linked

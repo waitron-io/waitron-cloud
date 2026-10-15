@@ -7,7 +7,7 @@ const installInputs = [
   '100644 blob c497f12cf9a96298962ce3546e5a70ed423527b6\t.npmrc',
   '100644 blob 971b0ee514238e13bf21780566d349a25a5efe96\tapps/portal/package.json',
   '100644 blob eea3c685174e08fd1c096290e1ac0c139c722e1f\tcompose.yaml',
-  '100644 blob f4fd86edd4238a024a8662af045989d51c9f3acc\tpackage.json',
+  '100644 blob 0c35d25a6cdcf1dd286a209be5051e211df6a797\tpackage.json',
   '100644 blob 559d3b0e13eb1cbefcce5e3ec478b35b8b8a1ffb\tpackages/account-http/package.json',
   '100644 blob ab4c519931d4a7aafd65f347deec0acf88bf213d\tpackages/backups/package.json',
   '100644 blob 84eb2b57ce3411e0f05ecd49a02d726018982b79\tpackages/fiscal-allocation/package.json',
