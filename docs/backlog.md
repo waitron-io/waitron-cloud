@@ -511,8 +511,16 @@ notifications separately.
   The tests exercise the real TLS gate, its fallback page and strict receipt
   validator. Changed gate/page code, helpers, test roots, commands, manifests,
   checkout attributes, install hooks or dependency overrides retain the checks.
-  The local-stack receipt remains conservative for backend work. Unknown/full changes retain all five;
-  portal alone runs local-stack, and isolated ui-smoke needs no receipt. Registration
+  Package-only changes also omit the local-stack receipt when both revisions
+  retain its audited deployment helpers, package readers, root script/test files,
+  installation inputs and CI wiring. Whole deployment and migration directory
+  hashes preserve wildcard test discovery and new directory entries. The tests
+  exercise configuration, manifests, migration compatibility, operations metrics
+  and validators; their child probes use controlled failures or supplied fixtures.
+  They do not launch the deployed service stack. Changed or missing readers,
+  new directory entries, installation hooks, attributes or overrides keep the checks.
+  Unknown/full changes retain all five;
+  unaudited portal work retains local-stack, and isolated ui-smoke needs no receipt. Registration
   uses seven file shards, account HTTP and portal use three each, and backups uses
   two. The other packages keep one job each. Selected receipt suites share one
   setup and run in one job. The runner validates every selected suite before
