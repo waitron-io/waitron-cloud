@@ -245,6 +245,17 @@ that backup case in 5,238 ms, observed the lock after 25 ms and refused expired
 history after 206 ms. These passes do not resolve the failures. Keep the dump,
 restore and worker-result stages when that case fails again; preserve both
 the 30-second deadline and the 150 ms witness policy.
+The two cases are `a restored old PostgreSQL backup cannot reissue C000042 and
+complete reconciliation permits C000043` and `a verified history that expires
+during a PostgreSQL lock wait cannot project`, both in
+`packages/fiscal-allocation/test/continuity.test.ts`. That run overlapped review
+and other local qualification work; resource pressure remains an assumption.
+The retained local evidence is under
+`~/waitron-campaign-d/receipts/d69/dependency-fixtures/`: the failures are in
+`gate-packages-fiscal-allocation.log`, the stage observations and diagnostic-only
+patch are `fiscal-diagnostic.log` and `fiscal-diagnostic.patch`, and the later
+133-case passing run is `fiscal-final.log`. Use those stages to investigate the
+next failure; a passing repeat does not resolve this defect.
 
 ## Initial focus
 
@@ -544,9 +555,22 @@ notifications separately.
   dependency changes still retain every receipt in the production planner.
   The parser's current-lock inventory check still pins 215 package/snapshot
   records and the original importer counts. A new dependency record needs an
-  explicitly reviewed inventory update; the remaining dependency-only Actions
-  control can use a resolved version replacement with unchanged counts.
-  Wider lock/root
+  explicitly reviewed inventory update. The disposable
+  [dependency-only control #164](https://github.com/waitron-io/waitron-cloud/pull/164)
+  replaces the portal's resolved axe-core version with unchanged inventory counts
+  and passes a frozen install. Its
+  [exact-head run 38823958615](https://github.com/waitron-io/waitron-cloud/actions/runs/38823958615)
+  runs only three portal groups (196 cases), all compiler checks, 263 root checks
+  and all five receipt suites (225 cases). All seven successful jobs check out the
+  exact head; documentation and script jobs skip. It uses 19 rounded job-minutes,
+  a 320-second job span and a 288-second longest job, compared with 69, 352 and
+  322 in the [full baseline](https://github.com/waitron-io/waitron-cloud/actions/runs/38817784178).
+  That baseline's complete tree equals the scratch target. Planner, workflow,
+  runner, summary and audit evidence are identical between target and control.
+  The scratch PR is closed without merging, and its branches and worktree are
+  removed. These are timestamp-based estimates, not invoices or a completed
+  full-run budget claim. Broader dependency additions, other controls and
+  wider lock/root
   selection, package precision and their real scratch controls remain open. Review follow-ups: the
   audit-version and inner path filters lack independent removal controls; other
   refusals currently mask their removal. The regular-file defenses have a paired
