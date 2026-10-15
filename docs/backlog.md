@@ -511,8 +511,10 @@ notifications separately.
   other policies keep full work. The planner reads the required policy, manifests and source
   blobs in one Git batch per saved revision, deduplicating identical objects. It checks
   each object's identity, byte length, separator and content hash before using the source.
-  Missing, malformed, oversized or corrupt batch evidence keeps all package suites
-  with a reason. Existing callers without a batch reader retain individual reads.
+  The old one-MiB per-file limit remains; each batch also has a 64-MiB output limit
+  and a 30-second deadline. Missing, malformed, oversized, slow or corrupt batch
+  evidence keeps all package suites with a reason. Existing callers without a
+  batch reader retain individual reads.
   This does not resolve the plan's broader dynamic
   input and directory rules. Identity still selects all nine packages in the current graph;
   portal alone remains isolated. Unaudited root, unknown and empty changes run everything.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
@@ -299,3 +299,37 @@ test('absent batch results or a failed command in either revision cannot hide a 
     assert.match(result.reason, /Unverified package revisions:.*batch.*full package suite/is);
   }
 }));
+
+
+test('batched objects retain the legacy one-MiB per-file fallback', () => fixture(({root, git, write, commit, plan}) => {
+  write('packages/gateway/src/large.mjs', '/*' + 'x'.repeat(1024 * 1024) + "*/\nimport '../../catalogue/src/index.mjs';\n");
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  const read = (...args) => git(...args);
+  read.readBlobs = ids => packageInputs.readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input, maxBuffer: 64 * 1024 * 1024}));
+  const expected = ['catalogue', 'gateway', 'portal', 'unrelated'];
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), expected);
+  const result = plan(base, head, read);
+  assert.deepEqual(result.packages.map(row => row.package), expected);
+  assert.match(result.reason, /Unverified package revisions:.*batch.*full package suite/is);
+}));
+
+
+test('real source symlinks and submodules retain full package work with a batch reader', () => {
+  for (const kind of ['symbolic-link', 'submodule']) fixture(({root, git, write, commit, plan}) => {
+    const base = commit();
+    const members = loadWorkspace(root);
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    if (kind === 'symbolic-link') symlinkSync('index.mjs', join(root, 'packages/portal/src/linked.mjs'));
+    git('add', '.');
+    if (kind === 'submodule') git('update-index', '--add', '--cacheinfo', `160000,${base},packages/portal/reader.mjs`);
+    git('commit', '-sm', 'Nonregular input fixture');
+    const head = git('rev-parse', 'HEAD').trim();
+    const read = (...args) => git(...args);
+    read.readBlobs = ids => packageInputs.readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input}));
+    const result = plan(base, head, read, members);
+    assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], kind);
+    assert.match(result.reason, /Unverified package revisions:.*full package suite/s);
+  });
+});

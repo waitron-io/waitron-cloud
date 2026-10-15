@@ -80,6 +80,7 @@ export function readGitBlobs(ids, execute = input => execFileSync('git', ['cat-f
     assert.ok(header && header[1] === id, 'Unexpected Git batch object');
     const size = Number(header[2]);
     assert.ok(Number.isSafeInteger(size) && size <= output.length - newline - 2, 'Incomplete Git batch body');
+    assert.ok(size <= 1024 * 1024, 'Git batch object exceeds the legacy per-file limit');
     const body = output.subarray(newline + 1, newline + 1 + size);
     offset = newline + 1 + size;
     assert.equal(output[offset++], 10, 'Missing Git batch separator');
