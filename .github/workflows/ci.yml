@@ -21,6 +21,7 @@ jobs:
       typecheck: ${{ steps.plan.outputs.typecheck }}
       packages: ${{ steps.plan.outputs.packages }}
       receipts: ${{ steps.plan.outputs.receipts }}
+      documentation: ${{ steps.plan.outputs.documentation }}
       package_matrix: ${{ steps.plan.outputs.package_matrix }}
       receipt_matrix: ${{ steps.plan.outputs.receipt_matrix }}
     steps:
@@ -39,6 +40,23 @@ jobs:
         run: node scripts/ci-plan.mjs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  documentation:
+    needs: changes
+    if: needs.changes.outputs.documentation == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: node scripts/ci-docs.mjs
+        env:
+          CI_PLAN: ${{ needs.changes.outputs.plan }}
   typecheck:
     needs: changes
     if: needs.changes.outputs.typecheck == 'true'
@@ -127,7 +145,7 @@ jobs:
         run: node scripts/test-postgres.mjs exec pnpm --filter ${{ matrix.package }} exec node --test --test-timeout=${{ matrix.package == '@waitron-cloud/portal' && '120000' || '30000' }} --test-shard=${{ matrix.shard }}/${{ matrix.shards }} "test/*.test.ts"
   summary:
     if: ${{ always() }}
-    needs: [changes, typecheck, receipts, packages]
+    needs: [changes, typecheck, receipts, packages, documentation]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

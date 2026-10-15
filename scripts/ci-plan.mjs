@@ -3,6 +3,7 @@ import {appendFileSync, readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {loadWorkspace, scopeForPaths, workPlan} from './ci-scope.mjs';
 import {findReuse} from './ci-reuse.mjs';
+import {documentationPlan} from './ci-docs.mjs';
 
 export function createPlan(event, context, workspace, git, api) {
   let scope = scopeForPaths([],workspace);
@@ -15,8 +16,12 @@ export function createPlan(event, context, workspace, git, api) {
       const mergeBase = git('merge-base',base.sha,head.sha).trim();
       const paths = git('diff','--name-only','--no-renames','-z',mergeBase,head.sha).split('\0');
       if (paths.at(-1)==='') paths.pop();
+      try {
+        const documentation = documentationPlan(paths, mergeBase, head.sha, git);
+        if (documentation) return {packages:[], receipts:[], typecheck:false, reuse:null, documentation, reason:`Audited unread Markdown: ${paths.join(', ')}`};
+      } catch { /* Missing or stale audit evidence keeps the existing full fallback. */ }
       scope = scopeForPaths(paths,workspace);
-      reason = scope.full ? 'Shared or unknown paths: full suite' : `Selected ${scope.packages.join(', ')}`;
+      reason = scope.full ? `Shared, unaudited or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
     } catch {
       reason = 'Cannot determine PR diff: full suite';
     }
@@ -40,12 +45,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       try { execFileSync('git',['cat-file','-e',sha],{stdio:'ignore',timeout:10_000}); }
       catch { execFileSync('git',['fetch','--no-tags','origin',sha],{stdio:'ignore',timeout:30_000}); }
     }
-    return execFileSync('git',args,{encoding:'utf8',timeout:30_000});
+    return execFileSync('git',args,{encoding:'utf8',timeout:30_000,stdio:['ignore','pipe','pipe']});
   };
   const api = path => JSON.parse(execFileSync('gh',['api',path],{encoding:'utf8',timeout:30_000,stdio:['ignore','pipe','ignore']}));
   const plan = createPlan(event,context,loadWorkspace(),git,api);
   const outputs = {
     plan:JSON.stringify(plan), typecheck:String(plan.typecheck),
+    documentation:String(Boolean(plan.documentation)),
     packages:String(plan.packages.length>0), receipts:String(plan.receipts.length>0),
     package_matrix:JSON.stringify({include:plan.packages.length ? plan.packages : [{package:'unused',shard:1}]}),
     receipt_matrix:JSON.stringify({suite:plan.receipts.length ? plan.receipts : ['unused']}),
