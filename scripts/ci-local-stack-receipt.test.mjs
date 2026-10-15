@@ -107,6 +107,7 @@ test('unknown full scope, invalid revisions and incomplete inventories retain lo
       (...args) => {if (args[0] === 'ls-tree') throw Error('Missing tree'); return git(...args);},
       (...args) => args[0] === 'ls-tree' ? git(...args).replace(/\0$/, '') : git(...args),
       (...args) => args[0] === 'ls-tree' ? git(...args) + 'unfinished' : git(...args),
+      (...args) => args[1] === '-rz' ? git(...args) + 'unfinished' : git(...args),
       (...args) => args[1] === '-z' ? git(...args) + 'unfinished' : git(...args),
     ]) assert.ok(select(base, head, execute).receipts.includes(suite));
   });
