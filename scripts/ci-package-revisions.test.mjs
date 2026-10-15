@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
 import {createPlan} from './ci-plan.mjs';
 import {loadWorkspace, scopeForPaths} from './ci-scope.mjs';
 import {scopeForRevisions} from './ci-package-revisions.mjs';
+import * as packageInputs from './ci-package-revisions.mjs';
 
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-package-revisions-'));
@@ -197,3 +198,104 @@ test('symbolic links, submodules and tracked dependency overrides cannot earn na
     assert.match(result.reason, /Unverified package revisions:.*full package suite/s);
   });
 });
+
+
+test('batch-capable Git readers preserve removed consumers without per-blob processes', () => fixture(({root, git, write, commit}) => {
+  write('packages/gateway/src/index.mjs', "import '../../catalogue/src/index.mjs';\n");
+  write('packages/portal/src/index.mjs', "import '../../gateway/src/index.mjs';\n");
+  const base = commit();
+  write('packages/gateway/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  const read = (...args) => {
+    assert.notEqual(args[0], 'show', 'Batch reader must not spawn one process per blob');
+    return git(...args);
+  };
+  read.readBlobs = ids => new Map(ids.map(id => [id, git('show', id)]));
+  assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, read),
+    {full: false, packages: ['catalogue', 'gateway', 'portal']});
+}));
+
+
+test('the real Git batch protocol reads binary-framed UTF-8 blobs and deduplicates requests', () => fixture(({git, write, commit, root}) => {
+  const content = 'café\n\0literal header blob 999\n';
+  write('packages/catalogue/src/unusual name.mjs', content);
+  const head = commit();
+  const id = git('rev-parse', `${head}:packages/catalogue/src/unusual name.mjs`).trim();
+  let calls = 0;
+  const result = packageInputs.readGitBlobs([id, id], input => {
+    calls++;
+    assert.equal(input, `${id}\n`);
+    return execFileSync('git', ['cat-file', '--batch'], {cwd: root, input});
+  });
+  assert.deepEqual([...result], [[id, content]]);
+  assert.equal(calls, 1);
+}));
+
+test('malformed or incomplete batch evidence keeps every package with an explicit reason', () => fixture(({git, write, commit, plan, root}) => {
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  for (const damage of ['missing', 'non-ascii-header', 'wrong-id', 'wrong-type', 'wrong-size', 'short-body', 'separator', 'trailing', 'corrupted-content', 'not-buffer']) {
+    const read = (...args) => git(...args);
+    read.readBlobs = ids => packageInputs.readGitBlobs(ids, input => {
+      const bytes = execFileSync('git', ['cat-file', '--batch'], {cwd: root, input});
+      const newline = bytes.indexOf(10);
+      const header = bytes.subarray(0, newline).toString();
+      if (damage === 'non-ascii-header') {bytes[0] |= 128; return bytes;}
+      if (damage === 'missing') return Buffer.from(`${ids[0]} missing\n`);
+      if (damage === 'wrong-id') return Buffer.concat([Buffer.from('0'.repeat(40)), bytes.subarray(40)]);
+      if (damage === 'wrong-type') return Buffer.concat([Buffer.from(header.replace(' blob ', ' tree ')), bytes.subarray(newline)]);
+      if (damage === 'wrong-size') return Buffer.concat([Buffer.from(header.replace(/ \d+$/, ' 9007199254740992')), bytes.subarray(newline)]);
+      if (damage === 'short-body') return bytes.subarray(0, newline + 2);
+      if (damage === 'separator') { bytes[newline + 1 + Number(header.split(' ')[2])] = 0; return bytes; }
+      if (damage === 'trailing') return Buffer.concat([bytes, Buffer.from('unexpected')]);
+      if (damage === 'corrupted-content') {bytes[newline + 1] ^= 1; return bytes;}
+      return bytes.toString();
+    });
+    const result = plan(base, head, read);
+    assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], damage);
+    assert.match(result.reason, /Unverified package revisions:.*batch.*full package suite/is, damage);
+  }
+}));
+
+
+test('the real planner command batches both saved revisions and retains former readers', () => fixture(({root, git, write, commit}) => {
+  write('packages/gateway/src/index.mjs', "import '../../catalogue/src/index.mjs';\n");
+  const base = commit();
+  write('packages/gateway/src/index.mjs', 'export const value = 2;\n');
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  const event = join(root, 'event.json');
+  const output = join(root, 'outputs.txt');
+  const trace = join(root, 'git-trace.log');
+  writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
+  execFileSync(process.execPath, [new URL('./ci-plan.mjs', import.meta.url).pathname], {
+    cwd: root, env: {...process.env, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output,
+      GITHUB_SHA: head, GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_REF_NAME: 'fixture', GIT_TRACE: trace},
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const result = JSON.parse(readFileSync(output, 'utf8').split('\n').find(line => line.startsWith('plan=')).slice(5));
+  assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway']);
+  assert.equal((readFileSync(trace, 'utf8').match(/built-in: git cat-file --batch\n/g) ?? []).length, 2);
+}));
+
+
+test('absent batch results or a failed command in either revision cannot hide a consumer', () => fixture(({git, write, commit, plan, root}) => {
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  for (const failedRevision of [1, 2]) for (const fault of ['no-map', 'missing-blob', 'command-error']) {
+    let revision = 0;
+    const read = (...args) => git(...args);
+    read.readBlobs = ids => {
+      if (++revision === failedRevision) {
+        if (fault === 'command-error') throw Error('Git batch command failed');
+        return fault === 'no-map' ? null : new Map();
+      }
+      return packageInputs.readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input}));
+    };
+    const result = plan(base, head, read);
+    assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], `${failedRevision} ${fault}`);
+    assert.match(result.reason, /Unverified package revisions:.*batch.*full package suite/is);
+  }
+}));

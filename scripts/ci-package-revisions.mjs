@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {sourceDependencies, scopeForPaths} from './ci-scope.mjs';
 
 function workspaceAt(sha, workspace, git) {
@@ -9,15 +11,21 @@ function workspaceAt(sha, workspace, git) {
   for (const entry of entries) {
     const match = entry.match(/^([0-7]{6}) (blob|commit) ([a-f0-9]{40})\t([\s\S]+)$/);
     assert.ok(match, 'Malformed package tree inventory');
-    const [, mode, type, , path] = match;
+    const [, mode, type, id, path] = match;
     assert.ok(!files.has(path), 'Duplicate package input');
     assert.ok(!/(?:^|\/)\.gitattributes$/.test(path), 'Checkout attributes require full package work');
-    files.set(path, {mode, type});
+    files.set(path, {mode, type, id});
   }
+  const inputs = [...files].filter(([path]) => path === 'pnpm-workspace.yaml' ||
+    workspace.some(pkg => path.startsWith(`${pkg.directory}/`) &&
+      (path === `${pkg.directory}/package.json` || /\.[cm]?[jt]sx?$/.test(path))));
+  const blobs = git.readBlobs?.([...new Set(inputs.map(([, file]) => file.id))]);
   const read = path => {
     const file = files.get(path);
     assert.ok(file?.type === 'blob' && ['100644', '100755'].includes(file.mode), `Nonregular or missing package input: ${path}`);
-    return git('show', `${sha}:${path}`);
+    if (!git.readBlobs) return git('show', `${sha}:${path}`);
+    assert.ok(blobs instanceof Map && typeof blobs.get(file.id) === 'string', `Missing batched package input: ${path}`);
+    return blobs.get(file.id);
   };
   const policy = read('pnpm-workspace.yaml');
   assert.match(policy, /^packages:\s*\n  - 'packages\/\*'\s*\n  - 'apps\/\*'\s*$/,
@@ -53,4 +61,33 @@ export function scopeForRevisions(paths, workspace, base, head, git) {
     return {...pkg, dependencies};
   });
   return scopeForPaths(paths, combined);
+}
+
+export function readGitBlobs(ids, execute = input => execFileSync('git', ['cat-file', '--batch'], {
+  input, timeout: 30_000, maxBuffer: 64 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'],
+})) {
+  const unique = [...new Set(ids)];
+  for (const id of unique) assert.match(id, /^[a-f0-9]{40}$/, 'Invalid batch object ID');
+  const blobs = new Map();
+  if (!unique.length) return blobs;
+  const output = execute(unique.join('\n') + '\n');
+  assert.ok(Buffer.isBuffer(output), 'Git batch output must be bytes');
+  let offset = 0;
+  for (const id of unique) {
+    const newline = output.indexOf(10, offset);
+    assert.ok(newline >= offset, 'Incomplete Git batch header');
+    const header = output.subarray(offset, newline).toString('utf8').match(/^([a-f0-9]{40}) blob (0|[1-9][0-9]*)$/);
+    assert.ok(header && header[1] === id, 'Unexpected Git batch object');
+    const size = Number(header[2]);
+    assert.ok(Number.isSafeInteger(size) && size <= output.length - newline - 2, 'Incomplete Git batch body');
+    const body = output.subarray(newline + 1, newline + 1 + size);
+    offset = newline + 1 + size;
+    assert.equal(output[offset++], 10, 'Missing Git batch separator');
+    // The size is in bytes; embedded newlines and non-ASCII source cannot frame records.
+    const hash = createHash('sha1').update(`blob ${size}\0`).update(body).digest('hex');
+    assert.equal(hash, id, 'Corrupt Git batch blob');
+    blobs.set(id, body.toString('utf8'));
+  }
+  assert.equal(offset, output.length, 'Unexpected trailing Git batch data');
+  return blobs;
 }
