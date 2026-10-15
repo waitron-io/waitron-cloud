@@ -120,7 +120,10 @@ test('the executed root job refuses syntax failures, behavioral failures, dirty 
   for (const scripts of [{...selected.scripts, head: 'a'.repeat(40)}, {...selected.scripts, paths: [checks]}, {...selected.scripts, paths: []}, {...selected.scripts, paths: ['scripts/consumer.mjs']}]) {
     assert.equal(execute({...selected, scripts}).status, 1, JSON.stringify(scripts));
   }
-  assert.equal(execute({...selected, typecheck: true}).status, 1, 'mixed execution');
+  for (const extra of [{typecheck: true}, {packages: [{package: 'one', shard: 1}]}, {receipts: ['test:local-stack']},
+    {reuse: {sha: head, runId: 42}}, {documentation: {base: selected.scripts.base, head, paths: ['README.md']}}]) {
+    assert.equal(execute({...selected, ...extra}).status, 1, 'mixed execution: ' + JSON.stringify(extra));
+  }
 }));
 
 test('a different commit with an identical tree still refuses the wrong checkout', () => fixture(({git, put, commit, plan, execute}) => {
@@ -144,6 +147,7 @@ test('summary requires the root script job and rejects missing, duplicate, unfin
   for (const conclusion of ['failure', 'cancelled', 'skipped']) assert.throws(() => assertSummary(plan, results, [jobs[0], {...jobs[1], conclusion}]));
   assert.throws(() => assertSummary(plan, results, [jobs[0], {...jobs[1], status: 'in_progress'}]));
   for (const paths of [[], [helper, helper], ['../scripts/identity-upstream.mjs'], ['scripts/consumer.mjs']]) assert.throws(() => assertSummary({...plan, scripts: {...scripts, paths}}, results, jobs));
+  for (const revisions of [{base: 'bad'}, {head: 'HEAD'}, {base: null}, {head: 42}]) assert.throws(() => assertSummary({...plan, scripts: {...scripts, ...revisions}}, results, jobs));
   for (const extra of [{documentation: {base: scripts.base, head: scripts.head, paths: ['README.md']}}, {reuse: {sha: scripts.head, runId: 42}}, {typecheck: true}, {packages: [{package: 'one', shard: 1}]}]) {
     assert.throws(() => assertSummary({...plan, ...extra}, results, jobs));
   }
