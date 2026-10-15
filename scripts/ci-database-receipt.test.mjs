@@ -29,6 +29,8 @@ const inputs = [
   'scripts/database-recovery-fixture.mjs', 'scripts/database-recovery-receipt.mjs',
   'scripts/database-recovery-migrations.mjs', 'scripts/database-recovery-migrations.test.mjs',
   'scripts/verify-database-recovery-receipt.mjs', 'scripts/verify-database-recovery-receipt.test.mjs',
+  'scripts/ci-run-receipts.mjs',
+  'scripts/ci-scope.mjs',
 ];
 const workspace = loadWorkspace();
 const expected = receiptSuites.filter(name => name !== suite);

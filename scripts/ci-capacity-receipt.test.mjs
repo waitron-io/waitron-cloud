@@ -28,6 +28,8 @@ const inputs = [
   'scripts/backup-capacity-fixture.mjs', 'scripts/backup-capacity-fixture.test.mjs',
   'scripts/verify-backup-transfer-receipt.mjs', 'scripts/verify-backup-transfer-receipt.test.mjs',
   'scripts/verify-backup-capacity-receipt.mjs', 'scripts/verify-backup-capacity-receipt.test.mjs',
+  'scripts/ci-run-receipts.mjs',
+  'scripts/ci-scope.mjs',
 ];
 const workspace = loadWorkspace();
 const expected = receiptSuites.filter(name => name !== suite);

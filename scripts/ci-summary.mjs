@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 import {assertDocumentation} from './ci-docs.mjs';
+import {assertReceiptSuites} from './ci-run-receipts.mjs';
 
 export function assertSummary(plan, results, jobs) {
   assert.equal(results.changes, 'success', 'CI planner must succeed');
@@ -27,10 +28,17 @@ export function assertSummary(plan, results, jobs) {
   }
   if (plan.typecheck) expected.push('typecheck');
   for (const row of plan.packages) expected.push(`package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`);
-  for (const suite of plan.receipts) expected.push(`receipt (${suite})`);
+  if (plan.receipts.length) {
+    assertReceiptSuites(plan.receipts);
+    expected.push('receipts');
+  }
   assert.equal(new Set(expected).size, expected.length, 'Duplicate planned jobs');
   for (const [group,required] of [['typecheck',plan.typecheck],['packages',plan.packages.length>0],['receipts',plan.receipts.length>0]]) {
     assert.equal(results[group], required ? 'success' : 'skipped', `${group} did not match its plan`);
+  }
+  for (const job of jobs) {
+    if (job.name === 'summary' || expected.includes(job.name)) continue;
+    assert.ok(job.status === 'completed' && job.conclusion === 'skipped', `Unexpected executed job: ${job.name}`);
   }
   for (const name of expected) {
     const matches = jobs.filter(job=>job.name===name);

@@ -39,7 +39,7 @@ test('executed summary consumes needs objects and the current job API, refusing 
     writeFileSync(gh,'#!/bin/sh\n[ "$1" = api ] || exit 2\ncat "$CI_FIXTURE"\n',{mode:0o700});
     const plan={packages:[{package:'@waitron-cloud/operations',shard:1}],receipts:['test:local-stack'],typecheck:true,reuse:null};
     const results={changes:{result:'success'},typecheck:{result:'success'},packages:{result:'success'},receipts:{result:'success'}};
-    const jobs=['changes','typecheck','package (@waitron-cloud/operations)','receipt (test:local-stack)'].map(name=>({name,status:'completed',conclusion:'success'}));
+    const jobs=['changes','typecheck','package (@waitron-cloud/operations)','receipts'].map(name=>({name,status:'completed',conclusion:'success'}));
     const env={...process.env,PATH:`${root}:${process.env.PATH}`,CI_FIXTURE:fixture,CI_PLAN:JSON.stringify(plan),CI_RESULTS:JSON.stringify(results),GITHUB_REPOSITORY:repository,GITHUB_RUN_ID:'42'};
     const run=()=>spawnSync(process.execPath,['scripts/ci-summary.mjs'],{env,encoding:'utf8'});
     writeFileSync(fixture,JSON.stringify([{jobs}]));assert.equal(run().status,0);

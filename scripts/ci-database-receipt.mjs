@@ -6,7 +6,9 @@ const suite = 'test:database-recovery-receipt';
 // validator and migration-count helper, including migrate.ts and transaction.ts.
 // Changed readers, imports or installation inputs require renewed evidence.
 const auditedInputs = [
-  '100644 blob e57300de069beb99f9baeca01220ba13ca64c566\t.github/workflows/ci.yml',
+  '100644 blob 6798c4293890db910a5e1a179486d47133780d70\tscripts/ci-run-receipts.mjs',
+  '100644 blob 41b94a2f7b581207e2d1d4c9dc1ddf1593aabe2d\tscripts/ci-scope.mjs',
+  '100644 blob 91bd1b06d5bacbdeaa06b35f2ff3b9916bf00879\t.github/workflows/ci.yml',
   '100644 blob e06930b7229ac44a14187f449a582497e9df177d\tpackages/registration/src/migrate.ts',
   '100644 blob 499fc6c5da992a85931d8e9b3b1c8ed7bb7bbf46\tpackages/registration/src/transaction.ts',
   '100644 blob 39ebcc2a20fb61bb8a606d79459f5f922330e39f\tscripts/database-recovery-fixture.mjs',

@@ -21,6 +21,8 @@ const inputs = [
   'scripts/verify-managed-recovery-receipt.test.mjs',
   'scripts/verify-two-venue-milestone-receipt.mjs',
   'scripts/verify-two-venue-milestone-receipt.test.mjs',
+  'scripts/ci-run-receipts.mjs',
+  'scripts/ci-scope.mjs',
 ];
 function fixture(run, alter = () => {}) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-receipt-inputs-'));

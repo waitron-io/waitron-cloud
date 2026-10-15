@@ -31,3 +31,34 @@ test('non-reuse cannot skip types and duplicate planned rows cannot pass',()=>{
   assert.throws(()=>assertSummary({...plan,typecheck:false},{...results,typecheck:'skipped'},jobs));
   assert.throws(()=>assertSummary({...plan,packages:[...plan.packages,plan.packages[0]]},results,jobs));
 });
+
+test('selected receipts require exactly one successful grouped job', () => {
+  const grouped = {...plan, receipts: ['test:backup-capacity', 'test:local-stack']};
+  const required = {...results, receipts: 'success'};
+  const receiptJob = {name: 'receipts', status: 'completed', conclusion: 'success'};
+  assert.doesNotThrow(() => assertSummary(grouped, required, [...jobs, receiptJob]));
+  assert.throws(() => assertSummary(grouped, required, jobs));
+  assert.throws(() => assertSummary(grouped, required, [...jobs, receiptJob, receiptJob]));
+  for (const conclusion of ['failure', 'cancelled', 'skipped', 'queued', 'in_progress', undefined]) {
+    assert.throws(() => assertSummary(grouped, required, [...jobs, {...receiptJob, conclusion}]));
+    assert.throws(() => assertSummary(grouped, {...required, receipts: conclusion}, [...jobs, receiptJob]));
+  }
+  assert.throws(() => assertSummary(grouped, required, [...jobs, {...receiptJob, status: 'in_progress'}]));
+  for (const receipts of [['test:local-stack', 'test:local-stack'], ['proof:local-stack'], [1]]) {
+    assert.throws(() => assertSummary({...grouped, receipts}, required, [...jobs, receiptJob]));
+  }
+});
+
+test('summary rejects unexpected executed jobs while allowing unused skipped families and itself', () => {
+  const self = {name: 'summary', status: 'in_progress', conclusion: null};
+  const unused = {name: 'documentation', status: 'completed', conclusion: 'skipped'};
+  assert.doesNotThrow(() => assertSummary(plan, results, [...jobs, unused, self]));
+  for (const extra of [
+    {name: 'legacy', status: 'completed', conclusion: 'success'},
+    {name: 'legacy', status: 'completed', conclusion: 'failure'},
+    {name: 'legacy', status: 'completed', conclusion: 'cancelled'},
+    {name: 'legacy', status: 'queued', conclusion: null},
+    {name: 'legacy', status: 'in_progress', conclusion: null},
+    {name: 'documentation', status: 'queued', conclusion: 'skipped'},
+  ]) assert.throws(() => assertSummary(plan, results, [...jobs, self, extra]), /Unexpected executed job/);
+});
