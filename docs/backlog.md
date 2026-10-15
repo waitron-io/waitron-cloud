@@ -506,7 +506,12 @@ notifications separately.
   database-recovery checks: checkout encoding can change a reader without changing
   its stored Git hash. A fresh-clone control proves the UTF-16 import failure.
   The shared installation check preserves the earlier capacity guards.
-  The local-stack and public-gateway receipts remain conservative for backend work. Unknown/full changes retain all five;
+  Package-only changes also omit the public-gateway receipt when both revisions
+  retain its audited seven-module test closure, installation inputs and CI wiring.
+  The tests exercise the real TLS gate, its fallback page and strict receipt
+  validator. Changed gate/page code, helpers, test roots, commands, manifests,
+  checkout attributes, install hooks or dependency overrides retain the checks.
+  The local-stack receipt remains conservative for backend work. Unknown/full changes retain all five;
   portal alone runs local-stack, and isolated ui-smoke needs no receipt. Registration
   uses seven file shards, account HTTP and portal use three each, and backups uses
   two. The other packages keep one job each. Selected receipt suites share one
