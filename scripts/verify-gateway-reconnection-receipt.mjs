@@ -33,3 +33,5 @@ if(import.meta.url===pathToFileURL(process.argv[1]??'').href){
  const file=process.argv[2];if(!file)throw Error('Usage: verify-gateway-reconnection-receipt.mjs RECEIPT.json');
  verifyGatewayReconnectionReceipt(JSON.parse(await readFile(file,'utf8')));console.log('gateway reconnection receipt verified');
 }
+
+// Receipt checks remain available for an isolated validator change.
