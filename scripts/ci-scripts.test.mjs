@@ -110,11 +110,13 @@ test('the executed root job refuses syntax failures, behavioral failures, dirty 
   head = commit(); selected = plan(head); result = execute(selected);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /SyntaxError/);
-  put(helper, 'export const result = 1;\n');
+  put(helper, 'export const result = 1; // valid after failure\n');
   head = commit(); selected = plan(head);
+  assert.deepEqual(selected.packages, []);
+  assert.equal(execute(selected).status, 0);
   put(helper, 'export const result = 1; // uncommitted but behaviorally equal\n');
   assert.equal(execute(selected).status, 1, 'dirty helper');
-  put(helper, 'export const result = 1;\n');
+  put(helper, 'export const result = 1; // valid after failure\n');
   for (const scripts of [{...selected.scripts, head: 'a'.repeat(40)}, {...selected.scripts, paths: [checks]}, {...selected.scripts, paths: []}, {...selected.scripts, paths: ['scripts/consumer.mjs']}]) {
     assert.equal(execute({...selected, scripts}).status, 1, JSON.stringify(scripts));
   }
@@ -161,6 +163,23 @@ test('old-only stale evidence and forged incomplete inventories cannot omit cons
     assert.equal(plan(head, certified, (...args) => args[0] === 'ls-tree' ? transform(git(...args)) : git(...args)).packages.length, 18);
   }
   assert.equal(plan(head, base).packages.length, 18, 'mixed diff');
+}));
+
+test('unreadable or corrupted audit evidence from either immutable revision retains full work', () => fixture(({git, put, commit, plan, base}) => {
+  put(helper, 'export const result = 1; // edited\n');
+  const head = commit();
+  for (const sha of [base, head]) {
+    for (const failure of ['missing', 'corrupt']) {
+      const read = (...args) => {
+        if (args[0] === 'show' && args[1] === `${sha}:${policy}`) {
+          if (failure === 'missing') throw Error('Object unavailable');
+          return JSON.stringify({version: 2, inputSha256: '0'.repeat(64)});
+        }
+        return git(...args);
+      };
+      assert.equal(plan(head, base, read).packages.length, 18, `${sha}: ${failure}`);
+    }
+  }
 }));
 
 test('executed planner emits the script-only job and summary consumes its needs results', () => fixture(({root, git, put, commit}) => {
