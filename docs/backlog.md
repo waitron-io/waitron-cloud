@@ -493,7 +493,16 @@ notifications separately.
   exact checkout and changed paths, and the summary requires its successful result.
   The identity audit covers that helper's only executable consumer, its own spawned test;
   the source-map default still takes the existing full route. Other root scripts,
-  configuration, lockfiles, package precision and their real controls remain open. The plan also requires measured
+  configuration and their real controls remain open. A lockfile PR now reports
+  which workspace dependency sets changed by comparing both saved revisions.
+  The bounded version 9 parser follows indirect, optional and workspace-linked
+  dependencies, retaining separate peer variants and their package metadata.
+  Duplicate keys, missing or unused records, unsupported syntax and incomplete
+  evidence cannot produce a partial comparison. These diagnostics still select
+  the full suite: package and root-file reader coverage must be established before
+  the resolved sets can narrow execution. Formatting-only lock changes also keep
+  full work. Lockfile selection, wider package precision and their real controls
+  remain open. The plan also requires measured
   grouping to reduce the full run toward 55 rounded job-minutes while keeping
   each work job near five minutes. The historical D66/D67 full-run samples used 72 and
   73 minutes; these are timestamp-based rounding estimates, not invoices.

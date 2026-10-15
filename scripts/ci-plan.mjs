@@ -7,6 +7,7 @@ import {documentationPlan} from './ci-docs.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
 import {scriptPlan} from './ci-scripts.mjs';
 import {scopeForRevisions, readGitBlobs} from './ci-package-revisions.mjs';
+import {describeLockChanges} from './ci-lock.mjs';
 
 export function createPlan(event, context, workspace, git, api) {
   let scope = scopeForPaths([],workspace);
@@ -42,6 +43,7 @@ export function createPlan(event, context, workspace, git, api) {
       }
       revisions = {base:mergeBase, head:head.sha};
       if (!reason.startsWith('Unverified package revisions:')) reason = scope.full ? `Shared, unaudited or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
+      if (paths.includes('pnpm-lock.yaml')) reason += `; ${describeLockChanges(mergeBase, head.sha, git)}`;
     } catch {
       reason = 'Cannot determine PR diff: full suite';
     }
