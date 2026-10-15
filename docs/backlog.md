@@ -480,8 +480,9 @@ notifications separately.
   readers and unsupported evidence keep that receipt. Package-only changes also
   omit the backup-capacity receipt when both revisions retain its audited TLS
   fixture, two backup source files, validators, installation inputs and CI wiring.
-  Root installation files and workspace manifests must match the complete audited
-  inventory, so new install hooks or packages keep the receipt. Changed storage
+  Root installation files and all tracked package manifests must match the complete
+  audited inventory, so nested manifests, new install hooks or packages keep the
+  receipt. Tracked dependency overrides under `node_modules` also keep it. Changed storage
   or transfer code still runs the real TLS checks. The other three receipts
   remain conservative for backend work. Unknown/full changes retain all five;
   portal alone runs local-stack, and isolated ui-smoke needs no receipt. Registration

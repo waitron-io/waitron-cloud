@@ -42,14 +42,14 @@ function fixture(run, alter = () => {}) {
       copyFileSync(path, join(root, path));
     }
     alter(root);
-    git('add', '.'); git('commit', '-s', '-qm', 'Seed capacity inputs');
+    git('add', '-f', '.'); git('commit', '-s', '-qm', 'Seed capacity inputs');
     const base = git('rev-parse', 'HEAD').trim();
     mkdirSync(join(root, 'packages/registration/src'), {recursive: true});
     writeFileSync(join(root, 'packages/registration/src/capacity-control.ts'), 'export const capacityControl = true;\n');
-    git('add', '.'); git('commit', '-s', '-qm', 'Change unrelated package');
+    git('add', '-f', '.'); git('commit', '-s', '-qm', 'Change unrelated package');
     const head = git('rev-parse', 'HEAD').trim();
     const select = (old = base, next = head, execute = git, scope = {full: false}) => receiptPlan(receiptSuites, scope, old, next, execute);
-    const commit = () => {git('add', '.'); git('commit', '-s', '-qm', 'Change audited input'); return git('rev-parse', 'HEAD').trim();};
+    const commit = () => {git('add', '-f', '.'); git('commit', '-s', '-qm', 'Change audited input'); return git('rev-parse', 'HEAD').trim();};
     run({root, git, base, head, select, commit});
   } finally { rmSync(root, {recursive: true, force: true}); }
 }
@@ -125,4 +125,22 @@ test('new install hooks and changed sibling install manifests retain capacity', 
     writeFileSync(join(root, 'packages/install-fixture/package.json'), '{"name":"install-fixture","scripts":{"postinstall":"node setup.mjs"}}\n');
     assert.deepEqual(select(base, commit()).receipts, receiptSuites);
   });
+});
+
+for (const [name, path, value] of [
+  ['nested module manifests', 'packages/backups/src/package.json', '{"type":"commonjs"}\n'],
+  ['tracked dependency overrides', 'packages/backups/src/node_modules/@aws-sdk/client-s3/index.js', 'module.exports = {};\n'],
+]) test(`${name} in either revision retain capacity`, () => {
+  const change = root => {
+    mkdirSync(dirname(join(root, path)), {recursive: true});
+    writeFileSync(join(root, path), value);
+  };
+  fixture(({root, base, select, commit}) => {
+    change(root);
+    assert.deepEqual(select(base, commit()).receipts, receiptSuites);
+  });
+  fixture(({root, base, select, commit}) => {
+    rmSync(join(root, path));
+    assert.deepEqual(select(base, commit()).receipts, receiptSuites);
+  }, change);
 });
