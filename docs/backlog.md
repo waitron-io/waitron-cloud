@@ -528,7 +528,14 @@ notifications separately.
   and every nondependency field stay audited. Version 1 remains supported for
   lock-only updates. This route still requires explicit reader review before
   renewing complete-input certificates. Wider lock/root
-  selection, package precision and their real scratch controls remain open. The plan also requires measured
+  selection, package precision and their real scratch controls remain open. Review follow-ups: the
+  audit-version and inner path filters lack independent removal controls; other
+  refusals currently mask their removal. The regular-file defenses have a paired
+  removal control. Keep the refusal assertions when simplifying these redundant
+  checks. Keep the renewal recipe's explicit manifest patterns aligned with
+  discovered workspace members; a mismatch currently retains full work. Add
+  changed manifest owners to the lock-specific reason when improving diagnostics;
+  the preceding selected-package list already includes them. The plan also requires measured
   grouping to reduce the full run toward 55 rounded job-minutes while keeping
   each work job near five minutes. The historical D66/D67 full-run samples used 72 and
   73 minutes; these are timestamp-based rounding estimates, not invoices.
