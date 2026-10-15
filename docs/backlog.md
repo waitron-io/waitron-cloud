@@ -499,7 +499,15 @@ notifications separately.
   73 minutes; these are timestamp-based rounding estimates, not invoices.
   CI still selects changed workspace packages and every package that depends on them,
   including test dependencies and direct sibling source/fixture reads absent from
-  manifests. Identity therefore selects all nine packages in the current graph;
+  manifests. Package-only PR selection now reads source and manifest dependency links from both
+  immutable Git revisions, preserving removed links and committed readers hidden
+  by local edits. The existing quoted-path discovery also retains named, root-relative
+  and uncertain sibling-template readers. Missing blobs, incomplete inventories,
+  changed workspace membership or test commands, checkout attributes, links and
+  tracked dependency overrides keep full work with a reason. Workspace discovery
+  currently recognises only the repository's two explicit package-directory patterns;
+  other policies keep full work. This does not resolve the plan's broader dynamic
+  input and directory rules. Identity still selects all nine packages in the current graph;
   portal alone remains isolated. Unaudited root, unknown and empty changes run everything.
   Type checking stays whole-workspace because backend manifests share the root
   TypeScript input. Package-only changes omit the two-venue milestone receipt when both immutable
