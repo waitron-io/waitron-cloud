@@ -180,7 +180,7 @@ browser receipts. Tagged key operators must match the recovery event and target
 node; malformed objects and person substitutions refuse. Focused contract and
 real HTTP tests cover those boundaries, and eight browser cases cover retained
 key-event packets in both languages, themes and widths. The actual PostgreSQL joint test now pins Waitron adapter candidate
-`65baf730d99faa08ddbfce15edde8e886314987b`. Its 15 cases cover real account status,
+`2293a60a311e20b227029782ba75048ee1fff241`. Its 15 cases cover real account status,
 independent verification of Cloud's signed packet, source/target/event/operator and
 full-purpose refusals, missing trust, reserved-state refusal, retained read access,
 session/CSRF refusals, complete manual activation and a matched machine report.

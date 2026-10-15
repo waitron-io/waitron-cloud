@@ -15,7 +15,7 @@ import { encodeReceipt } from '../../../fiscal-allocation/src/evidence.ts';
 import { createLeaseTrust } from '../../../registration/src/installation-proof.ts';
 import type { AllocationReceipt } from '../../../fiscal-allocation/src/types.ts';
 
-export const waitronCandidate = '65baf730d99faa08ddbfce15edde8e886314987b';
+export const waitronCandidate = '2293a60a311e20b227029782ba75048ee1fff241';
 const bridge = fileURLToPath(new URL('./fiscal-waitron-bridge.mjs', import.meta.url));
 async function freePort() {
   const listener = createServer();
