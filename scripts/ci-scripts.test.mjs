@@ -169,11 +169,14 @@ test('unreadable or corrupted audit evidence from either immutable revision reta
   put(helper, 'export const result = 1; // edited\n');
   const head = commit();
   for (const sha of [base, head]) {
-    for (const failure of ['missing', 'corrupt']) {
+    for (const failure of ['missing', 'version', 'digest']) {
       const read = (...args) => {
         if (args[0] === 'show' && args[1] === `${sha}:${policy}`) {
           if (failure === 'missing') throw Error('Object unavailable');
-          return JSON.stringify({version: 2, inputSha256: '0'.repeat(64)});
+          const audit = JSON.parse(git(...args));
+          if (failure === 'version') audit.version = 2;
+          else audit.inputSha256 = '0'.repeat(64);
+          return JSON.stringify(audit);
         }
         return git(...args);
       };
