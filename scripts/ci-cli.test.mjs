@@ -52,6 +52,11 @@ test('executed summary consumes needs objects and the current job API, refusing 
       }
     }
     env.CI_RESULTS=JSON.stringify(results);
+    const documentation={base:'a'.repeat(40),head:'b'.repeat(40),paths:['docs/backlog.md']};
+    env.CI_PLAN=JSON.stringify({packages:[],receipts:[],typecheck:false,reuse:null,documentation});
+    env.CI_RESULTS=JSON.stringify({changes:{result:'success'},documentation:{result:'success'},typecheck:{result:'skipped'},packages:{result:'skipped'},receipts:{result:'skipped'}});
+    writeFileSync(fixture,JSON.stringify([{jobs:['changes','documentation'].map(name=>({name,status:'completed',conclusion:'success'}))}]));
+    const documentResult=run();assert.equal(documentResult.status,0);assert.match(documentResult.stdout,/Passed 1 document check/);
     writeFileSync(gh,'#!/bin/sh\nexit 1\n',{mode:0o700});assert.equal(run().status,1);
   } finally {rmSync(root,{recursive:true,force:true});}
 });

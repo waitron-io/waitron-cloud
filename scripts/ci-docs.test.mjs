@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync, spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync, symlinkSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, unlinkSync, symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import test from 'node:test';
@@ -44,7 +44,7 @@ test('audited unread Markdown selects only the document check, including spaces 
   assert.match(selected.reason, /Audited unread Markdown/);
 }));
 
-test('a new reader invalidates later docs-only exemptions in both trees', () => fixture(({put, commit, plan, base}) => {
+test('a new reader invalidates later docs-only exemptions and mixed changes', () => fixture(({put, commit, plan, base}) => {
   put('scripts/new-reader.mjs', 'readFileSync("docs/backlog.md");\n');
   const reader = commit();
   put('docs/backlog.md', '# Updated\n');
@@ -66,13 +66,15 @@ test('changed or removed audited inputs and missing, malformed or stale audit ev
   });
 });
 
-test('package Markdown, document data and unknown paths preserve their existing checks', () => fixture(({put, commit, plan}) => {
-  for (const path of ['packages/identity/SOURCE.md', 'docs/receipts/receipt.json', 'docs/unknown.bin', '.github/action.yml']) {
-    put(path, '{}\n');
-    const selected = plan(commit());
-    assert.equal(selected.packages.length, 20, path);
+test('package Markdown, document data and unknown paths preserve their existing checks', () => {
+  for (const path of ['packages/identity/SOURCE.md', 'docs/receipts/receipt.json', 'docs/receipts/receipt.md', 'docs/unknown.bin', '.github/action.yml']) {
+    fixture(({put, commit, plan}) => {
+      put(path, '{}\n');
+      const selected = plan(commit());
+      assert.equal(selected.packages.length, 20, path);
+    });
   }
-}));
+});
 
 test('mixed documents and portal code retain the full fallback', () => fixture(({put, commit, plan}) => {
   put('docs/backlog.md', '# Updated\n');
@@ -105,6 +107,51 @@ test('document command reads exact immutable blobs and rejects invalid UTF-8, NU
   assert.equal(linked.packages.length, 20, 'linked Markdown cannot earn the exemption');
 }));
 
+test('document command accepts deletions and independently refuses a stale reader audit', () => fixture(({root, put, commit, plan}) => {
+  const run = value => spawnSync(process.execPath, [checker], {cwd: root, env: {...process.env, CI_PLAN: JSON.stringify(value)}, encoding: 'utf8'});
+  unlinkSync(join(root, 'README.md'));
+  assert.equal(run(plan(commit())).status, 0);
+  put('scripts/reader.mjs', 'readFileSync("docs/backlog.md");\n');
+  const base = commit();
+  put('docs/backlog.md', '# Updated\n');
+  const head = commit();
+  const forged = run({documentation: {base, head, paths: ['docs/backlog.md']}});
+  assert.equal(forged.status, 1);
+  assert.match(forged.stderr, /Executable inputs changed/);
+}));
+
+test('real planner command emits document output and reports unaudited fallbacks without fatal stderr', () => fixture(({root, git, put, commit}) => {
+  put('package.json', JSON.stringify({name: 'fixture', private: true}));
+  put('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n");
+  for (const name of ['one', 'two']) put(`packages/${name}/package.json`, JSON.stringify({name, scripts: {test: 'node --test'}}));
+  const inputs = ['package.json', 'pnpm-workspace.yaml', 'packages/one/package.json', 'packages/two/package.json', 'scripts/reader.mjs'];
+  const tree = commit();
+  const rows = git('ls-tree', '-rz', '--full-tree', tree).split('\0').filter(row => inputs.includes(row.split('\t')[1]));
+  put(policy, JSON.stringify({version: 1, inputSha256: createHash('sha256').update(rows.map(row => row + '\0').join('')).digest('hex')}) + '\n');
+  let base = commit();
+  const run = (head, old = base) => {
+    put('event.json', JSON.stringify({pull_request: {base: {sha: old}, head: {sha: head}}}));
+    const output = join(tmpdir(), `cloud-doc-output-${head}`);
+    try {
+      writeFileSync(output, '');
+      const result = spawnSync(process.execPath, [resolve('scripts/ci-plan.mjs')], {cwd: root, env: {...process.env, GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_OUTPUT: output}, encoding: 'utf8'});
+      return {...result, output: readFileSync(output, 'utf8')};
+    } finally { rmSync(output, {force: true}); rmSync(join(root, 'event.json'), {force: true}); }
+  };
+  put('docs/backlog.md', '# Updated\n');
+  let result = run(commit());
+  assert.equal(result.status, 0);
+  assert.match(result.output, /\ndocumentation=true\n/);
+  assert.match(result.output, /\npackages=false\n/);
+  unlinkSync(join(root, policy)); base = commit();
+  put('docs/backlog.md', '# Another change\n');
+  result = run(commit());
+  assert.equal(result.status, 0);
+  assert.match(result.output, /\npackages=true\n/);
+  assert.match(result.stdout, /full suite.*docs\/backlog.md/);
+  assert.equal(result.stderr, '');
+}));
+
 test('strict summary requires the audited document job and refuses malformed empty work', () => {
   const documentation = {base: 'a'.repeat(40), head: 'b'.repeat(40), paths: ['docs/backlog.md']};
   const plan = {packages: [], receipts: [], typecheck: false, reuse: null, documentation};
@@ -118,7 +165,12 @@ test('strict summary requires the audited document job and refuses malformed emp
     assert.throws(() => assertSummary(plan, results, [jobs[0], {...jobs[1], conclusion}]));
   }
   assert.throws(() => assertSummary(plan, results, [jobs[0], {...jobs[1], status: 'in_progress'}]));
-  for (const invalid of [{...documentation, paths: []}, {...documentation, paths: ['scripts/a.mjs']}, {...documentation, head: 'bad'}]) {
+  for (const invalid of [{...documentation, paths: []}, {...documentation, paths: ['scripts/a.mjs']}, {...documentation, head: 'bad'},
+    {...documentation, paths: ['docs/backlog.md', 'docs/backlog.md']},
+    ...['docs/../backlog.md', 'docs/./backlog.md', 'docs/a\\b.md'].map(path => ({...documentation, paths: [path]}))]) {
     assert.throws(() => assertSummary({...plan, documentation: invalid}, results, jobs));
   }
+  assert.throws(() => assertSummary({...plan, reuse: {sha: 'c'.repeat(40), runId: 42}}, results, jobs));
+  assert.throws(() => assertSummary({...plan, typecheck: true}, {...results, typecheck: 'success'}, [...jobs, {name: 'typecheck', status: 'completed', conclusion: 'success'}]));
+  assert.throws(() => assertSummary({...plan, packages: [{package: 'one', shard: 1}]}, {...results, packages: 'success'}, [...jobs, {name: 'package (one)', status: 'completed', conclusion: 'success'}]));
 });

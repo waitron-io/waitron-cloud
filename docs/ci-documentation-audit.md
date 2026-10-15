@@ -44,3 +44,8 @@ The certificate does not exempt package Markdown or receipt data. Root scripts,
 lockfile changes, finer receipt selection and measured job grouping remain later
 parts of the precise-selection plan. The existing equal-tree merge reuse remains
 in place.
+
+When a documentation-only pull request passes and its merge has the identical
+tree, the main run reuses that result and also skips package suites. This proves
+the same documented selection, rather than rerunning previously unchanged code.
+It does not establish that an unrelated failing or intermittent test has recovered.

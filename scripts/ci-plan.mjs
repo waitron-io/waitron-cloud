@@ -45,7 +45,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       try { execFileSync('git',['cat-file','-e',sha],{stdio:'ignore',timeout:10_000}); }
       catch { execFileSync('git',['fetch','--no-tags','origin',sha],{stdio:'ignore',timeout:30_000}); }
     }
-    return execFileSync('git',args,{encoding:'utf8',timeout:30_000});
+    return execFileSync('git',args,{encoding:'utf8',timeout:30_000,stdio:['ignore','pipe','pipe']});
   };
   const api = path => JSON.parse(execFileSync('gh',['api',path],{encoding:'utf8',timeout:30_000,stdio:['ignore','pipe','ignore']}));
   const plan = createPlan(event,context,loadWorkspace(),git,api);
