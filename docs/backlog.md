@@ -484,8 +484,13 @@ notifications separately.
   Root installation files and all tracked package manifests must match the complete
   audited inventory, so nested manifests, new install hooks or packages keep the
   receipt. Tracked dependency overrides under `node_modules` also keep it. Changed storage
-  or transfer code still runs the real TLS checks. The other three receipts
-  remain conservative for backend work. Unknown/full changes retain all five;
+  or transfer code still runs the real TLS checks. Package-only changes also omit
+  the database-recovery receipt when both revisions retain its audited syntax-check
+  targets, validator, migration-count helper, migration module, transaction helper,
+  installation inputs and CI wiring. The suite checks syntax and validators; it
+  does not execute the physical recovery drill. Changed imports or missing evidence
+  keep the receipt. The shared installation check preserves the capacity guards.
+  The local-stack and public-gateway receipts remain conservative for backend work. Unknown/full changes retain all five;
   portal alone runs local-stack, and isolated ui-smoke needs no receipt. Registration
   uses seven file shards, account HTTP and portal use three each, and backups uses
   two. The other packages keep one job each. Each file runs once, with its original
