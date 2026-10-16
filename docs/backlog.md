@@ -486,7 +486,15 @@ notifications separately.
   from both the plan and the job list cannot turn incomplete work green.
   Unknown packages, altered counts, invalid partition numbers and extra row
   fields fail; complete partitions and the existing short-package groups remain
-  accepted. An independent summary policy checks the execution contract; tests
+  accepted. Each package in a short-package group must also emit a nonempty,
+  consistent Node test summary and exit successfully. The runner reports its
+  test, pass, skip and todo counts, keeps all output and continues with later
+  packages after a failure. A zero exit without a summary, an all-skipped run,
+  or a failed or cancelled test cannot pass. Plain and colored TAP and spec output are
+  exercised with real Node test subprocesses; the package commands, deadlines
+  and treatment of individual skipped or todo cases are unchanged. These counts
+  establish executed work, not that the selected package contains every required
+  test. An independent summary policy checks the execution contract; tests
   feed it every real planner package allocation and the full grouped plan, and
   compare its package names with the complete workspace inventory. Adding,
   removing or renaming a package, or changing its partition count, requires
@@ -564,7 +572,11 @@ notifications separately.
   manifest and the lockfile before running the four positive checks sequentially.
   It requires all four test names, so a passing file with no matching test cannot
   substitute for coverage. The saved manifest metadata must match its reviewed
-  nondependency fields in the audit. Actual
+  nondependency fields in the audit. The fixtures also seed the saved audited
+  package runner from `scripts/fixtures/ci-execution-inputs.json`. A separate
+  real-clone check changes the live runner and requires all five original positive
+  receipt tests to execute. Their assertions and the production audit pins stay
+  unchanged; changing the real runner still retains receipt work. Actual
   dependency changes still retain every receipt in the production planner.
   Fourteen root-test fixtures now disable automatic Git maintenance for their
   temporary repositories. Real-child checks trace each named original test,
@@ -581,6 +593,19 @@ notifications separately.
   The change removes a confirmed detached background Git process from these
   fixtures; it does not establish the historical cleanup cause. Capture that
   directory's remaining entries and process activity if cleanup fails again.
+  Two 30-second child checks also timed out during overlapping local root and
+  reviewer receipt runs: the local-stack and dependency-fixture cases in
+  `scripts/ci-receipt-cleanup.test.mjs`. Both passed separately in 5.8 and 10.3
+  seconds without changing their deadlines. These passes do not establish the
+  earlier cause; resource contention remains an assumption. Retain child-stage
+  timings and process activity on recurrence. The failed and diagnostic logs are
+  under `~/waitron-campaign-d/receipts/d69/package-result-counts/`.
+  A separate forced-color package probe also exposed two strict CLI checks in
+  `packages/remote-access/test/operator-cli.test.ts` and `reconciler-cli.test.ts`:
+  Node's warning about conflicting `NO_COLOR` and `FORCE_COLOR` settings changes
+  their expected error output. Running those files directly, without the grouped
+  runner, reproduces both failures. Keep their exact error assertions; establish
+  one consistent color environment before promising forced-color package runs.
   The parser's current-lock inventory check still pins 215 package/snapshot
   records and the original importer counts. A new dependency record needs an
   explicitly reviewed inventory update. The disposable

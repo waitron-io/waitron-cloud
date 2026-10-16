@@ -36,7 +36,7 @@ function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-short-packages-'));
   const log = join(root, 'calls');
   try {
-    writeFileSync(join(root, 'pnpm'), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$PACKAGE_CALLS"\nprintf "package-output:%s\\n" "$2"\n[ "$2" != "$FAIL_PACKAGE" ]\n', {mode: 0o700});
+    writeFileSync(join(root, 'pnpm'), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$PACKAGE_CALLS"\nprintf "package-output:%s\\n" "$2"\nprintf "# tests 1\\n# pass 1\\n# fail 0\\n# cancelled 0\\n# skipped 0\\n# todo 0\\n"\n[ "$2" != "$FAIL_PACKAGE" ]\n', {mode: 0o700});
     const execute = (group = row(members), extra = {}) => spawnSync(process.execPath, ['scripts/ci-run-package-group.mjs'], {
       encoding: 'utf8', env: {...process.env, PATH: `${root}:${process.env.PATH}`, PACKAGE_CALLS: log, CI_PACKAGE_GROUP: JSON.stringify(group), ...extra},
     });
