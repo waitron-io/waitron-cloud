@@ -600,6 +600,12 @@ notifications separately.
   earlier cause; resource contention remains an assumption. Retain child-stage
   timings and process activity on recurrence. The failed and diagnostic logs are
   under `~/waitron-campaign-d/receipts/d69/package-result-counts/`.
+  A separate forced-color package probe also exposed two strict CLI checks in
+  `packages/remote-access/test/operator-cli.test.ts` and `reconciler-cli.test.ts`:
+  Node's warning about conflicting `NO_COLOR` and `FORCE_COLOR` settings changes
+  their expected error output. Running those files directly, without the grouped
+  runner, reproduces both failures. Keep their exact error assertions; establish
+  one consistent color environment before promising forced-color package runs.
   The parser's current-lock inventory check still pins 215 package/snapshot
   records and the original importer counts. A new dependency record needs an
   explicitly reviewed inventory update. The disposable
