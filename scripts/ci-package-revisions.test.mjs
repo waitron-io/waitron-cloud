@@ -713,3 +713,61 @@ for (const name of ${call}) {
     assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'portal'], call);
   });
 });
+
+test('root directory variables retain the package loaded by a real nonrecursive scan', () => {
+  for (const declaration of ['const directory', 'let $root', 'var root_2']) fixture(({root, write, commit, plan}) => {
+    const name = declaration.split(' ')[1];
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('root helper loaded');\n");
+    write('nested/unrelated-adapter.mjs', "import '../packages/unrelated/src/index.mjs';\n");
+    write('packages/portal/src/index.mjs', `import {readdirSync} from 'node:fs';
+${declaration} = new URL('../../.././', import.meta.url,);
+for (const name of readdirSync(${name},)) {
+  if (name.endsWith('.mjs')) await import(new URL(name, ${name}));
+}
+`);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'root helper loaded\n');
+    assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'portal'], declaration);
+  });
+});
+
+test('saved root directory variables retain added and removed helpers and former transitive readers', () => {
+  for (const [readerRevision, change] of [['both', 'add'], ['both', 'delete'], ['base', 'unchanged'], ['head', 'unchanged']]) fixture(({root, git, write, commit}) => {
+    const reader = `import {readdirSync} from 'node:fs';
+const directory = new URL('../../../', import.meta.url);
+for (const name of readdirSync(directory)) {
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`;
+    write('packages/gateway/src/index.mjs', "import '../../portal/src/index.mjs';\n");
+    if (readerRevision !== 'head') write('packages/portal/src/index.mjs', reader);
+    if (change !== 'add') write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\n");
+    const base = commit();
+    write('packages/portal/src/index.mjs', readerRevision !== 'base' ? reader : 'export const value = 2;\n');
+    if (change === 'add') write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\n");
+    else if (change === 'delete') rmSync(join(root, 'catalogue-adapter.mjs'));
+    const head = commit();
+    write('packages/portal/src/index.mjs', 'export const value = 3;\n');
+    write('catalogue-adapter.mjs', 'export const value = 3;\n');
+    const read = (...args) => git(...args);
+    read.readBlobs = ids => packageInputs.readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input}));
+    assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, read),
+      {full: false, packages: ['catalogue', 'gateway', 'portal']}, `${readerRevision} ${change}`);
+  });
+});
+
+test('a stored root command working directory does not imply a helper scan', () => fixture(({root, git, write, commit}) => {
+  write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\n");
+  write('packages/portal/src/index.mjs', `import {execFileSync} from 'node:child_process';
+const directory = new URL('../../../', import.meta.url);
+execFileSync(process.execPath, ['--version'], {cwd: directory});
+`);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root});
+  assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+    {full: false, packages: ['catalogue']});
+}));

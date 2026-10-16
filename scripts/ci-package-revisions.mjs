@@ -39,8 +39,8 @@ function workspaceAt(sha, workspace, git) {
     return {...manifest, directory: pkg.directory};
   });
   const modules = new Map([...files.keys()].filter(path => /\.[cm]?[jt]sx?$/.test(path)).map(path => [path, read(path)]));
-  // Named directories retain possible descendants; direct root scans without
-  // options enumerate immediate entries rather than command working directories.
+  // Named directories retain possible descendants; root scans without options
+  // enumerate immediate entries rather than command working directories.
   const directories = new Map();
   for (const path of modules.keys()) {
     for (let directory = posix.dirname(path); directory !== '.'; directory = posix.dirname(directory)) {
@@ -63,6 +63,11 @@ function workspaceAt(sha, workspace, git) {
     for (let index = 0; index < sources.length; index++) {
       const source = sources[index];
       const rootReads = new Set([...source.source.matchAll(/\breaddirSync\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*,?\s*\)\s*,?\s*\)/g)].map(match => match[2]));
+      // A stored URL is an input only when a matching identifier is scanned.
+      const scannedVariables = new Set([...source.source.matchAll(/\breaddirSync\s*\(\s*([A-Za-z_$][\w$]*)\s*,?\s*\)/g)].map(match => match[1]));
+      for (const match of source.source.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\.meta\.url\s*,?\s*\)/g)) {
+        if (scannedVariables.has(match[1])) rootReads.add(match[3]);
+      }
       for (const value of quotedReferences(source.source)) {
         const target = value.startsWith('.') ? posix.normalize(posix.join(posix.dirname(source.path), value)) : posix.normalize(value);
         if (packages.some(other => target.startsWith(`${other.directory}/`))) continue;
