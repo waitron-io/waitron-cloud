@@ -1,0 +1,190 @@
+{
+  "measured": "2026-10-16",
+  "corpusSha256": "1a19d695c2f5d4ecd4328e05f438adf42ca3d7796cbf8b7988f10add132d6bd9",
+  "counters": {
+    "geoapify": 80,
+    "google": 78,
+    "cartociudad": 41
+  },
+  "providers": {
+    "geoapify": {
+      "requests": 80,
+      "p50Ms": 1954,
+      "p95Ms": 6522,
+      "timeouts": 0,
+      "retries": 0,
+      "stages": {
+        "autocomplete": {
+          "inScope": {
+            "cases": 28,
+            "scored": 28,
+            "errors": 0,
+            "selectable": 17,
+            "wrongMatch": 10,
+            "noResult": 1,
+            "houseNumber": 25,
+            "postcode": 16,
+            "locality": 21,
+            "province": 12,
+            "postcodeAndProvinceAmongSelections": 8,
+            "selections": 17,
+            "foreignCountry": 0,
+            "missingCountry": 0,
+            "unitPreserved": 0,
+            "units": 1
+          },
+          "unsupported": {
+            "cases": 12,
+            "scored": 12,
+            "errors": 0,
+            "selectable": 8,
+            "wrongMatch": 3,
+            "noResult": 1,
+            "houseNumber": 8,
+            "postcode": 10,
+            "locality": 10,
+            "province": 8,
+            "postcodeAndProvinceAmongSelections": 7,
+            "selections": 8,
+            "foreignCountry": 0,
+            "missingCountry": 0,
+            "unitPreserved": 0,
+            "units": 2
+          }
+        },
+        "geocode": {
+          "inScope": {
+            "cases": 28,
+            "scored": 28,
+            "errors": 0,
+            "selectable": 18,
+            "wrongMatch": 10,
+            "noResult": 0,
+            "houseNumber": 25,
+            "postcode": 19,
+            "locality": 24,
+            "province": 11,
+            "postcodeAndProvinceAmongSelections": 8,
+            "selections": 18,
+            "foreignCountry": 0,
+            "missingCountry": 0,
+            "unitPreserved": 0,
+            "units": 1
+          },
+          "unsupported": {
+            "cases": 12,
+            "scored": 12,
+            "errors": 0,
+            "selectable": 9,
+            "wrongMatch": 3,
+            "noResult": 0,
+            "houseNumber": 10,
+            "postcode": 9,
+            "locality": 12,
+            "province": 9,
+            "postcodeAndProvinceAmongSelections": 7,
+            "selections": 9,
+            "foreignCountry": 0,
+            "missingCountry": 0,
+            "unitPreserved": 0,
+            "units": 2
+          }
+        }
+      }
+    },
+    "google": {
+      "requests": 78,
+      "p50Ms": 121,
+      "p95Ms": 226,
+      "timeouts": 0,
+      "retries": 0,
+      "stages": {
+        "selection": {
+          "inScope": {
+            "cases": 28,
+            "scored": 27,
+            "errors": 1,
+            "selectable": 22,
+            "wrongMatch": 4,
+            "noResult": 1,
+            "houseNumber": 23,
+            "postcode": 22,
+            "locality": 23,
+            "province": 23,
+            "postcodeAndProvinceAmongSelections": 21,
+            "selections": 22,
+            "foreignCountry": 0,
+            "missingCountry": 0,
+            "unitPreserved": 0,
+            "units": 1
+          },
+          "unsupported": {
+            "cases": 12,
+            "scored": 12,
+            "errors": 0,
+            "selectable": 11,
+            "wrongMatch": 1,
+            "noResult": 0,
+            "houseNumber": 9,
+            "postcode": 12,
+            "locality": 12,
+            "province": 8,
+            "postcodeAndProvinceAmongSelections": 8,
+            "selections": 11,
+            "foreignCountry": 0,
+            "missingCountry": 0,
+            "unitPreserved": 0,
+            "units": 2
+          }
+        }
+      }
+    },
+    "cartociudad": {
+      "requests": 40,
+      "p50Ms": 288,
+      "p95Ms": 521,
+      "timeouts": 0,
+      "retries": 0,
+      "stages": {
+        "selection": {
+          "inScope": {
+            "cases": 28,
+            "scored": 28,
+            "errors": 0,
+            "selectable": 3,
+            "wrongMatch": 7,
+            "noResult": 18,
+            "houseNumber": 7,
+            "postcode": 7,
+            "locality": 6,
+            "province": 7,
+            "postcodeAndProvinceAmongSelections": 3,
+            "selections": 3,
+            "foreignCountry": 0,
+            "missingCountry": 0,
+            "unitPreserved": 0,
+            "units": 1
+          },
+          "unsupported": {
+            "cases": 12,
+            "scored": 12,
+            "errors": 0,
+            "selectable": 3,
+            "wrongMatch": 1,
+            "noResult": 8,
+            "houseNumber": 4,
+            "postcode": 3,
+            "locality": 4,
+            "province": 4,
+            "postcodeAndProvinceAmongSelections": 3,
+            "selections": 3,
+            "foreignCountry": 0,
+            "missingCountry": 0,
+            "unitPreserved": 0,
+            "units": 2
+          }
+        }
+      }
+    }
+  }
+}

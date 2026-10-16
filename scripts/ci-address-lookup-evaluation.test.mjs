@@ -33,10 +33,13 @@ const good = {country:'es',street:'PLAZA CIBELES',number:'1',postcode:'28014',lo
 
 test('scoring rejects a wrong street, country and administrative region without borrowing expected components', () => {
   assert.equal(typeof module.score, 'function', 'independent scoring is missing');
-  assert.deepEqual(module.score(expected, good), {selectable:true,wrongMatch:false,houseNumber:true,postcode:true,locality:true,province:true,country:true,unit:null,noResult:false});
+  assert.deepEqual(module.score(expected, good), {selectable:true,wrongMatch:false,houseNumber:true,postcode:true,locality:true,province:true,country:true,foreignCountry:false,missingCountry:false,unit:null,noResult:false});
   for (const field of ['country','street','locality']) assert.equal(module.score(expected, {...good,[field]:'wrong'}).selectable, false);
   for (const field of ['number','postcode','province']) assert.equal(module.score(expected, {...good,[field]:''})[field==='number'?'houseNumber':field], false);
   assert.equal(module.score(expected, null).noResult,true);
+  assert.equal(module.score(expected, {...good,country:'fr'}).foreignCountry,true);
+  assert.equal(module.score(expected, {...good,country:''}).missingCountry,true);
+  assert.equal(module.score(expected, {...good,country:''}).foreignCountry,false);
   assert.equal(module.score({...expected,unit:'2 B'}, {...good,unit:null}).unit,false);
 });
 
@@ -166,4 +169,43 @@ test('malformed successful responses are errors rather than flattering empty mat
     assert.equal(r.error,'invalid_response');
     assert.deepEqual(r.stages,{});
   }
+});
+
+test('summary keeps failed and empty cases in the selection denominator and uses only selections for component accuracy', () => {
+  assert.equal(typeof module.summarize,'function','result summary is missing');
+  const selected={selectable:true,wrongMatch:false,houseNumber:true,postcode:false,province:true,locality:true,country:true,foreignCountry:false,missingCountry:false,noResult:false,unit:null};
+  const rows=[{inScope:true,stages:{selection:selected},error:null},{inScope:true,stages:{},error:'timeout'},{inScope:true,stages:{selection:{...selected,selectable:false,noResult:true,houseNumber:false,locality:false,province:false,country:false}},error:null},{inScope:false,stages:{selection:selected},error:null}];
+  const out=module.summarize(rows,'selection',true);
+  assert.deepEqual(out,{cases:3,scored:2,errors:1,selectable:1,wrongMatch:0,noResult:1,houseNumber:1,postcode:0,locality:1,province:1,postcodeAndProvinceAmongSelections:0,selections:1,foreignCountry:0,missingCountry:0,unitPreserved:0,units:0});
+});
+
+test('a refused key with an HTML body still blocks the corpus after one dispatch', async () => {
+  const directory=mkdtempSync(join(tmpdir(),'address-refused-'));
+  const budget=new module.RequestBudget(directory);
+  let calls=0;
+  try {
+    const client=new module.EvaluationClient({budget,directory,keys:{google:'secret'},spacingMs:0,fetcher:async()=>{calls++;return new Response('<h1>Forbidden</h1>',{status:403});}});
+    const rows=await module.runCases(client,'google',[{id:'1',query:'Madrid',inScope:true,expected},{id:'2',query:'Madrid',inScope:true,expected}],directory,'c'.repeat(64));
+    assert.equal(rows[0].error,'Provider key refused');
+    assert.equal(calls,1);
+  } finally {budget.close();rmSync(directory,{recursive:true,force:true});}
+});
+
+test('keys come only from the named runtime file, without importing inherited environment values', () => {
+  assert.equal(typeof module.readKeys,'function','runtime file key reader is missing');
+  const directory=mkdtempSync(join(tmpdir(),'address-keys-'));
+  try {
+    const path=join(directory,'env');
+    writeFileSync(path,'GOOGLE_MAPS_SERVER_KEY="file-google"\nGEOAPIFY_API_KEY=file-geo\nOTHER_VALUE=ignored\n');
+    assert.deepEqual(module.readKeys(path),{google:'file-google',geoapify:'file-geo'});
+    assert.throws(()=>module.readKeys(join(directory,'missing')),/key file/);
+  }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+test('CartoCiudad full address labels do not duplicate the street type or retain the returned number and municipality in the street', () => {
+  const actual=module.normalize('cartociudad',{countryCode:'011',tip_via:'PLAZA',address:'PLAZA CIBELES 1, Madrid',portalNumber:1,postalCode:'28014',muni:'Madrid',province:'Madrid'});
+  assert.equal(module.score(expected,actual).selectable,true);
+  assert.equal(actual.street,'PLAZA CIBELES');
+  assert.equal(actual.number,'1');
+  assert.equal(module.normalize('cartociudad',{tip_via:'CALLE',address:'PRIMERO DE MAYO 12, Madrid',portalNumber:12}).street,'CALLE PRIMERO DE MAYO');
 });

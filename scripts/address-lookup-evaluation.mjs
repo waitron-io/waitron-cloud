@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import {homedir} from 'node:os';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
+import {parseEnv} from 'node:util';
 
 export class RequestBudget {
   counts = {google:0, geoapify:0, cartociudad:0};
@@ -55,7 +56,7 @@ export function score(expected, actual) {
   return {selectable, wrongMatch:Boolean(actual)&&!selectable,
     houseNumber:Boolean(actual)&&expected.number!==null&&String(actual.number)===expected.number,
     postcode:Boolean(actual)&&actual.postcode===expected.postcode, locality,
-    province:matches(actual?.province,expected.province), country,
+    province:matches(actual?.province,expected.province), country, foreignCountry:Boolean(actual?.country)&&!country, missingCountry:Boolean(actual)&&!actual.country,
     unit:expected.unit ? textKey(actual?.unit)===textKey(expected.unit) : null, noResult:!actual};
 }
 export function normalize(provider, data) {
@@ -67,8 +68,13 @@ export function normalize(provider, data) {
     return {...empty,country:(postal.regionCode??'').toLowerCase(),street:component('route'),number:component('street_number'),postcode:postal.postalCode??'',locality:postal.locality??'',province:component('administrative_area_level_2'),unit:component('subpremise')||null};
   }
   assert.equal(provider,'cartociudad','Unknown provider');
+  let street=(data.address??'').split(',')[0].trim();
+  const suffix=` ${data.portalNumber??''}${data.extension??''}`;
+  if(data.portalNumber!=null && street.endsWith(suffix)) street=street.slice(0,-suffix.length);
+  if(data.noNumber===true) street=street.replace(/\s+s[/-]n$/i,'');
+  if(data.tip_via && !textKey(street).startsWith(textKey(data.tip_via)+' ')) street=`${data.tip_via} ${street}`;
   return {...empty,country:data.countryCode==='011'?'es':(data.countryCode??'').toLowerCase(),
-    street:[data.tip_via,data.address].filter(Boolean).join(' '),number:data.noNumber===true?'':String(data.portalNumber??''),
+    street,number:data.noNumber===true?'':String(data.portalNumber??''),
     postcode:String(data.postalCode??''),locality:data.poblacion||data.muni||'',province:data.province??'',unit:null};
 }
 
@@ -127,7 +133,7 @@ export class EvaluationClient {
         while(true) {const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>2*1024*1024)throw new Error('response_size');chunks.push(Buffer.from(value));}
       } finally {await reader.cancel();}
       let data;
-      try {data=JSON.parse(Buffer.concat(chunks).toString('utf8'));} catch {throw new Error('invalid_json');}
+      try {data=JSON.parse(Buffer.concat(chunks).toString('utf8'));} catch {throw new Error([401,403].includes(response.status)?'key_refused':'invalid_json');}
       const raw=openSync(join(this.directory,'raw',`${provider}-${event.ordinal}.json`),'wx',0o600);
       try {appendFileSync(raw,JSON.stringify(redact(data,this.keys)));} finally {closeSync(raw);}
       if([401,403].includes(response.status)) throw new Error('key_refused');
@@ -209,10 +215,7 @@ if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {
     const provider=process.argv[3];
     assert.ok(process.argv.length===4&&process.argv[2]==='--run'&&['google','geoapify','cartociudad'].includes(provider),'Use --run google|geoapify|cartociudad; live requests require this explicit flag');
     const root=join(homedir(),'waitron-campaign-d','receipts','d75');
-    if(provider!=='cartociudad') {
-      try{process.loadEnvFile(join(homedir(),'.waitron-address-lookup','env'));}catch{throw new Error('Missing provider key file');}
-    }
-    const keys={google:process.env.GOOGLE_MAPS_SERVER_KEY,geoapify:process.env.GEOAPIFY_API_KEY};
+    const keys=provider==='cartociudad'?{}:readKeys(join(homedir(),'.waitron-address-lookup','env'));
     assert.ok(provider==='cartociudad'||keys[provider],'Missing provider key');
     const corpusText=readFileSync(new URL('../docs/evaluations/spanish-addresses.json',import.meta.url),'utf8');
     const corpus=JSON.parse(corpusText);
@@ -232,4 +235,23 @@ if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {
     console.error(error.message);
     process.exitCode=1;
   } finally {budget?.close();}
+}
+
+export function summarize(rows, stage, inScope) {
+  const eligible=rows.filter(row=>inScope===undefined||row.inScope===inScope);
+  const scored=eligible.flatMap(row=>row.stages[stage]?[row.stages[stage]]:[]);
+  const count=key=>scored.filter(row=>row[key]===true).length;
+  return {cases:eligible.length,scored:scored.length,errors:eligible.filter(row=>row.error).length,
+    selectable:count('selectable'),wrongMatch:count('wrongMatch'),noResult:count('noResult'),
+    houseNumber:count('houseNumber'),postcode:count('postcode'),locality:count('locality'),province:count('province'),
+    postcodeAndProvinceAmongSelections:scored.filter(row=>row.selectable&&row.postcode&&row.province).length,
+    selections:count('selectable'),foreignCountry:count('foreignCountry'),missingCountry:count('missingCountry'),
+    unitPreserved:count('unit'),units:scored.filter(row=>row.unit!==null).length};
+}
+
+export function readKeys(path) {
+  try {
+    const env=parseEnv(readFileSync(path,'utf8'));
+    return {google:env.GOOGLE_MAPS_SERVER_KEY,geoapify:env.GEOAPIFY_API_KEY};
+  } catch {throw new Error('Missing or unreadable provider key file');}
 }

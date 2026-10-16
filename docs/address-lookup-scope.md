@@ -56,3 +56,151 @@ Before a venue is paired, propose a Cloud sign-in and narrowly scoped, expiring 
 Build a licensed public or synthetic corpus with expected components independent of each provider. Include mainland and island provinces, rural localities, accents and language variants, street numbers and units, postcode boundaries, ambiguous streets, typos, and unsupported fiscal jurisdictions. Run the same country-restricted input through Geoapify and CartoCiudad for Spain; add Google and Mapbox only when their proposed persistence and display terms are clear enough to test the intended flow. Score selectable match, wrong match, exact house number, postcode, locality, canonical province, coordinate quality where useful, and no result. Record provider chargeable units, latency, timeout, and retries. Run manual-only, provider-error, and correction cases through Waitron's actual validation. Add each later country separately after its country pack permits setup. This is an **evaluation plan**, not measured quality.
 
 The owner must set sample size and regional weights, acceptable normalization, accuracy thresholds, cache duration, attribution placement, and a peak-day budget. Proposed initial gates for discussion are 95% selectable matches among in-scope Spanish cases, 98% correct postcode and administrative area among selections, zero silent country switches or overwritten manual edits, and all accepted results passing Waitron server validation with the expected fiscal territory and time zone. Do not average an unsupported region's failure into a national pass. Before provider selection, obtain written permission or a reviewed contract basis for permanent merchant-field storage and display, plus the chosen endpoint's processing, rate, and price terms. The selected provider, allowance, and implementation remain open until those receipts and the benchmark exist.
+
+## Measured on Spain, 2026-10-16
+
+You can compare the services on a small, deliberately difficult set of civic addresses.
+This measures the returned fields under the adapters below. It does not select a provider
+or establish permission to keep its address content. Google's results are a quality
+comparison only; its durable merchant-record storage rights remain unresolved.
+
+The [corpus](evaluations/spanish-addresses.json) contains 20 public civic addresses and
+one hand-authored input variant for each. Its original queries and annotations are
+released under CC0-1.0. Each address fact names its independent municipal source;
+no provider supplied the expected answers. The corpus was fixed before authenticated
+requests, with SHA-256 `1a19d695c2f5d4ecd4328e05f438adf42ca3d7796cbf8b7988f10add132d6bd9`.
+The weights are runner defaults, not a population sample: 28 mainland cases (70%),
+eight island cases (20%), and four Ceuta/Melilla cases (10%). Eight cases cover
+small towns. The variants include accents, Spanish and local-language names,
+abbreviations, typos, ambiguous streets without a locality, conflicting postcodes,
+and two fictional units. The units test whether a detail survives, not whether it exists.
+
+Each service receives the same original query, restricted to Spain. Geoapify's
+EU endpoint is tested twice, as autocomplete and forward geocoding, with the same input.
+Google Places Autocomplete (New) supplies the first prediction, whose text is sent to
+Address Validation; no expected answer is used to pick a prediction. These two calls
+are separate requests without a session token, so this is not a session-billing test.
+CartoCiudad supplies its first candidate and resolves that exact ID with `find` only
+when the candidate lacks point coordinates. See the [Geoapify API](https://apidocs.geoapify.com/docs/geocoding/address-autocomplete/),
+[Google autocomplete API](https://developers.google.com/maps/documentation/places/web-service/place-autocomplete),
+[validation request format](https://developers.google.com/maps/documentation/address-validation/requests-validate-address),
+and [CartoCiudad service contract](https://github.com/IDEESpain/Cartociudad#-b%C3%BAsqueda-por-nombre-geogr%C3%A1fico).
+
+A selectable match means that the first result has the expected street, locality,
+and returned Spanish country code. This is an editable street-level suggestion;
+it does not mean every component is correct or that Waitron has accepted the address.
+Accents, case, punctuation, and articles are ignored; language translations require an
+explicit corpus alias. House numbers and postcodes compare exactly. A wrong street,
+locality or country counts as a wrong match. A missing component fails its field check.
+Province checks use the returned province field, not a province guessed from the postcode.
+A missing country remains unknown; a filter is not evidence that the result returned
+its country. CartoCiudad's documented `011` country code maps to ES.
+
+The proposed 95% selectable gate uses all 28 in-scope cases, including errors and no
+results, as its denominator. The proposed 98% postcode-and-province gate uses only
+street-level selections. The 12 cases in unsupported fiscal areas (Canaries,
+Basque Country, Navarra, Ceuta and Melilla) are reported separately. These scope
+flags follow Waitron's country pack at the recorded validation commit below.
+Neither threshold has been approved as a release promise.
+
+The [offline checks](../scripts/ci-address-lookup-evaluation.test.mjs) run with
+`node --test scripts/ci-address-lookup-evaluation.test.mjs`. They are included in the
+existing CI root-check filename pattern. The [measurement harness](../scripts/address-lookup-evaluation.mjs)
+requires `--run google`, `--run geoapify`, or `--run cartociudad` to send requests.
+It reads the hosted keys at runtime from `~/.waitron-address-lookup/env`. Its fixed
+item-wide journal is `~/waitron-campaign-d/receipts/d75/requests.jsonl`; do not reset
+it to repeat a measurement. An exclusive lock prevents simultaneous runs, and every
+attempt is saved and flushed to disk before dispatch. A crash after reservation
+still consumes that request. The counter refuses request 1,500, so each provider
+stays below the authorised 1,500-request ceiling. Requests start at least 1.1 seconds
+apart in the sequential corpus runner, with a 15-second timeout and no automatic
+retries or redirects. The item-wide Geoapify ceiling is also below its 3,000/day
+allowance, though this cannot account for unrelated use of the same key.
+
+Only the corpus, harness and per-case scores are committed. Raw responses remain in
+the local lane receipts until landing and are then deleted. Saved response URLs lose
+their query strings, credentials are redacted, and error receipts use fixed labels
+rather than transport exceptions that might contain a key. Request counts are
+conservative HTTP-attempt bounds, not invoices or a measurement of session discounts.
+
+### Results under this mapping
+
+The [per-case scores](evaluations/spanish-address-scores.jsonl) contain booleans and
+request measurements, with no returned address text. The [machine-readable totals](evaluations/spanish-address-summary.json)
+use the same corpus digest. The CartoCiudad adapter initially treated its full display
+label as a street component; an offline failing fixture exposed the duplicate street
+type, house number and locality. The corrected parser was applied to the saved responses
+without new requests or changes to expected answers. All final scores were replayed
+against the recorded request order.
+
+| Flow, 28 supported cases | Selectable | Wrong match | Exact number | Postcode | Locality | Province | No result / error | Postcode and province among selections |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Geoapify autocomplete | 17/28 (60.7%) | 10 | 25 | 16 | 21 | 12 | 1 / 0 | 8/17 (47.1%) |
+| Geoapify forward geocode | 18/28 (64.3%) | 10 | 25 | 19 | 24 | 11 | 0 / 0 | 8/18 (44.4%) |
+| Google autocomplete then validation, quality comparison only | 22/28 (78.6%) | 4 | 23 | 22 | 23 | 23 | 1 / 1 | 21/22 (95.5%) |
+| CartoCiudad first candidate | 3/28 (10.7%) | 7 | 7 | 7 | 6 | 7 | 18 / 0 | 3/3 (100%) |
+
+No flow reaches the proposed 95% selectable gate. CartoCiudad's component gate passes
+on only three selections, which is too little evidence for a choice. Google returned
+one HTTP 500 for the A Coruña base case; it remains an error in the denominator.
+A correct house number on the wrong street still counts in the separate number
+column, so that column must not be read as the number of correct complete addresses.
+
+| Flow, 12 unsupported cases | Selectable geographically | Wrong match | Exact number | Postcode | Locality | Province | No result / error |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Geoapify autocomplete | 8 | 3 | 8 | 10 | 10 | 8 | 1 / 0 |
+| Geoapify forward geocode | 9 | 3 | 10 | 9 | 12 | 9 | 0 / 0 |
+| Google autocomplete then validation | 11 | 1 | 9 | 12 | 12 | 8 | 0 / 0 |
+| CartoCiudad first candidate | 3 | 1 | 4 | 3 | 4 | 4 | 8 / 0 |
+
+A geographically correct unsupported address still cannot enable its fiscal territory.
+The two fictional units and the published Pamplona floor were not preserved by any
+of these flows (0/3 for each); the initial unit text must remain available for review.
+No measured returned country switched outside Spain, and no nonempty result lacked
+a country code. That does not prove a product guard against a future country switch.
+The offline fixtures independently refuse a foreign-country suggestion.
+
+| Provider | Corpus HTTP attempts | Item counter / 1,499 | Median / 95th percentile per request | Timeouts | Retries |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Geoapify EU, both endpoints | 80 | 80 / 1,499 | 1,954 / 6,522 ms | 0 | 0 |
+| Google, both APIs | 78 | 78 / 1,499 | 121 / 226 ms | 0 | 0 |
+| CartoCiudad | 40 | 41 / 1,499 | 288 / 521 ms | 0 | 0 |
+
+CartoCiudad's extra counter reservation is a failed browser documentation probe before
+the harness run; its dispatch is counted conservatively and has no latency sample.
+Every nonempty live CartoCiudad candidate already had coordinates, so `find` is covered
+by offline fixtures, not this live sample. Geoapify ran from 16:08:26 to 16:12:13 UTC,
+Google from 16:12:18 to 16:13:43, and CartoCiudad from 16:14:01 to 16:14:46.
+The latency percentiles include the failed Google attempt, exclude the deliberate
+spacing between calls, and use the nearest ranked observation. They are one Mac's
+network measurements, not a service commitment or a load test.
+
+The actual Waitron country-pack functions at commit
+`ce02b95d7d626d37db61ae2281629beb28247e4d` accepted all 40 expected postcodes,
+resolved their expected provinces and agreed with all fiscal-scope flags. A manual
+`28014`, malformed `2801`, and corrected `28015` check returned valid, invalid and
+valid respectively. The source bundle was built with the Cloud fixture's esbuild,
+and its source tree matched that Waitron commit. This checks the expected data and
+country functions. It does not submit provider output through the setup server or
+exercise an editable form: no provider integration exists for that test. Manual-only,
+provider-error and correction journeys through the real setup server/UI remain a
+separate integration acceptance requirement, including fiscal territory, time zone
+and protection of manual edits.
+
+Keep manual entry and run a second, explicitly scoped comparison before choosing.
+These are 20 civic sites with paired variants, not 40 independent homes or venue
+addresses. The first-result rule is stricter than a person choosing from several
+suggestions. Two queries deliberately omit their locality, and three deliberately
+supply a conflicting postcode. CartoCiudad returned no result for many complete
+postcode-bearing inputs; these scores do not show how a separately normalized query
+would perform. Missing or differently divided administrative fields count against
+this conservative adapter, so these are mapping results rather than an independent
+survey of geographical coverage. Coordinates were not checked against independent
+surveyed points. No result measures peak-day capacity, keystroke traffic, session
+cost, storage permission, cache rights, or attribution placement.
+
+The next decision is whether to approve a larger residential/rural sample and an
+explicit query-normalization and suggestion-selection policy. Confirm durable
+merchant storage and display rights before recommending a provider. Provider choice,
+release thresholds, cache lifetime, attribution placement, account allowance and
+sharing rules, and the peak-day budget remain owner decisions.
