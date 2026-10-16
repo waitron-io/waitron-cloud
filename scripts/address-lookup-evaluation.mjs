@@ -6,8 +6,22 @@ import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {parseEnv} from 'node:util';
 
+class RequestLimitError extends Error {}
+
 export class RequestBudget {
   counts = {google:0, geoapify:0, cartociudad:0};
+  retries = {google:0, geoapify:0, cartociudad:0};
+  lastAt = {google:0, geoapify:0, cartociudad:0};
+  attempts = new Map();
+  #record(event) {
+    const key=JSON.stringify([event.provider,event.operation,event.caseId]);
+    const attempt=(this.attempts.get(key)??0)+1;
+    this.attempts.set(key,attempt);
+    if(attempt>1)this.retries[event.provider]++;
+    this.lastAt[event.provider]=Math.max(this.lastAt[event.provider],Date.parse(event.at));
+    this.counts[event.provider]++;
+    return attempt;
+  }
   constructor(directory) {
     mkdirSync(directory, {recursive:true, mode:0o700});
     this.lock = join(directory, 'request.lock');
@@ -22,7 +36,7 @@ export class RequestBudget {
           assert.ok(Object.hasOwn(this.counts, event.provider));
           assert.equal(event.ordinal, this.counts[event.provider]+1);
           assert.ok(typeof event.operation === 'string' && typeof event.caseId === 'string' && Number.isFinite(Date.parse(event.at)));
-          this.counts[event.provider]++;
+          assert.ok(this.#record(event)<=2);
         }
       }
       assert.ok(Object.values(this.counts).every(count => count <= 1499));
@@ -31,14 +45,15 @@ export class RequestBudget {
   reserve(provider, operation, caseId) {
     assert.ok(this.lock, 'Request budget is closed');
     assert.ok(Object.hasOwn(this.counts, provider), 'Unknown provider');
-    assert.ok(this.counts[provider] < 1499, 'Provider request budget exhausted');
+    if(this.counts[provider]>=1499)throw new RequestLimitError('Provider request budget exhausted');
+    if((this.attempts.get(JSON.stringify([provider,operation,caseId]))??0)>=2)throw new RequestLimitError('Request attempt limit exhausted');
     const event = {provider, operation, caseId, ordinal:this.counts[provider]+1, at:new Date().toISOString()};
     // A crash after reservation consumes the allowance: uncertain sends cannot be free.
     const fd = openSync(this.path, 'a', 0o600);
     try { appendFileSync(fd, JSON.stringify(event)+'\n'); fsyncSync(fd); } finally { closeSync(fd); }
     const directory = openSync(join(this.path, '..'), 'r');
     try { fsyncSync(directory); } finally { closeSync(directory); }
-    this.counts[provider]++;
+    this.#record(event);
     return event;
   }
   close() { if (this.lock) { rmdirSync(this.lock); this.lock = null; } }
@@ -61,7 +76,7 @@ export function score(expected, actual) {
 }
 export function normalize(provider, data) {
   const empty = {country:'',street:'',number:'',postcode:'',locality:'',province:'',unit:null};
-  if (provider==='geoapify') return {...empty,country:data.country_code??'',street:data.street??'',number:data.housenumber??'',postcode:data.postcode??'',locality:data.city??data.town??data.village??'',province:data.county??'',unit:data.unit??null};
+  if (provider==='geoapify') return {...empty,country:data.country_code??'',street:data.street??'',number:data.housenumber??'',postcode:data.postcode??'',locality:data.city||data.town||data.village||'',province:data.county??'',unit:data.unit??null};
   if (provider==='google') {
     const address=data.address??{}, postal=address.postalAddress??{};
     const component = type => address.addressComponents?.find(part=>part.componentType===type)?.componentName?.text??'';
@@ -69,8 +84,12 @@ export function normalize(provider, data) {
   }
   assert.equal(provider,'cartociudad','Unknown provider');
   let street=(data.address??'').split(',')[0].trim();
-  const suffix=` ${data.portalNumber??''}${data.extension??''}`;
-  if(data.portalNumber!=null && street.endsWith(suffix)) street=street.slice(0,-suffix.length);
+  if(data.portalNumber!=null) {
+    for(const gap of ['', ' ']) {
+      const suffix=` ${data.portalNumber}${data.extension?gap+data.extension:''}`;
+      if(street.endsWith(suffix)){street=street.slice(0,-suffix.length);break;}
+    }
+  }
   if(data.noNumber===true) street=street.replace(/\s+s[/-]n$/i,'');
   if(data.tip_via && !textKey(street).startsWith(textKey(data.tip_via)+' ')) street=`${data.tip_via} ${street}`;
   return {...empty,country:data.countryCode==='011'?'es':(data.countryCode??'').toLowerCase(),
@@ -114,7 +133,7 @@ export class EvaluationClient {
     Object.assign(this,{budget,directory,keys,fetcher,spacingMs,timeoutMs});
     mkdirSync(join(directory,'raw'),{recursive:true,mode:0o700});
     this.measurements=[];
-    this.nextAt=0;
+    this.nextAt=Math.max(...Object.values(budget.lastAt))+spacingMs;
   }
   async request(provider,operation,caseId,query) {
     const {url,options}=requestFor(provider,operation,query,this.keys);
@@ -133,15 +152,15 @@ export class EvaluationClient {
         while(true) {const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>2*1024*1024)throw new Error('response_size');chunks.push(Buffer.from(value));}
       } finally {await reader.cancel();}
       let data;
-      try {data=JSON.parse(Buffer.concat(chunks).toString('utf8'));} catch {throw new Error([401,403].includes(response.status)?'key_refused':'invalid_json');}
+      try {data=JSON.parse(Buffer.concat(chunks).toString('utf8'));} catch {throw new Error('invalid_json');}
       const raw=openSync(join(this.directory,'raw',`${provider}-${event.ordinal}.json`),'wx',0o600);
       try {appendFileSync(raw,JSON.stringify(redact(data,this.keys)));} finally {closeSync(raw);}
-      if([401,403].includes(response.status)) throw new Error('key_refused');
       if(!response.ok) throw new Error(`http_${response.status}`);
       return data;
     } catch(error) {
       measurement.timeout=error.name==='TimeoutError'||error.name==='AbortError';
-      measurement.error=measurement.timeout?'timeout':['key_refused','response_size','invalid_json'].includes(error.message)||/^http_\d+$/.test(error.message)?error.message:'transport';
+      // A refused key stays terminal even when its response body cannot be read.
+      measurement.error=[401,403].includes(measurement.status)?'key_refused':measurement.timeout?'timeout':['key_refused','response_size','invalid_json'].includes(error.message)||/^http_\d+$/.test(error.message)?error.message:'transport';
       // Transport errors may include a credential-bearing URL; only fixed labels leave memory.
       throw new Error(measurement.error==='key_refused'?'Provider key refused':measurement.error);
     } finally {
@@ -184,6 +203,7 @@ export async function evaluateCase(client, provider, entry) {
       result.stages.selection=score(entry.expected,first?normalize(provider,first):null);
     }
   } catch(error) {
+    if(error instanceof RequestLimitError)throw error;
     result.error=['timeout','Provider key refused','transport','invalid_json','response_size','invalid_response'].includes(error.message)||/^http_\d+$/.test(error.message)?error.message:'evaluation_error';
   }
   return result;
@@ -210,7 +230,7 @@ export async function runCases(client,provider,cases,directory,corpusSha256,prog
 }
 
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {
-  let budget;
+  let budget,run;
   try {
     const provider=process.argv[3];
     assert.ok(process.argv.length===4&&process.argv[2]==='--run'&&['google','geoapify','cartociudad'].includes(provider),'Use --run google|geoapify|cartociudad; live requests require this explicit flag');
@@ -222,19 +242,26 @@ if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {
     assert.ok(corpus.version===1&&corpus.cases.length===40&&new Set(corpus.cases.map(row=>row.id)).size===40,'Invalid corpus');
     const corpusSha256=createHash('sha256').update(corpusText).digest('hex');
     budget=new RequestBudget(root);
-    const initial={...budget.counts};
+    run={provider,startedAt:new Date().toISOString(),corpusSha256,initialCount:budget.counts[provider],initialRetries:budget.retries[provider]};
     const client=new EvaluationClient({budget,directory:root,keys});
-    const startedAt=new Date().toISOString();
     const rows=await runCases(client,provider,corpus.cases,root,corpusSha256,row=>console.log(`${provider} ${row.id}: ${row.error??'scored'}; cumulative ${JSON.stringify(budget.counts)}/1499 each`));
-    const receipt={provider,startedAt,finishedAt:new Date().toISOString(),corpusSha256,counts:budget.counts,requestsThisRun:budget.counts[provider]-initial[provider],retries:0,completed:rows.length,errors:rows.filter(row=>row.error).length};
-    appendFileSync(join(root,'runs.jsonl'),JSON.stringify(receipt)+'\n',{mode:0o600});
-    console.log(JSON.stringify(receipt));
-    if(rows.some(row=>row.error))process.exitCode=1;
+    run.completed=rows.length;run.errors=rows.filter(row=>row.error).length;
+    if(run.errors)process.exitCode=1;
   } catch(error) {
-    // All errors above are local fixed messages; provider exceptions are reduced by the client.
+    if(run)run.error=error instanceof RequestLimitError?'request_limit':'local_error';
     console.error(error.message);
     process.exitCode=1;
-  } finally {budget?.close();}
+  } finally {
+    try {
+      if(run) {
+        const receipt={provider:run.provider,startedAt:run.startedAt,finishedAt:new Date().toISOString(),corpusSha256:run.corpusSha256,
+          counts:budget.counts,requestsThisRun:budget.counts[run.provider]-run.initialCount,retries:budget.retries[run.provider],
+          retriesThisRun:budget.retries[run.provider]-run.initialRetries,completed:run.completed??null,errors:run.errors??null,error:run.error??null};
+        appendFileSync(join(homedir(),'waitron-campaign-d/receipts/d75/runs.jsonl'),JSON.stringify(receipt)+'\n',{mode:0o600});
+        console.log(JSON.stringify(receipt));
+      }
+    } finally {budget?.close();}
+  }
 }
 
 export function summarize(rows, stage, inScope) {

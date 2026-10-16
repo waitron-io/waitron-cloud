@@ -92,7 +92,10 @@ it does not mean every component is correct or that Waitron has accepted the add
 Accents, case, punctuation, and articles are ignored; language translations require an
 explicit corpus alias. House numbers and postcodes compare exactly. A wrong street,
 locality or country counts as a wrong match. A missing component fails its field check.
-Province checks use the returned province field, not a province guessed from the postcode.
+This adapter treats Geoapify's `county`, Google's `administrative_area_level_2`,
+and CartoCiudad's `province` as candidate province fields. A county can instead be
+a comarca, a smaller regional division; these fields are not interchangeable
+proof of a canonical province. The comparison does not guess a province from a postcode.
 A missing country remains unknown; a filter is not evidence that the result returned
 its country. CartoCiudad's documented `011` country code maps to ES.
 
@@ -113,8 +116,13 @@ it to repeat a measurement. An exclusive lock prevents simultaneous runs, and ev
 attempt is saved and flushed to disk before dispatch. A crash after reservation
 still consumes that request. The counter refuses request 1,500, so each provider
 stays below the authorised 1,500-request ceiling. Requests start at least 1.1 seconds
-apart in the sequential corpus runner, with a 15-second timeout and no automatic
-retries or redirects. The item-wide Geoapify ceiling is also below its 3,000/day
+apart in the sequential corpus runner, including a restart using the journal's last
+reservation time. The HTTP deadline covers headers and body for 15 seconds. There
+are no automatic retries or redirects. A crash may repeat an unfinished case; each
+case/operation permits at most two attempts in total, and receipts count those
+repeat reservations as retries. A request or attempt limit stops the run without
+writing provider-error scores for unsent cases, and its final receipt still records
+the counters. The item-wide Geoapify ceiling is also below its 3,000/day
 allowance, though this cannot account for unrelated use of the same key.
 
 Only the corpus, harness and per-case scores are committed. Raw responses remain in
@@ -154,8 +162,12 @@ column, so that column must not be read as the number of correct complete addres
 | CartoCiudad first candidate | 3 | 1 | 4 | 3 | 4 | 4 | 8 / 0 |
 
 A geographically correct unsupported address still cannot enable its fiscal territory.
-The two fictional units and the published Pamplona floor were not preserved by any
-of these flows (0/3 for each); the initial unit text must remain available for review.
+The mapped unit/floor field matches none of the two fictional units and the published
+Pamplona floor (0/3 per flow). CartoCiudad always maps its unit to null in this adapter,
+so its zero measures an adapter limit, not the provider's unit content. Geoapify uses
+`unit` and Google uses `subpremise`; labels and other component types are not searched
+for unit details. Keep the original unit text available for review; actual form
+preservation remains untested.
 No measured returned country switched outside Spain, and no nonempty result lacked
 a country code. That does not prove a product guard against a future country switch.
 The offline fixtures independently refuse a foreign-country suggestion.

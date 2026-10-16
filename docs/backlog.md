@@ -940,6 +940,14 @@ notifications separately.
   concurrency option to the package script leaves it after the files and does
   not limit this runner. The fixture's default lock capacity for a full local
   parallel run remains open; preserve every assertion when addressing it.
+  A later bare `node scripts/test-postgres.mjs` run repeated `53200` in registration
+  schema reset/migration, including authenticator setup; it reported 576 passes and
+  72 failures among 648 result entries. The last relay-worker test process remained
+  open with no remaining test-database sessions. Stopping its recorded process ID
+  allowed the failure report and wrapper cleanup to finish. Qualify that fixture's
+  failed-setup/resource cleanup separately; the exact remaining handle was not
+  identified. The documented two-file command keeps every original assertion and
+  deadline; the bare run's failure remains recorded.
   The migration batch-size fixture now confines its database-wide DDL trigger
   to its own schema. A second populated fixture proves that other tests can
   migrate while it is active; the original 103-recipient and 100-row batch
