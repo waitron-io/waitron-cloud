@@ -63,9 +63,9 @@ function workspaceAt(sha, workspace, git) {
     for (let index = 0; index < sources.length; index++) {
       const source = sources[index];
       const rootReads = new Set([...source.source.matchAll(/\breaddirSync\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*,?\s*\)\s*,?\s*\)/g)].map(match => match[2]));
-      // A stored URL is an input only when a matching identifier is scanned.
+      // A root URL variable retains helpers when its identifier is scanned.
       const scannedVariables = new Set([...source.source.matchAll(/\breaddirSync\s*\(\s*([A-Za-z_$][\w$]*)\s*,?\s*\)/g)].map(match => match[1]));
-      for (const match of source.source.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\.meta\.url\s*,?\s*\)/g)) {
+      for (const match of source.source.matchAll(/(?:\b(?:const|let|var)\s+|,\s*)([A-Za-z_$][\w$]*)\s*(?::\s*URL\s*)?=\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\.meta\.url\s*,?\s*\)/g)) {
         if (scannedVariables.has(match[1])) rootReads.add(match[3]);
       }
       for (const value of quotedReferences(source.source)) {

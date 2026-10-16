@@ -773,3 +773,65 @@ execFileSync(process.execPath, ['--version'], {cwd: directory});
   assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
     {full: false, packages: ['catalogue']});
 }));
+
+test('typed root URL declarations retain their runtime-loaded package consumer', () => fixture(({root, write, commit, plan}) => {
+  write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('root helper loaded');\n");
+  write('packages/portal/src/scan.ts', `import {readdirSync} from 'node:fs';
+const directory: URL = new URL('../../../', import.meta.url);
+for (const name of readdirSync(directory)) {
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/scan.ts'], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}), 'root helper loaded\n');
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'portal']);
+}));
+
+test('later bindings in a root URL declaration retain their runtime-loaded package consumer', () => fixture(({root, write, commit, plan}) => {
+  write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('root helper loaded');\n");
+  write('packages/portal/src/index.mjs', `import {readdirSync} from 'node:fs';
+const suffix = '.mjs', directory = new URL('../../../', import.meta.url);
+for (const name of readdirSync(directory)) {
+  if (name.endsWith(suffix)) await import(new URL(name, directory));
+}
+`);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'root helper loaded\n');
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'portal']);
+}));
+
+test('checking root directory existence alone does not load root helpers', () => fixture(({root, git, write, commit}) => {
+  write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\n");
+  write('packages/portal/src/index.mjs', `import {existsSync} from 'node:fs';
+const directory = new URL('../../../', import.meta.url);
+console.log(existsSync(directory));
+`);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'true\n');
+  assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+    {full: false, packages: ['catalogue']});
+}));
+
+test('a shared helper scanning its own directory does not scan repository-root helpers', () => fixture(({root, git, write, commit}) => {
+  write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('root helper loaded');\n");
+  write('tools/venue-adapter.mjs', "console.log('local helper loaded');\n");
+  write('tools/scan.mjs', `import {readdirSync} from 'node:fs';
+const directory = new URL('./', import.meta.url);
+for (const name of readdirSync(directory)) {
+  if (name === 'venue-adapter.mjs') await import(new URL(name, directory));
+}
+`);
+  write('packages/portal/src/index.mjs', "import '../../../tools/scan.mjs';\n");
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'local helper loaded\n');
+  assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+    {full: false, packages: ['catalogue']});
+}));
