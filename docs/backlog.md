@@ -699,9 +699,17 @@ notifications separately.
   loaded helper keeps its package consumer; saved-tree checks retain added and
   removed helpers, transitive consumers and dirty-checkout independence. A root
   command working directory alone adds no helper inputs, and a nonrecursive root
-  scan does not traverse nested directories. This bounded rule does not resolve
-  reader aliases, intermediate directory variables, recursive options or other
-  directory APIs. Repository-root working directories, computed
+  scan does not traverse nested directories. The same rule now follows a simple
+  `const`, `let` or `var` assignment of that URL to an ASCII identifier passed
+  directly to `readdirSync` without options, including a `: URL` type annotation
+  or a later comma-separated binding in the declaration. Executed Node scans and saved-tree controls
+  cover added/deleted helpers, readers from either revision, dirty local files
+  and transitive consumers. Storing a root command working directory alone adds
+  no helper inputs. An existence check alone also adds no root helpers, and a
+  shared helper scanning its own directory does not scan the repository root.
+  This bounded scan can keep extra consumers when identifiers are reused; it does
+  not resolve aliases, other type annotations, computed assignments, recursive
+  options or other directory APIs. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain
   unresolved. This does not complete the plan's dynamic input and directory rules. Identity still selects all nine packages in the current graph;
   portal alone remains isolated. Unaudited root, unknown and empty changes run everything.
