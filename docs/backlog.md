@@ -250,6 +250,16 @@ complete reconciliation permits C000043` and `a verified history that expires
 during a PostgreSQL lock wait cannot project`, both in
 `packages/fiscal-allocation/test/continuity.test.ts`. That run overlapped review
 and other local qualification work; resource pressure remains an assumption.
+The 16 October five-shard qualification also passed 132 of 133 fiscal checks:
+the same 150 ms witness case did not observe its held lock. The fixture and
+fiscal sources match the preceding main tree. An isolated diagnostic run observed
+the lock and passed; a separate 200 ms pause before projection reproduced the
+assertion after the witness had expired and projection returned `history_uncertain`.
+This establishes an early-expiry mechanism, not the precise cause of the original
+failure. Retain verification, client-acquisition, projection and lock-observation
+ages on recurrence. Evidence is under
+`~/waitron-campaign-d/receipts/d69/registration-shard-budget/fiscal-*.log`.
+The 150 ms policy, lock assertion and 30-second deadline remain unchanged.
 The retained local evidence is under
 `~/waitron-campaign-d/receipts/d69/dependency-fixtures/`: the failures are in
 `gate-packages-fiscal-allocation.log`, the stage observations and diagnostic-only
