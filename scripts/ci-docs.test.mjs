@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import test from 'node:test';
 import {createPlan} from './ci-plan.mjs';
+import {documentationPlan} from './ci-docs.mjs';
 import {loadWorkspace} from './ci-scope.mjs';
 import {assertSummary} from './ci-summary.mjs';
 
@@ -173,4 +174,13 @@ test('strict summary requires the audited document job and refuses malformed emp
   assert.throws(() => assertSummary({...plan, reuse: {sha: 'c'.repeat(40), runId: 42}}, results, jobs));
   assert.throws(() => assertSummary({...plan, typecheck: true}, {...results, typecheck: 'success'}, [...jobs, {name: 'typecheck', status: 'completed', conclusion: 'success'}]));
   assert.throws(() => assertSummary({...plan, packages: [{package: 'one', shard: 1}]}, {...results, packages: 'success'}, [...jobs, {name: 'package (one)', status: 'completed', conclusion: 'success'}]));
+});
+
+// CI runs this against its committed checkout. Every tracked input outside the
+// prose set needs review before renewal, even when the change runs full CI.
+test('the committed checkout keeps the reviewed documentation audit current', () => {
+  const git = (...args) => execFileSync('git', args, {encoding: 'utf8'});
+  const head = git('rev-parse', 'HEAD').trim();
+  assert.doesNotThrow(() => documentationPlan(['docs/backlog.md'], head, head, git),
+    'Documentation audit is stale. Review changed executable inputs and follow docs/ci-documentation-audit.md before renewing scripts/ci-docs-audit.json.');
 });

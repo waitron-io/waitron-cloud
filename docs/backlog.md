@@ -576,7 +576,12 @@ notifications separately.
   and missing or stale audit evidence retain the existing selection or full fallback.
   Adding, changing or removing an executable, configuration or other tracked input
   invalidates the exemption until you audit the readers again and renew the
-  certificate. The identity source map and gateway JSON reader remain covered by
+  certificate. The real-checkout documentation test now fails full CI when that
+  certificate is stale, with the [review and renewal procedure](ci-documentation-audit.md).
+  The renewed audit covers CI reader/execution changes through #180; #144 was
+  the first unrenewed input change. Fixture-only checks had missed the real-tree
+  mismatch. Both immutable-tree checks and the conservative full fallback remain.
+  The identity source map and gateway JSON reader remain covered by
   their existing full checks. An isolated change to `scripts/identity-upstream.mjs`
   or its behavioral test now selects only syntax checks and that test, without
   package, receipt or compiler work. Both saved Git trees must match the complete
