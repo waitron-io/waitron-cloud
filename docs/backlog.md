@@ -601,6 +601,14 @@ notifications separately.
   earlier cause; resource contention remains an assumption. Retain child-stage
   timings and process activity on recurrence. The failed and diagnostic logs are
   under `~/waitron-campaign-d/receipts/d69/package-result-counts/`.
+  The same two child checks reached their unchanged 30-second deadlines again
+  during the root-directory selection work, alongside focused graph and portal
+  qualification. Diagnostic copies then completed in 6.2 and 10.0 seconds,
+  retaining child output, Git event traces and process-family samples under
+  `~/waitron-campaign-d/receipts/d69/root-directory-readers/`. These observations
+  do not establish the timeout cause. Keep the deadlines and assertions;
+  qualify the complete local root suite with bounded file concurrency before
+  pushing, and use the saved stages to investigate another failure.
   A separate forced-color package probe also exposed two strict CLI checks in
   `packages/remote-access/test/operator-cli.test.ts` and `reconciler-cli.test.ts`:
   Node's warning about conflicting `NO_COLOR` and `FORCE_COLOR` settings changes
@@ -678,7 +686,15 @@ notifications separately.
   This is a conservative source dependency rule, not evidence that every quoted
   directory is read at runtime. A bare quoted folder name such as `scripts` can
   select extra consumers even when it names a data field. Qualify actual reader
-  operations before narrowing that rule. Repository-root working directories, computed
+  operations before narrowing that rule. Direct `readdirSync(new URL(relativePath,
+  import.meta.url))` calls without options now retain immediate root-level source
+  helpers when the URL names the repository root. A real Node scan proves the
+  loaded helper keeps its package consumer; saved-tree checks retain added and
+  removed helpers, transitive consumers and dirty-checkout independence. A root
+  command working directory alone adds no helper inputs, and a nonrecursive root
+  scan does not traverse nested directories. This bounded rule does not resolve
+  reader aliases, intermediate directory variables, recursive options or other
+  directory APIs. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain
   unresolved. This does not complete the plan's dynamic input and directory rules. Identity still selects all nine packages in the current graph;
   portal alone remains isolated. Unaudited root, unknown and empty changes run everything.
