@@ -1,6 +1,6 @@
 # Waitron Cloud backlog
 
-Updated 2026-10-16. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-10-17. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
@@ -337,8 +337,8 @@ Remaining work:
 
 Implement routine work inline with failing behavioral tests first. Before every push, run the
 full touched-package and dependent-package suites; run the whole workspace only for shared
-configuration changes. Require normal hooks and current-head CI. This entry and amendment are
-documentation milestones, not runtime, joint-proof or release receipts.
+configuration changes. Require normal hooks and current-head CI. The amendment records the
+approved contract; the partial runtime above does not complete joint proof or release qualification.
 
 ## Initial focus
 
