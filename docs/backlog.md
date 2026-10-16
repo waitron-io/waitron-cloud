@@ -603,11 +603,15 @@ notifications separately.
   batch cannot silently substitute a full package plan.
   Three concurrent complete root-suite runs reproduced both outer checks' former
   30-second timeouts. With batching, the local-stack check completes in 27.0 seconds
-  under the same load. The nested dependency check completes in 58.0 seconds;
+  under the same load. The nested dependency check completes in 58.2 seconds;
   its outer deadline is now 90 seconds because its four sequential workers already
   have a 60-second budget, plus repository setup and cleanup. Other outer checks
   retain 30 seconds, and the deliberately stalled worker still has five seconds.
   These are local stress measurements, not a guarantee under arbitrary host load.
+  The same three-root overload still triggers the unchanged 35-second bootstrap
+  observer in all three runs and the inner 60-second dependency-worker limit in
+  one run. These are separate stress follow-ups, not resolved by the outer budget
+  correction; retain their diagnostics and avoid overlapping full qualification.
   The original historical failures did not retain these exact stages; the controlled
   reproduction establishes the timeout mechanisms rather than their precise history.
   Evidence, earlier partial fixes and complete load-run outcomes are retained under
