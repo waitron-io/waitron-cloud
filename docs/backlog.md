@@ -293,6 +293,9 @@ Remaining work:
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Append migrations at the then-current next numbers without editing landed migrations.
+  Keep Task 12's whole-request bound ahead of the fingerprint helper: a small declared
+  size with a large actual body still hashes that body before refusing the mismatch.
+  A cheap byte-length refusal can be considered there; Task 1 exposes no HTTP route.
 - **Waitron and joint qualification:** lane B A689-21 needs a real pagination loop, bounded
   decoded page reads and integration with existing durable suggestion reconciliation and ref
   deduplication. The current one-collect caller ignores `nextCursor` (`collectTranslation` in
