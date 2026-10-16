@@ -668,7 +668,7 @@ test('shared directory discovery preserves actual portal isolation and identity 
     {full: false, packages: ['@waitron-cloud/portal']});
   assert.deepEqual(scopeForRevisions(['packages/identity/src/index.ts'], workspace, sha, sha, git).packages,
     ['@waitron-cloud/account-http', '@waitron-cloud/backups', '@waitron-cloud/fiscal-allocation', '@waitron-cloud/identity',
-      '@waitron-cloud/operations', '@waitron-cloud/portal', '@waitron-cloud/registration', '@waitron-cloud/remote-access', '@waitron-cloud/ui-smoke']);
+      '@waitron-cloud/operations', '@waitron-cloud/portal', '@waitron-cloud/registration', '@waitron-cloud/remote-access', '@waitron-cloud/translation', '@waitron-cloud/ui-smoke']);
 });
 
 test('equivalent root-relative directory spellings retain the same helper consumers', () => {

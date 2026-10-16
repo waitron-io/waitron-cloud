@@ -9,7 +9,7 @@ import test from 'node:test';
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const memberDirectories = ['packages/account-http', 'packages/backups', 'packages/fiscal-allocation',
   'packages/identity', 'packages/operations', 'packages/registration', 'packages/remote-access',
-  'packages/ui-smoke', 'apps/portal'];
+  'packages/translation', 'packages/ui-smoke', 'apps/portal'];
 
 function fixture(run) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'cloud-typecheck-')));

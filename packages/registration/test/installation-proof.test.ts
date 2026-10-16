@@ -77,3 +77,15 @@ test('managed stream actions use the same signed machine namespace',()=>{
     assert.equal(verifyMachine(signed,publicKey,origin,action,now).action,action);
   }
 });
+
+test('translation actions use the same signed machine namespace and cannot cross actions',()=>{
+  for(const action of ['translation-submit','translation-status','translation-collect','translation-release'] as const){
+    const value={...claims,action};const signed=proof(value);
+    assert.equal(readMachineClaims(signed).action,action);
+    assert.equal(verifyMachine(signed,publicKey,origin,action,now).action,action);
+    assert.throws(()=>verifyMachine(signed,publicKey,origin,'configuration',now));
+    assert.throws(()=>verifyMachine(signed,publicKey,origin,action,now+60001));
+    assert.throws(()=>verifyMachine(signed,publicKey,'https://other.test',action,now));
+    assert.throws(()=>verifyMachine(signed,other.publicKey.export({type:'spki',format:'der'}).toString('base64url'),origin,action,now));
+  }
+});
