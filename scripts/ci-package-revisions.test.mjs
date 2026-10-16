@@ -715,7 +715,7 @@ for (const name of ${call}) {
 });
 
 test('root directory variables retain the package loaded by a real nonrecursive scan', () => {
-  for (const declaration of ['const directory', 'let $root', 'var root_2']) fixture(({root, write, commit, plan}) => {
+  for (const declaration of ['const directory', 'let $root', 'var root_2']) fixture(({root, git, write, commit, plan}) => {
     const name = declaration.split(' ')[1];
     write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('root helper loaded');\n");
     write('nested/unrelated-adapter.mjs', "import '../packages/unrelated/src/index.mjs';\n");
@@ -730,6 +730,8 @@ for (const name of readdirSync(${name},)) {
     const head = commit();
     assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'root helper loaded\n');
     assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'portal'], declaration);
+    assert.deepEqual(scopeForRevisions(['packages/unrelated/src/index.mjs'], loadWorkspace(root), base, head, git),
+      {full: false, packages: ['unrelated']}, declaration);
   });
 });
 
