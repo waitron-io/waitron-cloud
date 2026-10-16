@@ -573,10 +573,11 @@ notifications separately.
   It requires all four test names, so a passing file with no matching test cannot
   substitute for coverage. The saved manifest metadata must match its reviewed
   nondependency fields in the audit. The fixtures also seed the saved audited
-  package runner from `scripts/fixtures/ci-execution-inputs.json`. A separate
-  real-clone check changes the live runner and requires all five original positive
-  receipt tests to execute. Their assertions and the production audit pins stay
-  unchanged; changing the real runner still retains receipt work. Actual
+  package runner and package-path resolver from
+  `scripts/fixtures/ci-execution-inputs.json`. Separate real-clone checks change
+  each live input and require all five original positive receipt tests to execute.
+  Their assertions and the production audit pins stay unchanged; changing either
+  real input still retains receipt work. Actual
   dependency changes still retain every receipt in the production planner.
   Fourteen root-test fixtures now disable automatic Git maintenance for their
   temporary repositories. Real-child checks trace each named original test,

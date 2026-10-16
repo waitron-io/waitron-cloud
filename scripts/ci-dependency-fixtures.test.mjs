@@ -72,3 +72,27 @@ test('receipt selector fixtures retain their positive checks after the package r
     ].sort(), 'All five positive receipt checks must execute');
   } finally {rmSync(root, {recursive: true, force: true});}
 });
+
+test('receipt selector fixtures retain their positive checks after package path discovery changes', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cloud-scope-fixture-control-'));
+  try {
+    execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
+    cpSync('scripts', join(root, 'scripts'), {recursive: true});
+    appendFileSync(join(root, 'scripts/ci-scope.mjs'), '\n// Changed package discovery input\n');
+    const env = {...process.env}; delete env.NODE_TEST_CONTEXT;
+    const result = spawnSync('node', ['--test', '--test-reporter=tap', '--test-concurrency=1',
+      '--test-name-pattern=^(?:unrelated package changes omit|backend-only changes omit)',
+      'scripts/ci-capacity-receipt.test.mjs', 'scripts/ci-database-receipt.test.mjs',
+      'scripts/ci-gateway-receipt.test.mjs', 'scripts/ci-local-stack-receipt.test.mjs', 'scripts/ci-receipts.test.mjs'],
+    {cwd: root, env, encoding: 'utf8', timeout: 60_000});
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.deepEqual([...result.stdout.matchAll(/^ok \d+ - (.+)$/gm)].map(match => match[1]).sort(), [
+      'unrelated package changes omit capacity while retaining packages, types and other receipts',
+      'unrelated package changes omit database recovery while retaining packages, types and other receipts',
+      'unrelated package changes omit public gateway while retaining packages, types and other receipts',
+      'unrelated package changes omit all audited receipts and retain actual package and type checks',
+      'backend-only changes omit the unchanged pure milestone receipt and preserve all other work',
+    ].sort(), 'All five positive receipt checks must execute');
+  } finally {rmSync(root, {recursive: true, force: true});}
+});
