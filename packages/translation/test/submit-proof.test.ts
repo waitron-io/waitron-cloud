@@ -36,9 +36,13 @@ test('a wrong length, hash or malformed signed body is an invalid proof',()=>{
   assert.throws(()=>checkSubmitBody(signed(jobFingerprint('')),''),invalidProof);
 });
 
-test('a declared size over 1 MiB is refused before checking the body',()=>{
-  assert.throws(()=>checkSubmitBody(signed({jobSha256:'0'.repeat(64),jobBytes:1048577}),'x'),
-    (error:unknown)=>error instanceof TranslationError&&error.code==='job_too_large');
+test('a declared size over 1 MiB is refused before allocating the body bytes',t=>{
+  const from=t.mock.method(Buffer,'from');
+  try{
+    assert.throws(()=>checkSubmitBody(signed({jobSha256:'0'.repeat(64),jobBytes:1048577}),'x'),
+      (error:unknown)=>error instanceof TranslationError&&error.code==='job_too_large');
+    assert.equal(from.mock.callCount(),0);
+  }finally{from.mock.restore();}
   const exact='a'.repeat(1048576);
   assert.equal(maxJobBytes,Buffer.byteLength(exact));
   assert.equal(checkSubmitBody(signed(jobFingerprint(exact)),exact).jobBytes,1048576);
