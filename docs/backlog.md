@@ -480,7 +480,20 @@ notifications separately.
   passing repeats alone do not explain a failure. See [the ordering receipt](#portal-lost-reply-test-ordering).
 
 - **CI execution budget.** You can read one summary job and the individual package
-  and receipt jobs to check a candidate. The reviewed
+  and receipt jobs to check a candidate. The summary also checks the plan's
+  package allocation against the planner's registered package names and shard
+  counts. A shard is one partition of a package's tests. Removing a partition
+  from both the plan and the job list cannot turn incomplete work green.
+  Unknown packages, altered counts, invalid partition numbers and extra row
+  fields fail; complete partitions and the existing short-package groups remain
+  accepted. An independent summary policy checks the execution contract; tests
+  feed it every real planner package allocation and the full grouped plan, and
+  compare its package names with the complete workspace inventory. Adding,
+  removing or renaming a package, or changing its partition count, requires
+  updating that policy. This validates allocation for selected packages;
+  independently proving that every affected package was
+  selected and resolving wider input selection remain open. No grouping or
+  cost reduction is claimed by this guard. The reviewed
   [precise-selection design](superpowers/specs/2026-10-14-precise-ci-selection.md)
   and [implementation plan](superpowers/plans/2026-10-14-precise-ci-selection.md)
   define how documentation, scripts, configuration, resolved lockfile changes and

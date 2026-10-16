@@ -6,6 +6,18 @@ import {packageMembers} from './ci-package-groups.mjs';
 import {assertReceiptSuites} from './ci-run-receipts.mjs';
 import {assertScriptWork} from './ci-scripts.mjs';
 
+export const packageShards = Object.freeze({
+  '@waitron-cloud/registration': 7,
+  '@waitron-cloud/account-http': 3,
+  '@waitron-cloud/backups': 2,
+  '@waitron-cloud/portal': 3,
+  '@waitron-cloud/identity': 1,
+  '@waitron-cloud/operations': 1,
+  '@waitron-cloud/remote-access': 1,
+  '@waitron-cloud/fiscal-allocation': 1,
+  '@waitron-cloud/ui-smoke': 1,
+});
+
 export function assertSummary(plan, results, jobs) {
   assert.equal(results.changes, 'success', 'CI planner must succeed');
   assert.ok(Array.isArray(plan.packages) && Array.isArray(plan.receipts) && typeof plan.typecheck === 'boolean', 'Missing CI plan');
@@ -41,6 +53,18 @@ export function assertSummary(plan, results, jobs) {
   for (const name of groupedPackages) {
     assert.equal(plan.packages.filter(row => packageMembers(row).includes(name)).length, 1, 'Duplicate package execution');
   }
+  // Successful jobs cannot prove completeness when the plan itself omits a shard.
+  // Check the execution contract independently of the plan's declared counts.
+  const allocations = new Map();
+  for (const row of plan.packages) {
+    if (Object.hasOwn(row, 'members')) continue;
+    const count = packageShards[row.package];
+    assert.ok(count && Number.isSafeInteger(row.shard) && row.shard >= 1 && row.shard <= count, 'Invalid package allocation');
+    assert.deepEqual(Object.keys(row).sort(), count > 1 ? ['package', 'shard', 'shards'] : ['package', 'shard'], 'Invalid package allocation fields');
+    if (count > 1) assert.equal(row.shards, count, 'Invalid package allocation partition count');
+    allocations.set(row.package, (allocations.get(row.package) ?? 0) + 1);
+  }
+  for (const [name, count] of allocations) assert.equal(count, packageShards[name], `Incomplete package allocation: ${name}`);
   for (const row of plan.packages) expected.push(`package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`);
   if (plan.receipts.length) {
     assertReceiptSuites(plan.receipts);
