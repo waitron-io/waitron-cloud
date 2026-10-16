@@ -165,7 +165,7 @@ Indexed venue/operation queries avoid whole-table tenant scans. Current custody
 checks protect both receipt pages and post-append consumption; fresh signed machine
 authentication recovers the same immutable operation after a proof expires. Paper
 import status records completion without inventing a Cloud receipt.
-Registration tests run in five CI file shards. Every case and the 30-second
+Registration tests run in six CI file shards. Every case and the 30-second
 test deadline remain; work jobs stop after eight minutes.
 The phone journey at `/fiscal-allocations` now reserves and explicitly consumes
 identities, reconciles uncertain replies using the same operation, exports the
@@ -492,16 +492,17 @@ notifications separately.
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. The summary also checks the plan's
   package allocation against the planner's registered package names and shard
-  counts. Registration uses five partitions; account HTTP and portal use three
-  each, and backups uses two. The summary requires all five registration results
+  counts. Registration uses six partitions; account HTTP and portal use three
+  each, and backups uses two. The summary requires all six registration results
   and rejects the former seven-partition allocation. A Node subprocess check
   partitions copies of every current registration filename plus a new filename
   and requires each to execute exactly once. Its file workers run one at a time;
   overlapping fixture bodies fail on a shared scratch-directory lock. This checks file discovery; the real
   package jobs must still report every test case. Reducing registration from seven
-  jobs to five removes two repeated setups. Compare actual Ubuntu job durations
+  jobs to six removes one repeated setup. Compare actual Ubuntu job durations
   and rounded minutes before claiming a saving or the target of about five minutes
-  per job and 55 rounded minutes per full run.
+  per job and 55 rounded minutes per full run. The five-job trial passed every case,
+  but its longest registration job took 313 seconds, so it was not adopted.
   A shard is one partition of a package's tests. Removing a partition
   from both the plan and the job list cannot turn incomplete work green.
   Unknown packages, altered counts, invalid partition numbers and extra row
@@ -837,7 +838,7 @@ notifications separately.
   Unknown/full changes retain all five;
   portal source changes also omit local-stack when its audit holds, otherwise they
   retain it. Isolated ui-smoke needs no receipt. Registration
-  uses five file shards, account HTTP and portal use three each, and backups uses
+  uses six file shards, account HTTP and portal use three each, and backups uses
   two. Selected identity, operations and remote-access suites share one job when at
   least two are needed. Each keeps its full package command and deadline, runs
   once in sequence, and reports its own result. One PostgreSQL/Mailpit setup

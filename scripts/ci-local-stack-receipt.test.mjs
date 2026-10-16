@@ -54,7 +54,7 @@ test('unrelated package changes omit all audited receipts and retain actual pack
     assert.deepEqual(select().receipts, []);
     const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git, () => {throw Error('No reuse');});
     assert.deepEqual(plan.receipts, []);
-    assert.equal(plan.packages.length, 16);
+    assert.equal(plan.packages.length, 17);
     assert.equal(plan.typecheck, true);
     assert.match(plan.reason, /omitted local.stack receipt.*both revisions/i);
     assert.doesNotMatch(plan.reason, /Unverified package revisions:/);
