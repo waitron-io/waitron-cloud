@@ -358,9 +358,18 @@ venue does not subscribe to remote access or backups.
   including one conservative documentation probe; no retries or customer data.
   The harness, corpus, per-case scores and component/latency tables are retained;
   raw provider responses are local-only and deleted at landing. Google's storage
-  rights remain unresolved, so its row is a quality comparison only. Approve the
-  next residential/rural corpus, query normalization and selection policy before
-  another benchmark. Choose the provider only after confirming durable merchant
+  rights remain unresolved, so its row is a quality comparison only. The owner approved a larger residential/rural comparison. Its fixed
+  60-address regional corpus compares unchanged and postcode-free queries, supplied
+  versus postcode-derived provinces, and the first result versus presence in a
+  bounded list. It retains the original request counters and manual-entry rule;
+  its 120-query results retain the original reference fields and a separate rural
+  municipality sensitivity check. With postcodes, complete drafts occur in a
+  five-result list for Google 48/60, Geoapify autocomplete 36/60, geocoding 40/60 and
+  CartoCiudad 0/60; the rural municipality alternative raises Geoapify geocoding to
+  47/60 without new requests. Postcode omission gives CartoCiudad one complete draft.
+  These regional, field-mapping results do not select a provider or prove setup
+  integration. Cumulative attempts remain Google 363, Geoapify 320 and CartoCiudad 161,
+  below 1,499 each, with no errors or retries in the second run. Choose the provider only after confirming durable merchant
   storage/display rights, licensing, caching, attribution and peak-day capacity.
   Account allowance and attribution remain open; no product route or UI is added.
   Keep manual entry and correction available when lookup is unavailable or wrong.
@@ -948,6 +957,13 @@ notifications separately.
   failed-setup/resource cleanup separately; the exact remaining handle was not
   identified. The documented two-file command keeps every original assertion and
   deadline; the bare run's failure remains recorded.
+  The residential-comparison bare run repeated `53200` in authenticator schema
+  reset and reported 377 passes and 273 failures among 650 registration result entries.
+  Its remaining `test/relay-operator-stop.test.ts` worker also needed an owned-PID
+  stop before failure reporting and wrapper cleanup completed. The exact open
+  handle remains unproved. The complete documented two-file suite then passes
+  all 646 registration cases; that qualification does not close the unsplit-resource
+  or failed-setup cleanup follow-ups. Diagnostics: `~/waitron-campaign-d/receipts/d76/`.
   The migration batch-size fixture now confines its database-wide DDL trigger
   to its own schema. A second populated fixture proves that other tests can
   migrate while it is active; the original 103-recipient and 100-row batch
@@ -1759,7 +1775,7 @@ changing any check. The assertions and deadlines remain unchanged.
 | Invoice archive | Define the archived objects and access grants, including owner-approved AEAT/advisor access, retention, download and customer exit. Have hosting/archive questions reviewed for the launch country. |
 | Analytics and reports | Choose ingestion, supported source versions, country and cell placement, search/aggregation engine, scheduled reports and group reporting. Elasticsearch is a candidate. |
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |
-| Address lookup (free) | [Spain measured on 2026-10-16](address-lookup-scope.md#measured-on-spain-2026-10-16): 40 public/synthetic cases; none of the three tested providers reaches the proposed selectable-match gate under the first-result mapping. Provider and implementation remain open. Approve the next query/selection policy and corpus, confirm durable storage/display rights, and set caching, attribution, peak-day budget and account allowance before implementation. See [free services](#free-services-for-open-source-waitron). |
+| Address lookup (free) | [Spain measured on 2026-10-16](address-lookup-scope.md#measured-on-spain-2026-10-16): 40 public/synthetic cases; none of the three tested providers reaches the proposed selectable-match gate under the first-result mapping. The approved second comparison adds 60 public residential/rural addresses and 120 paired queries, first-versus-list scoring and explicit province inference. The original field references and a separate rural-municipality sensitivity remain distinct; accepted locality level and actual setup integration stay open. Provider and implementation remain open. Confirm durable storage/display rights, and set caching, attribution, peak-day budget and account allowance before implementation. See [free services](#free-services-for-open-source-waitron). |
 | Messaging | The [version 1 on-prem relay contract](transactional-email-relay-contract.md) has a disabled local-proof grant/reservation core; opt-in signed routes, an encrypted queue and a disabled local capture worker with bounded claims and accepted/uncertain outcomes; production origin verification, Waitron durable caller, joint proof and production decisions remain open. Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
 | Automated upgrades | Treat cloud services, cloud-hosted Waitron and on-prem installations separately; choose rollout groups, compatibility, maintenance windows, pause and recovery behaviour. |
 | Monitoring | External venue and remote-route health, backup staleness, customer incidents and bilingual email alerts are implemented locally. Accepted public/staff probes now emit retry-safe organisation usage events and the portal shows their measured total. Add filing/device signals, broader functional checks and performance evidence. The local deployment now schedules usage reconciliation; define production operations, cost, allowance and limit policy before using measurements for enforcement. |

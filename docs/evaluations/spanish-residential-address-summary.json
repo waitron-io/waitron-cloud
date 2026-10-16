@@ -1,0 +1,842 @@
+{
+  "version": 1,
+  "date": "2026-10-16",
+  "corpusSha256": "93db903d386e727bef5094d56312b62ac3558df7b199f3f44be9b95791a32e68",
+  "referencePolicy": "register-locality",
+  "distinctAddresses": 60,
+  "queriesPerAddress": 2,
+  "casesPerFlow": 120,
+  "provinces": 13,
+  "requests": {
+    "google": {
+      "initialCount": 78,
+      "attempts": 285,
+      "cumulativeCount": 363,
+      "ceiling": 1499,
+      "retries": 0,
+      "timeouts": 0,
+      "errors": 0,
+      "medianMs": 118,
+      "p95Ms": 186,
+      "startedAt": "2026-10-16T17:17:48.844Z",
+      "finishedAt": "2026-10-16T17:23:03.811Z"
+    },
+    "geoapify": {
+      "initialCount": 80,
+      "attempts": 240,
+      "cumulativeCount": 320,
+      "ceiling": 1499,
+      "retries": 0,
+      "timeouts": 0,
+      "errors": 0,
+      "medianMs": 1018,
+      "p95Ms": 4612,
+      "startedAt": "2026-10-16T17:10:00.198Z",
+      "finishedAt": "2026-10-16T17:17:33.544Z"
+    },
+    "cartociudad": {
+      "initialCount": 41,
+      "attempts": 120,
+      "cumulativeCount": 161,
+      "ceiling": 1499,
+      "retries": 0,
+      "timeouts": 0,
+      "errors": 0,
+      "medianMs": 434,
+      "p95Ms": 626,
+      "startedAt": "2026-10-16T17:23:27.999Z",
+      "finishedAt": "2026-10-16T17:25:41.086Z"
+    }
+  },
+  "flows": [
+    {
+      "provider": "google",
+      "stage": "selection",
+      "byVariant": {
+        "with-postcode": {
+          "cases": 60,
+          "firstSelectable": 47,
+          "listSelectable": 48,
+          "firstComplete": 47,
+          "listComplete": 48,
+          "noResult": 3,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 0,
+          "provinceConflicts": 0,
+          "candidates": 73,
+          "provinceSupplied": 73,
+          "unknownProvince": 0,
+          "missingCountry": 0
+        },
+        "without-postcode": {
+          "cases": 60,
+          "firstSelectable": 46,
+          "listSelectable": 48,
+          "firstComplete": 46,
+          "listComplete": 48,
+          "noResult": 2,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 0,
+          "provinceConflicts": 0,
+          "candidates": 92,
+          "provinceSupplied": 86,
+          "unknownProvince": 0,
+          "missingCountry": 0
+        }
+      },
+      "byCohort": {
+        "with-postcode": {
+          "residential": {
+            "cases": 30,
+            "firstSelectable": 23,
+            "listSelectable": 23,
+            "firstComplete": 23,
+            "listComplete": 23,
+            "noResult": 1,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 0,
+            "provinceConflicts": 0,
+            "candidates": 40,
+            "provinceSupplied": 40,
+            "unknownProvince": 0,
+            "missingCountry": 0
+          },
+          "rural": {
+            "cases": 30,
+            "firstSelectable": 24,
+            "listSelectable": 25,
+            "firstComplete": 24,
+            "listComplete": 25,
+            "noResult": 2,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 0,
+            "provinceConflicts": 0,
+            "candidates": 33,
+            "provinceSupplied": 33,
+            "unknownProvince": 0,
+            "missingCountry": 0
+          }
+        },
+        "without-postcode": {
+          "residential": {
+            "cases": 30,
+            "firstSelectable": 22,
+            "listSelectable": 23,
+            "firstComplete": 22,
+            "listComplete": 23,
+            "noResult": 0,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 0,
+            "provinceConflicts": 0,
+            "candidates": 57,
+            "provinceSupplied": 51,
+            "unknownProvince": 0,
+            "missingCountry": 0
+          },
+          "rural": {
+            "cases": 30,
+            "firstSelectable": 24,
+            "listSelectable": 25,
+            "firstComplete": 24,
+            "listComplete": 25,
+            "noResult": 2,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 0,
+            "provinceConflicts": 0,
+            "candidates": 35,
+            "provinceSupplied": 35,
+            "unknownProvince": 0,
+            "missingCountry": 0
+          }
+        }
+      },
+      "paired": {
+        "addresses": 60,
+        "bothQueriesComplete": 48,
+        "onlyWithPostcodeComplete": 0,
+        "onlyWithoutPostcodeComplete": 0
+      },
+      "ruralMunicipalitySensitivity": {
+        "with-postcode": {
+          "cases": 60,
+          "firstSelectable": 47,
+          "listSelectable": 48,
+          "firstComplete": 47,
+          "listComplete": 48,
+          "noResult": 3,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 0,
+          "provinceConflicts": 0,
+          "candidates": 73,
+          "provinceSupplied": 73,
+          "unknownProvince": 0,
+          "missingCountry": 0
+        },
+        "without-postcode": {
+          "cases": 60,
+          "firstSelectable": 46,
+          "listSelectable": 48,
+          "firstComplete": 46,
+          "listComplete": 48,
+          "noResult": 2,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 0,
+          "provinceConflicts": 0,
+          "candidates": 92,
+          "provinceSupplied": 86,
+          "unknownProvince": 0,
+          "missingCountry": 0
+        }
+      },
+      "firstCandidateComponents": {
+        "with-postcode": {
+          "wrongMatch": 10,
+          "houseNumber": 56,
+          "postcode": 57,
+          "locality": 54,
+          "province": 57,
+          "country": 57,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 57
+        },
+        "without-postcode": {
+          "wrongMatch": 12,
+          "houseNumber": 57,
+          "postcode": 54,
+          "locality": 52,
+          "province": 57,
+          "country": 58,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 58
+        }
+      }
+    },
+    {
+      "provider": "geoapify",
+      "stage": "autocomplete",
+      "byVariant": {
+        "with-postcode": {
+          "cases": 60,
+          "firstSelectable": 37,
+          "listSelectable": 40,
+          "firstComplete": 33,
+          "listComplete": 36,
+          "noResult": 0,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 44,
+          "provinceConflicts": 0,
+          "candidates": 168,
+          "provinceSupplied": 114,
+          "unknownProvince": 45,
+          "missingCountry": 0
+        },
+        "without-postcode": {
+          "cases": 60,
+          "firstSelectable": 37,
+          "listSelectable": 39,
+          "firstComplete": 33,
+          "listComplete": 37,
+          "noResult": 6,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 39,
+          "provinceConflicts": 0,
+          "candidates": 137,
+          "provinceSupplied": 87,
+          "unknownProvince": 40,
+          "missingCountry": 0
+        }
+      },
+      "byCohort": {
+        "with-postcode": {
+          "residential": {
+            "cases": 30,
+            "firstSelectable": 21,
+            "listSelectable": 24,
+            "firstComplete": 18,
+            "listComplete": 21,
+            "noResult": 0,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 42,
+            "provinceConflicts": 0,
+            "candidates": 73,
+            "provinceSupplied": 26,
+            "unknownProvince": 43,
+            "missingCountry": 0
+          },
+          "rural": {
+            "cases": 30,
+            "firstSelectable": 16,
+            "listSelectable": 16,
+            "firstComplete": 15,
+            "listComplete": 15,
+            "noResult": 0,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 2,
+            "provinceConflicts": 0,
+            "candidates": 95,
+            "provinceSupplied": 88,
+            "unknownProvince": 2,
+            "missingCountry": 0
+          }
+        },
+        "without-postcode": {
+          "residential": {
+            "cases": 30,
+            "firstSelectable": 22,
+            "listSelectable": 24,
+            "firstComplete": 19,
+            "listComplete": 22,
+            "noResult": 1,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 38,
+            "provinceConflicts": 0,
+            "candidates": 66,
+            "provinceSupplied": 24,
+            "unknownProvince": 39,
+            "missingCountry": 0
+          },
+          "rural": {
+            "cases": 30,
+            "firstSelectable": 15,
+            "listSelectable": 15,
+            "firstComplete": 14,
+            "listComplete": 15,
+            "noResult": 5,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 1,
+            "provinceConflicts": 0,
+            "candidates": 71,
+            "provinceSupplied": 63,
+            "unknownProvince": 1,
+            "missingCountry": 0
+          }
+        }
+      },
+      "paired": {
+        "addresses": 60,
+        "bothQueriesComplete": 35,
+        "onlyWithPostcodeComplete": 1,
+        "onlyWithoutPostcodeComplete": 2
+      },
+      "ruralMunicipalitySensitivity": {
+        "with-postcode": {
+          "cases": 60,
+          "firstSelectable": 42,
+          "listSelectable": 45,
+          "firstComplete": 35,
+          "listComplete": 38,
+          "noResult": 0,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 44,
+          "provinceConflicts": 0,
+          "candidates": 168,
+          "provinceSupplied": 114,
+          "unknownProvince": 45,
+          "missingCountry": 0
+        },
+        "without-postcode": {
+          "cases": 60,
+          "firstSelectable": 42,
+          "listSelectable": 45,
+          "firstComplete": 35,
+          "listComplete": 41,
+          "noResult": 6,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 39,
+          "provinceConflicts": 0,
+          "candidates": 137,
+          "provinceSupplied": 87,
+          "unknownProvince": 40,
+          "missingCountry": 0
+        }
+      },
+      "firstCandidateComponents": {
+        "with-postcode": {
+          "wrongMatch": 23,
+          "houseNumber": 50,
+          "postcode": 48,
+          "locality": 44,
+          "province": 58,
+          "country": 60,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 60
+        },
+        "without-postcode": {
+          "wrongMatch": 17,
+          "houseNumber": 48,
+          "postcode": 45,
+          "locality": 41,
+          "province": 52,
+          "country": 54,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 54
+        }
+      }
+    },
+    {
+      "provider": "geoapify",
+      "stage": "geocode",
+      "byVariant": {
+        "with-postcode": {
+          "cases": 60,
+          "firstSelectable": 40,
+          "listSelectable": 42,
+          "firstComplete": 38,
+          "listComplete": 40,
+          "noResult": 0,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 42,
+          "provinceConflicts": 0,
+          "candidates": 124,
+          "provinceSupplied": 73,
+          "unknownProvince": 43,
+          "missingCountry": 0
+        },
+        "without-postcode": {
+          "cases": 60,
+          "firstSelectable": 40,
+          "listSelectable": 41,
+          "firstComplete": 36,
+          "listComplete": 38,
+          "noResult": 0,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 48,
+          "provinceConflicts": 0,
+          "candidates": 131,
+          "provinceSupplied": 70,
+          "unknownProvince": 50,
+          "missingCountry": 0
+        }
+      },
+      "byCohort": {
+        "with-postcode": {
+          "residential": {
+            "cases": 30,
+            "firstSelectable": 24,
+            "listSelectable": 26,
+            "firstComplete": 22,
+            "listComplete": 24,
+            "noResult": 0,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 40,
+            "provinceConflicts": 0,
+            "candidates": 57,
+            "provinceSupplied": 15,
+            "unknownProvince": 41,
+            "missingCountry": 0
+          },
+          "rural": {
+            "cases": 30,
+            "firstSelectable": 16,
+            "listSelectable": 16,
+            "firstComplete": 16,
+            "listComplete": 16,
+            "noResult": 0,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 2,
+            "provinceConflicts": 0,
+            "candidates": 67,
+            "provinceSupplied": 58,
+            "unknownProvince": 2,
+            "missingCountry": 0
+          }
+        },
+        "without-postcode": {
+          "residential": {
+            "cases": 30,
+            "firstSelectable": 25,
+            "listSelectable": 26,
+            "firstComplete": 22,
+            "listComplete": 24,
+            "noResult": 0,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 47,
+            "provinceConflicts": 0,
+            "candidates": 67,
+            "provinceSupplied": 16,
+            "unknownProvince": 49,
+            "missingCountry": 0
+          },
+          "rural": {
+            "cases": 30,
+            "firstSelectable": 15,
+            "listSelectable": 15,
+            "firstComplete": 14,
+            "listComplete": 14,
+            "noResult": 0,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 1,
+            "provinceConflicts": 0,
+            "candidates": 64,
+            "provinceSupplied": 54,
+            "unknownProvince": 1,
+            "missingCountry": 0
+          }
+        }
+      },
+      "paired": {
+        "addresses": 60,
+        "bothQueriesComplete": 38,
+        "onlyWithPostcodeComplete": 2,
+        "onlyWithoutPostcodeComplete": 0
+      },
+      "ruralMunicipalitySensitivity": {
+        "with-postcode": {
+          "cases": 60,
+          "firstSelectable": 46,
+          "listSelectable": 50,
+          "firstComplete": 43,
+          "listComplete": 47,
+          "noResult": 0,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 42,
+          "provinceConflicts": 0,
+          "candidates": 124,
+          "provinceSupplied": 73,
+          "unknownProvince": 43,
+          "missingCountry": 0
+        },
+        "without-postcode": {
+          "cases": 60,
+          "firstSelectable": 47,
+          "listSelectable": 49,
+          "firstComplete": 41,
+          "listComplete": 45,
+          "noResult": 0,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 48,
+          "provinceConflicts": 0,
+          "candidates": 131,
+          "provinceSupplied": 70,
+          "unknownProvince": 50,
+          "missingCountry": 0
+        }
+      },
+      "firstCandidateComponents": {
+        "with-postcode": {
+          "wrongMatch": 20,
+          "houseNumber": 50,
+          "postcode": 56,
+          "locality": 49,
+          "province": 59,
+          "country": 60,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 60
+        },
+        "without-postcode": {
+          "wrongMatch": 20,
+          "houseNumber": 50,
+          "postcode": 48,
+          "locality": 48,
+          "province": 57,
+          "country": 60,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 60
+        }
+      }
+    },
+    {
+      "provider": "cartociudad",
+      "stage": "selection",
+      "byVariant": {
+        "with-postcode": {
+          "cases": 60,
+          "firstSelectable": 0,
+          "listSelectable": 0,
+          "firstComplete": 0,
+          "listComplete": 0,
+          "noResult": 60,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 0,
+          "provinceConflicts": 0,
+          "candidates": 0,
+          "provinceSupplied": 0,
+          "unknownProvince": 0,
+          "missingCountry": 0
+        },
+        "without-postcode": {
+          "cases": 60,
+          "firstSelectable": 15,
+          "listSelectable": 16,
+          "firstComplete": 1,
+          "listComplete": 1,
+          "noResult": 42,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 0,
+          "provinceConflicts": 0,
+          "candidates": 88,
+          "provinceSupplied": 88,
+          "unknownProvince": 0,
+          "missingCountry": 0
+        }
+      },
+      "byCohort": {
+        "with-postcode": {
+          "residential": {
+            "cases": 30,
+            "firstSelectable": 0,
+            "listSelectable": 0,
+            "firstComplete": 0,
+            "listComplete": 0,
+            "noResult": 30,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 0,
+            "provinceConflicts": 0,
+            "candidates": 0,
+            "provinceSupplied": 0,
+            "unknownProvince": 0,
+            "missingCountry": 0
+          },
+          "rural": {
+            "cases": 30,
+            "firstSelectable": 0,
+            "listSelectable": 0,
+            "firstComplete": 0,
+            "listComplete": 0,
+            "noResult": 30,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 0,
+            "provinceConflicts": 0,
+            "candidates": 0,
+            "provinceSupplied": 0,
+            "unknownProvince": 0,
+            "missingCountry": 0
+          }
+        },
+        "without-postcode": {
+          "residential": {
+            "cases": 30,
+            "firstSelectable": 9,
+            "listSelectable": 9,
+            "firstComplete": 0,
+            "listComplete": 0,
+            "noResult": 19,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 0,
+            "provinceConflicts": 0,
+            "candidates": 53,
+            "provinceSupplied": 53,
+            "unknownProvince": 0,
+            "missingCountry": 0
+          },
+          "rural": {
+            "cases": 30,
+            "firstSelectable": 6,
+            "listSelectable": 7,
+            "firstComplete": 1,
+            "listComplete": 1,
+            "noResult": 23,
+            "caseErrors": 0,
+            "candidateErrors": 0,
+            "foreignCountry": 0,
+            "provinceInferred": 0,
+            "provinceConflicts": 0,
+            "candidates": 35,
+            "provinceSupplied": 35,
+            "unknownProvince": 0,
+            "missingCountry": 0
+          }
+        }
+      },
+      "paired": {
+        "addresses": 60,
+        "bothQueriesComplete": 0,
+        "onlyWithPostcodeComplete": 0,
+        "onlyWithoutPostcodeComplete": 1
+      },
+      "ruralMunicipalitySensitivity": {
+        "with-postcode": {
+          "cases": 60,
+          "firstSelectable": 0,
+          "listSelectable": 0,
+          "firstComplete": 0,
+          "listComplete": 0,
+          "noResult": 60,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 0,
+          "provinceConflicts": 0,
+          "candidates": 0,
+          "provinceSupplied": 0,
+          "unknownProvince": 0,
+          "missingCountry": 0
+        },
+        "without-postcode": {
+          "cases": 60,
+          "firstSelectable": 15,
+          "listSelectable": 16,
+          "firstComplete": 1,
+          "listComplete": 1,
+          "noResult": 42,
+          "caseErrors": 0,
+          "candidateErrors": 0,
+          "foreignCountry": 0,
+          "provinceInferred": 0,
+          "provinceConflicts": 0,
+          "candidates": 88,
+          "provinceSupplied": 88,
+          "unknownProvince": 0,
+          "missingCountry": 0
+        }
+      },
+      "firstCandidateComponents": {
+        "with-postcode": {
+          "wrongMatch": 0,
+          "houseNumber": 0,
+          "postcode": 0,
+          "locality": 0,
+          "province": 0,
+          "country": 0,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 0
+        },
+        "without-postcode": {
+          "wrongMatch": 3,
+          "houseNumber": 1,
+          "postcode": 18,
+          "locality": 15,
+          "province": 18,
+          "country": 18,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 18
+        }
+      }
+    }
+  ],
+  "localitySensitivity": {
+    "policy": "Accept either the independently published rural village or municipality; all other matching rules remain unchanged. Offline diagnostic only, not an approved product policy.",
+    "affectedAddresses": 13,
+    "affectedCases": 26,
+    "caseIds": [
+      "residential-rural-036/with-postcode",
+      "residential-rural-036/without-postcode",
+      "residential-rural-037/with-postcode",
+      "residential-rural-037/without-postcode",
+      "residential-rural-039/with-postcode",
+      "residential-rural-039/without-postcode",
+      "residential-rural-040/with-postcode",
+      "residential-rural-040/without-postcode",
+      "residential-rural-041/with-postcode",
+      "residential-rural-041/without-postcode",
+      "residential-rural-042/with-postcode",
+      "residential-rural-042/without-postcode",
+      "residential-rural-044/with-postcode",
+      "residential-rural-044/without-postcode",
+      "residential-rural-051/with-postcode",
+      "residential-rural-051/without-postcode",
+      "residential-rural-052/with-postcode",
+      "residential-rural-052/without-postcode",
+      "residential-rural-057/with-postcode",
+      "residential-rural-057/without-postcode",
+      "residential-rural-058/with-postcode",
+      "residential-rural-058/without-postcode",
+      "residential-rural-059/with-postcode",
+      "residential-rural-059/without-postcode",
+      "residential-rural-060/with-postcode",
+      "residential-rural-060/without-postcode"
+    ]
+  },
+  "countryPackCheck": {
+    "sourceCommit": "39d07827e18658c671bfd3e9661dde065fc973c9",
+    "expectedCases": 120,
+    "checkedCompleteCandidates": 280,
+    "checks": [
+      "postcode validity",
+      "canonical province",
+      "supported fiscal area",
+      "Europe/Madrid time zone"
+    ],
+    "limit": "Country-pack component checks only; no setup server or form integration."
+  },
+  "cartociudadReturnedPostcodeTypes": {
+    "string": 88
+  },
+  "codeSha256": {
+    "scripts/address-lookup-evaluation.mjs": "fb6395ef11a047bb14ed7046e705b12ef59d59d29af9a52229b93f57a402b3ce",
+    "scripts/address-lookup-comparison.mjs": "e4a4c06d9ef60d8d1322ea7681823fa0285d66ba876cd2c54c0ee47b3e0c1eb0",
+    "docs/evaluations/spanish-provinces.json": "6fce6575fda33c8591b78b9bce5449351b9862bd0dd921f8997961cf0e14c019"
+  },
+  "limits": [
+    "Regional tourism-register sample, not national household coverage.",
+    "Register spelling and locality hierarchy may differ from provider fields.",
+    "A matching candidate in a list is an answer-aware upper bound, not a measured user selection.",
+    "Complete drafts may use province inference from returned postcodes.",
+    "No coordinate survey, unit preservation, typing traffic, session billing, production capacity or persistence permission measured.",
+    "Google is a quality comparison only."
+  ]
+}
