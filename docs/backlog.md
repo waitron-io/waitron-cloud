@@ -486,7 +486,15 @@ notifications separately.
   from both the plan and the job list cannot turn incomplete work green.
   Unknown packages, altered counts, invalid partition numbers and extra row
   fields fail; complete partitions and the existing short-package groups remain
-  accepted. An independent summary policy checks the execution contract; tests
+  accepted. Each package in a short-package group must also emit a nonempty,
+  consistent Node test summary and exit successfully. The runner reports its
+  test, pass, skip and todo counts, keeps all output and continues with later
+  packages after a failure. A zero exit without a summary, an all-skipped run,
+  or a failed or cancelled test cannot pass. TAP and spec reporter output are
+  exercised with real Node test subprocesses; the package commands, deadlines
+  and treatment of individual skipped or todo cases are unchanged. These counts
+  establish executed work, not that the selected package contains every required
+  test. An independent summary policy checks the execution contract; tests
   feed it every real planner package allocation and the full grouped plan, and
   compare its package names with the complete workspace inventory. Adding,
   removing or renaming a package, or changing its partition count, requires
