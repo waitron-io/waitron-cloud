@@ -708,8 +708,16 @@ notifications separately.
   no helper inputs. An existence check alone also adds no root helpers, and a
   shared helper scanning its own directory does not scan the repository root.
   This bounded scan can keep extra consumers when identifiers are reused; it does
-  not resolve aliases, other type annotations, computed assignments, recursive
-  options or other directory APIs. Repository-root working directories, computed
+  not resolve aliases, other type annotations, computed assignments or
+  other directory APIs. A reachable `readdirSync` of a literal repository-root URL,
+  directly or through a supported URL declaration, now selects full package work
+  whenever explicit options are supplied. The planner names the source path:
+  unresolved options may enable recursion and cannot justify dropping a nested
+  helper's package consumer. Real recursive, directory-entry, encoding and computed
+  option calls, saved readers from either revision and shared-helper directory
+  depth are covered. Calls without options retain their immediate-entry rule;
+  options on a helper's own non-root directory do not imply a root scan. Resolving
+  options precisely remains open. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain
   unresolved. This does not complete the plan's dynamic input and directory rules. Identity still selects all nine packages in the current graph;
   portal alone remains isolated. Unaudited root, unknown and empty changes run everything.
