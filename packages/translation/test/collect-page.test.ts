@@ -23,6 +23,8 @@ test('missing, duplicate, foreign and context outcomes cannot silently disappear
   {0:{results:[result('p1'),result('p1')],failed:['p2']}},
   {0:{results:[result('p1')],failed:['p1','p2']}},
   {0:{results:[result('p1'),result('foreign')],failed:['p2']}},
+  {0:{results:[result('p1'),result('foreign')],failed:[]}},
+  {0:{results:[result('p1'),result('context')],failed:[]}},
   {0:{results:[result('p1'),result('context')],failed:['p2']}},
  ])assert.throws(()=>page(items,batches),/translation_outcomes_invalid/);
  assert.throws(()=>page([item('p1'),item('p1')],{0:{results:[result('p1')],failed:[]}}),/translation_outcomes_invalid/);
