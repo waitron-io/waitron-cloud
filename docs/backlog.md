@@ -502,7 +502,14 @@ notifications separately.
   jobs to six removes one repeated setup. Compare actual Ubuntu job durations
   and rounded minutes before claiming a saving or the target of about five minutes
   per job and 55 rounded minutes per full run. The five-job trial passed every case,
-  but its longest registration job took 313 seconds, so it was not adopted.
+  but its longest registration job took 313 seconds, so it was not adopted. The
+  unchanged six-job layout also passed every case but reached 348 seconds.
+  The reminder-worker cases now live in `worker-reminders.test.ts`, with their
+  complete test bodies unchanged. Each file prepares its own disposable schema.
+  Node can run the reminder cases separately from quiet opening and recovery
+  cases; every test and the 30-second deadline remain. Case-duration totals guided
+  this split, but only the actual parallel CI jobs can establish its budget.
+
   A shard is one partition of a package's tests. Removing a partition
   from both the plan and the job list cannot turn incomplete work green.
   Unknown packages, altered counts, invalid partition numbers and extra row
