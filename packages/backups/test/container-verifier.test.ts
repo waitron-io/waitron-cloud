@@ -29,7 +29,7 @@ const empty=()=>assert.equal(docker('ps','-aq','--filter','label=cloud.backup-ve
 test('native memory and total scratch exhaustion refuse restoration; the parent verifies a later snapshot',async(t)=>{
  const verify=await createContainerWaitronVerifier({image,owner,memoryMiB:192,scratchMiB:16});
  for(const mode of [1,2]){
-  const start=Date.now();await assert.rejects(verify(source(mode),keys,point(mode),new AbortController().signal),(error:any)=>{assert.equal(error.message,'backup.verifier_resource');assert.equal(error.cause.memoryBytes,201326592);assert.equal(error.cause.memorySwapBytes,201326592);assert.deepEqual(error.cause.mounts,[]);assert.equal(error.cause.readOnly,true);assert.equal(error.cause.network,'none');assert.match(error.cause.scratch['/scratch'],/size=16m/);if(mode===1)assert.equal(error.cause.oomKilled,true);t.diagnostic(JSON.stringify({mode,...error.cause}));return true;});
+  const start=Date.now();await assert.rejects(verify(source(mode),keys,point(mode),new AbortController().signal),(error:any)=>{t.diagnostic(JSON.stringify({mode,...error.cause}));assert.equal(error.message,'backup.verifier_resource');assert.equal(error.cause.memoryBytes,201326592);assert.equal(error.cause.memorySwapBytes,201326592);assert.deepEqual(error.cause.mounts,[]);assert.equal(error.cause.readOnly,true);assert.equal(error.cause.network,'none');assert.match(error.cause.scratch['/scratch'],/size=16m/);if(mode===1)assert.equal(error.cause.oomKilled,true);return true;});
   assert(Date.now()-start<30000);empty();
  }
  const value=await verify(source(0),keys,point(0),new AbortController().signal) as any;
@@ -131,6 +131,45 @@ test('cancellation during result inspection cannot return a successful restore',
   const verify=await createContainerWaitronVerifier({image,owner});pending=verify(source(0),keys,point(0),stop.signal);
   const deadline=Date.now()+10000;while(!existsSync(entered)&&Date.now()<deadline)await delay(10);assert(existsSync(entered));
   stop.abort();await writeFile(release,'');await assert.rejects(pending,/backup.verifier_cancelled/);empty();
+ }finally{await writeFile(release,'');stop.abort();await pending?.catch(()=>{});process.env.PATH=oldPath;await rm(directory,{recursive:true,force:true});}
+});
+
+for(const boundary of ['ack','pending','cancel-before-start','cancel-after-start','cancel-start-inspection'])test(boundary==='ack'?'archive input stays unopened until Docker acknowledges container start':boundary==='pending'?'archive stays unopened across repeated created states':`archive stays unopened on ${boundary}`,async()=>{
+ const cancel=!['ack','pending'].includes(boundary);
+ const directory=await mkdtemp(join(tmpdir(),'container-start-ack-')),entered=join(directory,'entered'),release=join(directory,'release'),observed=join(directory,'observed'),oldPath=process.env.PATH,realDocker=execFileSync('which',['docker'],{encoding:'utf8'}).trim();
+ const wrapper=join(directory,'docker');
+ await writeFile(wrapper,`#!${process.execPath}
+const fs=require('node:fs'),cp=require('node:child_process'),args=process.argv.slice(2),boundary=${JSON.stringify(boundary)},real=${JSON.stringify(realDocker)};
+const gate=()=>{fs.writeFileSync(${JSON.stringify(entered)},'');while(!fs.existsSync(${JSON.stringify(release)}))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);};
+if(args[0]==='start'&&boundary==='cancel-start-inspection')process.exit(125);
+if(args[0]==='start'&&['pending','cancel-before-start'].includes(boundary))gate();
+if(args[0]==='inspect'&&args[1].startsWith('cloud-verify-')&&boundary==='pending'){const result=cp.spawnSync(real,args,{encoding:'utf8'});if(result.status===0)fs.appendFileSync(${JSON.stringify(observed)},JSON.parse(result.stdout)[0].State.Status+'\\n');if(result.stdout)process.stdout.write(result.stdout);if(result.stderr)process.stderr.write(result.stderr);process.exit(result.status??1);}
+if(args[0]==='inspect'&&args[1].startsWith('cloud-verify-')&&boundary!=='cancel-before-start'){
+ if(boundary==='cancel-start-inspection')gate();
+ let result;
+ do{result=cp.spawnSync(real,args,{encoding:'utf8'});if(result.status!==0)break;if(boundary!=='cancel-after-start'||JSON.parse(result.stdout)[0].State.Status!=='created')break;Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);}while(true);
+ if(boundary!=='cancel-start-inspection')gate();if(result.stdout)process.stdout.write(result.stdout);if(result.stderr)process.stderr.write(result.stderr);process.exit(result.status??1);
+}
+const result=cp.spawnSync(real,args,{stdio:'inherit'});process.exit(result.status??1);
+`);
+ await chmod(wrapper,0o700);process.env.PATH=directory+':'+oldPath;
+ const stop=new AbortController();let opened=false,pending:Promise<unknown>|undefined;
+ try{
+  const verify=await createContainerWaitronVerifier({image,owner}),archive=source(0);
+  pending=verify({...archive,open(){opened=true;return archive.open();}},keys,point(0),stop.signal);pending.catch(()=>{});
+  const deadline=Date.now()+10000;while(!existsSync(entered)&&Date.now()<deadline)await delay(10);assert(existsSync(entered));
+  if(boundary==='pending'){
+   const states=async()=>existsSync(observed)?(await readFile(observed,'utf8')).trim().split('\n'):[];
+   const pollBy=Date.now()+10000;while(!opened&&(await states()).length<3&&Date.now()<pollBy)await delay(10);
+   assert.equal(opened,false,'archive opened while Docker still reported created');
+   assert.deepEqual((await states()).slice(0,3),['created','created','created']);
+  }
+  assert.equal(opened,false,'archive opened before Docker acknowledged start');
+  if(cancel){stop.abort();const removedBy=Date.now()+10000;while(docker('ps','-aq','--filter','label=cloud.backup-verifier.owner='+owner)&&Date.now()<removedBy)await delay(10);empty();}
+  await writeFile(release,'');
+  if(cancel){await assert.rejects(pending,/backup.verifier_cancelled/);assert.equal(opened,false);}
+  else{assert.equal((await pending as any).integrityOk,true);assert.equal(opened,true);}
+  empty();
  }finally{await writeFile(release,'');stop.abort();await pending?.catch(()=>{});process.env.PATH=oldPath;await rm(directory,{recursive:true,force:true});}
 });
 

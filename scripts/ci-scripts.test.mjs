@@ -64,12 +64,12 @@ test('changed consumers, installation, new readers and incomplete inventories re
     const changed = commit();
     put(helper, 'export const result = 1; // edited\n');
     const head = commit();
-    for (const before of [base, changed]) assert.equal(plan(head, before).packages.length, 18, `${path} at ${before}`);
+    for (const before of [base, changed]) assert.equal(plan(head, before).packages.length, 16, `${path} at ${before}`);
   });
   fixture(({put, commit, plan, git}) => {
     put(helper, 'export const result = 1; // edited\n');
     const head = commit();
-    assert.equal(plan(head, undefined, (...args) => args[0] === 'ls-tree' ? git(...args).replace(/\0$/, '') : git(...args)).packages.length, 18);
+    assert.equal(plan(head, undefined, (...args) => args[0] === 'ls-tree' ? git(...args).replace(/\0$/, '') : git(...args)).packages.length, 16);
   });
 });
 
@@ -82,7 +82,7 @@ test('mixed paths, missing checks, symbolic links and executable modes cannot ea
     if (change === 'link') {unlinkSync(join(root, helper)); symlinkSync('consumer.mjs', join(root, helper));}
     if (change === 'executable') {git('add', '-A'); git('update-index', '--chmod=+x', helper); git('commit', '-sm', 'Executable input');}
     const head = change === 'executable' ? git('rev-parse', 'HEAD').trim() : commit();
-    assert.equal(plan(head).packages.length, 18, change);
+    assert.equal(plan(head).packages.length, 16, change);
   });
 });
 
@@ -93,7 +93,7 @@ test('missing, malformed and stale certificates fail closed with the changed pat
     const old = commit();
     put(helper, 'export const result = 1; // edited\n');
     const selected = plan(commit(), old);
-    assert.equal(selected.packages.length, 18, change);
+    assert.equal(selected.packages.length, 16, change);
     assert.match(selected.reason, /identity-upstream.mjs/);
   });
 });
@@ -162,11 +162,11 @@ test('old-only stale evidence and forged incomplete inventories cannot omit cons
   put(helper, 'export const result = 1; // change\n');
   const head = commit();
   assert.equal(plan(head, certified).packages.length, 0, 'new audit is valid');
-  assert.equal(plan(head, stale).packages.length, 18, 'old audit is stale');
+  assert.equal(plan(head, stale).packages.length, 16, 'old audit is stale');
   for (const transform of [text => text.replace(/[^\0]*\tscripts\/consumer.mjs\0/, ''), text => text + 'malformed\0']) {
-    assert.equal(plan(head, certified, (...args) => args[0] === 'ls-tree' ? transform(git(...args)) : git(...args)).packages.length, 18);
+    assert.equal(plan(head, certified, (...args) => args[0] === 'ls-tree' ? transform(git(...args)) : git(...args)).packages.length, 16);
   }
-  assert.equal(plan(head, base).packages.length, 18, 'mixed diff');
+  assert.equal(plan(head, base).packages.length, 16, 'mixed diff');
 }));
 
 test('unreadable or corrupted audit evidence from either immutable revision retains full work', () => fixture(({git, put, commit, plan, base}) => {
@@ -184,7 +184,7 @@ test('unreadable or corrupted audit evidence from either immutable revision reta
         }
         return git(...args);
       };
-      assert.equal(plan(head, base, read).packages.length, 18, `${sha}: ${failure}`);
+      assert.equal(plan(head, base, read).packages.length, 16, `${sha}: ${failure}`);
     }
   }
 }));
@@ -201,7 +201,7 @@ test('missing or nonregular base helpers cannot hide behind a restored regular h
     put(helper, 'export const result = 1; // restored regular helper\n');
     chmodSync(join(root, helper), 0o644);
     const head = commit();
-    assert.equal(plan(head, base).packages.length, 18, kind);
+    assert.equal(plan(head, base).packages.length, 16, kind);
   });
 });
 
@@ -210,7 +210,7 @@ test('the executed runner rechecks stale certificates even when a forged plan na
   const base = commit();
   put(helper, 'export const result = 1; // edited\n');
   const head = commit();
-  assert.equal(plan(head, base).packages.length, 18);
+  assert.equal(plan(head, base).packages.length, 16);
   const forged = {packages: [], receipts: [], typecheck: false, reuse: null, scripts: {base, head, paths: [helper]}};
   const result = execute(forged);
   assert.equal(result.status, 1);

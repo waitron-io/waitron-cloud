@@ -1,6 +1,6 @@
 # Waitron Cloud backlog
 
-Updated 2026-10-14. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-10-16. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
@@ -165,7 +165,7 @@ Indexed venue/operation queries avoid whole-table tenant scans. Current custody
 checks protect both receipt pages and post-append consumption; fresh signed machine
 authentication recovers the same immutable operation after a proof expires. Paper
 import status records completion without inventing a Cloud receipt.
-Registration tests run in seven CI file shards. Every case and the 30-second
+Registration tests run in five CI file shards. Every case and the 30-second
 test deadline remain; work jobs stop after eight minutes.
 The phone journey at `/fiscal-allocations` now reserves and explicitly consumes
 identities, reconciles uncertain replies using the same operation, exports the
@@ -250,6 +250,16 @@ complete reconciliation permits C000043` and `a verified history that expires
 during a PostgreSQL lock wait cannot project`, both in
 `packages/fiscal-allocation/test/continuity.test.ts`. That run overlapped review
 and other local qualification work; resource pressure remains an assumption.
+The 16 October five-shard qualification also passed 132 of 133 fiscal checks:
+the same 150 ms witness case did not observe its held lock. The fixture and
+fiscal sources match the preceding main tree. An isolated diagnostic run observed
+the lock and passed; a separate 200 ms pause before projection reproduced the
+assertion after the witness had expired and projection returned `history_uncertain`.
+This establishes an early-expiry mechanism, not the precise cause of the original
+failure. Retain verification, client-acquisition, projection and lock-observation
+ages on recurrence. Evidence is under
+`~/waitron-campaign-d/receipts/d69/registration-shard-budget/fiscal-*.log`.
+The 150 ms policy, lock assertion and 30-second deadline remain unchanged.
 The retained local evidence is under
 `~/waitron-campaign-d/receipts/d69/dependency-fixtures/`: the failures are in
 `gate-packages-fiscal-allocation.log`, the stage observations and diagnostic-only
@@ -482,7 +492,27 @@ notifications separately.
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. The summary also checks the plan's
   package allocation against the planner's registered package names and shard
-  counts. A shard is one partition of a package's tests. Removing a partition
+  counts. Registration uses five partitions; account HTTP and portal use three
+  each, and backups uses two. The summary requires every registration partition
+  and rejects the former six- and seven-partition allocations. A Node subprocess
+  check partitions copies of every current registration filename plus a new
+  filename and requires each to execute exactly once. Its file workers run one
+  at a time; overlapping fixture bodies fail on a shared scratch-directory lock.
+  This checks file discovery; real package jobs must still report every test case.
+  The reminder-worker cases live in `email-reminders.test.ts`, with their complete
+  test bodies unchanged. The name places them before the worker-loop tests in
+  Node's file allocation. Each file prepares its own disposable schema; every
+  case and the 30-second deadline remain. Earlier five- and six-job layouts took
+  313 and 348 seconds respectively and were not adopted. A later six-job split
+  reached 259 seconds but used the same 23 rounded registration minutes as seven
+  jobs, and its backup job failed the strict native-memory OOM check. The start
+  ordering fix below addresses a reproduced mechanism for that failure.
+  Matched case durations guide the five-job allocation; they do not prove its
+  elapsed time or a saving. Require every registration job within 300 seconds
+  and fewer than 23 rounded registration minutes on the exact candidate head.
+  The wider target of 55 rounded minutes for a full run remains open.
+
+  A shard is one partition of a package's tests. Removing a partition
   from both the plan and the job list cannot turn incomplete work green.
   Unknown packages, altered counts, invalid partition numbers and extra row
   fields fail; complete partitions and the existing short-package groups remain
@@ -617,6 +647,13 @@ notifications separately.
   worker after 65.34 seconds including its outer setup. Review controls and
   package qualification overlapped that run. The precise cause remains unproved;
   retain both limits and their original assertions when investigating recurrence.
+  A later review of the five-shard change also missed the 60-second dependency
+  worker twice with the new discovery check, while its base and skipped-check
+  comparisons did not. That small sample does not establish causality. The new
+  discovery fixture now permits one file worker at a time; overlapping bodies fail
+  on an exclusive scratch-directory lock. Keep the 35-second and 60-second limits
+  and capture stages on recurrence; bounded fixture workers do not prove that the
+  historical root timeouts are resolved.
   The original historical failures did not retain these exact stages; the controlled
   reproduction establishes the timeout mechanisms rather than their precise history.
   Evidence, earlier partial fixes and complete load-run outcomes are retained under
@@ -810,7 +847,7 @@ notifications separately.
   Unknown/full changes retain all five;
   portal source changes also omit local-stack when its audit holds, otherwise they
   retain it. Isolated ui-smoke needs no receipt. Registration
-  uses seven file shards, account HTTP and portal use three each, and backups uses
+  uses five file shards, account HTTP and portal use three each, and backups uses
   two. Selected identity, operations and remote-access suites share one job when at
   least two are needed. Each keeps its full package command and deadline, runs
   once in sequence, and reports its own result. One PostgreSQL/Mailpit setup
@@ -1506,6 +1543,17 @@ notifications separately.
   process verifier denies network, subprocesses, native addons, host reads and outside
   writes. The container adapter adds a disposable container around the deployed
   verifier with total memory, swap disabled, aggregate scratch, no network or host mounts, and ownership cleanup.
+  Archive input now waits until Docker inspection acknowledges runtime startup.
+  A local Docker 28.0.4 runtime with a controlled two-second start-return delay
+  reproduced exit 73 with `OOMKilled=false`: restore input arrived before
+  containerd installed its OOM watcher. Later inspection did not repair the flag.
+  Waiting before streaming passes the same controlled native-memory, scratch
+  and subsequent valid-restore sequence without changing a containment assertion
+  or deadline. This establishes and fixes that startup mechanism; the original
+  Ubuntu failure did not record its start stages, so its exact trigger remains
+  unproved. Gated real-Docker tests keep the archive unopened through startup
+  and cancellation at the start and refusal-inspection boundaries. Diagnostics
+  precede the strict resource assertions so a future failure retains its cause.
   Real Docker fixtures exhaust native memory (192 MiB) and scratch (16 MiB); the parent
   survives and verifies later work. Two real Waitron snapshots at revision
   `00496fcd182a5c2c9189cc3faf0f8f22d3baf8ac` restore with 1024 MiB memory and 256 MiB scratch.

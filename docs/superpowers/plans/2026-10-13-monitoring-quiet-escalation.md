@@ -91,10 +91,10 @@ Run from the feature checkout. Each RED/GREEN invocation selects only the task's
 | --- | --- |
 | A | `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/monitoring-quiet-migration.test.ts` |
 | B | `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/relay-control-migration.test.ts test/relay-bounds-migration.test.ts test/authenticator-schema.test.ts test/schema-compatibility.test.ts` |
-| C | `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/monitoring-quiet.test.ts test/monitoring.test.ts` |
+| C | `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/monitoring-quiet.test.ts test/email-reminders.test.ts test/monitoring.test.ts` |
 | D | `node --test packages/registration/test/monitor-config.test.ts deploy/local-stack/runtime.test.mjs deploy/local-stack/compose-contract.test.mjs` |
-| E | `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/service-alert.test.ts test/email-outbox.test.ts test/monitoring-quiet.test.ts test/smtp-mailer.test.ts test/local-mailer.test.ts` |
-| F | `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/monitoring-quiet.test.ts test/history-cleanup.test.ts test/usage-metering.test.ts ../backups/test/replacement.test.ts` |
+| E | `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/service-alert.test.ts test/email-outbox.test.ts test/monitoring-quiet.test.ts test/email-reminders.test.ts test/smtp-mailer.test.ts test/local-mailer.test.ts` |
+| F | `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/monitoring-quiet.test.ts test/email-reminders.test.ts test/history-cleanup.test.ts test/usage-metering.test.ts ../backups/test/replacement.test.ts` |
 | G | `node --test scripts/schema-upgrade-fixture.test.mjs scripts/verify-schema-upgrade-receipt.test.mjs scripts/database-recovery-migrations.test.mjs deploy/local-stack/schema-consumer.test.mjs` |
 | H | `node scripts/schema-upgrade-receipt.mjs /tmp/cloud-d59-schema-upgrade.json --monitoring-quiet --old d681db284ac8babeffb9f1029c2c32f8dc47701c --new <clean-implementation-SHA>` then `node scripts/verify-schema-upgrade-receipt.mjs /tmp/cloud-d59-schema-upgrade.json` |
 | I | `pnpm proof:local-stack` then `node scripts/verify-local-stack-receipt.mjs /tmp/waitron-cloud-local-stack-receipt.json` |
