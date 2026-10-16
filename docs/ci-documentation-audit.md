@@ -1,11 +1,21 @@
-# Keep the documentation CI audit current
+# Documentation-only CI
 
-A documentation-only pull request needs no package tests only while the tracked
-programs cannot use the changed prose. The certificate in
-`scripts/ci-docs-audit.json` records the reviewed input tree. Both the base and
-head must match their own certificates. A stale certificate keeps full CI;
-the real-checkout test in `scripts/ci-docs.test.mjs` also fails full CI so you
-cannot silently lose the shortcut on the next code change.
+A prose change should not need the database and browser suites. A pull request
+that changes only regular Markdown under `docs/` (outside `docs/receipts/`) or at
+the repository root can run `changes`, `documentation` and `summary` alone.
+The document check reads the exact git revisions, validates UTF-8, rejects NUL
+characters and requires a final newline. It accepts deleted regular documents.
+
+This exemption depends on the reader audit recorded in
+`scripts/ci-docs-audit.json`. Its SHA-256 value identifies every other tracked
+input, including executable files, configuration, package Markdown, JSON receipts
+and symbolic links. Both the old and new trees must match that inventory.
+Adding, changing or removing any of those inputs restores the full fallback for
+documentation-only changes. Package-only changes keep their existing package
+selection. Mixed documentation and code changes keep the full fallback.
+
+The real-checkout test in `scripts/ci-docs.test.mjs` also fails full CI when
+the certificate is stale, so a later code change cannot silently lose the shortcut.
 
 ## Review before renewal
 
@@ -63,13 +73,15 @@ passed because they created their own valid certificates. No test checked
 whether the real repository certificate was current.
 
 Renewal for this repair covers the tracked changes from that reviewed tree
-through `9ae64c55ce9b42e72d3a7d06deb4fcc5f51fa94d` and the new checkout check.
+through `9ae64c55ce9b42e72d3a7d06deb4fcc5f51fa94d` and the new checkout check. Build contexts can copy prose, but the inspected build
+steps do not execute or validate it.
 The later CI readers consume Git inventories, source modules, manifests,
 lockfiles and saved JSON fixtures. Package source discovery reads JavaScript
 and TypeScript, not Markdown. The address evaluation reads JSON corpora and
 local request journals; its files under `docs/evaluations/` remain pinned.
 The backup startup change reads container state, and the registration changes
-are tests. None adds an exempt Markdown reader.
+are tests. Source inspection found no new exempt Markdown reader. This is not a runtime
+proof for every possible external command or environment.
 
 The existing identity tool reads `packages/identity/SOURCE.md`, which remains
 outside the exemption. The release helper reads notices from the separate
@@ -81,3 +93,14 @@ Run the fixture checks for altered, missing and malformed evidence, mixed
 code/document changes and linked Markdown, as well as the real-checkout check.
 A local temporary revision with only a prose change should select documentation;
 a mixed revision must retain full work. These local proofs need no extra PR.
+
+The certificate does not exempt package Markdown or receipt data. Selected root
+scripts and receipt suites have separate input audits. A lockfile-only change has
+its own [bounded package-selection audit](ci-lockfile-audit.md). Wider path
+selection and measured job grouping remain open in the precise-selection plan.
+The existing equal-tree merge reuse remains in place.
+
+When a documentation-only pull request passes and its merge has the identical
+tree, the main run reuses that result and also skips package suites. This proves
+the same documented selection, rather than rerunning previously unchanged code.
+It does not establish that an unrelated failing or intermittent test has recovered.
