@@ -4,10 +4,10 @@ import {chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, wr
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import test from 'node:test';
-import {copyReceiptFixtureInput} from './ci-dependency-fixture.mjs';
+import {receiptFixtureWorkspace, copyReceiptFixtureInput} from './ci-dependency-fixture.mjs';
 import {createPlan} from './ci-plan.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
-import {loadWorkspace, receiptSuites} from './ci-scope.mjs';
+import {receiptSuites} from './ci-scope.mjs';
 import {readGitBlobs} from './ci-package-revisions.mjs';
 
 const suite = 'test:backup-capacity';
@@ -34,7 +34,7 @@ const inputs = [
   'scripts/ci-package-groups.mjs', 'scripts/ci-run-package-group.mjs',
   'scripts/ci-scope.mjs',
 ];
-const workspace = loadWorkspace();
+const workspace = receiptFixtureWorkspace();
 const expected = receiptSuites.filter(name => name !== suite);
 function fixture(run, alter = () => {}) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-capacity-inputs-'));

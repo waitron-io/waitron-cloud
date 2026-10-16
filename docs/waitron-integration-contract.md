@@ -714,3 +714,57 @@ document holds:
 The job text is `JSON.stringify` of the example's keys in the order shown, with no spaces. Cloud's
 first task pastes the generated document below this paragraph as the section's only `json` block;
 a test on each side compares its copy with it.
+
+```json
+{
+  "origin": "https://cloud.example.test",
+  "installationId": "22345678-1234-4234-8234-123456789abc",
+  "operationId": "52345678-1234-4234-8234-123456789abc",
+  "issuedAt": 1800000000000,
+  "publicKey": "MCowBQYDK2VwAyEAiojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
+  "issuerPublicKey": "MCowBQYDK2VwAyEAgTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q",
+  "issuerKeyId": "R96ljqAPrpQX7hnXZ1W_72kImQIRMu_7BP4fnk8MgFk",
+  "lease": {
+    "payload": "WyJ3YWl0cm9uLWNsb3VkLWFjY2Vzcy12MSIsImh0dHBzOi8vY2xvdWQuZXhhbXBsZS50ZXN0IiwiUjk2bGpxQVBycFFYN2huWFoxV183MmtJbVFJUk11XzdCUDRmbms4TWdGayIsIjEyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsIjIyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsIjMyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsInRlc3QiLCJNQ293QlFZREsyVndBeUVBaW9qajNYUUo4Wlg5VXRzdFBMcGRjc3BuQ2I4ZGxCSWI4M1NJQWJRUGIxdyIsMTgwMDAwMDAwMDAwMCwxODAwMDAzNjAwMDAwLCJjb250cm9sIl0",
+    "signature": "ox6VbdFkKUpIk_kcVJx22X_bo-zbhOFwEw9oXFJTwaj9so7ueA5xmk66vRnbMM22Q0Hx5pc9UG00I1ieO0lACQ"
+  },
+  "cases": [
+    {
+      "name": "valid",
+      "expect": "accepted",
+      "envelope": {
+        "payload": "WyJ3YWl0cm9uLWNsb3VkLW1hY2hpbmUtdjEiLCJodHRwczovL2Nsb3VkLmV4YW1wbGUudGVzdCIsInRyYW5zbGF0aW9uLXN1Ym1pdCIsIjIyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsIjUyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsMTgwMDAwMDAwMDAwMCwie1wicGF5bG9hZFwiOlwiV3lKM1lXbDBjbTl1TFdOc2IzVmtMV0ZqWTJWemN5MTJNU0lzSW1oMGRIQnpPaTh2WTJ4dmRXUXVaWGhoYlhCc1pTNTBaWE4wSWl3aVVqazJiR3B4UVZCeWNGRllOMmh1V0ZveFYxODNNbXRKYlZGSlVrMTFYemRDVURSbWJtczRUV2RHYXlJc0lqRXlNelExTmpjNExURXlNelF0TkRJek5DMDRNak0wTFRFeU16UTFOamM0T1dGaVl5SXNJakl5TXpRMU5qYzRMVEV5TXpRdE5ESXpOQzA0TWpNMExURXlNelExTmpjNE9XRmlZeUlzSWpNeU16UTFOamM0TFRFeU16UXROREl6TkMwNE1qTTBMVEV5TXpRMU5qYzRPV0ZpWXlJc0luUmxjM1FpTENKTlEyOTNRbEZaUkVzeVZuZEJlVVZCYVc5cWFqTllVVW80V2xnNVZYUnpkRkJNY0dSamMzQnVRMkk0Wkd4Q1NXSTRNMU5KUVdKUlVHSXhkeUlzTVRnd01EQXdNREF3TURBd01Dd3hPREF3TURBek5qQXdNREF3TENKamIyNTBjbTlzSWwwXCIsXCJzaWduYXR1cmVcIjpcIm94NlZiZEZrS1VwSWtfa2NWSngyMlhfYm8temJoT0Z3RXc5b1hGSlR3YWo5c283dWVBNXhtazY2dlJuYk1NMjJRMEh4NXBjOVVHMDBJMWllTzBsQUNRXCJ9Iiwie1widmVyc2lvblwiOjEsXCJqb2JTaGEyNTZcIjpcIjIyOTMyM2E2YjBhMzBlN2FmZWZhMTkzYjFmOTEyM2I3ZTc2NDFlYjcwYTMxYjBmMjQzZDVhNDMzY2UxNjUwNGRcIixcImpvYkJ5dGVzXCI6MzQ2fSJd",
+        "signature": "9M2i_bRCLsDofwfGwSnXJR583jbjUPjGyOGzArliMcY_B4wgj4w_lLOog4SZFQG7isJxenH8IRflnMfHuZH5CA",
+        "body": "{\"version\":1,\"country\":\"ES\",\"languages\":{\"default\":\"ca\",\"enabled\":[\"ca\",\"es\",\"en\"]},\"items\":[{\"ref\":\"variant:812\",\"kind\":\"variant\",\"family\":\"product:640\",\"category\":\"TAP BEERS\",\"staffName\":\"PINTA\",\"existing\":{\"en\":\"Pint\"},\"missing\":[\"ca\",\"es\"]}],\"houseStyle\":[{\"kind\":\"product\",\"staffName\":\"CARAJILLO\",\"names\":{\"ca\":\"Cigaló\",\"es\":\"Carajillo\"}}]}"
+      }
+    },
+    {
+      "name": "changed_body",
+      "expect": "401 invalid_proof",
+      "envelope": {
+        "payload": "WyJ3YWl0cm9uLWNsb3VkLW1hY2hpbmUtdjEiLCJodHRwczovL2Nsb3VkLmV4YW1wbGUudGVzdCIsInRyYW5zbGF0aW9uLXN1Ym1pdCIsIjIyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsIjUyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsMTgwMDAwMDAwMDAwMCwie1wicGF5bG9hZFwiOlwiV3lKM1lXbDBjbTl1TFdOc2IzVmtMV0ZqWTJWemN5MTJNU0lzSW1oMGRIQnpPaTh2WTJ4dmRXUXVaWGhoYlhCc1pTNTBaWE4wSWl3aVVqazJiR3B4UVZCeWNGRllOMmh1V0ZveFYxODNNbXRKYlZGSlVrMTFYemRDVURSbWJtczRUV2RHYXlJc0lqRXlNelExTmpjNExURXlNelF0TkRJek5DMDRNak0wTFRFeU16UTFOamM0T1dGaVl5SXNJakl5TXpRMU5qYzRMVEV5TXpRdE5ESXpOQzA0TWpNMExURXlNelExTmpjNE9XRmlZeUlzSWpNeU16UTFOamM0TFRFeU16UXROREl6TkMwNE1qTTBMVEV5TXpRMU5qYzRPV0ZpWXlJc0luUmxjM1FpTENKTlEyOTNRbEZaUkVzeVZuZEJlVVZCYVc5cWFqTllVVW80V2xnNVZYUnpkRkJNY0dSamMzQnVRMkk0Wkd4Q1NXSTRNMU5KUVdKUlVHSXhkeUlzTVRnd01EQXdNREF3TURBd01Dd3hPREF3TURBek5qQXdNREF3TENKamIyNTBjbTlzSWwwXCIsXCJzaWduYXR1cmVcIjpcIm94NlZiZEZrS1VwSWtfa2NWSngyMlhfYm8temJoT0Z3RXc5b1hGSlR3YWo5c283dWVBNXhtazY2dlJuYk1NMjJRMEh4NXBjOVVHMDBJMWllTzBsQUNRXCJ9Iiwie1widmVyc2lvblwiOjEsXCJqb2JTaGEyNTZcIjpcIjIyOTMyM2E2YjBhMzBlN2FmZWZhMTkzYjFmOTEyM2I3ZTc2NDFlYjcwYTMxYjBmMjQzZDVhNDMzY2UxNjUwNGRcIixcImpvYkJ5dGVzXCI6MzQ2fSJd",
+        "signature": "9M2i_bRCLsDofwfGwSnXJR583jbjUPjGyOGzArliMcY_B4wgj4w_lLOog4SZFQG7isJxenH8IRflnMfHuZH5CA",
+        "body": "{\"version\":1,\"country\":\"ES\",\"languages\":{\"default\":\"ca\",\"enabled\":[\"ca\",\"es\",\"en\"]},\"items\":[{\"ref\":\"variant:812\",\"kind\":\"variant\",\"family\":\"product:640\",\"category\":\"TAP BEERS\",\"staffName\":\"PINTO\",\"existing\":{\"en\":\"Pint\"},\"missing\":[\"ca\",\"es\"]}],\"houseStyle\":[{\"kind\":\"product\",\"staffName\":\"CARAJILLO\",\"names\":{\"ca\":\"Cigaló\",\"es\":\"Carajillo\"}}]}"
+      }
+    },
+    {
+      "name": "wrong_length",
+      "expect": "401 invalid_proof",
+      "envelope": {
+        "payload": "WyJ3YWl0cm9uLWNsb3VkLW1hY2hpbmUtdjEiLCJodHRwczovL2Nsb3VkLmV4YW1wbGUudGVzdCIsInRyYW5zbGF0aW9uLXN1Ym1pdCIsIjIyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsIjUyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsMTgwMDAwMDAwMDAwMCwie1wicGF5bG9hZFwiOlwiV3lKM1lXbDBjbTl1TFdOc2IzVmtMV0ZqWTJWemN5MTJNU0lzSW1oMGRIQnpPaTh2WTJ4dmRXUXVaWGhoYlhCc1pTNTBaWE4wSWl3aVVqazJiR3B4UVZCeWNGRllOMmh1V0ZveFYxODNNbXRKYlZGSlVrMTFYemRDVURSbWJtczRUV2RHYXlJc0lqRXlNelExTmpjNExURXlNelF0TkRJek5DMDRNak0wTFRFeU16UTFOamM0T1dGaVl5SXNJakl5TXpRMU5qYzRMVEV5TXpRdE5ESXpOQzA0TWpNMExURXlNelExTmpjNE9XRmlZeUlzSWpNeU16UTFOamM0TFRFeU16UXROREl6TkMwNE1qTTBMVEV5TXpRMU5qYzRPV0ZpWXlJc0luUmxjM1FpTENKTlEyOTNRbEZaUkVzeVZuZEJlVVZCYVc5cWFqTllVVW80V2xnNVZYUnpkRkJNY0dSamMzQnVRMkk0Wkd4Q1NXSTRNMU5KUVdKUlVHSXhkeUlzTVRnd01EQXdNREF3TURBd01Dd3hPREF3TURBek5qQXdNREF3TENKamIyNTBjbTlzSWwwXCIsXCJzaWduYXR1cmVcIjpcIm94NlZiZEZrS1VwSWtfa2NWSngyMlhfYm8temJoT0Z3RXc5b1hGSlR3YWo5c283dWVBNXhtazY2dlJuYk1NMjJRMEh4NXBjOVVHMDBJMWllTzBsQUNRXCJ9Iiwie1widmVyc2lvblwiOjEsXCJqb2JTaGEyNTZcIjpcIjIyOTMyM2E2YjBhMzBlN2FmZWZhMTkzYjFmOTEyM2I3ZTc2NDFlYjcwYTMxYjBmMjQzZDVhNDMzY2UxNjUwNGRcIixcImpvYkJ5dGVzXCI6MzQ3fSJd",
+        "signature": "1c-X-l8TG37Zh7EsruFa9i7Fbshp4a3VJBLfv8ktHgsXNAiVvtq31w9DxgabzGYjd5Yzl5g1fWcNBW6geeklAg",
+        "body": "{\"version\":1,\"country\":\"ES\",\"languages\":{\"default\":\"ca\",\"enabled\":[\"ca\",\"es\",\"en\"]},\"items\":[{\"ref\":\"variant:812\",\"kind\":\"variant\",\"family\":\"product:640\",\"category\":\"TAP BEERS\",\"staffName\":\"PINTA\",\"existing\":{\"en\":\"Pint\"},\"missing\":[\"ca\",\"es\"]}],\"houseStyle\":[{\"kind\":\"product\",\"staffName\":\"CARAJILLO\",\"names\":{\"ca\":\"Cigaló\",\"es\":\"Carajillo\"}}]}"
+      }
+    },
+    {
+      "name": "replayed_operation",
+      "expect": "409 conflict after valid",
+      "envelope": {
+        "payload": "WyJ3YWl0cm9uLWNsb3VkLW1hY2hpbmUtdjEiLCJodHRwczovL2Nsb3VkLmV4YW1wbGUudGVzdCIsInRyYW5zbGF0aW9uLXN1Ym1pdCIsIjIyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsIjUyMzQ1Njc4LTEyMzQtNDIzNC04MjM0LTEyMzQ1Njc4OWFiYyIsMTgwMDAwMDAwMDAwMCwie1wicGF5bG9hZFwiOlwiV3lKM1lXbDBjbTl1TFdOc2IzVmtMV0ZqWTJWemN5MTJNU0lzSW1oMGRIQnpPaTh2WTJ4dmRXUXVaWGhoYlhCc1pTNTBaWE4wSWl3aVVqazJiR3B4UVZCeWNGRllOMmh1V0ZveFYxODNNbXRKYlZGSlVrMTFYemRDVURSbWJtczRUV2RHYXlJc0lqRXlNelExTmpjNExURXlNelF0TkRJek5DMDRNak0wTFRFeU16UTFOamM0T1dGaVl5SXNJakl5TXpRMU5qYzRMVEV5TXpRdE5ESXpOQzA0TWpNMExURXlNelExTmpjNE9XRmlZeUlzSWpNeU16UTFOamM0TFRFeU16UXROREl6TkMwNE1qTTBMVEV5TXpRMU5qYzRPV0ZpWXlJc0luUmxjM1FpTENKTlEyOTNRbEZaUkVzeVZuZEJlVVZCYVc5cWFqTllVVW80V2xnNVZYUnpkRkJNY0dSamMzQnVRMkk0Wkd4Q1NXSTRNMU5KUVdKUlVHSXhkeUlzTVRnd01EQXdNREF3TURBd01Dd3hPREF3TURBek5qQXdNREF3TENKamIyNTBjbTlzSWwwXCIsXCJzaWduYXR1cmVcIjpcIm94NlZiZEZrS1VwSWtfa2NWSngyMlhfYm8temJoT0Z3RXc5b1hGSlR3YWo5c283dWVBNXhtazY2dlJuYk1NMjJRMEh4NXBjOVVHMDBJMWllTzBsQUNRXCJ9Iiwie1widmVyc2lvblwiOjEsXCJqb2JTaGEyNTZcIjpcImY2NGQ5ZTdhNzU4MWMzZjUzZjk0MjgwYmFmNDVkYmY1NWVhZGZjMjkwZmE0N2U0NWNlZWUyODcyODA0YjFiNTlcIixcImpvYkJ5dGVzXCI6MzQ2fSJd",
+        "signature": "vUNrsO7iA8YetktzhIoAzXMVToakQ4Erj6u3LlDJdFy5UwuA5Q_jfhMl2RsFrTgb-90rEYK2GFT9viUG8KoPCA",
+        "body": "{\"version\":1,\"country\":\"ES\",\"languages\":{\"default\":\"ca\",\"enabled\":[\"ca\",\"es\",\"en\"]},\"items\":[{\"ref\":\"variant:812\",\"kind\":\"variant\",\"family\":\"product:640\",\"category\":\"TAP BEERS\",\"staffName\":\"CANYA\",\"existing\":{\"en\":\"Pint\"},\"missing\":[\"ca\",\"es\"]}],\"houseStyle\":[{\"kind\":\"product\",\"staffName\":\"CARAJILLO\",\"names\":{\"ca\":\"Cigaló\",\"es\":\"Carajillo\"}}]}"
+      }
+    }
+  ]
+}
+```

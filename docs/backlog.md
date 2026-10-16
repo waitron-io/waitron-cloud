@@ -275,7 +275,10 @@ complete for the agreed translation flow: signed background jobs, missing-name s
 language-neutral first/review passes, consent, usage and retention. The owner approved the
 temporary **US$5 per venue per calendar month (UTC)** safety cap and submit admission of
 **4 in flight, at most 1 per client address**, outside other account requests' shared places.
-This records design progress only; the translation runtime remains to be implemented.
+Task 1 now provides UTF-8 job fingerprints, the four signed translation action names and
+deterministic shared signing vectors published in the canonical contract. Focused checks cover
+changed bytes, malformed fingerprints, the 1 MiB bound and action/signature separation.
+These foundations expose no translation routes or worker; the remaining runtime is still open.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies
@@ -286,10 +289,13 @@ and preserves accepted language tags. Runtime page sizing still needs behavioral
 
 Remaining work:
 
-- **Cloud runtime:** implement and test the original tasks with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 2–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Append migrations at the then-current next numbers without editing landed migrations.
+  Keep Task 12's whole-request bound ahead of the fingerprint helper: a small declared
+  size with a large actual body still hashes that body before refusing the mismatch.
+  A cheap byte-length refusal can be considered there; Task 1 exposes no HTTP route.
 - **Waitron and joint qualification:** lane B A689-21 needs a real pagination loop, bounded
   decoded page reads and integration with existing durable suggestion reconciliation and ref
   deduplication. The current one-collect caller ignores `nextCursor` (`collectTranslation` in

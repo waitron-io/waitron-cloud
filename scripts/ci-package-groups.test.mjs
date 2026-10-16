@@ -13,7 +13,7 @@ const row = selected => ({package: selected.join(' + '), members: selected, shar
 test('full plan packs all short packages exactly once while preserving every other shard', () => {
   const workspace = loadWorkspace();
   const plan = workPlan(scopeForPaths([], workspace), workspace);
-  assert.equal(plan.packages.length, 16);
+  assert.equal(plan.packages.length, 17);
   assert.deepEqual(plan.packages.find(item => item.members), row(members));
   const logical = plan.packages.flatMap(item => item.members ?? [item.package]);
   for (const name of members) assert.equal(logical.filter(value => value === name).length, 1);

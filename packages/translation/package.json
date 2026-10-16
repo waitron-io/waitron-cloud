@@ -1,0 +1,17 @@
+{
+  "name": "@waitron-cloud/translation",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p ../../tsconfig.json",
+    "test": "node --test --test-timeout=30000 test/*.test.ts"
+  },
+  "dependencies": {
+    "@waitron-cloud/registration": "workspace:*",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
+  }
+}
