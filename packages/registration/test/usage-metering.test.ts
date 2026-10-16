@@ -208,3 +208,31 @@ test('a failed reconciliation batch leaves no partial events or false freshness 
  assert.ok(Object.values(recovered.sources).every(source=>source.caughtUp));
  assert.equal(await count('usage_events'),10);
 });
+
+test('a translation measure records its quantity once per job and conflicts on a different one',async()=>{
+ const input={organisationId,venueId,type:'translation.cost_micro_usd' as const,quantity:731n,sourceKind:'translation_job' as const,sourceReference:randomUUID(),occurredAt:new Date().toISOString()};
+ await transaction(pool,c=>recordUsageEvent(c,input));await transaction(pool,c=>recordUsageEvent(c,input));
+ assert.equal((await pool.query('SELECT count(*)::integer AS n FROM usage_events WHERE source_reference=$1',[input.sourceReference])).rows[0].n,1);
+ await assert.rejects(transaction(pool,c=>recordUsageEvent(c,{...input,quantity:732n})),/usage_conflict/);
+});
+
+test('each translation measure keeps its quantity and source checks independent',async()=>{
+ const reference=randomUUID();
+ for(const type of ['translation.items_completed','translation.input_tokens','translation.output_tokens','translation.cost_micro_usd'] as const){
+  const event=input({type,quantity:9007199254740993n,sourceKind:'translation_job',sourceReference:reference});
+  const first=await transaction(pool,c=>recordUsageEvent(c,event));
+  assert.deepEqual(await transaction(pool,c=>recordUsageEvent(c,event)),first);
+  await expectCode(transaction(pool,c=>recordUsageEvent(c,{...event,sourceKind:'backup_point'})),'invalid_input');
+  await expectCode(transaction(pool,c=>recordUsageEvent(c,{...event,quantity:0n})),'invalid_input');
+  await expectCode(transaction(pool,c=>recordUsageEvent(c,{...event,quantity:-1n})),'invalid_input');
+  await expectCode(transaction(pool,c=>recordUsageEvent(c,{...event,venueId:secondVenueId})),'usage_conflict');
+ }
+ assert.deepEqual((await pool.query('SELECT event_type,quantity::text FROM usage_events WHERE source_reference=$1 ORDER BY event_type',[reference])).rows,[
+  {event_type:'translation.cost_micro_usd',quantity:'9007199254740993'},
+  {event_type:'translation.input_tokens',quantity:'9007199254740993'},
+  {event_type:'translation.items_completed',quantity:'9007199254740993'},
+  {event_type:'translation.output_tokens',quantity:'9007199254740993'},
+ ]);
+ await assert.rejects(pool.query('UPDATE usage_events SET quantity=1 WHERE source_reference=$1',[reference]),/usage_event_immutable/);
+ await assert.rejects(pool.query('DELETE FROM usage_events WHERE source_reference=$1',[reference]),/usage_event_immutable/);
+});

@@ -26,7 +26,7 @@ async function oldState(pool: Pool) {
   const result: Record<string, unknown> = {};
   for (const { tablename } of (
     await pool.query(
-      "SELECT tablename FROM pg_tables WHERE schemaname=current_schema() AND tablename NOT LIKE 'fiscal_registry_%' ORDER BY tablename",
+      "SELECT tablename FROM pg_tables WHERE schemaname=current_schema() AND tablename NOT LIKE 'fiscal_registry_%' AND tablename NOT LIKE 'translation_%' ORDER BY tablename",
     )
   ).rows)
     result[tablename] = (
@@ -79,7 +79,7 @@ test('populated release37 upgrades concurrently without changing any old row or 
     const after = await oldState(f.pool);
     assert.deepEqual({ ...after, schema_migrations: before.schema_migrations }, before);
     const ledger = (await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-    assert.equal(ledger.length, 38);
+    assert.equal(ledger.length, migrationNames.length);
     assert.equal(ledger[37].name, '038_fiscal_allocation_registry.sql');
     assert.deepEqual(
       (
@@ -130,7 +130,7 @@ test('interrupted038 rolls back its tables and populated old rows then retry suc
     await migrate(f.pool);
     assert.equal(
       (await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,
-      '38',
+      String(migrationNames.length),
     );
   } finally {
     await held.query('ROLLBACK');
@@ -304,10 +304,10 @@ test('current consumers refuse missing extra changed and pre-registry migration 
     await assert.rejects(checkConsumerSchema(f.pool, root));
     assert.equal(hasReleaseMigrationCount('37'), false);
     await migrate(f.pool);
-    assert.equal(migrationNames.at(-1), '038_fiscal_allocation_registry.sql');
+    assert.equal(migrationNames[37], '038_fiscal_allocation_registry.sql');
     await checkConsumerSchema(f.pool, root);
-    assert.equal(hasReleaseMigrationCount('38'), true);
-    for (const count of ['36', '37', '39']) assert.equal(hasReleaseMigrationCount(count), false);
+    assert.equal(hasReleaseMigrationCount(String(migrationNames.length)), true);
+    for (const count of ['36', '37', String(migrationNames.length - 1), String(migrationNames.length + 1)]) assert.equal(hasReleaseMigrationCount(count), false);
     const tail = (
       await f.pool.query(
         "SELECT * FROM schema_migrations WHERE name='038_fiscal_allocation_registry.sql'",

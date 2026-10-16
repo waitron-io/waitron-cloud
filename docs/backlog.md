@@ -278,6 +278,11 @@ temporary **US$5 per venue per calendar month (UTC)** safety cap and submit admi
 Task 1 now provides UTF-8 job fingerprints, the four signed translation action names and
 deterministic shared signing vectors published in the canonical contract. Focused checks cover
 changed bytes, malformed fingerprints, the 1 MiB bound and action/signature separation.
+Task 2 adds append-only migration 039 for jobs, separately retained bodies, consent history,
+prices and the spending policy. PostgreSQL checks constrain job bounds, reasons, one open job
+per venue and repeat operations. Usage metering accepts four translation quantities with
+per-job replay checks and keeps its existing accounting guards. The service name is allowed
+in the schema; existing installations still receive only their original three service rows.
 These foundations expose no translation routes or worker; the remaining runtime is still open.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
@@ -289,7 +294,7 @@ and preserves accepted language tags. Runtime page sizing still needs behavioral
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 2–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 3–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Append migrations at the then-current next numbers without editing landed migrations.
