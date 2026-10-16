@@ -63,6 +63,17 @@ committed, the worker cannot release its claim immediately; another pass can rec
 after the existing 120-second lease expires. The snapshot receives no invented verdict.
 Apply migration 029 before starting this worker so the job table accepts the new code.
 
+The adapter keeps `docker start -ai` attached while it starts the container.
+Archive input waits until inspection reports that startup has completed. The runtime can install its OOM watcher
+only after the process starts. Sending archive bytes during that interval lets a
+fast restore exhaust memory before the watcher exists. In a local Docker 28.0.4
+probe, delaying the runtime start return by two seconds reproduced a resource
+refusal with exit 73 and `OOMKilled=false`. The same probe with start acknowledged
+before archive input reports `OOMKilled=true`; scratch refusal and a later valid
+restore also pass. All memory, scratch, network, mount and deadline checks remain.
+The original Ubuntu failure lacks these timing details, so this probe establishes
+an executable failure mechanism rather than its exact historical trigger.
+
 Cancellation removes the container and waits for its local attach process to exit. A
 30-second watchdog inside the container also ends work if the parent is killed. Startup and each new restore
 reclaim only containers carrying its owner label whose 60-second ownership deadline has

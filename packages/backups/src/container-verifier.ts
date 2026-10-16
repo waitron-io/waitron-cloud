@@ -69,6 +69,17 @@ export async function createContainerWaitronVerifier(options:ContainerVerifierOp
    const collect=(bytes:Buffer,stdout:boolean)=>{size+=bytes.length;if(size>65536){stop('backup.verifier_output');return;}if(stdout)output+=bytes.toString('utf8');};
    attachedChild.stdout.on('data',chunk=>collect(chunk,true));attachedChild.stderr.on('data',chunk=>collect(chunk,false));
    const closed=attached=new Promise<number|null>(resolve=>{attachedChild.once('error',()=>{stop('backup.verifier_container');resolve(null);});attachedChild.once('close',resolve);});
+   let attachExit:{code:number|null}|undefined;
+   closed.then(code=>{attachExit={code};});
+   // Docker publishes running state after runtime startup installs its OOM watcher.
+   // Keep attach and start together, but withhold archive input until that acknowledgement.
+   for(;;){
+    const [info]=JSON.parse(await docker(['inspect',name]));
+    if(failure)throw Error(failure);
+    if(info.State.Status!=='created')break;
+    if(attachExit)throw Error('backup.verifier_container',{cause:{status:info.State.Status,exitCode:info.State.ExitCode,oomKilled:info.State.OOMKilled,startError:Boolean(info.State.Error),attachCode:attachExit.code,uploadFailed:false}});
+    await delay(10);
+   }
    const input=source.open();
    input.once('error',()=>stop('backup.verifier_input'));
    // Do not delegate throw/return to the source iterator: a broken stdin pipe is not a source-read failure.
@@ -90,6 +101,9 @@ export async function createContainerWaitronVerifier(options:ContainerVerifierOp
    if(info.State.ExitCode===74)throw Error('backup.verifier_timeout');
    if(info.State.ExitCode!==0)throw Error('backup.verifier_failed');
    try{return JSON.parse(output);}catch{throw Error('backup.verifier_output');}
+  }catch(error){
+   if(failure)throw Error(failure);
+   throw error;
   }finally{
    clearTimeout(timer);signal.removeEventListener('abort',abort);
    try{await (removal??removeContainer(name));}finally{child?.kill('SIGKILL');await attached;}

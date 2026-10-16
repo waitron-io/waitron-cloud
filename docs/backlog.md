@@ -492,23 +492,25 @@ notifications separately.
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. The summary also checks the plan's
   package allocation against the planner's registered package names and shard
-  counts. Registration uses six partitions; account HTTP and portal use three
-  each, and backups uses two. The summary requires all six registration results
-  and rejects the former seven-partition allocation. A Node subprocess check
-  partitions copies of every current registration filename plus a new filename
-  and requires each to execute exactly once. Its file workers run one at a time;
-  overlapping fixture bodies fail on a shared scratch-directory lock. This checks file discovery; the real
-  package jobs must still report every test case. Reducing registration from seven
-  jobs to six removes one repeated setup. Compare actual Ubuntu job durations
-  and rounded minutes before claiming a saving or the target of about five minutes
-  per job and 55 rounded minutes per full run. The five-job trial passed every case,
-  but its longest registration job took 313 seconds, so it was not adopted. The
-  unchanged six-job layout also passed every case but reached 348 seconds.
-  The reminder-worker cases now live in `worker-reminders.test.ts`, with their
-  complete test bodies unchanged. Each file prepares its own disposable schema.
-  Node can run the reminder cases separately from quiet opening and recovery
-  cases; every test and the 30-second deadline remain. Case-duration totals guided
-  this split, but only the actual parallel CI jobs can establish its budget.
+  counts. Registration uses five partitions; account HTTP and portal use three
+  each, and backups uses two. The summary requires every registration partition
+  and rejects the former six- and seven-partition allocations. A Node subprocess
+  check partitions copies of every current registration filename plus a new
+  filename and requires each to execute exactly once. Its file workers run one
+  at a time; overlapping fixture bodies fail on a shared scratch-directory lock.
+  This checks file discovery; real package jobs must still report every test case.
+  The reminder-worker cases live in `email-reminders.test.ts`, with their complete
+  test bodies unchanged. The name places them before the worker-loop tests in
+  Node's file allocation. Each file prepares its own disposable schema; every
+  case and the 30-second deadline remain. Earlier five- and six-job layouts took
+  313 and 348 seconds respectively and were not adopted. A later six-job split
+  reached 259 seconds but used the same 23 rounded registration minutes as seven
+  jobs, and its backup job failed the strict native-memory OOM check. The start
+  ordering fix below addresses a reproduced mechanism for that failure.
+  Matched case durations guide the five-job allocation; they do not prove its
+  elapsed time or a saving. Require every registration job within 300 seconds
+  and fewer than 23 rounded registration minutes on the exact candidate head.
+  The wider target of 55 rounded minutes for a full run remains open.
 
   A shard is one partition of a package's tests. Removing a partition
   from both the plan and the job list cannot turn incomplete work green.
@@ -1541,6 +1543,17 @@ notifications separately.
   process verifier denies network, subprocesses, native addons, host reads and outside
   writes. The container adapter adds a disposable container around the deployed
   verifier with total memory, swap disabled, aggregate scratch, no network or host mounts, and ownership cleanup.
+  Archive input now waits until Docker inspection acknowledges runtime startup.
+  A local Docker 28.0.4 runtime with a controlled two-second start-return delay
+  reproduced exit 73 with `OOMKilled=false`: restore input arrived before
+  containerd installed its OOM watcher. Later inspection did not repair the flag.
+  Waiting before streaming passes the same controlled native-memory, scratch
+  and subsequent valid-restore sequence without changing a containment assertion
+  or deadline. This establishes and fixes that startup mechanism; the original
+  Ubuntu failure did not record its start stages, so its exact trigger remains
+  unproved. Gated real-Docker tests keep the archive unopened through startup
+  and cancellation at the start and refusal-inspection boundaries. Diagnostics
+  precede the strict resource assertions so a future failure retains its cause.
   Real Docker fixtures exhaust native memory (192 MiB) and scratch (16 MiB); the parent
   survives and verifies later work. Two real Waitron snapshots at revision
   `00496fcd182a5c2c9189cc3faf0f8f22d3baf8ac` restore with 1024 MiB memory and 256 MiB scratch.

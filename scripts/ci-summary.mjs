@@ -7,7 +7,7 @@ import {assertReceiptSuites} from './ci-run-receipts.mjs';
 import {assertScriptWork} from './ci-scripts.mjs';
 
 export const packageShards = Object.freeze({
-  '@waitron-cloud/registration': 6,
+  '@waitron-cloud/registration': 5,
   '@waitron-cloud/account-http': 3,
   '@waitron-cloud/backups': 2,
   '@waitron-cloud/portal': 3,

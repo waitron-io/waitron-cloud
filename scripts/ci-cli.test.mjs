@@ -25,7 +25,7 @@ test('real squash merges reuse equal trees and run full when main has advanced',
       const sha=git('rev-parse','HEAD');
       const api=path=>path.includes('/commits/') ? [{state:'closed',merged_at:'2026-10-14T09:00:00Z',merge_commit_sha:sha,base:{ref:'main',repo:{full_name:repository}},head:{sha:head,ref:'feature',repo:{full_name:repository}}}] : path.includes('/jobs?') ? {total_count:2,jobs:['changes','summary'].map(name=>({name,status:'completed',conclusion:'success'}))} : {workflow_runs:[{id:42,head_sha:head,head_branch:'feature',head_repository:{full_name:repository},event:'pull_request',path:'.github/workflows/ci.yml',status:'completed',conclusion:'success'}]};
       const plan=createPlan({before:parent,commits:[{}]},{sha,repository,branch:'main'},workspace,git,api);
-      assert.equal(plan.packages.length,behind?17:0);
+      assert.equal(plan.packages.length,behind?16:0);
       if (behind) assert.match(plan.reason,/Merge tree differs/);
       assert.deepEqual(plan.reuse,behind?null:{sha:head,runId:42});
     }
