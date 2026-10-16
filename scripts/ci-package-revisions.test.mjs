@@ -34,6 +34,88 @@ function fixture(run) {
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 
+test('root directory APIs retain helpers loaded by real immediate-entry scans', () => {
+  for (const [api, module, entry] of [
+    ['readdir', 'node:fs/promises', 'item'],
+    ['opendir', 'node:fs/promises', 'item.name'],
+    ['opendirSync', 'node:fs', 'item.name'],
+  ]) for (const binding of ['direct', 'stored']) fixture(({root, git, write, commit}) => {
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('root helper loaded');\n");
+    write('nested/unrelated-adapter.mjs', "import '../packages/unrelated/src/index.mjs';\n");
+    const directory = "new URL('../../../', import.meta.url)";
+    write('packages/portal/src/index.mjs', `import {${api}} from '${module}';
+${binding === 'stored' ? `const directory = ${directory};` : ''}
+for await (const item of await ${api}(${binding === 'direct' ? directory : 'directory'})) {
+  const name = ${entry};
+  if (name.endsWith('.mjs')) await import(new URL('../../../' + name, import.meta.url));
+}
+`);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'root helper loaded\n');
+    assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+      {full: false, packages: ['catalogue', 'portal']}, `${api} ${binding}`);
+    assert.deepEqual(scopeForRevisions(['packages/unrelated/src/index.mjs'], loadWorkspace(root), base, head, git),
+      {full: false, packages: ['unrelated']}, `${api} ${binding}`);
+  });
+});
+
+test('directory API options keep every package when a root scan is unresolved', () => {
+  for (const [api, module, entry] of [
+    ['readdir', 'node:fs/promises', 'item'],
+    ['opendir', 'node:fs/promises', 'item.name'],
+    ['opendirSync', 'node:fs', 'item.name'],
+  ]) for (const binding of ['direct', 'stored']) fixture(({root, write, commit, plan}) => {
+    write('adapters/catalogue-reader.mjs', "import '../packages/catalogue/src/index.mjs';\nconsole.log('nested helper loaded');\n");
+    const directory = "new URL('../../../', import.meta.url)";
+    write('packages/portal/src/index.mjs', `import {${api}} from '${module}';
+import {pathToFileURL} from 'node:url';
+${binding === 'stored' ? `const directory = ${directory};` : ''}
+for await (const item of await ${api}(${binding === 'direct' ? directory : 'directory'}, {recursive: true})) {
+  const name = ${entry};
+  if (name.endsWith('-reader.mjs')) {
+    const target = typeof item === 'string' ? new URL(item, new URL('../../../', import.meta.url)) : pathToFileURL(item.parentPath + '/' + item.name);
+    await import(target);
+  }
+}
+`);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'nested helper loaded\n');
+    const result = plan(base, head);
+    assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], `${api} ${binding}`);
+    assert.equal(result.receipts.length, 5);
+    assert.match(result.reason, /Unverified package revisions:.*repository-root directory scan options at packages\/portal\/src\/index\.mjs.*full package suite/s);
+  });
+});
+
+test('directory API readers in saved helpers survive either revision and dirty local files', () => {
+  for (const api of ['readdir', 'opendir', 'opendirSync']) for (const revision of ['base', 'head']) fixture(({root, git, write, commit}) => {
+    const reader = `import {${api}} from '${api === 'opendirSync' ? 'node:fs' : 'node:fs/promises'}';
+const directory = new URL('../', import.meta.url);
+for await (const item of await ${api}(directory)) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`;
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('saved helper loaded');\n");
+    write('tools/scan.mjs', revision === 'base' ? reader : 'export const value = 1;\n');
+    write('packages/portal/src/index.mjs', "import '../../../tools/scan.mjs';\n");
+    write('packages/gateway/src/index.mjs', "import '../../portal/src/index.mjs';\n");
+    const base = commit();
+    if (revision === 'base') assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'saved helper loaded\n');
+    write('tools/scan.mjs', revision === 'head' ? reader : 'export const value = 2;\n');
+    const head = commit();
+    if (revision === 'head') assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'saved helper loaded\n');
+    write('tools/scan.mjs', 'export const value = 3;\n');
+    write('catalogue-adapter.mjs', 'export const value = 3;\n');
+    assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+      {full: false, packages: ['catalogue', 'gateway', 'portal']}, `${api} ${revision}`);
+  });
+});
+
 test('a removed sibling import keeps its former transitive consumers selected', () => fixture(({write, commit, plan}) => {
   write('packages/gateway/src/index.mjs', "import '../../catalogue/src/index.mjs';\n");
   write('packages/portal/src/index.mjs', "import '../../gateway/src/index.mjs';\n");
