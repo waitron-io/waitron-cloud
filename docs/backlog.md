@@ -678,7 +678,15 @@ notifications separately.
   This is a conservative source dependency rule, not evidence that every quoted
   directory is read at runtime. A bare quoted folder name such as `scripts` can
   select extra consumers even when it names a data field. Qualify actual reader
-  operations before narrowing that rule. Repository-root working directories, computed
+  operations before narrowing that rule. Direct `readdirSync(new URL(relativePath,
+  import.meta.url))` calls without options now retain immediate root-level source
+  helpers when the URL names the repository root. A real Node scan proves the
+  loaded helper keeps its package consumer; saved-tree checks retain added and
+  removed helpers, transitive consumers and dirty-checkout independence. A root
+  command working directory alone adds no helper inputs, and a nonrecursive root
+  scan does not traverse nested directories. This bounded rule does not resolve
+  reader aliases, intermediate directory variables, recursive options or other
+  directory APIs. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain
   unresolved. This does not complete the plan's dynamic input and directory rules. Identity still selects all nine packages in the current graph;
   portal alone remains isolated. Unaudited root, unknown and empty changes run everything.

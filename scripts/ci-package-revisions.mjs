@@ -39,8 +39,8 @@ function workspaceAt(sha, workspace, git) {
     return {...manifest, directory: pkg.directory};
   });
   const modules = new Map([...files.keys()].filter(path => /\.[cm]?[jt]sx?$/.test(path)).map(path => [path, read(path)]));
-  // Index named subdirectories. Repository-root references also supply command
-  // working directories and need separate reader evidence before expansion.
+  // Named directories retain possible descendants; direct root scans without
+  // options enumerate immediate entries rather than command working directories.
   const directories = new Map();
   for (const path of modules.keys()) {
     for (let directory = posix.dirname(path); directory !== '.'; directory = posix.dirname(directory)) {
@@ -48,6 +48,7 @@ function workspaceAt(sha, workspace, git) {
       directories.get(directory).push(path);
     }
   }
+  const rootModules = [...modules.keys()].filter(path => posix.dirname(path) === '.');
   for (const pkg of packages) {
     const sources = [];
     for (const [path, file] of files) {
@@ -61,11 +62,12 @@ function workspaceAt(sha, workspace, git) {
     // Visit saved helper sources too; a cycle must not expand the queue forever.
     for (let index = 0; index < sources.length; index++) {
       const source = sources[index];
+      const rootReads = new Set([...source.source.matchAll(/\breaddirSync\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*\)\s*\)/g)].map(match => match[2]));
       for (const value of quotedReferences(source.source)) {
         const target = value.startsWith('.') ? posix.normalize(posix.join(posix.dirname(source.path), value)) : posix.normalize(value);
         if (packages.some(other => target.startsWith(`${other.directory}/`))) continue;
         // Keep descendant helpers without matching a similarly named sibling.
-        for (const path of [...(directories.get(posix.normalize(target).replace(/\/$/, '')) ?? []), target, target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'), target.replace(/\.jsx?$/, '.tsx'),
+        for (const path of [...(target.replace(/\/$/, '') === '.' && rootReads.has(value) ? rootModules : []), ...(directories.get(posix.normalize(target).replace(/\/$/, '')) ?? []), target, target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'), target.replace(/\.jsx?$/, '.tsx'),
           ...['.mjs', '.cjs', '.js', '.ts', '.mts', '.cts', '.tsx', '.jsx'].flatMap(ext => [target + ext, posix.join(target, 'index' + ext)])]) {
           if (!modules.has(path) || visited.has(path)) continue;
           visited.add(path);
