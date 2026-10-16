@@ -1,0 +1,1114 @@
+{
+  "version": 1,
+  "authored": "2026-10-16",
+  "license": "CC0-1.0 for original selection, queries and annotations; independently transcribed civic address facts, no copied prose or provider output",
+  "method": "20 civic addresses, each with one independently authored variant. Fictional units test preservation, not existence. Expected aliases fixed before authenticated provider dispatch.",
+  "cases": [
+    {
+      "id": "madrid-base",
+      "query": "Plaza de Cibeles 1, 28014 Madrid",
+      "expected": {
+        "street": [
+          "Plaza de Cibeles"
+        ],
+        "number": "1",
+        "postcode": "28014",
+        "locality": [
+          "Madrid"
+        ],
+        "province": [
+          "Madrid",
+          "28"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "base"
+      ],
+      "source": "https://www.madrid.es/portales/munimadrid/es/Palacio-de-Cibeles/?vgnextoid=535e5a0f8161c010VgnVCM1000000b205a0aRCRD"
+    },
+    {
+      "id": "madrid-variant",
+      "query": "Plaza de Cibeles 1, 28015 Madrid",
+      "expected": {
+        "street": [
+          "Plaza de Cibeles"
+        ],
+        "number": "1",
+        "postcode": "28014",
+        "locality": [
+          "Madrid"
+        ],
+        "province": [
+          "Madrid",
+          "28"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "postcode-conflict"
+      ],
+      "source": "https://www.madrid.es/portales/munimadrid/es/Palacio-de-Cibeles/?vgnextoid=535e5a0f8161c010VgnVCM1000000b205a0aRCRD"
+    },
+    {
+      "id": "barcelona-base",
+      "query": "Plaça de Sant Jaume 1, 08002 Barcelona",
+      "expected": {
+        "street": [
+          "Plaça de Sant Jaume",
+          "Plaza de San Jaime",
+          "Plaça Sant Jaume"
+        ],
+        "number": "1",
+        "postcode": "08002",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona",
+          "08"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "base"
+      ],
+      "source": "https://ajuntament.barcelona.cat/es/organigrama-municipal/organ/Concejal%C3%ADa%20del%20Distrito%20de%20Sant%20Mart%C3%AD"
+    },
+    {
+      "id": "barcelona-variant",
+      "query": "Plaza de San Jaime 1, Barcelona",
+      "expected": {
+        "street": [
+          "Plaça de Sant Jaume",
+          "Plaza de San Jaime",
+          "Plaça Sant Jaume"
+        ],
+        "number": "1",
+        "postcode": "08002",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona",
+          "08"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "language-variant"
+      ],
+      "source": "https://ajuntament.barcelona.cat/es/organigrama-municipal/organ/Concejal%C3%ADa%20del%20Distrito%20de%20Sant%20Mart%C3%AD"
+    },
+    {
+      "id": "valencia-base",
+      "query": "Plaça de l’Ajuntament 1, 46002 València",
+      "expected": {
+        "street": [
+          "Plaça de l’Ajuntament",
+          "Plaza del Ayuntamiento",
+          "Plaça de l'Ajuntament"
+        ],
+        "number": "1",
+        "postcode": "46002",
+        "locality": [
+          "València",
+          "Valencia"
+        ],
+        "province": [
+          "València",
+          "Valencia",
+          "Valencia/València",
+          "46"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "base"
+      ],
+      "source": "https://www.valencia.es/val/buscador"
+    },
+    {
+      "id": "valencia-variant",
+      "query": "Plaza del Ayuntamiento 1, Valencia",
+      "expected": {
+        "street": [
+          "Plaça de l’Ajuntament",
+          "Plaza del Ayuntamiento",
+          "Plaça de l'Ajuntament"
+        ],
+        "number": "1",
+        "postcode": "46002",
+        "locality": [
+          "València",
+          "Valencia"
+        ],
+        "province": [
+          "València",
+          "Valencia",
+          "Valencia/València",
+          "46"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "language-variant"
+      ],
+      "source": "https://www.valencia.es/val/buscador"
+    },
+    {
+      "id": "sevilla-base",
+      "query": "Plaza Nueva 1, 41001 Sevilla",
+      "expected": {
+        "street": [
+          "Plaza Nueva"
+        ],
+        "number": "1",
+        "postcode": "41001",
+        "locality": [
+          "Sevilla"
+        ],
+        "province": [
+          "Sevilla",
+          "41"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "base"
+      ],
+      "source": "https://www.sevilla.org/ayuntamiento/el-ayuntamiento"
+    },
+    {
+      "id": "sevilla-variant",
+      "query": "Plaza Nueba 1, Sevilla",
+      "expected": {
+        "street": [
+          "Plaza Nueva"
+        ],
+        "number": "1",
+        "postcode": "41001",
+        "locality": [
+          "Sevilla"
+        ],
+        "province": [
+          "Sevilla",
+          "41"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "typo"
+      ],
+      "source": "https://www.sevilla.org/ayuntamiento/el-ayuntamiento"
+    },
+    {
+      "id": "coruna-base",
+      "query": "Praza de María Pita 1, 15001 A Coruña",
+      "expected": {
+        "street": [
+          "Praza de María Pita",
+          "Plaza de María Pita"
+        ],
+        "number": "1",
+        "postcode": "15001",
+        "locality": [
+          "A Coruña",
+          "La Coruña"
+        ],
+        "province": [
+          "A Coruña",
+          "La Coruña",
+          "15"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "base"
+      ],
+      "source": "https://www.coruna.gal/web/gl/comunicate/puntos-de-rexistro/oficina-de-asistencia-en-materia-de-rexistro/rexistro-xeral-palacio-municipal-maria-pita/entidad/1453690656767?argIdioma=gl"
+    },
+    {
+      "id": "coruna-variant",
+      "query": "Plaza Maria Pita 1, La Coruna",
+      "expected": {
+        "street": [
+          "Praza de María Pita",
+          "Plaza de María Pita"
+        ],
+        "number": "1",
+        "postcode": "15001",
+        "locality": [
+          "A Coruña",
+          "La Coruña"
+        ],
+        "province": [
+          "A Coruña",
+          "La Coruña",
+          "15"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "accent-language-variant"
+      ],
+      "source": "https://www.coruna.gal/web/gl/comunicate/puntos-de-rexistro/oficina-de-asistencia-en-materia-de-rexistro/rexistro-xeral-palacio-municipal-maria-pita/entidad/1453690656767?argIdioma=gl"
+    },
+    {
+      "id": "zaragoza-base",
+      "query": "Plaza de Nuestra Señora del Pilar 18, 50003 Zaragoza",
+      "expected": {
+        "street": [
+          "Plaza de Nuestra Señora del Pilar",
+          "Plaza del Pilar"
+        ],
+        "number": "18",
+        "postcode": "50003",
+        "locality": [
+          "Zaragoza"
+        ],
+        "province": [
+          "Zaragoza",
+          "50"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "base"
+      ],
+      "source": "https://www.zaragoza.es/sede/servicio/equipamiento/28116"
+    },
+    {
+      "id": "zaragoza-variant",
+      "query": "Plaza del Pilar 18, 50004 Zaragoza",
+      "expected": {
+        "street": [
+          "Plaza de Nuestra Señora del Pilar",
+          "Plaza del Pilar"
+        ],
+        "number": "18",
+        "postcode": "50003",
+        "locality": [
+          "Zaragoza"
+        ],
+        "province": [
+          "Zaragoza",
+          "50"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "postcode-conflict"
+      ],
+      "source": "https://www.zaragoza.es/sede/servicio/equipamiento/28116"
+    },
+    {
+      "id": "merida-base",
+      "query": "Plaza de España 1, 06800 Mérida",
+      "expected": {
+        "street": [
+          "Plaza de España"
+        ],
+        "number": "1",
+        "postcode": "06800",
+        "locality": [
+          "Mérida"
+        ],
+        "province": [
+          "Badajoz",
+          "06"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "base"
+      ],
+      "source": "https://merida.es/servicios-municipales/cultura/delegacion-festejos/"
+    },
+    {
+      "id": "merida-variant",
+      "query": "Plaza España 1",
+      "expected": {
+        "street": [
+          "Plaza de España"
+        ],
+        "number": "1",
+        "postcode": "06800",
+        "locality": [
+          "Mérida"
+        ],
+        "province": [
+          "Badajoz",
+          "06"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "ambiguous-no-locality"
+      ],
+      "source": "https://merida.es/servicios-municipales/cultura/delegacion-festejos/"
+    },
+    {
+      "id": "salamanca-base",
+      "query": "Plaza Mayor 1, 37002 Salamanca",
+      "expected": {
+        "street": [
+          "Plaza Mayor"
+        ],
+        "number": "1",
+        "postcode": "37002",
+        "locality": [
+          "Salamanca"
+        ],
+        "province": [
+          "Salamanca",
+          "37"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "base"
+      ],
+      "source": "https://www.aytosalamanca.gob.es/sta/CarpetaPublic/doEvent?APP_CODE=STA&PAGE_CODE=ASAL_QUEESLASEDE"
+    },
+    {
+      "id": "salamanca-variant",
+      "query": "Plaza Mayor 1",
+      "expected": {
+        "street": [
+          "Plaza Mayor"
+        ],
+        "number": "1",
+        "postcode": "37002",
+        "locality": [
+          "Salamanca"
+        ],
+        "province": [
+          "Salamanca",
+          "37"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "ambiguous-no-locality"
+      ],
+      "source": "https://www.aytosalamanca.gob.es/sta/CarpetaPublic/doEvent?APP_CODE=STA&PAGE_CODE=ASAL_QUEESLASEDE"
+    },
+    {
+      "id": "cangas-base",
+      "query": "Avenida de Covadonga 1, 33550 Cangas de Onís",
+      "expected": {
+        "street": [
+          "Avenida de Covadonga"
+        ],
+        "number": "1",
+        "postcode": "33550",
+        "locality": [
+          "Cangas de Onís",
+          "Cangues d’Onís"
+        ],
+        "province": [
+          "Asturias",
+          "Principado de Asturias",
+          "33"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": true,
+      "inScope": true,
+      "tags": [
+        "base"
+      ],
+      "source": "https://www.cangasdeonis.es/ast/bienvenida"
+    },
+    {
+      "id": "cangas-variant",
+      "query": "Avda Covadonga 1, Cangas de Onis",
+      "expected": {
+        "street": [
+          "Avenida de Covadonga"
+        ],
+        "number": "1",
+        "postcode": "33550",
+        "locality": [
+          "Cangas de Onís",
+          "Cangues d’Onís"
+        ],
+        "province": [
+          "Asturias",
+          "Principado de Asturias",
+          "33"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": true,
+      "inScope": true,
+      "tags": [
+        "accent-abbreviation"
+      ],
+      "source": "https://www.cangasdeonis.es/ast/bienvenida"
+    },
+    {
+      "id": "albarracin-base",
+      "query": "Plaza Mayor 1, 44126 Albarracín",
+      "expected": {
+        "street": [
+          "Plaza Mayor"
+        ],
+        "number": "1",
+        "postcode": "44126",
+        "locality": [
+          "Albarracín"
+        ],
+        "province": [
+          "Teruel",
+          "44"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": true,
+      "inScope": true,
+      "tags": [
+        "base"
+      ],
+      "source": "https://www.albarracin.es/enlaces/"
+    },
+    {
+      "id": "albarracin-variant",
+      "query": "Plaza Mayor 1, 44100 Albarracin",
+      "expected": {
+        "street": [
+          "Plaza Mayor"
+        ],
+        "number": "1",
+        "postcode": "44126",
+        "locality": [
+          "Albarracín"
+        ],
+        "province": [
+          "Teruel",
+          "44"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": true,
+      "inScope": true,
+      "tags": [
+        "postcode-conflict"
+      ],
+      "source": "https://www.albarracin.es/enlaces/"
+    },
+    {
+      "id": "valderrobres-base",
+      "query": "Plaza de España 1, 44580 Valderrobres",
+      "expected": {
+        "street": [
+          "Plaza de España"
+        ],
+        "number": "1",
+        "postcode": "44580",
+        "locality": [
+          "Valderrobres",
+          "Vall-de-roures"
+        ],
+        "province": [
+          "Teruel",
+          "44"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": true,
+      "inScope": true,
+      "tags": [
+        "base"
+      ],
+      "source": "https://www.valderrobres.es/wp-content/uploads/sites/27/2023/09/20230516_Acta_PLENO_ORDINARIO_-27_04_2023.pdf"
+    },
+    {
+      "id": "valderrobres-variant",
+      "query": "Plaza de Espana 1, Valderrobres, piso 2 puerta B",
+      "expected": {
+        "street": [
+          "Plaza de España"
+        ],
+        "number": "1",
+        "postcode": "44580",
+        "locality": [
+          "Valderrobres",
+          "Vall-de-roures"
+        ],
+        "province": [
+          "Teruel",
+          "44"
+        ],
+        "unit": "2 B"
+      },
+      "region": "mainland",
+      "rural": true,
+      "inScope": true,
+      "tags": [
+        "synthetic-unit"
+      ],
+      "source": "https://www.valderrobres.es/wp-content/uploads/sites/27/2023/09/20230516_Acta_PLENO_ORDINARIO_-27_04_2023.pdf"
+    },
+    {
+      "id": "besalu-base",
+      "query": "Plaça de la Llibertat 1, 17850 Besalú",
+      "expected": {
+        "street": [
+          "Plaça de la Llibertat",
+          "Plaza de la Libertad"
+        ],
+        "number": "1",
+        "postcode": "17850",
+        "locality": [
+          "Besalú"
+        ],
+        "province": [
+          "Girona",
+          "Gerona",
+          "17"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": true,
+      "inScope": true,
+      "tags": [
+        "base"
+      ],
+      "source": "https://besalu.cat/ajuntament-3/"
+    },
+    {
+      "id": "besalu-variant",
+      "query": "Plaza de la Libertad 1, Besalu",
+      "expected": {
+        "street": [
+          "Plaça de la Llibertat",
+          "Plaza de la Libertad"
+        ],
+        "number": "1",
+        "postcode": "17850",
+        "locality": [
+          "Besalú"
+        ],
+        "province": [
+          "Girona",
+          "Gerona",
+          "17"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": true,
+      "inScope": true,
+      "tags": [
+        "language-variant"
+      ],
+      "source": "https://besalu.cat/ajuntament-3/"
+    },
+    {
+      "id": "palma-base",
+      "query": "Plaça de Cort 1, 07001 Palma",
+      "expected": {
+        "street": [
+          "Plaça de Cort"
+        ],
+        "number": "1",
+        "postcode": "07001",
+        "locality": [
+          "Palma",
+          "Palma de Mallorca"
+        ],
+        "province": [
+          "Illes Balears",
+          "Balearic Islands",
+          "Baleares",
+          "Islas Baleares",
+          "07"
+        ],
+        "unit": null
+      },
+      "region": "island",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "base"
+      ],
+      "source": "https://llengua.palma.cat/index.php?title=Indicacions_de_lloc_i_temps"
+    },
+    {
+      "id": "palma-variant",
+      "query": "Plaza de Cort 1, Palma de Mallorca",
+      "expected": {
+        "street": [
+          "Plaça de Cort"
+        ],
+        "number": "1",
+        "postcode": "07001",
+        "locality": [
+          "Palma",
+          "Palma de Mallorca"
+        ],
+        "province": [
+          "Illes Balears",
+          "Balearic Islands",
+          "Baleares",
+          "Islas Baleares",
+          "07"
+        ],
+        "unit": null
+      },
+      "region": "island",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "language-variant"
+      ],
+      "source": "https://llengua.palma.cat/index.php?title=Indicacions_de_lloc_i_temps"
+    },
+    {
+      "id": "mao-base",
+      "query": "Plaça de la Constitució 1, 07701 Maó",
+      "expected": {
+        "street": [
+          "Plaça de la Constitució",
+          "Plaza de la Constitución"
+        ],
+        "number": "1",
+        "postcode": "07701",
+        "locality": [
+          "Maó",
+          "Mahón",
+          "Mahón-Maó"
+        ],
+        "province": [
+          "Illes Balears",
+          "Balearic Islands",
+          "Baleares",
+          "Islas Baleares",
+          "07"
+        ],
+        "unit": null
+      },
+      "region": "island",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "base"
+      ],
+      "source": "https://ajmao.org/contingut.aspx?idioma=2&idpub=31994"
+    },
+    {
+      "id": "mao-variant",
+      "query": "Plaza de la Constitucion 1, Mahon",
+      "expected": {
+        "street": [
+          "Plaça de la Constitució",
+          "Plaza de la Constitución"
+        ],
+        "number": "1",
+        "postcode": "07701",
+        "locality": [
+          "Maó",
+          "Mahón",
+          "Mahón-Maó"
+        ],
+        "province": [
+          "Illes Balears",
+          "Balearic Islands",
+          "Baleares",
+          "Islas Baleares",
+          "07"
+        ],
+        "unit": null
+      },
+      "region": "island",
+      "rural": false,
+      "inScope": true,
+      "tags": [
+        "language-variant"
+      ],
+      "source": "https://ajmao.org/contingut.aspx?idioma=2&idpub=31994"
+    },
+    {
+      "id": "tenerife-base",
+      "query": "Calle Viera y Clavijo 46, 38004 Santa Cruz de Tenerife",
+      "expected": {
+        "street": [
+          "Calle Viera y Clavijo"
+        ],
+        "number": "46",
+        "postcode": "38004",
+        "locality": [
+          "Santa Cruz de Tenerife"
+        ],
+        "province": [
+          "Santa Cruz de Tenerife",
+          "38"
+        ],
+        "unit": null
+      },
+      "region": "island",
+      "rural": false,
+      "inScope": false,
+      "tags": [
+        "base"
+      ],
+      "source": "https://sede.santacruzdetenerife.es/sede/politica-de-privacidad"
+    },
+    {
+      "id": "tenerife-variant",
+      "query": "Calle Viera y Clavijo 46, Santa Cruz de Tenerife, piso 2 puerta B",
+      "expected": {
+        "street": [
+          "Calle Viera y Clavijo"
+        ],
+        "number": "46",
+        "postcode": "38004",
+        "locality": [
+          "Santa Cruz de Tenerife"
+        ],
+        "province": [
+          "Santa Cruz de Tenerife",
+          "38"
+        ],
+        "unit": "2 B"
+      },
+      "region": "island",
+      "rural": false,
+      "inScope": false,
+      "tags": [
+        "synthetic-unit"
+      ],
+      "source": "https://sede.santacruzdetenerife.es/sede/politica-de-privacidad"
+    },
+    {
+      "id": "laspalmas-base",
+      "query": "Calle León y Castillo 270, 35005 Las Palmas de Gran Canaria",
+      "expected": {
+        "street": [
+          "Calle León y Castillo"
+        ],
+        "number": "270",
+        "postcode": "35005",
+        "locality": [
+          "Las Palmas de Gran Canaria"
+        ],
+        "province": [
+          "Las Palmas",
+          "35"
+        ],
+        "unit": null
+      },
+      "region": "island",
+      "rural": false,
+      "inScope": false,
+      "tags": [
+        "base"
+      ],
+      "source": "https://www.laspalmasgc.es/es/otras-secciones/aviso-legal/"
+    },
+    {
+      "id": "laspalmas-variant",
+      "query": "Calle Leon y Castillo 270, Las Palmas de Gran Canaria",
+      "expected": {
+        "street": [
+          "Calle León y Castillo"
+        ],
+        "number": "270",
+        "postcode": "35005",
+        "locality": [
+          "Las Palmas de Gran Canaria"
+        ],
+        "province": [
+          "Las Palmas",
+          "35"
+        ],
+        "unit": null
+      },
+      "region": "island",
+      "rural": false,
+      "inScope": false,
+      "tags": [
+        "accent-variant"
+      ],
+      "source": "https://www.laspalmasgc.es/es/otras-secciones/aviso-legal/"
+    },
+    {
+      "id": "pamplona-base",
+      "query": "Plaza Consistorial s/n, 31001 Pamplona",
+      "expected": {
+        "street": [
+          "Plaza Consistorial"
+        ],
+        "number": null,
+        "postcode": "31001",
+        "locality": [
+          "Pamplona",
+          "Iruña",
+          "Pamplona/Iruña"
+        ],
+        "province": [
+          "Navarra",
+          "Navarre",
+          "31"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": false,
+      "tags": [
+        "base"
+      ],
+      "source": "https://www.pamplona.es/en/node/3756"
+    },
+    {
+      "id": "pamplona-variant",
+      "query": "Plaza Consistorial s/n, Pamplona, planta 2",
+      "expected": {
+        "street": [
+          "Plaza Consistorial"
+        ],
+        "number": null,
+        "postcode": "31001",
+        "locality": [
+          "Pamplona",
+          "Iruña",
+          "Pamplona/Iruña"
+        ],
+        "province": [
+          "Navarra",
+          "Navarre",
+          "31"
+        ],
+        "unit": "2"
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": false,
+      "tags": [
+        "published-floor"
+      ],
+      "source": "https://www.pamplona.es/en/node/3756"
+    },
+    {
+      "id": "bilbao-base",
+      "query": "Plaza Ernesto Erkoreka 1, 48007 Bilbao",
+      "expected": {
+        "street": [
+          "Plaza Ernesto Erkoreka",
+          "Ernesto Erkoreka plaza"
+        ],
+        "number": "1",
+        "postcode": "48007",
+        "locality": [
+          "Bilbao",
+          "Bilbo"
+        ],
+        "province": [
+          "Bizkaia",
+          "Vizcaya",
+          "Biscay",
+          "48"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": false,
+      "tags": [
+        "base"
+      ],
+      "source": "https://www.bilbao.eus/callejero/jsp/buscador.jsp?idioma=c"
+    },
+    {
+      "id": "bilbao-variant",
+      "query": "Ernesto Erkoreka plaza 1, Bilbo",
+      "expected": {
+        "street": [
+          "Plaza Ernesto Erkoreka",
+          "Ernesto Erkoreka plaza"
+        ],
+        "number": "1",
+        "postcode": "48007",
+        "locality": [
+          "Bilbao",
+          "Bilbo"
+        ],
+        "province": [
+          "Bizkaia",
+          "Vizcaya",
+          "Biscay",
+          "48"
+        ],
+        "unit": null
+      },
+      "region": "mainland",
+      "rural": false,
+      "inScope": false,
+      "tags": [
+        "language-variant"
+      ],
+      "source": "https://www.bilbao.eus/callejero/jsp/buscador.jsp?idioma=c"
+    },
+    {
+      "id": "ceuta-base",
+      "query": "Plaza de África 1, 51001 Ceuta",
+      "expected": {
+        "street": [
+          "Plaza de África"
+        ],
+        "number": "1",
+        "postcode": "51001",
+        "locality": [
+          "Ceuta"
+        ],
+        "province": [
+          "Ceuta",
+          "51"
+        ],
+        "unit": null
+      },
+      "region": "enclave",
+      "rural": false,
+      "inScope": false,
+      "tags": [
+        "base"
+      ],
+      "source": "https://www.ceuta.es/ceuta/informacion-archivo"
+    },
+    {
+      "id": "ceuta-variant",
+      "query": "Plaza de Africa 1, Ceuta",
+      "expected": {
+        "street": [
+          "Plaza de África"
+        ],
+        "number": "1",
+        "postcode": "51001",
+        "locality": [
+          "Ceuta"
+        ],
+        "province": [
+          "Ceuta",
+          "51"
+        ],
+        "unit": null
+      },
+      "region": "enclave",
+      "rural": false,
+      "inScope": false,
+      "tags": [
+        "accent-variant"
+      ],
+      "source": "https://www.ceuta.es/ceuta/informacion-archivo"
+    },
+    {
+      "id": "melilla-base",
+      "query": "Plaza de España 1, 52001 Melilla",
+      "expected": {
+        "street": [
+          "Plaza de España"
+        ],
+        "number": "1",
+        "postcode": "52001",
+        "locality": [
+          "Melilla"
+        ],
+        "province": [
+          "Melilla",
+          "52"
+        ],
+        "unit": null
+      },
+      "region": "enclave",
+      "rural": false,
+      "inScope": false,
+      "tags": [
+        "base"
+      ],
+      "source": "https://sede.melilla.es/sta/CarpetaPublic/doEvent?APP_CODE=STA&PAGE_CODE=PTS2_TITULARSEDE"
+    },
+    {
+      "id": "melilla-variant",
+      "query": "Plaza Espana 1, Melila",
+      "expected": {
+        "street": [
+          "Plaza de España"
+        ],
+        "number": "1",
+        "postcode": "52001",
+        "locality": [
+          "Melilla"
+        ],
+        "province": [
+          "Melilla",
+          "52"
+        ],
+        "unit": null
+      },
+      "region": "enclave",
+      "rural": false,
+      "inScope": false,
+      "tags": [
+        "typo"
+      ],
+      "source": "https://sede.melilla.es/sta/CarpetaPublic/doEvent?APP_CODE=STA&PAGE_CODE=PTS2_TITULARSEDE"
+    }
+  ]
+}

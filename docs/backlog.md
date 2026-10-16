@@ -351,9 +351,19 @@ venue does not subscribe to remote access or backups.
 - **Address lookup.** Offer free geographic address lookup and completion to help
   fill out addresses correctly. The [2026-09-30 scope note](address-lookup-scope.md)
   compares provider terms, cost scenarios, Waitron field mapping and account metering.
-  Choose the provider only after confirming durable address-storage rights, country
-  coverage, measured address quality, licensing, caching and peak-day capacity. Keep
-  manual entry and correction available when lookup is unavailable or wrong.
+  Its 2026-10-16 Spain measurement fixes 40 public/synthetic cases before testing:
+  Google selects 22/28 supported cases, Geoapify autocomplete 17/28 and CartoCiudad
+  3/28 under a conservative first-result mapping. None reaches the proposed 95%
+  gate. The item counters are 78 Google, 80 Geoapify and 41 CartoCiudad attempts,
+  including one conservative documentation probe; no retries or customer data.
+  The harness, corpus, per-case scores and component/latency tables are retained;
+  raw provider responses are local-only and deleted at landing. Google's storage
+  rights remain unresolved, so its row is a quality comparison only. Approve the
+  next residential/rural corpus, query normalization and selection policy before
+  another benchmark. Choose the provider only after confirming durable merchant
+  storage/display rights, licensing, caching, attribution and peak-day capacity.
+  Account allowance and attribution remain open; no product route or UI is added.
+  Keep manual entry and correction available when lookup is unavailable or wrong.
 - **Transactional email.** Offer managed SMTP delivery for password resets and other
   account administration emails from on-prem Waitron. Scope the relay to these
   messages, authenticate requests and handle delivery failures and abuse. The existing
@@ -930,6 +940,14 @@ notifications separately.
   concurrency option to the package script leaves it after the files and does
   not limit this runner. The fixture's default lock capacity for a full local
   parallel run remains open; preserve every assertion when addressing it.
+  A later bare `node scripts/test-postgres.mjs` run repeated `53200` in registration
+  schema reset/migration, including authenticator setup; it reported 576 passes and
+  72 failures among 648 result entries. The last relay-worker test process remained
+  open with no remaining test-database sessions. Stopping its recorded process ID
+  allowed the failure report and wrapper cleanup to finish. Qualify that fixture's
+  failed-setup/resource cleanup separately; the exact remaining handle was not
+  identified. The documented two-file command keeps every original assertion and
+  deadline; the bare run's failure remains recorded.
   The migration batch-size fixture now confines its database-wide DDL trigger
   to its own schema. A second populated fixture proves that other tests can
   migrate while it is active; the original 103-recipient and 100-row batch
@@ -1741,7 +1759,7 @@ changing any check. The assertions and deadlines remain unchanged.
 | Invoice archive | Define the archived objects and access grants, including owner-approved AEAT/advisor access, retention, download and customer exit. Have hosting/archive questions reviewed for the launch country. |
 | Analytics and reports | Choose ingestion, supported source versions, country and cell placement, search/aggregation engine, scheduled reports and group reporting. Elasticsearch is a candidate. |
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |
-| Address lookup (free) | [Scope researched on 2026-09-30](address-lookup-scope.md); provider and implementation remain open. Resolve durable storage rights, Spain-first quality test, peak-day costs, account attribution and allowance policy before implementing lookup and completion for open-source Waitron. See [free services](#free-services-for-open-source-waitron). |
+| Address lookup (free) | [Spain measured on 2026-10-16](address-lookup-scope.md#measured-on-spain-2026-10-16): 40 public/synthetic cases; none of the three tested providers reaches the proposed selectable-match gate under the first-result mapping. Provider and implementation remain open. Approve the next query/selection policy and corpus, confirm durable storage/display rights, and set caching, attribution, peak-day budget and account allowance before implementation. See [free services](#free-services-for-open-source-waitron). |
 | Messaging | The [version 1 on-prem relay contract](transactional-email-relay-contract.md) has a disabled local-proof grant/reservation core; opt-in signed routes, an encrypted queue and a disabled local capture worker with bounded claims and accepted/uncertain outcomes; production origin verification, Waitron durable caller, joint proof and production decisions remain open. Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
 | Automated upgrades | Treat cloud services, cloud-hosted Waitron and on-prem installations separately; choose rollout groups, compatibility, maintenance windows, pause and recovery behaviour. |
 | Monitoring | External venue and remote-route health, backup staleness, customer incidents and bilingual email alerts are implemented locally. Accepted public/staff probes now emit retry-safe organisation usage events and the portal shows their measured total. Add filing/device signals, broader functional checks and performance evidence. The local deployment now schedules usage reconciliation; define production operations, cost, allowance and limit policy before using measurements for enforcement. |
