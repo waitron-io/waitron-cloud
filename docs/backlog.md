@@ -576,24 +576,32 @@ notifications separately.
   and missing or stale audit evidence retain the existing selection or full fallback.
   Adding, changing or removing an executable, configuration or other tracked input
   invalidates the exemption until you audit the readers again and renew the
-  certificate. The real-checkout documentation test now fails full CI when that
-  certificate is stale, with the [review and renewal procedure](ci-documentation-audit.md).
+  certificate. The planner now emits a prominent GitHub warning on every run when
+  that audit is unavailable or stale, including non-document changes, with the
+  [review and renewal procedure](ci-documentation-audit.md).
   The renewed audit covers CI reader/execution changes through #180; #144 was
   the first unrenewed input change. Fixture-only checks had missed the real-tree
   mismatch. Both immutable-tree checks and the conservative full fallback remain.
   The identity source map and gateway JSON reader remain covered by
-  their existing full checks. An isolated change to `scripts/identity-upstream.mjs`
-  or its behavioral test now selects only syntax checks and that test, without
+  their existing full checks. When its input audit is current, an isolated change
+  to `scripts/identity-upstream.mjs` or its behavioral test can select only syntax
+  checks and that test, without
   package, receipt or compiler work. Both saved Git trees must match the complete
   other-input digest in `scripts/ci-scripts-audit.json`; a new reader, changed
   installation input, missing test, symbolic link or stale audit retains full work.
-  The gateway-reconnection validator and its behavioral test have a separate
+  The gateway-reconnection validator and its behavioral test have another
   audited exemption. Their script job checks both files and the measurement
   generator for syntax, then runs the unchanged validator tests. It does not
   launch the measurement generator. Both saved trees must match the gateway
   other-input digest, including the published receipt and generator. Changed
   readers or installation inputs retain full work. Each family pins the other
-  family, so changes spanning both families also retain full work.
+  family, so changes spanning both families also retain full work. The script
+  certificates are currently stale: they and the documentation certificate pin
+  each other. The lockfile certificate also pins the documentation certificate.
+  Restore these shortcuts together through a coordinated reader-audit design in
+  the remaining precise-selection work. The new diagnostics are advisory so
+  renewing one certificate cannot permanently block another; every selector
+  retains its strict comparisons and full fallback.
   Mixed changes also retain the existing fallback. The script job verifies the
   exact checkout and changed paths, and the summary requires its successful result.
   The identity audit covers that helper's only executable consumer, its own spawned test;

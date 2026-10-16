@@ -14,8 +14,9 @@ Adding, changing or removing any of those inputs restores the full fallback for
 documentation-only changes. Package-only changes keep their existing package
 selection. Mixed documentation and code changes keep the full fallback.
 
-The real-checkout test in `scripts/ci-docs.test.mjs` also fails full CI when
-the certificate is stale, so a later code change cannot silently lose the shortcut.
+The planner checks its committed checkout on every run and emits a prominent
+GitHub warning when the certificate is unavailable or stale, including for code
+paths that never enter the document selector. It keeps the existing safe fallback.
 
 ## Review before renewal
 
@@ -56,11 +57,31 @@ Path('scripts/ci-docs-audit.json').write_text(json.dumps(audit, indent=2) + '\n'
 PYTHON
 ```
 
-Commit with your sign-off before running `node --test scripts/ci-docs.test.mjs`.
-The real-checkout check reads committed Git objects, so staged or unstaged
-renewals cannot satisfy it. CI runs the same check on the exact candidate head.
-After any additional non-document change, review and renew again before pushing.
-Keep the full package and dependent-package checks required for your change.
+Commit with your sign-off, run `node --test scripts/ci-docs.test.mjs`, and verify
+the actual committed certificate with this direct production check:
+
+```sh
+node --input-type=module - <<'JAVASCRIPT'
+import {execFileSync} from 'node:child_process';
+import {auditDocumentation} from './scripts/ci-docs.mjs';
+const git = (...args) => execFileSync('git', args, {encoding: 'utf8'});
+auditDocumentation(git('rev-parse', 'HEAD').trim(), git);
+console.log('Committed documentation audit is current');
+JAVASCRIPT
+```
+
+The check reads committed Git objects. An uncommitted renewal cannot satisfy it;
+a staged breakage also remains invisible until committed. CI checks the exact
+candidate checkout. After any further non-document change, review and renew again
+before pushing. Keep the full package and dependent-package checks for your change.
+
+The documentation and root-script certificates currently fingerprint each other.
+Renewing either invalidates the other. The lockfile certificate also pins the
+documentation certificate. For that reason the planner warns rather than requiring
+all these certificates to remain current simultaneously. Each selector still
+requires its own valid evidence in both saved trees. Restoring all shortcuts
+together needs a coordinated audit design in the wider precise-selection work;
+do not remove a pinned input merely to make their hashes agree.
 
 ## The reviewed tree for this repair
 
@@ -73,24 +94,26 @@ passed because they created their own valid certificates. No test checked
 whether the real repository certificate was current.
 
 Renewal for this repair covers the tracked changes from that reviewed tree
-through `9ae64c55ce9b42e72d3a7d06deb4fcc5f51fa94d` and the new checkout check. Build contexts can copy prose, but the inspected build
-steps do not execute or validate it.
+through `9ae64c55ce9b42e72d3a7d06deb4fcc5f51fa94d` and the unconditional planner
+warning. Build contexts can copy prose, but the inspected build steps do not
+execute or validate it.
 The later CI readers consume Git inventories, source modules, manifests,
 lockfiles and saved JSON fixtures. Package source discovery reads JavaScript
 and TypeScript, not Markdown. The address evaluation reads JSON corpora and
 local request journals; its files under `docs/evaluations/` remain pinned.
 The backup startup change reads container state, and the registration changes
-are tests. Source inspection found no new exempt Markdown reader. This is not a runtime
-proof for every possible external command or environment.
+are tests. Source inspection found no new exempt Markdown reader. This is not a
+runtime proof for every possible external command or environment.
 
 The existing identity tool reads `packages/identity/SOURCE.md`, which remains
 outside the exemption. The release helper reads notices from the separate
 Waitron checkout and its staged package, not Cloud prose. Gateway checks read
-`docs/receipts/` JSON, which also remains pinned. The repair changes no planner
-exemption, immutable-tree check, fallback, job requirement or product behavior.
+`docs/receipts/` JSON, which also remains pinned. The repair adds diagnostics without
+changing any planner exemption, immutable-tree comparison, fallback, job requirement
+or product behavior.
 
 Run the fixture checks for altered, missing and malformed evidence, mixed
-code/document changes and linked Markdown, as well as the real-checkout check.
+code/document changes and linked Markdown, as well as the planner warning checks.
 A local temporary revision with only a prose change should select documentation;
 a mixed revision must retain full work. These local proofs need no extra PR.
 
