@@ -346,3 +346,304 @@ result returns as a signed machine report. Waitron owns and lands its adapter
 independently. Preserve the complete consumed
 receipt and local authenticated recovery checks. Cloud operator attribution is
 not local operator authentication, and no registry call belongs on the sale path.
+
+## Translate all, version 1
+
+Designed 2026-10-14; not implemented. The product design is in
+[the Cloud spec](superpowers/specs/2026-10-14-translate-all-design.md) and in Waitron's
+`docs/superpowers/specs/2026-10-14-translate-all-design.md`. This section is the wire contract
+both sides build against; both specs and both plans point here and do not restate it differently.
+Reconciled with both plans on 2026-10-14.
+
+Four machine actions use the existing `waitron-cloud-machine-v1` envelope and a current control
+lease: POST to `/api/installations/translation-submit`, `translation-status`,
+`translation-collect` and `translation-release`. The signed action is the final path segment.
+The existing 60-second proof window, one-hour lease, per-installation and per-IP limits, and the
+refusal of browser Origin headers apply. While Cloud's operator has the service switched off, all
+four answer 503 `temporarily_unavailable`.
+
+### Request limits
+
+| Action | Whole HTTP request at most | Received within |
+|---|---|---|
+| submit | 2,113,536 bytes (twice the 1 MiB job, plus 16 KiB) | 60 s |
+| status, collect, release | 16,384 bytes | 5 s |
+
+Every other account route keeps today's reader, which refuses a body over 16,384 bytes or one not
+received within 5 seconds (`packages/account-http/src/request.ts:6,15,22`); the server's own
+request time limit is 5 seconds today (`packages/account-http/src/server.ts:37`). Submit gets its
+own limits because `body` travels as a JSON string inside the envelope: the job is JSON text, and
+escaping JSON text adds at most one backslash per character, so its escaped form is at most twice
+its size. A request over its size limit is refused with 413 (`translation_job_too_large` for
+submit, `invalid_input` for the others); one not received in time with 408.
+
+### Seeing the service
+
+The `configuration` reply returns exactly three services today, and Waitron refuses any other
+count. A `configuration` request whose signed body is exactly `{"servicesVersion":2}` receives four
+services: the three it receives today and this one:
+
+```json
+{ "service": "content_translation", "state": "ready", "configuration": {}, "health": "unknown", "failure": null, "observedAt": null }
+```
+
+Services are matched by name; their order in the list is not significant. A `configuration` body
+of `{}` keeps receiving exactly three; any other `configuration` body is an invalid proof (401).
+`renew` and `report` replies are unchanged and always carry three, so the box keeps the
+`content_translation` entry from its last version-2 `configuration` reply.
+
+`state: "ready"` means the service is available to this installation; any other state means it is
+not. Every connected installation has it `ready` until the allowance replaces free use. A ready
+`content_translation` never makes a venue monitored, alerted or shown with services: every Cloud
+reader that asks whether an installation has a service switched on, or lists its services to the
+portal, counts only the three original services.
+
+### Submit: a signed fingerprint of a larger body
+
+A job body is larger than the 4,096-character signed body allows, so submit sends it beside the
+envelope:
+
+```json
+{ "payload": "...", "signature": "...", "body": "<the job as a JSON string>" }
+```
+
+The outer request is read by the reader every account route uses: a request not sent as
+`application/json` is refused with 415 `invalid_input`, and one whose body is not a JSON object
+with 400 `invalid_input`. A JSON object must hold exactly those three keys, each a string; any other
+object is an invalid envelope (401). The same rules hold for status, collect and release, whose
+outer request holds `payload` and `signature` only. The signed body is the fingerprint, not the job, with exactly these keys:
+
+```json
+{ "version": 1, "jobSha256": "<SHA-256 hex of the UTF-8 bytes of body>", "jobBytes": 183402 }
+```
+
+`jobSha256` is lowercase hex; `jobBytes` is the whole number of UTF-8 bytes, not characters
+(`Cigaló` is 7 bytes). Cloud checks, in this order:
+
+1. the envelope, proof and lease (401);
+2. `jobBytes` over 1,048,576: 413 `translation_job_too_large`, before anything is hashed;
+3. `jobBytes` and `jobSha256` against `body`, before parsing it: a mismatch is 401 like any other
+   invalid proof;
+4. the job's fields (400 `invalid_request`), and more than 1,000 items (413
+   `translation_job_too_large`);
+5. a submit operation ID already used by this installation: with the same fingerprint, Cloud
+   returns that job's submit reply (with its current state) and checks nothing further; with a
+   different fingerprint, 409 `conflict`;
+6. the installation's `content_translation` service is `ready` (else 403 `permission_denied`),
+   the venue's consent (403 `translation_consent_required`), no open job for the venue (409
+   `translation_job_running`), and the monthly cap (409 `translation_limit_reached`).
+
+The job:
+
+```json
+{
+  "version": 1,
+  "country": "ES",
+  "languages": { "default": "ca", "enabled": ["ca", "es", "en"] },
+  "items": [
+    {
+      "ref": "variant:812",
+      "kind": "variant",
+      "family": "product:640",
+      "category": "TAP BEERS",
+      "staffName": "PINTA",
+      "existing": { "en": "Pint" },
+      "missing": ["ca", "es"]
+    }
+  ],
+  "houseStyle": [
+    { "kind": "product", "staffName": "CARAJILLO", "names": { "ca": "Cigaló", "es": "Carajillo" } }
+  ]
+}
+```
+
+Every key shown is required and no other key is allowed. Lengths are counted as JavaScript string
+length. A job that breaks any rule below is refused with 400 `invalid_request`.
+
+- `version` is 1. `country` is two capital letters naming a region.
+- `languages.enabled` holds 1 to 20 distinct language tags (`ca`, `es`, `pt-BR`) and includes
+  `languages.default`.
+- `items` holds 1 to 1,000 entries, context items included; more is 413.
+- `ref` is the box's own identifier for the item, 1 to 128 characters, unique in the job, opaque to
+  Cloud.
+- `kind` is one of Waitron's nine `TranslationGapKind` values: `product`, `variant`,
+  `option_list`, `option_label`, `extra_list`, `menu`, `section`, `included_menu`, `unit`.
+- `family`, 1 to 128 characters, names the item a variant, options label or menu section belongs
+  to; it equals `ref` for an item that heads its own family. The box lists a family's head before
+  its members.
+- `category` is the family head's category, or `null`. A product has one category, so it is a
+  product's own and a variant's product's; every other kind sends `null`. 1 to 500 characters.
+- `staffName` is 1 to 500 characters.
+- `existing` holds the venue's text in enabled languages that are not missing, each 1 to 500
+  characters; the service never changes it.
+- `missing` lists distinct enabled languages to write, none of them in `existing`.
+- **Context items.** `missing` may be empty only for an item that heads the family of another item
+  in the same job that has languages to write (its `ref` equals that item's `family`). The box sends
+  a head this way when it sends a member of the family but not the head itself: a product whose
+  names are complete while its variants' are not, an options list whose labels are missing, a menu
+  whose sections are missing. Cloud gives it to the model as context and never returns names or a
+  failure for it. At least one item in a job has languages to write.
+- `houseStyle` holds 0 to 300 saved names, each with `kind`, `staffName` (1 to 500 characters) and
+  `names`, mapping enabled languages to 1 to 500 characters.
+
+`total`, `done` and `failed` count only items with languages to write.
+
+**The cap.** Cloud estimates a job's cost from `total` at a stored rate per item. If the estimate
+exceeds what is left of the venue's cap for the calendar month (UTC), submit is refused:
+
+```json
+{ "error": "translation_limit_reached", "fits": 6 }
+```
+
+Every account-http refusal is `{"error":"<code>"}` (`packages/account-http/src/app.ts:98`); this
+one adds `fits`, the whole number (0 or more, below `total`) of items that would fit. The worker
+also stops a running job once its actual cost reaches the cap (status `reason: "limit_reached"`).
+
+Keep the full submit body and operation ID until the result is known. After a lost reply, sign the
+same fingerprint with the same operation ID, a fresh proof time and a live lease: Cloud returns the
+same job rather than making another.
+
+The reply:
+
+```json
+{ "version": 1, "jobId": "00000000-0000-4000-8000-000000000010", "state": "queued", "total": 358 }
+```
+
+### Status, collect and release
+
+Each signs exactly `{"version":1,"jobId":"<uuid>"}` with a fresh operation ID; any other signed
+body is 400 `invalid_request`.
+
+**Status** returns:
+
+```json
+{ "version": 1, "jobId": "...", "state": "running", "total": 358, "done": 180, "failed": 0 }
+```
+
+`state` is one of:
+
+- `queued` and `running`: not finished;
+- `done`: every item with languages to write has a result;
+- `partly_done`: some have a result and the rest failed;
+- `failed`: none has a result;
+- `collected`: released by the box;
+- `expired`: the body and results were deleted 24 hours after the job finished, or 24 hours after
+  it was submitted if it never finished.
+
+A `partly_done` or `failed` status also carries `reason`, one of this list:
+
+| State | `reason` | Meaning | Waitron shows |
+|---|---|---|---|
+| `partly_done` | `limit_reached` | The cap stopped the job. | `content.suggestion_limit_reached` (`fits` 0) |
+| `partly_done` | `provider_failed` | Some batches failed at the provider. | how many could not be done |
+| `failed` | `provider_unavailable` | Every batch failed at the provider. | `content.suggestion_service_unavailable` |
+| `failed` | `consent_required` | Consent was withdrawn before the job started. | `content.suggestion_consent_required` |
+| `failed` | `limit_reached` | The cap was reached before any item was done. | `content.suggestion_limit_reached` (`fits` 0) |
+
+Poll every five seconds at most.
+
+**Collect**, by state: `done` or `partly_done` returns the results; `queued`, `running` or
+`failed` is 409 `translation_not_ready`; `collected` or `expired` is 410 `translation_expired`.
+
+```json
+{
+  "version": 1,
+  "jobId": "...",
+  "state": "done",
+  "results": [
+    {
+      "ref": "variant:812",
+      "names": { "ca": "Pinta", "es": "Pinta" },
+      "placeholder": false,
+      "corrections": []
+    },
+    {
+      "ref": "product:977",
+      "names": { "ca": "Zurito", "es": "Zurito", "en": "Zurito (small draught beer)" },
+      "placeholder": false,
+      "corrections": [ { "field": "internal", "wrong": "ZURRITO", "right": "ZURITO" } ]
+    }
+  ],
+  "failed": ["product:1021"]
+}
+```
+
+Every item with languages to write appears once, in `results` or in `failed`; a context item
+appears in neither. `names` holds only languages listed in the item's `missing`, each 1 to 500
+characters. `placeholder: true` comes with empty `names`. An item carries at most 10
+`corrections`; `field` is `internal` or an enabled language code, and `wrong` and `right` are 1 to
+500 characters and differ. A correction to a language the venue entered is a suggestion only. The
+box must drop:
+
+- a result whose `ref` it did not send with languages to write;
+- a name for a language that was not missing.
+
+**Release** tells Cloud the box has stored the results, by state: `done`, `partly_done` or
+`failed` deletes the job's body and results and returns
+`{"version":1,"jobId":"...","state":"collected"}`; `collected` returns the same reply again;
+`queued` or `running` is 409 `translation_not_ready`; `expired` is 410 `translation_expired`.
+
+### Consent
+
+The account owner agrees, or withdraws, on the portal's account page, `<Cloud origin>/account`,
+in the venue's entry (owners only). Waitron's dialog links there when submit is refused with
+`translation_consent_required`.
+
+### Refusals
+
+| HTTP | Code | When | Waitron's code |
+|---|---|---|---|
+| 400 | `invalid_request` | A job field, or a status, collect or release signed body, breaks a rule above. | `cloud.request_invalid` |
+| 400, 415 | `invalid_input` (existing) | The outer request is not a JSON object (400) or not sent as `application/json` (415). | `cloud.request_invalid` |
+| 401 | `invalid_proof` (existing) | The envelope, proof or lease is invalid, including a submit whose `body` does not match `jobSha256` or `jobBytes`. | `cloud.unavailable` |
+| 403 | `translation_consent_required` | The venue's account owner has not agreed to the named language-model providers. | `content.suggestion_consent_required` |
+| 403 | `revoked`, `permission_denied` (existing) | The installation is revoked, or `content_translation` is not `ready` for it. | `cloud.unavailable` |
+| 403 | `forbidden` (existing) | The request carries a browser Origin header. | `cloud.unavailable` |
+| 404 | `translation_job_not_found` | Another installation's job, or an unknown ID. | `content.suggestion_expired` |
+| 408 | `invalid_input` (existing) | The request was not received within its time limit. | `cloud.unavailable` |
+| 409 | `conflict` | A submit operation ID reused with a different fingerprint. | `cloud.request_invalid` |
+| 409 | `translation_job_running` | A job is already queued or running for the venue. | `content.suggestion_job_running` |
+| 409 | `translation_limit_reached` | The estimate exceeds what is left of the cap. Carries `fits`. | `content.suggestion_limit_reached` |
+| 409 | `translation_not_ready` | Collect or release in a state listed above. | `cloud.unavailable` |
+| 410 | `translation_expired` | Collect of a `collected` or `expired` job, or release of an `expired` one. | `content.suggestion_expired` |
+| 413 | `translation_job_too_large` | Submit: `jobBytes` over 1,048,576, more than 1,000 items, or a request over 2,113,536 bytes. | `cloud.request_invalid` |
+| 413 | `invalid_input` (existing) | A status, collect or release request over 16,384 bytes. | `cloud.request_invalid` |
+| 429 | `rate_limited` (existing) | A per-installation or per-IP limit. | `cloud.unavailable` |
+| 503 | `temporarily_unavailable` (existing) | Cloud has the service switched off. | `cloud.unavailable` |
+
+### Shared test vectors
+
+The first implementation task on each side adds the signing test vectors to this section, generated
+from fixed keys:
+
+- a valid submit;
+- the same submit with one byte of `body` changed;
+- a `jobBytes` that does not match;
+- a replayed operation ID with a different fingerprint.
+
+Waitron's signer and Cloud's verifier both test against them.
+
+The vectors are one JSON document, generated by Cloud's
+`packages/translation/test/make-submit-vectors.ts` and committed as
+`packages/translation/test/submit-vectors.json`. Its inputs are the keys, issuer, lease, origin,
+installation ID and proof time of `packages/registration/test/installation-vector.json`; Waitron's
+`apps/server/test/cloud-installation-vector.json` is byte-identical to it (`cmp`, 2026-10-14), and
+Ed25519 signatures are deterministic, so either side's signer reproduces the same bytes. The
+document holds:
+
+- `origin`, `installationId`, `operationId`, `issuedAt`, `publicKey`, `issuerPublicKey`,
+  `issuerKeyId`, and `lease` as an object (the envelope signs `JSON.stringify(lease)`);
+- `cases`, in this order, each `{ "name", "expect", "envelope": { "payload", "signature", "body" } }`,
+  all signed as `translation-submit` with the one `operationId`
+  (`52345678-1234-4234-8234-123456789abc`) and `issuedAt`:
+  - `valid` (`expect: "accepted"`): the job example above, with staff name `PINTA`;
+  - `changed_body` (`"401 invalid_proof"`): the valid envelope with `PINTA` changed to `PINTO` in
+    `body`;
+  - `wrong_length` (`"401 invalid_proof"`): the valid body, signed with `jobBytes` one more than its
+    length;
+  - `replayed_operation` (`"409 conflict after valid"`): the same job with staff name `CANYA`, its own
+    fingerprint, and the valid case's operation ID.
+
+The job text is `JSON.stringify` of the example's keys in the order shown, with no spaces. Cloud's
+first task pastes the generated document below this paragraph as the section's only `json` block;
+a test on each side compares its copy with it.
