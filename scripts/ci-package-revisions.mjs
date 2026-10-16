@@ -62,7 +62,7 @@ function workspaceAt(sha, workspace, git) {
     for (let index = 0; index < sources.length; index++) {
       const source = sources[index];
       for (const value of quotedReferences(source.source)) {
-        const target = value.startsWith('.') ? posix.normalize(posix.join(posix.dirname(source.path), value)) : value;
+        const target = value.startsWith('.') ? posix.normalize(posix.join(posix.dirname(source.path), value)) : posix.normalize(value);
         if (packages.some(other => target.startsWith(`${other.directory}/`))) continue;
         // Keep descendant helpers without matching a similarly named sibling.
         for (const path of [...(directories.get(posix.normalize(target).replace(/\/$/, '')) ?? []), target, target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'), target.replace(/\.jsx?$/, '.tsx'),

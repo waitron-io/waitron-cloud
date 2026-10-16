@@ -573,10 +573,11 @@ notifications separately.
   It requires all four test names, so a passing file with no matching test cannot
   substitute for coverage. The saved manifest metadata must match its reviewed
   nondependency fields in the audit. The fixtures also seed the saved audited
-  package runner from `scripts/fixtures/ci-execution-inputs.json`. A separate
-  real-clone check changes the live runner and requires all five original positive
-  receipt tests to execute. Their assertions and the production audit pins stay
-  unchanged; changing the real runner still retains receipt work. Actual
+  package runner and package-path resolver from
+  `scripts/fixtures/ci-execution-inputs.json`. Separate real-clone checks change
+  each live input and require all five original positive receipt tests to execute.
+  Their assertions and the production audit pins stay unchanged; changing either
+  real input still retains receipt work. Actual
   dependency changes still retain every receipt in the production planner.
   Fourteen root-test fixtures now disable automatic Git maintenance for their
   temporary repositories. Real-child checks trace each named original test,
@@ -662,6 +663,18 @@ notifications separately.
   the formerly omitted portal consumer; saved-revision and batched-read checks
   cover old and new helper files, dirty local sources and paths with spaces.
   The actual portal-only and all-nine identity selections stay covered.
+  Root-relative file paths also normalize dotted segments and repeated slashes
+  before looking up package owners or shared helpers. Real Node imports prove
+  that equivalent package and helper spellings load the same input; selection
+  checks retain their direct and transitive consumers from both saved trees,
+  even when local helper files have changed. The live workspace graph applies
+  the same normalization to direct package paths. When `..` leaves an earlier
+  package prefix, selection follows the actual destination and drops that false
+  dependency. If an unresolved root-relative package template has no constant
+  package owner after normalization, every package remains a possible input.
+  Real imports and selection checks cover both directions across package
+  boundaries and this uncertain template case. Both graphs use slash-based
+  normalization. Every earlier assertion and reader-audit certificate is unchanged.
   This is a conservative source dependency rule, not evidence that every quoted
   directory is read at runtime. A bare quoted folder name such as `scripts` can
   select extra consumers even when it names a data field. Qualify actual reader
