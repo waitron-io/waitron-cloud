@@ -11,7 +11,7 @@ import * as packageInputs from './ci-package-revisions.mjs';
 
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-package-revisions-'));
-  const git = (...args) => execFileSync('git', args, {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+  const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
   const write = (path, content) => {
     mkdirSync(join(root, path, '..'), {recursive: true});
     writeFileSync(join(root, path), content);

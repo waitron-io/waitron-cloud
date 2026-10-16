@@ -17,7 +17,7 @@ test('receipt selector fixtures retain their assertions after dependency inputs 
     assert.equal(createHash('sha256').update(JSON.stringify(canonical)).digest('hex'), expected, `Saved manifest metadata must match its audit: ${path}`);
   }
   const root = mkdtempSync(join(tmpdir(), 'cloud-dependency-fixture-control-'));
-  const git = (...args) => execFileSync('git', args, {cwd: root, encoding: 'utf8', stdio: 'pipe'});
+  const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: 'pipe'});
   try {
     execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
     // Include candidate fixture repairs before they have been committed.

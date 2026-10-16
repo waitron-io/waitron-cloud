@@ -38,7 +38,7 @@ const workspace = loadWorkspace();
 const expected = receiptSuites.filter(name => name !== suite);
 function fixture(run, alter = () => {}) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-database-inputs-'));
-  // Disposable repositories must have no background writer racing their removal.
+  // Disposable repositories must not start detached Git maintenance.
   const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
   try {
     git('init', '-q');
@@ -195,7 +195,7 @@ test('checkout attributes in either revision keep the receipt even when stored r
     assert.deepEqual(select(base, changed).receipts, receiptSuites);
     assert.deepEqual(select(changed, head).receipts, receiptSuites);
     const checkout = join(root, 'encoded-checkout');
-    execFileSync('git', ['-c', 'maintenance.auto=false', 'clone', '--no-hardlinks', root, checkout], {stdio: 'pipe'});
+    execFileSync('git', ['clone', '--no-hardlinks', root, checkout], {stdio: 'pipe'});
     assert.equal(readFileSync(join(checkout, 'packages/registration/src/migrate.ts')).subarray(0, 8).toString('hex'), '69006d0070006f00');
     const env = {...process.env};
     // A separate test runner must not inherit the parent's child-runner marker.

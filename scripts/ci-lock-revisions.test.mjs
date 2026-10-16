@@ -8,7 +8,7 @@ import {createPlan} from './ci-plan.mjs';
 
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-lock-revisions-'));
-  const git = (...args) => execFileSync('git', args, {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+  const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
   const write = (path, text) => {mkdirSync(join(root, path, '..'), {recursive: true}); writeFileSync(join(root, path), text);};
   const commit = () => {git('add', '.'); git('commit', '-sm', 'Lock graph fixture'); return git('rev-parse', 'HEAD').trim();};
   const lock = {

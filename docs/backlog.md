@@ -553,18 +553,21 @@ notifications separately.
   substitute for coverage. The saved manifest metadata must match its reviewed
   nondependency fields in the audit. Actual
   dependency changes still retain every receipt in the production planner.
-  Four receipt-selector fixtures now disable automatic Git maintenance for their
-  temporary repositories, including their clone commands, so detached maintenance
-  cannot write while those repositories are removed. Four real-child checks trace
-  the original positive tests and require their commits to execute without an
-  automatic maintenance child. The old behavior fails all four checks; their
-  existing receipt assertions remain unchanged. In
-  [run 38824736788](https://github.com/waitron-io/waitron-cloud/actions/runs/38824736788),
-  262 of 263 root checks passed before the database-input fixture's cleanup failed
-  with `ENOTEMPTY`. Local Git tracing confirms detached maintenance in those
-  fixtures, but that historical log does not identify the writer. This removes a
-  verified background writer without changing deletion, selection or fiscal policy;
-  capture any further cleanup failure before attributing its cause.
+  Fourteen root-test fixtures now disable automatic Git maintenance for their
+  temporary repositories. Real-child checks trace each named original test,
+  require that exact test and its commit to execute, and reject automatic
+  maintenance or garbage-collection children. The original receipt, selection
+  and reuse assertions remain unchanged. The checking process owns a separate
+  process group and stops that group's remaining descendants when the check ends;
+  a deliberately stalled test proves its worker is stopped after a timeout.
+  In [run 38824736788](https://github.com/waitron-io/waitron-cloud/actions/runs/38824736788),
+  262 of 263 root checks passed before database-input fixture cleanup failed
+  with `ENOTEMPTY`. Local tracing confirms detached maintenance launches in the
+  original fixtures, but does not establish that they wrote into the directory.
+  Sixteen concurrent original-file review runs did not reproduce the failure.
+  The change removes a confirmed detached background Git process from these
+  fixtures; it does not establish the historical cleanup cause. Capture that
+  directory's remaining entries and process activity if cleanup fails again.
   The parser's current-lock inventory check still pins 215 package/snapshot
   records and the original importer counts. A new dependency record needs an
   explicitly reviewed inventory update. The disposable

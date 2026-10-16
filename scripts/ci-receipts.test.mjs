@@ -27,7 +27,7 @@ const inputs = [
 ];
 function fixture(run, alter = () => {}) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-receipt-inputs-'));
-  const git = (...args) => execFileSync('git', args, {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+  const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
   try {
     git('init', '-q');
     git('config', 'user.name', 'CI test');

@@ -11,7 +11,7 @@ const repository='waitron-io/waitron-cloud';
 test('real squash merges reuse equal trees and run full when main has advanced',()=>{
   const root=mkdtempSync(join(tmpdir(),'cloud-ci-merge-'));
   try {
-    const git=(...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8'}).trim();
+    const git=(...args)=>execFileSync('git',['-c','maintenance.auto=false',...args],{cwd:root,encoding:'utf8'}).trim();
     git('init','-b','main'); git('config','user.name','CI test'); git('config','user.email','ci@example.test');
     writeFileSync(join(root,'baseline'),'baseline');git('add','.');git('commit','-sm','Baseline');
     const before=git('rev-parse','HEAD');

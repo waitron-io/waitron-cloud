@@ -37,7 +37,7 @@ const workspace = loadWorkspace();
 const expected = receiptSuites.filter(name => name !== suite);
 function fixture(run, alter = () => {}) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-capacity-inputs-'));
-  // Disposable repositories must have no background writer racing their removal.
+  // Disposable repositories must not start detached Git maintenance.
   const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
   try {
     git('init', '-q');
