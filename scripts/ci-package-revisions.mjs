@@ -62,7 +62,7 @@ function workspaceAt(sha, workspace, git) {
     // Visit saved helper sources too; a cycle must not expand the queue forever.
     for (let index = 0; index < sources.length; index++) {
       const source = sources[index];
-      const rootReads = new Set([...source.source.matchAll(/\breaddirSync\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*\)\s*\)/g)].map(match => match[2]));
+      const rootReads = new Set([...source.source.matchAll(/\breaddirSync\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*,?\s*\)\s*,?\s*\)/g)].map(match => match[2]));
       for (const value of quotedReferences(source.source)) {
         const target = value.startsWith('.') ? posix.normalize(posix.join(posix.dirname(source.path), value)) : posix.normalize(value);
         if (packages.some(other => target.startsWith(`${other.directory}/`))) continue;

@@ -692,3 +692,24 @@ execFileSync(process.execPath, ['--version'], {cwd: new URL('../../../', import.
   assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
     {full: false, packages: ['catalogue']});
 }));
+
+
+test('trailing commas in direct root directory calls retain the runtime-loaded consumer', () => {
+  for (const call of [
+    "readdirSync(\n  new URL('../../../', import.meta.url),\n)",
+    "readdirSync(new URL('../../../', import.meta.url,))",
+    "readdirSync(\n  new URL('../../../', import.meta.url,),\n)",
+  ]) fixture(({root, write, commit, plan}) => {
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('root helper loaded');\n");
+    write('packages/portal/src/index.mjs', `import {readdirSync} from 'node:fs';
+for (const name of ${call}) {
+  if (name.endsWith('.mjs')) await import(new URL('../../../' + name, import.meta.url));
+}
+`);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'root helper loaded\n');
+    assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'portal'], call);
+  });
+});
