@@ -34,6 +34,54 @@ function fixture(run) {
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 
+test('unresolved glob scans retain packages whose helpers they actually load', () => {
+  for (const api of ['globSync', 'glob']) for (const binding of ['direct', 'stored', 'default', 'absolute']) fixture(({root, write, commit, plan}) => {
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('glob helper loaded');\n");
+    const directory = "new URL('../../../', import.meta.url)";
+    const args = binding === 'default' ? "'*.mjs'" : binding === 'absolute'
+      ? "new URL('../../../*.mjs', import.meta.url).pathname"
+      : `'*.mjs', {cwd: ${binding === 'stored' ? 'directory' : directory}}`;
+    write('packages/portal/src/index.mjs', `import {${api}} from '${api === 'glob' ? 'node:fs/promises' : 'node:fs'}';
+import {pathToFileURL} from 'node:url';
+${binding === 'stored' ? `const directory = ${directory};` : ''}
+for await (const name of ${api} /* scan */ (${args})) {
+  await import(${binding === 'absolute' ? 'pathToFileURL(name)' : `new URL('../../../' + name, import.meta.url)`});
+}
+`);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'glob helper loaded\n');
+    const result = plan(base, head);
+    assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], `${api} ${binding}`);
+    assert.match(result.reason, /Unverified package revisions:.*Unresolved glob scan at packages\/portal\/src\/index\.mjs.*full package suite/s);
+  });
+});
+
+test('glob readers in saved helpers keep full package work from either revision', () => {
+  for (const api of ['globSync', 'glob']) for (const revision of ['base', 'head']) fixture(({root, git, write, commit}) => {
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('saved glob helper loaded');\n");
+    const reader = `import {${api}} from '${api === 'glob' ? 'node:fs/promises' : 'node:fs'}';
+for await (const name of ${api}('*.mjs', {cwd: new URL('../', import.meta.url)})) {
+  await import(new URL('../' + name, import.meta.url));
+}
+`;
+    write('tools/scan.mjs', revision === 'base' ? reader : 'export const value = 1;\n');
+    write('packages/portal/src/index.mjs', "import '../../../tools/scan.mjs';\n");
+    write('packages/gateway/src/index.mjs', "import '../../portal/src/index.mjs';\n");
+    const base = commit();
+    if (revision === 'base') assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'saved glob helper loaded\n');
+    write('tools/scan.mjs', revision === 'head' ? reader : 'export const value = 2;\n');
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    if (revision === 'head') assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'saved glob helper loaded\n');
+    write('tools/scan.mjs', 'export const value = 3;\n');
+    write('catalogue-adapter.mjs', 'export const value = 3;\n');
+    assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+      /Unresolved glob scan at tools\/scan\.mjs/, `${api} ${revision}`);
+  });
+});
+
 test('root directory APIs retain helpers loaded by real immediate-entry scans', () => {
   for (const [api, module, entry] of [
     ['readdir', 'node:fs/promises', 'item'],
