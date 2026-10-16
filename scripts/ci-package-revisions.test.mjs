@@ -1106,3 +1106,47 @@ for (const name of readdirSync(// scan${ending}directory)) {
       {full: false, packages: ['catalogue', 'gateway', 'portal']}, `${JSON.stringify(ending)} ${revision}`);
   });
 });
+
+
+test('a block comment cannot swallow options through an adjacent or later comment', () => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
+    for (const binding of ['direct', 'stored']) for (const ending of ['/* end */', '']) fixture(({root, write, commit, plan}) => {
+      write('adapters/catalogue-reader.mjs', "import '../packages/catalogue/src/index.mjs';\nconsole.log('bounded comment helper loaded');\n");
+      const directory = "new URL('../../../', import.meta.url)";
+      write('packages/portal/src/index.mjs', `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+import {pathToFileURL} from 'node:url';
+${binding === 'stored' ? `const directory = ${directory};` : ''}
+for await (const item of await ${api}(${binding === 'direct' ? directory : 'directory'}, /* options */ {recursive: true} ${ending})) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('-reader.mjs')) {
+    const target = typeof item === 'string' ? new URL(item, new URL('../../../', import.meta.url)) : pathToFileURL(item.parentPath + '/' + item.name);
+    await import(target);
+  }
+}
+(() => {})(/* later */);
+`);
+      const base = commit();
+      write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+      const head = commit();
+      assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'bounded comment helper loaded\n');
+      const result = plan(base, head);
+      assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], `${api} ${binding} ${ending || 'later'}`);
+      assert.match(result.reason, /repository-root directory scan options at packages\/portal\/src\/index\.mjs/);
+    });
+  }
+});
+
+test('a run of block comments cannot trap package selection in backtracking', () => fixture(({root, git, write, commit}) => {
+  write('packages/portal/src/index.mjs', 'readdirSync(' + '/**/'.repeat(40) + 'undefined);\n');
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  const members = loadWorkspace(root);
+  const program = `import {execFileSync} from 'node:child_process';
+import {scopeForRevisions} from ${JSON.stringify(new URL('./ci-package-revisions.mjs', import.meta.url).href)};
+const git = (...args) => execFileSync('git', args, {encoding: 'utf8'});
+console.log(JSON.stringify(scopeForRevisions(['packages/catalogue/src/index.mjs'], ${JSON.stringify(members)}, '${base}', '${head}', git)));
+`;
+  assert.deepEqual(JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', program],
+    {cwd: root, encoding: 'utf8', timeout: 10_000})), {full: false, packages: ['catalogue']});
+}));

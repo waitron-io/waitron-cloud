@@ -5,8 +5,9 @@ import {posix} from 'node:path';
 import {sourceDependencies, scopeForPaths, quotedReferences} from './ci-scope.mjs';
 
 function directoryPattern(expression) {
-  // Comments separate tokens just like whitespace; keep quoted paths intact.
-  const space = String.raw`(?:\s|/\*[\s\S]*?\*/|//[^\r\n\u2028\u2029]*(?:[\r\n\u2028\u2029]|$))`;
+  // Comments separate tokens like whitespace and stop at their first terminator;
+  // crossing a terminator could hide options inside the closing-call lookahead.
+  const space = String.raw`(?:\s|/\*(?:[^*]|\*(?!/))*\*/|//[^\r\n\u2028\u2029]*(?:[\r\n\u2028\u2029]|$))`;
   return new RegExp(expression.source.replaceAll(String.raw`\s*`, space + '*')
     .replaceAll(String.raw`\s+`, space + '+'), expression.flags);
 }
