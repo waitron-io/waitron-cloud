@@ -555,3 +555,47 @@ for (const name of readdirSync(directory)) await import(pathToFileURL(resolve(di
     assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'portal'], directory);
   });
 });
+
+
+test('equivalent root-relative package files retain live and saved consumers', () => {
+  for (const input of ['packages/./catalogue/src/index.mjs', 'packages/catalogue//src/index.mjs',
+    'packages/catalogue/src/../src/index.mjs']) fixture(({root, git, write, commit}) => {
+    write('packages/catalogue/src/index.mjs', "console.log('catalogue loaded');\n");
+    write('packages/portal/src/index.mjs', `import {pathToFileURL} from 'node:url';
+await import(pathToFileURL('${input}'));
+`);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', "console.log('catalogue changed');\n");
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'catalogue changed\n');
+    assert.deepEqual(scopeForPaths(['packages/catalogue/src/index.mjs'], loadWorkspace(root)),
+      {full: false, packages: ['catalogue', 'portal']}, input);
+    assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+      {full: false, packages: ['catalogue', 'portal']}, input);
+  });
+});
+
+test('equivalent root-relative helper files retain their package consumers in both saved trees', () => {
+  for (const input of ['scripts/./adapter.mjs', 'scripts//adapter.mjs', 'scripts/nested/../adapter.mjs']) {
+    for (const revision of ['base', 'head']) fixture(({root, git, write, commit, plan}) => {
+      mkdirSync(join(root, 'scripts/nested'), {recursive: true});
+      const reader = "import '../packages/catalogue/src/index.mjs';\nconsole.log('helper loaded');\n";
+      write('scripts/adapter.mjs', revision === 'base' ? reader : 'export const value = 0;\n');
+      write('packages/portal/src/index.mjs', `import {pathToFileURL} from 'node:url';
+await import(pathToFileURL('${input}'));
+`);
+      write('packages/gateway/src/index.mjs', "import '../../portal/src/index.mjs';\n");
+      const base = commit();
+      if (revision === 'base') assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'helper loaded\n');
+      write('scripts/adapter.mjs', revision === 'head' ? reader : 'export const value = 0;\n');
+      write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+      const head = commit();
+      if (revision === 'head') assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'helper loaded\n');
+      write('scripts/adapter.mjs', 'export const value = 0;\n');
+      assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+        {full: false, packages: ['catalogue', 'gateway', 'portal']}, input + ' ' + revision);
+      const result = plan(base, head, (...args) => args[0] === 'diff' ? 'packages/catalogue/src/index.mjs\0' : git(...args));
+      assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal'], input + ' ' + revision);
+    });
+  }
+});

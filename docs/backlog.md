@@ -662,6 +662,13 @@ notifications separately.
   the formerly omitted portal consumer; saved-revision and batched-read checks
   cover old and new helper files, dirty local sources and paths with spaces.
   The actual portal-only and all-nine identity selections stay covered.
+  Root-relative file paths also normalize dotted segments and repeated slashes
+  before looking up package owners or shared helpers. Real Node imports prove
+  that equivalent package and helper spellings load the same input; selection
+  checks retain their direct and transitive consumers from both saved trees,
+  even when local helper files have changed. The live workspace graph applies
+  the same normalization to direct package paths. These checks add coverage;
+  every earlier assertion and the reader-audit certificates remain unchanged.
   This is a conservative source dependency rule, not evidence that every quoted
   directory is read at runtime. A bare quoted folder name such as `scripts` can
   select extra consumers even when it names a data field. Qualify actual reader
