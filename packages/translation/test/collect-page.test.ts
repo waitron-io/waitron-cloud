@@ -29,19 +29,20 @@ test('missing, duplicate, foreign and context outcomes cannot silently disappear
  ])assert.throws(()=>page(items,batches),/translation_outcomes_invalid/);
  assert.throws(()=>page([item('p1'),item('p1')],{0:{results:[result('p1')],failed:[]}}),/translation_outcomes_invalid/);
 });
-test('a legal singleton with long language fields, 20 names and ten corrections fits unchanged',()=>{
- const tag='a'.repeat(450000),names=Object.fromEntries([tag,...Array.from({length:19},(_,i)=>`l${i}`)].map(key=>[key,'\u0000'.repeat(500)]));
+test('the conservative singleton allowance with long fields, 20 names and ten corrections fits unchanged',()=>{
+ // The bound deliberately allows more tag text than Intl may recognize.
+ const tag='en-'+('v0000-'.repeat(74999))+'v0000',names=Object.fromEntries([tag,'en',...Array.from({length:18},(_,i)=>`l${i}`)].map(key=>[key,'\u0000'.repeat(500)]));
  const value={ref:'p1',names,placeholder:false,corrections:Array.from({length:10},()=>({field:tag,wrong:'\ud800'.repeat(500),right:'😀'.repeat(250)}))};
- const body=JSON.stringify({version:1,country:'ES',languages:{default:'en',enabled:['en',...Object.keys(names)]},houseStyle:[],items:[{...item('p1',Object.keys(names)),kind:'product',family:'p1',category:null,staffName:'Coffee',existing:{}}]});
+ const body=JSON.stringify({version:1,country:'ES',languages:{default:'en',enabled:Object.keys(names)},houseStyle:[],items:[{...item('p1',Object.keys(names)),kind:'product',family:'p1',category:null,staffName:'Coffee',existing:{}}]});
  assert(Buffer.byteLength(body)<=1048576);
  const actual=page([item('p1')],{0:{results:[value],failed:[]}});
  assert(Buffer.byteLength(JSON.stringify(actual))<=16777216);assert.deepEqual(actual.results,[value]);
 });
 test('a legal sub-MiB job produces maximal bounded pages with no lost or repeated refs',()=>{
- const languages=Array.from({length:20},(_,i)=>`l${i}`),items=Array.from({length:1000},(_,i)=>item(`p${i}`,languages));
- const body=JSON.stringify({version:1,country:'ES',languages:{default:'en',enabled:['en',...languages]},houseStyle:[],items:items.map(i=>({...i,kind:'product',family:i.ref,category:null,staffName:'Coffee',existing:{}}))});
+ const languages=['en','es','ca','fr','de','it','pt','nl','sv','da','fi','pl','cs','sk','hu','ro','el','tr','ja','zh'],items=Array.from({length:1000},(_,i)=>item(`p${i}`,languages));
+ const body=JSON.stringify({version:1,country:'ES',languages:{default:'en',enabled:languages},houseStyle:[],items:items.map(i=>({...i,kind:'product',family:i.ref,category:null,staffName:'Coffee',existing:{}}))});
  assert(Buffer.byteLength(body)<=1048576);
- const results=items.filter((_,i)=>i%3!==1).map(i=>({...result(i.ref),names:Object.fromEntries(languages.map(l=>[l,'\u0000'.repeat(500)])),placeholder:Number(i.ref.slice(1))%3===0}));
+ const results=items.filter((_,i)=>i%3!==1).map(i=>({...result(i.ref),names:Number(i.ref.slice(1))%3===0?{}:Object.fromEntries(languages.map(l=>[l,'\u0000'.repeat(500)])),placeholder:Number(i.ref.slice(1))%3===0}));
  const failed=items.filter((_,i)=>i%3===1).map(i=>i.ref);
  const batches={3:{results:[...results].reverse(),failed:[...failed].reverse()}};
  assert(Buffer.byteLength(JSON.stringify({results,failed}))>16777216);
@@ -75,4 +76,27 @@ test('the full envelope, UTF-8 text and actual continuation fit at the byte boun
  first.names.padding+='a';assert.throws(()=>page(items,batches),/translation_outcome_too_large/);
  const last=page(items,batches,1);assert.equal(last.nextCursor,null);assert.deepEqual(last.results,[second]);
  assert.equal(maxCollectBytes,16777216);
+});
+for(const kind of ['results','failed'] as const)test(`comma bytes between ${kind} stay inside the full page limit`,()=>{
+ const first=result('p1'),results=kind==='results'?[first,result('p2'),result('p3')]:[first];
+ const failed=kind==='failed'?['p2','p3','p4']:[];
+ const items=(kind==='results'?['p1','p2','p3']:['p1','p2','p3','p4']).map(ref=>item(ref));
+ const prefix={version:1,jobId,state:'partly_done',results:kind==='results'?results.slice(0,2):results,failed:failed.slice(0,2),nextCursor:kind==='results'?2:3};
+ // Synthetic padding isolates punctuation accounting from the separate accepted-item bounds.
+ first.names.padding='a'.repeat(16777216-Buffer.byteLength(JSON.stringify(prefix))-13);
+ assert.equal(Buffer.byteLength(JSON.stringify(prefix)),16777216);
+ const batches={0:{results,failed}},exact=page(items,batches);
+ assert.equal(Buffer.byteLength(JSON.stringify(exact)),16777216);assert.equal(exact.nextCursor,kind==='results'?2:3);
+ first.names.padding+='a';
+ const over=page(items,batches);assert(Buffer.byteLength(JSON.stringify(over))<=16777216);
+ assert.equal(over.nextCursor,kind==='results'?1:2);
+});
+test('the final null continuation is included in an exact-limit singleton',()=>{
+ const value=result('p1'),wire={version:1,jobId,state:'partly_done',results:[value],failed:[],nextCursor:null};
+ value.names.padding='a'.repeat(16777216-Buffer.byteLength(JSON.stringify(wire))-13);
+ assert.equal(Buffer.byteLength(JSON.stringify(wire)),16777216);
+ const items=[item('p1')],batches={0:{results:[value],failed:[]}};
+ assert.equal(Buffer.byteLength(JSON.stringify(page(items,batches))),16777216);
+ assert.equal(page(items,batches).nextCursor,null);
+ value.names.padding+='a';assert.throws(()=>page(items,batches),/translation_outcome_too_large/);
 });

@@ -3,7 +3,7 @@ import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {after,before,test} from 'node:test';
 import {createLeaseIssuer,transaction} from '@waitron-cloud/registration';
-import {collectJob,createJob,findSubmitted,jobFingerprint,lockVenue,monthSpend,readJob,releaseJob,statusView,submitView,TranslationError,type SubmitFingerprint} from '../src/index.ts';
+import {collectJob,createJob,findSubmitted,jobFingerprint,lockVenue,monthSpend,readJob,releaseJob,spendingPolicy,statusView,submitView,TranslationError,type SubmitFingerprint} from '../src/index.ts';
 import {connectedVenue,database} from './fixtures.ts';
 let db:Awaited<ReturnType<typeof database>>;
 const origin='https://cloud.example.test',issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
@@ -60,7 +60,9 @@ test('status shows the reason only for a partly done or failed job, and a retrie
 });
 test('another installation cannot read a job, and collect and release follow the contract states',async()=>{
  const a=await connectedVenue(db,issuer,origin),b=await connectedVenue(db,issuer,origin);
- const body=JSON.stringify({items:[{ref:'context',missing:[]},{ref:'product:1',missing:['ca']},{ref:'product:2',missing:['ca']}]});
+ const body=JSON.stringify({version:1,country:'ES',languages:{default:'en',enabled:['en','ca']},houseStyle:[],items:[
+  {ref:'context',kind:'product',family:'context',category:null,staffName:'Coffee',existing:{},missing:[]},
+  ...['product:1','product:2'].map(ref=>({ref,kind:'variant',family:'context',category:null,staffName:'Coffee',existing:{},missing:['ca']}))]});
  const job=await submit(a,randomUUID(),body,jobFingerprint(body),2);
  const code=(name:string)=>(e:unknown)=>e instanceof TranslationError&&e.code===name;
  await assert.rejects(transaction(db.pool,c=>readJob(c,b.installationId,job.id)),code('job_not_found'));
@@ -157,9 +159,10 @@ test('a transaction failure rolls back both submitted metadata and body',async()
  assert.equal((await submit(v,op,'{}',jobFingerprint('{}'),1)).state,'queued');
 });
 test('a retained PostgreSQL job walks several bounded pages without deleting or reordering outcomes',async()=>{
- const v=await connectedVenue(db,issuer,origin),languages=Array.from({length:20},(_,i)=>`l${i}`);
+ const v=await connectedVenue(db,issuer,origin),languages=['en','es','ca','fr','de','it','pt','nl','sv','da','fi','pl','cs','sk','hu','ro','el','tr','ja','zh'];
  const items=Array.from({length:600},(_,i)=>({ref:`product:${i}`,kind:'product',family:`product:${i}`,category:null,staffName:'Coffee',existing:{},missing:languages}));
- const body=JSON.stringify({version:1,country:'ES',languages:{default:'en',enabled:['en',...languages]},houseStyle:[],items:[{...items[0],ref:'context',missing:[]},...items]});
+ items[0]!.kind='variant';items[0]!.family='context';
+ const body=JSON.stringify({version:1,country:'ES',languages:{default:'en',enabled:languages},houseStyle:[],items:[{...items[0],ref:'context',kind:'product',family:'context',missing:[]},...items]});
  assert(Buffer.byteLength(body)<=1048576);
  const job=await submit(v,randomUUID(),body,jobFingerprint(body),600);
  const results=items.filter((_,i)=>i%4!==1).map(item=>({ref:item.ref,names:Object.fromEntries(languages.map(l=>[l,'\u0001'.repeat(500)])),placeholder:false,corrections:[]}));
@@ -176,4 +179,31 @@ test('a retained PostgreSQL job walks several bounded pages without deleting or 
  assert.deepEqual((await walk(599)).failed,['product:599'].filter(ref=>failed.includes(ref)));
  await transaction(db.pool,async c=>releaseJob(c,await readJob(c,v.installationId,job.id)));
  await assert.rejects(walk(first.nextCursor),(e:unknown)=>e instanceof TranslationError&&e.code==='expired');
+});
+test('an estimate exactly equal to the money left is accepted and one more item is refused',async()=>{
+ const v=await connectedVenue(db,issuer,origin),first=await submit(v,randomUUID(),'{}',jobFingerprint('{}'),1);
+ await db.pool.query("UPDATE translation_jobs SET state='collected',cost_micro_usd=4998978,created_at=date_trunc('month',clock_timestamp(),'UTC') WHERE id=$1",[first.id]);
+ assert.equal((await submit(v,randomUUID(),'{}',jobFingerprint('{}'),7)).total,7);
+ await db.pool.query("UPDATE translation_jobs SET state='done',finished_at=clock_timestamp() WHERE venue_id=$1 AND state='queued'",[v.venueId]);
+ await assert.rejects(submit(v,randomUUID(),'{}',jobFingerprint('{}'),8),(e:unknown)=>e instanceof TranslationError&&e.code==='limit_reached'&&e.fits===7);
+});
+test('a stored total that disagrees with the retained items is an invariant failure',async()=>{
+ const v=await connectedVenue(db,issuer,origin),body=JSON.stringify({items:[{ref:'p1',missing:['ca']}]});
+ const job=await submit(v,randomUUID(),body,jobFingerprint(body),2);
+ await db.pool.query("UPDATE translation_jobs SET state='done',done=1,finished_at=clock_timestamp() WHERE id=$1",[job.id]);
+ await db.pool.query('UPDATE translation_job_bodies SET batch_results=$2 WHERE job_id=$1',[job.id,{0:{results:[{ref:'p1',names:{ca:'Cafè'},placeholder:false,corrections:[]}],failed:[]}}]);
+ await assert.rejects(transaction(db.pool,async c=>collectJob(c,await readJob(c,v.installationId,job.id),1)),/translation_outcomes_invalid/);
+});
+test('a terminal job with a missing retained body is expired',async()=>{
+ const v=await connectedVenue(db,issuer,origin),job=await submit(v,randomUUID(),'{}',jobFingerprint('{}'),1);
+ await db.pool.query("UPDATE translation_jobs SET state='done',finished_at=clock_timestamp() WHERE id=$1",[job.id]);
+ await db.pool.query('DELETE FROM translation_job_bodies WHERE job_id=$1',[job.id]);
+ await assert.rejects(transaction(db.pool,async c=>collectJob(c,await readJob(c,v.installationId,job.id))),(e:unknown)=>e instanceof TranslationError&&e.code==='expired');
+});
+test('a missing spending policy refuses service instead of supplying an allowance',async()=>{
+ const original=(await db.pool.query('SELECT * FROM translation_policy')).rows[0];
+ try{
+  await db.pool.query('DELETE FROM translation_policy');
+  await assert.rejects(transaction(db.pool,c=>spendingPolicy(c)),/translation_policy_missing/);
+ }finally{await db.pool.query('INSERT INTO translation_policy VALUES(true,$1,$2)',[original.monthly_cap_micro_usd,original.estimate_micro_usd_per_item]);}
 });
