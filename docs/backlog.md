@@ -572,7 +572,11 @@ notifications separately.
   manifest and the lockfile before running the four positive checks sequentially.
   It requires all four test names, so a passing file with no matching test cannot
   substitute for coverage. The saved manifest metadata must match its reviewed
-  nondependency fields in the audit. Actual
+  nondependency fields in the audit. The fixtures also seed the saved audited
+  package runner from `scripts/fixtures/ci-execution-inputs.json`. A separate
+  real-clone check changes the live runner and requires all five original positive
+  receipt tests to execute. Their assertions and the production audit pins stay
+  unchanged; changing the real runner still retains receipt work. Actual
   dependency changes still retain every receipt in the production planner.
   Fourteen root-test fixtures now disable automatic Git maintenance for their
   temporary repositories. Real-child checks trace each named original test,
@@ -589,6 +593,13 @@ notifications separately.
   The change removes a confirmed detached background Git process from these
   fixtures; it does not establish the historical cleanup cause. Capture that
   directory's remaining entries and process activity if cleanup fails again.
+  Two 30-second child checks also timed out during overlapping local root and
+  reviewer receipt runs: the local-stack and dependency-fixture cases in
+  `scripts/ci-receipt-cleanup.test.mjs`. Both passed separately in 5.8 and 10.3
+  seconds without changing their deadlines. These passes do not establish the
+  earlier cause; resource contention remains an assumption. Retain child-stage
+  timings and process activity on recurrence. The failed and diagnostic logs are
+  under `~/waitron-campaign-d/receipts/d69/package-result-counts/`.
   The parser's current-lock inventory check still pins 215 package/snapshot
   records and the original importer counts. A new dependency record needs an
   explicitly reviewed inventory update. The disposable
