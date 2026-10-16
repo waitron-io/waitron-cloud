@@ -1,6 +1,6 @@
 # Waitron Cloud backlog
 
-Updated 2026-10-14. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-10-16. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
@@ -165,7 +165,7 @@ Indexed venue/operation queries avoid whole-table tenant scans. Current custody
 checks protect both receipt pages and post-append consumption; fresh signed machine
 authentication recovers the same immutable operation after a proof expires. Paper
 import status records completion without inventing a Cloud receipt.
-Registration tests run in six CI file shards. Every case and the 30-second
+Registration tests run in five CI file shards. Every case and the 30-second
 test deadline remain; work jobs stop after eight minutes.
 The phone journey at `/fiscal-allocations` now reserves and explicitly consumes
 identities, reconciles uncertain replies using the same operation, exports the
@@ -847,7 +847,7 @@ notifications separately.
   Unknown/full changes retain all five;
   portal source changes also omit local-stack when its audit holds, otherwise they
   retain it. Isolated ui-smoke needs no receipt. Registration
-  uses six file shards, account HTTP and portal use three each, and backups uses
+  uses five file shards, account HTTP and portal use three each, and backups uses
   two. Selected identity, operations and remote-access suites share one job when at
   least two are needed. Each keeps its full package command and deadline, runs
   once in sequence, and reports its own result. One PostgreSQL/Mailpit setup
