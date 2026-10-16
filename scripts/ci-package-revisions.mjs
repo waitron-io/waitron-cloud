@@ -4,6 +4,14 @@ import {createHash} from 'node:crypto';
 import {posix} from 'node:path';
 import {sourceDependencies, scopeForPaths, quotedReferences} from './ci-scope.mjs';
 
+function directoryPattern(expression) {
+  // Comments separate tokens like whitespace and stop at their first terminator;
+  // crossing a terminator could hide options inside the closing-call lookahead.
+  const space = String.raw`(?:\s|/\*(?:[^*]|\*(?!/))*\*/|//[^\r\n\u2028\u2029]*(?:[\r\n\u2028\u2029]|$))`;
+  return new RegExp(expression.source.replaceAll(String.raw`\s*`, space + '*')
+    .replaceAll(String.raw`\s+`, space + '+'), expression.flags);
+}
+
 function workspaceAt(sha, workspace, git) {
   assert.match(sha, /^[a-f0-9]{40}$/);
   const entries = git('ls-tree', '-rz', '--full-tree', sha).split('\0');
@@ -62,14 +70,14 @@ function workspaceAt(sha, workspace, git) {
     // Visit saved helper sources too; a cycle must not expand the queue forever.
     for (let index = 0; index < sources.length; index++) {
       const source = sources[index];
-      const rootReads = new Set([...source.source.matchAll(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*,?\s*\)\s*,?\s*\)/g)].map(match => match[2]));
+      const rootReads = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*,?\s*\)\s*,?\s*\)/g))].map(match => match[2]));
       // Options may enable recursion or supply a computed policy; an unresolved
       // root scan cannot justify omitting any package consumer.
-      const optionReads = new Set([...source.source.matchAll(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*,?\s*\)\s*,(?!\s*\))/g)].map(match => match[2]));
-      const optionVariables = new Set([...source.source.matchAll(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*([A-Za-z_$][\w$]*)\s*,(?!\s*\))/g)].map(match => match[1]));
+      const optionReads = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*,?\s*\)\s*,(?!\s*\))/g))].map(match => match[2]));
+      const optionVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*([A-Za-z_$][\w$]*)\s*,(?!\s*\))/g))].map(match => match[1]));
       // A root URL variable retains helpers when its identifier is scanned.
-      const scannedVariables = new Set([...source.source.matchAll(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*([A-Za-z_$][\w$]*)\s*,?\s*\)/g)].map(match => match[1]));
-      for (const match of source.source.matchAll(/(?:\b(?:const|let|var)\s+|,\s*)([A-Za-z_$][\w$]*)\s*(?::\s*URL\s*)?=\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\.meta\.url\s*,?\s*\)/g)) {
+      const scannedVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*([A-Za-z_$][\w$]*)\s*,?\s*\)/g))].map(match => match[1]));
+      for (const match of source.source.matchAll(directoryPattern(/(?:\b(?:const|let|var)\s+|,\s*)([A-Za-z_$][\w$]*)\s*(?::\s*URL\s*)?=\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\.meta\.url\s*,?\s*\)/g))) {
         if (scannedVariables.has(match[1])) rootReads.add(match[3]);
         if (optionVariables.has(match[1])) optionReads.add(match[3]);
       }
