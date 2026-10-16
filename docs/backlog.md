@@ -708,8 +708,13 @@ notifications separately.
   no helper inputs. An existence check alone also adds no root helpers, and a
   shared helper scanning its own directory does not scan the repository root.
   This bounded scan can keep extra consumers when identifiers are reused; it does
-  not resolve aliases, other type annotations, computed assignments or
-  other directory APIs. A reachable `readdirSync` of a literal repository-root URL,
+  not resolve aliased directory calls, other type annotations or computed
+  assignments. The immediate-entry rule also covers `readdir` from
+  `node:fs/promises`, `opendir` and `opendirSync`, directly or through a supported
+  URL declaration. Executed scans retain the loaded helper consumer without
+  traversing nested directories; saved shared-helper readers from either revision
+  retain former transitive consumers despite dirty local files. A reachable
+  `readdirSync`, `readdir`, `opendir` or `opendirSync` of a literal repository-root URL,
   directly or through a supported URL declaration, now selects full package work
   whenever explicit options are supplied. The same fallback covers ancestor scans
   and URL text containing query, fragment or percent-encoded syntax that this path
