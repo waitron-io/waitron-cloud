@@ -339,7 +339,10 @@ two only without it. Geocoding has 38 in both arms and two only with a postcode.
 CartoCiudad has one complete draft, only without a postcode. It returns no candidates
 for any of these postcode-bearing queries. Removing postcodes therefore helps this
 CartoCiudad query shape, but does not establish a general normalization rule or a
-complete address service. Most of its street matches still lack matching components.
+complete address service. Among its 73 street-matching candidates across 16 queries, only one has the
+reference house number; all 73 have the reference postcode and province. Individual
+first-result wrong-match, number, postcode, locality, province and country counts
+for both query arms are also retained in the machine-readable totals.
 Every returned CartoCiudad candidate already has coordinates, so its `find` calls
 remain covered offline rather than measured here. Its 88 returned postcode fields
 are strings; this does not establish the type of every possible response.

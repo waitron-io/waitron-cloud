@@ -203,6 +203,32 @@
           "unknownProvince": 0,
           "missingCountry": 0
         }
+      },
+      "firstCandidateComponents": {
+        "with-postcode": {
+          "wrongMatch": 10,
+          "houseNumber": 56,
+          "postcode": 57,
+          "locality": 54,
+          "province": 57,
+          "country": 57,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 57
+        },
+        "without-postcode": {
+          "wrongMatch": 12,
+          "houseNumber": 57,
+          "postcode": 54,
+          "locality": 52,
+          "province": 57,
+          "country": 58,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 58
+        }
       }
     },
     {
@@ -358,6 +384,32 @@
           "provinceSupplied": 87,
           "unknownProvince": 40,
           "missingCountry": 0
+        }
+      },
+      "firstCandidateComponents": {
+        "with-postcode": {
+          "wrongMatch": 23,
+          "houseNumber": 50,
+          "postcode": 48,
+          "locality": 44,
+          "province": 58,
+          "country": 60,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 60
+        },
+        "without-postcode": {
+          "wrongMatch": 17,
+          "houseNumber": 48,
+          "postcode": 45,
+          "locality": 41,
+          "province": 52,
+          "country": 54,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 54
         }
       }
     },
@@ -515,6 +567,32 @@
           "unknownProvince": 50,
           "missingCountry": 0
         }
+      },
+      "firstCandidateComponents": {
+        "with-postcode": {
+          "wrongMatch": 20,
+          "houseNumber": 50,
+          "postcode": 56,
+          "locality": 49,
+          "province": 59,
+          "country": 60,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 60
+        },
+        "without-postcode": {
+          "wrongMatch": 20,
+          "houseNumber": 50,
+          "postcode": 48,
+          "locality": 48,
+          "province": 57,
+          "country": 60,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 60
+        }
       }
     },
     {
@@ -670,6 +748,32 @@
           "provinceSupplied": 88,
           "unknownProvince": 0,
           "missingCountry": 0
+        }
+      },
+      "firstCandidateComponents": {
+        "with-postcode": {
+          "wrongMatch": 0,
+          "houseNumber": 0,
+          "postcode": 0,
+          "locality": 0,
+          "province": 0,
+          "country": 0,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 0
+        },
+        "without-postcode": {
+          "wrongMatch": 3,
+          "houseNumber": 1,
+          "postcode": 18,
+          "locality": 15,
+          "province": 18,
+          "country": 18,
+          "missingCountry": 0,
+          "foreignCountry": 0,
+          "cases": 60,
+          "nonemptyFirstResults": 18
         }
       }
     }
