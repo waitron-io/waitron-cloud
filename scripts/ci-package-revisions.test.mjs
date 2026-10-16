@@ -1026,3 +1026,83 @@ for (const name of readdirSync(${binding === 'direct' ? directory : 'directory'}
     });
   }
 });
+
+
+test('comments in directory calls retain consumers of helpers Node actually loads', () => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
+    for (const binding of ['direct', 'stored']) for (const gap of ['/* scan */', '// scan\n']) {
+      fixture(({root, git, write, commit}) => {
+        write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('commented helper loaded');\n");
+        write('nested/unrelated-adapter.mjs', "import '../packages/unrelated/src/index.mjs';\n");
+        const directory = `new${gap} URL${gap}(${gap}'../../../'${gap},${gap}import.meta.url${gap},${gap})`;
+        write('packages/portal/src/index.mjs', `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+${binding === 'stored' ? `const${gap}directory${gap}=${gap}${directory};` : ''}
+for await (const item of await ${api}${gap}(${gap}${binding === 'direct' ? directory : 'directory'}${gap},${gap})) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL('../../../' + name, import.meta.url));
+}
+`);
+        const base = commit();
+        write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+        const head = commit();
+        assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'commented helper loaded\n');
+        assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+          {full: false, packages: ['catalogue', 'portal']}, `${api} ${binding} ${gap}`);
+        assert.deepEqual(scopeForRevisions(['packages/unrelated/src/index.mjs'], loadWorkspace(root), base, head, git),
+          {full: false, packages: ['unrelated']}, `${api} ${binding} ${gap}`);
+      });
+    }
+  }
+});
+
+test('comments before directory options cannot hide unresolved recursive scans', () => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
+    for (const binding of ['direct', 'stored']) fixture(({root, write, commit, plan}) => {
+      write('adapters/catalogue-reader.mjs', "import '../packages/catalogue/src/index.mjs';\nconsole.log('commented recursive helper loaded');\n");
+      const directory = "new /* target */ URL(/* relative */ '../../../', /* base */ import.meta.url)";
+      write('packages/portal/src/index.mjs', `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+import {pathToFileURL} from 'node:url';
+${binding === 'stored' ? `const /* binding */ directory /* value */ = ${directory};` : ''}
+for await (const item of await ${api}(/* start */ ${binding === 'direct' ? directory : 'directory'} /* end */, /* options */ {recursive: true})) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('-reader.mjs')) {
+    const target = typeof item === 'string' ? new URL(item, new URL('../../../', import.meta.url)) : pathToFileURL(item.parentPath + '/' + item.name);
+    await import(target);
+  }
+}
+`);
+      const base = commit();
+      write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+      const head = commit();
+      assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'commented recursive helper loaded\n');
+      const result = plan(base, head);
+      assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], `${api} ${binding}`);
+      assert.match(result.reason, /repository-root directory scan options at packages\/portal\/src\/index\.mjs/);
+    });
+  }
+});
+
+
+test('line comments in saved helper scans end at every JavaScript line terminator', () => {
+  for (const ending of ['\r', '\u2028', '\u2029']) for (const revision of ['base', 'head']) fixture(({root, git, write, commit}) => {
+    const reader = `import {readdirSync} from 'node:fs';
+const directory = new URL('../', import.meta.url);
+for (const name of readdirSync(// scan${ending}directory)) {
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`;
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('saved commented helper loaded');\n");
+    write('tools/scan.mjs', revision === 'base' ? reader : 'export const value = 1;\n');
+    write('packages/portal/src/index.mjs', "import '../../../tools/scan.mjs';\n");
+    write('packages/gateway/src/index.mjs', "import '../../portal/src/index.mjs';\n");
+    const base = commit();
+    if (revision === 'base') assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'saved commented helper loaded\n');
+    write('tools/scan.mjs', revision === 'head' ? reader : 'export const value = 2;\n');
+    const head = commit();
+    if (revision === 'head') assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'saved commented helper loaded\n');
+    write('tools/scan.mjs', 'export const changedLocally = true;\n');
+    write('catalogue-adapter.mjs', 'export const changedLocally = true;\n');
+    assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+      {full: false, packages: ['catalogue', 'gateway', 'portal']}, `${JSON.stringify(ending)} ${revision}`);
+  });
+});

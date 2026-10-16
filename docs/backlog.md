@@ -709,10 +709,17 @@ notifications separately.
   shared helper scanning its own directory does not scan the repository root.
   This bounded scan can keep extra consumers when identifiers are reused; it does
   not resolve aliased directory calls, other type annotations, computed
-  assignments, comments inside calls or other directory APIs such as `globSync`.
-  A runtime `globSync` root scan and a commented `readdir` call both load a helper
-  whose package consumer is still omitted; qualify these forms before narrowing
-  their consumers. The immediate-entry rule also covers `readdir` from
+  assignments or other directory APIs such as `globSync`.
+  A runtime `globSync` root scan still loads a helper whose package consumer is
+  omitted; qualify that form before narrowing its consumers. Block and line
+  comments now separate tokens in the supported directory calls and URL bindings
+  just as whitespace does. Executed Node scans and saved-tree checks retain the
+  loaded helper, its package consumer and transitive consumers from either
+  revision despite dirty local helpers. Nonrecursive scans still exclude nested
+  helpers, and comments cannot hide the full fallback for explicit root options.
+  Line comments end at each JavaScript line terminator. This remains a bounded
+  source scan; aliases, comments between the tokens of `import.meta.url` and
+  other unsupported expressions still need qualification. The immediate-entry rule also covers `readdir` from
   `node:fs/promises`, `opendir` and `opendirSync`, directly or through a supported
   URL declaration. Executed scans retain the loaded helper consumer without
   traversing nested directories; saved shared-helper readers from either revision
