@@ -1,6 +1,6 @@
 # Waitron Cloud backlog
 
-Updated 2026-10-16. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-10-17. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
@@ -287,20 +287,31 @@ in the schema; existing installations still receive only their original three se
 Historical receipt-selector fixtures use their saved migration module and directory membership,
 so new migrations still exercise the original omission and refusal assertions. Production receipt
 audits remain unchanged and retain work for the new schema.
-These foundations expose no translation routes or worker; the remaining runtime is still open.
+Task 3 adds transaction-scoped venue locking, repeat-submit lookup, exact integer UTC-month
+spending checks, installation-scoped job reads and release. Collection reconstructs filtered
+submit order from retained outcomes and measures complete compact UTF-8 pages, including the
+actual continuation, against the 16 MiB limit. PostgreSQL tests cover concurrent submits,
+rollback, repeated collection, release locking and a multi-page walk; serializer tests cover
+exact byte boundaries, Unicode and complete outcomes. These foundations expose no translation
+routes or worker; the remaining runtime is still open.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies
 compact full-body replies of at most 16,777,216 decoded UTF-8 bytes, signed optional cursors in
 filtered submit order, atomic unchanged results, stable retries and release only after every page
 is durably stored. A conservative singleton size calculation uses the existing 1 MiB job bound
-and preserves accepted language tags. Runtime page sizing still needs behavioral proof.
+and preserves accepted language tags. Store-level page sizing is tested; HTTP serialization and the real Waitron caller still need joint proof.
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 3–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 4–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
+  Before Task 8 persists provider results, resolve JSONB's refusal of NUL and lone surrogates
+  without silently altering accepted names or corrections. The Task 3 PostgreSQL multi-page
+  test initially reproduced `22P05` for NUL; its database fixture uses U+0001, while pure page
+  tests retain NUL and lone-surrogate serialization. An appended storage change or an explicit
+  provider-reply validity decision needs behavioral proof before claiming all accepted text works.
   Consent rows retain history after membership removal; Task 13 must prove current, enabled,
   verified ownership when consent is recorded and used. A stored account ID alone grants nothing.
   Append migrations at the then-current next numbers without editing landed migrations.
@@ -326,8 +337,8 @@ Remaining work:
 
 Implement routine work inline with failing behavioral tests first. Before every push, run the
 full touched-package and dependent-package suites; run the whole workspace only for shared
-configuration changes. Require normal hooks and current-head CI. This entry and amendment are
-documentation milestones, not runtime, joint-proof or release receipts.
+configuration changes. Require normal hooks and current-head CI. The amendment records the
+approved contract; the partial runtime above does not complete joint proof or release qualification.
 
 ## Initial focus
 
