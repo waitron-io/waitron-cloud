@@ -1,3 +1,5 @@
+ALTER TABLE installations ADD CONSTRAINT installations_id_venue_id_key UNIQUE (id,venue_id);
+
 ALTER TABLE installation_services DROP CONSTRAINT installation_services_service_check;
 ALTER TABLE installation_services ADD CONSTRAINT installation_services_service_check
  CHECK (service IN ('remote_access','continuous_backup','retained_snapshots','content_translation'));
@@ -62,6 +64,7 @@ CREATE TABLE translation_jobs (
  finished_at timestamptz,
  collected_at timestamptz,
  UNIQUE (installation_id,operation_id),
+ CONSTRAINT translation_jobs_installation_venue_fkey FOREIGN KEY (installation_id,venue_id) REFERENCES installations(id,venue_id),
  CONSTRAINT translation_jobs_counts_check CHECK (done+failed<=total),
  CONSTRAINT translation_jobs_finished_at_check CHECK ((state IN ('done','partly_done','failed')) <= (finished_at IS NOT NULL)),
  CONSTRAINT translation_jobs_reason_state_check CHECK ((reason IS NOT NULL) <= (state IN ('partly_done','failed','expired','collected'))),

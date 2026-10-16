@@ -137,3 +137,19 @@ test('concurrent submissions leave exactly one open job for the venue',async()=>
  assert.equal(refusal.reason.constraint,'translation_jobs_one_open_idx');
  assert.equal((await db.pool.query("SELECT count(*)::integer AS n FROM translation_jobs WHERE venue_id=$1 AND state IN ('queued','running')",[v.venueId])).rows[0].n,1);
 });
+
+test('a job cannot charge a different venue from the installation it belongs to',async()=>{
+ const v=await connectedVenue(db,issuer,origin),other=await connectedVenue(db,issuer,origin);
+ await assert.rejects(insertJob(v,{venue_id:other.venueId}),refusedBy('translation_jobs_installation_venue_fkey'));
+ await insertJob(v);
+});
+test('the database keeps the positive quantity rule for translation usage',async()=>{
+ const v=await connectedVenue(db,issuer,origin);
+ for(const quantity of [0,-1])await assert.rejects(db.pool.query(`INSERT INTO usage_events(organisation_id,venue_id,event_type,quantity,source_kind,source_reference,occurred_at)
+  VALUES($1,$2,'translation.cost_micro_usd',$3,'translation_job',$4,clock_timestamp())`,[v.organisationId,v.venueId,quantity,randomUUID()]),refusedBy('usage_events_quantity_check'));
+});
+test('the database keeps the source reference rule for translation usage',async()=>{
+ const v=await connectedVenue(db,issuer,origin);
+ for(const reference of ['-bad','','has a space','x'.repeat(257)])await assert.rejects(db.pool.query(`INSERT INTO usage_events(organisation_id,venue_id,event_type,quantity,source_kind,source_reference,occurred_at)
+  VALUES($1,$2,'translation.cost_micro_usd',731,'translation_job',$3,clock_timestamp())`,[v.organisationId,v.venueId,reference]),refusedBy('usage_events_source_reference_check'));
+});
