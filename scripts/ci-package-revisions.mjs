@@ -39,6 +39,15 @@ function workspaceAt(sha, workspace, git) {
     return {...manifest, directory: pkg.directory};
   });
   const modules = new Map([...files.keys()].filter(path => /\.[cm]?[jt]sx?$/.test(path)).map(path => [path, read(path)]));
+  // Index named subdirectories. Repository-root references also supply command
+  // working directories and need separate reader evidence before expansion.
+  const directories = new Map();
+  for (const path of modules.keys()) {
+    for (let directory = posix.dirname(path); directory !== '.'; directory = posix.dirname(directory)) {
+      if (!directories.has(directory)) directories.set(directory, []);
+      directories.get(directory).push(path);
+    }
+  }
   for (const pkg of packages) {
     const sources = [];
     for (const [path, file] of files) {
@@ -55,7 +64,8 @@ function workspaceAt(sha, workspace, git) {
       for (const value of quotedReferences(source.source)) {
         const target = value.startsWith('.') ? posix.normalize(posix.join(posix.dirname(source.path), value)) : value;
         if (packages.some(other => target.startsWith(`${other.directory}/`))) continue;
-        for (const path of [target, target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'), target.replace(/\.jsx?$/, '.tsx'),
+        // Keep descendant helpers without matching a similarly named sibling.
+        for (const path of [...(directories.get(posix.normalize(target).replace(/\/$/, '')) ?? []), target, target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'), target.replace(/\.jsx?$/, '.tsx'),
           ...['.mjs', '.cjs', '.js', '.ts', '.mts', '.cts', '.tsx', '.jsx'].flatMap(ext => [target + ext, posix.join(target, 'index' + ext)])]) {
           if (!modules.has(path) || visited.has(path)) continue;
           visited.add(path);
