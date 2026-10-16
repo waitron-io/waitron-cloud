@@ -559,7 +559,7 @@ for (const name of readdirSync(directory)) await import(pathToFileURL(resolve(di
 
 test('equivalent root-relative package files retain live and saved consumers', () => {
   for (const input of ['packages/./catalogue/src/index.mjs', 'packages/catalogue//src/index.mjs',
-    'packages/catalogue/src/../src/index.mjs']) fixture(({root, git, write, commit}) => {
+    'packages/catalogue/src/../src/index.mjs', 'packages/portal/../catalogue/src/index.mjs']) fixture(({root, git, write, commit}) => {
     write('packages/catalogue/src/index.mjs', "console.log('catalogue loaded');\n");
     write('packages/portal/src/index.mjs', `import {pathToFileURL} from 'node:url';
 await import(pathToFileURL('${input}'));
@@ -599,3 +599,43 @@ await import(pathToFileURL('${input}'));
     });
   }
 });
+
+
+test('a normalized path crossing package directories selects the loaded provider instead of the discarded prefix', () => fixture(({root, git, write, commit}) => {
+  write('packages/unrelated/src/index.mjs', "console.log('unrelated loaded');\n");
+  write('packages/portal/src/index.mjs', `import {pathToFileURL} from 'node:url';
+await import(pathToFileURL('packages/catalogue/../unrelated/src/index.mjs'));
+`);
+  write('packages/gateway/src/index.mjs', "import '../../portal/src/index.mjs';\n");
+  const base = commit();
+  write('packages/unrelated/src/index.mjs', "console.log('unrelated changed');\n");
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'unrelated changed\n');
+  for (const [path, expected] of [
+    ['packages/catalogue/src/index.mjs', ['catalogue']],
+    ['packages/unrelated/src/index.mjs', ['gateway', 'portal', 'unrelated']],
+  ]) {
+    assert.deepEqual(scopeForPaths([path], loadWorkspace(root)), {full: false, packages: expected});
+    assert.deepEqual(scopeForRevisions([path], loadWorkspace(root), base, head, git), {full: false, packages: expected});
+  }
+}));
+
+test('unresolved root-relative package templates retain possible consumers after parent normalization', () => fixture(({root, git, write, commit}) => {
+  write('packages/unrelated/src/index.mjs', "console.log('unrelated loaded');\n");
+  write('packages/portal/src/index.mjs', `import {pathToFileURL} from 'node:url';
+const name = process.argv[2];
+await import(pathToFileURL(\`packages/catalogue/../\${name}/src/index.mjs\`));
+`);
+  write('packages/gateway/src/index.mjs', "import '../../portal/src/index.mjs';\n");
+  const base = commit();
+  write('packages/unrelated/src/index.mjs', "console.log('unrelated changed');\n");
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs', 'unrelated'], {cwd: root, encoding: 'utf8'}), 'unrelated changed\n');
+  for (const [path, expected] of [
+    ['packages/catalogue/src/index.mjs', ['catalogue', 'gateway', 'portal']],
+    ['packages/unrelated/src/index.mjs', ['gateway', 'portal', 'unrelated']],
+  ]) {
+    assert.deepEqual(scopeForPaths([path], loadWorkspace(root)), {full: false, packages: expected});
+    assert.deepEqual(scopeForRevisions([path], loadWorkspace(root), base, head, git), {full: false, packages: expected});
+  }
+}));

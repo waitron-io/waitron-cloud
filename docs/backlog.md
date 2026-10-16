@@ -668,8 +668,13 @@ notifications separately.
   that equivalent package and helper spellings load the same input; selection
   checks retain their direct and transitive consumers from both saved trees,
   even when local helper files have changed. The live workspace graph applies
-  the same normalization to direct package paths. These checks add coverage;
-  every earlier assertion and the reader-audit certificates remain unchanged.
+  the same normalization to direct package paths. When `..` leaves an earlier
+  package prefix, selection follows the actual destination and drops that false
+  dependency. If an unresolved root-relative package template has no constant
+  package owner after normalization, every package remains a possible input.
+  Real imports and selection checks cover both directions across package
+  boundaries and this uncertain template case. Both graphs use slash-based
+  normalization. Every earlier assertion and reader-audit certificate is unchanged.
   This is a conservative source dependency rule, not evidence that every quoted
   directory is read at runtime. A bare quoted folder name such as `scripts` can
   select extra consumers even when it names a data field. Qualify actual reader
