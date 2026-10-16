@@ -1547,6 +1547,16 @@ notifications separately.
   each finish without errors. This fixes the concurrent reclamation failure; it
   does not resolve the sequential worker-test failure above. Continue assigning distinct worker owners;
   these local probes do not establish production concurrency capacity.
+  Two unchanged reclamation tests later exceeded their 13-second whole-operation
+  checks in a full local backup run, at 14.57 and 14.82 seconds. Isolated tracing
+  completed them in 2.17 and 10.84 seconds. Adding 11.5 seconds to container creation
+  or 3.2 seconds to image inspection reproduces the respective elapsed-time
+  failures without changing the ten-second removal budget. The original run
+  overlapped root checks and review controls but retained no per-command timings,
+  so its exact cause remains unproved. Capture image inspection, enumeration,
+  removal, verification and host scheduling on recurrence. Keep the 13-second
+  checks, 15-second test deadlines and removal policy intact; passing repeats
+  do not resolve this timing defect.
   A read-only
   dependency inventory and local drill now prove active-key rotation, old snapshot restore,
   worker restart and wrong/missing-key refusal without exposing secrets or deleting keys.
