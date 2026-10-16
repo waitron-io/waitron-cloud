@@ -63,10 +63,21 @@ function workspaceAt(sha, workspace, git) {
     for (let index = 0; index < sources.length; index++) {
       const source = sources[index];
       const rootReads = new Set([...source.source.matchAll(/\breaddirSync\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*,?\s*\)\s*,?\s*\)/g)].map(match => match[2]));
+      // Options may enable recursion or supply a computed policy; an unresolved
+      // root scan cannot justify omitting any package consumer.
+      const optionReads = new Set([...source.source.matchAll(/\breaddirSync\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*,?\s*\)\s*,(?!\s*\))/g)].map(match => match[2]));
+      const optionVariables = new Set([...source.source.matchAll(/\breaddirSync\s*\(\s*([A-Za-z_$][\w$]*)\s*,(?!\s*\))/g)].map(match => match[1]));
       // A root URL variable retains helpers when its identifier is scanned.
       const scannedVariables = new Set([...source.source.matchAll(/\breaddirSync\s*\(\s*([A-Za-z_$][\w$]*)\s*,?\s*\)/g)].map(match => match[1]));
       for (const match of source.source.matchAll(/(?:\b(?:const|let|var)\s+|,\s*)([A-Za-z_$][\w$]*)\s*(?::\s*URL\s*)?=\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\.meta\.url\s*,?\s*\)/g)) {
         if (scannedVariables.has(match[1])) rootReads.add(match[3]);
+        if (optionVariables.has(match[1])) optionReads.add(match[3]);
+      }
+      for (const value of optionReads) {
+        assert.doesNotMatch(value, /[?#%]/, `Unverified repository-root directory scan options at ${source.path}`);
+        const target = posix.normalize(posix.join(posix.dirname(source.path), value)).replace(/\/$/, '');
+        assert.notEqual(target, '.', `Unverified repository-root directory scan options at ${source.path}`);
+        assert.ok(target !== '..' && !target.startsWith('../'), `Unverified repository-root directory scan options at ${source.path}`);
       }
       for (const value of quotedReferences(source.source)) {
         const target = value.startsWith('.') ? posix.normalize(posix.join(posix.dirname(source.path), value)) : posix.normalize(value);
