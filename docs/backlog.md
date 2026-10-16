@@ -357,8 +357,11 @@ venue does not subscribe to remote access or backups.
   gate. The item counters are 78 Google, 80 Geoapify and 41 CartoCiudad attempts,
   including one conservative documentation probe; no retries or customer data.
   The harness, corpus, per-case scores and component/latency tables are retained;
-  raw provider responses are local-only and deleted at landing. Google's storage
-  rights remain unresolved, so its row is a quality comparison only. The owner approved a larger residential/rural comparison. Its fixed
+  raw provider responses are local-only and deleted at landing. The later
+  [terms check](address-lookup-scope.md#google-can-propose-an-address-you-must-confirm-what-you-keep)
+  identifies Address Validation's conditional confirmation route for merchant
+  fields; Places selection alone does not establish durable storage permission.
+  The owner approved a larger residential/rural comparison. Its fixed
   60-address regional corpus compares unchanged and postcode-free queries, supplied
   versus postcode-derived provinces, and the first result versus presence in a
   bounded list. It retains the original request counters and manual-entry rule;
@@ -369,9 +372,19 @@ venue does not subscribe to remote access or backups.
   47/60 without new requests. Postcode omission gives CartoCiudad one complete draft.
   These regional, field-mapping results do not select a provider or prove setup
   integration. Cumulative attempts remain Google 363, Geoapify 320 and CartoCiudad 161,
-  below 1,499 each, with no errors or retries in the second run. Choose the provider only after confirming durable merchant
-  storage/display rights, licensing, caching, attribution and peak-day capacity.
-  Account allowance and attribution remain open; no product route or UI is added.
+  below 1,499 each, with no errors or retries in the second run. The owner's next
+  preference is Google with Geoapify fallback. Its
+  [proposed design](superpowers/specs/2026-10-16-address-suggestions.md) and
+  [plan](superpowers/plans/2026-10-16-address-suggestions.md) specify explicit whole-address
+  confirmation, provider-specific attribution, no shared response cache, ten
+  confirmed selections per account per month and a zero-paid-usage budget. These
+  are proposed defaults, not approved production allowances or configured key caps.
+  Effective billing terms, accounted shared usage, operator quotas, Geoapify Free
+  eligibility/storage rights, locality policy and joint Waitron setup acceptance
+  remain release gates. The retained CartoCiudad audit agrees with published
+  scores and the earlier parser fix; a new raw-response re-score is unavailable
+  because both landings deleted those replies. No further provider call or
+  product route/UI is added.
   Keep manual entry and correction available when lookup is unavailable or wrong.
 - **Transactional email.** Offer managed SMTP delivery for password resets and other
   account administration emails from on-prem Waitron. Scope the relay to these
@@ -1775,7 +1788,7 @@ changing any check. The assertions and deadlines remain unchanged.
 | Invoice archive | Define the archived objects and access grants, including owner-approved AEAT/advisor access, retention, download and customer exit. Have hosting/archive questions reviewed for the launch country. |
 | Analytics and reports | Choose ingestion, supported source versions, country and cell placement, search/aggregation engine, scheduled reports and group reporting. Elasticsearch is a candidate. |
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |
-| Address lookup (free) | [Spain measured on 2026-10-16](address-lookup-scope.md#measured-on-spain-2026-10-16): 40 public/synthetic cases; none of the three tested providers reaches the proposed selectable-match gate under the first-result mapping. The approved second comparison adds 60 public residential/rural addresses and 120 paired queries, first-versus-list scoring and explicit province inference. The original field references and a separate rural-municipality sensitivity remain distinct; accepted locality level and actual setup integration stay open. Provider and implementation remain open. Confirm durable storage/display rights, and set caching, attribution, peak-day budget and account allowance before implementation. See [free services](#free-services-for-open-source-waitron). |
+| Address lookup (free) | [Spain measured on 2026-10-16](address-lookup-scope.md#measured-on-spain-2026-10-16): 40 public/synthetic cases; none of the three tested providers reaches the proposed selectable-match gate under the first-result mapping. The approved second comparison adds 60 public residential/rural addresses and 120 paired queries, first-versus-list scoring and explicit province inference. The original field references and a separate rural-municipality sensitivity remain distinct; accepted locality level and actual setup integration stay open. The owner prefers a Google-first plan with Geoapify fallback. The [terms finding and proposed design](address-lookup-scope.md#google-can-propose-an-address-you-must-confirm-what-you-keep) distinguish whole-address confirmation from a Places click and propose attribution, no shared cache, account limits and zero paid usage. Provider activation, effective account terms/quotas, fallback eligibility, locality policy and actual setup acceptance remain open. See [free services](#free-services-for-open-source-waitron). |
 | Messaging | The [version 1 on-prem relay contract](transactional-email-relay-contract.md) has a disabled local-proof grant/reservation core; opt-in signed routes, an encrypted queue and a disabled local capture worker with bounded claims and accepted/uncertain outcomes; production origin verification, Waitron durable caller, joint proof and production decisions remain open. Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Prefer a Spain-hosted provider for administrative email; configure the implemented TLS SMTP adapter, notification channels, sender identities, preferences, delivery failures and message location policy. |
 | Automated upgrades | Treat cloud services, cloud-hosted Waitron and on-prem installations separately; choose rollout groups, compatibility, maintenance windows, pause and recovery behaviour. |
 | Monitoring | External venue and remote-route health, backup staleness, customer incidents and bilingual email alerts are implemented locally. Accepted public/staff probes now emit retry-safe organisation usage events and the portal shows their measured total. Add filing/device signals, broader functional checks and performance evidence. The local deployment now schedules usage reconciliation; define production operations, cost, allowance and limit policy before using measurements for enforcement. |

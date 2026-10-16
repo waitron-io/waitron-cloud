@@ -1,6 +1,95 @@
 # Scope address lookup before choosing a provider
 
-**Decision note, 2026-09-30.** Offer address suggestions to people setting up an open-source Waitron venue through a Cloud login, while keeping every existing address field editable. Do not select a provider yet. A useful suggestion is not enough: Waitron must be allowed to save the selected address as a durable merchant record, map it safely into its country pack, and sustain the resulting traffic within a stated allowance and budget. **Geoapify is the first hosted candidate to test across countries; CartoCiudad is a Spain-specific comparator.** Google and Mapbox warrant a bounded quality comparison only if their intended storage and display rights can be confirmed. Public Nominatim cannot serve live autocomplete under its published policy. The prices below are dated list-price scenarios, not quotes or measured demand. No keys, live provider requests, spending, or customer data were used in this research.
+**Decision note, 2026-09-30.** Offer address suggestions to people setting up an open-source Waitron venue through a Cloud login, while keeping every existing address field editable. Do not select a provider yet. A useful suggestion is not enough: Waitron must be allowed to save the selected address as a durable merchant record, map it safely into its country pack, and sustain the resulting traffic within a stated allowance and budget. The original research put Geoapify first and used CartoCiudad as a Spain-specific comparator. The owner now prefers planning Google with Geoapify fallback after the two measured comparisons; read the dated terms finding below before implementing it. Public Nominatim cannot serve live autocomplete under its published policy. The prices below are dated list-price scenarios, not quotes or measured demand. No keys, live provider requests, spending, or customer data were used in the original September research. The October measurements are recorded separately below.
+
+## Google can propose an address; you must confirm what you keep
+
+**Terms read 2026-10-16; design only.** You need an address that remains yours after
+setup. Google Address Validation has a specific confirmation route for that purpose.
+A Places suggestion by itself does not establish the same storage permission. The
+owner's preference is Google suggestions with Geoapify fallback. The
+[proposed design](superpowers/specs/2026-10-16-address-suggestions.md) and
+[implementation plan](superpowers/plans/2026-10-16-address-suggestions.md) keep
+manual entry available and leave both providers disabled until the release checks pass.
+
+| Official source, read 2026-10-16 | Source wording | Meaning for this design |
+| --- | --- | --- |
+| [EEA service terms, B1.4 and table 1.4](https://cloud.google.com/terms/maps-platform/eea/maps-service-terms) | “replace it with End User data provided through End User confirmation or correction” | Listed validation address fields have a 30-calendar-day temporary permission for account-related downstream transactions, followed by deletion or this replacement. Coordinates instead require deletion after 30 days. This is not permission to keep every response field. |
+| [Google validation architecture guide, step 2](https://developers.google.com/maps/architecture/high-volume-address-validation) | “Once the user accepts, you can cache the formattedAddress in the database.” | Google describes showing the corrected address for acceptance, retaining that accepted address, and deleting validation flags afterward. This supports explicit confirmation of the final address rather than treating an earlier prediction click as confirmation. |
+| [Non-EEA service terms, B1.3.2](https://cloud.google.com/maps-platform/terms/maps-service-terms) | “30 consecutive calendar days” | The listed validation address fields have the same delete-or-replace path. Applicable terms depend on the Google billing address, which this research has not checked. |
+| [EEA Places permitted uses](https://cloud.google.com/terms/maps-platform/eea-places-api-permitted-uses) | “facilitate address lookup and autocompletion functionalities” | Address suggestions are a permitted use. This does not add permanent Places-content storage permission. |
+| [Places policies](https://developers.google.com/maps/documentation/places/web-service/policies) | “store Place ID values indefinitely” | A saved identifier is an exception, not a licence to save the prediction text, business details or coordinates indefinitely. The design needs no retained place ID. |
+| [Validation attribution policy](https://developers.google.com/maps/documentation/address-validation/policies) | “within the same visual container” | Show Google Maps attribution beside the Google list and validation draft, distinguish other providers, and preserve any required third-party credit. Provide public terms and privacy links. Use no map in this flow. |
+
+**Design interpretation:** after validation, show every proposed address field together,
+let you correct it, and ask you to confirm the whole address as your venue's address.
+Persist those submitted, confirmed fields as your record and discard the provider
+response. This implements the stated replacement route; it is an interpretation of
+the terms, not written approval of Waitron from Google. A click that merely chooses
+a Places prediction starts validation. It does not confirm the final address or grant
+rights to keep Google's raw replies, confidence flags, coordinates or a shared address
+cache. The implementation must distinguish those two actions and retain no provider
+content in logs, durable queues or backups before confirmation.
+
+The proposed provider-response cache lifetime is **zero between workflows**. Keep only
+active display state and discard it on cancellation, expiry or provider change. The
+30-day permission is an outer bound, not a proposed background cache. Customer address
+retention follows the venue record's policy once you have confirmed it. Keep Google
+attribution on its active draft; do not attribute your subsequently corrected record
+to Google or attach Google's logo to Geoapify output.
+
+The plan proposes ten confirmed addresses per Cloud account per UTC calendar month,
+shared across venues and providers. Its paid API budget is **USD 0**. It stops Google
+at 500 validations and 4,000 autocomplete requests per provider billing month,
+including existing and uncertain usage, and imposes separate daily peaks. Those are
+proposed ceilings below the public free allowances, not settings on the owner's key.
+[Google session pricing](https://developers.google.com/maps/documentation/places/web-service/session-pricing)
+bills an Address Validation termination at the Enterprise rate; abandoned suggestions
+can still be billed per request. The plan counts every suggestion conservatively.
+[Google's price list](https://developers.google.com/maps/billing-and-pricing/pricing)
+currently lists 1,000 free Enterprise validations and 10,000 autocomplete requests
+per month. [Free usage resets at midnight US Pacific time on the first](https://developers.google.com/maps/billing-and-pricing/pay-as-you-go)
+and usage aggregates across the billing account's projects. Unknown outside usage
+therefore prevents enabling the proposed zero-paid service.
+
+The owner's Google key has no configured cap or alert according to the queue's owner
+note; this firing has not inspected or changed that account. A billing budget
+[does not automatically stop usage or spending](https://developers.google.com/maps/billing-and-pricing/manage-costs).
+Transactional reservations before dispatch, provider quotas set by the owner, accounted
+shared usage and a tested stop control are separate activation requirements. Geoapify
+is the planned fallback only after its commercial Free eligibility and exact
+merchant-storage terms are confirmed. Its [terms](https://www.geoapify.com/terms-and-conditions/)
+require OpenStreetMap credit, plus Geoapify credit on Free, and permit suspension or
+overage charges when limits are exceeded. An unavailable fallback leaves manual entry.
+This note enables no lookup route, provider account, spending or product release.
+
+### CartoCiudad: the retained evidence has a narrower answer
+
+The cited **0/74** combines 14 supported clean civic inputs from the first benchmark
+with 60 postcode-bearing residential/rural inputs. They use different selection rules,
+so it is not one accuracy rate. The retained scores give zero street selections for
+the first 14, including 13 empty results and one wrong street. The second set has 60
+empty lists, zero candidate errors and zero request errors. Omitting postcodes gives
+18 nonempty lists, 16 street matches and one complete draft among 60 queries.
+
+The first benchmark already fixed a parser defect: full display labels duplicated
+street types and retained house numbers/locality in the street component. Its saved
+responses were re-scored before landing; the published results include that fix.
+The retained second-run replay receipt reproduces all 120 scores and query/candidate
+identities. Recomputing its boolean totals now gives the same published counts. The
+46 existing offline harness checks pass, including the label parser, exact candidate
+resolution and malformed-response refusals. An empty-array probe reaches an empty
+list without a parser error. These checks support query sensitivity as a limitation;
+they do not prove every CartoCiudad response shape is parsed correctly.
+
+A fresh raw-response re-score **cannot be done from the retained files**: the first
+landing removed 198 raw replies and the second removed 645, including CartoCiudad's,
+under their agreed cleanup rule. The raw directories are absent. No new geocoder
+request was made, no reference or score was changed, and the shared request journal
+remains Google 363, Geoapify 320 and CartoCiudad 161. The no-new-requests check is an
+audit of retained scores and earlier replay receipts, not a newly repeated replay or
+proof that the provider lacks these addresses. A future authorised measurement would
+need raw replies again to investigate a new parsing hypothesis.
 
 ## A selected address must remain an editable Waitron draft
 
@@ -16,7 +105,7 @@ Treat three things separately: the person's original text, a transient suggestio
 | --- | --- | --- | --- |
 | **Geoapify** | Autocomplete and geocoding expose structured address fields, country filters, and Spanish, Portuguese, French, and Italian language options. Data includes OpenStreetMap and OpenAddresses; no comparable country-level house-number match rate is published. ([API docs](https://apidocs.geoapify.com/docs/geocoding/address-autocomplete/), [sources](https://www.geoapify.com/products-and-services/)) | Its autocomplete product page permits storing and caching suggestions; confirm that intended merchant reuse is covered. OpenStreetMap credit is required, plus Geoapify credit on Free. Its DPA says `api-eu.geoapify.com` keeps requests EU-bound; the default endpoint uses Cloudflare. Confirm the agreement and use the EU hostname if that boundary is required. ([Storage guidance](https://www.geoapify.com/address-autocomplete/), [Terms](https://www.geoapify.com/terms-and-conditions/), [DPA](https://www.geoapify.com/data-processing-agreement/)) | Free: 3,000 credits/day and up to 5 requests/second; paid tiers raise both limits. ([Pricing](https://www.geoapify.com/pricing/)) |
 | **CartoCiudad** | Spain's official-data service combines national, regional, and local sources and includes postal/locality fields. Its dataset count and update schedule describe availability, not accuracy for Waitron addresses. `candidates` can be followed by `find` for a non-point result. ([FAQ](https://www.cartociudad.es/web/portal/faq), [service guide](https://www.cartociudad.es/web/portal/directorio-de-servicios/geoprocesamiento)) | Published FAQ allows commercial use with CC BY 4.0 credit. Confirm how attribution should appear in this product, plus request-data retention and processing location. ([FAQ](https://www.cartociudad.es/web/portal/faq)) | Web service is free, but the reviewed guide does not publish a per-client throughput limit or service commitment. Confirm production expectations with its operator. ([Service guide](https://www.cartociudad.es/web/portal/directorio-de-servicios/geoprocesamiento)) |
-| **Google Places / Address Validation** | Validation explicitly lists ES, PT, FR, IT, while warning that quality varies by country. Its validation output is different from a Places suggestion. ([Coverage](https://developers.google.com/maps/documentation/address-validation/coverage)) | Default Maps policies restrict storing returned content, with Place IDs as an exception, and require Google attribution. EEA billing can change applicable Places rules; the reviewed documents do not establish a Maps endpoint residency promise. Obtain written clarity for durable merchant fields and any map display. ([Validation policies](https://developers.google.com/maps/documentation/address-validation/policies), [EEA Places changes](https://developers.google.com/maps/comms/eea/places)) | Address Validation defaults to 6,000 requests/minute; configure project quotas for the chosen APIs. ([Quota documentation](https://developers.google.com/maps/documentation/address-validation/usage-and-billing)) Session billing depends on whether autocomplete ends in Details or Validation; abandoned sessions bill per suggestion request. ([Session pricing](https://developers.google.com/maps/documentation/places/web-service/session-pricing)) |
+| **Google Places / Address Validation** | Validation explicitly lists ES, PT, FR, IT, while warning that quality varies by country. Its validation output is different from a Places suggestion. ([Coverage](https://developers.google.com/maps/documentation/address-validation/coverage)) | Default Maps policies restrict storing returned content, with Place IDs as an exception, and require Google attribution. EEA billing can change applicable Places rules; the reviewed documents do not establish a Maps endpoint residency promise. Use the dated confirmation-route finding above for merchant fields; any map display remains outside this design. ([Validation policies](https://developers.google.com/maps/documentation/address-validation/policies), [EEA Places changes](https://developers.google.com/maps/comms/eea/places)) | Address Validation defaults to 6,000 requests/minute; configure project quotas for the chosen APIs. ([Quota documentation](https://developers.google.com/maps/documentation/address-validation/usage-and-billing)) Session billing depends on whether autocomplete ends in Details or Validation; abandoned sessions bill per suggestion request. ([Session pricing](https://developers.google.com/maps/documentation/places/web-service/session-pricing)) |
 | **Mapbox Search Box** | Documents Europe-wide Search Box coverage and relevant query languages, without a country-by-country address match measure. ([Search Box API](https://docs.mapbox.com/api/search/search-box/)) | Search Box results are temporary-use only. Separate permanent Geocoding permits storage, but its pricing terms restrict redistribution/sublicensing; confirm multi-tenant merchant use in writing. Mapbox says it cannot limit processing to Europe. ([Search Box](https://docs.mapbox.com/api/search/search-box/), [Geocoding](https://docs.mapbox.com/api/search/geocoding/), [pricing](https://www.mapbox.com/pricing), [privacy FAQ](https://www.mapbox.com/legal/privacy)) | A Search Box session ends on retrieval, timeout, or suggestion cap; default endpoint limit is 10 requests/second. Confirm the effective timeout and preview-plan eligibility. ([Search Box API](https://docs.mapbox.com/api/search/search-box/)) |
 | **Nominatim** | OpenStreetMap-based search can parse structured addresses; completeness depends on contributed map data. A self-hosted instance is a separate infrastructure option. ([Search API](https://nominatim.org/release-docs/develop/api/Search/), [installation](https://nominatim.org/release-docs/latest/admin/Installation/)) | OSM attribution and ODbL questions depend on the data stored or distributed; review the exact use. ([OSM copyright](https://www.openstreetmap.org/copyright/es)) | **Public service forbids autocomplete** and allows at most 1 request/second per application. Self-hosting removes that public-service policy but adds index, update, capacity, and uptime work. ([Public policy](https://operations.osmfoundation.org/policies/nominatim/)) |
 
@@ -55,14 +144,15 @@ Before a venue is paired, propose a Cloud sign-in and narrowly scoped, expiring 
 
 Build a licensed public or synthetic corpus with expected components independent of each provider. Include mainland and island provinces, rural localities, accents and language variants, street numbers and units, postcode boundaries, ambiguous streets, typos, and unsupported fiscal jurisdictions. Run the same country-restricted input through Geoapify and CartoCiudad for Spain; add Google and Mapbox only when their proposed persistence and display terms are clear enough to test the intended flow. Score selectable match, wrong match, exact house number, postcode, locality, canonical province, coordinate quality where useful, and no result. Record provider chargeable units, latency, timeout, and retries. Run manual-only, provider-error, and correction cases through Waitron's actual validation. Add each later country separately after its country pack permits setup. This is an **evaluation plan**, not measured quality.
 
-The owner must set sample size and regional weights, acceptable normalization, accuracy thresholds, cache duration, attribution placement, and a peak-day budget. Proposed initial gates for discussion are 95% selectable matches among in-scope Spanish cases, 98% correct postcode and administrative area among selections, zero silent country switches or overwritten manual edits, and all accepted results passing Waitron server validation with the expected fiscal territory and time zone. Do not average an unsupported region's failure into a national pass. Before provider selection, obtain written permission or a reviewed contract basis for permanent merchant-field storage and display, plus the chosen endpoint's processing, rate, and price terms. The selected provider, allowance, and implementation remain open until those receipts and the benchmark exist.
+The owner must set sample size and regional weights, acceptable normalization, accuracy thresholds, cache duration, attribution placement, and a peak-day budget. Proposed initial gates for discussion are 95% selectable matches among in-scope Spanish cases, 98% correct postcode and administrative area among selections, zero silent country switches or overwritten manual edits, and all accepted results passing Waitron server validation with the expected fiscal territory and time zone. Do not average an unsupported region's failure into a national pass. Before provider selection, obtain written permission or a reviewed contract basis for permanent merchant-field storage and display, plus the chosen endpoint's processing, rate, and price terms. The later Google-first plan proposes an allowance and confirmation route; release thresholds, effective provider terms and implementation acceptance remain open.
 
 ## Measured on Spain, 2026-10-16
 
 You can compare the services on a small, deliberately difficult set of civic addresses.
 This measures the returned fields under the adapters below. It does not select a provider
 or establish permission to keep its address content. Google's results are a quality
-comparison only; its durable merchant-record storage rights remain unresolved.
+comparison only; the later terms finding identifies a conditional confirmation route,
+not a live product integration.
 
 The [corpus](evaluations/spanish-addresses.json) contains 20 public civic addresses and
 one hand-authored input variant for each. Its original queries and annotations are
@@ -213,9 +303,8 @@ cost, storage permission, cache rights, or attribution placement.
 
 The owner approved the [second residential/rural comparison](#residential-and-rural-comparison-2026-10-16)
 on 2026-10-16. The first benchmark remains frozen. Confirm durable
-merchant storage and display rights before recommending a provider. Provider choice,
-release thresholds, cache lifetime, attribution placement, account allowance and
-sharing rules, and the peak-day budget remain owner decisions.
+merchant storage and display rights before recommending a provider. The later Google-first plan proposes cache, attribution, allowance and budget defaults;
+release thresholds and provider activation remain open.
 
 ## Residential and rural comparison, 2026-10-16
 
@@ -425,8 +514,8 @@ here is the portal default, rather than a dataset-specific permission receipt.
 Different references and province/selection rules make these figures unsuitable
 for claiming an improvement over the first benchmark's percentages.
 
-Next, settle the locality level and verify durable merchant-field storage and display
-rights before selecting a provider. Google remains a quality comparison only.
-Release thresholds, cache lifetime, attribution placement, account allowance and
-sharing, and the peak-day budget remain owner decisions. The harness adds no product
-route, automatic field replacement or provider selection.
+The later Google-first design documents a conditional confirmation route for durable
+merchant fields, plus proposed cache, attribution, allowance and budget defaults.
+Locality policy, release thresholds, effective terms and actual setup acceptance
+remain activation gates. The measured rows remain quality evidence; the harness
+adds no product route or automatic field replacement.
