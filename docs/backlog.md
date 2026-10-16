@@ -496,10 +496,12 @@ notifications separately.
   each, and backups uses two. The summary requires all five registration results
   and rejects the former seven-partition allocation. A Node subprocess check
   partitions copies of every current registration filename plus a new filename
-  and requires each to execute exactly once. This checks file discovery; the real
+  and requires each to execute exactly once. Its file workers run one at a time;
+  overlapping fixture bodies fail on a shared scratch-directory lock. This checks file discovery; the real
   package jobs must still report every test case. Reducing registration from seven
   jobs to five removes two repeated setups. Compare actual Ubuntu job durations
-  and rounded minutes before claiming a saving or the five-minute target.
+  and rounded minutes before claiming a saving or the target of about five minutes
+  per job and 55 rounded minutes per full run.
   A shard is one partition of a package's tests. Removing a partition
   from both the plan and the job list cannot turn incomplete work green.
   Unknown packages, altered counts, invalid partition numbers and extra row
@@ -635,6 +637,13 @@ notifications separately.
   worker after 65.34 seconds including its outer setup. Review controls and
   package qualification overlapped that run. The precise cause remains unproved;
   retain both limits and their original assertions when investigating recurrence.
+  A later review of the five-shard change also missed the 60-second dependency
+  worker twice with the new discovery check, while its base and skipped-check
+  comparisons did not. That small sample does not establish causality. The new
+  discovery fixture now permits one file worker at a time; overlapping bodies fail
+  on an exclusive scratch-directory lock. Keep the 35-second and 60-second limits
+  and capture stages on recurrence; bounded fixture workers do not prove that the
+  historical root timeouts are resolved.
   The original historical failures did not retain these exact stages; the controlled
   reproduction establishes the timeout mechanisms rather than their precise history.
   Evidence, earlier partial fixes and complete load-run outcomes are retained under

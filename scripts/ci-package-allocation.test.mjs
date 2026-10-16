@@ -81,12 +81,19 @@ test('registration shards discover every current file and a future file exactly 
   const root = mkdtempSync(join(tmpdir(), 'cloud-registration-shards-'));
   try {
     for (const name of files) writeFileSync(join(root, name),
-      `import test from 'node:test';\ntest(${JSON.stringify(name)}, () => {});\n`);
+      `import test from 'node:test';
+import {mkdirSync, rmdirSync} from 'node:fs';
+import {setTimeout as delay} from 'node:timers/promises';
+test(${JSON.stringify(name)}, async () => {
+  mkdirSync('active-discovery');
+  try {await delay(50);} finally {rmdirSync('active-discovery');}
+});
+`);
     const seen = [];
     const env = {...process.env};
     delete env.NODE_TEST_CONTEXT;
     for (const row of rows) {
-      const output = execFileSync(process.execPath, ['--test', '--test-reporter=tap', '--test-timeout=30000',
+      const output = execFileSync(process.execPath, ['--test', '--test-reporter=tap', '--test-concurrency=1', '--test-timeout=30000',
         `--test-shard=${row.shard}/${row.shards}`, '*.test.ts'], {cwd: root, env, encoding: 'utf8', timeout: 30_000});
       const selected = [...output.matchAll(/^ok \d+ - (.+)$/gm)].map(match => match[1]);
       assert.ok(selected.length > 0, `Empty registration shard ${row.shard}`);
