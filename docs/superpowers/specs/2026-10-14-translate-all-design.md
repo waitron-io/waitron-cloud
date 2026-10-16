@@ -1,7 +1,10 @@
 # Translate all: the Cloud translation service
 
-**Status:** design, approved in conversation with the owner on 2026-10-14; this file awaits the
-owner's review.
+**Status:** owner-approved design and implementation plan, including the US$5 UTC monthly
+per-venue safety cap and submit admission (4 in flight, 1 per address). The owner requires bounded
+collect before go-live. The [2026-10-16 paging amendment](../plans/2026-10-16-translation-collect-pages.md)
+defines that prerequisite without restricting accepted language tags.
+Runtime implementation and release qualification remain open.
 **Companion spec (Waitron side):** `waitron/docs/superpowers/specs/2026-10-14-translate-all-design.md`.
 It covers the dashboard, the box's job runner and the suggestions it stores.
 **Wire contract:** [`docs/waitron-integration-contract.md`](../../waitron-integration-contract.md),
@@ -19,11 +22,12 @@ request and its collected results.
 ## Owner decisions this design follows (2026-10-14)
 
 1. **Free for now, for any connected installation**, with a per-venue spending cap as a safety
-   limit: **$5 per venue per calendar month (UTC) — proposed, owner to confirm.** A monthly
+   limit: **US$5 per venue per calendar month (UTC), owner-approved.** A monthly
    allowance, recorded so that billing can use it later, replaces this before the first live venue.
    There is no billing in this repository yet (`docs/backlog.md`); this design adds none.
-2. **Cloud keeps nothing but usage counts.** The menu and the results are deleted once the box has
-   collected them, or after 24 hours. No name ever enters a log.
+2. **Cloud keeps nothing but usage counts.** The menu and the results are deleted when the box
+   releases the job after durably storing every collect page, or after 24 hours. Collect itself
+   never deletes them. No name ever enters a log.
 3. **The prompt rules stay language-neutral.** A rule written for one language was tried and dropped
    by the owner: "that doesn't help us with arbitrary languages".
 4. **Cloud runs each request as a background job** (the shape of the email relay), not the box
@@ -109,6 +113,25 @@ seconds (`packages/account-http/src/server.ts:37`). A 1 MiB job, escaped as a JS
 the envelope, can be twice that, so submit accepts a request of up to 2 MiB plus 16 KiB, received
 within 60 seconds. Status, collect and release keep 16 KiB and 5 seconds. The exact numbers and
 refusals are in the contract.
+
+**Submit admission is owner-approved:** four requests in flight, at most one per client address,
+outside the eight places shared by other account requests. Existing rate limits still apply.
+
+**Collect is paged before go-live.** Each complete compact JSON reply is at most 16,777,216 UTF-8
+bytes after content decoding, including its UUID and `nextCursor`. A signed optional integer
+cursor selects an offset in the original submitted items filtered to those with missing languages.
+Terminal results stay in submit order, independent of worker or batch completion. Each page is
+the largest nonempty consecutive segment that fits, with complete unchanged items. Retried cursors
+return the same semantic page while retained. The contract owns the exact validation and fields.
+
+The box stores each page through durable suggestion reconciliation and deduplicates refs on crash
+retries. It reads at most 16 MiB per page without concatenating response strings or accumulating
+unbounded buffers, and releases only after every page is durably stored. Release or expiry between
+pages means an incomplete job, never a full result. Waitron lane B A689-21 must implement the loop;
+a smaller reader alone cannot prevent a one-collect caller from releasing unseen pages. Joint
+Cloud/Waitron pagination and recovery proof is a go-live gate, alongside the existing quality and
+pricing gates. The amendment proves that a single result fits using the existing input bounds;
+no new language-tag restriction is needed.
 
 **Context items.** When the box sends a member of a family (a variant, an options label, a menu
 section) but not its head, because the head's own names are complete or an earlier job of the
@@ -284,6 +307,9 @@ by hand, not in CI.
 
 Before release, two further measurements:
 
+Tasks 22–24 remain owner-only, after 2026-11-02. Preserve their commands; neither documentation
+drafting nor offline implementation authorizes running them or accessing the real key.
+
 - **A short trial on the other kinds of name** (variants, options labels, menu sections), using
   Santet's, graded by the owner.
 - **The templated prompt and the house-style examples**, as in "The prompt".
@@ -294,6 +320,11 @@ Before release, two further measurements:
   refused; a retried operation returns its first result. The contract's test vectors pass.
 - **Request limits:** a 1 MiB job inside a 2 MiB request is accepted at submit, a larger one is
   refused as too large, and the other three actions keep 16 KiB and 5 seconds.
+- **Collect pages:** measure the complete compact JSON in decoded UTF-8 bytes, including the
+  UUID and actual `nextCursor`; cover escaping, exact bounds, maximal pages, stable submit order,
+  mixed failures/context, arbitrary valid offsets, owner-first cursor validation and repeat reads.
+  Jointly prove bounded Waitron reads, crash retries/ref deduplication, durable completion before
+  release, and incomplete results after release or expiry between pages.
 - **Job body:** a context item is accepted only when it heads the family of an item with languages
   to write, and never appears in the results or the failed list.
 - **Batching:** families are never split; a family over 90 stays whole; categories stay together;

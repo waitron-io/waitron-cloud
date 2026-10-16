@@ -349,11 +349,15 @@ not local operator authentication, and no registry call belongs on the sale path
 
 ## Translate all, version 1
 
-Designed 2026-10-14; not implemented. The product design is in
+Owner-approved design; runtime not implemented in this Cloud checkout. The bounded-collect
+prerequisite is documented on 2026-10-16 in the
+[paging amendment](superpowers/plans/2026-10-16-translation-collect-pages.md).
+The bound preserves the existing input limits;
+design approval does not claim runtime qualification or release readiness. The product design is in
 [the Cloud spec](superpowers/specs/2026-10-14-translate-all-design.md) and in Waitron's
 `docs/superpowers/specs/2026-10-14-translate-all-design.md`. This section is the wire contract
 both sides build against; both specs and both plans point here and do not restate it differently.
-Reconciled with both plans on 2026-10-14.
+The paging amendment supersedes conflicting collect examples in the original Cloud plan.
 
 Four machine actions use the existing `waitron-cloud-machine-v1` envelope and a current control
 lease: POST to `/api/installations/translation-submit`, `translation-status`,
@@ -376,6 +380,15 @@ own limits because `body` travels as a JSON string inside the envelope: the job 
 escaping JSON text adds at most one backslash per character, so its escaped form is at most twice
 its size. A request over its size limit is refused with 413 (`translation_job_too_large` for
 submit, `invalid_input` for the others); one not received in time with 408.
+
+The owner approved submit admission of **4 requests in flight, at most 1 per client address**,
+outside the 8 places shared by other account requests. Refuse excess submits before reading their
+bodies with 503 `temporarily_unavailable` and `Retry-After: 1`; existing rate limits still apply.
+
+Every successful collect response is at most **16,777,216 UTF-8 bytes (16 MiB) for the complete JSON
+body**, including every field, the UUID and `nextCursor`. Serialize compact JSON with no formatting
+whitespace. Count bytes after decoding any HTTP content encoding; compression never increases the
+allowance. Never drop fields, names or corrections, or truncate text, to make a page fit.
 
 ### Seeing the service
 
@@ -488,7 +501,9 @@ length. A job that breaks any rule below is refused with 400 `invalid_request`.
 
 `total`, `done` and `failed` count only items with languages to write.
 
-**The cap.** Cloud estimates a job's cost from `total` at a stored rate per item. If the estimate
+**The cap.** The owner approved **US$5 per venue per calendar month (UTC)** as the temporary safety
+cap. Pricing, the replacement monthly allowance and billing remain separate release gates.
+Cloud estimates a job's cost from `total` at a stored rate per item. If the estimate
 exceeds what is left of the venue's cap for the calendar month (UTC), submit is refused:
 
 ```json
@@ -511,8 +526,19 @@ The reply:
 
 ### Status, collect and release
 
-Each signs exactly `{"version":1,"jobId":"<uuid>"}` with a fresh operation ID; any other signed
-body is 400 `invalid_request`.
+Status and release each sign exactly `{"version":1,"jobId":"<uuid>"}` with a fresh operation ID.
+Collect signs exactly those fields with an optional `cursor`, for example
+`{"version":1,"jobId":"00000000-0000-4000-8000-000000000010","cursor":2}`.
+Omitting `cursor` means 0. Other fields or invalid action bodies are 400 `invalid_request`.
+
+After proof and lease validation, look up the job scoped to the signing installation before
+checking cursor validity or range. An unknown or foreign job is always 404
+`translation_job_not_found`, including with an invalid cursor. For an owned job, a supplied cursor
+must be a JSON number that is a safe integer with `0 <= cursor < total`; null, strings, booleans,
+fractions, negative, unsafe and out-of-range values are 400 `invalid_request`. Validate the cursor
+before applying collect's state rules. `total` excludes context items. Any positive offset in range
+is allowed; it need not be a previously returned page boundary. An opaque or encrypted token adds
+no authority: the offset is already signed and installation-scoped.
 
 **Status** returns:
 
@@ -542,14 +568,14 @@ A `partly_done` or `failed` status also carries `reason`, one of this list:
 
 Poll every five seconds at most.
 
-**Collect**, by state: `done` or `partly_done` returns the results; `queued`, `running` or
+**Collect**, by state: `done` or `partly_done` returns one page; `queued`, `running` or
 `failed` is 409 `translation_not_ready`; `collected` or `expired` is 410 `translation_expired`.
 
 ```json
 {
   "version": 1,
-  "jobId": "...",
-  "state": "done",
+  "jobId": "00000000-0000-4000-8000-000000000010",
+  "state": "partly_done",
   "results": [
     {
       "ref": "variant:812",
@@ -564,12 +590,32 @@ Poll every five seconds at most.
       "corrections": [ { "field": "internal", "wrong": "ZURRITO", "right": "ZURITO" } ]
     }
   ],
-  "failed": ["product:1021"]
+  "failed": ["product:1021"],
+  "nextCursor": null
 }
 ```
 
-Every item with languages to write appears once, in `results` or in `failed`; a context item
-appears in neither. `names` holds only languages listed in the item's `missing`, each 1 to 500
+The response has exactly `version`, `jobId`, `state`, `results`, `failed` and `nextCursor`.
+Build one immutable terminal list from the original submitted items, filtered to those with
+nonempty `missing`, in submit order. Each entry is either its complete result or its failed ref.
+Worker completion order, batch order and object-key order cannot change that list. The cursor is
+an offset into this filtered list, not into `results` alone or the unfiltered input.
+
+Starting at that offset, return the **largest nonempty consecutive segment** whose complete
+serialized response fits 16 MiB. Split that segment into `results` and `failed`, each preserving
+submit order. `nextCursor` is the offset immediately after the segment, or `null` at the end.
+Measure with the candidate's actual `nextCursor`, including `null` on the last page. An item is
+atomic: its names, placeholder flag and corrections stay together and unchanged. The
+[single-item bound](superpowers/plans/2026-10-16-translation-collect-pages.md#single-item-size-proof)
+uses the existing 1 MiB job bound, without adding a language-tag length restriction. Never
+drop data to make a page fit.
+
+A complete walk starts at 0 and follows `nextCursor` until null. Every item with languages to
+write appears exactly once across that walk, in `results` or in `failed`; context items appear in
+neither. Repeating the same cursor returns the identical semantic page while the job is retained,
+even with a fresh operation ID. Collect never deletes data or extends retention.
+
+`names` holds only languages listed in the item's `missing`, each 1 to 500
 characters. `placeholder: true` comes with empty `names`. An item carries at most 10
 `corrections`; `field` is `internal` or an enabled language code, and `wrong` and `right` are 1 to
 500 characters and differ. A correction to a language the venue entered is a suggestion only. The
@@ -578,10 +624,31 @@ box must drop:
 - a result whose `ref` it did not send with languages to write;
 - a name for a language that was not missing.
 
-**Release** tells Cloud the box has stored the results, by state: `done`, `partly_done` or
+The box must read at most 16 MiB of decoded JSON per page, regardless of `Content-Length` or
+compression, and reject an oversized or incomplete response. Do not concatenate response strings
+or keep an unbounded in-memory collection. Persist each validated page into Waitron's existing
+durable suggestion reconciliation, deduplicate refs per job, and save the next cursor with the
+page's durable writes. Crash retries may safely fetch and reconcile the same page again. Mark
+the walk complete only after the null-cursor page is durably stored and all `total` refs are
+accounted for. A release or expiry between pages returns 410 `translation_expired` for the next
+valid collect; retain the partial/incomplete distinction and never report those pages as a full
+job or release on their behalf.
+
+**Release** tells Cloud the box has durably stored **every page**, and is sent only after that
+complete walk. A `failed` job has no collectable pages and keeps its existing release path. Cloud
+does not infer durable client storage from a collect call. The release state rules remain:
+`done`, `partly_done` or
 `failed` deletes the job's body and results and returns
 `{"version":1,"jobId":"...","state":"collected"}`; `collected` returns the same reply again;
 `queued` or `running` is 409 `translation_not_ready`; `expired` is 410 `translation_expired`.
+
+**Joint release gate:** Waitron lane B **A689-21** needs a real pagination loop and durable
+completion check. At Waitron commit `8eb93dbf3a0583f479d96b5bf0bc214d974ba080`,
+`apps/server/src/cloud-translation.ts`, `collectTranslation`, makes one request and ignores
+`nextCursor`. Lowering its byte reader
+alone could accept page one and silently release the remaining pages. Do not go live until pinned
+Cloud and Waitron candidates jointly prove multi-page collection, crash/reply-loss retry,
+deduplication, bounded decoded reads and release only after durable completion.
 
 ### Consent
 
