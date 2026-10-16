@@ -385,6 +385,20 @@ venue does not subscribe to remote access or backups.
   scores and the earlier parser fix; a new raw-response re-score is unavailable
   because both landings deleted those replies. No further provider call or
   product route/UI is added.
+  The offline evaluation client now waits a full spacing interval when created,
+  including after reopening its durable journal. A controlled 150 ms reservation
+  delay reproduces a restart dispatch less than the original 90 ms test bound;
+  the new guard passes that bound without changing allowance, retry or deadline
+  checks. CI run 38950506223 failed the original restart-spacing assertion, but
+  retained no write/dispatch stages, so its exact trigger remains unproved.
+  No provider request is needed for this fix. Further offline timing qualification
+  remains: a review probe with a journal timestamp 500 ms ahead waits 607 ms, but
+  a 30-day offset overflows Node's timer and dispatches after 15 ms (7 ms with the
+  old constructor). A forward five-second clock jump after client creation also
+  shortens a 100 ms interval to 43 ms. Add an automated future-timestamp assertion
+  and qualify clock shifts, oversized timer waits and overlapping calls before
+  reusing this sequential measurement client for broader dispatch work. These
+  follow-ups do not change the request budget or permit new provider requests.
   Keep manual entry and correction available when lookup is unavailable or wrong.
 - **Transactional email.** Offer managed SMTP delivery for password resets and other
   account administration emails from on-prem Waitron. Scope the relay to these
@@ -576,19 +590,32 @@ notifications separately.
   and missing or stale audit evidence retain the existing selection or full fallback.
   Adding, changing or removing an executable, configuration or other tracked input
   invalidates the exemption until you audit the readers again and renew the
-  certificate. The identity source map and gateway JSON reader remain covered by
-  their existing full checks. An isolated change to `scripts/identity-upstream.mjs`
-  or its behavioral test now selects only syntax checks and that test, without
+  certificate. The planner now emits a prominent GitHub warning on every run when
+  that audit is unavailable or stale, including non-document changes, with the
+  [review and renewal procedure](ci-documentation-audit.md).
+  The renewed audit covers CI reader/execution changes through #180; #144 was
+  the first unrenewed input change. Fixture-only checks had missed the real-tree
+  mismatch. Both immutable-tree checks and the conservative full fallback remain.
+  The identity source map and gateway JSON reader remain covered by
+  their existing full checks. When its input audit is current, an isolated change
+  to `scripts/identity-upstream.mjs` or its behavioral test can select only syntax
+  checks and that test, without
   package, receipt or compiler work. Both saved Git trees must match the complete
   other-input digest in `scripts/ci-scripts-audit.json`; a new reader, changed
   installation input, missing test, symbolic link or stale audit retains full work.
-  The gateway-reconnection validator and its behavioral test have a separate
+  The gateway-reconnection validator and its behavioral test have another
   audited exemption. Their script job checks both files and the measurement
   generator for syntax, then runs the unchanged validator tests. It does not
   launch the measurement generator. Both saved trees must match the gateway
   other-input digest, including the published receipt and generator. Changed
   readers or installation inputs retain full work. Each family pins the other
-  family, so changes spanning both families also retain full work.
+  family, so changes spanning both families also retain full work. The script
+  certificates are currently stale: they and the documentation certificate pin
+  each other. The lockfile certificate also pins the documentation certificate.
+  Restore these shortcuts together through a coordinated reader-audit design in
+  the remaining precise-selection work. The new diagnostics are advisory so
+  renewing one certificate cannot permanently block another; every selector
+  retains its strict comparisons and full fallback.
   Mixed changes also retain the existing fallback. The script job verifies the
   exact checkout and changed paths, and the summary requires its successful result.
   The identity audit covers that helper's only executable consumer, its own spawned test;

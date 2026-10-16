@@ -258,6 +258,30 @@ test('request spacing survives closing and reopening the journal', async () => {
   }finally{budget?.close();rmSync(directory,{recursive:true,force:true});}
 });
 
+test('restart spacing still protects dispatch after a slow durable reservation', async () => {
+  const directory=mkdtempSync(join(tmpdir(),'address-slow-reservation-'));
+  const arrivals=[];let budget;
+  const fetcher=async()=>{arrivals.push(performance.now());return new Response('{}');};
+  try {
+    budget=new module.RequestBudget(directory);
+    const reserve=budget.reserve.bind(budget);
+    budget.reserve=(...args)=>{
+      const event=reserve(...args);
+      // Model a slow durable write by delaying its return after the timestamp.
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,150);
+      return event;
+    };
+    let client=new module.EvaluationClient({budget,directory,keys:{google:'offline-key'},spacingMs:100,fetcher});
+    await client.request('google','autocomplete','one','Madrid');
+    budget.close();budget=new module.RequestBudget(directory);
+    client=new module.EvaluationClient({budget,directory,keys:{google:'offline-key'},spacingMs:100,fetcher});
+    await client.request('google','autocomplete','two','Madrid');
+    assert.ok(arrivals[1]-arrivals[0]>=90,'restart spacing was bypassed after slow reservation');
+    assert.equal(budget.counts.google,2);
+    assert.equal(budget.retries.google,0);
+  }finally{budget?.close();rmSync(directory,{recursive:true,force:true});}
+});
+
 test('crash reservations count as retries on resume and cannot allow a third attempt for the same operation', () => {
   const directory=mkdtempSync(join(tmpdir(),'address-retries-'));let budget;
   try {

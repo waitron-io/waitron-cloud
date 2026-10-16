@@ -133,7 +133,9 @@ export class EvaluationClient {
     Object.assign(this,{budget,directory,keys,fetcher,spacingMs,timeoutMs});
     mkdirSync(join(directory,'raw'),{recursive:true,mode:0o700});
     this.measurements=[];
-    this.nextAt=Math.max(...Object.values(budget.lastAt))+spacingMs;
+    // A durable reservation can precede dispatch by a slow fsync. A fresh client
+    // waits a whole interval instead of treating that old timestamp as dispatch.
+    this.nextAt=Math.max(Date.now(),...Object.values(budget.lastAt))+spacingMs;
   }
   async request(provider,operation,caseId,query) {
     const {url,options}=requestFor(provider,operation,query,this.keys);

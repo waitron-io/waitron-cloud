@@ -31,17 +31,20 @@ function inventory(git, sha) {
   return {documents, digest: createHash('sha256').update(inputs.join('')).digest('hex')};
 }
 
+export function auditDocumentation(sha, git) {
+  assert.match(sha, shaPattern, 'Invalid document audit revision');
+  const audit = JSON.parse(git('show', `${sha}:${auditPath}`));
+  assert.equal(audit.version, 1, 'Unsupported document audit');
+  assert.match(audit.inputSha256, /^[a-f0-9]{64}$/);
+  const tree = inventory(git, sha);
+  assert.equal(tree.digest, audit.inputSha256, 'Executable inputs changed since the document audit');
+  return tree;
+}
+
 export function documentationPlan(paths, base, head, git) {
   if (!paths.length || !paths.every(unreadMarkdown)) return null;
   assertDocumentation({base, head, paths});
-  const trees = [base, head].map(sha => {
-    const audit = JSON.parse(git('show', `${sha}:${auditPath}`));
-    assert.equal(audit.version, 1, 'Unsupported document audit');
-    assert.match(audit.inputSha256, /^[a-f0-9]{64}$/);
-    const tree = inventory(git, sha);
-    assert.equal(tree.digest, audit.inputSha256, 'Executable inputs changed since the document audit');
-    return tree;
-  });
+  const trees = [base, head].map(sha => auditDocumentation(sha, git));
   assert.ok(paths.every(path => trees.some(tree => tree.documents.has(path))), 'Document is not audited regular prose');
   return {base, head, paths};
 }

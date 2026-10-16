@@ -141,6 +141,7 @@ test('real planner command emits document output and reports unaudited fallbacks
   put('docs/backlog.md', '# Updated\n');
   let result = run(commit());
   assert.equal(result.status, 0);
+  assert.doesNotMatch(result.stdout, /::warning/);
   assert.match(result.output, /\ndocumentation=true\n/);
   assert.match(result.output, /\npackages=false\n/);
   unlinkSync(join(root, policy)); base = commit();
@@ -173,4 +174,27 @@ test('strict summary requires the audited document job and refuses malformed emp
   assert.throws(() => assertSummary({...plan, reuse: {sha: 'c'.repeat(40), runId: 42}}, results, jobs));
   assert.throws(() => assertSummary({...plan, typecheck: true}, {...results, typecheck: 'success'}, [...jobs, {name: 'typecheck', status: 'completed', conclusion: 'success'}]));
   assert.throws(() => assertSummary({...plan, packages: [{package: 'one', shard: 1}]}, {...results, packages: 'success'}, [...jobs, {name: 'package (one)', status: 'completed', conclusion: 'success'}]));
+});
+
+test('planner command prominently warns about an unreviewed documentation audit for any changed path', () => {
+  for (const path of ['docs/backlog.md', 'packages/one/change.txt', 'scripts/new-reader.mjs']) fixture(({root, git, put, commit}) => {
+    put('package.json', JSON.stringify({name: 'fixture', private: true}));
+    put('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n");
+    for (const name of ['one', 'two']) put(`packages/${name}/package.json`, JSON.stringify({name, scripts: {test: 'node --test'}}));
+    const base = commit();
+    put(path, 'Changed input\n');
+    const head = commit();
+    put('event.json', JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
+    const output = join(root, 'output.txt');
+    writeFileSync(output, '');
+    const result = spawnSync(process.execPath, [resolve('scripts/ci-plan.mjs')], {cwd: root,
+      env: {...process.env, GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_OUTPUT: output}, encoding: 'utf8'});
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /::warning title=Documentation-only CI unavailable::/);
+    assert.match(result.stdout, /review.*scripts\/ci-docs-audit\.json.*docs\/ci-documentation-audit\.md/i);
+    const selected = JSON.parse(readFileSync(output, 'utf8').split('\n').find(line => line.startsWith('plan=')).slice(5));
+    assert.ok(selected.packages.length > 0);
+    assert.equal(selected.typecheck, true);
+    assert.equal(selected.documentation, undefined);
+  });
 });
