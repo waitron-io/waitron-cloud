@@ -2,9 +2,10 @@ import {copyFileSync, readFileSync, readdirSync, rmSync, writeFileSync} from 'no
 import {join} from 'node:path';
 import {loadWorkspace} from './ci-scope.mjs';
 
-// Positive receipt fixtures need the exact audited installation and execution
-// inputs so current changes still exercise omission and refusal assertions.
-const inputs = {...JSON.parse(readFileSync(new URL('./fixtures/ci-dependency-inputs.json', import.meta.url), 'utf8')),
+// Positive receipt fixtures need the exact audited installation, execution and
+// schema inputs so current changes still exercise omission and refusal assertions.
+const schemaInputs = JSON.parse(readFileSync(new URL('./fixtures/ci-schema-inputs.json', import.meta.url), 'utf8'));
+const inputs = {...schemaInputs.files, ...JSON.parse(readFileSync(new URL('./fixtures/ci-dependency-inputs.json', import.meta.url), 'utf8')),
   ...JSON.parse(readFileSync(new URL('./fixtures/ci-execution-inputs.json', import.meta.url), 'utf8'))};
 
 export function receiptFixtureWorkspace() {
@@ -23,6 +24,11 @@ export function seedReceiptDependencyInputs(root) {
       if (entry.isDirectory() && !Object.hasOwn(inputs, `${parent}/${entry.name}/package.json`)) {
         rmSync(join(root, parent, entry.name), {recursive: true, force: true});
       }
+    }
+  }
+  for (const [directory, names] of Object.entries(schemaInputs.directories)) {
+    for (const name of readdirSync(join(root, directory))) {
+      if (!names.includes(name)) rmSync(join(root, directory, name), {recursive: true, force: true});
     }
   }
   for (const [path, text] of Object.entries(inputs)) writeFileSync(join(root, path), text);

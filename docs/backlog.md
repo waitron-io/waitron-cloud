@@ -284,6 +284,9 @@ per venue and repeat operations. A composite foreign key also binds each job to 
 installation’s own venue. Usage metering accepts four translation quantities with
 per-job replay checks and keeps its existing accounting guards. The service name is allowed
 in the schema; existing installations still receive only their original three service rows.
+Historical receipt-selector fixtures use their saved migration module and directory membership,
+so new migrations still exercise the original omission and refusal assertions. Production receipt
+audits remain unchanged and retain work for the new schema.
 These foundations expose no translation routes or worker; the remaining runtime is still open.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
