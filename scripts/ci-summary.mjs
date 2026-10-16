@@ -6,7 +6,7 @@ import {packageMembers} from './ci-package-groups.mjs';
 import {assertReceiptSuites} from './ci-run-receipts.mjs';
 import {assertScriptWork} from './ci-scripts.mjs';
 
-const packageShards = {
+export const packageShards = Object.freeze({
   '@waitron-cloud/registration': 7,
   '@waitron-cloud/account-http': 3,
   '@waitron-cloud/backups': 2,
@@ -16,7 +16,7 @@ const packageShards = {
   '@waitron-cloud/remote-access': 1,
   '@waitron-cloud/fiscal-allocation': 1,
   '@waitron-cloud/ui-smoke': 1,
-};
+});
 
 export function assertSummary(plan, results, jobs) {
   assert.equal(results.changes, 'success', 'CI planner must succeed');

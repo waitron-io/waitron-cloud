@@ -487,10 +487,11 @@ notifications separately.
   Unknown packages, altered counts, invalid partition numbers and extra row
   fields fail; complete partitions and the existing short-package groups remain
   accepted. An independent summary policy checks the execution contract; tests
-  feed it every real planner package allocation and the full grouped plan.
-  Adding a package or changing its partition count requires updating that policy.
-  This validates allocation
-  for selected packages; independently proving that every affected package was
+  feed it every real planner package allocation and the full grouped plan, and
+  compare its package names with the complete workspace inventory. Adding,
+  removing or renaming a package, or changing its partition count, requires
+  updating that policy. This validates allocation for selected packages;
+  independently proving that every affected package was
   selected and resolving wider input selection remain open. No grouping or
   cost reduction is claimed by this guard. The reviewed
   [precise-selection design](superpowers/specs/2026-10-14-precise-ci-selection.md)

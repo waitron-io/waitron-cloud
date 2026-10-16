@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {assertSummary} from './ci-summary.mjs';
+import * as summary from './ci-summary.mjs';
 import {loadWorkspace, workPlan} from './ci-scope.mjs';
 
+const {assertSummary} = summary;
 const results = {changes: 'success', typecheck: 'success', packages: 'success', receipts: 'skipped'};
 const partitions = [['registration', 7], ['account-http', 3], ['backups', 2], ['portal', 3]];
 const rowsFor = (name, count) => Array.from({length: count}, (_, i) => ({package: `@waitron-cloud/${name}`, shard: i + 1, shards: count}));
+
+test('summary policy contains exactly the real workspace packages, including no obsolete names', () => {
+  assert.deepEqual(Object.keys(summary.packageShards ?? {}).sort(), loadWorkspace().map(pkg => pkg.name).sort());
+});
 
 function summarize(packages) {
   const jobs = ['changes', 'typecheck', ...packages.map(row => `package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`)]
