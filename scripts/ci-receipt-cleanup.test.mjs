@@ -39,7 +39,10 @@ for (const [file, name] of cases) {
     const env = {...process.env, GIT_TRACE2_EVENT: trace};
     delete env.NODE_TEST_CONTEXT;
     try {
-      const result = runFixture(`scripts/${file}`, name, env);
+      // The dependency check gives four sequential workers 60 seconds; its
+      // enclosing check must also allow repository setup and cleanup to finish.
+      const timeout = file === 'ci-dependency-fixtures.test.mjs' ? 90_000 : 30_000;
+      const result = runFixture(`scripts/${file}`, name, env, timeout);
       assert.equal(result.error, undefined);
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.deepEqual([...result.stdout.matchAll(/^ok \d+ - (.+)$/gm)].map(match => match[1]), [name], 'The exact fixture test must execute');
@@ -47,6 +50,13 @@ for (const [file, name] of cases) {
       assert.ok(events.some(event => event.event === 'start' && event.argv?.includes('commit')), 'The real fixture commit must execute and be traced');
       const maintenance = events.filter(event => event.event === 'child_start' && event.argv?.some(arg => arg === 'maintenance' || arg === 'gc'));
       assert.deepEqual(maintenance, [], 'Disposable test repositories must not start automatic background Git processes');
+      if (['ci-local-stack-receipt.test.mjs', 'ci-dependency-fixtures.test.mjs'].includes(file)) {
+        const starts = events.filter(event => event.event === 'start');
+        const sourceReads = starts.filter(event => event.argv.includes('show') && /^[a-f0-9]{40}:.*\.[cm]?[jt]sx?$/.test(event.argv.at(-1)));
+        assert.equal(sourceReads.length, 0, 'Fixture package discovery must not launch Git once per source file');
+        const batches = starts.filter(event => event.argv.includes('cat-file') && event.argv.includes('--batch'));
+        assert.equal(batches.length, file === 'ci-local-stack-receipt.test.mjs' ? 2 : 8, 'Fixture package discovery must read both saved revisions for every checked plan in batches');
+      }
     } finally {rmSync(root, {recursive: true, force: true});}
   });
 }

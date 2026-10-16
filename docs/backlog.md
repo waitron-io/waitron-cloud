@@ -594,21 +594,24 @@ notifications separately.
   The change removes a confirmed detached background Git process from these
   fixtures; it does not establish the historical cleanup cause. Capture that
   directory's remaining entries and process activity if cleanup fails again.
-  Two 30-second child checks also timed out during overlapping local root and
-  reviewer receipt runs: the local-stack and dependency-fixture cases in
-  `scripts/ci-receipt-cleanup.test.mjs`. Both passed separately in 5.8 and 10.3
-  seconds without changing their deadlines. These passes do not establish the
-  earlier cause; resource contention remains an assumption. Retain child-stage
-  timings and process activity on recurrence. The failed and diagnostic logs are
-  under `~/waitron-campaign-d/receipts/d69/package-result-counts/`.
-  The same two child checks reached their unchanged 30-second deadlines again
-  during the root-directory selection work, alongside focused graph and portal
-  qualification. Diagnostic copies then completed in 6.2 and 10.0 seconds,
-  retaining child output, Git event traces and process-family samples under
-  `~/waitron-campaign-d/receipts/d69/root-directory-readers/`. These observations
-  do not establish the timeout cause. Keep the deadlines and assertions;
-  qualify the complete local root suite with bounded file concurrency before
-  pushing, and use the saved stages to investigate another failure.
+  Four receipt-selector fixtures now use the planner's existing batch reader
+  against their own temporary repositories. The local-stack and nested dependency
+  checks previously launched 1,021 and 1,094 individual source-read processes.
+  Tracing now requires zero individual source reads and exactly two batches per
+  checked plan, while every original omission, refusal and maintenance assertion
+  remains. Positive checks also reject a package-evidence fallback, so a broken
+  batch cannot silently substitute a full package plan.
+  Three concurrent complete root-suite runs reproduced both outer checks' former
+  30-second timeouts. With batching, the local-stack check completes in 27.0 seconds
+  under the same load. The nested dependency check completes in 58.0 seconds;
+  its outer deadline is now 90 seconds because its four sequential workers already
+  have a 60-second budget, plus repository setup and cleanup. Other outer checks
+  retain 30 seconds, and the deliberately stalled worker still has five seconds.
+  These are local stress measurements, not a guarantee under arbitrary host load.
+  The original historical failures did not retain these exact stages; the controlled
+  reproduction establishes the timeout mechanisms rather than their precise history.
+  Evidence, earlier partial fixes and complete load-run outcomes are retained under
+  `~/waitron-campaign-d/receipts/d69/fixture-child-timeouts/`.
   A separate forced-color package probe also exposed two strict CLI checks in
   `packages/remote-access/test/operator-cli.test.ts` and `reconciler-cli.test.ts`:
   Node's warning about conflicting `NO_COLOR` and `FORCE_COLOR` settings changes

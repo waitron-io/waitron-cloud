@@ -8,6 +8,7 @@ import {copyReceiptFixtureInput} from './ci-dependency-fixture.mjs';
 import {createPlan} from './ci-plan.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
 import {loadWorkspace, receiptSuites} from './ci-scope.mjs';
+import {readGitBlobs} from './ci-package-revisions.mjs';
 
 const suite = 'test:public-gateway-limits';
 const inputs = [
@@ -40,6 +41,9 @@ function fixture(run, alter = () => {}) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-gateway-inputs-'));
   // Disposable repositories must not start detached Git maintenance.
   const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+  // Use the planner's batch protocol so source discovery does not spawn once per file.
+  git.readBlobs = ids => readGitBlobs(ids, input => execFileSync('git', ['-c', 'maintenance.auto=false', 'cat-file', '--batch'],
+    {cwd: root, input, timeout: 30_000, maxBuffer: 64 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe']}));
   try {
     git('init', '-q');
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
@@ -68,6 +72,7 @@ test('unrelated package changes omit public gateway while retaining packages, ty
     assert.equal(plan.packages.length, 18);
     assert.equal(plan.typecheck, true);
     assert.match(plan.reason, /omitted public gateway receipt.*both revisions/i);
+    assert.doesNotMatch(plan.reason, /Unverified package revisions:/);
   });
 });
 
