@@ -52,7 +52,7 @@ test('zero, incomplete, duplicate, failed and inconsistent summaries cannot pass
   for (const FORGED_SUMMARY of [
     summary.replaceAll('3', '0'), summary.replace('# pass 3\n', ''), summary + '# pass 3\n',
     summary.replace('# pass 3', '# pass 2'), summary.replace('# tests 3', '# tests 3.5'),
-    summary.replace('# tests 3', '# tests 9007199254740993'),
+    summary.replaceAll('3', '9007199254740993'),
     summary.replace('# pass 3', '# pass 2').replace('# fail 0', '# fail 1'),
     summary.replace('# pass 3', '# pass 2').replace('# cancelled 0', '# cancelled 1'),
     summary.replace('# pass 3', '# pass 0').replace('# skipped 0', '# skipped 3'),
