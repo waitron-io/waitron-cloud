@@ -612,6 +612,11 @@ notifications separately.
   observer in all three runs and the inner 60-second dependency-worker limit in
   one run. These are separate stress follow-ups, not resolved by the outer budget
   correction; retain their diagnostics and avoid overlapping full qualification.
+  A later default-concurrency root run passed 322 of 324 checks and hit both
+  limits again: the bootstrap observer after 35.18 seconds and the dependency
+  worker after 65.34 seconds including its outer setup. Review controls and
+  package qualification overlapped that run. The precise cause remains unproved;
+  retain both limits and their original assertions when investigating recurrence.
   The original historical failures did not retain these exact stages; the controlled
   reproduction establishes the timeout mechanisms rather than their precise history.
   Evidence, earlier partial fixes and complete load-run outcomes are retained under
