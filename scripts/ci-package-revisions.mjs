@@ -74,8 +74,10 @@ function workspaceAt(sha, workspace, git) {
         if (optionVariables.has(match[1])) optionReads.add(match[3]);
       }
       for (const value of optionReads) {
+        assert.doesNotMatch(value, /[?#%]/, `Unverified repository-root directory scan options at ${source.path}`);
         const target = posix.normalize(posix.join(posix.dirname(source.path), value)).replace(/\/$/, '');
         assert.notEqual(target, '.', `Unverified repository-root directory scan options at ${source.path}`);
+        assert.ok(target !== '..' && !target.startsWith('../'), `Unverified repository-root directory scan options at ${source.path}`);
       }
       for (const value of quotedReferences(source.source)) {
         const target = value.startsWith('.') ? posix.normalize(posix.join(posix.dirname(source.path), value)) : posix.normalize(value);

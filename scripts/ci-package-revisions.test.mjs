@@ -853,7 +853,7 @@ const options = JSON.parse(process.argv[2] || '{}');
 ${binding === 'stored' ? `const directory = ${directory};` : ''}
 for (const name of ${call}) {
   const entry = ${entry};
-  if (entry.endsWith('catalogue-reader.mjs')) await import(new URL('../../../' + entry, import.meta.url));
+  if (entry.endsWith('-reader.mjs')) await import(new URL('../../../' + entry, import.meta.url));
 }
 `);
       const base = commit();
@@ -912,3 +912,35 @@ for (const name of readdirSync(new URL('./', import.meta.url), {withFileTypes: t
   assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
     {full: false, packages: ['catalogue']});
 }));
+
+
+test('URL syntax and ancestor directories cannot hide root scan option consumers', () => {
+  for (const value of ['../../../?x', '../../../#x', '%2e%2e/%2e%2e/%2e%2e/', '../../../../']) {
+    for (const binding of ['direct', 'stored']) fixture(({root, write, commit, plan}) => {
+      const directory = `new URL('${value}', import.meta.url)`;
+      const reader = `import {readdirSync} from 'node:fs';
+${binding === 'stored' ? `const directory = ${directory};` : ''}
+for (const name of readdirSync(${binding === 'direct' ? directory : 'directory'}, {recursive: true})) {
+  if (name.endsWith('-reader.mjs')) await import(new URL(name, ${directory}));
+}
+`;
+      const helper = "import '../packages/catalogue/src/index.mjs';\nconsole.log('URL options helper loaded');\n";
+      write('adapters/catalogue-reader.mjs', helper);
+      write('packages/portal/src/index.mjs', reader);
+      const base = commit();
+      write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+      const head = commit();
+      // Keep ancestor enumeration inside an owned parent instead of scanning /tmp.
+      const program = value === '../../../../' ? 'proof/repo/packages/portal/src/index.mjs' : 'packages/portal/src/index.mjs';
+      if (value === '../../../../') {
+        write(program, reader);
+        write('proof/repo/adapters/catalogue-reader.mjs', helper);
+        write('proof/repo/packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+      }
+      assert.equal(execFileSync(process.execPath, [program], {cwd: root, encoding: 'utf8'}), 'URL options helper loaded\n');
+      const result = plan(base, head);
+      assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], value + ' ' + binding);
+      assert.match(result.reason, /repository-root directory scan options at packages\/portal\/src\/index\.mjs/);
+    });
+  }
+});
