@@ -601,6 +601,14 @@ notifications separately.
   earlier cause; resource contention remains an assumption. Retain child-stage
   timings and process activity on recurrence. The failed and diagnostic logs are
   under `~/waitron-campaign-d/receipts/d69/package-result-counts/`.
+  The same two child checks reached their unchanged 30-second deadlines again
+  during the root-directory selection work, alongside focused graph and portal
+  qualification. Diagnostic copies then completed in 6.2 and 10.0 seconds,
+  retaining child output, Git event traces and process-family samples under
+  `~/waitron-campaign-d/receipts/d69/root-directory-readers/`. These observations
+  do not establish the timeout cause. Keep the deadlines and assertions;
+  qualify the complete local root suite with bounded file concurrency before
+  pushing, and use the saved stages to investigate another failure.
   A separate forced-color package probe also exposed two strict CLI checks in
   `packages/remote-access/test/operator-cli.test.ts` and `reconciler-cli.test.ts`:
   Node's warning about conflicting `NO_COLOR` and `FORCE_COLOR` settings changes
