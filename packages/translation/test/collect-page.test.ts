@@ -37,6 +37,12 @@ test('the conservative singleton allowance with long fields, 20 names and ten co
  assert(Buffer.byteLength(body)<=1048576);
  const actual=page([item('p1')],{0:{results:[value],failed:[]}});
  assert(Buffer.byteLength(JSON.stringify(actual))<=16777216);assert.deepEqual(actual.results,[value]);
+ // Assign a whole submit budget to each repeated field to exercise the conservative proof itself.
+ const upperTag='a'.repeat(1048576),upper={...value,
+  names:Object.fromEntries([upperTag,...Object.keys(names).slice(1)].map(key=>[key,'\u0000'.repeat(500)])),
+  corrections:Array.from({length:10},()=>({field:upperTag,wrong:'\ud800'.repeat(500),right:'😀'.repeat(250)}))};
+ const upperPage=page([item('p1')],{0:{results:[upper],failed:[]}});
+ assert(Buffer.byteLength(JSON.stringify(upperPage))<=11720640);assert.deepEqual(upperPage.results,[upper]);
 });
 test('a legal sub-MiB job produces maximal bounded pages with no lost or repeated refs',()=>{
  const languages=['en','es','ca','fr','de','it','pt','nl','sv','da','fi','pl','cs','sk','hu','ro','el','tr','ja','zh'],items=Array.from({length:1000},(_,i)=>item(`p${i}`,languages));
