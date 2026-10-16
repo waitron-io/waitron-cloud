@@ -1,0 +1,4402 @@
+{
+  "version": 2,
+  "createdAt": "2026-10-16T19:08:28.652486+02:00",
+  "description": "60 public registered tourist homes and rural lodgings; two queries per street address. Registry reference data, not independently surveyed coordinates or a national sample. Floor, unit, owner and contact fields excluded.",
+  "licenses": [
+    {
+      "dataset": "catalunya-tourism-register",
+      "attribution": "Generalitat de Catalunya, Departament d’Empresa i Treball; tourism register, retrieved 2026-10-16. Address fields selected and reformatted; Spanish street-type aliases and query variants added.",
+      "license": "Llicència oberta d’ús d’informació – Catalunya (portal default; dataset says See Terms of Use)",
+      "url": "https://web.gencat.cat/ca/generalitat/dades-indicadors/dades-obertes/llicencies"
+    },
+    {
+      "dataset": "castilla-leon-tourism-register",
+      "attribution": "Junta de Castilla y León, Consejería de Cultura, Turismo y Deporte; Registro de Turismo, retrieved 2026-10-16. Address fields selected and reformatted; query variants added.",
+      "license": "CC BY 4.0",
+      "url": "https://creativecommons.org/licenses/by/4.0/deed.es_ES"
+    }
+  ],
+  "selection": "First distinct streets in register-id order among first 1000 active homes per Catalan province (8 Barcelona, 8 Girona, 7 Lleida, 7 Tarragona); first distinct localities with simple numbered street addresses among first 100 rural records per Castilian-Leonese province (4 Ávila/Burgos/León, 3 each remaining province). Excludes road kilometre addresses, number ranges, missing postcodes and repeated Calle Calle. No provider results influenced selection.",
+  "cases": [
+    {
+      "id": "residential-rural-001/with-postcode",
+      "baseId": "residential-rural-001",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Marina 306, 08025 Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Marina",
+          "Calle Marina"
+        ],
+        "number": "306",
+        "postcode": "08025",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000001",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000001%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000001",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Marina",
+          "numero": "306",
+          "codi_postal": "08025",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-001/without-postcode",
+      "baseId": "residential-rural-001",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Marina 306, Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Marina",
+          "Calle Marina"
+        ],
+        "number": "306",
+        "postcode": "08025",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000001",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000001%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000001",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Marina",
+          "numero": "306",
+          "codi_postal": "08025",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-002/with-postcode",
+      "baseId": "residential-rural-002",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer MARQUES DE BARBERA 8, 08001 Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer MARQUES DE BARBERA",
+          "Calle MARQUES DE BARBERA"
+        ],
+        "number": "8",
+        "postcode": "08001",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000031",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000031%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000031",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "MARQUES DE BARBERA",
+          "numero": "8",
+          "codi_postal": "08001",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-002/without-postcode",
+      "baseId": "residential-rural-002",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer MARQUES DE BARBERA 8, Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer MARQUES DE BARBERA",
+          "Calle MARQUES DE BARBERA"
+        ],
+        "number": "8",
+        "postcode": "08001",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000031",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000031%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000031",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "MARQUES DE BARBERA",
+          "numero": "8",
+          "codi_postal": "08001",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-003/with-postcode",
+      "baseId": "residential-rural-003",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer MARQUES DE CAMPO SAGRADO 7, 08015 Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer MARQUES DE CAMPO SAGRADO",
+          "Calle MARQUES DE CAMPO SAGRADO"
+        ],
+        "number": "7",
+        "postcode": "08015",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000035",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000035%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000035",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "MARQUES DE CAMPO SAGRADO",
+          "numero": "7",
+          "codi_postal": "08015",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-003/without-postcode",
+      "baseId": "residential-rural-003",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer MARQUES DE CAMPO SAGRADO 7, Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer MARQUES DE CAMPO SAGRADO",
+          "Calle MARQUES DE CAMPO SAGRADO"
+        ],
+        "number": "7",
+        "postcode": "08015",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000035",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000035%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000035",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "MARQUES DE CAMPO SAGRADO",
+          "numero": "7",
+          "codi_postal": "08015",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-004/with-postcode",
+      "baseId": "residential-rural-004",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Marquès de Campo Sagrado 9, 08015 Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Marquès de Campo Sagrado",
+          "Calle Marquès de Campo Sagrado"
+        ],
+        "number": "9",
+        "postcode": "08015",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000036",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000036%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000036",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Marquès de Campo Sagrado",
+          "numero": "9",
+          "codi_postal": "08015",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-004/without-postcode",
+      "baseId": "residential-rural-004",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Marquès de Campo Sagrado 9, Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Marquès de Campo Sagrado",
+          "Calle Marquès de Campo Sagrado"
+        ],
+        "number": "9",
+        "postcode": "08015",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000036",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000036%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000036",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Marquès de Campo Sagrado",
+          "numero": "9",
+          "codi_postal": "08015",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-005/with-postcode",
+      "baseId": "residential-rural-005",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Marquesa 9, 08003 Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Marquesa",
+          "Calle Marquesa"
+        ],
+        "number": "9",
+        "postcode": "08003",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000039",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000039%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000039",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Marquesa",
+          "numero": "9",
+          "codi_postal": "08003",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-005/without-postcode",
+      "baseId": "residential-rural-005",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Marquesa 9, Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Marquesa",
+          "Calle Marquesa"
+        ],
+        "number": "9",
+        "postcode": "08003",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000039",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000039%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000039",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Marquesa",
+          "numero": "9",
+          "codi_postal": "08003",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-006/with-postcode",
+      "baseId": "residential-rural-006",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Martí i Alsina 4, 08031 Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Martí i Alsina",
+          "Calle Martí i Alsina"
+        ],
+        "number": "4",
+        "postcode": "08031",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000043",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000043%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000043",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Martí i Alsina",
+          "numero": "4",
+          "codi_postal": "08031",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-006/without-postcode",
+      "baseId": "residential-rural-006",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Martí i Alsina 4, Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Martí i Alsina",
+          "Calle Martí i Alsina"
+        ],
+        "number": "4",
+        "postcode": "08031",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000043",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000043%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000043",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Martí i Alsina",
+          "numero": "4",
+          "codi_postal": "08031",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-007/with-postcode",
+      "baseId": "residential-rural-007",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Martí Molins 2, 08027 Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Martí Molins",
+          "Calle Martí Molins"
+        ],
+        "number": "2",
+        "postcode": "08027",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000044",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000044%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000044",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Martí Molins",
+          "numero": "2",
+          "codi_postal": "08027",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-007/without-postcode",
+      "baseId": "residential-rural-007",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Martí Molins 2, Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Martí Molins",
+          "Calle Martí Molins"
+        ],
+        "number": "2",
+        "postcode": "08027",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000044",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000044%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000044",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Martí Molins",
+          "numero": "2",
+          "codi_postal": "08027",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-008/with-postcode",
+      "baseId": "residential-rural-008",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Martinez de la Rosa 11, 08012 Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Martinez de la Rosa",
+          "Calle Martinez de la Rosa"
+        ],
+        "number": "11",
+        "postcode": "08012",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000045",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000045%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000045",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Martinez de la Rosa",
+          "numero": "11",
+          "codi_postal": "08012",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-008/without-postcode",
+      "baseId": "residential-rural-008",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Martinez de la Rosa 11, Barcelona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Martinez de la Rosa",
+          "Calle Martinez de la Rosa"
+        ],
+        "number": "11",
+        "postcode": "08012",
+        "locality": [
+          "Barcelona"
+        ],
+        "province": [
+          "Barcelona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTB-000045",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTB-000045%27",
+        "fields": {
+          "n_mero_inscripci": "HUTB-000045",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Martinez de la Rosa",
+          "numero": "11",
+          "codi_postal": "08012",
+          "municipi": "Barcelona",
+          "prov_ncia": "Barcelona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-009/with-postcode",
+      "baseId": "residential-rural-009",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Vic 10, 17405 Espinelves, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Vic",
+          "Calle Vic"
+        ],
+        "number": "10",
+        "postcode": "17405",
+        "locality": [
+          "Espinelves"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000114",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000114%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000114",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Vic",
+          "numero": "10",
+          "codi_postal": "17405",
+          "municipi": "Espinelves",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-009/without-postcode",
+      "baseId": "residential-rural-009",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Vic 10, Espinelves, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Vic",
+          "Calle Vic"
+        ],
+        "number": "10",
+        "postcode": "17405",
+        "locality": [
+          "Espinelves"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000114",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000114%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000114",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Vic",
+          "numero": "10",
+          "codi_postal": "17405",
+          "municipi": "Espinelves",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-010/with-postcode",
+      "baseId": "residential-rural-010",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Bofill i Ferro 9, 17406 Viladrau, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Bofill i Ferro",
+          "Calle Bofill i Ferro"
+        ],
+        "number": "9",
+        "postcode": "17406",
+        "locality": [
+          "Viladrau"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000200",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000200%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000200",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Bofill i Ferro",
+          "numero": "9",
+          "codi_postal": "17406",
+          "municipi": "Viladrau",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-010/without-postcode",
+      "baseId": "residential-rural-010",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Bofill i Ferro 9, Viladrau, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Bofill i Ferro",
+          "Calle Bofill i Ferro"
+        ],
+        "number": "9",
+        "postcode": "17406",
+        "locality": [
+          "Viladrau"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000200",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000200%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000200",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Bofill i Ferro",
+          "numero": "9",
+          "codi_postal": "17406",
+          "municipi": "Viladrau",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-011/with-postcode",
+      "baseId": "residential-rural-011",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Sant Hilari 58, 17405 Espinelves, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Sant Hilari",
+          "Calle Sant Hilari"
+        ],
+        "number": "58",
+        "postcode": "17405",
+        "locality": [
+          "Espinelves"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000333",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000333%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000333",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Sant Hilari",
+          "numero": "58",
+          "codi_postal": "17405",
+          "municipi": "Espinelves",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-011/without-postcode",
+      "baseId": "residential-rural-011",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Sant Hilari 58, Espinelves, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Sant Hilari",
+          "Calle Sant Hilari"
+        ],
+        "number": "58",
+        "postcode": "17405",
+        "locality": [
+          "Espinelves"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000333",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000333%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000333",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Sant Hilari",
+          "numero": "58",
+          "codi_postal": "17405",
+          "municipi": "Espinelves",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-012/with-postcode",
+      "baseId": "residential-rural-012",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Puigsacalm 6, 17515 Vidrà, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Puigsacalm",
+          "Calle Puigsacalm"
+        ],
+        "number": "6",
+        "postcode": "17515",
+        "locality": [
+          "Vidrà"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-039789",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-039789%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-039789",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Puigsacalm",
+          "numero": "6",
+          "codi_postal": "17515",
+          "municipi": "Vidrà",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-012/without-postcode",
+      "baseId": "residential-rural-012",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Puigsacalm 6, Vidrà, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Puigsacalm",
+          "Calle Puigsacalm"
+        ],
+        "number": "6",
+        "postcode": "17515",
+        "locality": [
+          "Vidrà"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-039789",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-039789%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-039789",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Puigsacalm",
+          "numero": "6",
+          "codi_postal": "17515",
+          "municipi": "Vidrà",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-013/with-postcode",
+      "baseId": "residential-rural-013",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Passeig de les Guilleries 13, 17405 Espinelves, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Passeig de les Guilleries",
+          "Paseo de les Guilleries"
+        ],
+        "number": "13",
+        "postcode": "17405",
+        "locality": [
+          "Espinelves"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-040962",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-040962%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-040962",
+          "tipus_de_via": "Passeig",
+          "nom_de_la_via": "de les Guilleries",
+          "numero": "13",
+          "codi_postal": "17405",
+          "municipi": "Espinelves",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-013/without-postcode",
+      "baseId": "residential-rural-013",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Passeig de les Guilleries 13, Espinelves, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Passeig de les Guilleries",
+          "Paseo de les Guilleries"
+        ],
+        "number": "13",
+        "postcode": "17405",
+        "locality": [
+          "Espinelves"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-040962",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-040962%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-040962",
+          "tipus_de_via": "Passeig",
+          "nom_de_la_via": "de les Guilleries",
+          "numero": "13",
+          "codi_postal": "17405",
+          "municipi": "Espinelves",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-014/with-postcode",
+      "baseId": "residential-rural-014",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Passeig Ramon Bofill 4, 17406 Viladrau, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Passeig Ramon Bofill",
+          "Paseo Ramon Bofill"
+        ],
+        "number": "4",
+        "postcode": "17406",
+        "locality": [
+          "Viladrau"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-042883",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-042883%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-042883",
+          "tipus_de_via": "Passeig",
+          "nom_de_la_via": "Ramon Bofill",
+          "numero": "4",
+          "codi_postal": "17406",
+          "municipi": "Viladrau",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-014/without-postcode",
+      "baseId": "residential-rural-014",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Passeig Ramon Bofill 4, Viladrau, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Passeig Ramon Bofill",
+          "Paseo Ramon Bofill"
+        ],
+        "number": "4",
+        "postcode": "17406",
+        "locality": [
+          "Viladrau"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-042883",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-042883%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-042883",
+          "tipus_de_via": "Passeig",
+          "nom_de_la_via": "Ramon Bofill",
+          "numero": "4",
+          "codi_postal": "17406",
+          "municipi": "Viladrau",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-015/with-postcode",
+      "baseId": "residential-rural-015",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Passeig Montseny 4, 17405 Espinelves, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Passeig Montseny",
+          "Paseo Montseny"
+        ],
+        "number": "4",
+        "postcode": "17405",
+        "locality": [
+          "Espinelves"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-043499",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-043499%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-043499",
+          "tipus_de_via": "Passeig",
+          "nom_de_la_via": "Montseny",
+          "numero": "4",
+          "codi_postal": "17405",
+          "municipi": "Espinelves",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-015/without-postcode",
+      "baseId": "residential-rural-015",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Passeig Montseny 4, Espinelves, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Passeig Montseny",
+          "Paseo Montseny"
+        ],
+        "number": "4",
+        "postcode": "17405",
+        "locality": [
+          "Espinelves"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-043499",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-043499%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-043499",
+          "tipus_de_via": "Passeig",
+          "nom_de_la_via": "Montseny",
+          "numero": "4",
+          "codi_postal": "17405",
+          "municipi": "Espinelves",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-016/with-postcode",
+      "baseId": "residential-rural-016",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Avinguda Marcos Redondo 7, 17406 Viladrau, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Avinguda Marcos Redondo",
+          "Avenida Marcos Redondo"
+        ],
+        "number": "7",
+        "postcode": "17406",
+        "locality": [
+          "Viladrau"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-044582",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-044582%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-044582",
+          "tipus_de_via": "Avinguda",
+          "nom_de_la_via": "Marcos Redondo",
+          "numero": "7",
+          "codi_postal": "17406",
+          "municipi": "Viladrau",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-016/without-postcode",
+      "baseId": "residential-rural-016",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Avinguda Marcos Redondo 7, Viladrau, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Avinguda Marcos Redondo",
+          "Avenida Marcos Redondo"
+        ],
+        "number": "7",
+        "postcode": "17406",
+        "locality": [
+          "Viladrau"
+        ],
+        "province": [
+          "Girona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-044582",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-044582%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-044582",
+          "tipus_de_via": "Avinguda",
+          "nom_de_la_via": "Marcos Redondo",
+          "numero": "7",
+          "codi_postal": "17406",
+          "municipi": "Viladrau",
+          "prov_ncia": "Girona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-017/with-postcode",
+      "baseId": "residential-rural-017",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Cadí 24, 25284 Coma i la Pedra, la, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Cadí",
+          "Calle Cadí"
+        ],
+        "number": "24",
+        "postcode": "25284",
+        "locality": [
+          "Coma i la Pedra, la"
+        ],
+        "province": [
+          "Lleida"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000010",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000010%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000010",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Cadí",
+          "numero": "24",
+          "codi_postal": "25284",
+          "municipi": "Coma i la Pedra, la",
+          "prov_ncia": "Lleida"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-017/without-postcode",
+      "baseId": "residential-rural-017",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Cadí 24, Coma i la Pedra, la, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Cadí",
+          "Calle Cadí"
+        ],
+        "number": "24",
+        "postcode": "25284",
+        "locality": [
+          "Coma i la Pedra, la"
+        ],
+        "province": [
+          "Lleida"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000010",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000010%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000010",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Cadí",
+          "numero": "24",
+          "codi_postal": "25284",
+          "municipi": "Coma i la Pedra, la",
+          "prov_ncia": "Lleida"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-018/with-postcode",
+      "baseId": "residential-rural-018",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Sant Josep de Calasanz 7, 25280 Solsona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Sant Josep de Calasanz",
+          "Calle Sant Josep de Calasanz"
+        ],
+        "number": "7",
+        "postcode": "25280",
+        "locality": [
+          "Solsona"
+        ],
+        "province": [
+          "Lleida"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000057",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000057%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000057",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Sant Josep de Calasanz",
+          "numero": "7",
+          "codi_postal": "25280",
+          "municipi": "Solsona",
+          "prov_ncia": "Lleida"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-018/without-postcode",
+      "baseId": "residential-rural-018",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Sant Josep de Calasanz 7, Solsona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Sant Josep de Calasanz",
+          "Calle Sant Josep de Calasanz"
+        ],
+        "number": "7",
+        "postcode": "25280",
+        "locality": [
+          "Solsona"
+        ],
+        "province": [
+          "Lleida"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000057",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000057%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000057",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Sant Josep de Calasanz",
+          "numero": "7",
+          "codi_postal": "25280",
+          "municipi": "Solsona",
+          "prov_ncia": "Lleida"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-019/with-postcode",
+      "baseId": "residential-rural-019",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Francesc Moragas 1, 25282 Sant Llorenç de Morunys, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Francesc Moragas",
+          "Calle Francesc Moragas"
+        ],
+        "number": "1",
+        "postcode": "25282",
+        "locality": [
+          "Sant Llorenç de Morunys"
+        ],
+        "province": [
+          "Lleida"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000142",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000142%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000142",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Francesc Moragas",
+          "numero": "1",
+          "codi_postal": "25282",
+          "municipi": "Sant Llorenç de Morunys",
+          "prov_ncia": "Lleida"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-019/without-postcode",
+      "baseId": "residential-rural-019",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Francesc Moragas 1, Sant Llorenç de Morunys, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Francesc Moragas",
+          "Calle Francesc Moragas"
+        ],
+        "number": "1",
+        "postcode": "25282",
+        "locality": [
+          "Sant Llorenç de Morunys"
+        ],
+        "province": [
+          "Lleida"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000142",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000142%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000142",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Francesc Moragas",
+          "numero": "1",
+          "codi_postal": "25282",
+          "municipi": "Sant Llorenç de Morunys",
+          "prov_ncia": "Lleida"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-020/with-postcode",
+      "baseId": "residential-rural-020",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Canal 6, 25716 Gósol, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Canal",
+          "Calle Canal"
+        ],
+        "number": "6",
+        "postcode": "25716",
+        "locality": [
+          "Gósol"
+        ],
+        "province": [
+          "Lleida"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000152",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000152%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000152",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Canal",
+          "numero": "6",
+          "codi_postal": "25716",
+          "municipi": "Gósol",
+          "prov_ncia": "Lleida"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-020/without-postcode",
+      "baseId": "residential-rural-020",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Canal 6, Gósol, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Canal",
+          "Calle Canal"
+        ],
+        "number": "6",
+        "postcode": "25716",
+        "locality": [
+          "Gósol"
+        ],
+        "province": [
+          "Lleida"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000152",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000152%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000152",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Canal",
+          "numero": "6",
+          "codi_postal": "25716",
+          "municipi": "Gósol",
+          "prov_ncia": "Lleida"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-021/with-postcode",
+      "baseId": "residential-rural-021",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Plaça Sant Joan 1, 25280 Solsona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Plaça Sant Joan",
+          "Plaza Sant Joan"
+        ],
+        "number": "1",
+        "postcode": "25280",
+        "locality": [
+          "Solsona"
+        ],
+        "province": [
+          "Lleida"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000167",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000167%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000167",
+          "tipus_de_via": "Plaça",
+          "nom_de_la_via": "Sant Joan",
+          "numero": "1",
+          "codi_postal": "25280",
+          "municipi": "Solsona",
+          "prov_ncia": "Lleida"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-021/without-postcode",
+      "baseId": "residential-rural-021",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Plaça Sant Joan 1, Solsona, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Plaça Sant Joan",
+          "Plaza Sant Joan"
+        ],
+        "number": "1",
+        "postcode": "25280",
+        "locality": [
+          "Solsona"
+        ],
+        "province": [
+          "Lleida"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000167",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000167%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000167",
+          "tipus_de_via": "Plaça",
+          "nom_de_la_via": "Sant Joan",
+          "numero": "1",
+          "codi_postal": "25280",
+          "municipi": "Solsona",
+          "prov_ncia": "Lleida"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-022/with-postcode",
+      "baseId": "residential-rural-022",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer de la Mercè 3, 25282 Sant Llorenç de Morunys, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer de la Mercè",
+          "Calle de la Mercè"
+        ],
+        "number": "3",
+        "postcode": "25282",
+        "locality": [
+          "Sant Llorenç de Morunys"
+        ],
+        "province": [
+          "Lleida"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000186",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000186%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000186",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "de la Mercè",
+          "numero": "3",
+          "codi_postal": "25282",
+          "municipi": "Sant Llorenç de Morunys",
+          "prov_ncia": "Lleida"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-022/without-postcode",
+      "baseId": "residential-rural-022",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer de la Mercè 3, Sant Llorenç de Morunys, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer de la Mercè",
+          "Calle de la Mercè"
+        ],
+        "number": "3",
+        "postcode": "25282",
+        "locality": [
+          "Sant Llorenç de Morunys"
+        ],
+        "province": [
+          "Lleida"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000186",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000186%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000186",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "de la Mercè",
+          "numero": "3",
+          "codi_postal": "25282",
+          "municipi": "Sant Llorenç de Morunys",
+          "prov_ncia": "Lleida"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-023/with-postcode",
+      "baseId": "residential-rural-023",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Verge de Lord 4, 25282 Sant Llorenç de Morunys, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Verge de Lord",
+          "Calle Verge de Lord"
+        ],
+        "number": "4",
+        "postcode": "25282",
+        "locality": [
+          "Sant Llorenç de Morunys"
+        ],
+        "province": [
+          "Lleida"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000252",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000252%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000252",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Verge de Lord",
+          "numero": "4",
+          "codi_postal": "25282",
+          "municipi": "Sant Llorenç de Morunys",
+          "prov_ncia": "Lleida"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-023/without-postcode",
+      "baseId": "residential-rural-023",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Verge de Lord 4, Sant Llorenç de Morunys, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Verge de Lord",
+          "Calle Verge de Lord"
+        ],
+        "number": "4",
+        "postcode": "25282",
+        "locality": [
+          "Sant Llorenç de Morunys"
+        ],
+        "province": [
+          "Lleida"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTCC-000252",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTCC-000252%27",
+        "fields": {
+          "n_mero_inscripci": "HUTCC-000252",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Verge de Lord",
+          "numero": "4",
+          "codi_postal": "25282",
+          "municipi": "Sant Llorenç de Morunys",
+          "prov_ncia": "Lleida"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-024/with-postcode",
+      "baseId": "residential-rural-024",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Bellavista 26, 43440 Espluga de Francolí, l', España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Bellavista",
+          "Calle Bellavista"
+        ],
+        "number": "26",
+        "postcode": "43440",
+        "locality": [
+          "Espluga de Francolí, l'"
+        ],
+        "province": [
+          "Tarragona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTT-000001",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTT-000001%27",
+        "fields": {
+          "n_mero_inscripci": "HUTT-000001",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Bellavista",
+          "numero": "26",
+          "codi_postal": "43440",
+          "municipi": "Espluga de Francolí, l'",
+          "prov_ncia": "Tarragona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-024/without-postcode",
+      "baseId": "residential-rural-024",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Bellavista 26, Espluga de Francolí, l', España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Bellavista",
+          "Calle Bellavista"
+        ],
+        "number": "26",
+        "postcode": "43440",
+        "locality": [
+          "Espluga de Francolí, l'"
+        ],
+        "province": [
+          "Tarragona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTT-000001",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTT-000001%27",
+        "fields": {
+          "n_mero_inscripci": "HUTT-000001",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Bellavista",
+          "numero": "26",
+          "codi_postal": "43440",
+          "municipi": "Espluga de Francolí, l'",
+          "prov_ncia": "Tarragona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-025/with-postcode",
+      "baseId": "residential-rural-025",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Molí de Guasch 10, 43440 Espluga de Francolí, l', España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Molí de Guasch",
+          "Calle Molí de Guasch"
+        ],
+        "number": "10",
+        "postcode": "43440",
+        "locality": [
+          "Espluga de Francolí, l'"
+        ],
+        "province": [
+          "Tarragona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTT-000004",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTT-000004%27",
+        "fields": {
+          "n_mero_inscripci": "HUTT-000004",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Molí de Guasch",
+          "numero": "10",
+          "codi_postal": "43440",
+          "municipi": "Espluga de Francolí, l'",
+          "prov_ncia": "Tarragona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-025/without-postcode",
+      "baseId": "residential-rural-025",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Molí de Guasch 10, Espluga de Francolí, l', España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Molí de Guasch",
+          "Calle Molí de Guasch"
+        ],
+        "number": "10",
+        "postcode": "43440",
+        "locality": [
+          "Espluga de Francolí, l'"
+        ],
+        "province": [
+          "Tarragona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTT-000004",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTT-000004%27",
+        "fields": {
+          "n_mero_inscripci": "HUTT-000004",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Molí de Guasch",
+          "numero": "10",
+          "codi_postal": "43440",
+          "municipi": "Espluga de Francolí, l'",
+          "prov_ncia": "Tarragona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-026/with-postcode",
+      "baseId": "residential-rural-026",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Chirac 15, 43890 Vandellòs i l'Hospitalet de l'Infant, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Chirac",
+          "Calle Chirac"
+        ],
+        "number": "15",
+        "postcode": "43890",
+        "locality": [
+          "Vandellòs i l'Hospitalet de l'Infant"
+        ],
+        "province": [
+          "Tarragona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTT-000010",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTT-000010%27",
+        "fields": {
+          "n_mero_inscripci": "HUTT-000010",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Chirac",
+          "numero": "15",
+          "codi_postal": "43890",
+          "municipi": "Vandellòs i l'Hospitalet de l'Infant",
+          "prov_ncia": "Tarragona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-026/without-postcode",
+      "baseId": "residential-rural-026",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Chirac 15, Vandellòs i l'Hospitalet de l'Infant, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Chirac",
+          "Calle Chirac"
+        ],
+        "number": "15",
+        "postcode": "43890",
+        "locality": [
+          "Vandellòs i l'Hospitalet de l'Infant"
+        ],
+        "province": [
+          "Tarragona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTT-000010",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTT-000010%27",
+        "fields": {
+          "n_mero_inscripci": "HUTT-000010",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Chirac",
+          "numero": "15",
+          "codi_postal": "43890",
+          "municipi": "Vandellòs i l'Hospitalet de l'Infant",
+          "prov_ncia": "Tarragona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-027/with-postcode",
+      "baseId": "residential-rural-027",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Las Dos Tartanas 1, 43890 Vandellòs i l'Hospitalet de l'Infant, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Las Dos Tartanas",
+          "Calle Las Dos Tartanas"
+        ],
+        "number": "1",
+        "postcode": "43890",
+        "locality": [
+          "Vandellòs i l'Hospitalet de l'Infant"
+        ],
+        "province": [
+          "Tarragona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTT-000011",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTT-000011%27",
+        "fields": {
+          "n_mero_inscripci": "HUTT-000011",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Las Dos Tartanas",
+          "numero": "1",
+          "codi_postal": "43890",
+          "municipi": "Vandellòs i l'Hospitalet de l'Infant",
+          "prov_ncia": "Tarragona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-027/without-postcode",
+      "baseId": "residential-rural-027",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Las Dos Tartanas 1, Vandellòs i l'Hospitalet de l'Infant, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Las Dos Tartanas",
+          "Calle Las Dos Tartanas"
+        ],
+        "number": "1",
+        "postcode": "43890",
+        "locality": [
+          "Vandellòs i l'Hospitalet de l'Infant"
+        ],
+        "province": [
+          "Tarragona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTT-000011",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTT-000011%27",
+        "fields": {
+          "n_mero_inscripci": "HUTT-000011",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Las Dos Tartanas",
+          "numero": "1",
+          "codi_postal": "43890",
+          "municipi": "Vandellòs i l'Hospitalet de l'Infant",
+          "prov_ncia": "Tarragona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-028/with-postcode",
+      "baseId": "residential-rural-028",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Nou 25, 43371 Margalef, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Nou",
+          "Calle Nou"
+        ],
+        "number": "25",
+        "postcode": "43371",
+        "locality": [
+          "Margalef"
+        ],
+        "province": [
+          "Tarragona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTT-000025",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTT-000025%27",
+        "fields": {
+          "n_mero_inscripci": "HUTT-000025",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Nou",
+          "numero": "25",
+          "codi_postal": "43371",
+          "municipi": "Margalef",
+          "prov_ncia": "Tarragona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-028/without-postcode",
+      "baseId": "residential-rural-028",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Nou 25, Margalef, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Nou",
+          "Calle Nou"
+        ],
+        "number": "25",
+        "postcode": "43371",
+        "locality": [
+          "Margalef"
+        ],
+        "province": [
+          "Tarragona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTT-000025",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTT-000025%27",
+        "fields": {
+          "n_mero_inscripci": "HUTT-000025",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Nou",
+          "numero": "25",
+          "codi_postal": "43371",
+          "municipi": "Margalef",
+          "prov_ncia": "Tarragona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-029/with-postcode",
+      "baseId": "residential-rural-029",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Escultor Belart 35, 43400 Montblanc, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Escultor Belart",
+          "Calle Escultor Belart"
+        ],
+        "number": "35",
+        "postcode": "43400",
+        "locality": [
+          "Montblanc"
+        ],
+        "province": [
+          "Tarragona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTT-000027",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTT-000027%27",
+        "fields": {
+          "n_mero_inscripci": "HUTT-000027",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Escultor Belart",
+          "numero": "35",
+          "codi_postal": "43400",
+          "municipi": "Montblanc",
+          "prov_ncia": "Tarragona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-029/without-postcode",
+      "baseId": "residential-rural-029",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Escultor Belart 35, Montblanc, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Escultor Belart",
+          "Calle Escultor Belart"
+        ],
+        "number": "35",
+        "postcode": "43400",
+        "locality": [
+          "Montblanc"
+        ],
+        "province": [
+          "Tarragona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTT-000027",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTT-000027%27",
+        "fields": {
+          "n_mero_inscripci": "HUTT-000027",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Escultor Belart",
+          "numero": "35",
+          "codi_postal": "43400",
+          "municipi": "Montblanc",
+          "prov_ncia": "Tarragona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-030/with-postcode",
+      "baseId": "residential-rural-030",
+      "variant": "with-postcode",
+      "cohort": "residential",
+      "query": "Carrer Muralla Alfons I 26, 43400 Montblanc, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Muralla Alfons I",
+          "Calle Muralla Alfons I"
+        ],
+        "number": "26",
+        "postcode": "43400",
+        "locality": [
+          "Montblanc"
+        ],
+        "province": [
+          "Tarragona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTT-000028",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTT-000028%27",
+        "fields": {
+          "n_mero_inscripci": "HUTT-000028",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Muralla Alfons I",
+          "numero": "26",
+          "codi_postal": "43400",
+          "municipi": "Montblanc",
+          "prov_ncia": "Tarragona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-030/without-postcode",
+      "baseId": "residential-rural-030",
+      "variant": "without-postcode",
+      "cohort": "residential",
+      "query": "Carrer Muralla Alfons I 26, Montblanc, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Carrer Muralla Alfons I",
+          "Calle Muralla Alfons I"
+        ],
+        "number": "26",
+        "postcode": "43400",
+        "locality": [
+          "Montblanc"
+        ],
+        "province": [
+          "Tarragona"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "catalunya-tourism-register",
+        "recordId": "HUTT-000028",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/t2h3-cgys.json?%24select=n_mero_inscripci%2Ctipus_de_via%2Cnom_de_la_via%2Cnumero%2Ccodi_postal%2Cmunicipi%2Cprov_ncia&%24where=n_mero_inscripci%3D%27HUTT-000028%27",
+        "fields": {
+          "n_mero_inscripci": "HUTT-000028",
+          "tipus_de_via": "Carrer",
+          "nom_de_la_via": "Muralla Alfons I",
+          "numero": "26",
+          "codi_postal": "43400",
+          "municipi": "Montblanc",
+          "prov_ncia": "Tarragona"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-031/with-postcode",
+      "baseId": "residential-rural-031",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Plaza DE ESPAÑA 5, 05123 HOYOCASERO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Plaza DE ESPAÑA"
+        ],
+        "number": "5",
+        "postcode": "05123",
+        "locality": [
+          "HOYOCASERO"
+        ],
+        "province": [
+          "Ávila"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "05/000039",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2705%2F000039%27",
+        "fields": {
+          "n_registro": "05/000039",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Plaza DE ESPAÑA 5",
+          "c_postal": "05123",
+          "provincia": "Ávila",
+          "municipio": "Hoyocasero",
+          "localidad": "HOYOCASERO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-031/without-postcode",
+      "baseId": "residential-rural-031",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Plaza DE ESPAÑA 5, HOYOCASERO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Plaza DE ESPAÑA"
+        ],
+        "number": "5",
+        "postcode": "05123",
+        "locality": [
+          "HOYOCASERO"
+        ],
+        "province": [
+          "Ávila"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "05/000039",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2705%2F000039%27",
+        "fields": {
+          "n_registro": "05/000039",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Plaza DE ESPAÑA 5",
+          "c_postal": "05123",
+          "provincia": "Ávila",
+          "municipio": "Hoyocasero",
+          "localidad": "HOYOCASERO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-032/with-postcode",
+      "baseId": "residential-rural-032",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle FUENTENUEVA 107, 05100 NAVALUENGA, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle FUENTENUEVA"
+        ],
+        "number": "107",
+        "postcode": "05100",
+        "locality": [
+          "NAVALUENGA"
+        ],
+        "province": [
+          "Ávila"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "05/000042",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2705%2F000042%27",
+        "fields": {
+          "n_registro": "05/000042",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle FUENTENUEVA 107",
+          "c_postal": "05100",
+          "provincia": "Ávila",
+          "municipio": "Navaluenga",
+          "localidad": "NAVALUENGA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-032/without-postcode",
+      "baseId": "residential-rural-032",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle FUENTENUEVA 107, NAVALUENGA, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle FUENTENUEVA"
+        ],
+        "number": "107",
+        "postcode": "05100",
+        "locality": [
+          "NAVALUENGA"
+        ],
+        "province": [
+          "Ávila"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "05/000042",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2705%2F000042%27",
+        "fields": {
+          "n_registro": "05/000042",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle FUENTENUEVA 107",
+          "c_postal": "05100",
+          "provincia": "Ávila",
+          "municipio": "Navaluenga",
+          "localidad": "NAVALUENGA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-033/with-postcode",
+      "baseId": "residential-rural-033",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle GENERAL SANJUJO 26, 05560 VILLATORO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle GENERAL SANJUJO"
+        ],
+        "number": "26",
+        "postcode": "05560",
+        "locality": [
+          "VILLATORO"
+        ],
+        "province": [
+          "Ávila"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "05/000045",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2705%2F000045%27",
+        "fields": {
+          "n_registro": "05/000045",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle GENERAL SANJUJO 26",
+          "c_postal": "05560",
+          "provincia": "Ávila",
+          "municipio": "Villatoro",
+          "localidad": "VILLATORO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-033/without-postcode",
+      "baseId": "residential-rural-033",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle GENERAL SANJUJO 26, VILLATORO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle GENERAL SANJUJO"
+        ],
+        "number": "26",
+        "postcode": "05560",
+        "locality": [
+          "VILLATORO"
+        ],
+        "province": [
+          "Ávila"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "05/000045",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2705%2F000045%27",
+        "fields": {
+          "n_registro": "05/000045",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle GENERAL SANJUJO 26",
+          "c_postal": "05560",
+          "provincia": "Ávila",
+          "municipio": "Villatoro",
+          "localidad": "VILLATORO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-034/with-postcode",
+      "baseId": "residential-rural-034",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Avenida JUSTO MUÑOZ 2, 05634 HOYOS DEL ESPINO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Avenida JUSTO MUÑOZ"
+        ],
+        "number": "2",
+        "postcode": "05634",
+        "locality": [
+          "HOYOS DEL ESPINO"
+        ],
+        "province": [
+          "Ávila"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "05/000053",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2705%2F000053%27",
+        "fields": {
+          "n_registro": "05/000053",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Avenida JUSTO MUÑOZ 2",
+          "c_postal": "05634",
+          "provincia": "Ávila",
+          "municipio": "Hoyos del Espino",
+          "localidad": "HOYOS DEL ESPINO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-034/without-postcode",
+      "baseId": "residential-rural-034",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Avenida JUSTO MUÑOZ 2, HOYOS DEL ESPINO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Avenida JUSTO MUÑOZ"
+        ],
+        "number": "2",
+        "postcode": "05634",
+        "locality": [
+          "HOYOS DEL ESPINO"
+        ],
+        "province": [
+          "Ávila"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "05/000053",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2705%2F000053%27",
+        "fields": {
+          "n_registro": "05/000053",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Avenida JUSTO MUÑOZ 2",
+          "c_postal": "05634",
+          "provincia": "Ávila",
+          "municipio": "Hoyos del Espino",
+          "localidad": "HOYOS DEL ESPINO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-035/with-postcode",
+      "baseId": "residential-rural-035",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle San Nicolás 59, 09280 PANCORBO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle San Nicolás"
+        ],
+        "number": "59",
+        "postcode": "09280",
+        "locality": [
+          "PANCORBO"
+        ],
+        "province": [
+          "Burgos"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "09/000001",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2709%2F000001%27",
+        "fields": {
+          "n_registro": "09/000001",
+          "tipo": "Casa Rural",
+          "direccion": "Calle San Nicolás 59",
+          "c_postal": "09280",
+          "provincia": "Burgos",
+          "municipio": "Pancorbo",
+          "localidad": "PANCORBO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-035/without-postcode",
+      "baseId": "residential-rural-035",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle San Nicolás 59, PANCORBO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle San Nicolás"
+        ],
+        "number": "59",
+        "postcode": "09280",
+        "locality": [
+          "PANCORBO"
+        ],
+        "province": [
+          "Burgos"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "09/000001",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2709%2F000001%27",
+        "fields": {
+          "n_registro": "09/000001",
+          "tipo": "Casa Rural",
+          "direccion": "Calle San Nicolás 59",
+          "c_postal": "09280",
+          "provincia": "Burgos",
+          "municipio": "Pancorbo",
+          "localidad": "PANCORBO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-036/with-postcode",
+      "baseId": "residential-rural-036",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle Merindad de Losa 8, 09510 QUINCOCES DE YUSO, Valle de Losa, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle Merindad de Losa"
+        ],
+        "number": "8",
+        "postcode": "09510",
+        "locality": [
+          "QUINCOCES DE YUSO"
+        ],
+        "province": [
+          "Burgos"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "09/000003",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2709%2F000003%27",
+        "fields": {
+          "n_registro": "09/000003",
+          "tipo": "Casa Rural de Alojamiento Compartido",
+          "direccion": "Calle Merindad de Losa, 8",
+          "c_postal": "09510",
+          "provincia": "Burgos",
+          "municipio": "Valle de Losa",
+          "localidad": "QUINCOCES DE YUSO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-036/without-postcode",
+      "baseId": "residential-rural-036",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle Merindad de Losa 8, QUINCOCES DE YUSO, Valle de Losa, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle Merindad de Losa"
+        ],
+        "number": "8",
+        "postcode": "09510",
+        "locality": [
+          "QUINCOCES DE YUSO"
+        ],
+        "province": [
+          "Burgos"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "09/000003",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2709%2F000003%27",
+        "fields": {
+          "n_registro": "09/000003",
+          "tipo": "Casa Rural de Alojamiento Compartido",
+          "direccion": "Calle Merindad de Losa, 8",
+          "c_postal": "09510",
+          "provincia": "Burgos",
+          "municipio": "Valle de Losa",
+          "localidad": "QUINCOCES DE YUSO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-037/with-postcode",
+      "baseId": "residential-rural-037",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle Lavaderos 1, 09119 HINESTROSA, Castrojeriz, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle Lavaderos"
+        ],
+        "number": "1",
+        "postcode": "09119",
+        "locality": [
+          "HINESTROSA"
+        ],
+        "province": [
+          "Burgos"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "09/000012",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2709%2F000012%27",
+        "fields": {
+          "n_registro": "09/000012",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle Lavaderos 1",
+          "c_postal": "09119",
+          "provincia": "Burgos",
+          "municipio": "Castrojeriz",
+          "localidad": "HINESTROSA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-037/without-postcode",
+      "baseId": "residential-rural-037",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle Lavaderos 1, HINESTROSA, Castrojeriz, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle Lavaderos"
+        ],
+        "number": "1",
+        "postcode": "09119",
+        "locality": [
+          "HINESTROSA"
+        ],
+        "province": [
+          "Burgos"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "09/000012",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2709%2F000012%27",
+        "fields": {
+          "n_registro": "09/000012",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle Lavaderos 1",
+          "c_postal": "09119",
+          "provincia": "Burgos",
+          "municipio": "Castrojeriz",
+          "localidad": "HINESTROSA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-038/with-postcode",
+      "baseId": "residential-rural-038",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle Salas 35, 09693 REGUMIEL DE LA SIERRA, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle Salas"
+        ],
+        "number": "35",
+        "postcode": "09693",
+        "locality": [
+          "REGUMIEL DE LA SIERRA"
+        ],
+        "province": [
+          "Burgos"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "09/000035",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2709%2F000035%27",
+        "fields": {
+          "n_registro": "09/000035",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle Salas 35",
+          "c_postal": "09693",
+          "provincia": "Burgos",
+          "municipio": "Regumiel de la Sierra",
+          "localidad": "REGUMIEL DE LA SIERRA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-038/without-postcode",
+      "baseId": "residential-rural-038",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle Salas 35, REGUMIEL DE LA SIERRA, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle Salas"
+        ],
+        "number": "35",
+        "postcode": "09693",
+        "locality": [
+          "REGUMIEL DE LA SIERRA"
+        ],
+        "province": [
+          "Burgos"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "09/000035",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2709%2F000035%27",
+        "fields": {
+          "n_registro": "09/000035",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle Salas 35",
+          "c_postal": "09693",
+          "provincia": "Burgos",
+          "municipio": "Regumiel de la Sierra",
+          "localidad": "REGUMIEL DE LA SIERRA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-039/with-postcode",
+      "baseId": "residential-rural-039",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Plaza mayor 4, 24270 CARRIZO DE LA RIBERA, Carrizo, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Plaza mayor"
+        ],
+        "number": "4",
+        "postcode": "24270",
+        "locality": [
+          "CARRIZO DE LA RIBERA"
+        ],
+        "province": [
+          "León"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "24/000005",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2724%2F000005%27",
+        "fields": {
+          "n_registro": "24/000005",
+          "tipo": "Posada",
+          "direccion": "Plaza mayor 4",
+          "c_postal": "24270",
+          "provincia": "León",
+          "municipio": "Carrizo",
+          "localidad": "CARRIZO DE LA RIBERA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-039/without-postcode",
+      "baseId": "residential-rural-039",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Plaza mayor 4, CARRIZO DE LA RIBERA, Carrizo, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Plaza mayor"
+        ],
+        "number": "4",
+        "postcode": "24270",
+        "locality": [
+          "CARRIZO DE LA RIBERA"
+        ],
+        "province": [
+          "León"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "24/000005",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2724%2F000005%27",
+        "fields": {
+          "n_registro": "24/000005",
+          "tipo": "Posada",
+          "direccion": "Plaza mayor 4",
+          "c_postal": "24270",
+          "provincia": "León",
+          "municipio": "Carrizo",
+          "localidad": "CARRIZO DE LA RIBERA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-040/with-postcode",
+      "baseId": "residential-rural-040",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle LA BOLADA 4, 24141 QUINTANILLA DE BABIA, Cabrillanes, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle LA BOLADA"
+        ],
+        "number": "4",
+        "postcode": "24141",
+        "locality": [
+          "QUINTANILLA DE BABIA"
+        ],
+        "province": [
+          "León"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "24/000007",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2724%2F000007%27",
+        "fields": {
+          "n_registro": "24/000007",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle LA BOLADA, 4",
+          "c_postal": "24141",
+          "provincia": "León",
+          "municipio": "Cabrillanes",
+          "localidad": "QUINTANILLA DE BABIA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-040/without-postcode",
+      "baseId": "residential-rural-040",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle LA BOLADA 4, QUINTANILLA DE BABIA, Cabrillanes, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle LA BOLADA"
+        ],
+        "number": "4",
+        "postcode": "24141",
+        "locality": [
+          "QUINTANILLA DE BABIA"
+        ],
+        "province": [
+          "León"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "24/000007",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2724%2F000007%27",
+        "fields": {
+          "n_registro": "24/000007",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle LA BOLADA, 4",
+          "c_postal": "24141",
+          "provincia": "León",
+          "municipio": "Cabrillanes",
+          "localidad": "QUINTANILLA DE BABIA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-041/with-postcode",
+      "baseId": "residential-rural-041",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle LAS CANCELAS 4, 24433 PEREDA DE ANCARES, Valle de Ancares, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle LAS CANCELAS"
+        ],
+        "number": "4",
+        "postcode": "24433",
+        "locality": [
+          "PEREDA DE ANCARES"
+        ],
+        "province": [
+          "León"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "24/000011",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2724%2F000011%27",
+        "fields": {
+          "n_registro": "24/000011",
+          "tipo": "Hotel Rural",
+          "direccion": "Calle LAS CANCELAS 4",
+          "c_postal": "24433",
+          "provincia": "León",
+          "municipio": "Valle de Ancares",
+          "localidad": "PEREDA DE ANCARES"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-041/without-postcode",
+      "baseId": "residential-rural-041",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle LAS CANCELAS 4, PEREDA DE ANCARES, Valle de Ancares, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle LAS CANCELAS"
+        ],
+        "number": "4",
+        "postcode": "24433",
+        "locality": [
+          "PEREDA DE ANCARES"
+        ],
+        "province": [
+          "León"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "24/000011",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2724%2F000011%27",
+        "fields": {
+          "n_registro": "24/000011",
+          "tipo": "Hotel Rural",
+          "direccion": "Calle LAS CANCELAS 4",
+          "c_postal": "24433",
+          "provincia": "León",
+          "municipio": "Valle de Ancares",
+          "localidad": "PEREDA DE ANCARES"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-042/with-postcode",
+      "baseId": "residential-rural-042",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Plaza  EL FERIAL 35, 24439 ESPINO (EL), Vega de Espinareda, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Plaza  EL FERIAL"
+        ],
+        "number": "35",
+        "postcode": "24439",
+        "locality": [
+          "ESPINO (EL)"
+        ],
+        "province": [
+          "León"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "24/000013",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2724%2F000013%27",
+        "fields": {
+          "n_registro": "24/000013",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Plaza  EL FERIAL 35",
+          "c_postal": "24439",
+          "provincia": "León",
+          "municipio": "Vega de Espinareda",
+          "localidad": "ESPINO (EL)"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-042/without-postcode",
+      "baseId": "residential-rural-042",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Plaza  EL FERIAL 35, ESPINO (EL), Vega de Espinareda, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Plaza  EL FERIAL"
+        ],
+        "number": "35",
+        "postcode": "24439",
+        "locality": [
+          "ESPINO (EL)"
+        ],
+        "province": [
+          "León"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "24/000013",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2724%2F000013%27",
+        "fields": {
+          "n_registro": "24/000013",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Plaza  EL FERIAL 35",
+          "c_postal": "24439",
+          "provincia": "León",
+          "municipio": "Vega de Espinareda",
+          "localidad": "ESPINO (EL)"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-043/with-postcode",
+      "baseId": "residential-rural-043",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle PEÑA 2, 34839 MUDA, Mudá, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle PEÑA"
+        ],
+        "number": "2",
+        "postcode": "34839",
+        "locality": [
+          "MUDA"
+        ],
+        "province": [
+          "Palencia"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "34/000004",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2734%2F000004%27",
+        "fields": {
+          "n_registro": "34/000004",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle PEÑA 2",
+          "c_postal": "34839",
+          "provincia": "Palencia",
+          "municipio": "Mudá",
+          "localidad": "MUDA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-043/without-postcode",
+      "baseId": "residential-rural-043",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle PEÑA 2, MUDA, Mudá, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle PEÑA"
+        ],
+        "number": "2",
+        "postcode": "34839",
+        "locality": [
+          "MUDA"
+        ],
+        "province": [
+          "Palencia"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "34/000004",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2734%2F000004%27",
+        "fields": {
+          "n_registro": "34/000004",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle PEÑA 2",
+          "c_postal": "34839",
+          "provincia": "Palencia",
+          "municipio": "Mudá",
+          "localidad": "MUDA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-044/with-postcode",
+      "baseId": "residential-rural-044",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle DE LA CONCEPCION 7, 34815 VILLALLANO, Pomar de Valdivia, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle DE LA CONCEPCION"
+        ],
+        "number": "7",
+        "postcode": "34815",
+        "locality": [
+          "VILLALLANO"
+        ],
+        "province": [
+          "Palencia"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "34/000009",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2734%2F000009%27",
+        "fields": {
+          "n_registro": "34/000009",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle DE LA CONCEPCION 7",
+          "c_postal": "34815",
+          "provincia": "Palencia",
+          "municipio": "Pomar de Valdivia",
+          "localidad": "VILLALLANO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-044/without-postcode",
+      "baseId": "residential-rural-044",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle DE LA CONCEPCION 7, VILLALLANO, Pomar de Valdivia, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle DE LA CONCEPCION"
+        ],
+        "number": "7",
+        "postcode": "34815",
+        "locality": [
+          "VILLALLANO"
+        ],
+        "province": [
+          "Palencia"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "34/000009",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2734%2F000009%27",
+        "fields": {
+          "n_registro": "34/000009",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle DE LA CONCEPCION 7",
+          "c_postal": "34815",
+          "provincia": "Palencia",
+          "municipio": "Pomar de Valdivia",
+          "localidad": "VILLALLANO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-045/with-postcode",
+      "baseId": "residential-rural-045",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle MAYOR 2, 34886 VELILLA DEL RIO CARRION, Velilla del Río Carrión, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle MAYOR"
+        ],
+        "number": "2",
+        "postcode": "34886",
+        "locality": [
+          "VELILLA DEL RIO CARRION"
+        ],
+        "province": [
+          "Palencia"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "34/000041",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2734%2F000041%27",
+        "fields": {
+          "n_registro": "34/000041",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle MAYOR, 2",
+          "c_postal": "34886",
+          "provincia": "Palencia",
+          "municipio": "Velilla del Río Carrión",
+          "localidad": "VELILLA DEL RIO CARRION"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-045/without-postcode",
+      "baseId": "residential-rural-045",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle MAYOR 2, VELILLA DEL RIO CARRION, Velilla del Río Carrión, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle MAYOR"
+        ],
+        "number": "2",
+        "postcode": "34886",
+        "locality": [
+          "VELILLA DEL RIO CARRION"
+        ],
+        "province": [
+          "Palencia"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "34/000041",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2734%2F000041%27",
+        "fields": {
+          "n_registro": "34/000041",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle MAYOR, 2",
+          "c_postal": "34886",
+          "provincia": "Palencia",
+          "municipio": "Velilla del Río Carrión",
+          "localidad": "VELILLA DEL RIO CARRION"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-046/with-postcode",
+      "baseId": "residential-rural-046",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle LARGA 1, 37659 SAN MARTIN DEL CASTAÑAR, San Martín del Castañar, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle LARGA"
+        ],
+        "number": "1",
+        "postcode": "37659",
+        "locality": [
+          "SAN MARTIN DEL CASTAÑAR"
+        ],
+        "province": [
+          "Salamanca"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "37/000002",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2737%2F000002%27",
+        "fields": {
+          "n_registro": "37/000002",
+          "tipo": "Posada",
+          "direccion": "Calle LARGA 1",
+          "c_postal": "37659",
+          "provincia": "Salamanca",
+          "municipio": "San Martín del Castañar",
+          "localidad": "SAN MARTIN DEL CASTAÑAR"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-046/without-postcode",
+      "baseId": "residential-rural-046",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle LARGA 1, SAN MARTIN DEL CASTAÑAR, San Martín del Castañar, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle LARGA"
+        ],
+        "number": "1",
+        "postcode": "37659",
+        "locality": [
+          "SAN MARTIN DEL CASTAÑAR"
+        ],
+        "province": [
+          "Salamanca"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "37/000002",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2737%2F000002%27",
+        "fields": {
+          "n_registro": "37/000002",
+          "tipo": "Posada",
+          "direccion": "Calle LARGA 1",
+          "c_postal": "37659",
+          "provincia": "Salamanca",
+          "municipio": "San Martín del Castañar",
+          "localidad": "SAN MARTIN DEL CASTAÑAR"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-047/with-postcode",
+      "baseId": "residential-rural-047",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle SAHUCO 1, 37671 SAN ESTEBAN DE LA SIERRA, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle SAHUCO"
+        ],
+        "number": "1",
+        "postcode": "37671",
+        "locality": [
+          "SAN ESTEBAN DE LA SIERRA"
+        ],
+        "province": [
+          "Salamanca"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "37/000003",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2737%2F000003%27",
+        "fields": {
+          "n_registro": "37/000003",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle SAHUCO, 1",
+          "c_postal": "37671",
+          "provincia": "Salamanca",
+          "municipio": "San Esteban de la Sierra",
+          "localidad": "SAN ESTEBAN DE LA SIERRA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-047/without-postcode",
+      "baseId": "residential-rural-047",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle SAHUCO 1, SAN ESTEBAN DE LA SIERRA, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle SAHUCO"
+        ],
+        "number": "1",
+        "postcode": "37671",
+        "locality": [
+          "SAN ESTEBAN DE LA SIERRA"
+        ],
+        "province": [
+          "Salamanca"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "37/000003",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2737%2F000003%27",
+        "fields": {
+          "n_registro": "37/000003",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle SAHUCO, 1",
+          "c_postal": "37671",
+          "provincia": "Salamanca",
+          "municipio": "San Esteban de la Sierra",
+          "localidad": "SAN ESTEBAN DE LA SIERRA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-048/with-postcode",
+      "baseId": "residential-rural-048",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle ELOY BULLON 11, 37656 CEPEDA, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle ELOY BULLON"
+        ],
+        "number": "11",
+        "postcode": "37656",
+        "locality": [
+          "CEPEDA"
+        ],
+        "province": [
+          "Salamanca"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "37/000004",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2737%2F000004%27",
+        "fields": {
+          "n_registro": "37/000004",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle ELOY BULLON 11",
+          "c_postal": "37656",
+          "provincia": "Salamanca",
+          "municipio": "Cepeda",
+          "localidad": "CEPEDA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-048/without-postcode",
+      "baseId": "residential-rural-048",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle ELOY BULLON 11, CEPEDA, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle ELOY BULLON"
+        ],
+        "number": "11",
+        "postcode": "37656",
+        "locality": [
+          "CEPEDA"
+        ],
+        "province": [
+          "Salamanca"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "37/000004",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2737%2F000004%27",
+        "fields": {
+          "n_registro": "37/000004",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle ELOY BULLON 11",
+          "c_postal": "37656",
+          "provincia": "Salamanca",
+          "municipio": "Cepeda",
+          "localidad": "CEPEDA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-049/with-postcode",
+      "baseId": "residential-rural-049",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle ARRIBA 3, 40554 MADERUELO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle ARRIBA"
+        ],
+        "number": "3",
+        "postcode": "40554",
+        "locality": [
+          "MADERUELO"
+        ],
+        "province": [
+          "Segovia"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "40/000004",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2740%2F000004%27",
+        "fields": {
+          "n_registro": "40/000004",
+          "tipo": "Casa Rural",
+          "direccion": "Calle ARRIBA 3",
+          "c_postal": "40554",
+          "provincia": "Segovia",
+          "municipio": "Maderuelo",
+          "localidad": "MADERUELO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-049/without-postcode",
+      "baseId": "residential-rural-049",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle ARRIBA 3, MADERUELO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle ARRIBA"
+        ],
+        "number": "3",
+        "postcode": "40554",
+        "locality": [
+          "MADERUELO"
+        ],
+        "province": [
+          "Segovia"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "40/000004",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2740%2F000004%27",
+        "fields": {
+          "n_registro": "40/000004",
+          "tipo": "Casa Rural",
+          "direccion": "Calle ARRIBA 3",
+          "c_postal": "40554",
+          "provincia": "Segovia",
+          "municipio": "Maderuelo",
+          "localidad": "MADERUELO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-050/with-postcode",
+      "baseId": "residential-rural-050",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle REAL 7, 40330 FUENTERREBOLLO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle REAL"
+        ],
+        "number": "7",
+        "postcode": "40330",
+        "locality": [
+          "FUENTERREBOLLO"
+        ],
+        "province": [
+          "Segovia"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "40/000008",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2740%2F000008%27",
+        "fields": {
+          "n_registro": "40/000008",
+          "tipo": "Casa Rural",
+          "direccion": "Calle REAL 7",
+          "c_postal": "40330",
+          "provincia": "Segovia",
+          "municipio": "Fuenterrebollo",
+          "localidad": "FUENTERREBOLLO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-050/without-postcode",
+      "baseId": "residential-rural-050",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle REAL 7, FUENTERREBOLLO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle REAL"
+        ],
+        "number": "7",
+        "postcode": "40330",
+        "locality": [
+          "FUENTERREBOLLO"
+        ],
+        "province": [
+          "Segovia"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "40/000008",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2740%2F000008%27",
+        "fields": {
+          "n_registro": "40/000008",
+          "tipo": "Casa Rural",
+          "direccion": "Calle REAL 7",
+          "c_postal": "40330",
+          "provincia": "Segovia",
+          "municipio": "Fuenterrebollo",
+          "localidad": "FUENTERREBOLLO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-051/with-postcode",
+      "baseId": "residential-rural-051",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle LA VEGA 3, 40181 CUESTA (LA), Turégano, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle LA VEGA"
+        ],
+        "number": "3",
+        "postcode": "40181",
+        "locality": [
+          "CUESTA (LA)"
+        ],
+        "province": [
+          "Segovia"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "40/000009",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2740%2F000009%27",
+        "fields": {
+          "n_registro": "40/000009",
+          "tipo": "Casa Rural",
+          "direccion": "Calle LA VEGA 3",
+          "c_postal": "40181",
+          "provincia": "Segovia",
+          "municipio": "Turégano",
+          "localidad": "CUESTA (LA)"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-051/without-postcode",
+      "baseId": "residential-rural-051",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle LA VEGA 3, CUESTA (LA), Turégano, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle LA VEGA"
+        ],
+        "number": "3",
+        "postcode": "40181",
+        "locality": [
+          "CUESTA (LA)"
+        ],
+        "province": [
+          "Segovia"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "40/000009",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2740%2F000009%27",
+        "fields": {
+          "n_registro": "40/000009",
+          "tipo": "Casa Rural",
+          "direccion": "Calle LA VEGA 3",
+          "c_postal": "40181",
+          "provincia": "Segovia",
+          "municipio": "Turégano",
+          "localidad": "CUESTA (LA)"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-052/with-postcode",
+      "baseId": "residential-rural-052",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle SAN ROQUE 22, 42145 HERREROS, Cidones, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle SAN ROQUE"
+        ],
+        "number": "22",
+        "postcode": "42145",
+        "locality": [
+          "HERREROS"
+        ],
+        "province": [
+          "Soria"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "42/000002",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2742%2F000002%27",
+        "fields": {
+          "n_registro": "42/000002",
+          "tipo": "Posada",
+          "direccion": "Calle SAN ROQUE 22",
+          "c_postal": "42145",
+          "provincia": "Soria",
+          "municipio": "Cidones",
+          "localidad": "HERREROS"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-052/without-postcode",
+      "baseId": "residential-rural-052",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle SAN ROQUE 22, HERREROS, Cidones, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle SAN ROQUE"
+        ],
+        "number": "22",
+        "postcode": "42145",
+        "locality": [
+          "HERREROS"
+        ],
+        "province": [
+          "Soria"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "42/000002",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2742%2F000002%27",
+        "fields": {
+          "n_registro": "42/000002",
+          "tipo": "Posada",
+          "direccion": "Calle SAN ROQUE 22",
+          "c_postal": "42145",
+          "provincia": "Soria",
+          "municipio": "Cidones",
+          "localidad": "HERREROS"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-053/with-postcode",
+      "baseId": "residential-rural-053",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle LA IGLESIA 153, 42328 CASTILLEJO DE ROBLEDO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle LA IGLESIA"
+        ],
+        "number": "153",
+        "postcode": "42328",
+        "locality": [
+          "CASTILLEJO DE ROBLEDO"
+        ],
+        "province": [
+          "Soria"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "42/000003",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2742%2F000003%27",
+        "fields": {
+          "n_registro": "42/000003",
+          "tipo": "Casa Rural de Alojamiento Compartido",
+          "direccion": "Calle LA IGLESIA 153",
+          "c_postal": "42328",
+          "provincia": "Soria",
+          "municipio": "Castillejo de Robledo",
+          "localidad": "CASTILLEJO DE ROBLEDO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-053/without-postcode",
+      "baseId": "residential-rural-053",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle LA IGLESIA 153, CASTILLEJO DE ROBLEDO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle LA IGLESIA"
+        ],
+        "number": "153",
+        "postcode": "42328",
+        "locality": [
+          "CASTILLEJO DE ROBLEDO"
+        ],
+        "province": [
+          "Soria"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "42/000003",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2742%2F000003%27",
+        "fields": {
+          "n_registro": "42/000003",
+          "tipo": "Casa Rural de Alojamiento Compartido",
+          "direccion": "Calle LA IGLESIA 153",
+          "c_postal": "42328",
+          "provincia": "Soria",
+          "municipio": "Castillejo de Robledo",
+          "localidad": "CASTILLEJO DE ROBLEDO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-054/with-postcode",
+      "baseId": "residential-rural-054",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle LOS LEONES 15, 42360 BERLANGA DE DUERO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle LOS LEONES"
+        ],
+        "number": "15",
+        "postcode": "42360",
+        "locality": [
+          "BERLANGA DE DUERO"
+        ],
+        "province": [
+          "Soria"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "42/000016",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2742%2F000016%27",
+        "fields": {
+          "n_registro": "42/000016",
+          "tipo": "Posada",
+          "direccion": "Calle LOS LEONES 15",
+          "c_postal": "42360",
+          "provincia": "Soria",
+          "municipio": "Berlanga de Duero",
+          "localidad": "BERLANGA DE DUERO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-054/without-postcode",
+      "baseId": "residential-rural-054",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle LOS LEONES 15, BERLANGA DE DUERO, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle LOS LEONES"
+        ],
+        "number": "15",
+        "postcode": "42360",
+        "locality": [
+          "BERLANGA DE DUERO"
+        ],
+        "province": [
+          "Soria"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "42/000016",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2742%2F000016%27",
+        "fields": {
+          "n_registro": "42/000016",
+          "tipo": "Posada",
+          "direccion": "Calle LOS LEONES 15",
+          "c_postal": "42360",
+          "provincia": "Soria",
+          "municipio": "Berlanga de Duero",
+          "localidad": "BERLANGA DE DUERO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-055/with-postcode",
+      "baseId": "residential-rural-055",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle MAYOR 4, 47830 TORDEHUMOS, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle MAYOR"
+        ],
+        "number": "4",
+        "postcode": "47830",
+        "locality": [
+          "TORDEHUMOS"
+        ],
+        "province": [
+          "Valladolid"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "47/000001",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2747%2F000001%27",
+        "fields": {
+          "n_registro": "47/000001",
+          "tipo": "Hotel Rural",
+          "direccion": "Calle MAYOR 4",
+          "c_postal": "47830",
+          "provincia": "Valladolid",
+          "municipio": "Tordehumos",
+          "localidad": "TORDEHUMOS"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-055/without-postcode",
+      "baseId": "residential-rural-055",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle MAYOR 4, TORDEHUMOS, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle MAYOR"
+        ],
+        "number": "4",
+        "postcode": "47830",
+        "locality": [
+          "TORDEHUMOS"
+        ],
+        "province": [
+          "Valladolid"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "47/000001",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2747%2F000001%27",
+        "fields": {
+          "n_registro": "47/000001",
+          "tipo": "Hotel Rural",
+          "direccion": "Calle MAYOR 4",
+          "c_postal": "47830",
+          "provincia": "Valladolid",
+          "municipio": "Tordehumos",
+          "localidad": "TORDEHUMOS"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-056/with-postcode",
+      "baseId": "residential-rural-056",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle REAL 160, 47240 VALDESTILLAS, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle REAL"
+        ],
+        "number": "160",
+        "postcode": "47240",
+        "locality": [
+          "VALDESTILLAS"
+        ],
+        "province": [
+          "Valladolid"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "47/000003",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2747%2F000003%27",
+        "fields": {
+          "n_registro": "47/000003",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle REAL 160",
+          "c_postal": "47240",
+          "provincia": "Valladolid",
+          "municipio": "Valdestillas",
+          "localidad": "VALDESTILLAS"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-056/without-postcode",
+      "baseId": "residential-rural-056",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle REAL 160, VALDESTILLAS, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle REAL"
+        ],
+        "number": "160",
+        "postcode": "47240",
+        "locality": [
+          "VALDESTILLAS"
+        ],
+        "province": [
+          "Valladolid"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "47/000003",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2747%2F000003%27",
+        "fields": {
+          "n_registro": "47/000003",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle REAL 160",
+          "c_postal": "47240",
+          "provincia": "Valladolid",
+          "municipio": "Valdestillas",
+          "localidad": "VALDESTILLAS"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-057/with-postcode",
+      "baseId": "residential-rural-057",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle SANTA ISABEL 17, 47318 MELIDA, Peñafiel, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle SANTA ISABEL"
+        ],
+        "number": "17",
+        "postcode": "47318",
+        "locality": [
+          "MELIDA"
+        ],
+        "province": [
+          "Valladolid"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "47/000011",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2747%2F000011%27",
+        "fields": {
+          "n_registro": "47/000011",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle SANTA ISABEL 17",
+          "c_postal": "47318",
+          "provincia": "Valladolid",
+          "municipio": "Peñafiel",
+          "localidad": "MELIDA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-057/without-postcode",
+      "baseId": "residential-rural-057",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle SANTA ISABEL 17, MELIDA, Peñafiel, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle SANTA ISABEL"
+        ],
+        "number": "17",
+        "postcode": "47318",
+        "locality": [
+          "MELIDA"
+        ],
+        "province": [
+          "Valladolid"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "47/000011",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2747%2F000011%27",
+        "fields": {
+          "n_registro": "47/000011",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle SANTA ISABEL 17",
+          "c_postal": "47318",
+          "provincia": "Valladolid",
+          "municipio": "Peñafiel",
+          "localidad": "MELIDA"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-058/with-postcode",
+      "baseId": "residential-rural-058",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Avenida PEÑA MIRA 2, 49593 LINAREJOS, Manzanal de Arriba, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Avenida PEÑA MIRA"
+        ],
+        "number": "2",
+        "postcode": "49593",
+        "locality": [
+          "LINAREJOS"
+        ],
+        "province": [
+          "Zamora"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "49/000015",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2749%2F000015%27",
+        "fields": {
+          "n_registro": "49/000015",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Avenida PEÑA MIRA 2",
+          "c_postal": "49593",
+          "provincia": "Zamora",
+          "municipio": "Manzanal de Arriba",
+          "localidad": "LINAREJOS"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-058/without-postcode",
+      "baseId": "residential-rural-058",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Avenida PEÑA MIRA 2, LINAREJOS, Manzanal de Arriba, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Avenida PEÑA MIRA"
+        ],
+        "number": "2",
+        "postcode": "49593",
+        "locality": [
+          "LINAREJOS"
+        ],
+        "province": [
+          "Zamora"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "49/000015",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2749%2F000015%27",
+        "fields": {
+          "n_registro": "49/000015",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Avenida PEÑA MIRA 2",
+          "c_postal": "49593",
+          "provincia": "Zamora",
+          "municipio": "Manzanal de Arriba",
+          "localidad": "LINAREJOS"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-059/with-postcode",
+      "baseId": "residential-rural-059",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle La Feria 1, 49513 FORNILLOS DE ALISTE, Fonfría, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle La Feria"
+        ],
+        "number": "1",
+        "postcode": "49513",
+        "locality": [
+          "FORNILLOS DE ALISTE"
+        ],
+        "province": [
+          "Zamora"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "49/000020",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2749%2F000020%27",
+        "fields": {
+          "n_registro": "49/000020",
+          "tipo": "Hotel Rural",
+          "direccion": "Calle La Feria 1",
+          "c_postal": "49513",
+          "provincia": "Zamora",
+          "municipio": "Fonfría",
+          "localidad": "FORNILLOS DE ALISTE"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-059/without-postcode",
+      "baseId": "residential-rural-059",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle La Feria 1, FORNILLOS DE ALISTE, Fonfría, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle La Feria"
+        ],
+        "number": "1",
+        "postcode": "49513",
+        "locality": [
+          "FORNILLOS DE ALISTE"
+        ],
+        "province": [
+          "Zamora"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "49/000020",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2749%2F000020%27",
+        "fields": {
+          "n_registro": "49/000020",
+          "tipo": "Hotel Rural",
+          "direccion": "Calle La Feria 1",
+          "c_postal": "49513",
+          "provincia": "Zamora",
+          "municipio": "Fonfría",
+          "localidad": "FORNILLOS DE ALISTE"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-060/with-postcode",
+      "baseId": "residential-rural-060",
+      "variant": "with-postcode",
+      "cohort": "rural",
+      "query": "Calle Palacio 10, 49337 VILLANUEVA DE VALROJO, Ferreras de Arriba, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle Palacio"
+        ],
+        "number": "10",
+        "postcode": "49337",
+        "locality": [
+          "VILLANUEVA DE VALROJO"
+        ],
+        "province": [
+          "Zamora"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "49/000021",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2749%2F000021%27",
+        "fields": {
+          "n_registro": "49/000021",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle Palacio 10",
+          "c_postal": "49337",
+          "provincia": "Zamora",
+          "municipio": "Ferreras de Arriba",
+          "localidad": "VILLANUEVA DE VALROJO"
+        }
+      }
+    },
+    {
+      "id": "residential-rural-060/without-postcode",
+      "baseId": "residential-rural-060",
+      "variant": "without-postcode",
+      "cohort": "rural",
+      "query": "Calle Palacio 10, VILLANUEVA DE VALROJO, Ferreras de Arriba, España",
+      "inScope": true,
+      "expected": {
+        "street": [
+          "Calle Palacio"
+        ],
+        "number": "10",
+        "postcode": "49337",
+        "locality": [
+          "VILLANUEVA DE VALROJO"
+        ],
+        "province": [
+          "Zamora"
+        ],
+        "unit": null
+      },
+      "source": {
+        "dataset": "castilla-leon-tourism-register",
+        "recordId": "49/000021",
+        "url": "https://analisis.datosabiertos.jcyl.es/api/explore/v2.1/catalog/datasets/registro-de-turismo-de-castilla-y-leon/records?select=n_registro%2Ctipo%2Cdireccion%2Cc_postal%2Cprovincia%2Cmunicipio%2Clocalidad&where=n_registro%3D%2749%2F000021%27",
+        "fields": {
+          "n_registro": "49/000021",
+          "tipo": "Casa Rural de Alquiler",
+          "direccion": "Calle Palacio 10",
+          "c_postal": "49337",
+          "provincia": "Zamora",
+          "municipio": "Ferreras de Arriba",
+          "localidad": "VILLANUEVA DE VALROJO"
+        }
+      }
+    }
+  ]
+}

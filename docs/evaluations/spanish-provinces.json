@@ -1,0 +1,300 @@
+{
+  "sourceCommit": "39d07827e18658c671bfd3e9661dde065fc973c9",
+  "sourcePath": "packages/country-es/src/spain.ts",
+  "provinces": [
+    {
+      "code": "01",
+      "name": "Araba/Álava",
+      "aliases": [
+        "Álava",
+        "Araba"
+      ]
+    },
+    {
+      "code": "02",
+      "name": "Albacete",
+      "aliases": []
+    },
+    {
+      "code": "03",
+      "name": "Alicante/Alacant",
+      "aliases": [
+        "Alicante",
+        "Alacant"
+      ]
+    },
+    {
+      "code": "04",
+      "name": "Almería",
+      "aliases": []
+    },
+    {
+      "code": "05",
+      "name": "Ávila",
+      "aliases": []
+    },
+    {
+      "code": "06",
+      "name": "Badajoz",
+      "aliases": []
+    },
+    {
+      "code": "07",
+      "name": "Balears, Illes",
+      "aliases": [
+        "Illes Balears",
+        "Baleares"
+      ]
+    },
+    {
+      "code": "08",
+      "name": "Barcelona",
+      "aliases": []
+    },
+    {
+      "code": "09",
+      "name": "Burgos",
+      "aliases": []
+    },
+    {
+      "code": "10",
+      "name": "Cáceres",
+      "aliases": []
+    },
+    {
+      "code": "11",
+      "name": "Cádiz",
+      "aliases": []
+    },
+    {
+      "code": "12",
+      "name": "Castellón/Castelló",
+      "aliases": [
+        "Castellón",
+        "Castelló"
+      ]
+    },
+    {
+      "code": "13",
+      "name": "Ciudad Real",
+      "aliases": []
+    },
+    {
+      "code": "14",
+      "name": "Córdoba",
+      "aliases": []
+    },
+    {
+      "code": "15",
+      "name": "Coruña, A",
+      "aliases": [
+        "A Coruña",
+        "La Coruña"
+      ]
+    },
+    {
+      "code": "16",
+      "name": "Cuenca",
+      "aliases": []
+    },
+    {
+      "code": "17",
+      "name": "Girona",
+      "aliases": [
+        "Gerona"
+      ]
+    },
+    {
+      "code": "18",
+      "name": "Granada",
+      "aliases": []
+    },
+    {
+      "code": "19",
+      "name": "Guadalajara",
+      "aliases": []
+    },
+    {
+      "code": "20",
+      "name": "Gipuzkoa",
+      "aliases": [
+        "Guipúzcoa"
+      ]
+    },
+    {
+      "code": "21",
+      "name": "Huelva",
+      "aliases": []
+    },
+    {
+      "code": "22",
+      "name": "Huesca",
+      "aliases": []
+    },
+    {
+      "code": "23",
+      "name": "Jaén",
+      "aliases": []
+    },
+    {
+      "code": "24",
+      "name": "León",
+      "aliases": []
+    },
+    {
+      "code": "25",
+      "name": "Lleida",
+      "aliases": [
+        "Lérida"
+      ]
+    },
+    {
+      "code": "26",
+      "name": "Rioja, La",
+      "aliases": [
+        "La Rioja"
+      ]
+    },
+    {
+      "code": "27",
+      "name": "Lugo",
+      "aliases": []
+    },
+    {
+      "code": "28",
+      "name": "Madrid",
+      "aliases": []
+    },
+    {
+      "code": "29",
+      "name": "Málaga",
+      "aliases": []
+    },
+    {
+      "code": "30",
+      "name": "Murcia",
+      "aliases": []
+    },
+    {
+      "code": "31",
+      "name": "Navarra",
+      "aliases": [
+        "Nafarroa"
+      ]
+    },
+    {
+      "code": "32",
+      "name": "Ourense",
+      "aliases": [
+        "Orense"
+      ]
+    },
+    {
+      "code": "33",
+      "name": "Asturias",
+      "aliases": []
+    },
+    {
+      "code": "34",
+      "name": "Palencia",
+      "aliases": []
+    },
+    {
+      "code": "35",
+      "name": "Palmas, Las",
+      "aliases": [
+        "Las Palmas"
+      ]
+    },
+    {
+      "code": "36",
+      "name": "Pontevedra",
+      "aliases": []
+    },
+    {
+      "code": "37",
+      "name": "Salamanca",
+      "aliases": []
+    },
+    {
+      "code": "38",
+      "name": "Santa Cruz de Tenerife",
+      "aliases": []
+    },
+    {
+      "code": "39",
+      "name": "Cantabria",
+      "aliases": []
+    },
+    {
+      "code": "40",
+      "name": "Segovia",
+      "aliases": []
+    },
+    {
+      "code": "41",
+      "name": "Sevilla",
+      "aliases": []
+    },
+    {
+      "code": "42",
+      "name": "Soria",
+      "aliases": []
+    },
+    {
+      "code": "43",
+      "name": "Tarragona",
+      "aliases": []
+    },
+    {
+      "code": "44",
+      "name": "Teruel",
+      "aliases": []
+    },
+    {
+      "code": "45",
+      "name": "Toledo",
+      "aliases": []
+    },
+    {
+      "code": "46",
+      "name": "Valencia/València",
+      "aliases": [
+        "Valencia",
+        "València"
+      ]
+    },
+    {
+      "code": "47",
+      "name": "Valladolid",
+      "aliases": []
+    },
+    {
+      "code": "48",
+      "name": "Bizkaia",
+      "aliases": [
+        "Vizcaya"
+      ]
+    },
+    {
+      "code": "49",
+      "name": "Zamora",
+      "aliases": []
+    },
+    {
+      "code": "50",
+      "name": "Zaragoza",
+      "aliases": []
+    },
+    {
+      "code": "51",
+      "name": "Ceuta",
+      "aliases": []
+    },
+    {
+      "code": "52",
+      "name": "Melilla",
+      "aliases": []
+    }
+  ]
+}

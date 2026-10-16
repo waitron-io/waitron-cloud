@@ -216,3 +216,87 @@ explicit query-normalization and suggestion-selection policy. Confirm durable
 merchant storage and display rights before recommending a provider. Provider choice,
 release thresholds, cache lifetime, attribution placement, account allowance and
 sharing rules, and the peak-day budget remain owner decisions.
+
+## Residential and rural comparison, 2026-10-16
+
+A person can choose from several suggestions, and a returned postcode can supply a
+province even when the provider names a comarca instead. The next comparison measures
+those differences explicitly. Keep manual entry available while you assess the results.
+It approves no provider, product normalization rule, storage right or release threshold.
+
+The [second corpus](evaluations/spanish-residential-addresses.json) fixes 60 public
+street addresses before requests. Thirty are registered tourist homes in Catalunya;
+thirty are registered rural lodgings in Castilla y León. Each has an unchanged query
+and a second query without its original postcode, for 120 cases. The register supplies
+the reference street, number, locality, postcode and province. No provider supplies
+an expected answer. Floor, unit, owner, contact and cadastral fields are excluded.
+These are tourist homes and rural lodgings, rather than a representative household
+sample. Register mistakes remain possible; coordinates are not independently surveyed.
+
+You can trace each address to its original record ID, selected fields and public API
+URL. Catalunya contributes eight addresses each from Barcelona and Girona and seven
+each from Lleida and Tarragona. Castilla y León contributes four each from Ávila,
+Burgos and León and three each from its other six provinces. This deliberate regional
+sample does not estimate national, island or unsupported-territory performance. The
+first civic benchmark remains unchanged and separate. Its paired variants and this
+corpus's paired queries are not independent addresses.
+
+Sources and attribution: Generalitat de Catalunya, Departament d'Empresa i Treball,
+[tourism register](https://analisi.transparenciacatalunya.cat/Turisme/Establiments-d-allotjament-tur-stic-inscrits-al-Re/t2h3-cgys),
+under the portal's [open-use terms](https://web.gencat.cat/ca/generalitat/dades-indicadors/dades-obertes/llicencies);
+and Junta de Castilla y León, Consejería de Cultura, Turismo y Deporte,
+[tourism register](https://analisis.datosabiertos.jcyl.es/explore/dataset/registro-de-turismo-de-castilla-y-leon/),
+whose metadata names CC BY 4.0. Both were read on 2026-10-16. Address fields are
+selected and reformatted, Spanish street-type aliases are added explicitly, and
+postcode-free queries are derived from the original input. The corpus records the
+selection order and exclusions. It does not relicense the source records as CC0.
+
+### Fixed evaluation rules
+
+Send both queries separately, without automatic fallback or correction. Removing a
+postcode tests query sensitivity; it never fills a missing returned postcode or changes
+the expected answer. Exact postcode accuracy always compares the returned value with
+the independent register reference. Both arms retain the same street number and locality.
+
+Resolve province evidence through the [frozen country-pack table](evaluations/spanish-provinces.json).
+It records all 52 province names, codes and aliases from Waitron commit
+`39d07827e18658c671bfd3e9661dde065fc973c9`. A recognized supplied province is
+canonicalized. Otherwise, a valid returned Spanish postcode can supply its province;
+report this as inference, separately from supplied evidence. A recognized province
+that conflicts with that postcode refuses a complete draft. Unknown comarca names
+are not provinces. Neither the input postcode nor the expected answer supplies missing
+provider fields. Missing or foreign countries remain unaccepted.
+
+Score every result among the first five, in provider order. Google validates each
+prediction separately, including incorrect predictions. CartoCiudad resolves only the
+exact ID and type of each candidate without coordinates. Geoapify returns its own
+bounded list for each endpoint. Expected answers are used only to score every result,
+never to decide which result gets another request.
+
+Report first-result matches and the presence of a matching address anywhere in that
+list separately. List presence is an answer-aware upper bound on what a person could
+select; no person or product has selected that address. A complete draft requires the
+same candidate to match street, locality, country, house number, postcode and canonical
+province, with no province conflict. A correct number on another candidate cannot
+complete a wrong street. This is stricter than the original street-level selection
+metric, which remains available for comparison. Neither metric proves that the actual
+Waitron setup server or editable form accepts and preserves a suggestion.
+
+### Reproduce the bounded comparison
+
+Run the offline checks with:
+
+```sh
+node --test scripts/ci-address-lookup-comparison.test.mjs scripts/ci-address-lookup-evaluation.test.mjs
+```
+
+The [comparison harness](../scripts/address-lookup-comparison.mjs) requires an explicit
+`--run google`, `--run geoapify` or `--run cartociudad` to make requests. It shares the
+original D75 request journal and its exclusive lock, cumulative 1,499 ceiling,
+pre-dispatch disk flush, two-attempt limit, spacing and HTTP deadline. It writes its
+scores and temporary raw responses under `~/waitron-campaign-d/receipts/d76/`.
+Do not reset the shared journal to repeat either benchmark. Initial cumulative counts
+are Google 78, Geoapify 80 and CartoCiudad 41. At most 720, 240 and 720 additional
+requests respectively are needed, including every possible list-resolution request.
+No automatic retry is enabled. The preflight counts only unfinished cases when resuming;
+every actual attempt still reserves its allowance before dispatch.

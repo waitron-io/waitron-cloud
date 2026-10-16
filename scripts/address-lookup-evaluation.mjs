@@ -6,7 +6,7 @@ import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {parseEnv} from 'node:util';
 
-class RequestLimitError extends Error {}
+export class RequestLimitError extends Error {}
 
 export class RequestBudget {
   counts = {google:0, geoapify:0, cartociudad:0};
@@ -209,7 +209,7 @@ export async function evaluateCase(client, provider, entry) {
   return result;
 }
 
-export async function runCases(client,provider,cases,directory,corpusSha256,progress=()=>{}) {
+export async function runCases(client,provider,cases,directory,corpusSha256,progress=()=>{},evaluate=evaluateCase) {
   const path=join(directory,`${provider}-scores.jsonl`);
   const existing=existsSync(path)?readFileSync(path,'utf8'):'';
   assert.ok(!existing||existing.endsWith('\n'),'Incomplete corpus score journal');
@@ -219,7 +219,7 @@ export async function runCases(client,provider,cases,directory,corpusSha256,prog
   if(rows.some(row=>row.error==='Provider key refused')) return rows;
   for(const entry of cases) {
     if(rows.some(row=>row.id===entry.id)) continue;
-    const row={...await evaluateCase(client,provider,entry),corpusSha256};
+    const row={...await evaluate(client,provider,entry),corpusSha256};
     const fd=openSync(path,'a',0o600);
     try{appendFileSync(fd,JSON.stringify(row)+'\n');fsyncSync(fd);}finally{closeSync(fd);}
     rows.push(row);

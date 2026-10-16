@@ -358,9 +358,11 @@ venue does not subscribe to remote access or backups.
   including one conservative documentation probe; no retries or customer data.
   The harness, corpus, per-case scores and component/latency tables are retained;
   raw provider responses are local-only and deleted at landing. Google's storage
-  rights remain unresolved, so its row is a quality comparison only. Approve the
-  next residential/rural corpus, query normalization and selection policy before
-  another benchmark. Choose the provider only after confirming durable merchant
+  rights remain unresolved, so its row is a quality comparison only. The owner approved a larger residential/rural comparison. Its fixed
+  60-address regional corpus compares unchanged and postcode-free queries, supplied
+  versus postcode-derived provinces, and the first result versus presence in a
+  bounded list. It retains the original request counters and manual-entry rule;
+  the scope note records the results and their limits. Choose the provider only after confirming durable merchant
   storage/display rights, licensing, caching, attribution and peak-day capacity.
   Account allowance and attribution remain open; no product route or UI is added.
   Keep manual entry and correction available when lookup is unavailable or wrong.
