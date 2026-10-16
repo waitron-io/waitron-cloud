@@ -267,6 +267,51 @@ patch are `fiscal-diagnostic.log` and `fiscal-diagnostic.patch`, and the later
 133-case passing run is `fiscal-final.log`. Use those stages to investigate the
 next failure; a passing repeat does not resolve this defect.
 
+## Translate all: approved design, implementation still open
+
+The [Cloud design](superpowers/specs/2026-10-14-translate-all-design.md) and
+[24-task plan](superpowers/plans/2026-10-14-translate-all.md) are owner-approved. Design is
+complete for the agreed translation flow: signed background jobs, missing-name suggestions,
+language-neutral first/review passes, consent, usage and retention. The owner approved the
+temporary **US$5 per venue per calendar month (UTC)** safety cap and submit admission of
+**4 in flight, at most 1 per client address**, outside other account requests' shared places.
+This records design progress only; the translation runtime remains to be implemented.
+
+The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
+The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies
+compact full-body replies of at most 16,777,216 decoded UTF-8 bytes, signed optional cursors in
+filtered submit order, atomic unchanged results, stable retries and release only after every page
+is durably stored. A conservative singleton size calculation uses the existing 1 MiB job bound
+and preserves accepted language tags. Runtime page sizing still needs behavioral proof.
+
+Remaining work:
+
+- **Cloud runtime:** implement and test the original tasks with the paging amendment's
+  replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
+  consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
+  Append migrations at the then-current next numbers without editing landed migrations.
+- **Waitron and joint qualification:** lane B A689-21 needs a real pagination loop, bounded
+  decoded page reads and integration with existing durable suggestion reconciliation and ref
+  deduplication. The current one-collect caller ignores `nextCursor` (`collectTranslation` in
+  Waitron `apps/server/src/cloud-translation.ts` at `8eb93dbf3a0583f479d96b5bf0bc214d974ba080`);
+  lowering its byte reader alone risks releasing unseen pages. Pin both candidates and jointly prove a
+  multi-page walk, lost replies, crash retries, durable completion before release, and partial
+  handling after release/expiry between pages. These remain go-live gates.
+- **Owner quality trials:** Tasks 22–24 remain owner-only after **2026-11-02**, using their
+  preserved commands. Templated-prompt non-regression on both graded sets, house-style effects
+  and the other kinds of name still need measurement and owner grading. Run no real-key trials
+  as part of this documentation prerequisite or autonomous implementation.
+- **Commercial and production gates:** pricing, billing and the replacement monthly allowance
+  remain required before the first live venue. Provider processing/residency and retention
+  decisions, consent wording, production key custody and deployment remain open. Suggestions
+  still require a person to save them before diners see a change. Design approval enables none
+  of these production capabilities.
+
+Implement routine work inline with failing behavioral tests first. Before every push, run the
+full touched-package and dependent-package suites; run the whole workspace only for shared
+configuration changes. Require normal hooks and current-head CI. This entry and amendment are
+documentation milestones, not runtime, joint-proof or release receipts.
+
 ## Initial focus
 
 - Launch first in Spain on AWS. AWS documents Europe (Spain) as `eu-south-2` and

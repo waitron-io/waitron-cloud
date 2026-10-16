@@ -1,6 +1,16 @@
 # Translate all (Cloud side) implementation plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Dispatch every implementer as `subagent_type: "implementer"`.
+> **Read first: [bounded collect prerequisite, 2026-10-16](2026-10-16-translation-collect-pages.md).**
+> It supersedes conflicting collect interfaces, snippets and tests in this plan, especially
+> Tasks 3, 8, 10, 11 and 18. Preserve all 24 task numbers and unrelated behavioral assertions.
+> The design and plan, US$5 UTC monthly per-venue cap, and submit admission (4 in flight,
+> 1/address) are owner-approved. The amendment preserves accepted input limits.
+> Runtime implementation and release qualification remain open.
+
+**Execution:** work inline with failing behavioral tests first, then focused verification.
+Do not dispatch an implementer and reviewer automatically for each task. Follow the amendment's
+current migration and pre-push rules. Tasks 22–24 remain owner-only after 2026-11-02; preserve
+their commands and do not execute them during autonomous implementation.
 
 **Goal:** A connected Waitron box can send its missing customer-facing names to Cloud as one signed job, and collect suggested names written and reviewed by `gpt-6-luna`, with Cloud keeping nothing but usage counts.
 
@@ -19,22 +29,23 @@
 - Retries: "Each pass of a batch makes up to four calls: the first, then three retries after 2 s, 8 s and 30 s, or after the provider's `Retry-After` (capped at 60 s)." A batch that still fails marks its items failed; the job ends `partly_done` with reason `provider_failed`, or `failed` with reason `provider_unavailable` if every batch fails.
 - Body: "The job body is capped at 1 MiB and 1,000 items"; `houseStyle` "holds 0 to 300 saved names." The field rules, the nine kinds and the context items are in the contract's "Submit" section.
 - Request limits (contract, "Request limits"): submit accepts a whole HTTP request of up to 2,113,536 bytes received within 60 s; status, collect and release keep today's 16,384 bytes and 5 s (`packages/account-http/src/request.ts:6,15,22`, `server.ts:37`).
-- Submit admission (this plan's, Task 12): the account server admits at most 8 requests at once (`server.ts:32-35`), and a request keeps its place while its body is read. A submit therefore does not use one of those 8: it has its own allowance of 4 in flight, and at most 1 in flight per client address; past either, it is answered 503 `temporarily_unavailable` with `Retry-After: 1` before its body is read.
+- Submit admission (owner-approved, Task 12): the account server admits at most 8 requests at once (`server.ts:32-35`), and a request keeps its place while its body is read. A submit therefore does not use one of those 8: it has its own allowance of 4 in flight, and at most 1 in flight per client address; past either, it is answered 503 `temporarily_unavailable` with `Retry-After: 1` before its body is read.
 - Context items: an item with `missing: []` is accepted only when it heads the family of an item in the job with languages to write; it goes to the model as context, never appears in `results` or `failed`, and does not count in `total`, `done`, `failed` or the cap estimate.
 - Reasons (contract, "Status, collect and release"): `partly_done` carries `limit_reached` or `provider_failed`; `failed` carries `provider_unavailable`, `consent_required` or `limit_reached`.
-- The cap is refused at submit from an estimate; the worker only stops a running job at the cap. The $5 monthly cap is proposed, owner to confirm (spec, decision 1).
+- The cap is refused at submit from an estimate; the worker only stops a running job at the cap. The US$5 per-venue calendar-month (UTC) safety cap is owner-approved (spec, decision 1). Pricing, billing and its replacement allowance remain release gates.
 - Signed body: `{ "version": 1, "jobSha256": "<SHA-256 hex of the UTF-8 bytes of body>", "jobBytes": N }`. Cloud checks `jobBytes` and `jobSha256` against `body` before parsing it.
 - "One open job per venue." A second submit while one is `queued` or `running` is refused with `translation_job_running`.
 - States: `queued`, `running`, `done`, `partly_done`, `failed`, `collected`, `expired`.
+- Collect: the [paging amendment](2026-10-16-translation-collect-pages.md) replaces every single-reply collect assumption below. Limit the full compact decoded JSON to 16,777,216 UTF-8 bytes, including UUID and `nextCursor`; use signed optional safe-integer offsets in filtered submit order. Return atomic unchanged items, maximal pages and repeatable reads. Never delete on collect; Waitron must durably reconcile every page before release. Joint paging/recovery proof with lane B A689-21 gates go-live. Its singleton proof uses the existing 1 MiB job bound without a new tag restriction.
 - Retention: the body row "is deleted on `translation-release`, or by a sweep 24 hours after the job finished, which also moves an uncollected job to `expired`. A job that never finishes (no worker ran for a day) is swept 24 hours after it was submitted." The sweep runs in the worker and in the account server whenever `CLOUD_TRANSLATION=1`, so menus are deleted when no worker runs at all (Task 18). "No name ever enters a log."
 - Consent names "three possible language-model providers: OpenAI, Anthropic and Google". "Until consent is recorded, `translation-submit` is refused with `translation_consent_required`."
 - Seeing the service (contract): a `configuration` request whose signed body is exactly `{"servicesVersion":2}` receives four services, `content_translation` among them; `{}` keeps receiving exactly three. Services are matched by name; their order is not significant.
 - An abort (worker shutdown, a lost lease) saves nothing for the batch it interrupted: neither a failed batch nor a first-pass-only result.
 - Tests never need a real key: every provider test talks to a fake OpenAI server on loopback through the real client.
-- Append migrations only (`039_translation_jobs.sql`, `040_content_translation_service.sql`); never edit an applied one.
-- Every task: failing test first and watch it fail, then the implementation, then the focused tests green. Commit with `git commit -s` and a plain-English message (the owner's rule covers commit text too). Do not run whole-workspace suites; CI owns those.
+- Append migrations only; re-read the current migration directory and `migrationNames` before choosing the next two numbers. Both currently end at 038 (2026-10-16); 039/040 below are conditional examples, not reserved numbers. Update all associated filenames, counts, indices and upgrade fixtures; never edit or renumber a landed migration. This documentation milestone creates none.
+- Every implementation task: failing test first and watch it fail, then the implementation, then focused tests green. Commit with `git commit -s` and a plain-English message. Before **every push**, run the full suites of each touched package and all dependent packages, including source/test/fixture readers; run the whole workspace only for shared configuration changes. Preserve normal hooks and require current-head CI results. CI does not replace those local suites.
 - Database tests run from the repository root as `node scripts/test-postgres.mjs exec pnpm --dir packages/<pkg> exec node --test --test-timeout=30000 test/<file>.test.ts`; tests with no database run as `pnpm --dir packages/<pkg> exec node --test test/<file>.test.ts`. Read the `tests` count in each summary; a run that prints none proves nothing.
-- An implementer that passes about 150 tool calls with its task unfinished stops at a passing (or cleanly failing) point, commits, and returns a handover: what is done, what is left, the files, and each check's state.
+- Keep routine implementation inline. Delegate only independent work when coordination justifies it; there is no automatic per-task agent workflow.
 
 ## Review Focus
 
@@ -327,6 +338,10 @@ git commit -s -m "Add the translation package with the signed job fingerprint ch
 ---
 ### Task 2: Migration 039 — job, body, consent, price and policy tables
 
+> **Migration numbers are conditional:** [recheck the current inventories](2026-10-16-translation-collect-pages.md#current-migrations-and-push-policy)
+> before implementation. Append the then-current next numbers and update all related assertions;
+> never edit a landed migration. The current maximum is 038, verified on 2026-10-16.
+
 **Files:**
 - Create: `packages/registration/migrations/039_translation_jobs.sql`, `packages/translation/test/schema.test.ts`, `packages/translation/test/fixtures.ts`
 - Modify: `packages/registration/src/migrate.ts` (append to `migrationNames`), `packages/registration/src/usage-metering.ts` (types, source map, quantity rule at `:75`), `packages/registration/test/usage-metering.test.ts`, and the tests this migration breaks (Step 6): `packages/registration/test/registration.test.ts:79,82`, `packages/fiscal-allocation/test/schema.test.ts:25-38,82,133,307,309,310`
@@ -441,7 +456,7 @@ Expected: FAIL, `relation "translation_policy" does not exist`.
 
 - [ ] **Step 4: Write the migration**
 
-The seeded values, so a reviewer can check them: OpenAI's standard prices read on 2026-10-14 (spec, "How the method was chosen") are $0.10 in and $0.50 out per million tokens for `gpt-6-luna`, which is 100,000 and 500,000 micro-US-dollars per million. The trial measured $0.0035 per 100 products for the first pass plus $0.0038 for the review, so 73 micro-dollars per item; the spec asks for twice that, 146. The monthly cap of 5,000,000 micro-dollars ($5) per venue is the spec's decision 1, marked there "proposed, owner to confirm"; at the estimate it allows about 34,000 items a month.
+The seeded values, so a reviewer can check them: OpenAI's standard prices read on 2026-10-14 (spec, "How the method was chosen") are $0.10 in and $0.50 out per million tokens for `gpt-6-luna`, which is 100,000 and 500,000 micro-US-dollars per million. The trial measured $0.0035 per 100 products for the first pass plus $0.0038 for the review, so 73 micro-dollars per item; the spec asks for twice that, 146. The monthly cap of 5,000,000 micro-dollars (US$5) per venue per calendar month (UTC) is owner-approved (spec, decision 1); at the estimate it allows about 34,000 items a month.
 
 `packages/registration/migrations/039_translation_jobs.sql`:
 
@@ -610,6 +625,11 @@ git commit -s -m "Add the tables for translation jobs, their bodies, consents, p
 ---
 
 ### Task 3: Job store — submit, status, collect, release and the spending cap
+
+> **Authoritative replacement:** [paging amendment, Task 3 row and behavioral checks](2026-10-16-translation-collect-pages.md#implement-inline-with-failing-behavioral-tests-first).
+> The `collectJob(client,row)` interface, batch-order flattening and single-reply expectations
+> below are superseded. Accept cursor, reconstruct filtered submit order and return a measured
+> maximal page with `nextCursor`. Preserve all submit, cap, state and release assertions.
 
 **Files:**
 - Create: `packages/translation/src/service.ts`, `src/job-store.ts`, `test/job-store.test.ts`
@@ -808,6 +828,9 @@ git commit -s -m "Store translation jobs: a retried submit returns its first job
 ---
 
 ### Task 4: Job body parsing and batching
+
+> **Paging:** the [single-item size proof](2026-10-16-translation-collect-pages.md#single-item-size-proof)
+> uses the existing job byte limit. Preserve the parser below and its accepted language tags.
 
 **Files:**
 - Create: `packages/translation/src/job-body.ts`, `src/batching.ts`, `test/job-body.test.ts`, `test/batching.test.ts`
@@ -1771,6 +1794,10 @@ git commit -s -m "Run one translation batch: retry failed or unusable replies af
 
 ### Task 8: The worker — leases, four batches side by side, the cap, finishing and usage events
 
+> **Authoritative replacement:** [paging amendment, Task 8 row and behavioral checks](2026-10-16-translation-collect-pages.md#implement-inline-with-failing-behavioral-tests-first).
+> Collect helpers must walk pages. Prove submit-order results despite reversed batch/completion
+> order, and preserve lease, retry, context, cap and usage assertions.
+
 **Files:**
 - Create: `packages/translation/src/worker.ts`, `test/worker.test.ts`
 - Modify: `src/index.ts`
@@ -2270,6 +2297,10 @@ git commit -s -m "Add the translation-worker command: fixed failure output, a --
 
 ### Task 10: The four machine actions at the store level
 
+> **Authoritative replacement:** [paging amendment, Task 10 row and behavioral checks](2026-10-16-translation-collect-pages.md#implement-inline-with-failing-behavioral-tests-first).
+> The shared exact-body parser below applies only to status/release. Collect allows optional
+> cursor; perform the installation-scoped lookup before validating cursor and its range.
+
 **Files:**
 - Create: `packages/translation/src/machine.ts`, `test/machine.test.ts`
 - Modify: `packages/translation/src/index.ts`, `test/fixtures.ts` (add `readyForTranslation`)
@@ -2427,6 +2458,10 @@ git commit -s -m "Check and run the four translation machine actions at the stor
 ---
 
 ### Task 11: The four machine routes in account-http
+
+> **Authoritative replacement:** [paging amendment, Task 11 row and behavioral checks](2026-10-16-translation-collect-pages.md#implement-inline-with-failing-behavioral-tests-first).
+> Replace single-collect shape assertions with paged replies including `nextCursor`; measure
+> the exact compact full response through a real listener without changing security checks.
 
 **Files:**
 - Create: `packages/account-http/src/translation.ts`, `packages/account-http/test/translation.test.ts`
@@ -3524,6 +3559,10 @@ git commit -s -m "Count only remote access and backups when deciding whether a v
 
 ### Task 17: Migration 040 — the fourth service, and the configuration reply's servicesVersion 2
 
+> **Migration numbers are conditional:** follow the [append-only rule](2026-10-16-translation-collect-pages.md#current-migrations-and-push-policy).
+> Recheck the directory and `migrationNames`; the 040 filenames/counts/indices below must follow
+> the actual next number after Task 2, without changing any landed migration.
+
 **Files:**
 - Create: `packages/registration/migrations/040_content_translation_service.sql`, `packages/registration/test/content-translation-service.test.ts`
 - Modify: `packages/registration/src/migrate.ts`, `src/index.ts:218-219` (registration inserts four rows), `packages/backups/src/replacement.ts:98` (replacement inserts four rows), `packages/registration/src/installations.ts:17,25-27,77,105` (`InstallationView`, `readBody` accepts the version-2 configuration body; `execute` passes it to `view`), and the tests this breaks (Step 4)
@@ -3659,6 +3698,10 @@ git commit -s -m "Switch menu translation on for every connected installation an
 ---
 
 ### Task 18: The retention sweep, in the worker and the account server, and no names in any log
+
+> **Authoritative replacement:** [paging amendment, Task 18 row and behavioral checks](2026-10-16-translation-collect-pages.md#implement-inline-with-failing-behavioral-tests-first).
+> Walk and durably store all pages before release in the log test. Add release/expiry-between-pages
+> and repeat-collect retention checks; retain the existing deletion schedule and privacy assertions.
 
 **Files:**
 - Create: `packages/translation/src/retention.ts`, `test/retention.test.ts`, `test/no-names-in-logs.test.ts`, `packages/account-http/test/translation-sweep.test.ts`
@@ -3922,6 +3965,11 @@ git commit -s -m "Delete a job's menu and results 24 hours after it finished, or
 ---
 
 ### Task 19: Compose service, local stack role, configuration example, CI selection and docs
+
+> **Status wording:** Step 5's historical contract-status replacement is superseded by the
+> [paging amendment's joint gates](2026-10-16-translation-collect-pages.md#joint-qualification-and-release-gates).
+> Update implementation status only from actual current-head evidence. A Cloud package check
+> does not establish Waitron paging, joint qualification, owner quality approval or go-live.
 
 **Files:**
 - Modify: `compose.yaml` (service `translation-worker`; `CLOUD_TRANSLATION` on `account` at `:95`), `deploy/local-stack/runtime.mjs:26-41` (`commands.translation`, the `translation` role, `CLOUD_TRANSLATION` on the `account` role), `deploy/local-stack/runtime.test.mjs`, `deploy/local-stack/compose-contract.test.mjs:6,10,21-22,28`, `.env.example`, `packages/translation/README.md`, `packages/account-http/README.md` (section "Installation access and status"), `docs/usage-metering.md`, `docs/launch-evidence.md` (the provider table near `:84`), `docs/waitron-integration-contract.md` (status line under "Translate all, version 1"), `docs/product-and-platform.md` (service table), `README.md`
@@ -4383,6 +4431,8 @@ git commit -s -m "Add the hand-run translation trial, which sends a graded set t
 
 ### Task 22 (OWNER-INVOLVED, needs the real key): Score the templated prompt against both graded sets
 
+**Owner-only after 2026-11-02.** The commands below are preserved, not authorized for autonomous execution.
+
 Run only after Tasks 1–21 are merged or on their branch. Needs `CLOUD_OPENAI_API_KEY` (the trial's key is in `~/.llm-trial/env`; export it only in the shell) and the owner's time to grade. Run every command below from `packages/translation`.
 
 The bar, from the spec: "Before release, the harness must show that the templated prompt scores no worse than the fourth prompt on both graded sets." The fourth prompt with the Luna review had 6% of its names marked (4% wrong) on the tuning set and 5% (2% wrong) on the blind set (spec's table; the scorer's "marked" column).
@@ -4394,6 +4444,8 @@ The bar, from the spec: "Before release, the harness must show that the template
 - [ ] **Step 5:** Commit the new grades and shown keys (`git commit -s -m "Grade the templated prompt's new names; it scores X% and Y% against the fourth prompt's 6% and 5%"`), and put the table in the PR description.
 
 ### Task 23 (OWNER-INVOLVED, needs the real key): Measure the house-style examples
+
+**Owner-only after 2026-11-02.** The commands below are preserved, not authorized for autonomous execution.
 
 The spec: "The fair test is to give the blind set's run the names the owner accepted from the tuning set, and to count the Catalan vocabulary errors. Neither has been measured."
 
@@ -4448,6 +4500,8 @@ and in `runTrial` accept `houseStyle?:'tuning-accepted'` in its options, buildin
 - [ ] **Step 5:** Record both arms' scores and the vocabulary-error counts in the PR description and commit the code, the grades and the shown keys.
 
 ### Task 24 (OWNER-INVOLVED, needs the real key): A short trial on variants, options labels and menu sections
+
+**Owner-only after 2026-11-02.** The commands below are preserved, not authorized for autonomous execution.
 
 The spec: "A short trial on the other kinds of name (variants, options labels, menu sections), using Santet's, graded by the owner."
 
@@ -4527,6 +4581,6 @@ Menu sections: Square has none. Look for them in the Waitron venue built from th
 ## Self-review notes
 
 - **Spec coverage.** Machine actions (Tasks 1, 10, 11), fingerprint and vectors (1), entitlement and fourth service (2, 16, 17), jobs, one open job and the cap at submit (2, 3), submit's request limits (12), context items (4, 5, 8, 11), worker steps 1–8 (4 batching; 5–7 passes, retries and aborts; 8 cap stop, finish, reasons and usage; consent at lease in 13), review merge (5), prompt (5, 22, 23), OpenAI client (6), the worker command (9), providers and consent (13, 14, 15, 19 docs), retention in the worker and the account server (18), quality check (20–24), the spec's testing list (Tasks 1, 3, 4, 7, 8, 11, 12, 16, 17, 18).
-- **Decisions this plan makes that the owner should see:** submit's own admission (4 in flight, 1 per client address, outside the 8 places every other request shares); the account server also runs the retention sweep whenever `CLOUD_TRANSLATION=1`; a job leased more than three times ends `provider_failed` or `provider_unavailable`, because the contract's reason list has no reason for a worker that keeps dying, and a clean shutdown's hand-back does not count as a lease; an abort saves nothing for the batch it interrupted; `CLOUD_TRANSLATION` and `CLOUD_OPENAI_BASE_URL`; two jobs per worker process; the grading page sorts new names instead of shuffling them. Stated in the spec or the contract, and followed here: the $5 monthly cap (spec decision 1, proposed, owner to confirm); four calls per batch pass and the 60-second cap on `Retry-After`; a never-finished job expires 24 hours after it was submitted; up to four usage events per job; submit's 2 MiB and 60-second request limits; the field bounds, the nine kinds, a category only on products and variants, and context items; collect and release in every state, 409 `conflict`, 410 for collecting a released job; the five reasons; services matched by name.
+- **Approved decisions and implementation details:** owner-approved submit admission (4 in flight, 1 per client address, outside the 8 places every other request shares) and US$5 per-venue calendar-month (UTC) safety cap; the account server also runs the retention sweep whenever `CLOUD_TRANSLATION=1`; a job leased more than three times ends `provider_failed` or `provider_unavailable`, because the contract's reason list has no reason for a worker that keeps dying, and a clean shutdown's hand-back does not count as a lease; an abort saves nothing for the batch it interrupted; `CLOUD_TRANSLATION` and `CLOUD_OPENAI_BASE_URL`; two jobs per worker process; the grading page sorts new names instead of shuffling them. Preserve four calls per batch pass and the 60-second cap on `Retry-After`; a never-finished job expires 24 hours after it was submitted; up to four usage events per job; submit's 2 MiB and 60-second request limits; the field bounds, nine kinds, category rules and context items; collect/release state refusals, submit conflict, reasons and named services. The paging amendment replaces single-collect assumptions preserving the existing input limits.
 - **Context items close the old gap** where a variant arrived without its product's name: the box now sends a complete family head with `missing: []` (contract, "Submit"), so `partOf` always finds it in the batch. Task 24 still measures the other kinds.
 - **Task size.** Each task is meant to fit one implementer well under about 100 tool calls. The largest are Tasks 8 (the worker, 14 tests), 12 (submit's limits, with real-socket timing tests) and 18 (the sweep in two processes and the log test); each has one deliverable a reviewer can accept or reject alone, so none is split further.
