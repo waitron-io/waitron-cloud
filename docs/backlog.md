@@ -653,8 +653,18 @@ notifications separately.
   and a 30-second deadline. Missing, malformed, oversized, slow or corrupt batch
   evidence keeps all package suites with a reason. Existing callers without a
   batch reader retain individual reads.
-  This does not resolve the plan's broader dynamic
-  input and directory rules. Identity still selects all nine packages in the current graph;
+  Named shared subdirectories now retain every saved JavaScript or TypeScript
+  descendant as a possible helper input. Directory readers can therefore keep
+  their package consumers through helper chains and cycles, including files
+  added or deleted between the two revisions. Exact directory boundaries avoid
+  pulling in similarly named siblings. A real Node directory scan reproduces
+  the formerly omitted portal consumer; saved-revision and batched-read checks
+  cover old and new helper files, dirty local sources and paths with spaces.
+  The actual portal-only and all-nine identity selections stay covered.
+  This is a conservative source dependency rule, not evidence that every quoted
+  directory is read at runtime. Repository-root working directories, computed
+  inputs, non-source directory contents and broader root-path selection remain
+  unresolved. This does not complete the plan's dynamic input and directory rules. Identity still selects all nine packages in the current graph;
   portal alone remains isolated. Unaudited root, unknown and empty changes run everything.
   Type checking stays whole-workspace. The root command compiles the shared
   backend configuration once, then runs the portal and UI-smoke configurations.

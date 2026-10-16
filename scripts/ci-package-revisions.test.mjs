@@ -477,3 +477,62 @@ test('quoted generated programs retain the broad scanner consumer floor', () => 
   assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
     {full: false, packages: ['catalogue', 'portal']});
 }));
+
+test('a package scanning a root helper directory retains the loaded package consumer', () => fixture(({root, write, commit, plan}) => {
+  write('scripts/readers/catalogue.mjs', "import '../catalogue-adapter.mjs';\nconsole.log('catalogue reader loaded');\n");
+  write('scripts/catalogue-adapter.mjs', "import '../packages/catalogue/src/index.mjs';\n");
+  write('packages/portal/src/index.mjs', `import {readdirSync} from 'node:fs';
+const directory = new URL('../../../scripts/readers/', import.meta.url);
+for (const name of readdirSync(directory)) await import(new URL(name, directory));
+`);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'catalogue reader loaded\n');
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'portal']);
+}));
+
+test('saved helper directories retain removed and newly added readers despite dirty local files', () => {
+  for (const revision of ['base', 'head']) fixture(({root, git, write, commit}) => {
+    const reader = "import '../packages/catalogue/src/index.mjs';\n";
+    write('scripts/reader set/nested/adapter.mjs', "import '../../catalogue-adapter.mjs';\nimport '../cycle.mjs';\n");
+    write('scripts/reader set/cycle.mjs', "import './nested/adapter.mjs';\n");
+    write('scripts/reader set-other/adapter.mjs', "import '../../packages/unrelated/src/index.mjs';\n");
+    write('scripts/catalogue-adapter.mjs', revision === 'base' ? reader : 'export const value = 0;\n');
+    write('packages/portal/src/index.mjs', "const directory = new URL('../../../scripts/reader set', import.meta.url);\n");
+    write('packages/gateway/src/index.mjs', "import '../../portal/src/index.mjs';\n");
+    const base = commit();
+    write('scripts/catalogue-adapter.mjs', revision === 'head' ? reader : 'export const value = 0;\n');
+    const head = commit();
+    write('scripts/reader set/nested/adapter.mjs', 'export const value = 0;\n');
+    write('scripts/catalogue-adapter.mjs', 'export const value = 0;\n');
+    assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+      {full: false, packages: ['catalogue', 'gateway', 'portal']}, revision);
+  });
+});
+
+test('new and deleted helper files under a root-relative directory retain their consumers', () => {
+  for (const change of ['add', 'delete']) fixture(({root, git, write, commit}) => {
+    write('packages/portal/src/index.mjs', "const directory = 'scripts/readers/';\n");
+    if (change === 'delete') write('scripts/readers/adapter.mjs', "import '../../packages/catalogue/src/index.mjs';\n");
+    const base = commit();
+    if (change === 'add') write('scripts/readers/adapter.mjs', "import '../../packages/catalogue/src/index.mjs';\n");
+    else rmSync(join(root, 'scripts/readers/adapter.mjs'));
+    const head = commit();
+    const read = (...args) => git(...args);
+    read.readBlobs = ids => packageInputs.readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input}));
+    assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, read),
+      {full: false, packages: ['catalogue', 'portal']}, change);
+  });
+});
+
+test('shared directory discovery preserves actual portal isolation and identity consumers', () => {
+  const git = (...args) => execFileSync('git', args, {encoding: 'utf8', maxBuffer: 64 * 1024 * 1024});
+  git.readBlobs = packageInputs.readGitBlobs;
+  const sha = git('rev-parse', 'HEAD').trim(), workspace = loadWorkspace();
+  assert.deepEqual(scopeForRevisions(['apps/portal/src/app.ts'], workspace, sha, sha, git),
+    {full: false, packages: ['@waitron-cloud/portal']});
+  assert.deepEqual(scopeForRevisions(['packages/identity/src/index.ts'], workspace, sha, sha, git).packages,
+    ['@waitron-cloud/account-http', '@waitron-cloud/backups', '@waitron-cloud/fiscal-allocation', '@waitron-cloud/identity',
+      '@waitron-cloud/operations', '@waitron-cloud/portal', '@waitron-cloud/registration', '@waitron-cloud/remote-access', '@waitron-cloud/ui-smoke']);
+});
