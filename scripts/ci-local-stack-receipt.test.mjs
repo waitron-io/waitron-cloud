@@ -4,14 +4,14 @@ import {chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writ
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import test from 'node:test';
-import {seedReceiptDependencyInputs} from './ci-dependency-fixture.mjs';
+import {receiptFixtureWorkspace, seedReceiptDependencyInputs} from './ci-dependency-fixture.mjs';
 import {createPlan} from './ci-plan.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
-import {loadWorkspace, receiptSuites} from './ci-scope.mjs';
+import {receiptSuites} from './ci-scope.mjs';
 import {readGitBlobs} from './ci-package-revisions.mjs';
 
 const suite = 'test:local-stack';
-const workspace = loadWorkspace();
+const workspace = receiptFixtureWorkspace();
 const files = [
   'scripts/ci-package-groups.mjs', 'scripts/ci-run-package-group.mjs',
   'scripts/ci-run-receipts.mjs', 'scripts/ci-scope.mjs', '.github/workflows/ci.yml',
@@ -54,7 +54,7 @@ test('unrelated package changes omit all audited receipts and retain actual pack
     assert.deepEqual(select().receipts, []);
     const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git, () => {throw Error('No reuse');});
     assert.deepEqual(plan.receipts, []);
-    assert.equal(plan.packages.length, 17);
+    assert.equal(plan.packages.length, 16);
     assert.equal(plan.typecheck, true);
     assert.match(plan.reason, /omitted local.stack receipt.*both revisions/i);
     assert.doesNotMatch(plan.reason, /Unverified package revisions:/);
