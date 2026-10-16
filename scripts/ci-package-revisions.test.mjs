@@ -538,3 +538,20 @@ test('shared directory discovery preserves actual portal isolation and identity 
     ['@waitron-cloud/account-http', '@waitron-cloud/backups', '@waitron-cloud/fiscal-allocation', '@waitron-cloud/identity',
       '@waitron-cloud/operations', '@waitron-cloud/portal', '@waitron-cloud/registration', '@waitron-cloud/remote-access', '@waitron-cloud/ui-smoke']);
 });
+
+test('equivalent root-relative directory spellings retain the same helper consumers', () => {
+  for (const directory of ['scripts/./readers', 'scripts/readers//', 'scripts/readers/../readers']) fixture(({root, write, commit, plan}) => {
+    write('scripts/readers/adapter.mjs', "import '../../packages/catalogue/src/index.mjs';\nconsole.log('catalogue reader loaded');\n");
+    write('packages/portal/src/index.mjs', `import {readdirSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+const directory = '${directory}';
+for (const name of readdirSync(directory)) await import(pathToFileURL(resolve(directory, name)));
+`);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'catalogue reader loaded\n');
+    assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'portal'], directory);
+  });
+});

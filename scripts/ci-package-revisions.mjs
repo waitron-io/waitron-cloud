@@ -65,7 +65,7 @@ function workspaceAt(sha, workspace, git) {
         const target = value.startsWith('.') ? posix.normalize(posix.join(posix.dirname(source.path), value)) : value;
         if (packages.some(other => target.startsWith(`${other.directory}/`))) continue;
         // Keep descendant helpers without matching a similarly named sibling.
-        for (const path of [...(directories.get(target.replace(/\/$/, '')) ?? []), target, target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'), target.replace(/\.jsx?$/, '.tsx'),
+        for (const path of [...(directories.get(posix.normalize(target).replace(/\/$/, '')) ?? []), target, target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'), target.replace(/\.jsx?$/, '.tsx'),
           ...['.mjs', '.cjs', '.js', '.ts', '.mts', '.cts', '.tsx', '.jsx'].flatMap(ext => [target + ext, posix.join(target, 'index' + ext)])]) {
           if (!modules.has(path) || visited.has(path)) continue;
           visited.add(path);

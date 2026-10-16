@@ -657,12 +657,15 @@ notifications separately.
   descendant as a possible helper input. Directory readers can therefore keep
   their package consumers through helper chains and cycles, including files
   added or deleted between the two revisions. Exact directory boundaries avoid
-  pulling in similarly named siblings. A real Node directory scan reproduces
+  pulling in similarly named siblings; equivalent dotted and repeated-slash
+  directory paths resolve to the same saved inputs. A real Node directory scan reproduces
   the formerly omitted portal consumer; saved-revision and batched-read checks
   cover old and new helper files, dirty local sources and paths with spaces.
   The actual portal-only and all-nine identity selections stay covered.
   This is a conservative source dependency rule, not evidence that every quoted
-  directory is read at runtime. Repository-root working directories, computed
+  directory is read at runtime. A bare quoted folder name such as `scripts` can
+  select extra consumers even when it names a data field. Qualify actual reader
+  operations before narrowing that rule. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain
   unresolved. This does not complete the plan's dynamic input and directory rules. Identity still selects all nine packages in the current graph;
   portal alone remains isolated. Unaudited root, unknown and empty changes run everything.
