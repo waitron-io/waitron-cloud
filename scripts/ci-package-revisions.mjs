@@ -72,7 +72,7 @@ function workspaceAt(sha, workspace, git) {
       const source = sources[index];
       // Glob patterns, options and the default working directory can reach inputs
       // outside the quoted paths; unresolved scans must keep every package.
-      assert.ok(!directoryPattern(/\b(?:globSync|glob)\s*\(/g).test(source.source), `Unresolved glob scan at ${source.path}`);
+      assert.doesNotMatch(source.source, /\b(?:globSync|glob)\b/, `Unresolved glob scan at ${source.path}`);
       const rootReads = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*,?\s*\)\s*,?\s*\)/g))].map(match => match[2]));
       // Options may enable recursion or supply a computed policy; an unresolved
       // root scan cannot justify omitting any package consumer.

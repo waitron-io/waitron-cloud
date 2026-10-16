@@ -709,15 +709,16 @@ notifications separately.
   shared helper scanning its own directory does not scan the repository root.
   This bounded scan can keep extra consumers when identifiers are reused; it does
   not resolve aliased directory calls, other type annotations, computed
-  assignments or other directory APIs. A reachable call named `glob` or
-  `globSync` now keeps every package and names its source in the planner output.
+  assignments or other directory APIs. A reachable source mentioning `glob` or
+  `globSync` now keeps every package. Package-only planning names that source
+  in its fallback reason; lockfile planning can report a generic full fallback.
   Glob patterns, options and the default working directory remain unresolved,
   so these calls cannot justify dropping consumers. Executed Node scans cover
-  direct/stored root directories, default working directories and absolute
-  patterns. Saved shared-helper readers in either revision keep this fallback
+  direct/stored root directories, default working directories, absolute patterns,
+  optional calls, `.call` and import aliases. Saved shared-helper readers in either revision keep this fallback
   despite dirty local files. The bounded source scan can retain extra packages
-  for inert text or unrelated functions with these names; aliased calls and
-  precise glob resolution remain open. Block and line
+  for inert text or unrelated functions with these names; indirect scans without
+  a named glob reference and precise input resolution remain open. Block and line
   comments now separate tokens in the supported directory calls and URL bindings
   just as whitespace does. Executed Node scans and saved-tree checks retain the
   loaded helper, its package consumer and transitive consumers from either

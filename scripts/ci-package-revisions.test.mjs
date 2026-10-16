@@ -35,16 +35,18 @@ function fixture(run) {
 }
 
 test('unresolved glob scans retain packages whose helpers they actually load', () => {
-  for (const api of ['globSync', 'glob']) for (const binding of ['direct', 'stored', 'default', 'absolute']) fixture(({root, write, commit, plan}) => {
+  for (const api of ['globSync', 'glob']) for (const binding of ['optional', 'call', 'aliased', 'direct', 'stored', 'default', 'absolute']) fixture(({root, write, commit, plan}) => {
     write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('glob helper loaded');\n");
     const directory = "new URL('../../../', import.meta.url)";
     const args = binding === 'default' ? "'*.mjs'" : binding === 'absolute'
       ? "new URL('../../../*.mjs', import.meta.url).pathname"
       : `'*.mjs', {cwd: ${binding === 'stored' ? 'directory' : directory}}`;
-    write('packages/portal/src/index.mjs', `import {${api}} from '${api === 'glob' ? 'node:fs/promises' : 'node:fs'}';
+    const invocation = binding === 'optional' ? `${api}?.(${args})` : binding === 'call'
+      ? `${api}.call(null, ${args})` : `${binding === 'aliased' ? 'findFiles' : api} /* scan */ (${args})`;
+    write('packages/portal/src/index.mjs', `import {${api}${binding === 'aliased' ? ' as findFiles' : ''}} from '${api === 'glob' ? 'node:fs/promises' : 'node:fs'}';
 import {pathToFileURL} from 'node:url';
 ${binding === 'stored' ? `const directory = ${directory};` : ''}
-for await (const name of ${api} /* scan */ (${args})) {
+for await (const name of ${invocation}) {
   await import(${binding === 'absolute' ? 'pathToFileURL(name)' : `new URL('../../../' + name, import.meta.url)`});
 }
 `);
