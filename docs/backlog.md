@@ -385,6 +385,20 @@ venue does not subscribe to remote access or backups.
   scores and the earlier parser fix; a new raw-response re-score is unavailable
   because both landings deleted those replies. No further provider call or
   product route/UI is added.
+  The offline evaluation client now waits a full spacing interval when created,
+  including after reopening its durable journal. A controlled 150 ms reservation
+  delay reproduces a restart dispatch less than the original 90 ms test bound;
+  the new guard passes that bound without changing allowance, retry or deadline
+  checks. CI run 38950506223 failed the original restart-spacing assertion, but
+  retained no write/dispatch stages, so its exact trigger remains unproved.
+  No provider request is needed for this fix. Further offline timing qualification
+  remains: a review probe with a journal timestamp 500 ms ahead waits 607 ms, but
+  a 30-day offset overflows Node's timer and dispatches after 15 ms (7 ms with the
+  old constructor). A forward five-second clock jump after client creation also
+  shortens a 100 ms interval to 43 ms. Add an automated future-timestamp assertion
+  and qualify clock shifts, oversized timer waits and overlapping calls before
+  reusing this sequential measurement client for broader dispatch work. These
+  follow-ups do not change the request budget or permit new provider requests.
   Keep manual entry and correction available when lookup is unavailable or wrong.
 - **Transactional email.** Offer managed SMTP delivery for password resets and other
   account administration emails from on-prem Waitron. Scope the relay to these

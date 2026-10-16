@@ -95,8 +95,9 @@ whether the real repository certificate was current.
 
 Renewal for this repair covers the tracked changes from that reviewed tree
 through `9ae64c55ce9b42e72d3a7d06deb4fcc5f51fa94d` and the unconditional planner
-warning. Build contexts can copy prose, but the inspected build steps do not
-execute or validate it.
+warning. The offline evaluation client's restart-spacing fix also remains a
+non-prose input; it changes no reader. Build contexts can copy prose, but the
+inspected build steps do not execute or validate it.
 The later CI readers consume Git inventories, source modules, manifests,
 lockfiles and saved JSON fixtures. Package source discovery reads JavaScript
 and TypeScript, not Markdown. The address evaluation reads JSON corpora and
