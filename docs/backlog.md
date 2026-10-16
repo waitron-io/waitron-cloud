@@ -612,6 +612,11 @@ notifications separately.
   observer in all three runs and the inner 60-second dependency-worker limit in
   one run. These are separate stress follow-ups, not resolved by the outer budget
   correction; retain their diagnostics and avoid overlapping full qualification.
+  A later default-concurrency root run passed 322 of 324 checks and hit both
+  limits again: the bootstrap observer after 35.18 seconds and the dependency
+  worker after 65.34 seconds including its outer setup. Review controls and
+  package qualification overlapped that run. The precise cause remains unproved;
+  retain both limits and their original assertions when investigating recurrence.
   The original historical failures did not retain these exact stages; the controlled
   reproduction establishes the timeout mechanisms rather than their precise history.
   Evidence, earlier partial fixes and complete load-run outcomes are retained under
@@ -709,9 +714,16 @@ notifications separately.
   shared helper scanning its own directory does not scan the repository root.
   This bounded scan can keep extra consumers when identifiers are reused; it does
   not resolve aliased directory calls, other type annotations, computed
-  assignments or other directory APIs such as `globSync`.
-  A runtime `globSync` root scan still loads a helper whose package consumer is
-  omitted; qualify that form before narrowing its consumers. Block and line
+  assignments or other directory APIs. A reachable source mentioning `glob` or
+  `globSync` now keeps every package. Package-only planning names that source
+  in its fallback reason; lockfile planning can report a generic full fallback.
+  Glob patterns, options and the default working directory remain unresolved,
+  so these calls cannot justify dropping consumers. Executed Node scans cover
+  direct/stored root directories, default working directories, absolute patterns,
+  optional calls, `.call` and import aliases. Saved shared-helper readers in either revision keep this fallback
+  despite dirty local files. The bounded source scan can retain extra packages
+  for inert text or unrelated functions with these names; indirect scans without
+  a named glob reference and precise input resolution remain open. Block and line
   comments now separate tokens in the supported directory calls and URL bindings
   just as whitespace does. Executed Node scans and saved-tree checks retain the
   loaded helper, its package consumer and transitive consumers from either
@@ -1540,6 +1552,16 @@ notifications separately.
   each finish without errors. This fixes the concurrent reclamation failure; it
   does not resolve the sequential worker-test failure above. Continue assigning distinct worker owners;
   these local probes do not establish production concurrency capacity.
+  Two unchanged reclamation tests later exceeded their 13-second whole-operation
+  checks in a full local backup run, at 14.57 and 14.82 seconds. Isolated tracing
+  completed them in 2.17 and 10.84 seconds. Adding 11.5 seconds to container creation
+  or 3.2 seconds to image inspection reproduces the respective elapsed-time
+  failures without changing the ten-second removal budget. The original run
+  overlapped root checks and review controls but retained no per-command timings,
+  so its exact cause remains unproved. Capture image inspection, enumeration,
+  removal, verification and host scheduling on recurrence. Keep the 13-second
+  checks, 15-second test deadlines and removal policy intact; passing repeats
+  do not resolve this timing defect.
   A read-only
   dependency inventory and local drill now prove active-key rotation, old snapshot restore,
   worker restart and wrong/missing-key refusal without exposing secrets or deleting keys.
