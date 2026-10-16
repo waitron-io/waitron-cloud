@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {StringDecoder} from 'node:string_decoder';
+import {stripVTControlCharacters} from 'node:util';
 import {packageMembers} from './ci-package-groups.mjs';
 
 function testCounts(output) {
+  output = stripVTControlCharacters(output);
   const counts = {};
   for (const field of ['tests', 'pass', 'fail', 'cancelled', 'skipped', 'todo']) {
     const matches = [...output.matchAll(new RegExp(`^(?:# |ℹ )${field} (.*)$`, 'gm'))];

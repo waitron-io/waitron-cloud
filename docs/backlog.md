@@ -490,7 +490,7 @@ notifications separately.
   consistent Node test summary and exit successfully. The runner reports its
   test, pass, skip and todo counts, keeps all output and continues with later
   packages after a failure. A zero exit without a summary, an all-skipped run,
-  or a failed or cancelled test cannot pass. TAP and spec reporter output are
+  or a failed or cancelled test cannot pass. Plain and colored TAP and spec output are
   exercised with real Node test subprocesses; the package commands, deadlines
   and treatment of individual skipped or todo cases are unchanged. These counts
   establish executed work, not that the selected package contains every required

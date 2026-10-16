@@ -47,12 +47,22 @@ test('real TAP and spec summaries report per-package counts while retaining test
   });
 });
 
+test('colored Node reporter output retains its passing counts', () => {
+  for (const COUNT_REPORTER of ['tap', 'spec']) fixture(({execute}) => {
+    const result = execute({COUNT_REPORTER, FORCE_COLOR: '1'});
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    for (const name of members) assert.ok(result.stdout.includes(`Package ${name}: PASS (3 tests, 1 passed, 1 skipped, 1 todo;`), result.stdout);
+  });
+});
+
 test('zero, incomplete, duplicate, failed and inconsistent summaries cannot pass with a zero exit', () => {
   const summary = '# tests 3\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n';
   for (const FORGED_SUMMARY of [
     summary.replaceAll('3', '0'), summary.replace('# pass 3\n', ''), summary + '# pass 3\n',
     summary.replace('# pass 3', '# pass 2'), summary.replace('# tests 3', '# tests 3.5'),
     summary.replaceAll('3', '9007199254740993'),
+    summary.replace('# fail 0', '# fail 1'), summary.replace('# cancelled 0', '# cancelled 1'),
+    summary.replaceAll('3', '0x3'), summary.replaceAll('3', '+3'), summary.replaceAll('3', '03'),
     summary.replace('# pass 3', '# pass 2').replace('# fail 0', '# fail 1'),
     summary.replace('# pass 3', '# pass 2').replace('# cancelled 0', '# cancelled 1'),
     summary.replace('# pass 3', '# pass 0').replace('# skipped 0', '# skipped 3'),
