@@ -106,7 +106,7 @@ test('receipt selector fixtures retain their positive checks after migration inv
     appendFileSync(join(root, 'packages/registration/migrations/999_fixture_control.sql'), 'SELECT 1;\n');
     const env = {...process.env}; delete env.NODE_TEST_CONTEXT;
     const result = spawnSync('node', ['--test', '--test-reporter=tap', '--test-concurrency=1',
-      '--test-name-pattern=unrelated package changes omit',
+      '--test-name-pattern=unrelated package changes omit|combined audits',
       'scripts/ci-capacity-receipt.test.mjs', 'scripts/ci-database-receipt.test.mjs',
       'scripts/ci-gateway-receipt.test.mjs', 'scripts/ci-local-stack-receipt.test.mjs'],
     {cwd: root, env, encoding: 'utf8', timeout: 60_000});
@@ -117,6 +117,8 @@ test('receipt selector fixtures retain their positive checks after migration inv
       'unrelated package changes omit database recovery while retaining packages, types and other receipts',
       'unrelated package changes omit public gateway while retaining packages, types and other receipts',
       'unrelated package changes omit all audited receipts and retain actual package and type checks',
+      'combined audits retain earlier omissions and ignore unrelated top-level prose',
+      'combined audits preserve three earlier omissions and retain only local-stack',
     ].sort(), 'Every positive receipt check must execute with the saved schema inputs');
   } finally {rmSync(root, {recursive: true, force: true});}
 });

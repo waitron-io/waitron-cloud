@@ -213,7 +213,7 @@ test('combined audits preserve three earlier omissions and retain only local-sta
       'scripts/verify-database-recovery-receipt.mjs', 'scripts/verify-database-recovery-receipt.test.mjs',
     ]) {
       mkdirSync(dirname(join(root, path)), {recursive: true});
-      copyFileSync(path, join(root, path));
+      copyReceiptFixtureInput(path, join(root, path));
     }
   });
 });
