@@ -496,7 +496,7 @@ test('saved helper directories retain removed and newly added readers despite di
   for (const revision of ['base', 'head']) fixture(({root, git, write, commit}) => {
     const reader = "import '../packages/catalogue/src/index.mjs';\n";
     write('scripts/reader set/nested/adapter.mjs', "import '../../catalogue-adapter.mjs';\nimport '../cycle.mjs';\n");
-    write('scripts/reader set/cycle.mjs', "import './nested/adapter.mjs';\n");
+    write('scripts/reader set/cycle.mjs', "import './cycle.mjs';\n");
     write('scripts/reader set-other/adapter.mjs', "import '../../packages/unrelated/src/index.mjs';\n");
     write('scripts/catalogue-adapter.mjs', revision === 'base' ? reader : 'export const value = 0;\n');
     write('packages/portal/src/index.mjs', "const directory = new URL('../../../scripts/reader set', import.meta.url);\n");
@@ -508,6 +508,8 @@ test('saved helper directories retain removed and newly added readers despite di
     write('scripts/catalogue-adapter.mjs', 'export const value = 0;\n');
     assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
       {full: false, packages: ['catalogue', 'gateway', 'portal']}, revision);
+    assert.deepEqual(scopeForRevisions(['packages/unrelated/src/index.mjs'], loadWorkspace(root), base, head, git),
+      {full: false, packages: ['unrelated']}, revision);
   });
 });
 
