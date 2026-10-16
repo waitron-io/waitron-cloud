@@ -708,8 +708,11 @@ notifications separately.
   no helper inputs. An existence check alone also adds no root helpers, and a
   shared helper scanning its own directory does not scan the repository root.
   This bounded scan can keep extra consumers when identifiers are reused; it does
-  not resolve aliased directory calls, other type annotations or computed
-  assignments. The immediate-entry rule also covers `readdir` from
+  not resolve aliased directory calls, other type annotations, computed
+  assignments, comments inside calls or other directory APIs such as `globSync`.
+  A runtime `globSync` root scan and a commented `readdir` call both load a helper
+  whose package consumer is still omitted; qualify these forms before narrowing
+  their consumers. The immediate-entry rule also covers `readdir` from
   `node:fs/promises`, `opendir` and `opendirSync`, directly or through a supported
   URL declaration. Executed scans retain the loaded helper consumer without
   traversing nested directories; saved shared-helper readers from either revision
