@@ -211,8 +211,8 @@ survey of geographical coverage. Coordinates were not checked against independen
 surveyed points. No result measures peak-day capacity, keystroke traffic, session
 cost, storage permission, cache rights, or attribution placement.
 
-The next decision is whether to approve a larger residential/rural sample and an
-explicit query-normalization and suggestion-selection policy. Confirm durable
+The owner approved the [second residential/rural comparison](#residential-and-rural-comparison-2026-10-16)
+on 2026-10-16. The first benchmark remains frozen. Confirm durable
 merchant storage and display rights before recommending a provider. Provider choice,
 release thresholds, cache lifetime, attribution placement, account allowance and
 sharing rules, and the peak-day budget remain owner decisions.
@@ -249,7 +249,9 @@ and Junta de Castilla y León, Consejería de Cultura, Turismo y Deporte,
 whose metadata names CC BY 4.0. Both were read on 2026-10-16. Address fields are
 selected and reformatted, Spanish street-type aliases are added explicitly, and
 postcode-free queries are derived from the original input. The corpus records the
-selection order and exclusions. It does not relicense the source records as CC0.
+selection order and exclusions. Its distinct-street check compares literal labels,
+so cases 003 and 004 retain two different numbers on the same street despite a
+spelling variation. The corpus remains frozen, including that wording. It does not relicense the source records as CC0.
 
 ### Fixed evaluation rules
 
@@ -300,3 +302,128 @@ are Google 78, Geoapify 80 and CartoCiudad 41. At most 720, 240 and 720 addition
 requests respectively are needed, including every possible list-resolution request.
 No automatic retry is enabled. The preflight counts only unfinished cases when resuming;
 every actual attempt still reserves its allowance before dispatch.
+
+
+### Results under the fixed reference fields
+
+The corpus SHA-256 is
+`93db903d386e727bef5094d56312b62ac3558df7b199f3f44be9b95791a32e68`.
+The [360 per-case score rows](evaluations/spanish-residential-address-scores.jsonl)
+and [complete totals](evaluations/spanish-residential-address-summary.json) retain
+booleans, ranks and request measurements. Saved responses reproduce every score and
+the exact query and candidate identities without another provider request. The final
+error-handling corrections do not change these scores: all measured requests and
+candidates succeeded. Each denominator below is 60 queries, one per distinct address.
+
+**Original postcode retained**
+
+| Flow | First street match | Match in list | First complete draft | Complete draft in list | No result |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Google, quality only | 47 | 48 | 47 | 48 | 3 |
+| Geoapify autocomplete | 37 | 40 | 33 | 36 | 0 |
+| Geoapify geocoding | 40 | 42 | 38 | 40 | 0 |
+| CartoCiudad | 0 | 0 | 0 | 0 | 60 |
+
+**Original postcode omitted**
+
+| Flow | First street match | Match in list | First complete draft | Complete draft in list | No result |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Google, quality only | 46 | 48 | 46 | 48 | 2 |
+| Geoapify autocomplete | 37 | 39 | 33 | 37 | 6 |
+| Geoapify geocoding | 40 | 41 | 36 | 38 | 0 |
+| CartoCiudad | 15 | 16 | 1 | 1 | 42 |
+
+Google has the same 48 addresses with a complete draft somewhere in the list under
+both queries. Geoapify autocomplete has 35 in both arms, one only with a postcode and
+two only without it. Geocoding has 38 in both arms and two only with a postcode.
+CartoCiudad has one complete draft, only without a postcode. It returns no candidates
+for any of these postcode-bearing queries. Removing postcodes therefore helps this
+CartoCiudad query shape, but does not establish a general normalization rule or a
+complete address service. Most of its street matches still lack matching components.
+Every returned CartoCiudad candidate already has coordinates, so its `find` calls
+remain covered offline rather than measured here. Its 88 returned postcode fields
+are strings; this does not establish the type of every possible response.
+
+**Complete drafts available in the list, by cohort; each cell is out of 30 addresses**
+
+| Flow | Homes, postcode | Rural, postcode | Homes, omitted | Rural, omitted |
+| --- | ---: | ---: | ---: | ---: |
+| Google, quality only | 23 | 25 | 23 | 25 |
+| Geoapify autocomplete | 21 | 15 | 22 | 15 |
+| Geoapify geocoding | 24 | 16 | 24 | 14 |
+| CartoCiudad | 0 | 0 | 0 | 1 |
+
+These figures depend on the locality field. Catalunya's reference is a municipality;
+Castilla y León's is a village. In 13 rural addresses, or 26 paired cases, the village
+and municipality differ. A provider naming the municipality can therefore fail a
+reference that names its village, even when other components match. Conversely, the
+Catalan reference can reject a more specific village. This is a field-mapping result,
+not a count of addresses that a provider cannot locate.
+
+A separate [offline sensitivity check](evaluations/spanish-residential-locality-sensitivity.jsonl)
+allows either of the rural register's independently published locality fields. It
+changes no original reference, query, request or baseline score. With a postcode,
+Geoapify autocomplete's complete-list count changes from 36 to 38, and geocoding's
+from 40 to 47; without a postcode they change from 37 to 41 and from 38 to 45.
+Google stays at 48 in both arms; CartoCiudad stays at zero and one. This is a stated
+alternative evaluation rule, not approval to put a municipality into the product's
+city field. No independent village aliases are available in the Catalan reference,
+so that side of the hierarchy remains unmeasured. Decide the accepted locality level
+before choosing a provider or treating these figures as geographical accuracy.
+
+**Province evidence across all returned candidates in both query arms**
+
+| Flow | Candidates | Correct supplied province | Computed from returned postcode | Unrecognized supplied label |
+| --- | ---: | ---: | ---: | ---: |
+| Google, quality only | 165 | 159 | 0 | 0 |
+| Geoapify autocomplete | 305 | 201 | 83 | 85 |
+| Geoapify geocoding | 255 | 143 | 90 | 93 |
+| CartoCiudad | 88 | 88 | 0 | 0 |
+
+These are candidate counts, including wrong street matches, rather than selected
+addresses or comparable accuracy rates. An unrecognized label can coexist with
+postcode inference, so the columns do not add up. A computed province need not be
+the expected province; a complete draft still requires the expected value. All 813
+candidates return Spanish country evidence. None has a recognized province/postcode
+conflict. Offline tests independently refuse missing/foreign countries and conflicts;
+this sample does not prove a future product guard.
+
+The actual Waitron country pack at the frozen commit accepts all 120 reference
+postcodes, their provinces, supported fiscal areas and Madrid time zones. The 280
+complete candidate drafts also pass those component checks against that pack.
+This does not submit provider output through the actual setup server or form. Manual
+entry, correction, field preservation and fiscal/time-zone acceptance through that
+journey remain integration requirements. No unit, floor, independent coordinate,
+keystroke-traffic, session-discount or peak-capacity claim follows from this run.
+
+### Requests and remaining decisions
+
+| Provider | Additional HTTP attempts | Cumulative / 1,499 | Median / 95th percentile per request | Errors / timeouts / retries |
+| --- | ---: | ---: | ---: | ---: |
+| Google | 285 | 363 / 1,499 | 118 / 186 ms | 0 / 0 / 0 |
+| Geoapify | 240 | 320 / 1,499 | 1018 / 4612 ms | 0 / 0 / 0 |
+| Cartociudad | 120 | 161 / 1,499 | 434 / 626 ms | 0 / 0 / 0 |
+
+Google uses 120 autocomplete and 165 validation attempts; Geoapify uses 120 per
+endpoint; CartoCiudad uses 120 candidate requests. These are HTTP-attempt bounds,
+not invoices or session-billing measurements. Geoapify runs from 17:10:00 to
+17:17:33 UTC, Google from 17:17:48 to 17:23:03 and CartoCiudad from 17:23:27 to
+17:25:41. Latencies exclude spacing and describe this Mac's network only. Temporary
+raw responses stay local until landing, when they are deleted. No customer data or
+provider address text is committed in the scores.
+
+Keep manual entry. The strict street-list result remains below the proposed 95%
+gate for every flow, including the stated rural-municipality alternative. The
+sample still has concentrated geography: Barcelona contributes one city, Girona
+three neighbouring villages, and Lleida and Tarragona four municipalities each.
+Register spelling remains literal, including the `GENERAL SANJUJO` reference.
+The Catalunya dataset metadata says only “See Terms of Use”; its licensing basis
+here is the portal default, rather than a dataset-specific permission receipt.
+Different references and province/selection rules make these figures unsuitable
+for claiming an improvement over the first benchmark's percentages.
+
+Next, settle the locality level and verify durable merchant-field storage and display
+rights before selecting a provider. Google remains a quality comparison only.
+Release thresholds, cache lifetime, attribution placement, account allowance and
+sharing, and the peak-day budget remain owner decisions. The harness adds no product
+route, automatic field replacement or provider selection.

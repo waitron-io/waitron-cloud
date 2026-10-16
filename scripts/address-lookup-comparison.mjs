@@ -44,7 +44,7 @@ export async function evaluateListCase(client,provider,entry) {
       try {
         assert.ok(item&&typeof item==='object','invalid_response');
         const resolved=resolve?await resolve(item,index):item;
-        assert.ok(resolved&&typeof resolved==='object','invalid_response');
+        assert.ok(resolved&&typeof resolved==='object'&&!Array.isArray(resolved)&&Object.keys(resolved).length>0,'invalid_response');
         result.stages[stage].push(candidateScore(entry.expected,provider,resolved,index+1));
       } catch(error) {
         if(error instanceof RequestLimitError||error.message==='Provider key refused')throw error;
@@ -56,11 +56,17 @@ export async function evaluateListCase(client,provider,entry) {
   try {
     if(provider==='geoapify') {
       for(const operation of ['autocomplete','geocode']) {
-        const data=await request(operation);
-        await candidates(operation,data.results);
+        try {
+          const data=await request(operation);
+          await candidates(operation,data.results);
+        } catch(error) {
+          if(error instanceof RequestLimitError||error.message==='Provider key refused')throw error;
+          (result.stageErrors??={})[operation]=errorLabel(error);
+        }
       }
     } else if(provider==='google') {
       const data=await request('autocomplete');
+      assert.ok(data.suggestions===undefined||Array.isArray(data.suggestions),'invalid_response');
       await candidates('selection',data.suggestions??[],async(item,index)=>{
         const text=item.placePrediction?.text?.text;
         assert.ok(typeof text==='string'&&text.trim(),'invalid_response');
@@ -93,11 +99,13 @@ export function summarizeLists(rows,stage) {
     listSelectable:lists.filter(list=>list?.some(item=>item.selectable)).length,
     firstComplete:lists.filter(list=>list?.[0]?.complete).length,
     listComplete:lists.filter(list=>list?.some(item=>item.complete)).length,
-    noResult:lists.filter(list=>list?.length===0).length,caseErrors:rows.filter(row=>row.error).length,
+    noResult:lists.filter(list=>list?.length===0).length,caseErrors:rows.filter(row=>row.error||row.stageErrors?.[stage]).length,
     candidateErrors:candidates.filter(item=>item.error).length,
     foreignCountry:candidates.filter(item=>item.foreignCountry).length,
     provinceInferred:candidates.filter(item=>item.provinceInferred).length,
-    provinceConflicts:candidates.filter(item=>item.provinceConflict).length};
+    provinceConflicts:candidates.filter(item=>item.provinceConflict).length,
+    candidates:candidates.length,provinceSupplied:candidates.filter(item=>item.provinceSupplied).length,
+    unknownProvince:candidates.filter(item=>item.unknownProvince).length,missingCountry:candidates.filter(item=>item.missingCountry).length};
 }
 
 export function comparisonPlan(corpus,counts,provider,completed=[]) {
@@ -142,14 +150,26 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href) {
     const client=new EvaluationClient({budget,directory,keys});
     const rows=await runCases(client,provider,corpus.cases,directory,corpusSha256,row=>console.log(`${provider} ${row.id}: ${row.error??'scored'}; cumulative ${JSON.stringify(budget.counts)}/1499 each`),evaluateListCase);
     run.completed=rows.length;
-    run.caseErrors=rows.filter(row=>row.error).length;
+    run.caseErrors=rows.filter(row=>row.error||Object.keys(row.stageErrors??{}).length).length;
     run.candidateErrors=rows.flatMap(row=>Object.values(row.stages).flat()).filter(row=>row.error).length;
     if(run.caseErrors||run.candidateErrors)process.exitCode=1;
   } catch(error) {
     if(run)run.error=error instanceof RequestLimitError?'request_limit':'local_error';
-    console.error(error instanceof RequestLimitError?'Provider request limit reached':'Comparison stopped; check local setup or the per-case fixed error labels');
+    const fixedMessages=new Set([
+      'Use --run google|geoapify|cartociudad; live requests require this explicit flag',
+      'Missing provider key','Missing or unreadable provider key file',
+      'Request journal is locked; reconcile its owner before resuming',
+      'Invalid request journal; reconcile it before sending',
+      'Invalid comparison corpus','Invalid comparison corpus identities',
+      'Invalid comparison corpus address count','Invalid comparison corpus query pairs',
+      'Invalid completed corpus cases','Invalid request counter',
+      'Comparison would exceed shared provider request budget',
+      'Incomplete comparison score journal','Changed corpus or provider must not reuse scores',
+      'Changed corpus must not reuse scores','Duplicate corpus scores','Incomplete corpus score journal',
+    ]);
+    const message=String(error?.message??'').split('\n')[0];
+    console.error(error instanceof RequestLimitError?'Provider request limit reached':fixedMessages.has(message)?message:'Comparison stopped; check local setup or the per-case fixed error labels');
     process.exitCode=1;
-    if(!run)console.error('Use --run google|geoapify|cartociudad; live requests require this explicit flag');
   } finally {
     try {
       if(run) {

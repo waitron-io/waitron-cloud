@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync, existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCases} from './address-lookup-evaluation.mjs';
@@ -105,7 +105,7 @@ test('list summaries keep errors and empty lists in their denominator and never 
   const street={rank:2,selectable:true,houseNumber:false,postcode:false,province:true,complete:false,error:null};
   const full={...street,houseNumber:true,postcode:true,complete:true};
   const rows=[{stages:{selection:[wrong,street]},error:null},{stages:{selection:[full]},error:null},{stages:{selection:[]},error:null},{stages:{},error:'timeout'}];
-  assert.deepEqual(comparison.summarizeLists(rows,'selection'),{cases:4,firstSelectable:1,listSelectable:2,firstComplete:1,listComplete:1,noResult:1,caseErrors:1,candidateErrors:0,foreignCountry:0,provinceInferred:0,provinceConflicts:0});
+  assert.deepEqual(comparison.summarizeLists(rows,'selection'),{cases:4,firstSelectable:1,listSelectable:2,firstComplete:1,listComplete:1,noResult:1,caseErrors:1,candidateErrors:0,foreignCountry:0,provinceInferred:0,provinceConflicts:0,candidates:3,provinceSupplied:0,unknownProvince:0,missingCountry:0});
 });
 
 test('a shared request-limit exhaustion stops the list without scoring an unsent case', async () => {
@@ -172,4 +172,92 @@ test('preflight reserves only unsent durable cases when resuming near the cumula
   assert.deepEqual(comparison.comparisonPlan(corpus,{google:1490,geoapify:80,cartociudad:41},'google',done),{cases:120,addresses:60,maximumRequests:{google:6},maximumCumulative:{google:1496,geoapify:80,cartociudad:41}});
   assert.throws(()=>comparison.comparisonPlan(corpus,{google:0,geoapify:0,cartociudad:0},'google',['unrelated-case']),/completed/);
   assert.throws(()=>comparison.comparisonPlan(corpus,{google:0,geoapify:0,cartociudad:0},'google',[done[0],done[0]]),/completed/);
+});
+
+test('each Geoapify endpoint keeps its own error without suppressing or charging failure to the other', async () => {
+  for(const failed of ['autocomplete','geocode']) {
+    const calls=[];
+    const client={request:async(provider,operation)=>{calls.push(operation);if(operation===failed)throw new Error('timeout');return {results:[geo()]};}};
+    const row=await comparison.evaluateListCase(client,'geoapify',entry);
+    assert.deepEqual(calls,['autocomplete','geocode']);
+    assert.equal(row.stageErrors[failed],'timeout');
+    assert.equal(comparison.summarizeLists([row],failed).caseErrors,1);
+    const passed=failed==='autocomplete'?'geocode':'autocomplete';
+    assert.equal(comparison.summarizeLists([row],passed).caseErrors,0);
+    assert.equal(row.stages[passed][0].complete,true);
+  }
+});
+
+test('malformed empty candidates and null Google lists are errors rather than geographic mismatches', async () => {
+  const geoRow=await comparison.evaluateListCase({request:async()=>({results:[{}]})},'geoapify',entry);
+  assert.equal(geoRow.stages.autocomplete[0].error,'invalid_response');
+  const carto=await comparison.evaluateListCase({request:async(provider,operation)=>operation==='candidates'?[{id:'point',type:'portal'}]:[]},'cartociudad',entry);
+  assert.equal(carto.stages.selection[0].error,'invalid_response');
+  const googleRow=await comparison.evaluateListCase({request:async()=>({suggestions:null})},'google',entry);
+  assert.equal(googleRow.error,'invalid_response');
+});
+
+test('complete drafts require postcode and province on the same otherwise correct candidate', async () => {
+  const cases=[geo({postcode:''}),geo({postcode:'28014',county:'Madrid'}),geo({postcode:'',county:'unknown'}),geo({postcode:'08025',county:'Madrid'}),geo({postcode:'',county:'Barcelona'})];
+  const row=await comparison.evaluateListCase({request:async()=>({results:cases})},'geoapify',entry);
+  for(const candidate of row.stages.autocomplete){assert.equal(candidate.selectable,true);assert.equal(candidate.houseNumber,true);assert.equal(candidate.complete,false);}
+  assert.deepEqual(row.stages.autocomplete.map(x=>x.provinceSupplied),[false,false,false,false,true]);
+});
+
+test('request limits reached during list resolution escape instead of saving a completed case', async () => {
+  const {RequestBudget}=await import('./address-lookup-evaluation.mjs');
+  const directory=mkdtempSync(join(tmpdir(),'address-list-mid-budget-'));
+  const budget=new RequestBudget(directory);budget.counts.google=1497;
+  const client={request:async(provider,operation,id)=>{
+    budget.reserve(provider,operation,id);
+    return operation==='autocomplete'?{suggestions:[1,2].map(i=>({placePrediction:{text:{text:`prediction ${i}`}}}))}:google();
+  }};
+  try {
+    await assert.rejects(runCases(client,'google',[entry],directory,'fixed',()=>{},comparison.evaluateListCase),/budget exhausted/);
+    assert.equal(budget.counts.google,1499);
+    assert.equal(existsSync(join(directory,'google-scores.jsonl')),false);
+  } finally {budget.close();rmSync(directory,{recursive:true,force:true});}
+});
+
+test('untrusted exception text cannot enter saved list scores', async () => {
+  const client={request:async(provider,operation)=>{if(operation==='autocomplete')return {suggestions:[{placePrediction:{text:{text:'public prediction'}}}]};throw new Error('https://provider.example/?apiKey=private-test-value');}};
+  const row=await comparison.evaluateListCase(client,'google',entry);
+  assert.equal(row.stages.selection[0].error,'evaluation_error');
+  assert.ok(!JSON.stringify(row).includes('private-test-value'));
+  assert.ok(!JSON.stringify(row).includes('provider.example'));
+});
+
+test('the CLI names an exhausted shared budget without suggesting the valid run flag is wrong', async () => {
+  const {spawnSync}=await import('node:child_process');
+  const {fileURLToPath}=await import('node:url');
+  const home=mkdtempSync(join(tmpdir(),'address-comparison-cli-'));
+  try {
+    mkdirSync(join(home,'.waitron-address-lookup'),{recursive:true});
+    writeFileSync(join(home,'.waitron-address-lookup/env'),'GOOGLE_MAPS_SERVER_KEY=fake-comparison-key\n');
+    const directory=join(home,'waitron-campaign-d/receipts/d75');mkdirSync(directory,{recursive:true});
+    const events=Array.from({length:1499},(_,i)=>JSON.stringify({provider:'google',operation:'autocomplete',caseId:`past-${i}`,ordinal:i+1,at:'2026-10-16T00:00:00.000Z'})).join('\n')+'\n';
+    writeFileSync(join(directory,'requests.jsonl'),events);
+    const trap=join(home,'trap.mjs');writeFileSync(trap,"globalThis.fetch=()=>{throw new Error('NETWORK_TRAP')};");
+    const child=spawnSync(process.execPath,['--import',trap,fileURLToPath(new URL('./address-lookup-comparison.mjs',import.meta.url)),'--run','google'],{encoding:'utf8',env:{...process.env,HOME:home},timeout:3000});
+    assert.equal(child.status,1);
+    assert.match(child.stderr,/Comparison would exceed shared provider request budget/);
+    assert.ok(!child.stderr.includes('Use --run'));
+    assert.ok(!child.stderr.includes('fake-comparison-key'));
+    assert.ok(!child.stderr.includes('NETWORK_TRAP'));
+    assert.equal(readFileSync(join(directory,'requests.jsonl'),'utf8'),events);
+    assert.equal(existsSync(join(directory,'request.lock')),false);
+  } finally {rmSync(home,{recursive:true,force:true});}
+});
+
+test('list summaries identify the province evidence and missing countries with an explicit candidate denominator', () => {
+  const candidates=[
+    {rank:1,selectable:true,complete:true,provinceSupplied:true,provinceInferred:false,provinceConflict:false,unknownProvince:false,missingCountry:false},
+    {rank:2,selectable:false,complete:false,provinceSupplied:false,provinceInferred:true,provinceConflict:false,unknownProvince:true,missingCountry:false},
+    {rank:3,selectable:false,complete:false,provinceSupplied:false,provinceInferred:false,provinceConflict:false,unknownProvince:false,missingCountry:true},
+  ];
+  const out=comparison.summarizeLists([{stages:{selection:candidates},error:null}],'selection');
+  assert.equal(out.candidates,3);
+  assert.equal(out.provinceSupplied,1);
+  assert.equal(out.unknownProvince,1);
+  assert.equal(out.missingCountry,1);
 });
