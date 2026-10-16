@@ -62,8 +62,9 @@ test('language sets keep the accepted tags and enforce one to twenty distinct en
  assert.deepEqual(parseJob(JSON.stringify(body)).languages,{default:'pt-BR',enabled:tags});
  const one={...valid,languages:{default:'en',enabled:['en']},items:[{...valid.items[0],existing:{},missing:['en']}],houseStyle:[]};
  assert.deepEqual(parseJob(JSON.stringify(one)).languages,{default:'en',enabled:['en']});
- for(const enabled of [[],[...tags,'cs'],['und'],['xx'],['EN'],['en_XX'],['en-abcdefghi'],['en-x-private'],[3]])
-  assert.throws(()=>parseJob(JSON.stringify({...valid,languages:{default:enabled[0],enabled}})),refused);
+ for(const enabled of [[],[...tags,'cs'],...['und','xx','EN','en_XX','en-abcdefghi','en-x-private',3].map(tag=>['ca','es','en',tag]),['ca','es','en','ca']])
+  assert.throws(()=>parseJob(JSON.stringify({...valid,languages:{default:'ca',enabled}})),refused);
+ assert.throws(()=>parseJob(JSON.stringify({...valid,languages:{default:'fr',enabled:['ca','es','en']}})),refused);
  for(const languages of [{default:3,enabled:['en']},{enabled:['en']},{default:'en'},'en'])
   assert.throws(()=>parseJob(JSON.stringify({...valid,languages})),refused);
 });
@@ -113,4 +114,6 @@ test('context heads stay in model input while only written items count',()=>{
  assert.equal(writtenItems(job).length,2);
  const orphan={...items[2],ref:'orphan',family:'orphan'};
  assert.throws(()=>parseJob(JSON.stringify({...valid,items:[...items,orphan]})),refused);
+ const nested=[{...items[0],family:'other'},items[1]];
+ assert.throws(()=>parseJob(JSON.stringify({...valid,items:nested})),refused);
 });
