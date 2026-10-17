@@ -1794,6 +1794,15 @@ git commit -s -m "Run one translation batch: retry failed or unusable replies af
 
 ### Task 8: The worker — leases, four batches side by side, the cap, finishing and usage events
 
+**Implementation note:** append-only migration `040_translation_result_json.sql` preserves
+accepted escaped NUL and lone-surrogate text by storing batch outcomes as JSON. The worker
+updates the complete retained batch object under the job row lock and counts its outcomes in
+JavaScript; the JSONB update/aggregation snippet below is superseded. The wire shape is unchanged.
+Task 17 must re-read the migration inventory; 040 is now used, and 041 is the next candidate.
+The worker's abort listener covers loading and exhausted-lease handling too. Both spending and
+renewal callback failures are retained when they happen together. The tests in `worker.test.ts`
+and `result-storage-upgrade.test.ts` qualify these additions with real PostgreSQL.
+
 > **Authoritative replacement:** [paging amendment, Task 8 row and behavioral checks](2026-10-16-translation-collect-pages.md#implement-inline-with-failing-behavioral-tests-first).
 > Collect helpers must walk pages. Prove submit-order results despite reversed batch/completion
 > order, and preserve lease, retry, context, cap and usage assertions.

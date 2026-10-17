@@ -293,7 +293,7 @@ submit order from retained outcomes and measures complete compact UTF-8 pages, i
 actual continuation, against the 16 MiB limit. PostgreSQL tests cover concurrent submits,
 rollback, repeated collection, release locking and a multi-page walk; serializer tests cover
 exact byte boundaries, Unicode and complete outcomes. These foundations expose no translation
-routes or worker; the remaining runtime is still open.
+routes; the remaining runtime is still open.
 Task 4 adds the contract parser and family/category batch planner. Offline checks cover exact
 field shapes, language and text bounds, the 1,000-item boundary, context-only heads, all nine
 name kinds and house-style examples. Batches keep families whole, including context heads and
@@ -320,9 +320,21 @@ Every billed reply reaches the spending callback, including unusable text and in
 responses; every attempt reaches the lease callback once. The cap is checked before each call.
 Shutdown during either pass, a callback or retry waiting returns an abort without a batch
 result. Storage and lease callback failures escape without repeating paid work. These
-callbacks still need the durable worker integration in Task 8. If saving spend and renewing
-the lease both throw, the second error currently hides the first; worker diagnostics and
-recovery must account for that failure without logging names or repeating paid work.
+callbacks now reach the durable worker in Task 8. If spending and lease renewal both fail,
+an aggregate error retains both failures without retrying the paid call; Task 18 still needs
+to prove sanitized command diagnostics.
+
+Task 8 adds the durable worker: exclusive job leases, four concurrent batches, saved-batch
+recovery, integer token/cost accounting, cap checks and transactional finish/usage records.
+Real PostgreSQL and loopback-provider checks cover shutdown during connection waits, body
+loading and either provider pass; stale leases cannot save outcomes or update spend. A failed
+usage write rolls back completion, and the next lease finishes saved batches without a new
+provider call. A greater-than-16-MiB result walks pages in filtered submit order despite family
+regrouping and reversed completion. Names and corrections retain escaped control characters
+and lone surrogates. Append-only migration 040 changes retained results from JSONB to JSON;
+release-39 upgrade, cancellation rollback, repeat/concurrent migration, manifest and recovery
+count checks preserve retained results and existing job/ledger rows. No worker command,
+provider activation or route is introduced. Consent enforcement remains Task 13.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies
@@ -333,7 +345,7 @@ and preserves accepted language tags. Store-level page sizing is tested; HTTP se
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 8–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 9–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Before enabling submit, jointly qualify language recognition and canonical duplicates. The
@@ -344,11 +356,6 @@ Remaining work:
   approved accepted-tag set until that contract decision; claim no complete recognition gate.
   Before wiring the worker, validate keys that cannot form an HTTP authorization header;
   a local newline-key probe currently becomes a retryable network error before sending.
-  Before Task 8 persists provider results, resolve JSONB's refusal of NUL and lone surrogates
-  without silently altering accepted names or corrections. The Task 3 PostgreSQL multi-page
-  test initially reproduced `22P05` for NUL; its database fixture uses U+0001, while pure page
-  tests retain NUL and lone-surrogate serialization. An appended storage change or an explicit
-  provider-reply validity decision needs behavioral proof before claiming all accepted text works.
   Consent rows retain history after membership removal; Task 13 must prove current, enabled,
   verified ownership when consent is recorded and used. A stored account ID alone grants nothing.
   Append migrations at the then-current next numbers without editing landed migrations.
