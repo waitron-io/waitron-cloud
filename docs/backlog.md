@@ -320,7 +320,9 @@ Every billed reply reaches the spending callback, including unusable text and in
 responses; every attempt reaches the lease callback once. The cap is checked before each call.
 Shutdown during either pass, a callback or retry waiting returns an abort without a batch
 result. Storage and lease callback failures escape without repeating paid work. These
-callbacks still need the durable worker integration in Task 8.
+callbacks still need the durable worker integration in Task 8. If saving spend and renewing
+the lease both throw, the second error currently hides the first; worker diagnostics and
+recovery must account for that failure without logging names or repeating paid work.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies

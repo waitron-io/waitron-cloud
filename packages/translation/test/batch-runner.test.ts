@@ -49,10 +49,10 @@ test('a refusal ends the pass after one call',async()=>{
 });
 test('a review that always times out keeps the first-pass names',async()=>{
  await withFake(r=>isReview(r)?{delayMs:500,json:{}}:echoFirstPass(r),async(client,fake)=>{
-  const {hooks}=hooksFor(),outcome=await translateBatch(job,job.items,client,hooks,live());
+  const {hooks,waits}=hooksFor(),outcome=await translateBatch(job,job.items,client,hooks,live());
   assert.ok(outcome.kind==='done');assert.equal(outcome.reviewFailed,true);
   assert.deepEqual(outcome.results.map(r=>r.names),echoed);
-  assert.equal(fake.requests.filter(isReview).length,4);
+  assert.equal(fake.requests.filter(isReview).length,4);assert.deepEqual(waits,[2000,8000,30000]);
  });
 });
 test('the review applies an allowed change and drops one for a language the venue entered',async()=>{
