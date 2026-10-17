@@ -430,7 +430,9 @@ allow 30 requests per minute per account and return status without installation 
 lease signatures or adapter configuration. Revocation records the actor, time, reason
 and result while keeping the venue and service records.
 
-The three service states begin unconfigured. Internal provisioning can advance a
+The original three service states begin unconfigured. Translation starts ready, but only
+the exact signed version-2 configuration request reveals it; see the
+[translation contract](../../docs/waitron-integration-contract.md#seeing-the-service). Internal provisioning can advance a
 configuration revision. Installation reports cannot configure services, and a report
 for an old revision is refused. Health becomes unknown after five minutes without a
 fresh observation. A healthy report is not proof of a restorable backup. The local
@@ -504,7 +506,7 @@ across client addresses, and never renew passive activity. The session is checke
 before charging and before and after the database change, so expiry during a lock
 wait rolls the change back. Bodies retain the ordinary 16 KiB, five-second reader.
 You can manage consent while the machine routes are off; doing so does not enable
-them. The portal control remains to be built. See the
+them. The installation entry in the portal provides the owner consent control. See the
 [request and reply example](../../docs/waitron-integration-contract.md#consent).
 
 ## Translation machine routes
@@ -527,6 +529,13 @@ its rate allowance is spent. Address grouping follows the existing trusted-proxy
 IPv4 and IPv6 rules. Collect returns the same compact JSON that the page builder sizes, bounded to
 16,777,216 UTF-8 bytes. Collect retains results; release deletes them after your
 caller has durably stored every page.
+
+With `CLOUD_TRANSLATION=1`, the account command sweeps retained menu text at startup and
+every minute, including when no translation worker runs. Startup cleanup failure refuses
+listening; later failures retry while serving. See the
+[worker and retention guide](../translation/README.md#spending-and-retained-text)
+for the bounded cleanup and its remaining qualification. The Compose account service
+receives the switch, default `0`, without receiving the provider key.
 
 ## Installation snapshot delivery
 

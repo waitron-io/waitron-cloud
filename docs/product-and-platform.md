@@ -53,6 +53,7 @@ The complete earlier inventory is in the [service inventory](reference/2026-08-2
 | Fiscal archive | Retained invoices and associated records, export, and access granted by the owner to an advisor or tax authority such as AEAT. |
 | Analytics and reporting | Search and analyse venue data, receive scheduled reports, and compare or aggregate several venues. Elasticsearch or a similar system is a candidate. |
 | Multiple venues | Central visibility, catalogue and configuration distribution, and group management. |
+| Menu translation | Missing-name suggestions with owner consent, human review in Waitron and a per-venue safety cap. Cloud runtime is implemented locally; quality and joint qualification remain open, and translation stays off. |
 | Messages and notifications | Administrative emails, receipts, booking messages and mobile notifications, with preferences and delivery status. |
 | Monitoring and upgrades | Venue health, alerts, version visibility and controlled automatic upgrades. |
 | Further candidates | Loyalty and gift cards, opening-hours publishing, delivery and accounting integrations, forecasting, benchmarking and managed device enrolment. |
