@@ -89,7 +89,7 @@ test('HTTP refusal and rate-limit classification does not depend on error body s
 test('ordered output text is joined across messages, ignoring reasoning and refusal parts',async()=>{
  const fake=await startFakeOpenAi(()=>({json:{...responsesBody(''),output:[
   {type:'reasoning',content:[{type:'output_text',text:'PRIVATE REASONING'}]},
-  {type:'message',content:[{type:'refusal',refusal:'no'},{type:'output_text',text:'one'}]},
+  {type:'message',content:[{type:'refusal',refusal:'no',text:'NOT OUTPUT'},{type:'output_text',text:'one'}]},
   {type:'message',content:[{type:'output_text',text:'two'},{type:'output_text',text:42}]},null,
  ]}}));
  try{assert.deepEqual(await createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl+'/v1/'}).respond({...call,effort:'medium'}),{text:'onetwo',inputTokens:100,outputTokens:50});
@@ -167,5 +167,12 @@ test('fake helpers accept actual assembled prompts through the HTTP client',asyn
   assert.deepEqual(JSON.parse(first.text),{products:[{id:'p01',ca:'OLIVES [ca]',es:'OLIVES [es]',en:'OLIVES [en]',placeholder:false,corrections:[]}]});
   assert.deepEqual([first.inputTokens,first.outputTokens],[2,3]);
   assert.deepEqual(await client.respond({instructions:reviewInstructions(job),input:'Names:\n[]',effort:'medium'}),{text:'{"changes": []}',inputTokens:4,outputTokens:5});
+ }finally{await fake.close();}
+});
+test('the fake server refuses malformed requests without an unhandled rejection',async()=>{
+ const fake=await startFakeOpenAi(()=>({json:responsesBody('x')}));
+ try{
+  const response=await fetch(fake.baseUrl+'/responses',{method:'POST',body:'not json',signal:AbortSignal.timeout(200)});
+  assert.equal(response.status,400);assert.equal(fake.requests.length,0);
  }finally{await fake.close();}
 });

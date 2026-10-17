@@ -19,7 +19,10 @@ export async function startFakeOpenAi(handler:(r:FakeRequest)=>FakeReply|Promise
  const requests:FakeRequest[]=[];
  const server=createServer(async(req,res)=>{
   const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(chunk as Buffer);
-  const r:FakeRequest={path:req.url??'',headers:req.headers,body:JSON.parse(Buffer.concat(chunks).toString('utf8'))};
+  let body:FakeRequest['body'];
+  try{body=JSON.parse(Buffer.concat(chunks).toString('utf8'));}
+  catch{res.writeHead(400);res.end();return;}
+  const r:FakeRequest={path:req.url??'',headers:req.headers,body};
   requests.push(r);
   let reply:FakeReply;try{reply=await handler(r);}catch{reply={status:500,json:{error:'fake handler failed'}};}
   if(reply.delayMs)await new Promise<void>(resolve=>{const timer=setTimeout(resolve,reply.delayMs);res.once('close',()=>{clearTimeout(timer);resolve();});});
