@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
+import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {after,before,test} from 'node:test';
 import {crypto as acmeCrypto} from 'acme-client';
 import forge from 'node-forge';
@@ -184,4 +188,33 @@ test('paid signed staff exchange publishes a usable chain and denies reads after
  const ready=await request('staff-certificate-status',{version:1,requestId:id});assert.equal(ready.status,200);assert.equal((await ready.json()).certificate,c.chain);
  await plans.set(v.organisationId,'free');const refused=await request('staff-certificate-status',{version:1,requestId:id});assert.equal(refused.status,403);assert.deepEqual(await refused.json(),{error:'permission_denied'});
  assert.equal((await db.pool.query('SELECT certificate FROM staff_certificate_exchange WHERE installation_id=$1',[v.installationId])).rows[0].certificate,c.chain);
+});
+
+test('a free plan cannot export retained active setup through either operator runtime',async()=>{
+ const v=await venue('free'),key=generateKeyPairSync('ed25519'),root=await mkdtemp(join(tmpdir(),'cloud-plan-cli-'));
+ try{
+  assert.deepEqual((await store.manifest(v.cellId)).routes,[]);
+  const output=join(root,'manifest.json'),signingKeyFile=join(root,'issuer.pem'),accountKeyFile=join(root,'acme.pem'),dnsModule=join(root,'dns.mjs'),configFile=join(root,'config.json'),url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+db.schema);
+  await writeFile(signingKeyFile,key.privateKey.export({format:'pem',type:'pkcs8'}),{mode:0o600});await writeFile(accountKeyFile,await acmeCrypto.createPrivateKey(),{mode:0o600});await writeFile(dnsModule,'export default {present:async()=>{},remove:async()=>{}};');
+  await writeFile(configFile,JSON.stringify({cellId:v.cellId,signingKeyFile,output}));
+  const run=(file:string,args:string[])=>{const result=spawnSync(process.execPath,[file,...args],{cwd:new URL('..',import.meta.url),encoding:'utf8',timeout:10000,env:{...process.env,DATABASE_URL:url.toString(),CLOUD_TEST_SERVICE_PLANS:'1'}});assert.equal(result.status,0,result.stderr);};
+  run('src/operator-cli.ts',['export',configFile]);assert.deepEqual(verifyManifest(JSON.parse(await readFile(output,'utf8')),key.publicKey,v.cellId).routes,[]);
+  await due(new RemoteConfigurationReconciler(db.pool,{planMode:mode}),'route',v.cellId);
+  await writeFile(configFile,JSON.stringify({routes:[{cellId:v.cellId,output,signingKeyFile}],certificates:[],acme:{directoryUrl:'https://acme.example.test/directory',email:'operator@example.test',accountKeyFile,dnsModule}}));
+  run('src/reconciler-cli.ts',[configFile,'--once']);assert.deepEqual(verifyManifest(JSON.parse(await readFile(output,'utf8')),key.publicKey,v.cellId).routes,[]);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('free retained staged setup never becomes a gateway route',async()=>{
+ const v=await venue('free'),target=await cell();await ordinary.stageMove({operationId:randomUUID(),installationId:v.installationId,targetCellId:target,targetPeerPublicKey:peer(),expectedRevision:1});
+ assert.deepEqual((await store.manifest(target)).routes,[]);
+ const worker=new RemoteConfigurationReconciler(db.pool,{planMode:mode});await worker.schedule();assert.equal((await db.pool.query("SELECT count(*)::integer AS n FROM remote_configuration_jobs WHERE target_id=$1 AND kind<>'route' AND enabled",[v.installationId])).rows[0].n,0);
+});
+
+test('an export defers a new placement whose policy was not in its locked set',async()=>{
+ const v=await venue(),newcomer=await venue('paid',false,v.cellId),b=barrier();let paused=false;
+ const exporting=new Proxy(db.secondPool,{get(pool,name){if(name==='connect')return async()=>{const client=await pool.connect();return new Proxy(client,{get(c,key){if(key==='query')return async(...args:Parameters<typeof c.query>)=>{const result=await c.query(...args);if(!paused&&String(args[0]).startsWith('SELECT o.id FROM organisations')){paused=true;b.enter();await b.gate;}return result;};const value=Reflect.get(c,key);return typeof value==='function'?value.bind(c):value;}});};const value=Reflect.get(pool,name);return typeof value==='function'?value.bind(pool):value;}});
+ const pending=new RemoteAccessStore(exporting,mode).manifest(v.cellId);void pending.catch(()=>{});
+ try{await b.started;await store.provision(newcomer.installationId,v.cellId,newcomer.peerPublicKey);}finally{b.release();}
+ assert.deepEqual((await pending).routes.map(r=>r.installationId),[v.installationId]);assert.equal((await store.manifest(v.cellId)).routes.length,2);
 });

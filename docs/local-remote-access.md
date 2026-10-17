@@ -528,3 +528,14 @@ Old staged moves stay excluded by their old revision; cancel them before staging
 a replacement. Retained placements, names and certificates are not permission to
 resume service. Outside-home remote access still needs a separately approved
 domain, certificates and deployment.
+
+
+The 2026-10-18 disposable Mac gateway proof used two actual TLS upstreams and
+WireGuard peers. After one plan changed to free, its route and peer disappeared
+in 4,053 ms while its paid neighbour continued returning its own venue response.
+A separate 2,500 ms signed lease expired on the wall clock; refusal was observed
+689 ms after its expiry, and restarting with that expired cache restored no route
+or peer. The shorter lease tests the existing expiry mechanism; it is not a
+measurement of a ten-minute wait. All owned containers, network, image tag and
+fixture directories were removed. This proves the local synthetic gateway
+boundary, not LAN deployment or a connection to the quarantined Waitron venue.

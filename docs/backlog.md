@@ -881,6 +881,12 @@ notifications separately.
   signing/DNS results recheck policy; publication holds policy through the file
   replacement. Upgrading alone restores no route; explicit existing-placement
   provision restores cleared setup once. Public setup metadata remains readable.
+  A real two-peer Docker gateway proof withdrew the downgraded route/peer in
+  4,053 ms while its paid neighbour still served its own body; wall-clock short-lease
+  expiry and an expired-cache restart restored no access. This is local synthetic
+  gateway evidence, not test-box deployment or the later client acceptance proof.
+  A barrier test also excludes a new placement whose organisation was absent from
+  that export's locked policy set; the next export includes it.
   The signed manifest schema and ten-minute authority maximum are unchanged.
   See the [remote test guide](local-remote-access.md#exercise-test-free-and-paid-plans).
   Deployment enforcement is still off. Four remaining implementation slices,
