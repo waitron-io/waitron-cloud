@@ -299,8 +299,8 @@ spending checks, installation-scoped job reads and release. Collection reconstru
 submit order from retained outcomes and measures complete compact UTF-8 pages, including the
 actual continuation, against the 16 MiB limit. PostgreSQL tests cover concurrent submits,
 rollback, repeated collection, release locking and a multi-page walk; serializer tests cover
-exact byte boundaries, Unicode and complete outcomes. These foundations expose no translation
-routes; the remaining runtime is still open.
+exact byte boundaries, Unicode and complete outcomes. These foundations are consumed by the signed translation
+routes described below.
 Task 4 adds the contract parser and family/category batch planner. Offline checks cover exact
 field shapes, language and text bounds, the 1,000-item boundary, context-only heads, all nine
 name kinds and house-style examples. Batches keep families whole, including context heads and
@@ -482,7 +482,7 @@ files before printing a table, and warn about incomplete products and names. A m
 check preserves the complete ungraded list. The copied shown-language keys match the saved
 grading pages, apart from unchanged given names that scoring excludes. These offline checks run in the
 ordinary package suite without a provider or key; they do not measure the templated prompt.
-Task 21's trial runner and grading page, owner Tasks 22–24 and the joint proof remain open.
+Task 21 adds the trial runner and grading page below. Owner Tasks 22–24 and the joint proof remain open.
 A controlled client-error event followed by cleanup-query rejection reproduces a fatal
 line followed by a misleading cleanup-retry line. The worker now stops that retry path
 after a fatal failure; the original exact-output assertions remain. The new subprocess
