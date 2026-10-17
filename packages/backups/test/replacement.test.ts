@@ -77,6 +77,12 @@ test('a restored continuous operation keeps the existing owner-confirmed replace
  const result=await f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f));assert.equal(result.state,'complete');assert.equal(result.registration.venueId,f.installed.venueId);
 });
 const confirm=(f:Awaited<ReturnType<typeof ready>>)=>({oldInstallationId:f.installed.installationId,oldServerUnavailable:true,confirmReplacement:true});
+test('ordinary completed replacement replay retains its authority after the owner is disabled',async()=>{
+ const f=await ready();await f.store.machine('prepare',f.envelope('prepare'));
+ const result=await f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f));
+ await db.pool.query('UPDATE cloud_accounts SET disabled_at=clock_timestamp() WHERE id=$1',[f.owner.accountId]);
+ assert.deepEqual(await f.store.machine('status',f.envelope('status')),result);
+});
 test('an abandoned proposal does not prevent a new recovery replacing the same installation',async()=>{
  const f=await ready();await f.store.machine('prepare',f.envelope('prepare'));await f.recovery.close(f.session.token,f.session.csrfToken,f.t.id);
  const t=target();await f.requests.machine('start',t.proof('start'));await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,{pointId:f.point.id,oldServerUnavailable:true,acceptDataLoss:true});await f.recovery.target(t.id,'restored',t.recovery('restored',f.point.digest));

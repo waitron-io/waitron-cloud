@@ -63,7 +63,7 @@ export class ReplacementStore {
   const c=await this.authenticate(action,envelope);
   return transaction(this.pool,async client=>{
    const prior=(await client.query('SELECT * FROM installation_replacements WHERE id=$1',[c.id])).rows[0];
-   if(prior?.result){bound(prior,c);const r=await recovery(client,c.id);await permission(client,r.account_id,r.venue_id);await backupPlan(client,r.venue_id,this.planMode);const result=await this.#activeResult(client,prior);claims(this.origin,action,envelope);return result;}
+   if(prior?.result){bound(prior,c);if(this.planMode!=='existing'){const r=await recovery(client,c.id);await permission(client,r.account_id,r.venue_id);await backupPlan(client,r.venue_id,this.planMode);}const result=await this.#activeResult(client,prior);claims(this.origin,action,envelope);return result;}
    const {r,old,l,p}=await this.#locked(client,c.id);
    if(r.local_venue_id!==c.localVenueId||r.source_node_id!==c.nodeId)backupFail('conflict');
    if(p?.result){bound(p,c);const result=await this.#activeResult(client,p);claims(this.origin,action,envelope);return result;}

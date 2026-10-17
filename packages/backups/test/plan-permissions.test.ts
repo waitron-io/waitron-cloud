@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import {after,before,beforeEach,test} from 'node:test';
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {login} from '@waitron-cloud/identity';
 import {SignupStore,RegistrationStore,OrganisationPlanStore,InstallationStore,createLeaseIssuer,encodeMachine,transaction,type MachineAction,type SignedEnvelope} from '@waitron-cloud/registration';
 import {database} from '../../account-http/test/fixtures.ts';
@@ -13,10 +15,13 @@ import {BackupRecovery,recoveryPayload} from '../src/recovery.ts';
 import {RecoveryRequests,requestPayload} from '../src/recovery-request.ts';
 import {ReplacementStore,replacementPayload} from '../src/replacement.ts';
 import {receipt} from '../src/storage.ts';
+import {BackupWorker} from '../src/worker.ts';
 import {createAccountApp} from '../../account-http/src/app.ts';
 const mode='test-free-paid',origin='https://cloud.test',password='a long enough plan test password';
 const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
 const vault=new BackupKeyVault(randomBytes(32));
+const workerImage='cloud-plan-worker:'+randomUUID(),execute=promisify(execFile),root=new URL('../../../',import.meta.url);
+let workerImageBuilt=false;
 let db:Awaited<ReturnType<typeof database>>,plans:OrganisationPlanStore;
 let a:Awaited<ReturnType<typeof installed>>,b:typeof a;
 const objects=new Map<string,Buffer>();
@@ -49,7 +54,8 @@ async function snapshot(days=0){
  const metadata={...receipt(bytes),capturedAt:new Date(Date.now()-days*86400000).toISOString(),retention:'daily' as const,sourceNodeId:randomUUID(),modules:{core:1}};
  const point=await catalogue().publish(a.installationId,reserved.id,metadata);await catalogue().verify(point.id,'plan-test',async()=>{});return {point,metadata};
 }
-before(async()=>{db=await database();plans=new OrganisationPlanStore(db.pool);});after(async()=>db?.close());
+before(async()=>{db=await database();plans=new OrganisationPlanStore(db.pool);await execute('docker',['build','-q','-t',workerImage,'-f','packages/backups/test/container-fixture/Dockerfile','.'],{cwd:root,timeout:120000});workerImageBuilt=true;},{timeout:150000});
+after(async()=>{try{if(workerImageBuilt)await execute('docker',['image','rm',workerImage],{timeout:30000});}finally{await db?.close();}});
 beforeEach(async()=>{await resetSchema(db.pool);objects.clear();grants=0;provisions=0;wait=undefined;removeWait=undefined;a=await installed('plan-a');b=await installed('plan-b');});
 
 // Removing the paid admission check would let a free organisation obtain keys or mutate storage state.
@@ -247,4 +253,20 @@ test('ordinary_mode_keeps_missing_installation_and_local_backup_refusal_order',a
  const captures=new BackupCaptures(db.pool,issuer,origin,{vault,objects:storage,async grant(){throw Error('unexpected grant');}});
  const forged={...proof('backup-reserve'),signature:sign(null,Buffer.from('wrong'),a.key.privateKey).toString('base64url')};
  await assert.rejects(captures.execute('backup-reserve',forged),/backup.local_integration_only/);
+});
+
+test('worker_CLI_test_mode_pauses_free_expiry_without_contacting_storage',async()=>{
+ await paid();const first=await snapshot(90);await snapshot(80);await plans.set(a.organisationId,'free');
+ const worker=new BackupWorker(db.pool,catalogue(),async()=>{});await worker.schedule();
+ await db.pool.query("UPDATE backup_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'retention'");
+ {
+  const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+db.schema);
+  const result=await execute(process.execPath,['packages/backups/src/worker-cli.ts','--once'],{cwd:root,timeout:30000,env:{PATH:process.env.PATH,DATABASE_URL:url.href,CLOUD_TEST_SERVICE_PLANS:'1',CLOUD_BACKUP_MASTER_KEY:randomBytes(32).toString('hex'),CLOUD_VERIFIER_IMAGE:workerImage,CLOUD_VERIFIER_OWNER:'plan-'+randomUUID(),CLOUD_BACKUP_ENDPOINT:'https://127.0.0.1:9',CLOUD_BACKUP_REGION:'local',CLOUD_BACKUP_ACCESS_KEY:'test',CLOUD_BACKUP_SECRET_KEY:'test'}});
+  assert.equal(JSON.parse(result.stdout).failures,0);
+  assert.deepEqual((await db.pool.query('SELECT deleting,deleted_at FROM backup_points WHERE id=$1',[first.point.id])).rows[0],{deleting:false,deleted_at:null});
+ }
+});
+test('worker_CLI_rejects_malformed_plan_mode_before_mutation',async()=>{
+ const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+db.schema);
+ await assert.rejects(promisify(execFile)(process.execPath,['packages/backups/src/worker-cli.ts','--retry-failed'],{cwd:new URL('../../../',import.meta.url),timeout:30000,env:{PATH:process.env.PATH,DATABASE_URL:url.href,CLOUD_TEST_SERVICE_PLANS:'true'}}));
 });

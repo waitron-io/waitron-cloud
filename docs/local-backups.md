@@ -43,8 +43,9 @@ node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test
 
 Trusted callers pass `planMode: 'test-free-paid'` explicitly to the account app and the
 matching stores. `BackupCatalogue`, `ManagedStreams`, `BackupRecovery`, `RecoveryRequests`
-and `ReplacementStore` default to ordinary mode; a backup worker uses its injected
-catalogue's mode. The lock order is request/session and membership first where needed,
+and `ReplacementStore` default to ordinary mode. The backup worker CLI validates
+`CLOUD_TEST_SERVICE_PLANS` at startup and passes its mode to the catalogue, including
+retention work; an injected worker uses its catalogue's mode. The lock order is request/session and membership first where needed,
 then organisation policy, installations in UUID order and existing service/location
 locks. The plan setter takes no account locks. Its policy lock allows foreign-key
 checks to complete while still fencing policy readers. Keep organisation writes in

@@ -861,7 +861,9 @@ notifications separately.
   clear paid setup and cached machine replies use current configuration. Explicit
   reprovisioning restores an existing location/stream binding without discarding
   objects or key versions. Test-mode expiry pauses while free, and admitted expiry
-  holds policy through deletion. Metadata/status/close and admitted verification
+  holds policy through deletion. The backup worker CLI validates and forwards the
+  test plan flag; ordinary completed replacement replies retain their original
+  authority rules. Metadata/status/close and admitted verification
   remain available. Ordinary deployment permissions and retention stay unchanged.
   The [backup guide](local-backups.md#exercise-test-free-and-paid-plans) describes
   these checks and their lock order. Real PostgreSQL barriers cover provider waits,
