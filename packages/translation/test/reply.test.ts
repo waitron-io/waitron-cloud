@@ -59,7 +59,7 @@ test('malformed review IDs and languages are dropped and counted without interru
 });
 const translated=()=>[{id:'p01',ca:'Gildes',es:'Gildas',en:'Gildas'},{id:'p02',ca:'Doble',es:'Doble'}];
 test('invalid JSON and non-list envelopes use the reply error reason rather than raw parser errors',()=>{
- for(const text of ['{"products":','```json\n{"products":]\n```','[1,2]', '', 'null'])assert.throws(()=>extractJson(text),reason('no_json'));
+ for(const text of ['{"products":','{"products": ]}','```json\n{"products":]\n```','[1,2]', '', 'null'])assert.throws(()=>extractJson(text),reason('no_json'));
  assert.deepEqual(extractJson('Prose {"products":[]} end.'),{products:[]});
  for(const envelope of [null,[],3,{}, {products:{}},{products:null}]){
   const expected=envelope===null||Array.isArray(envelope)||typeof envelope==='number'?'no_json':'shape';
