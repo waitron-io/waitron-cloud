@@ -13,5 +13,6 @@
   "dependencies": {
     "@waitron-io/ui-core": "0.1.0",
     "lit": "3.3.3"
-  }
+  },
+  "license": "SEE LICENSE IN LICENSE"
 }

@@ -12,11 +12,19 @@ The current ledger records:
 - snapshot bytes uploaded and restored;
 - completed installation operations;
 - accepted public and staff monitoring probes; and
-- service-alert messages that reached a terminal `sent`, `failed`, `expired` or `cancelled` state.
+- service-alert messages that reached a terminal `sent`, `failed`, `expired` or `cancelled` state; and
+- translation items completed, input tokens, output tokens and cost in micro-dollars (one million per US dollar).
 
 The snapshot storage total is bytes added minus bytes removed. The transfer totals count snapshot publication and completed snapshot restores. A monitoring result contributes one event for each accepted public or staff observation. Replayed or older observations do not add another event.
 
 Continuous-backup stream bytes are not available from the current durable sources, so they are excluded. Account-level identity mail is excluded because it has no organisation or venue attribution. Restored snapshot bytes begin with receipts written after migration `025_usage_metering.sql`; older recovery rows do not contain a trustworthy restored time and are not backfilled. The portal says so explicitly instead of presenting incomplete history as complete coverage.
+
+Translation measures are `translation.items_completed`, `translation.input_tokens`,
+`translation.output_tokens` and `translation.cost_micro_usd`. The worker records them in
+the job's finishing transaction, keyed by the job ID, so retrying completion does not count
+it twice. They survive release and expiry and are not reconstructed by the reconciler.
+The translation safety cap is separate from these usage totals and from any future billing
+policy. See [menu translation](../packages/translation/README.md).
 
 ## Reconcile durable sources
 

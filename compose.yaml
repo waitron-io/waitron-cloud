@@ -93,6 +93,7 @@ services:
     <<: *cloud
     environment:
       CLOUD_STAFF_CERTIFICATES: ${CLOUD_STAFF_CERTIFICATES:-0}
+      CLOUD_TRANSLATION: ${CLOUD_TRANSLATION:-0}
       CLOUD_FACTOR_POLICY: ${CLOUD_FACTOR_POLICY:-}
     command: ["node", "deploy/local-stack/runtime.mjs", "account"]
     depends_on:
@@ -240,6 +241,19 @@ services:
     volumes:
       - local-stack-config:/run/local-stack:ro
       - ${LOCAL_STACK_RECONCILER_DIR:-./.local-stack/reconciler}:/run/reconciler:ro
+
+  translation-worker:
+    <<: *cloud
+    command: ["node", "deploy/local-stack/runtime.mjs", "translation"]
+    profiles: [translation]
+    environment:
+      CLOUD_OPENAI_API_KEY: ${CLOUD_OPENAI_API_KEY:-}
+      CLOUD_OPENAI_BASE_URL: ${CLOUD_OPENAI_BASE_URL:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    stop_grace_period: 15s
 
 volumes:
   local-stack-config:

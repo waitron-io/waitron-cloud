@@ -28,6 +28,13 @@ candidate list and previous commercial reasoning. Remote access and backups are 
 agreed initial services. The first integration milestone is complete locally; the
 production release scope remains open.
 
+## Repository licence
+
+The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
+All eleven workspace and root manifests identify it with `SEE LICENSE IN LICENSE`.
+Waitron's separate grants are not included. The owner and watcher control the repository's
+visibility; this change does not switch it or alter settings and workflows.
+
 ## First working milestone
 
 The [combined local receipt](launch-evidence.md#read-the-local-evidence-narrowly)
@@ -413,6 +420,14 @@ replies cannot restore it. The browser sends the session's security token on wri
 and validates complete consent replies. Real PostgreSQL/Chromium tests cover
 agreement, persistence, withdrawal after a lost response body and owner-only display
 in both languages, themes and phone/desktop widths. The wording awaits the owner.
+The manual-retry browser fixture holds its successful session-activity reply until the
+retry read returns. A controlled reply before click reproduces the five-second missing
+retry-button failure: the session update automatically reloads consent and replaces that
+button after pointerdown. Holding the reply passes the same 500 ms delayed-click control;
+removing the hold restores the original timeout. Every existing assertion and deadline
+remains. The two natural failures retained no request ordering, so their exact trigger stays
+unproved; bounded path/status events now accompany any future failure. Portal production
+code is unchanged by this fixture correction.
 Task 16 keeps translation out of the three-service configuration, account and diagnostic
 lists, monitoring targets, incident display and alert delivery. A ready translation row alone
 cannot enable those services. PostgreSQL regressions insert that row explicitly and cover
@@ -446,6 +461,18 @@ job limit does not bound rows scanned. Measure retained-history growth at launch
 qualify an append-only indexing migration if needed. The worker's lease query still has no age
 predicate; provider dispatch for a job aging between bounded sweeps remains unverified and
 must be qualified before activation. These are separate from deleting an expired body.
+Task 19 adds the optional `translation` Compose profile and runtime role. The default stack
+omits the worker; only it receives provider settings, while account receives the translation
+switch, default off. Compose and runtime checks cover the profile, migration dependency,
+private configuration mount and exact environment boundaries. The package guide documents
+the worker, fixed diagnostics, cap overshoot and bounded retention. CI scope checks retain
+translation package selection. A real disposable Compose/PostgreSQL regression starts the
+worker, then refuses a changed migration digest before dispatch. Deleting only the launcher
+schema gate makes that assertion fail. The local source-mounted proof also checks exact child
+environment names and normal idle shutdown (0.27 seconds); its project is removed.
+A built release image and active-provider Compose shutdown still need qualification.
+This does not establish full-stack translation delivery,
+quality, joint Waitron paging or production provider approval.
 Keep translation off until the remaining runtime and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
@@ -457,7 +484,7 @@ and preserves accepted language tags. Store-level sizing and HTTP serialization 
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 19–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 20–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Complete lock-order qualification across worker, release and installation revocation. The

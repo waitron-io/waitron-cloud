@@ -19,7 +19,7 @@ test('runtime roles receive only their explicit configuration',async()=>{
   usage:{DATABASE_URL:database},probe:{DATABASE_URL:database},
   backup:{DATABASE_URL:database,CLOUD_BACKUP_MASTER_KEY:config.backup.masterKey,CLOUD_BACKUP_ENDPOINT:'https://storage:8333',CLOUD_BACKUP_REGION:'local',CLOUD_BACKUP_ACCESS_KEY:config.storage.accessKeyId,CLOUD_BACKUP_SECRET_KEY:config.storage.secretAccessKey,CLOUD_BACKUP_CA_FILE:'/run/local-stack/storage-ca.pem'},
   gateway:{GATEWAY_STATE_DIR:'/state',GATEWAY_MANIFEST:'/run/local-stack/gateway-manifest.json',GATEWAY_CELL_ID:config.gateway.cellId,GATEWAY_TRUST_KEY:'/run/local-stack/gateway-issuer.pem',GATEWAY_WIREGUARD_KEY:'/run/local-stack/gateway-wireguard.key',GATEWAY_BOT_KEY:'/run/local-stack/gateway-bot.key',GATEWAY_SUBNET:'61'},
-  manifest:{LOCAL_STACK_CONFIG_DIR:'/run/local-stack'},reconcile:{DATABASE_URL:database}
+  manifest:{LOCAL_STACK_CONFIG_DIR:'/run/local-stack'},reconcile:{DATABASE_URL:database},translation:{DATABASE_URL:database}
  };
  for(const [role,value] of Object.entries(expected))assert.deepEqual(runtimeEnvironment(role,config),value,role);
  assert.throws(()=>runtimeEnvironment('shell',config),/local_stack\.role_invalid/);
@@ -121,4 +121,25 @@ test('monitor alone receives explicit quiet and reminder settings',async()=>{
   const other=runtimeEnvironment(role,config,settings);assert.equal(other.CLOUD_MONITOR_QUIET_SECONDS,undefined);assert.equal(other.CLOUD_MONITOR_REMINDER_SECONDS,undefined);
  }
  assert.equal(runtimeEnvironment('monitor',config).CLOUD_MONITOR_QUIET_SECONDS,undefined);
+});
+
+
+test('translation receives only its database and explicitly supplied provider settings',async()=>{
+ const {config}=await configured();
+ const database=`postgres://cloud:${config.database.password}@postgres:5432/cloud`;
+ assert.deepEqual(runtimeEnvironment('translation',config),{DATABASE_URL:database});
+ const settings={CLOUD_OPENAI_API_KEY:'local-fake-key',CLOUD_OPENAI_BASE_URL:'http://127.0.0.1:4010/v1',UNRELATED_SECRET:'private',CLOUD_EMAIL_KEYS:'foreign',CLOUD_TRANSLATION:'1'};
+ assert.deepEqual(runtimeEnvironment('translation',config,settings),{DATABASE_URL:database,CLOUD_OPENAI_API_KEY:'local-fake-key',CLOUD_OPENAI_BASE_URL:'http://127.0.0.1:4010/v1'});
+ for(const role of ['migrate','account','email','monitor','usage','probe','backup','gateway','manifest','reconcile']){
+  const env=runtimeEnvironment(role,config,settings);
+  assert.equal(env.CLOUD_OPENAI_API_KEY,undefined,role);assert.equal(env.CLOUD_OPENAI_BASE_URL,undefined,role);
+ }
+});
+
+test('only account receives an explicitly supplied translation switch',async()=>{
+ const {config}=await configured();
+ assert.equal(runtimeEnvironment('account',config).CLOUD_TRANSLATION,undefined);
+ for(const value of ['0','1'])assert.equal(runtimeEnvironment('account',config,{CLOUD_TRANSLATION:value}).CLOUD_TRANSLATION,value);
+ for(const role of ['migrate','email','monitor','usage','probe','backup','gateway','manifest','reconcile','translation'])
+  assert.equal(runtimeEnvironment(role,config,{CLOUD_TRANSLATION:'1'}).CLOUD_TRANSLATION,undefined,role);
 });

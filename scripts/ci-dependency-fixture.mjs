@@ -3,9 +3,10 @@ import {join} from 'node:path';
 import {loadWorkspace} from './ci-scope.mjs';
 
 // Positive receipt fixtures need the exact audited installation, execution and
-// schema inputs so current changes still exercise omission and refusal assertions.
+// schema and deployment inputs so current changes still exercise omission and refusal assertions.
 const schemaInputs = JSON.parse(readFileSync(new URL('./fixtures/ci-schema-inputs.json', import.meta.url), 'utf8'));
-const inputs = {...schemaInputs.files, ...JSON.parse(readFileSync(new URL('./fixtures/ci-dependency-inputs.json', import.meta.url), 'utf8')),
+const deploymentInputs = JSON.parse(readFileSync(new URL('./fixtures/ci-deployment-inputs.json', import.meta.url), 'utf8'));
+const inputs = {...deploymentInputs.files, ...schemaInputs.files, ...JSON.parse(readFileSync(new URL('./fixtures/ci-dependency-inputs.json', import.meta.url), 'utf8')),
   ...JSON.parse(readFileSync(new URL('./fixtures/ci-execution-inputs.json', import.meta.url), 'utf8'))};
 
 export function receiptFixtureWorkspace() {
@@ -26,10 +27,14 @@ export function seedReceiptDependencyInputs(root) {
       }
     }
   }
-  for (const [directory, names] of Object.entries(schemaInputs.directories)) {
+  for (const [directory, names] of Object.entries({...deploymentInputs.directories,...schemaInputs.directories})) {
     for (const name of readdirSync(join(root, directory))) {
       if (!names.includes(name)) rmSync(join(root, directory, name), {recursive: true, force: true});
     }
+  }
+  // Positive fixtures must reproduce the audited root-file inventory as well as its contents.
+  for (const entry of readdirSync(root,{withFileTypes:true})) {
+    if (entry.name!=='.git' && !entry.name.endsWith('.md') && !deploymentInputs.rootFiles.includes(entry.name) && (entry.isFile() || entry.isSymbolicLink())) rmSync(join(root,entry.name));
   }
   for (const [path, text] of Object.entries(inputs)) writeFileSync(join(root, path), text);
 }

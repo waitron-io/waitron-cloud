@@ -8,6 +8,11 @@ on your own machine.
 This stack is for development and deployment rehearsal. It does not create a public Cloud
 service or model production secret custody.
 
+The optional `translation` profile adds a menu-translation worker. It is absent from the
+default stack and receives the provider key separately from the account service. Follow the
+[translation worker guide](../packages/translation/README.md#run-the-worker-locally) for the
+Compose command and account switch. Keep it off until the release gates pass.
+
 ## Start with empty local state
 
 You need Docker with Compose, pnpm 9.15 and a GitHub package token that can read the private

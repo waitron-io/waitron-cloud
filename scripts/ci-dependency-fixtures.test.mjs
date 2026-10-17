@@ -146,3 +146,34 @@ test('receipt selector fixtures retain their positive checks after workflow chec
     ].sort(), 'Every original positive receipt assertion must execute with its audited workflow');
   } finally {rmSync(root, {recursive: true, force: true});}
 });
+
+test('receipt selector fixtures retain their positive checks after deployment and licence inputs change', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cloud-deployment-fixture-control-'));
+  try {
+    execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
+    cpSync('scripts', join(root, 'scripts'), {recursive: true});
+    appendFileSync(join(root, '.env.example'), '\n# Changed configuration example\n');
+    appendFileSync(join(root, 'compose.yaml'), '\n# Changed deployment profile\n');
+    appendFileSync(join(root, 'deploy/local-stack/runtime.mjs'), '\n// Changed runtime role\n');
+    appendFileSync(join(root, 'deploy/local-stack/new-control.mjs'), 'export const control = true;\n');
+    appendFileSync(join(root, 'LICENSE'), 'New licence input\n');
+    const git=(...args)=>execFileSync('git',['-c','maintenance.auto=false','-c','user.name=CI test','-c','user.email=ci@example.test',...args],{cwd:root,stdio:'pipe'});
+    git('add','-A');git('commit','-s','-qm','Change deployment fixture inputs');
+    const env = {...process.env}; delete env.NODE_TEST_CONTEXT;
+    const result = spawnSync('node', ['--test', '--test-reporter=tap', '--test-concurrency=1',
+      '--test-name-pattern=unrelated package changes omit|combined audits',
+      'scripts/ci-capacity-receipt.test.mjs', 'scripts/ci-database-receipt.test.mjs',
+      'scripts/ci-gateway-receipt.test.mjs', 'scripts/ci-local-stack-receipt.test.mjs'],
+    {cwd: root, env, encoding: 'utf8', timeout: 60_000});
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.deepEqual([...result.stdout.matchAll(/^ok \d+ - (.+)$/gm)].map(match => match[1]).sort(), [
+      'unrelated package changes omit capacity while retaining packages, types and other receipts',
+      'unrelated package changes omit database recovery while retaining packages, types and other receipts',
+      'unrelated package changes omit public gateway while retaining packages, types and other receipts',
+      'unrelated package changes omit all audited receipts and retain actual package and type checks',
+      'combined audits retain earlier omissions and ignore unrelated top-level prose',
+      'combined audits preserve three earlier omissions and retain only local-stack',
+    ].sort(), 'Every positive receipt check must execute with saved deployment and installation inputs');
+  } finally {rmSync(root, {recursive: true, force: true});}
+});

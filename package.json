@@ -69,5 +69,6 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "typescript": "^7.0.2"
-  }
+  },
+  "license": "SEE LICENSE IN LICENSE"
 }

@@ -129,3 +129,10 @@ replacement still depends on Waitron's SQLite slice-2 recovery implementation.
 For configured test venues, [local monitoring](docs/local-monitoring.md) records contact
 and snapshot incidents and supports opt-in English/Spanish service emails. Run
 `pnpm monitor:worker` for observations and `pnpm mail:worker` for queued delivery.
+
+## Local menu translation
+
+The [translation worker guide](packages/translation/README.md) covers the optional Compose
+profile, direct worker command and configuration. Translation stays off while quality trials,
+joint Waitron paging proof and launch decisions remain open. Use local fake providers for
+protocol tests; the worker's US$5 monthly safety cap is not a billing policy.

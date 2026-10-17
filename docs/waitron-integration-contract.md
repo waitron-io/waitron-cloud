@@ -352,8 +352,10 @@ not local operator authentication, and no registry call belongs on the sale path
 Owner-approved design; Cloud store, worker and four HTTP routes are implemented, with
 translation off by default. Submit has its separate 2,113,536-byte, 60-second reader
 and admission limit. Current owner consent is enforced at submit and worker lease;
-the account consent API is implemented. The portal consent control is implemented; retention and joint
-qualification remain open. Keep the operator flag off until those gates pass. The bounded-collect
+the account and portal consent controls and bounded retention sweeps are implemented.
+The optional Compose worker and account switch are implemented on 2026-10-17.
+Quality trials, pinned joint Waitron paging proof and launch decisions remain open.
+Keep the operator flag off until those gates pass. The bounded-collect
 prerequisite is documented on 2026-10-16 in the
 [paging amendment](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The bound preserves the existing input limits;
@@ -657,7 +659,7 @@ deduplication, bounded decoded reads and release only after durable completion.
 
 The account owner agrees, or withdraws, on the portal's account page, `<Cloud origin>/account`,
 in the venue's entry (owners only). Waitron's dialog links there when submit is refused with
-`translation_consent_required`. The portal control remains to be built; keep translation off.
+`translation_consent_required`. The portal provides the owner consent control; keep translation off until the release gates pass.
 
 The account API is `GET|POST /api/account/translation-consent`. Reads need your live
 session cookie. Writes also need the portal `Origin` and the session's

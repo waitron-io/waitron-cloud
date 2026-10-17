@@ -27,5 +27,6 @@
     "./probe-observations": "./src/probe-observations.ts",
     "./probe": "./src/probe.ts",
     "./probe-runner": "./src/probe-runner.ts"
-  }
+  },
+  "license": "SEE LICENSE IN LICENSE"
 }
