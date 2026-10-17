@@ -152,10 +152,15 @@ qualify a complete two-pass quality result.
 
 The page command writes `quality/grading-<set>.html` and its `-keys.json` companion. These
 are ignored local outputs. It rejects malformed, failed, wrong-set or repeated input files
-before replacing either output. Keep partial results for diagnosis; score them to see the
-missing coverage before using a page. Given names, placeholders, previously shown names
+before replacing either output. Failed trials retain their partial output for diagnosis; both commands refuse them.
+The scorer reports missing coverage for partial files without reported failures,
+including older manually assembled inputs. Given names, placeholders, previously shown names
 and previously marked names are excluded from the choices. Spelling corrections are
-retained in result files but this page grades customer-facing names only.
+retained in result files but this page grades customer-facing names only. In manually edited
+or older files, the scorer can count an altered given name or text on a placeholder that
+the page excludes. Regenerate these inputs through the production trial instead of treating
+an absent grading choice as accepted. If either output write fails, correct the output path
+and regenerate both files before using them; the pair is not written as one transaction.
 
 To save marks, open the page with its grading database through the existing
 `window.claude.use("db")` bridge. Without it, you can read the page but its mark buttons
@@ -163,7 +168,8 @@ stay disabled. The local browser test uses a controlled store; it does not verif
 external bridge or publish a grading page. A failed save leaves the last confirmed mark
 and asks you to retry. The owner's existing export process writes one mark per file with
 `pid`, `lang`, `text` and `verdict`; merge the companion keys into the matching shown file
-only after grading, then rescore. Never treat a newly displayed, unread page as accepted.
+only after grading, then rescore. Use a new `--round` value for a new reading round;
+reusing it keeps that round's stored done markers. Never treat a newly displayed, unread page as accepted.
 
 Owner Tasks 22–24 in the [approved plan](../../docs/superpowers/plans/2026-10-14-translate-all.md#task-22-owner-involved-needs-the-real-key-score-the-templated-prompt-against-both-graded-sets)
 retain their commands and release criteria. They cover both-set quality, house-style

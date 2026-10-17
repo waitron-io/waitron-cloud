@@ -513,7 +513,9 @@ keeps diagnostic names but is refused as a successful quality run. The builder f
 marked, shown, given and placeholder names, keeps run provenance, and escapes embedded
 text. Its separate maintained template preserves the original experiment assets.
 Chromium checks cover English/Spanish, light/dark, phone/desktop, exact mark writes and
-deletions, failed saves and disabled controls without a grading store. These use a local
+deletions, failed saves and disabled controls without a grading store. Later snapshots
+preserve a save result; both initial snapshots are required, pending choices lock and a
+disconnected store cannot re-enable controls with a late update. These use a local
 controlled store; the external grading bridge and owner measurements remain unqualified.
 No real key or provider call is part of this implementation.
 

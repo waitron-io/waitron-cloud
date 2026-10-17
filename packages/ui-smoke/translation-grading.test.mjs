@@ -35,14 +35,17 @@ try{
   await row.getByRole('button',{name:lang==='en'?'Needs work':'Mejorar',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.name').dataset.v==='fix');
   assert.equal(await page.locator('#n-fix').textContent(),'1');
-  assert.equal(await page.evaluate(()=>window.fixture.writes[0].value.text),'Cafè </script> $&');
+  assert.deepEqual(await page.evaluate(()=>window.fixture.writes[0]),{name:'grades',id:Object.keys(keys)[0],value:{pid:'p01',lang:'ca',text:'Cafè </script> $&',verdict:'fix'}});
+  await page.evaluate(()=>window.fixture.collection('grades').doc('other').set({pid:'other',lang:'ca',text:'Other',verdict:'wrong'}));
+  assert.equal(await page.locator('#save-state').getAttribute('data-state'),'saved','a later snapshot must preserve the save result');
   await row.getByRole('button',{name:lang==='en'?'Needs work':'Mejorar',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.name').dataset.v==='');
   await page.evaluate(()=>window.fixture.fail=true);
   await row.getByRole('button',{name:lang==='en'?'Wrong':'Incorrecto',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('#save-state').dataset.state==='failed');
   assert.equal(await row.getAttribute('data-v'),'');
-  await page.evaluate(()=>window.fixture.fail=false);
+  await page.evaluate(async()=>{window.fixture.fail=false;await window.fixture.collection('grades').doc('other').delete();});
+  assert.equal(await page.locator('#save-state').getAttribute('data-state'),'failed','another update must not hide a failed save');
   await page.getByRole('button',{name:lang==='en'?'Mark done':'Terminar',exact:true}).first().click();
   await page.waitForFunction(()=>document.querySelector('.product').classList.contains('done'));
   await page.locator('#hide-done').check();
@@ -59,4 +62,38 @@ try{
  assert.equal(Object.keys(keys).length,4);console.log('No bridge: marks visibly disabled PASS');
  await page.close();
 }finally{await browser.close();}
+});
+
+test('grading waits for both store snapshots, locks pending marks and stays disabled after disconnect',async()=>{
+ const template=readFileSync(root+'/packages/translation/quality/page.template.html','utf8');
+ const {html}=gradingPage({products:[{id:'p',internal:'CAFE',category:null}],grades:new Map(),shown:new Set()},[{file:'test.json',names:{p:{ca:'Cafè'}}}],template,'connection');
+ const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage();
+  await page.addInitScript(()=>{
+   window.fixture={listeners:{},writes:0,resolve:null,collection(name){return {
+    onSnapshot(fn,error){window.fixture.listeners[name]={fn,error};},
+    doc(){return {set(){window.fixture.writes++;return new Promise(resolve=>window.fixture.resolve=resolve);},delete(){throw new Error('unexpected delete');}};}
+   };}};
+   window.claude={use:async()=>window.fixture};
+  });
+  await page.goto('about:blank');await page.setContent(html);
+  assert.equal(await page.locator('.marks button:enabled').count(),0);
+  await page.evaluate(()=>window.fixture.listeners.grades.fn({docs:[]}));
+  assert.equal(await page.locator('.marks button:enabled').count(),0,'done snapshot must also arrive');
+  await page.evaluate(()=>window.fixture.listeners['done-connection'].fn({docs:[]}));
+  assert.equal(await page.locator('.marks button:enabled').count(),2);
+  await page.locator('.marks button').first().click();
+  assert.equal(await page.locator('.marks button:disabled').count(),2,'both choices lock while a write is pending');
+  await page.evaluate(()=>document.querySelectorAll('.marks button')[1].click());
+  assert.equal(await page.evaluate(()=>window.fixture.writes),1);
+  await page.evaluate(()=>window.fixture.resolve());
+  await page.waitForFunction(()=>document.querySelector('#save-state').dataset.state==='saved');
+  await page.evaluate(()=>window.fixture.listeners.grades.error(new Error('fixture disconnect')));
+  assert.equal(await page.locator('#save-state').getAttribute('data-state'),'unavailable');
+  assert.equal(await page.locator('.marks button:enabled').count(),0);
+  await page.evaluate(()=>{window.fixture.listeners.grades.fn({docs:[]});window.fixture.listeners['done-connection'].fn({docs:[]});});
+  assert.equal(await page.locator('#save-state').getAttribute('data-state'),'unavailable');
+  assert.equal(await page.locator('.marks button:enabled').count(),0);
+ }finally{await browser.close();}
 });

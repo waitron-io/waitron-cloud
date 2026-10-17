@@ -74,7 +74,7 @@ render();
  try{
   db=window.claude?await window.claude.use('db'):null;if(!db)return unavailable();
   let marksReady=false,doneReady=false,ended=false;
-  const ready=()=>{if(marksReady&&doneReady&&!ended){connected=true;status('ready');render();}};
+  const ready=()=>{if(marksReady&&doneReady&&!ended){if(!connected){connected=true;status('ready');}render();}};
   const failed=()=>{ended=true;unavailable();};
   db.collection('grades').onSnapshot(snap=>{if(ended)return;grades.clear();for(const d of snap.docs)grades.set(d.id,d.data().verdict);marksReady=true;ready();},failed);
   db.collection(DONE).onSnapshot(snap=>{if(ended)return;done.clear();for(const d of snap.docs)done.add(d.id);doneReady=true;ready();},failed);

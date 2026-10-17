@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import {syncBuiltinESMExports} from 'node:module';
 import {spawn} from 'node:child_process';
-import {mkdtempSync,readFileSync,readdirSync,rmSync} from 'node:fs';
+import {mkdtempSync,readFileSync,readdirSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {test} from 'node:test';
+import {test,mock} from 'node:test';
 import * as trial from './trial.ts';
 import {gradeRun,loadSet,type GradedSet} from './scorer.ts';
 import {echoFirstPass,emptyReview,isReview,startFakeOpenAi} from '../test/fake-openai.ts';
@@ -31,7 +33,7 @@ test('the trial preserves given names and kind/family, dropping items with all l
  ]});
  assert.equal(trial.trialJob(loadSet('tuning')).items.length,32);
 });
-test('two real production-path trials write scorer inputs, count both passes, and never overwrite',async()=>{
+test('two real production-path trials write scorer inputs and count both passes',async()=>{
  assert.equal(typeof trial.runTrial,'function','runTrial must exist');
  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
  const dir=mkdtempSync(join(tmpdir(),'translation-trial-'));
@@ -78,7 +80,7 @@ test('a refused first pass records failures; a refused review cannot look fully 
   }finally{await fake.close();rmSync(dir,{recursive:true,force:true});}
  }
 });
-test('the trial command is strict about options and prints only successful file paths',async()=>{
+test('the trial command is strict about options and prints written result paths',async()=>{
  assert.equal(typeof trial.runTrial,'function','runTrial must exist');
  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r)),dir=mkdtempSync(join(tmpdir(),'translation-trial-cli-'));
  try{
@@ -91,4 +93,24 @@ test('the trial command is strict about options and prints only successful file 
   const file=r.stdout.trim();assert.ok(file.startsWith(dir+'/blind-'));assert.ok(file.endsWith('-1.json'));
   assert.equal(JSON.parse(readFileSync(file,'utf8')).failed.length,0);
  }finally{await fake.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('a refused trial prints its diagnostic path and exits unsuccessfully',async()=>{
+ const fake=await startFakeOpenAi(()=>({status:401})),dir=mkdtempSync(join(tmpdir(),'translation-trial-cli-failed-'));
+ try{
+  const r=await command(cli,['--set','blind','--runs','1','--out',dir],{CLOUD_OPENAI_API_KEY:'private-test-value',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
+  assert.equal(r.code,1,r.stderr);assert.equal(r.stderr,'');
+  const file=r.stdout.trim();assert.ok(file.startsWith(dir+'/blind-'));
+  assert.equal(JSON.parse(readFileSync(file,'utf8')).failed.length,30);
+ }finally{await fake.close();rmSync(dir,{recursive:true,force:true});}
+});
+test('a colliding output filename preserves the earlier trial evidence',async()=>{
+ const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r)),dir=mkdtempSync(join(tmpdir(),'translation-trial-collision-'));
+ const file=join(dir,'blind-2026-10-17T12-00-00-000Z-fixed-1.json');
+ writeFileSync(file,'Earlier paid trial evidence');
+ mock.method(crypto,'randomUUID',()=> 'fixed');mock.method(Date.prototype,'toISOString',()=> '2026-10-17T12:00:00.000Z');syncBuiltinESMExports();
+ try{
+  await assert.rejects(trial.runTrial({set:'blind',runs:1,outDir:pathToFileURL(dir+'/'),env:{CLOUD_OPENAI_API_KEY:'test-key',CLOUD_OPENAI_BASE_URL:fake.baseUrl}}),{code:'EEXIST'});
+  assert.equal(readFileSync(file,'utf8'),'Earlier paid trial evidence');
+ }finally{mock.restoreAll();syncBuiltinESMExports();await fake.close();rmSync(dir,{recursive:true,force:true});}
 });
