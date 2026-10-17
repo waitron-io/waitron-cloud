@@ -850,7 +850,13 @@ notifications separately.
   and [implementation plan](superpowers/plans/2026-10-17-test-cloud-free-paid.md)
   describe a separate Cloud Compose project on the owner's test box, with an
   operator-set pretend plan and service checks enabled only for this test deployment.
-  Ordinary deployment permissions and retention stay unchanged. Implementation, deployment,
+  The organisation plan store and operator command now persist free/paid metadata,
+  advance revisions only on changes and refuse incompatible migration ledgers.
+  Real PostgreSQL checks cover concurrent updates, rollback and separate organisations;
+  paid status leaves the disabled fiscal API unavailable. See the
+  [operator commands](local-deployment.md#inspect-the-test-organisation-plan).
+  Service enforcement is still dormant. Ordinary deployment permissions and retention
+  stay unchanged. The six remaining implementation slices, deployment,
   two-organisation acceptance and measured headroom remain open. The existing
   Waitron venue is quarantined; use a separate disposable Waitron test venue for
   acceptance and leave its running containers and data untouched. Keep address
