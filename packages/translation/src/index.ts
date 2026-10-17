@@ -9,3 +9,4 @@ export {batchIds,firstPassInput,firstPassInstructions,reviewInput,reviewInstruct
 export {checkFirstPass,extractJson,mergeReview,ReplyError} from './reply.ts';
 export {createOpenAiClient,openAiBaseUrl,ProviderError,type ModelCall,type ModelClient,type ModelReply} from './openai-client.ts';
 export {retryWaitsMs,translateBatch,type BatchHooks,type BatchOutcome} from './batch-runner.ts';
+export {TranslationWorker} from './worker.ts';

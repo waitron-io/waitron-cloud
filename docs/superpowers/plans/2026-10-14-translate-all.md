@@ -14,7 +14,7 @@ their commands and do not execute them during autonomous implementation.
 
 **Goal:** A connected Waitron box can send its missing customer-facing names to Cloud as one signed job, and collect suggested names written and reviewed by `gpt-6-luna`, with Cloud keeping nothing but usage counts.
 
-**Architecture:** A new workspace package, `packages/translation`, holds the domain: the signed-fingerprint check, job body parsing, batching, prompt assembly, the reply checks and review merge, the OpenAI client, the job store, the four machine actions, consent, the worker and the retention sweep. `account-http` gains four machine routes and one account route that call into it, and runs the retention sweep itself whenever translation is switched on. A new command, `packages/translation/src/worker-cli.ts`, runs jobs on the existing `runWorkerLoop` (`packages/registration/src/worker-loop.ts`) as its own Compose service. Two appended migrations (`039`, `040`) add the tables and the fourth service.
+**Architecture:** A new workspace package, `packages/translation`, holds the domain: the signed-fingerprint check, job body parsing, batching, prompt assembly, the reply checks and review merge, the OpenAI client, the job store, the four machine actions, consent, the worker and the retention sweep. `account-http` gains four machine routes and one account route that call into it, and runs the retention sweep itself whenever translation is switched on. A new command, `packages/translation/src/worker-cli.ts`, runs jobs on the existing `runWorkerLoop` (`packages/registration/src/worker-loop.ts`) as its own Compose service. Append-only migrations add the job tables (039), lossless retained results (040), and the fourth service (Task 17, using the next available number).
 
 **Tech Stack:** TypeScript run directly by Node 26 (`erasableSyntaxOnly`, so no `enum`, no constructor parameter properties, no namespaces), `node --test`, `pg` against PostgreSQL 18 through `scripts/test-postgres.mjs`, Hono, Node's built-in `fetch`. No new third-party dependency.
 
@@ -42,7 +42,7 @@ their commands and do not execute them during autonomous implementation.
 - Seeing the service (contract): a `configuration` request whose signed body is exactly `{"servicesVersion":2}` receives four services, `content_translation` among them; `{}` keeps receiving exactly three. Services are matched by name; their order is not significant.
 - An abort (worker shutdown, a lost lease) saves nothing for the batch it interrupted: neither a failed batch nor a first-pass-only result.
 - Tests never need a real key: every provider test talks to a fake OpenAI server on loopback through the real client.
-- Append migrations only; re-read the current migration directory and `migrationNames` before choosing the next two numbers. Both currently end at 038 (2026-10-16); 039/040 below are conditional examples, not reserved numbers. Update all associated filenames, counts, indices and upgrade fixtures; never edit or renumber a landed migration. This documentation milestone creates none.
+- Append migrations only; re-read the current directory and `migrationNames` before choosing a number. Jobs (039) and lossless results (040) are implemented. Task 17 must use the next available number (currently 041); its original 040 service snippets are conditional examples superseded by this rule. Update associated filenames, counts, indices and upgrade fixtures; never edit or renumber a landed migration.
 - Every implementation task: failing test first and watch it fail, then the implementation, then focused tests green. Commit with `git commit -s` and a plain-English message. Before **every push**, run the full suites of each touched package and all dependent packages, including source/test/fixture readers; run the whole workspace only for shared configuration changes. Preserve normal hooks and require current-head CI results. CI does not replace those local suites.
 - Database tests run from the repository root as `node scripts/test-postgres.mjs exec pnpm --dir packages/<pkg> exec node --test --test-timeout=30000 test/<file>.test.ts`; tests with no database run as `pnpm --dir packages/<pkg> exec node --test test/<file>.test.ts`. Read the `tests` count in each summary; a run that prints none proves nothing.
 - Keep routine implementation inline. Delegate only independent work when coordination justifies it; there is no automatic per-task agent workflow.
@@ -1793,6 +1793,15 @@ git commit -s -m "Run one translation batch: retry failed or unusable replies af
 ---
 
 ### Task 8: The worker — leases, four batches side by side, the cap, finishing and usage events
+
+**Implementation note:** append-only migration `040_translation_result_json.sql` preserves
+accepted escaped NUL and lone-surrogate text by storing batch outcomes as JSON. The worker
+updates the complete retained batch object under the job row lock and counts its outcomes in
+JavaScript; the JSONB update/aggregation snippet below is superseded. The wire shape is unchanged.
+Task 17 must re-read the migration inventory; 040 is now used, and 041 is the next candidate.
+The worker's abort listener covers loading and exhausted-lease handling too. Both spending and
+renewal callback failures are retained when they happen together. The tests in `worker.test.ts`
+and `result-storage-upgrade.test.ts` qualify these additions with real PostgreSQL.
 
 > **Authoritative replacement:** [paging amendment, Task 8 row and behavioral checks](2026-10-16-translation-collect-pages.md#implement-inline-with-failing-behavioral-tests-first).
 > Collect helpers must walk pages. Prove submit-order results despite reversed batch/completion

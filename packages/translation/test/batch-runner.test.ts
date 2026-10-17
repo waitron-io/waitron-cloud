@@ -185,3 +185,14 @@ for(const hook of ['spent','attempted','wait','mayCall'] as const)test(`a ${hook
   assert.equal(fake.requests.length,hook==='mayCall'?0:1);if(hook==='spent')assert.equal(attempts,1);
  });
 });
+
+test('spending and renewal failures are both retained without repeating the paid call',async()=>{
+ const spend=new Error('spend failed'),renew=new Error('renew failed');
+ await withFake(r=>echoFirstPass(r),async(client,fake)=>{
+  const {hooks}=hooksFor();hooks.spent=async()=>{throw spend;};hooks.attempted=async()=>{throw renew;};
+  await assert.rejects(translateBatch(job,job.items,client,hooks,live()),(e:unknown)=>{
+   assert.ok(e instanceof AggregateError);assert.equal(e.message,'translation_callbacks_failed');assert.deepEqual(e.errors,[spend,renew]);return true;
+  });
+  assert.equal(fake.requests.length,1);
+ });
+});

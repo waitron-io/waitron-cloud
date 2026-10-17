@@ -16,11 +16,15 @@ async function runPass<T>(client:ModelClient,call:ModelCall,check:(text:string)=
   let response:{reply:ModelReply}|{error:unknown};
   try{response={reply:await client.respond(call,signal)};}catch(error){response={error};}
   // Storage and lease failures must escape without replaying a paid provider call.
+  const callbackErrors:unknown[]=[];
   try{
    const usage='reply' in response?{inputTokens:response.reply.inputTokens,outputTokens:response.reply.outputTokens}
     :response.error instanceof ProviderError?response.error.usage:undefined;
    if(usage)await hooks.spent(usage);
-  }finally{await hooks.attempted();}
+  }catch(error){callbackErrors.push(error);}
+  try{await hooks.attempted();}catch(error){callbackErrors.push(error);}
+  if(callbackErrors.length>1)throw new AggregateError(callbackErrors,'translation_callbacks_failed');
+  if(callbackErrors.length)throw callbackErrors[0];
   if(signal.aborted)return {ok:false,stop:'aborted'};
   let error:unknown;
   if('reply' in response){
