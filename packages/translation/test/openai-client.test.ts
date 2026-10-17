@@ -4,7 +4,7 @@ import {once} from 'node:events';
 import {createServer,type ServerResponse} from 'node:http';
 import {createOpenAiClient,openAiBaseUrl,ProviderError} from '../src/index.ts';
 import {responsesBody,startFakeOpenAi,echoFirstPass,emptyReview,isReview,type FakeReply} from './fake-openai.ts';
-import {firstPassInput,firstPassInstructions,reviewInstructions,type ParsedJob} from '../src/index.ts';
+import {firstPassInput,firstPassInstructions,reviewInstructions,reviewInput,checkFirstPass,type ParsedJob} from '../src/index.ts';
 const call={instructions:'I',input:'U',effort:'low'} as const;
 async function failure(reply:FakeReply,options:{timeoutMs?:number;maxResponseBytes?:number}={},signal?:AbortSignal):Promise<ProviderError>{
  const fake=await startFakeOpenAi(()=>reply);
@@ -120,7 +120,7 @@ test('the response bound counts UTF-8 bytes and allows the exact boundary',async
  }finally{await fake.close();}
 });
 test('retry-after ignores invalid dates, floors past dates and caps server delays',async()=>{
- for(const [header,want] of [['nonsense',undefined],['Thu, 01 Jan 1970 00:00:00 GMT',0],['0',0],['999999999',60000]] as const){
+ for(const [header,want] of [['nonsense',undefined],['1.5',undefined],['foo 5',undefined],['-3',undefined],['Thu, 01 Jan 1970 00:00:00 GMT',0],['0',0],['999999999',60000]] as const){
   const e=await failure({status:503,headers:{'retry-after':header}});assert.deepEqual([e.kind,e.retryable,e.retryAfterMs],['server',true,want]);
  }
 });
@@ -131,7 +131,7 @@ test('all redirect statuses are refused without sending the key to the target',a
  }assert.equal(target.requests.length,0);}finally{await target.close();}
 });
 test('the base URL setting rejects fragments and credentials and normalizes one trailing slash',()=>{
- for(const bad of ['https://api.test/v1#secret','https://user@api.test/v1','http://localhost.example.test/v1','http://[::1]/v1'])assert.throws(()=>openAiBaseUrl({CLOUD_OPENAI_BASE_URL:bad}));
+ for(const bad of ['https://api.test/v1#secret','https://api.test/v1#','https://api.test/v1?','https://user@api.test/v1','http://localhost.example.test/v1','http://[::1]/v1'])assert.throws(()=>openAiBaseUrl({CLOUD_OPENAI_BASE_URL:bad}));
  assert.equal(openAiBaseUrl({CLOUD_OPENAI_BASE_URL:'http://localhost:4000/v1/'}),'http://localhost:4000/v1');
  assert.equal(openAiBaseUrl({CLOUD_OPENAI_BASE_URL:'https://api.test/v1/'}),'https://api.test/v1');
 });
@@ -151,8 +151,9 @@ test('a caller abort while reading the response stays a retryable network error'
  try{await assert.rejects(createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}).respond(call,controller.signal),(e:unknown)=>e instanceof ProviderError&&e.kind==='network'&&e.retryable);}finally{await fake.close();}
 });
 test('the size bound cancels an unfinished response as soon as it exceeds the bound',async()=>{
- const fake=await streaming(res=>{res.writeHead(200);res.write('x'.repeat(1001));});
- try{await assert.rejects(createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,maxResponseBytes:1000,timeoutMs:500}).respond(call),(e:unknown)=>e instanceof ProviderError&&e.kind==='malformed');}finally{await fake.close();}
+ let resolveClosed!:()=>void;const closed=new Promise<void>(resolve=>{resolveClosed=resolve;});
+ const fake=await streaming(res=>{res.once('close',resolveClosed);res.writeHead(200);res.write('x'.repeat(1001));});
+ try{await assert.rejects(createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,maxResponseBytes:1000,timeoutMs:500}).respond(call),(e:unknown)=>e instanceof ProviderError&&e.kind==='malformed');await Promise.race([closed,new Promise<never>((_resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('response connection retained')),300);timer.unref();})]);}finally{await fake.close();}
 });
 test('a broken response stream becomes a sanitized network error',async()=>{
  const fake=await streaming(res=>{res.writeHead(200,{'content-length':'1000',connection:'close'});res.write('PRIVATE-NAME');res.end();});
@@ -166,7 +167,7 @@ test('fake helpers accept actual assembled prompts through the HTTP client',asyn
   const first=await client.respond({instructions:firstPassInstructions(job),input:firstPassInput(job,job.items),effort:'low'});
   assert.deepEqual(JSON.parse(first.text),{products:[{id:'p01',ca:'OLIVES [ca]',es:'OLIVES [es]',en:'OLIVES [en]',placeholder:false,corrections:[]}]});
   assert.deepEqual([first.inputTokens,first.outputTokens],[2,3]);
-  assert.deepEqual(await client.respond({instructions:reviewInstructions(job),input:'Names:\n[]',effort:'medium'}),{text:'{"changes": []}',inputTokens:4,outputTokens:5});
+  assert.deepEqual(await client.respond({instructions:reviewInstructions(job),input:reviewInput(job,job.items,checkFirstPass(job,job.items,first.text))!,effort:'medium'}),{text:'{"changes": []}',inputTokens:4,outputTokens:5});
  }finally{await fake.close();}
 });
 test('the fake server refuses malformed requests without an unhandled rejection',async()=>{
@@ -174,5 +175,33 @@ test('the fake server refuses malformed requests without an unhandled rejection'
  try{
   const response=await fetch(fake.baseUrl+'/responses',{method:'POST',body:'not json',signal:AbortSignal.timeout(200)});
   assert.equal(response.status,400);assert.equal(fake.requests.length,0);
+ }finally{await fake.close();}
+});
+
+test('an HTTP error cancels its unread response connection',async()=>{
+ let resolveClosed!:()=>void;const closed=new Promise<void>(resolve=>{resolveClosed=resolve;});
+ const fake=await streaming(res=>{res.once('close',resolveClosed);res.writeHead(401);res.write('PRIVATE-NAME');});
+ try{
+  await assert.rejects(createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:5000}).respond(call),(e:unknown)=>e instanceof ProviderError&&e.kind==='refused');
+  await Promise.race([closed,new Promise<never>((_resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('error connection retained')),300);timer.unref();})]);
+ }finally{await fake.close();}
+});
+test('default requests receive a 120-second timeout and explicit limits override it',async t=>{
+ const requested:number[]=[],timeout=AbortSignal.timeout;
+ t.mock.method(AbortSignal,'timeout',(ms:number)=>{requested.push(ms);return timeout(ms);});
+ const fake=await startFakeOpenAi(()=>({json:responsesBody('x')}));
+ try{
+  await createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}).respond(call);
+  await createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:5000}).respond(call);
+  assert.deepEqual(requested,[120000,5000]);
+ }finally{await fake.close();}
+});
+test('the default response bound admits exactly 4 MiB and refuses the next byte',async()=>{
+ const limit=4194304,body=responsesBody(''),overhead=Buffer.byteLength(JSON.stringify(body));let extra=0;
+ const fake=await startFakeOpenAi(()=>({json:responsesBody('x'.repeat(limit-overhead+extra))}));
+ try{
+  const client=createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl});
+  assert.equal((await client.respond(call)).text.length,limit-overhead);extra=1;
+  await assert.rejects(client.respond(call),(e:unknown)=>e instanceof ProviderError&&e.kind==='malformed');
  }finally{await fake.close();}
 });

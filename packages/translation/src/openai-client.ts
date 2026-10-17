@@ -16,12 +16,14 @@ export function openAiBaseUrl(env:NodeJS.ProcessEnv):string{
  if(value===undefined||value==='')return defaultBaseUrl;
  let url:URL;try{url=new URL(value);}catch{throw new Error('invalid_openai_base_url');}
  const loopback=url.protocol==='http:'&&(url.hostname==='127.0.0.1'||url.hostname==='localhost');
- if((url.protocol!=='https:'&&!loopback)||url.username||url.password||url.search||url.hash)throw new Error('invalid_openai_base_url');
+ if((url.protocol!=='https:'&&!loopback)||url.username||url.password||value.includes('?')||value.includes('#'))throw new Error('invalid_openai_base_url');
  return value.replace(/\/$/,'');
 }
 function retryAfter(value:string|null):number|undefined{
  if(value===null)return undefined;
- const text=value.trim(),ms=/^\d+$/.test(text)?Number(text)*1000:Date.parse(text)-Date.now();
+ const text=value.trim(),date=Date.parse(text);
+ // Date.parse accepts non-date strings that must not replace the retry backoff.
+ const ms=/^\d+$/.test(text)?Number(text)*1000:new Date(date).toUTCString()===text?date-Date.now():NaN;
  return Number.isFinite(ms)?Math.min(60000,Math.max(0,ms)):undefined;
 }
 function stopped(error:unknown):ProviderError{

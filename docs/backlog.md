@@ -310,7 +310,9 @@ pinned model and effort, `store: false`, redirects refused, timeout and caller c
 4 MiB response sizing, token validation, retry hints and sanitized errors. Valid token counts
 survive unusable replies so spending checks can account for them. HTTP errors are classified
 before their bodies are read, so an oversized refusal cannot become retryable. The fake provider
-accepts the actual assembled first-pass and review prompts. No real provider request or quality
+accepts the actual assembled first-pass and review prompts. Retry hints reject malformed dates;
+base URLs reject even empty query and fragment delimiters. Connection-close checks protect
+both response cancellation paths, and real HTTP checks pin the default byte limit. No real provider request or quality
 measurement is part of these checks.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
@@ -331,6 +333,8 @@ Remaining work:
   refuses the unknown/non-language probe inputs and normalizes ordinary regional variants,
   but direct signed input still needs a policy decision before activation. Preserve the
   approved accepted-tag set until that contract decision; claim no complete recognition gate.
+  Before wiring the worker, validate keys that cannot form an HTTP authorization header;
+  a local newline-key probe currently becomes a retryable network error before sending.
   Before Task 8 persists provider results, resolve JSONB's refusal of NUL and lone surrogates
   without silently altering accepted names or corrections. The Task 3 PostgreSQL multi-page
   test initially reproduced `22P05` for NUL; its database fixture uses U+0001, while pure page
