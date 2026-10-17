@@ -2182,7 +2182,7 @@ git commit -s -m "Run translation jobs in a worker: lease a job, send up to four
 - Consumes: `TranslationWorker` (Task 8); `createOpenAiClient`, `openAiBaseUrl` (Task 6); `migrationNames`, `runWorkerLoop` from `@waitron-cloud/registration`.
 - Produces: the command `node packages/translation/src/worker-cli.ts [--once]`, needing `DATABASE_URL` and `CLOUD_OPENAI_API_KEY`, optional `CLOUD_OPENAI_BASE_URL`. Any failure prints exactly `Translation worker failed; check database, migrations and provider configuration` on stderr and exits 1; SIGTERM or SIGINT stops it cleanly with exit 0. Task 18 adds the retention sweep to it.
 
-- [ ] **Step 1: Write the failing command tests**
+- [x] **Step 1: Write the failing command tests**
 
 `test/worker-cli.test.ts` spawns the command the way `packages/account-http/test/server.test.ts:133-147` spawns the account server:
 
@@ -2256,7 +2256,7 @@ test('SIGTERM during a provider call exits 0, saves nothing and hands the lease 
 
 Run: `node scripts/test-postgres.mjs exec pnpm --dir packages/translation exec node --test --test-timeout=60000 test/worker-cli.test.ts` and watch it fail (the command does not exist).
 
-- [ ] **Step 2: Write `src/worker-cli.ts`**
+- [x] **Step 2: Write `src/worker-cli.ts`**
 
 Shaped like `packages/registration/src/email-worker-cli.ts`:
 
@@ -2293,9 +2293,9 @@ Two jobs side by side at four batches each is at most eight provider calls at on
 
 Add the two `package.json` scripts named in **Files**.
 
-- [ ] **Step 3: Run the command tests and watch them pass.** Same command as Step 1; expected: 4 passing.
+- [x] **Step 3: Run the command tests and watch them pass.** Same command as Step 1; expected: 16 passing, including header validation, idle signals and two-job concurrency.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add packages/translation package.json
