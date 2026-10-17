@@ -881,7 +881,11 @@ notifications separately.
   `node scripts/test-postgres.mjs exec pnpm --dir packages/registration test`
   emitted failures and left its sole `relay-control.test.ts` child alive for more
   than nine minutes despite the 30-second test timeout. The driver stopped that
-  recorded child; this is an interrupted failed run, with no established cause.
+  recorded child. An isolated run of the same command on landed base
+  `f56b4c8595ed3cb81d0931352c0bac2880648e18` reproduces PostgreSQL
+  `out of shared memory` within seven seconds; it was stopped after that observed
+  failure. This proves a baseline resource failure, but not the cause of the
+  nine-minute child stall. Neither interrupted run is a pass.
   The review's default-concurrency account suite also emitted failures. Complete
   registration/account suites pass all 679/382 tests with two file workers on
   the corrected branch. Capture the full output of both default-concurrency commands,
