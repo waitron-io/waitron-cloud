@@ -12,11 +12,16 @@ export async function connectedVenue(db:Awaited<ReturnType<typeof database>>,iss
  const binding={operationId:randomUUID(),installationKey,localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  const registrations=new RegistrationStore(db.pool);await registrations.start(binding);await registrations.approveCloud(binding,owner.accountId);await registrations.approveLocal(binding,randomUUID());
  const installation=await registrations.complete(binding);
- function proof(action:string,body:unknown={},operationId=randomUUID(),lease?:SignedEnvelope,raw?:string,issuedAt=Date.now()):SignedEnvelope{
-  const payload=encodeMachine({origin,action:action as MachineAction,installationId:installation.installationId,operationId,issuedAt,lease:lease?JSON.stringify(lease):'',body:raw??JSON.stringify(body)});
+ function proof(action:string,body:unknown={},operationId=randomUUID(),lease?:SignedEnvelope,raw?:string,issuedAt=Date.now(),overrides:{origin?:string;installationId?:string;lease?:string}={}):SignedEnvelope{
+  const payload=encodeMachine({origin,action:action as MachineAction,installationId:installation.installationId,operationId,issuedAt,lease:lease?JSON.stringify(lease):'',body:raw??JSON.stringify(body),...overrides});
   return {payload:payload.toString('base64url'),signature:sign(null,payload,key.privateKey).toString('base64url')};
  }
  const lease=(await new InstallationStore(db.pool,issuer,origin).execute('renew',proof('renew'))).lease!;
  const submit=(job:string,operationId=randomUUID(),issuedAt=Date.now())=>({...proof('translation-submit',undefined,operationId,lease,JSON.stringify({version:1,...jobFingerprint(job)}),issuedAt),body:job});
  return {...owner,...installation,installationKey,lease,proof,submit};
+}
+
+export async function readyForTranslation(db:Awaited<ReturnType<typeof database>>,v:{installationId:string}){
+ await db.pool.query(`INSERT INTO installation_services(installation_id,service,state) VALUES($1,'content_translation','ready')
+  ON CONFLICT (installation_id,service) DO UPDATE SET state='ready'`,[v.installationId]);
 }
