@@ -517,6 +517,8 @@ deletions, failed saves and disabled controls without a grading store. Later sna
 preserve a save result; both initial snapshots are required, pending choices lock and a
 disconnected store cannot re-enable controls with a late update. These use a local
 controlled store; the external grading bridge and owner measurements remain unqualified.
+The new browser cases register through the original UI test entry point and keep its
+workspace test command unchanged, preserving historical receipt-fixture discovery.
 No real key or provider call is part of this implementation.
 
 Remaining work:
