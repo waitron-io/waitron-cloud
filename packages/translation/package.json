@@ -8,7 +8,9 @@
     "test": "node --test --test-timeout=30000 test/*.test.ts quality/*.test.ts",
     "worker": "node src/worker-cli.ts",
     "quality:test": "node --test --test-timeout=30000 quality/*.test.ts",
-    "quality:score": "node quality/scorer.ts"
+    "quality:score": "node quality/scorer.ts",
+    "quality:trial": "node quality/trial.ts",
+    "quality:grading": "node quality/build-grading.ts"
   },
   "dependencies": {
     "@waitron-cloud/registration": "workspace:*",

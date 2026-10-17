@@ -507,9 +507,19 @@ filtered submit order, atomic unchanged results, stable retries and release only
 is durably stored. A conservative singleton size calculation uses the existing 1 MiB job bound
 and preserves accepted language tags. Store-level sizing and HTTP serialization are tested; the real Waitron caller still needs joint proof.
 
+Task 21 adds the hand-run production-path trial and new-name grading page. Fake-provider
+checks cover usage, both passes, failed trials and strict command input; a failed review
+keeps diagnostic names but is refused as a successful quality run. The builder filters
+marked, shown, given and placeholder names, keeps run provenance, and escapes embedded
+text. Its separate maintained template preserves the original experiment assets.
+Chromium checks cover English/Spanish, light/dark, phone/desktop, exact mark writes and
+deletions, failed saves and disabled controls without a grading store. These use a local
+controlled store; the external grading bridge and owner measurements remain unqualified.
+No real key or provider call is part of this implementation.
+
 Remaining work:
 
-- **Cloud implementation:** implement and test Task 21 with the paging amendment's
+- **Cloud qualification:** Tasks 1–21 are implemented, including the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Complete lock-order qualification across worker, release and installation revocation. The
