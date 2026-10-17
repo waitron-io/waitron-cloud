@@ -305,6 +305,13 @@ and duplicate outcomes, name and correction bounds, placeholders, context omissi
 changes limited to missing names. Malformed review entries are dropped and counted without
 interrupting valid changes. Venue-entered names remain unchanged; spelling corrections stay
 suggestions. These are offline checks, not a measurement of translation quality.
+Task 6 adds the OpenAI Responses client and a local fake provider. Real HTTP checks cover the
+pinned model and effort, `store: false`, redirects refused, timeout and caller cancellation,
+4 MiB response sizing, token validation, retry hints and sanitized errors. Valid token counts
+survive unusable replies so spending checks can account for them. HTTP errors are classified
+before their bodies are read, so an oversized refusal cannot become retryable. The fake provider
+accepts the actual assembled first-pass and review prompts. No real provider request or quality
+measurement is part of these checks.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies
@@ -315,7 +322,7 @@ and preserves accepted language tags. Store-level page sizing is tested; HTTP se
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 6–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 7–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Before enabling submit, jointly qualify language recognition and canonical duplicates. The
