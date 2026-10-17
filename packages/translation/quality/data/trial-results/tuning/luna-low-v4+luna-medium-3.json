@@ -1,0 +1,536 @@
+{
+ "config": "luna-low-v4+luna-medium",
+ "repeat": 3,
+ "base_usage": {
+  "input": 2011,
+  "output": 2155
+ },
+ "base_seconds": 20.472841208800673,
+ "probe": {
+  "usage": {
+   "input": 0,
+   "output": 0
+  }
+ },
+ "names": {
+  "p01": {
+   "id": "p01",
+   "ca": "Hamburguesa amb patates fregides",
+   "es": "Hamburguesa con patatas fritas",
+   "en": "Burger with fries",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p02": {
+   "id": "p02",
+   "ca": "Entrepà de pulled pork amb patates fregides",
+   "es": "Bocadillo de pulled pork con patatas fritas",
+   "en": "Pulled pork sandwich with fries",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p03": {
+   "id": "p03",
+   "ca": "Entrepà de coliflor",
+   "es": "Bocadillo de coliflor",
+   "en": "Cauliflower sandwich",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p04": {
+   "id": "p04",
+   "ca": "Entrepà de calamars",
+   "es": "Bocadillo de calamares",
+   "en": "Calamari sandwich",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p05": {
+   "id": "p05",
+   "ca": "Rotllets de salsitxa",
+   "es": "Rollitos de salchicha",
+   "en": "Sausage rolls",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "internal",
+     "wrong": "SALCHICCA",
+     "right": "SALCHICHA"
+    }
+   ]
+  },
+  "p06": {
+   "id": "p06",
+   "ca": "Gildes",
+   "es": "Gildas",
+   "en": "Gildas",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "internal",
+     "wrong": "GUILDAS",
+     "right": "GILDAS"
+    }
+   ]
+  },
+  "p07": {
+   "id": "p07",
+   "ca": "Mandonguilles",
+   "es": "Albóndigas",
+   "en": "Meatballs",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p08": {
+   "id": "p08",
+   "ca": "Pollastre a l’ast per emportar",
+   "es": "Pollo a l’ast para llevar",
+   "en": "Rotisserie chicken to take away",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p09": {
+   "id": "p09",
+   "ca": "Arròs amb llet i festucs",
+   "es": "Arroz con leche y pistachos",
+   "en": "Rice pudding with pistachios",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p10": {
+   "id": "p10",
+   "ca": "Bunyols de formatge",
+   "es": "Buñuelos de queso",
+   "en": "Cheese fritters",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p11": {
+   "id": "p11",
+   "ca": "Torrada d’alvocat",
+   "es": "Tostada de aguacate",
+   "en": "Avo on toast",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p12": {
+   "id": "p12",
+   "ca": "Panet d’esmorzar",
+   "es": "Panecillo de desayuno",
+   "en": "Brekkie roll",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p13": {
+   "id": "p13",
+   "ca": "Bol de smoothie",
+   "es": "Bol de smoothie",
+   "en": "Smoothie bowl",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "internal",
+     "wrong": "SMOOTIE",
+     "right": "SMOOTHIE"
+    }
+   ]
+  },
+  "p14": {
+   "id": "p14",
+   "ca": "Entranya",
+   "es": "Entraña",
+   "en": "Skirt steak",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p15": {
+   "id": "p15",
+   "ca": "Rotllets nem vegetals",
+   "es": "Rollitos nem vegetales",
+   "en": "Vegetable nem rolls",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p16": {
+   "id": "p16",
+   "ca": "Biquini",
+   "es": "Bikini",
+   "en": "Ham and cheese toastie",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p17": {
+   "id": "p17",
+   "ca": "",
+   "es": "",
+   "en": "",
+   "placeholder": true,
+   "corrections": []
+  },
+  "p18": {
+   "id": "p18",
+   "ca": "",
+   "es": "",
+   "en": "",
+   "placeholder": true,
+   "corrections": []
+  },
+  "p19": {
+   "id": "p19",
+   "ca": "Estrella Galicia 33 cl",
+   "es": "Estrella Galicia 33 cl",
+   "en": "Estrella Galicia 33 cl",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p20": {
+   "id": "p20",
+   "ca": "Alhambra",
+   "es": "Alhambra",
+   "en": "Alhambra",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "internal",
+     "wrong": "ALAMBRA",
+     "right": "ALHAMBRA"
+    }
+   ]
+  },
+  "p21": {
+   "id": "p21",
+   "ca": "Hennessy",
+   "es": "Hennessy",
+   "en": "Hennessy",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "internal",
+     "wrong": "HENNESSEY",
+     "right": "HENNESSY"
+    }
+   ]
+  },
+  "p22": {
+   "id": "p22",
+   "ca": "Zurito",
+   "es": "Zurito",
+   "en": "Small beer",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p23": {
+   "id": "p23",
+   "ca": "Cervesa en llauna",
+   "es": "Cerveza en lata",
+   "en": "Canned beer",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "internal",
+     "wrong": "CERVESA",
+     "right": "CERVEZA"
+    }
+   ]
+  },
+  "p24": {
+   "id": "p24",
+   "ca": "Hot toddy",
+   "es": "Hot toddy",
+   "en": "Hot toddy",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "internal",
+     "wrong": "TOTTY",
+     "right": "TODDY"
+    }
+   ]
+  },
+  "p25": {
+   "id": "p25",
+   "ca": "Negroni sbagliato",
+   "es": "Negroni sbagliato",
+   "en": "Negroni sbagliato",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p26": {
+   "id": "p26",
+   "ca": "Té de rooibos",
+   "es": "Té rooibos",
+   "en": "Rooibos tea",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "internal",
+     "wrong": "ROOBIOS",
+     "right": "ROOIBOS"
+    }
+   ]
+  },
+  "p27": {
+   "id": "p27",
+   "ca": "Ous trencats amb xoriço",
+   "es": "Huevos rotos con chorizo",
+   "en": "Broken eggs with chorizo",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p28": {
+   "id": "p28",
+   "ca": "Pa amb tomàquet",
+   "es": "Pan con tomate",
+   "en": "Toasted bread rubbed with tomato and olive oil",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p29": {
+   "id": "p29",
+   "ca": "Croquetes de vedella rostida",
+   "es": "Croqueta de ternera asada",
+   "en": "Roast beef croquette",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p30": {
+   "id": "p30",
+   "ca": "Escalivada de pebrot i albergínia rostits per emportar",
+   "es": "Escalivada de pimiento y berenjena asados, para llevar",
+   "en": "Roasted pepper and aubergine escalivada to take away",
+   "placeholder": false,
+   "corrections": []
+  },
+  "p31": {
+   "id": "p31",
+   "ca": "Amanida Cèsar",
+   "es": "Ensalada César",
+   "en": "Cesar salad",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "internal",
+     "wrong": "CESAR",
+     "right": "CAESAR"
+    },
+    {
+     "field": "en",
+     "wrong": "Cesar",
+     "right": "Caesar"
+    }
+   ]
+  },
+  "p32": {
+   "id": "p32",
+   "ca": "Pastís de llimona",
+   "es": "Tarta de limon",
+   "en": "Lemon tart",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "es",
+     "wrong": "limon",
+     "right": "limón"
+    }
+   ]
+  }
+ },
+ "changes": [
+  {
+   "id": "p08",
+   "language": "en",
+   "name": "Rotisserie chicken to take away",
+   "reason": "The original wording is awkward; this is the natural menu phrasing and preserves the takeaway option."
+  },
+  {
+   "id": "p12",
+   "language": "ca",
+   "name": "Panet d’esmorzar",
+   "reason": "“Entrepà d’esmorzar” is an awkward calque and does not convey the breakfast roll."
+  },
+  {
+   "id": "p12",
+   "language": "es",
+   "name": "Panecillo de desayuno",
+   "reason": "“Bocadillo de desayuno” is an awkward calque; “panecillo” conveys the roll."
+  },
+  {
+   "id": "p13",
+   "language": "ca",
+   "name": "Bol de smoothie",
+   "reason": "“Bol de batut” sounds like a bowl of drink rather than the familiar smoothie-bowl dish."
+  },
+  {
+   "id": "p13",
+   "language": "es",
+   "name": "Bol de smoothie",
+   "reason": "“Bol de batido” sounds like a bowl of drink rather than the familiar smoothie-bowl dish."
+  },
+  {
+   "id": "p26",
+   "language": "ca",
+   "name": "Té de rooibos",
+   "reason": "The Catalan word for tea requires an accent: “té”."
+  },
+  {
+   "id": "p30",
+   "language": "en",
+   "name": "Roasted pepper and aubergine escalivada to take away",
+   "reason": "“Takeaway” is awkwardly tacked onto the dish name; “to take away” is natural and retains the takeaway option."
+  }
+ ],
+ "applied": 7,
+ "review_usage": {
+  "input": 2631,
+  "output": 2331
+ },
+ "review_seconds": 24.735899791121483,
+ "problems": [],
+ "checks": [
+  {
+   "id": "p03",
+   "label": "cauliflower typo corrected",
+   "passed": true
+  },
+  {
+   "id": "p05",
+   "label": "sausage typo understood",
+   "passed": true
+  },
+  {
+   "id": "p06",
+   "label": "gilda recognised",
+   "passed": true
+  },
+  {
+   "id": "p08",
+   "label": "takeaway said in each language",
+   "passed": true
+  },
+  {
+   "id": "p13",
+   "label": "smoothie typo corrected",
+   "passed": true
+  },
+  {
+   "id": "p16",
+   "label": "bikini not read as swimwear",
+   "passed": true
+  },
+  {
+   "id": "p17",
+   "label": "price dropped",
+   "passed": true
+  },
+  {
+   "id": "p17",
+   "label": "price flagged",
+   "passed": true
+  },
+  {
+   "id": "p18",
+   "label": "price dropped",
+   "passed": true
+  },
+  {
+   "id": "p18",
+   "label": "price flagged",
+   "passed": true
+  },
+  {
+   "id": "p19",
+   "label": "brand spelled Estrella Galicia",
+   "passed": true
+  },
+  {
+   "id": "p20",
+   "label": "brand spelled Alhambra",
+   "passed": true
+  },
+  {
+   "id": "p21",
+   "label": "brand spelled Hennessy",
+   "passed": true
+  },
+  {
+   "id": "p24",
+   "label": "toddy typo corrected",
+   "passed": true
+  },
+  {
+   "id": "p26",
+   "label": "rooibos typo corrected",
+   "passed": true
+  },
+  {
+   "id": "p27",
+   "label": "given English kept",
+   "passed": true
+  },
+  {
+   "id": "p27",
+   "label": "chorizo carried from English",
+   "passed": true
+  },
+  {
+   "id": "p28",
+   "label": "given English kept",
+   "passed": true
+  },
+  {
+   "id": "p28",
+   "label": "olive oil carried from English",
+   "passed": false
+  },
+  {
+   "id": "p29",
+   "label": "given Catalan kept",
+   "passed": true
+  },
+  {
+   "id": "p29",
+   "label": "roast carried from Catalan",
+   "passed": true
+  },
+  {
+   "id": "p30",
+   "label": "given Spanish kept",
+   "passed": true
+  },
+  {
+   "id": "p30",
+   "label": "peppers carried from Spanish",
+   "passed": true
+  },
+  {
+   "id": "p31",
+   "label": "given English kept",
+   "passed": true
+  },
+  {
+   "id": "p31",
+   "label": "Caesar suggested for the given English",
+   "passed": true
+  },
+  {
+   "id": "p32",
+   "label": "given Spanish kept",
+   "passed": true
+  },
+  {
+   "id": "p32",
+   "label": "limón suggested for the given Spanish",
+   "passed": true
+  },
+  {
+   "id": "p22",
+   "label": "Zurito listed as an internal fix",
+   "passed": false
+  },
+  {
+   "id": "p30",
+   "label": "takeaway carried from Spanish",
+   "passed": true
+  }
+ ]
+}

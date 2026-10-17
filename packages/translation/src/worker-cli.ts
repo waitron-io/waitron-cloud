@@ -12,6 +12,8 @@ async function sweepUntilReady(){
  while(!stop.signal.aborted){
   try{await sweepTranslationJobs(pool!);return;}
   catch{
+   // A fatal client failure has already stopped retries and reported the outcome.
+   if(failed)return;
    console.error('Translation worker cleanup failed; retrying');
    try{await delay(60000,undefined,{signal:stop.signal});}catch(error){if(!stop.signal.aborted)throw error;}
   }

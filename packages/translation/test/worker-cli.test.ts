@@ -222,3 +222,18 @@ test('a failed pass logs one fixed retry line and keeps its lease until expiry',
    [{state:'running',lease_count:1,held:true}]);
  }finally{await run.dispose();await db.pool.query('ALTER TABLE unavailable_private_bodies RENAME TO translation_job_bodies');}
 });
+
+test('a fatal client error during cleanup prints only the fatal line',async()=>{
+ const pgUrl=new URL('../node_modules/pg/lib/index.js',import.meta.url).href;
+ const preload=`import pg from ${JSON.stringify(pgUrl)};
+  const query=pg.Client.prototype.query;
+  pg.Client.prototype.query=function(...args){
+   if(typeof args[0]==='string'&&args[0].includes('SELECT id FROM translation_jobs')){
+    this.emit('error',new Error('SENTINEL private client failure during cleanup'));
+    return Promise.reject(new Error('SENTINEL private cleanup rejection'));
+   }
+   return query.apply(this,args);
+  };`;
+ const out=await command([],{},['--import','data:text/javascript;base64,'+Buffer.from(preload).toString('base64')]).exited;
+ assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);
+});

@@ -69,6 +69,7 @@ headers do not enter diagnostics:
 - `Translation worker pass failed; retrying`
 - `Translation worker cleanup failed; retrying`
 
+After a fatal database-client error, interrupted cleanup adds no retry message.
 Database connection errors use the first message too. The enabled account server reports
 scheduled cleanup failure as `Account server translation cleanup failed`. Inspect configuration, migrations
 and local service availability without logging request or provider response bodies.
@@ -81,6 +82,39 @@ Run the full package suite against disposable PostgreSQL and local fake provider
 node scripts/test-postgres.mjs --filter @waitron-cloud/translation test
 ```
 
-CI selects this package through workspace discovery and source consumers. Quality trials
-are separate from `test/*.test.ts`; owner Tasks 22–24 require the real key and remain
-owner-run after 2 November 2026.
+CI selects this package through workspace discovery and source consumers. Its ordinary test
+command includes the offline scorer tests in `quality/`; these never call a provider.
+
+## Score the recorded trial
+
+You can reproduce the owner's 14 October grades without a key. From `packages/translation`, run:
+
+```sh
+pnpm quality:test
+pnpm quality:score --set tuning quality/data/trial-results/tuning/*.json
+pnpm quality:score --set blind quality/data/trial-results/blind/*.json
+```
+
+The total rows are `| total | 252 | 2% | 4% | 6% | 0 |` for tuning and
+`| total | 243 | 2% | 2% | 5% | 0 |` for blind. Columns show written names, needs work,
+wrong, their combined marked share, and ungraded names. Given names kept unchanged do
+not count. An unmarked name counts as accepted only when the owner was shown that exact
+product, language and text. A new name is listed as ungraded so a prompt change cannot
+appear to improve quality merely by producing unseen text.
+
+Result files contain a JSON object with a `names` map keyed by product id. The scorer trims
+written text and compares only Catalan, Spanish and English, matching these recorded sets.
+It prints menu text locally for grading; it is not a production worker diagnostic.
+The command refuses errored runs, reported failures, wrong-set ids, non-text names,
+empty scores and repeated files. It validates every file before printing a table.
+For partial results it names the missing products and languages on standard error;
+percentages still cover only the names actually written. They do not establish complete
+coverage or a release-quality pass. Whole-number percentages round exact halves up,
+as the approved port specifies; the original Python formatter rounded ties to even.
+Keep new results under the ignored `quality/results/` directory.
+
+`quality/original/` and `quality/grading.template.html` preserve the experiment verbatim;
+do not run the archived Python scripts. Their paths, provider calls and grading-store
+integration belong to that experiment. The new trial runner and grading page remain Task 21.
+Fresh quality measurements, owner Tasks 22–24, require the real key and owner grading after
+2 November 2026. They remain release gates; rescoring old results does not satisfy them.

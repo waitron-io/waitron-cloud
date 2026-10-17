@@ -1,0 +1,253 @@
+<title>Menu Name Grading</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+/* Layout: one column of product cards; each card is the staff label on top, then three language columns that stack on a phone. */
+:root {
+  --bg: #f3f4f1;
+  --surface: #ffffff;
+  --ink: #1d221f;
+  --muted: #5c655f;
+  --line: #d9ddd6;
+  --accent: #1f5f4a;
+  --accent-soft: #e2eee8;
+  --warn: #8a5a00;
+  --warn-soft: #fbefd6;
+  --bad: #a3271f;
+  --bad-soft: #f9e1de;
+  --display: "Fraunces", Georgia, serif;
+  --body: "Atkinson Hyperlegible", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141816; --surface: #1c211e; --ink: #e7ebe7; --muted: #a0aaa3; --line: #323a35;
+  --accent: #7cc7a8; --accent-soft: #1f3a2f; --warn: #f0c060; --warn-soft: #3a2e14;
+  --bad: #f28b80; --bad-soft: #3d1f1c; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #141816; --surface: #1c211e; --ink: #e7ebe7; --muted: #a0aaa3; --line: #323a35;
+  --accent: #7cc7a8; --accent-soft: #1f3a2f; --warn: #f0c060; --warn-soft: #3a2e14;
+  --bad: #f28b80; --bad-soft: #3d1f1c; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 1rem; line-height: 1.5; }
+.wrap { max-width: 72rem; margin: 0 auto; padding-inline: 16px; padding-block: 1.5rem 4rem; display: grid; gap: 1.25rem; }
+h1 { font-family: var(--display); font-weight: 600; font-size: 2rem; line-height: 1.15; margin: 0; text-wrap: balance; }
+.intro { display: grid; gap: .5rem; max-width: 65ch; color: var(--muted); }
+.intro p { margin: 0; }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; align-items: center; padding-block: .6rem; }
+.bar .stat { font-variant-numeric: tabular-nums; }
+.bar .stat b { font-weight: 700; }
+.bar label { display: inline-flex; gap: .4rem; align-items: center; color: var(--muted); }
+#save-state { margin-left: auto; color: var(--muted); font-size: .875rem; }
+#save-state.off { color: var(--bad); }
+
+.product { background: var(--surface); border: 1px solid var(--line); border-radius: .5rem; display: grid; }
+.product.done { border-color: var(--accent); }
+.head { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: baseline; padding: .9rem 1rem; border-bottom: 1px solid var(--line); }
+.label { font-family: var(--mono); font-weight: 500; font-size: 1.05rem; letter-spacing: .02em; }
+.cat { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; }
+.given { flex-basis: 100%; font-size: .9rem; color: var(--muted); margin: 0; }
+.given q { color: var(--ink); }
+.done-toggle { margin-left: auto; }
+.langs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.lang.fixes { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); }
+.lang { padding: .75rem 1rem 1rem; display: grid; gap: .5rem; align-content: start; min-width: 0; }
+.lang + .lang { border-left: 1px solid var(--line); }
+.lang h3 { margin: 0; font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
+.name { display: grid; gap: .35rem; padding: .5rem .6rem; border-radius: .375rem; border: 1px solid transparent; }
+.name[data-v="fix"] { background: var(--warn-soft); border-color: var(--warn); }
+.name[data-v="wrong"] { background: var(--bad-soft); border-color: var(--bad); }
+.name .t { overflow-wrap: anywhere; }
+.badge { display: inline-block; margin-left: .4rem; font-size: .7rem; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0 .45rem; vertical-align: .1em; }
+.only-new .name:not(.is-new) { display: none; }
+.only-new .product:not(.has-new) { display: none; }
+.name[data-v="wrong"] .t { text-decoration: line-through; text-decoration-color: var(--bad); }
+.marks { display: flex; gap: .35rem; flex-wrap: wrap; }
+.none { color: var(--muted); font-size: .9rem; margin: 0; }
+button { font: inherit; font-size: .8rem; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted);
+  padding: .15rem .65rem; cursor: pointer; }
+button:hover { border-color: var(--ink); color: var(--ink); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[data-m="fix"][aria-pressed="true"] { background: var(--warn); border-color: var(--warn); color: var(--surface); }
+button[data-m="wrong"][aria-pressed="true"] { background: var(--bad); border-color: var(--bad); color: var(--surface); }
+button.done-toggle[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+button:disabled { opacity: .5; cursor: default; }
+.hide-done .product.done { display: none; }
+@media (max-width: 760px) {
+  .langs { grid-template-columns: minmax(0, 1fr); }
+  .lang + .lang { border-left: 0; border-top: 1px solid var(--line); }
+}
+@media (prefers-reduced-motion: no-preference) { .name { transition: background-color .15s, border-color .15s; } }
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <h1>Menu name grading</h1>
+    <p>Each card is one of Santet's products, shown by its internal name as staff see it. Under each language are the customer-facing names the models wrote for it, every distinct answer once, in a shuffled order and with the model hidden.</p>
+    <p>Names marked <b>New</b> come from the latest round; everything else you have already seen, and anything you left unmarked counts as good.</p>
+    <p>Leave a good name alone. Mark one <b>Needs work</b> if it is understandable but not how a menu should say it, or <b>Wrong</b> if it misleads a customer. Click a mark again to clear it. Mark a card done when you have read it all.</p>
+    <p>Some cards now list <b>suggested spelling corrections</b>: fixes the model proposes to the internal name, or to a name someone already entered (which it leaves unchanged). Mark a correction <b>Wrong</b> if it is not a real fix.</p>
+  </header>
+
+  <div class="bar" role="status">
+    <span class="stat"><b id="n-done">0</b> of <span id="n-products">0</span> products done</span>
+    <span class="stat"><b id="n-fix">0</b> need work · <b id="n-wrong">0</b> wrong</span>
+    <label><input type="checkbox" id="hide-done"> Hide finished products</label>
+    <label><input type="checkbox" id="only-new"> Show only new names (<span id="n-new">0</span>)</label>
+    <span id="save-state">Connecting…</span>
+  </div>
+
+  <main id="products"></main>
+</div>
+
+<script>
+const PRODUCTS = /*DATA*/[];
+const DONE = "done-/*ROUND*/";
+const LANG_NAMES = { ca: "Catalan (default)", es: "Spanish", en: "English" };
+const GIVEN_NAMES = { ca: "Catalan", es: "Spanish", en: "English" };
+const grades = new Map();
+const done = new Set();
+let db = null;
+
+const root = document.getElementById("products");
+root.style.display = "grid";
+root.style.gap = "1rem";
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") node.className = v; else if (k === "text") node.textContent = v; else node.setAttribute(k, v);
+  }
+  for (const c of children) node.append(c);
+  return node;
+}
+
+function nameRow(pid, lang, n) {
+  const label = el("span", { class: "t", text: n.t });
+  if (n.new) label.append(el("span", { class: "badge", text: "New" }));
+  const row = el("div", { class: n.new ? "name is-new" : "name", id: "n-" + n.k, "data-v": "" }, label);
+  const marks = el("div", { class: "marks" });
+  const choices = lang === "fix" ? [["wrong", "Wrong"]] : [["fix", "Needs work"], ["wrong", "Wrong"]];
+  for (const [m, text] of choices) {
+    const b = el("button", { type: "button", "data-m": m, "aria-pressed": "false", text });
+    b.addEventListener("click", () => mark(pid, lang, n, m));
+    marks.append(b);
+  }
+  row.append(marks);
+  return row;
+}
+
+for (const p of PRODUCTS) {
+  const head = el("div", { class: "head" },
+    el("span", { class: "label", text: p.internal }),
+    el("span", { class: "cat", text: p.category }));
+  const doneBtn = el("button", { class: "done-toggle", type: "button", "aria-pressed": "false", id: "done-" + p.id, text: "Mark done" });
+  doneBtn.addEventListener("click", () => toggleDone(p.id));
+  head.append(doneBtn);
+  for (const [lang, text] of Object.entries(p.given || {})) {
+    const g = el("p", { class: "given" }, `Given ${GIVEN_NAMES[lang]} name, which must be kept: `);
+    g.append(el("q", { text }));
+    head.append(g);
+  }
+  const langs = el("div", { class: "langs" });
+  for (const lang of ["ca", "es", "en"]) {
+    const col = el("section", { class: "lang" }, el("h3", { text: LANG_NAMES[lang] }));
+    const names = p.names[lang];
+    if (!names.length) col.append(el("p", { class: "none", text: p.given?.[lang] ? "Every model kept the given name." : "No model wrote a name." }));
+    for (const n of names) col.append(nameRow(p.id, lang, n));
+    langs.append(col);
+  }
+  if (p.names.fix.length) {
+    const fixes = el("section", { class: "lang fixes" }, el("h3", { text: "Suggested spelling corrections" }));
+    for (const n of p.names.fix) fixes.append(nameRow(p.id, "fix", n));
+    langs.append(fixes);
+  }
+  const hasNew = ["ca", "es", "en", "fix"].some(lang => p.names[lang].some(n => n.new));
+  root.append(el("article", { class: hasNew ? "product has-new" : "product", id: "p-" + p.id }, head, langs));
+}
+document.getElementById("n-new").textContent = PRODUCTS.reduce((t, p) => t + ["ca", "es", "en", "fix"].reduce((u, l) => u + p.names[l].filter(n => n.new).length, 0), 0);
+const onlyNew = document.getElementById("only-new");
+onlyNew.addEventListener("change", () => document.body.classList.toggle("only-new", onlyNew.checked));
+document.getElementById("n-products").textContent = PRODUCTS.length;
+
+function paint() {
+  for (const p of PRODUCTS) for (const lang of ["ca", "es", "en", "fix"]) for (const n of p.names[lang]) {
+    const v = grades.get(n.k) || "";
+    const row = document.getElementById("n-" + n.k);
+    row.dataset.v = v;
+    for (const b of row.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.m === v));
+  }
+  for (const p of PRODUCTS) {
+    const isDone = done.has(p.id);
+    document.getElementById("p-" + p.id).classList.toggle("done", isDone);
+    const b = document.getElementById("done-" + p.id);
+    b.setAttribute("aria-pressed", String(isDone));
+    b.textContent = isDone ? "Done" : "Mark done";
+  }
+  const values = [...grades.values()];
+  document.getElementById("n-done").textContent = done.size;
+  document.getElementById("n-fix").textContent = values.filter(v => v === "fix").length;
+  document.getElementById("n-wrong").textContent = values.filter(v => v === "wrong").length;
+}
+
+function setSaveState(text, off = false) {
+  const s = document.getElementById("save-state");
+  s.textContent = text;
+  s.classList.toggle("off", off);
+}
+
+async function mark(pid, lang, n, m) {
+  if (!db) return;
+  const ref = db.collection("grades").doc(n.k);
+  const next = grades.get(n.k) === m ? "" : m;
+  try {
+    if (next) await ref.set({ pid, lang, text: n.t, verdict: next });
+    else await ref.delete();
+    setSaveState("Saved");
+  } catch (e) {
+    setSaveState("Not saved: " + (e.code === "invalid_argument" ? "you can view this page but not mark it." : "the store did not answer. Try again in a moment."), true);
+  }
+}
+
+async function toggleDone(pid) {
+  if (!db) return;
+  const ref = db.collection(DONE).doc(pid);
+  try {
+    if (done.has(pid)) await ref.delete(); else await ref.set({ done: true });
+    setSaveState("Saved");
+  } catch (e) {
+    setSaveState("Not saved: the store did not answer. Try again in a moment.", true);
+  }
+}
+
+const hide = document.getElementById("hide-done");
+try { hide.checked = localStorage.getItem("hide-done") === "1"; } catch {}
+document.body.classList.toggle("hide-done", hide.checked);
+hide.addEventListener("change", () => {
+  document.body.classList.toggle("hide-done", hide.checked);
+  try { localStorage.setItem("hide-done", hide.checked ? "1" : "0"); } catch {}
+});
+
+function disableMarks(text) {
+  for (const b of document.querySelectorAll("button")) b.disabled = true;
+  setSaveState(text, true);
+}
+
+(async () => {
+  db = window.claude ? await window.claude.use("db") : null;
+  if (!db) return disableMarks("Marks can't be saved in this view; open the page on claude.ai signed in.");
+  setSaveState("Marks save as you click");
+  db.collection("grades").onSnapshot(snap => {
+    grades.clear();
+    for (const d of snap.docs) grades.set(d.id, d.data().verdict);
+    paint();
+  }, () => disableMarks("The connection to the store ended; reload the page."));
+  db.collection(DONE).onSnapshot(snap => {
+    done.clear();
+    for (const d of snap.docs) done.add(d.id);
+    paint();
+  }, () => disableMarks("The connection to the store ended; reload the page."));
+})();
+</script>

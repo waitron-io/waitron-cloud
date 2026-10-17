@@ -1,0 +1,164 @@
+[
+ {
+  "id": "f01",
+  "internal": "FUET PLATE",
+  "category": "ALL DAY MENU"
+ },
+ {
+  "id": "f02",
+  "internal": "BOCATA DE BUTIFARRA",
+  "category": "ALL DAY MENU"
+ },
+ {
+  "id": "f03",
+  "internal": "HALLOUMI FRITOS",
+  "category": "NIGHT MENU & SHARERS"
+ },
+ {
+  "id": "f04",
+  "internal": "ALITAS",
+  "category": "NIGHT MENU & SHARERS"
+ },
+ {
+  "id": "f05",
+  "internal": "BOQUERONES",
+  "category": "NIGHT MENU & SHARERS"
+ },
+ {
+  "id": "f06",
+  "internal": "TUNA TARTAR",
+  "category": "NIGHT MENU & SHARERS"
+ },
+ {
+  "id": "f07",
+  "internal": "FRUTOS SECOS",
+  "category": "BAR TAPAS"
+ },
+ {
+  "id": "f08",
+  "internal": "TABLA DE QUESOS Y ENCURTIDOS",
+  "category": "NIGHT MENU & SHARERS"
+ },
+ {
+  "id": "f09",
+  "internal": "KIBBE DE CARNE",
+  "category": "ALL DAY MENU"
+ },
+ {
+  "id": "f10",
+  "internal": "HUMMUS & TABOULE",
+  "category": "ALL DAY MENU"
+ },
+ {
+  "id": "f11",
+  "internal": "BAKLAVA + COFFEE",
+  "category": "COFFEE"
+ },
+ {
+  "id": "f12",
+  "internal": "ESTUFADO DE CIERVO",
+  "category": "ALL DAY MENU"
+ },
+ {
+  "id": "f13",
+  "internal": "MILANESA DE BERENJENA",
+  "category": "NIGHT MENU & SHARERS"
+ },
+ {
+  "id": "f14",
+  "internal": "1/4 POLLO Y PATATAS",
+  "category": "ALL DAY MENU"
+ },
+ {
+  "id": "f15",
+  "internal": "PAPAS AL HORNO TAKEAWAY",
+  "category": "CHICKEN SHOP"
+ },
+ {
+  "id": "f16",
+  "internal": "CARAJILLO",
+  "category": "COFFEE"
+ },
+ {
+  "id": "f17",
+  "internal": "MANZANILLA TEA",
+  "category": "COFFEE"
+ },
+ {
+  "id": "f18",
+  "internal": "ZUMO DE PIÑA",
+  "category": "NON ALCOHOL"
+ },
+ {
+  "id": "f19",
+  "internal": "SODA DE POMELO",
+  "category": "NON ALCOHOL"
+ },
+ {
+  "id": "f20",
+  "internal": "MAHOU TOSTADA 0%",
+  "category": "BOTTLED BEERS"
+ },
+ {
+  "id": "f21",
+  "internal": "LADRON CIDER",
+  "category": "BOTTLED BEERS"
+ },
+ {
+  "id": "f22",
+  "internal": "HAZY IPA 47CL",
+  "category": "BOTTLED BEERS"
+ },
+ {
+  "id": "f23",
+  "internal": "LEMON SCHWEPPS",
+  "category": "NON ALCOHOL"
+ },
+ {
+  "id": "f24",
+  "internal": "PANACOTTA",
+  "category": "ALL DAY MENU"
+ },
+ {
+  "id": "f25",
+  "internal": "SPECIAL 5.00",
+  "category": "COCKTAILS"
+ },
+ {
+  "id": "f26",
+  "internal": "DESSERT 4.00",
+  "category": "NIGHT MENU & SHARERS"
+ },
+ {
+  "id": "f27",
+  "internal": "CROQUETAS",
+  "category": "NIGHT MENU & SHARERS",
+  "existing": {
+   "ca": "Croquetes casolanes de pernil"
+  }
+ },
+ {
+  "id": "f28",
+  "internal": "LEMON PIE",
+  "category": "NIGHT MENU & SHARERS",
+  "existing": {
+   "es": "Tarta de limon y merengue"
+  }
+ },
+ {
+  "id": "f29",
+  "internal": "HOT CHOCOLATE",
+  "category": "COFFEE",
+  "existing": {
+   "en": "Hot chocolate with churos"
+  }
+ },
+ {
+  "id": "f30",
+  "internal": "CALAMARES FRITOS",
+  "category": "NIGHT MENU & SHARERS",
+  "existing": {
+   "en": "Fried squid rings with aioli"
+  }
+ }
+]

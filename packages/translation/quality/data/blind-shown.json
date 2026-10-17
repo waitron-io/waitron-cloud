@@ -1,0 +1,2171 @@
+{
+ "40e887903963ec7e": {
+  "pid": "f01",
+  "lang": "ca",
+  "text": "Plat de fuet",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "b7d27f6065c8b163": {
+  "pid": "f01",
+  "lang": "es",
+  "text": "Plato de fuet",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "458c35958f8c4931": {
+  "pid": "f01",
+  "lang": "en",
+  "text": "Fuet platter",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "52972454add8e908": {
+  "pid": "f02",
+  "lang": "ca",
+  "text": "Entrepà de botifarra",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "4536deca7e81c5d5": {
+  "pid": "f02",
+  "lang": "es",
+  "text": "Bocadillo de butifarra",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "4c83fe18451ad813": {
+  "pid": "f02",
+  "lang": "en",
+  "text": "Butifarra sandwich",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#3"
+  ]
+ },
+ "7abc0d0230f2d57f": {
+  "pid": "f03",
+  "lang": "ca",
+  "text": "Halloumi fregit",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "96871df2ca7cb6a5": {
+  "pid": "f03",
+  "lang": "es",
+  "text": "Halloumi frito",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "4258cd6408102a54": {
+  "pid": "f03",
+  "lang": "en",
+  "text": "Fried halloumi",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "cd4e90c3a4e5dc33": {
+  "pid": "f04",
+  "lang": "ca",
+  "text": "Aletes de pollastre",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "8086badcdde6153e": {
+  "pid": "f04",
+  "lang": "es",
+  "text": "Alitas de pollo",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "2e192e2d126ea292": {
+  "pid": "f04",
+  "lang": "en",
+  "text": "Chicken wings",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "03e805693496f44e": {
+  "pid": "f05",
+  "lang": "ca",
+  "text": "Seitons",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "5503f94831efc1ce": {
+  "pid": "f05",
+  "lang": "es",
+  "text": "Boquerones",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "6a765787451504bf": {
+  "pid": "f05",
+  "lang": "en",
+  "text": "Anchovies",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3"
+  ]
+ },
+ "0cad4918ead224ef": {
+  "pid": "f06",
+  "lang": "ca",
+  "text": "Tàrtar de tonyina",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "aa865b7b5c6a853f": {
+  "pid": "f06",
+  "lang": "es",
+  "text": "Tartar de atún",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "34e44cc62150a6f4": {
+  "pid": "f06",
+  "lang": "en",
+  "text": "Tuna tartare",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "b20e22a53aa26f11": {
+  "pid": "f07",
+  "lang": "ca",
+  "text": "Fruits secs",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "9d44398eb4d78a19": {
+  "pid": "f07",
+  "lang": "es",
+  "text": "Frutos secos",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "9600fe72ff455600": {
+  "pid": "f07",
+  "lang": "en",
+  "text": "Nuts",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2"
+  ]
+ },
+ "cdd43a622681bef5": {
+  "pid": "f08",
+  "lang": "ca",
+  "text": "Taula de formatges i envinagrats",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "e81aa14893008d72": {
+  "pid": "f08",
+  "lang": "es",
+  "text": "Tabla de quesos y encurtidos",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "086be8f4391bb8dc": {
+  "pid": "f08",
+  "lang": "en",
+  "text": "Cheese and pickles platter",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "26d5f44463bb0b66": {
+  "pid": "f09",
+  "lang": "ca",
+  "text": "Kibbeh de carn",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "5af6d772331a7efd": {
+  "pid": "f09",
+  "lang": "es",
+  "text": "Kibbeh de carne",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "1b77b5b0c199c625": {
+  "pid": "f09",
+  "lang": "en",
+  "text": "Meat kibbeh",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "ca9ac07c42db7b33": {
+  "pid": "f10",
+  "lang": "ca",
+  "text": "Hummus i tabulé",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "c23f2a19eaced3cc": {
+  "pid": "f10",
+  "lang": "es",
+  "text": "Hummus y tabulé",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "adb9bcc111bef466": {
+  "pid": "f10",
+  "lang": "en",
+  "text": "Hummus and tabbouleh",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "06a99fc68506e870": {
+  "pid": "f11",
+  "lang": "ca",
+  "text": "Baklava amb cafè",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#3"
+  ]
+ },
+ "6ddbd9c6b54aab24": {
+  "pid": "f11",
+  "lang": "es",
+  "text": "Baklava con café",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#3"
+  ]
+ },
+ "4226c2d271a0a916": {
+  "pid": "f11",
+  "lang": "en",
+  "text": "Baklava with coffee",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#3"
+  ]
+ },
+ "6c975de4147e4a0d": {
+  "pid": "f12",
+  "lang": "ca",
+  "text": "Estofat de cérvol",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "fdf2b4d37cecbd2c": {
+  "pid": "f12",
+  "lang": "es",
+  "text": "Estofado de ciervo",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "be7f8c6eb55a3d4e": {
+  "pid": "f12",
+  "lang": "en",
+  "text": "Venison stew",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "e782aa3b90412b23": {
+  "pid": "f13",
+  "lang": "ca",
+  "text": "Milanesa d’albergínia",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "1fe4432d09d366fe": {
+  "pid": "f13",
+  "lang": "es",
+  "text": "Milanesa de berenjena",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2"
+  ]
+ },
+ "55012ade2278e815": {
+  "pid": "f13",
+  "lang": "en",
+  "text": "Aubergine milanesa",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "0ea124e9b38678c5": {
+  "pid": "f14",
+  "lang": "ca",
+  "text": "¼ de pollastre amb patates",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "8fa5628500f702d4": {
+  "pid": "f14",
+  "lang": "es",
+  "text": "¼ de pollo con patatas",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "583d8d6892b26257": {
+  "pid": "f14",
+  "lang": "en",
+  "text": "¼ chicken with potatoes",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "a739a2b853c52ef3": {
+  "pid": "f15",
+  "lang": "ca",
+  "text": "Patates al forn per emportar",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "38a81a67f4682712": {
+  "pid": "f15",
+  "lang": "es",
+  "text": "Patatas al horno para llevar",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "6d6f57a03c666765": {
+  "pid": "f15",
+  "lang": "en",
+  "text": "Baked potatoes to take away",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "1048875836b6f17a": {
+  "pid": "f16",
+  "lang": "ca",
+  "text": "Cigaló",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "3d31b749ddea3983": {
+  "pid": "f16",
+  "lang": "es",
+  "text": "Carajillo",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "b8adf17793815910": {
+  "pid": "f16",
+  "lang": "en",
+  "text": "Coffee with liquor",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "ef1837eb862d68f3": {
+  "pid": "f17",
+  "lang": "ca",
+  "text": "Te de camamilla",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "0a6d8194b1c53da2": {
+  "pid": "f17",
+  "lang": "es",
+  "text": "Té de manzanilla",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "5c49dab385f44fe1": {
+  "pid": "f17",
+  "lang": "en",
+  "text": "Chamomile tea",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "fdeb933b532c16cb": {
+  "pid": "f18",
+  "lang": "ca",
+  "text": "Suc de pinya",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "d3093382b1a9ddb2": {
+  "pid": "f18",
+  "lang": "es",
+  "text": "Zumo de piña",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "49b3f29f6d390400": {
+  "pid": "f18",
+  "lang": "en",
+  "text": "Pineapple juice",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "155b943d67783d3a": {
+  "pid": "f19",
+  "lang": "ca",
+  "text": "Soda de pomelo",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2"
+  ]
+ },
+ "be2bb3d7dadd96c8": {
+  "pid": "f19",
+  "lang": "es",
+  "text": "Soda de pomelo",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#2"
+  ]
+ },
+ "3215c4654610e3e1": {
+  "pid": "f19",
+  "lang": "en",
+  "text": "Grapefruit soda",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "e39183ac517ed5a7": {
+  "pid": "f20",
+  "lang": "ca",
+  "text": "Mahou Tostada 0%",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "48bdd7c3569db4f3": {
+  "pid": "f20",
+  "lang": "es",
+  "text": "Mahou Tostada 0%",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "937768718956b626": {
+  "pid": "f20",
+  "lang": "en",
+  "text": "Mahou Tostada 0%",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "e271d1a585e14dfb": {
+  "pid": "f21",
+  "lang": "ca",
+  "text": "Sidra Ladrón",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#2"
+  ]
+ },
+ "0427e0d4e1ee850e": {
+  "pid": "f21",
+  "lang": "es",
+  "text": "Sidra Ladrón",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "5238a6b3e47d409f": {
+  "pid": "f21",
+  "lang": "en",
+  "text": "Ladrón cider",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "904ff24c9925ea0e": {
+  "pid": "f22",
+  "lang": "ca",
+  "text": "Hazy IPA",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#3"
+  ]
+ },
+ "7ca8d5c2e1a90d48": {
+  "pid": "f22",
+  "lang": "es",
+  "text": "Hazy IPA",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#3"
+  ]
+ },
+ "a2072c00d192233f": {
+  "pid": "f22",
+  "lang": "en",
+  "text": "Hazy IPA",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3"
+  ]
+ },
+ "53f34884000f158f": {
+  "pid": "f23",
+  "lang": "ca",
+  "text": "Schweppes de llimona",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "6198944345deacb4": {
+  "pid": "f23",
+  "lang": "es",
+  "text": "Schweppes de limón",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "a82a7862a08abad5": {
+  "pid": "f23",
+  "lang": "en",
+  "text": "Schweppes lemon",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2"
+  ]
+ },
+ "f45133f5964fe2cb": {
+  "pid": "f24",
+  "lang": "ca",
+  "text": "Panna cotta",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "b13b8f8e175cccb6": {
+  "pid": "f24",
+  "lang": "es",
+  "text": "Panna cotta",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "62df16a115026477": {
+  "pid": "f24",
+  "lang": "en",
+  "text": "Panna cotta",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "87f18c2b78f817d5": {
+  "pid": "f25",
+  "lang": "ca",
+  "text": "Especial",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3"
+  ]
+ },
+ "48a94281d273e4b8": {
+  "pid": "f25",
+  "lang": "es",
+  "text": "Especial",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3"
+  ]
+ },
+ "40ad5b0e3868c85b": {
+  "pid": "f25",
+  "lang": "en",
+  "text": "Special",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3"
+  ]
+ },
+ "acc9a33f749de22f": {
+  "pid": "f26",
+  "lang": "ca",
+  "text": "Postres",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "6818eac670473358": {
+  "pid": "f26",
+  "lang": "es",
+  "text": "Postre",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "15bc2f456d033695": {
+  "pid": "f26",
+  "lang": "en",
+  "text": "Dessert",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "5488810fd291bb15": {
+  "pid": "f27",
+  "lang": "ca",
+  "text": "Croquetes casolanes de pernil",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "f8a8d68b992b8a06": {
+  "pid": "f27",
+  "lang": "es",
+  "text": "Croquetas caseras de jamón",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "c25e2098f5795df1": {
+  "pid": "f27",
+  "lang": "en",
+  "text": "Homemade ham croquettes",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "d0d8c4a69f585de3": {
+  "pid": "f28",
+  "lang": "ca",
+  "text": "Tarta de llimona i merenga",
+  "runs": [
+   "luna-low-api#1"
+  ]
+ },
+ "816d28eabbd0d62a": {
+  "pid": "f28",
+  "lang": "es",
+  "text": "Tarta de limon y merengue",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "3ac69c9c4fc16028": {
+  "pid": "f28",
+  "lang": "en",
+  "text": "Lemon meringue pie",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "cf82f99aef2527ee": {
+  "pid": "f29",
+  "lang": "ca",
+  "text": "Xocolata calenta amb churos",
+  "runs": [
+   "luna-low-api#1"
+  ]
+ },
+ "86505e2b96be0b84": {
+  "pid": "f29",
+  "lang": "es",
+  "text": "Chocolate caliente con churos",
+  "runs": [
+   "luna-low-api#1"
+  ]
+ },
+ "0e253970d664ccee": {
+  "pid": "f29",
+  "lang": "en",
+  "text": "Hot chocolate with churos",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "1d56c4369e0a99bb": {
+  "pid": "f30",
+  "lang": "ca",
+  "text": "Anelles de calamar fregides amb allioli",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "f1ad295e6cff54a5": {
+  "pid": "f30",
+  "lang": "es",
+  "text": "Anillas de calamar fritas con alioli",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "6507b16e97e614b6": {
+  "pid": "f30",
+  "lang": "en",
+  "text": "Fried squid rings with aioli",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "77a7a456b827a055": {
+  "pid": "f08",
+  "lang": "en",
+  "text": "Cheese and pickles board",
+  "runs": [
+   "luna-low-api#2"
+  ]
+ },
+ "bc961fd1cfe2eb92": {
+  "pid": "f11",
+  "lang": "ca",
+  "text": "Baklava i cafè",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "901cb26aca6fe790": {
+  "pid": "f11",
+  "lang": "es",
+  "text": "Baklava y café",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "eead4c1d0016407b": {
+  "pid": "f11",
+  "lang": "en",
+  "text": "Baklava and coffee",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "d527a86cb3191c98": {
+  "pid": "f13",
+  "lang": "ca",
+  "text": "Milanesa d'albergínia",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2"
+  ]
+ },
+ "ad2ac87f40f0dcd8": {
+  "pid": "f14",
+  "lang": "ca",
+  "text": "Un quart de pollastre amb patates",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2"
+  ]
+ },
+ "73acca1d579bbca4": {
+  "pid": "f14",
+  "lang": "es",
+  "text": "Un cuarto de pollo con patatas",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2"
+  ]
+ },
+ "46c73405053ea12c": {
+  "pid": "f14",
+  "lang": "en",
+  "text": "Quarter chicken with potatoes",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2"
+  ]
+ },
+ "a52b8b982479dc32": {
+  "pid": "f15",
+  "lang": "ca",
+  "text": "Patates al forn",
+  "runs": [
+   "luna-low-api#2"
+  ]
+ },
+ "6f89d57010ec2ee6": {
+  "pid": "f15",
+  "lang": "es",
+  "text": "Patatas al horno",
+  "runs": [
+   "luna-low-api#2"
+  ]
+ },
+ "85b63fa6948ade4c": {
+  "pid": "f15",
+  "lang": "en",
+  "text": "Baked potatoes",
+  "runs": [
+   "luna-low-api#2"
+  ]
+ },
+ "e052e0bc130a5dd8": {
+  "pid": "f16",
+  "lang": "ca",
+  "text": "Carajillo",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "7a68f09ebf9e39bc": {
+  "pid": "f16",
+  "lang": "en",
+  "text": "Carajillo",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2"
+  ]
+ },
+ "2a991c686ecb55ba": {
+  "pid": "f22",
+  "lang": "ca",
+  "text": "Cervesa Hazy IPA",
+  "runs": [
+   "luna-low-api#2"
+  ]
+ },
+ "90122cf258cdf296": {
+  "pid": "f22",
+  "lang": "es",
+  "text": "Cerveza Hazy IPA",
+  "runs": [
+   "luna-low-api#2"
+  ]
+ },
+ "8b782c61ccabbcdd": {
+  "pid": "f28",
+  "lang": "ca",
+  "text": "Pastís de llimona i merenga",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "5de1a6718827183e": {
+  "pid": "f29",
+  "lang": "ca",
+  "text": "Xocolata calenta amb xurros",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "7aefea7533eafab6": {
+  "pid": "f29",
+  "lang": "es",
+  "text": "Chocolate caliente con churros",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "6e1ddc7e1fac2650": {
+  "pid": "f08",
+  "lang": "ca",
+  "text": "Taula de formatges i encurtits",
+  "runs": [
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#2"
+  ]
+ },
+ "c72574fb631a699d": {
+  "pid": "f08",
+  "lang": "en",
+  "text": "Cheese and pickle board",
+  "runs": [
+   "luna-low-api#3"
+  ]
+ },
+ "27a1ba5e978d8b0d": {
+  "pid": "f09",
+  "lang": "es",
+  "text": "Kibbe de carne",
+  "runs": [
+   "luna-low-api#3"
+  ]
+ },
+ "eaab881884826981": {
+  "pid": "f13",
+  "lang": "en",
+  "text": "Aubergine Milanese",
+  "runs": [
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#1"
+  ]
+ },
+ "78b573b8f8afa540": {
+  "pid": "f14",
+  "lang": "ca",
+  "text": "1/4 de pollastre amb patates",
+  "runs": [
+   "luna-low-api#3"
+  ]
+ },
+ "5c8f853f1869cfef": {
+  "pid": "f14",
+  "lang": "es",
+  "text": "1/4 de pollo con patatas",
+  "runs": [
+   "luna-low-api#3"
+  ]
+ },
+ "917b0aead0a6a8c0": {
+  "pid": "f19",
+  "lang": "ca",
+  "text": "Soda d'aranja",
+  "runs": [
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#2"
+  ]
+ },
+ "55a25c49302f63a2": {
+  "pid": "f23",
+  "lang": "en",
+  "text": "Schweppes Lemon",
+  "runs": [
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "6fb613ae37e51fc3": {
+  "pid": "f28",
+  "lang": "en",
+  "text": "Lemon and meringue pie",
+  "runs": [
+   "luna-low-api#3"
+  ]
+ },
+ "05bad5fd7a38ce1f": {
+  "pid": "f05",
+  "lang": "en",
+  "text": "Boquerones",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2"
+  ]
+ },
+ "5c6f99a4eb54cd5d": {
+  "pid": "f08",
+  "lang": "ca",
+  "text": "Taula de formatges i adobats",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "c08303cc73570a20": {
+  "pid": "f08",
+  "lang": "en",
+  "text": "Cheese and pickle platter",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "0e0a3d19d8114992": {
+  "pid": "f17",
+  "lang": "ca",
+  "text": "Tè de camamilla",
+  "runs": [
+   "luna-low-v4+luna-medium#1"
+  ]
+ },
+ "ff73570472ff2ec6": {
+  "pid": "f19",
+  "lang": "ca",
+  "text": "Refresc de pomelo",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "3ac678b9a333dc9d": {
+  "pid": "f19",
+  "lang": "es",
+  "text": "Refresco de pomelo",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "32d327e496f3bfaf": {
+  "pid": "f22",
+  "lang": "ca",
+  "text": "Hazy IPA 47 cl",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "d6f2871421ed8282": {
+  "pid": "f22",
+  "lang": "es",
+  "text": "Hazy IPA 47 cl",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "f055751c89e4c0ae": {
+  "pid": "f22",
+  "lang": "en",
+  "text": "Hazy IPA 47 cl",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "e5647d55db9c9690": {
+  "pid": "f02",
+  "lang": "en",
+  "text": "Butifarra sausage sandwich",
+  "runs": [
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#2"
+  ]
+ },
+ "43046a88a022a378": {
+  "pid": "f13",
+  "lang": "en",
+  "text": "Eggplant milanesa",
+  "runs": [
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#2"
+  ]
+ },
+ "1579b06e127122ab": {
+  "pid": "f30",
+  "lang": "ca",
+  "text": "Calamars fregits amb allioli",
+  "runs": [
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "f8c287af684bd4fb": {
+  "pid": "f30",
+  "lang": "es",
+  "text": "Calamares fritos con alioli",
+  "runs": [
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "8802713a2048776b": {
+  "pid": "f05",
+  "lang": "en",
+  "text": "Marinated anchovies",
+  "runs": [
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "4e9883a450bf6577": {
+  "pid": "f07",
+  "lang": "en",
+  "text": "Mixed nuts",
+  "runs": [
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "8dfb34b3f94abb31": {
+  "pid": "f13",
+  "lang": "ca",
+  "text": "Albergínia a la milanesa",
+  "runs": [
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "8a50adb1c3d40244": {
+  "pid": "f13",
+  "lang": "es",
+  "text": "Berenjena a la milanesa",
+  "runs": [
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "a1f5d1c065396b8c": {
+  "pid": "f13",
+  "lang": "en",
+  "text": "Milanese-style aubergine",
+  "runs": [
+   "luna-low-v4+luna-medium#3"
+  ]
+ },
+ "d9941e57239ad306": {
+  "pid": "f19",
+  "lang": "ca",
+  "text": "Gasosa de pomelo",
+  "runs": [
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "138ca8f4b1519c9a": {
+  "pid": "f19",
+  "lang": "es",
+  "text": "Gaseosa de pomelo",
+  "runs": [
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "ca7a9d71ec924567": {
+  "pid": "f19",
+  "lang": "ca",
+  "text": "Refresc d'aranja",
+  "runs": [
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2"
+  ]
+ },
+ "b56bb450c9d693a6": {
+  "pid": "f21",
+  "lang": "ca",
+  "text": "Ladrón cider",
+  "runs": [
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "19e4e8258755c7f3": {
+  "pid": "f21",
+  "lang": "es",
+  "text": "Ladrón cider",
+  "runs": [
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "fbde561aab11221f": {
+  "pid": "f10",
+  "lang": "ca",
+  "text": "Hummus i tabule",
+  "runs": [
+   "luna-low-v4+terra-low#3"
+  ]
+ },
+ "9ed13456b9b1c076": {
+  "pid": "f13",
+  "lang": "en",
+  "text": "Breaded aubergine",
+  "runs": [
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "e0fdca90d26456cc": {
+  "pid": "f19",
+  "lang": "ca",
+  "text": "Gasosa d'aranja",
+  "runs": [
+   "luna-low-v4+terra-low#3"
+  ]
+ },
+ "a323330529494cce": {
+  "pid": "f13",
+  "lang": "ca",
+  "text": "Milanaise d'albergínia",
+  "runs": [
+   "luna-low-v4#2"
+  ]
+ },
+ "6974c209368cb919": {
+  "pid": "f21",
+  "lang": "ca",
+  "text": "Cervesa de poma Ladrón",
+  "runs": [
+   "luna-low-v4#3"
+  ]
+ },
+ "41d9127a229213b4": {
+  "pid": "f09",
+  "lang": "fix",
+  "text": "Internal name: KIBBE → KIBBEH",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "5b547408042a96df": {
+  "pid": "f10",
+  "lang": "fix",
+  "text": "Internal name: TABOULE → TABOULÉ",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "e39f9b11dda7f8ae": {
+  "pid": "f21",
+  "lang": "fix",
+  "text": "Internal name: LADRON → LADRÓN",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "e5e216f7503f0ba2": {
+  "pid": "f23",
+  "lang": "fix",
+  "text": "Internal name: SCHWEPPS → SCHWEPPES",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "37a2869a8dc5a006": {
+  "pid": "f24",
+  "lang": "fix",
+  "text": "Internal name: PANACOTTA → PANNA COTTA",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "df5124c6bc0a071a": {
+  "pid": "f28",
+  "lang": "fix",
+  "text": "Spanish name: limon → limón",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "fcbadeba0c3d2ffd": {
+  "pid": "f29",
+  "lang": "fix",
+  "text": "English name: churos → churros",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "c1ef56a48e47b22b": {
+  "pid": "f12",
+  "lang": "fix",
+  "text": "Internal name: ESTUFADO → ESTOFADO",
+  "runs": [
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ }
+}

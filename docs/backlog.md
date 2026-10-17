@@ -473,6 +473,31 @@ environment names and normal idle shutdown (0.27 seconds); its project is remove
 A built release image and active-provider Compose shutdown still need qualification.
 This does not establish full-stack translation delivery,
 quality, joint Waitron paging or production provider approval.
+Task 20 preserves the original trial scripts, grading template, both product and shown-name
+sets, all 141 owner grades and six Luna-review result files byte for byte. The offline scorer
+reproduces the original totals: tuning 252 names, 6 needing work and 10 wrong; blind 243 names,
+5 needing work and 6 wrong. Unseen names are counted and listed as ungraded, never accepted.
+Command checks refuse missing input, failed or wrong-set runs, malformed values and repeated
+files before printing a table, and warn about incomplete products and names. A multi-file
+check preserves the complete ungraded list. The copied shown-language keys match the saved
+grading pages, apart from unchanged given names that scoring excludes. These offline checks run in the
+ordinary package suite without a provider or key; they do not measure the templated prompt.
+Task 21's trial runner and grading page, owner Tasks 22–24 and the joint proof remain open.
+A controlled client-error event followed by cleanup-query rejection reproduces a fatal
+line followed by a misleading cleanup-retry line. The worker now stops that retry path
+after a fatal failure; the original exact-output assertions remain. The new subprocess
+case and ordinary cleanup retry/recovery checks cover this ordering. CI exposed the
+same duplicate output without retaining its exact query stages, so the historical
+database timing remains unproved. The runtime reviewer later saw this original disconnect
+case fail once among ten two-file runs, but its output filter discarded the assertion diff.
+Twenty driver repeats then pass all 580 cases, including 60 original idle disconnections,
+with complete logs retained. These passes do not explain that uncaptured failure. A real
+PostgreSQL self-termination during cleanup passes three times with the guard and fails
+with the guard deleted. Treat that as qualification of the fatal-then-retry mechanism,
+not proof that every intermittent disconnect failure is resolved. On recurrence, keep the
+complete assertion output, selected backend ids and termination results before changing
+the original check. Active-job failure ordering at direct pool queries remains separately
+unqualified; the reviewed idle scenario leases no job.
 Keep translation off until the remaining runtime and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
@@ -484,7 +509,7 @@ and preserves accepted language tags. Store-level sizing and HTTP serialization 
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 20–21 with the paging amendment's
+- **Cloud implementation:** implement and test Task 21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Complete lock-order qualification across worker, release and installation revocation. The

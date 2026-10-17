@@ -4143,8 +4143,8 @@ Why the shown sets matter: a new prompt writes names the owner never saw. The tr
   - `export function addScores(a:Score,b:Score):Score; export function scoreLine(label:string,s:Score):string` — a Markdown table row: label, names, needs work %, wrong %, marked % (needs work plus wrong, the share the spec's table reports), ungraded.
   - The command `node quality/scorer.ts --set tuning|blind <results files…>` prints the table, one row per file and a total, then one `ungraded: <pid> <lang> <text>` line per ungraded name. A results file is any JSON object with `names` keyed by product id, which both the trial's records and Task 21's are.
 
-- [ ] **Step 1: Copy the files** listed above with `cp`, then `diff -r` each copied directory against its source, and `cmp` each single file, to show they are byte-identical. Copy grades with `cp owner-grades/grades/*.json packages/translation/quality/data/tuning-grades/` (and the same for the blind set) so the directory holds only the grade files.
-- [ ] **Step 2: Write the failing scorer tests**
+- [x] **Step 1: Copy the files** listed above with `cp`, then `diff -r` each copied directory against its source, and `cmp` each single file, to show they are byte-identical. Copy grades with `cp owner-grades/grades/*.json packages/translation/quality/data/tuning-grades/` (and the same for the blind set) so the directory holds only the grade files.
+- [x] **Step 2: Write the failing scorer tests**
 
 `quality/scorer.test.ts` ports `test_trial.py`'s `Grading` class and pins the port against the original script's own counts:
 
@@ -4205,8 +4205,8 @@ test('a score line shows the shares the spec reports',()=>{
 
 The expected counts and percentages come from running the original script on 2026-10-14: `TRIAL_SET= python3 -I trial.py score` printed `| luna-low-v4+luna-medium | 3 | 84 | 2% | 4% | 6% | …` for the tuning set and `TRIAL_SET=final python3 -I trial.py score` printed `| luna-low-v4+luna-medium | 3 | 81 | 2% | 2% | 5% | …` for the blind set; `grade_run` over the three files gave 84+84+84 names with 3+0+3 needing work and 4+2+4 wrong (tuning), and 83+80+80 names with 3+1+1 and 3+0+3 (blind). The spec's table reports the marked share: 6% (4% wrong) and 5% (2% wrong).
 
-- [ ] **Step 3: Run** `pnpm --dir packages/translation quality:test` and watch it fail (cannot find `./scorer.ts`).
-- [ ] **Step 4: Implement `scorer.ts`**
+- [x] **Step 3: Run** `pnpm --dir packages/translation quality:test` and watch it fail (cannot find `./scorer.ts`).
+- [x] **Step 4: Implement `scorer.ts`**
 
 ```ts
 import {createHash} from 'node:crypto';
@@ -4265,9 +4265,9 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)main(p
 
 `Math.round` rounds a half up where Python's `:.0%` rounds a half to even; no share in these sets falls on a half.
 
-- [ ] **Step 5: Run the tests and watch them pass.** `pnpm --dir packages/translation quality:test`; expected: 7 passing. Then, from `packages/translation`, run the command on the copied trial files and keep its output for the commit message: `pnpm quality:score --set tuning quality/data/trial-results/tuning/*.json` (total row `| total | 252 | 2% | 4% | 6% | 0 |`) and the same with `blind` (`| total | 243 | 2% | 2% | 5% | 0 |`).
-- [ ] **Step 6: Typecheck** with `pnpm --dir packages/translation typecheck`.
-- [ ] **Step 7: Commit**
+- [x] **Step 5: Run the tests and watch them pass.** `pnpm --dir packages/translation quality:test`; expected: 7 passing. Then, from `packages/translation`, run the command on the copied trial files and keep its output for the commit message: `pnpm quality:score --set tuning quality/data/trial-results/tuning/*.json` (total row `| total | 252 | 2% | 4% | 6% | 0 |`) and the same with `blind` (`| total | 243 | 2% | 2% | 5% | 0 |`).
+- [x] **Step 6: Typecheck** with `pnpm --dir packages/translation typecheck`.
+- [x] **Step 7: Commit**
 
 ```bash
 git add packages/translation/quality packages/translation/package.json

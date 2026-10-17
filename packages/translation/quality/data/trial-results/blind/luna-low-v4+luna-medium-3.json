@@ -1,0 +1,327 @@
+{
+ "config": "luna-low-v4+luna-medium",
+ "repeat": 3,
+ "base_usage": {
+  "input": 1924,
+  "output": 1638
+ },
+ "base_seconds": 13.636238957755268,
+ "probe": {
+  "usage": {
+   "input": 0,
+   "output": 0
+  }
+ },
+ "names": {
+  "f01": {
+   "id": "f01",
+   "ca": "Plat de fuet",
+   "es": "Plato de fuet",
+   "en": "Fuet platter",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f02": {
+   "id": "f02",
+   "ca": "Entrepà de botifarra",
+   "es": "Bocadillo de butifarra",
+   "en": "Butifarra sandwich",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f03": {
+   "id": "f03",
+   "ca": "Halloumi fregit",
+   "es": "Halloumi frito",
+   "en": "Fried halloumi",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f04": {
+   "id": "f04",
+   "ca": "Aletes de pollastre",
+   "es": "Alitas de pollo",
+   "en": "Chicken wings",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f05": {
+   "id": "f05",
+   "ca": "Seitons",
+   "es": "Boquerones",
+   "en": "Marinated anchovies",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f06": {
+   "id": "f06",
+   "ca": "Tàrtar de tonyina",
+   "es": "Tartar de atún",
+   "en": "Tuna tartare",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f07": {
+   "id": "f07",
+   "ca": "Fruits secs",
+   "es": "Frutos secos",
+   "en": "Mixed nuts",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f08": {
+   "id": "f08",
+   "ca": "Taula de formatges i envinagrats",
+   "es": "Tabla de quesos y encurtidos",
+   "en": "Cheese and pickles platter",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f09": {
+   "id": "f09",
+   "ca": "Kibbeh de carn",
+   "es": "Kibbeh de carne",
+   "en": "Meat kibbeh",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f10": {
+   "id": "f10",
+   "ca": "Hummus i tabulé",
+   "es": "Hummus y tabulé",
+   "en": "Hummus and tabbouleh",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "internal",
+     "wrong": "TABOULE",
+     "right": "TABOULÉ"
+    }
+   ]
+  },
+  "f11": {
+   "id": "f11",
+   "ca": "Baklava i cafè",
+   "es": "Baklava y café",
+   "en": "Baklava and coffee",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f12": {
+   "id": "f12",
+   "ca": "Estofat de cérvol",
+   "es": "Estofado de ciervo",
+   "en": "Venison stew",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "internal",
+     "wrong": "ESTUFADO",
+     "right": "ESTOFADO"
+    }
+   ]
+  },
+  "f13": {
+   "id": "f13",
+   "ca": "Albergínia a la milanesa",
+   "es": "Berenjena a la milanesa",
+   "en": "Milanese-style aubergine",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f14": {
+   "id": "f14",
+   "ca": "¼ de pollastre amb patates",
+   "es": "¼ de pollo con patatas",
+   "en": "Quarter chicken with potatoes",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f15": {
+   "id": "f15",
+   "ca": "Patates al forn per emportar",
+   "es": "Patatas al horno para llevar",
+   "en": "Baked potatoes to take away",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f16": {
+   "id": "f16",
+   "ca": "Cigaló",
+   "es": "Carajillo",
+   "en": "Coffee with liquor",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f17": {
+   "id": "f17",
+   "ca": "Te de camamilla",
+   "es": "Té de manzanilla",
+   "en": "Chamomile tea",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f18": {
+   "id": "f18",
+   "ca": "Suc de pinya",
+   "es": "Zumo de piña",
+   "en": "Pineapple juice",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f19": {
+   "id": "f19",
+   "ca": "Gasosa de pomelo",
+   "es": "Gaseosa de pomelo",
+   "en": "Grapefruit soda",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f20": {
+   "id": "f20",
+   "ca": "Mahou Tostada 0%",
+   "es": "Mahou Tostada 0%",
+   "en": "Mahou Tostada 0%",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f21": {
+   "id": "f21",
+   "ca": "Sidra Ladrón",
+   "es": "Sidra Ladrón",
+   "en": "Ladrón cider",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "internal",
+     "wrong": "LADRON",
+     "right": "LADRÓN"
+    }
+   ]
+  },
+  "f22": {
+   "id": "f22",
+   "ca": "Hazy IPA 47 cl",
+   "es": "Hazy IPA 47 cl",
+   "en": "Hazy IPA 47 cl",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f23": {
+   "id": "f23",
+   "ca": "Schweppes de llimona",
+   "es": "Schweppes de limón",
+   "en": "Schweppes Lemon",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "internal",
+     "wrong": "SCHWEPPS",
+     "right": "SCHWEPPES"
+    }
+   ]
+  },
+  "f24": {
+   "id": "f24",
+   "ca": "Panna cotta",
+   "es": "Panna cotta",
+   "en": "Panna cotta",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "internal",
+     "wrong": "PANACOTTA",
+     "right": "PANNA COTTA"
+    }
+   ]
+  },
+  "f25": {
+   "id": "f25",
+   "ca": "",
+   "es": "",
+   "en": "",
+   "placeholder": true,
+   "corrections": []
+  },
+  "f26": {
+   "id": "f26",
+   "ca": "",
+   "es": "",
+   "en": "",
+   "placeholder": true,
+   "corrections": []
+  },
+  "f27": {
+   "id": "f27",
+   "ca": "Croquetes casolanes de pernil",
+   "es": "Croquetas caseras de jamón",
+   "en": "Homemade ham croquettes",
+   "placeholder": false,
+   "corrections": []
+  },
+  "f28": {
+   "id": "f28",
+   "ca": "Pastís de llimona i merenga",
+   "es": "Tarta de limon y merengue",
+   "en": "Lemon meringue pie",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "es",
+     "wrong": "limon",
+     "right": "limón"
+    }
+   ]
+  },
+  "f29": {
+   "id": "f29",
+   "ca": "Xocolata calenta amb xurros",
+   "es": "Chocolate caliente con churros",
+   "en": "Hot chocolate with churos",
+   "placeholder": false,
+   "corrections": [
+    {
+     "field": "en",
+     "wrong": "churos",
+     "right": "churros"
+    }
+   ]
+  },
+  "f30": {
+   "id": "f30",
+   "ca": "Calamars fregits amb allioli",
+   "es": "Calamares fritos con alioli",
+   "en": "Fried squid rings with aioli",
+   "placeholder": false,
+   "corrections": []
+  }
+ },
+ "changes": [
+  {
+   "id": "f13",
+   "language": "en",
+   "name": "Milanese-style aubergine",
+   "reason": "Preserves the Milanese preparation named in the Catalan and Spanish versions."
+  },
+  {
+   "id": "f14",
+   "language": "en",
+   "name": "Quarter chicken with potatoes",
+   "reason": "“Quarter chicken” is the natural English menu phrasing for this serving size."
+  },
+  {
+   "id": "f21",
+   "language": "ca",
+   "name": "Sidra Ladrón",
+   "reason": "“Cervesa de poma” means apple beer; the drink is cider."
+  }
+ ],
+ "applied": 3,
+ "review_usage": {
+  "input": 2478,
+  "output": 1462
+ },
+ "review_seconds": 16.73767991689965,
+ "problems": [],
+ "checks": []
+}
