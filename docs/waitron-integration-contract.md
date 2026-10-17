@@ -349,7 +349,10 @@ not local operator authentication, and no registry call belongs on the sale path
 
 ## Translate all, version 1
 
-Owner-approved design; runtime not implemented in this Cloud checkout. The bounded-collect
+Owner-approved design; Cloud store, worker and four HTTP routes are implemented, with
+translation off by default. Submit still uses the existing 16 KiB, five-second reader;
+its larger request limits, consent enforcement, retention and joint qualification remain
+open. Keep the operator flag off until those gates pass. The bounded-collect
 prerequisite is documented on 2026-10-16 in the
 [paging amendment](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The bound preserves the existing input limits;

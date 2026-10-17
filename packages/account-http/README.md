@@ -481,6 +481,23 @@ per-account, per-minute allowance and do not renew passive sessions. Venue overv
 responses include bounded monitoring evidence for your current organisation memberships.
 See [local monitoring](../../docs/local-monitoring.md) for thresholds and delivery rules.
 
+## Translation machine routes
+
+The four POST routes under `/api/installations/translation-` are `submit`, `status`,
+`collect` and `release`. They use installation signatures and current leases, reject
+browser Origin headers, and retain the account API's request allowances and security
+headers. See the [wire contract](../../docs/waitron-integration-contract.md#translate-all-version-1)
+for request fields, cursor paging and refusals.
+
+Translation is off by default, returning 503 on all four routes. The account command
+accepts only `CLOUD_TRANSLATION=0` or `1`; enabling requires
+`CLOUD_INSTALLATION_ISSUER_KEY`. Keep it off until consent, retention and joint
+qualification are complete. All four routes currently use the existing 16 KiB,
+five-second request reader; submit's larger limits and separate admission are still
+open. Collect returns the same compact JSON that the page builder sizes, bounded to
+16,777,216 UTF-8 bytes. Collect retains results; release deletes them after your
+caller has durably stored every page.
+
 ## Installation snapshot delivery
 
 The optional [authenticated capture adapter](../../docs/authenticated-captures.md) adds

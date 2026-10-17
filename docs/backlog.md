@@ -365,19 +365,29 @@ then validate lowercase job UUIDs before reading jobs scoped to the signing inst
 then applies state rules. PostgreSQL checks cover crossed and expired leases, revocation
 during a lock wait, rollback after a body insert fails, mixed outcomes and a signed multi-page walk
 larger than 16 MiB with unchanged text. Collection retains results; release deletes them.
-These are store methods. HTTP routes remain Task 11 and consent enforcement remains Task 13;
-no installation gains translation access from this task.
+These store methods are now used by the HTTP routes below; consent enforcement remains Task 13.
+
+Task 11 adds the four translation HTTP routes, off by default. The account server
+accepts only `CLOUD_TRANSLATION=0` or `1`; enabling requires an installation issuer.
+The routes preserve proof/lease checks, installation-scoped job reads, retry ordering,
+shared request allowances and security headers. Submit validates its three outer fields
+before passing only the signed two-field envelope to authentication. Real-listener
+checks prove compact collect replies at exactly 16,777,216 UTF-8 bytes, splitting at one
+byte over, stable cursor retries and unchanged names/corrections across multiple pages.
+All four routes still use the existing 16 KiB, five-second request reader; Task 12 adds
+submit's larger bounds and separate admission. Keep translation off until consent,
+retention and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies
 compact full-body replies of at most 16,777,216 decoded UTF-8 bytes, signed optional cursors in
 filtered submit order, atomic unchanged results, stable retries and release only after every page
 is durably stored. A conservative singleton size calculation uses the existing 1 MiB job bound
-and preserves accepted language tags. Store-level page sizing is tested; HTTP serialization and the real Waitron caller still need joint proof.
+and preserves accepted language tags. Store-level sizing and HTTP serialization are tested; the real Waitron caller still needs joint proof.
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 11–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 12–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Complete lock-order qualification across worker, release and installation revocation. The
