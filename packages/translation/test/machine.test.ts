@@ -2,13 +2,15 @@ import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {after,before,test} from 'node:test';
-import {createLeaseIssuer,InstallationError,type LeaseInput,type SignedEnvelope} from '@waitron-cloud/registration';
-import {jobFingerprint,maxCollectBytes,TranslationError,TranslationMachine,type TranslationAction} from '../src/index.ts';
+import {createLeaseIssuer,InstallationError,type SignedEnvelope} from '@waitron-cloud/registration';
+import {jobFingerprint,maxCollectBytes,TranslationError,TranslationMachine,type TranslationAction,type ItemResult} from '../src/index.ts';
 import {connectedVenue,database,readyForTranslation} from './fixtures.ts';
 let db:Awaited<ReturnType<typeof database>>;
 const origin='https://cloud.example.test';
 const newIssuer=()=>createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
-const issuer=newIssuer(),machine=()=>new TranslationMachine(db.pool,issuer,origin);
+const issuer=newIssuer();
+type LeaseInput=Parameters<typeof issuer.issue>[0];
+const machine=()=>new TranslationMachine(db.pool,issuer,origin);
 before(async()=>{db=await database();});after(async()=>db?.close());
 async function venue(){const v=await connectedVenue(db,issuer,origin);await readyForTranslation(db,v);return v;}
 type Venue=Awaited<ReturnType<typeof venue>>;
@@ -201,7 +203,7 @@ test('machine collection walks more than 16 MiB using signed continuations witho
  body.items=Array.from({length:400},(_,i)=>({...item(`ref:${i}`),missing:languages}));
  const text=JSON.stringify(body);assert(Buffer.byteLength(text)<=1048576);
  const {jobId}=await submit(v,text);
- const results=body.items.map((i:{ref:string})=>({ref:i.ref,names:Object.fromEntries(languages.map(tag=>[tag,'\u0000'.repeat(500)])),placeholder:false,
+ const results:ItemResult[]=body.items.map((i:{ref:string})=>({ref:i.ref,names:Object.fromEntries(languages.map(tag=>[tag,'\u0000'.repeat(500)])),placeholder:false,
   corrections:Array.from({length:10},()=>({field:'internal',wrong:'\\'.repeat(500),right:'\ud800'.repeat(500)}))}));
  await outcomes(jobId,{0:{results,failed:[]}});await finish(jobId);
  let cursor:number|null=0,pages=0;const refs:string[]=[];
