@@ -10,6 +10,7 @@ import {BackupKeyVault} from '../src/keys.ts';
 import {ManagedStreams,type ManagedStreamAuthority} from '../src/managed-streams.ts';
 import {BackupCaptures} from '../src/captures.ts';
 import {BackupRecovery,recoveryPayload} from '../src/recovery.ts';
+import {RecoveryRequests,requestPayload} from '../src/recovery-request.ts';
 import {ReplacementStore,replacementPayload} from '../src/replacement.ts';
 import {receipt} from '../src/storage.ts';
 import {createAccountApp} from '../../account-http/src/app.ts';
@@ -71,6 +72,8 @@ test('cached_machine_reply_never_reissues_paid_configuration',async()=>{
  const renew=proof('renew'),first=await store.execute('renew',renew);assert(first.lease);assert(JSON.stringify(first).includes('private-gateway'));
  const config=proof('configuration',first.lease,{servicesVersion:2}),report=proof('report',first.lease,{revision:configured.revision,observedAt:Date.now(),services:[{service:'remote_access',health:'healthy',failure:null}]});
  await store.execute('configuration',config);await store.execute('report',report);await plans.set(a.organisationId,'free');
+ const cleared=(await db.pool.query("SELECT state,configuration FROM installation_services WHERE installation_id=$1 AND service<>'content_translation' ORDER BY service",[a.installationId])).rows;
+ assert.deepEqual(cleared,[{state:'unconfigured',configuration:{}},{state:'unconfigured',configuration:{}},{state:'unconfigured',configuration:{}}]);
  for(const [action,envelope] of [['renew',renew],['configuration',config],['report',report]] as const){
   const current=await store.execute(action,envelope);assert.equal(current.revision,configured.revision+1);
   for(const s of current.services.filter(s=>s.service!=='content_translation')){assert.equal(s.state,'unconfigured');assert.deepEqual(s.configuration,{});assert.equal(s.health,'unknown');}
@@ -100,6 +103,7 @@ test('stream_provider_wait_rechecks_downgrade',async()=>{
 test('downgrade_preserves_last_verified_snapshot_and_pauses_expiry',async()=>{
  await paid();const first=await snapshot(90),second=await snapshot(80);await plans.set(a.organisationId,'free');
  assert.equal(await catalogue().cleanupOne(a.venueId),null);assert(objects.has(first.point.objectKey));assert(objects.has(second.point.objectKey));
+ assert.equal((await db.pool.query('SELECT count(*) FROM backup_points WHERE NOT deleting AND deleted_at IS NULL')).rows[0].count,'2');
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_key_versions')).rows[0].count,'1');
 });
 test('metadata_and_close_survive_downgrade_but_target_read_and_replacement_completion_do_not',async()=>{
@@ -156,8 +160,9 @@ test('plan_lock_order_survives_pairing_replacement_and_two_installations',async(
  const change=plans.set(a.organisationId,'free');
  try {
   await waitForQuery('SELECT i.id FROM installations i JOIN venues v%');
-  // Pairing adds organisation foreign keys while the setter waits on an installation.
+  // Pairing and new organisation references can finish while the setter waits on an installation.
   await reg.complete(pendingBinding);
+  await transaction(db.pool,async client=>{await client.query("SET LOCAL lock_timeout='500ms'");await client.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[randomUUID(),a.organisationId]);});
  } finally {await blocker.query('ROLLBACK');blocker.release();}
  await change;
  assert.equal((await db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[second.installationId])).rows[0].configuration_revision,1);
@@ -218,4 +223,19 @@ test('fresh_machine_and_account_views_mask_existing_free_configuration',async()=
  assert.equal(JSON.stringify(current).includes('legacy-secret'),false);assert.equal(current.services.find(s=>s.service==='retained_snapshots')?.state,'unconfigured');
  const list=await machines().listWithSession(a.token);assert.equal(list[0]?.services.find(s=>s.service==='retained_snapshots')?.state,'unconfigured');
  assert.equal((await ordinary.execute('renew',proof('renew'))).services.find(s=>s.service==='retained_snapshots')?.state,'ready');
+});
+
+test('recovery_approval_and_HTTP_provider_wait_use_current_plan',async()=>{
+ await paid();const {point}=await snapshot(),target=generateKeyPairSync('ed25519'),id=randomUUID(),code='12345678';
+ const publicKey=target.publicKey.export({type:'spki',format:'der'}).toString('base64url'),request=requestPayload(origin,id,'start',publicKey,code,Date.now());
+ const requests=new RecoveryRequests(db.pool,vault,origin,undefined,mode);await requests.machine('start',{payload:request.toString('base64url'),signature:sign(null,request,target.privateKey).toString('base64url')});
+ const selection={pointId:point.id,oldServerUnavailable:true,acceptDataLoss:true};await plans.set(a.organisationId,'free');
+ await assert.rejects(requests.approve(id,code,a.token,a.csrfToken,selection),/permission_denied/);
+ assert.equal((await db.pool.query('SELECT count(*) FROM backup_recoveries')).rows[0].count,'0');
+ await plans.set(a.organisationId,'paid');await requests.approve(id,code,a.token,a.csrfToken,selection);
+ const app=createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},leaseIssuer:issuer,planMode:mode,
+  captures:{vault,objects:storage,async grant(){grants++;await plans.set(a.organisationId,'free');return {credentials:{accessKeyId:'a',secretAccessKey:'b',sessionToken:'c'},expiresAt:new Date(Date.now()+900000).toISOString()};}}});
+ const bytes=recoveryPayload(origin,id,'read',point.digest,Date.now());
+ const response=await app.request(origin+'/api/recovery/read',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,payload:bytes.toString('base64url'),signature:sign(null,bytes,target.privateKey).toString('base64url')})},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as Parameters<typeof app.request>[2]);
+ assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:'permission_denied'});assert.equal(grants,1);
 });
