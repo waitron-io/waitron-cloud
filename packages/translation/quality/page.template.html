@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Menu name grading</title>
+<style>
+:root{color-scheme:light dark;--bg:#f3f4f1;--surface:white;--ink:#1d221f;--muted:#5c655f;--line:#d9ddd6;--accent:#1f5f4a;--warn:#8a5a00;--bad:#a3271f}
+@media(prefers-color-scheme:dark){:root{--bg:#141816;--surface:#1c211e;--ink:#e7ebe7;--muted:#a0aaa3;--line:#465248;--accent:#7cc7a8;--warn:#f0c060;--bad:#f28b80}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:1rem/1.5 system-ui,sans-serif}.wrap{max-width:72rem;margin:auto;padding:24px 16px 64px}header{max-width:70ch}h1{font:600 2rem/1.2 Georgia,serif}p{color:var(--muted)}.bar{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;padding:16px 0;border-block:1px solid var(--line);margin:24px 0}.bar label{display:flex;gap:8px;align-items:center}#save-state{flex-basis:100%;color:var(--muted)}#save-state[data-state=failed],#save-state[data-state=unavailable]{color:var(--bad)}#products{display:grid;gap:20px}.product{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}.product.done{border-color:var(--accent)}.head{padding:16px;display:flex;flex-wrap:wrap;gap:8px 16px;border-bottom:1px solid var(--line);align-items:center}.label{font-weight:700;overflow-wrap:anywhere}.cat{color:var(--muted);font-size:.85rem}.given{flex-basis:100%;margin:0}.done-toggle{margin-left:auto}.langs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.lang{min-width:0;padding:16px}.lang+.lang{border-left:1px solid var(--line)}h3{font-size:.85rem;color:var(--muted);margin:0 0 12px}.name{border:1px solid var(--line);border-radius:6px;padding:12px;margin:8px 0}.name[data-v=fix]{border-color:var(--warn)}.name[data-v=wrong]{border-color:var(--bad)}.t{overflow-wrap:anywhere}.badge{display:inline-block;font-size:.75rem;color:var(--accent);margin-left:8px}.marks{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}button,select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px 12px}button{cursor:pointer}button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:3px}button[aria-pressed=true]{border-color:var(--accent);font-weight:700}button:disabled{opacity:.6;cursor:default}.hide-done .product.done{display:none}.none{font-size:.9rem}.locale{display:flex;align-items:center;gap:12px}input{accent-color:var(--accent)}
+@media(max-width:760px){.langs{grid-template-columns:minmax(0,1fr)}.lang+.lang{border-left:0;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body><div class="wrap">
+<div class="locale"><label for="locale">Language / Idioma</label><select id="locale"><option value="en">English</option><option value="es">Español</option></select></div>
+<header><h1 id="title"></h1><p id="intro"></p><p id="instructions"></p></header>
+<div class="bar"><span><b id="n-done">0</b> / <span id="n-products">0</span> <span id="done-label"></span></span><span><b id="n-fix">0</b> <span id="fix-label"></span> · <b id="n-wrong">0</b> <span id="wrong-label"></span></span><label><input type="checkbox" id="hide-done"><span id="hide-label"></span></label><span id="save-state" role="status" data-state="connecting"></span></div>
+<main id="products"></main>
+</div>
+<script>
+const PRODUCTS = /*DATA*/[];
+const DONE = "done-/*ROUND*/";
+const words={
+ en:{title:'Menu name grading',intro:'Only new names appear here, sorted within each language. The model is hidden. Given names stay unchanged.',instructions:'Leave good names alone. Choose Needs work for awkward wording, or Wrong for a misleading name. Click again to clear a mark. Mark each product done when you have read it.',doneLabel:'products done',fixLabel:'need work',wrongLabel:'wrong',hide:'Hide finished products',new:'New',fix:'Needs work',wrong:'Wrong',done:'Done',finish:'Mark done',none:'No new names to grade.',given:'Given',connecting:'Connecting…',ready:'Marks save as you click',saved:'Saved',failed:'Not saved. Try again.',unavailable:'Marks cannot be saved here. Open this page with its grading database.',langs:{ca:'Catalan (default)',es:'Spanish',en:'English'}},
+ es:{title:'Revisión de nombres',intro:'Aquí solo aparecen nombres nuevos, ordenados por idioma. El modelo está oculto. Los nombres existentes se conservan.',instructions:'No marques los nombres correctos. Elige Mejorar si la redacción suena poco natural, o Incorrecto si confunde al cliente. Pulsa de nuevo para borrar la marca. Termina cada producto cuando lo hayas leído.',doneLabel:'productos terminados',fixLabel:'por mejorar',wrongLabel:'incorrectos',hide:'Ocultar productos terminados',new:'Nuevo',fix:'Mejorar',wrong:'Incorrecto',done:'Terminado',finish:'Terminar',none:'No hay nombres nuevos que revisar.',given:'Existente',connecting:'Conectando…',ready:'Las marcas se guardan al pulsar',saved:'Guardado',failed:'No se ha guardado. Inténtalo de nuevo.',unavailable:'Aquí no puedes guardar marcas. Abre esta página con su base de datos de revisión.',langs:{ca:'Catalán (predeterminado)',es:'Español',en:'Inglés'}}
+};
+let locale='en',db=null,state='connecting',connected=false;
+const grades=new Map(),done=new Set(),pending=new Set();
+const root=document.getElementById('products'),save=document.getElementById('save-state');
+function node(tag,attrs={},...children){const n=document.createElement(tag);for(const [key,value] of Object.entries(attrs)){if(key==='text')n.textContent=value;else n.setAttribute(key,value);}n.append(...children);return n;}
+function status(next){state=next;save.dataset.state=state;save.textContent=words[locale][state];}
+function render(){
+ const w=words[locale];document.documentElement.lang=locale;document.title=w.title;
+ for(const [id,value] of Object.entries({title:w.title,intro:w.intro,instructions:w.instructions,'done-label':w.doneLabel,'fix-label':w.fixLabel,'wrong-label':w.wrongLabel,'hide-label':w.hide}))document.getElementById(id).textContent=value;
+ root.replaceChildren();
+ let fixes=0,wrongs=0;
+ for(const p of PRODUCTS){
+  const isDone=done.has(p.id),head=node('div',{class:'head'},node('span',{class:'label',text:p.internal}),node('span',{class:'cat',text:p.category||''}));
+  const finish=node('button',{type:'button',class:'done-toggle','aria-pressed':String(isDone),text:isDone?w.done:w.finish});
+  finish.disabled=!connected||pending.has('done:'+p.id);finish.onclick=()=>write('done:'+p.id,async()=>{const ref=db.collection(DONE).doc(p.id);if(done.has(p.id))await ref.delete();else await ref.set({done:true});});head.append(finish);
+  for(const [lang,text] of Object.entries(p.given))head.append(node('p',{class:'given',text:`${w.given} ${w.langs[lang]||lang}: ${text}`}));
+  const langs=node('div',{class:'langs'});
+  for(const lang of ['ca','es','en']){
+   const col=node('section',{class:'lang'},node('h3',{text:w.langs[lang]}));
+   if(!p.names[lang].length)col.append(node('p',{class:'none',text:w.none}));
+   for(const n of p.names[lang]){
+    const verdict=grades.get(n.k)||'';if(verdict==='fix')fixes++;if(verdict==='wrong')wrongs++;
+    const row=node('div',{class:'name','data-v':verdict},node('span',{class:'t',text:n.t}),node('span',{class:'badge',text:w.new}));
+    const marks=node('div',{class:'marks'});
+    for(const mark of ['fix','wrong']){
+     const b=node('button',{type:'button','aria-pressed':String(verdict===mark),text:w[mark]});b.disabled=!connected||pending.has(n.k);
+     b.onclick=()=>write(n.k,async()=>{const ref=db.collection('grades').doc(n.k);if(grades.get(n.k)===mark)await ref.delete();else await ref.set({pid:p.id,lang,text:n.t,verdict:mark});});marks.append(b);
+    }
+    row.append(marks);col.append(row);
+   }
+   langs.append(col);
+  }
+  root.append(node('article',{class:isDone?'product done':'product'},head,langs));
+ }
+ document.getElementById('n-products').textContent=PRODUCTS.length;document.getElementById('n-done').textContent=PRODUCTS.filter(p=>done.has(p.id)).length;
+ document.getElementById('n-fix').textContent=fixes;document.getElementById('n-wrong').textContent=wrongs;status(state);
+}
+async function write(key,operation){
+ if(!connected||pending.has(key))return;pending.add(key);render();
+ try{await operation();if(connected)status('saved');}catch{if(connected)status('failed');}
+ finally{pending.delete(key);render();}
+}
+document.getElementById('locale').onchange=event=>{locale=event.target.value;render();};
+const hide=document.getElementById('hide-done');
+hide.onchange=()=>document.body.classList.toggle('hide-done',hide.checked);
+function unavailable(){connected=false;status('unavailable');render();}
+render();
+(async()=>{
+ try{
+  db=window.claude?await window.claude.use('db'):null;if(!db)return unavailable();
+  let marksReady=false,doneReady=false,ended=false;
+  const ready=()=>{if(marksReady&&doneReady&&!ended){if(!connected){connected=true;status('ready');}render();}};
+  const failed=()=>{ended=true;unavailable();};
+  db.collection('grades').onSnapshot(snap=>{if(ended)return;grades.clear();for(const d of snap.docs)grades.set(d.id,d.data().verdict);marksReady=true;ready();},failed);
+  db.collection(DONE).onSnapshot(snap=>{if(ended)return;done.clear();for(const d of snap.docs)done.add(d.id);doneReady=true;ready();},failed);
+ }catch{unavailable();}
+})();
+</script></body></html>

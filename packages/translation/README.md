@@ -115,6 +115,63 @@ Keep new results under the ignored `quality/results/` directory.
 
 `quality/original/` and `quality/grading.template.html` preserve the experiment verbatim;
 do not run the archived Python scripts. Their paths, provider calls and grading-store
-integration belong to that experiment. The new trial runner and grading page remain Task 21.
+integration belong to that experiment. The maintained runner and page builder use the production client and a separate page template.
 Fresh quality measurements, owner Tasks 22–24, require the real key and owner grading after
 2 November 2026. They remain release gates; rescoring old results does not satisfy them.
+
+
+## Quality harness
+
+Before you ship a prompt, model or batching change, score it against both recorded sets
+and include the results in your pull request. You need new owner grades for unseen names;
+an empty ungraded count from old results does not qualify a new prompt.
+
+`quality/trial.ts` runs the production parser, batches, prompts, reply checks and two-pass
+client against the selected set. `quality/build-grading.ts` creates a page containing only
+new names, sorted within each product and language, with the model hidden. Its maintained
+`page.template.html` offers English and Spanish and follows your light or dark theme.
+The copied `grading.template.html`, `original/` and all recorded data remain unchanged.
+
+After 2 November 2026, run these commands by hand from `packages/translation` with the
+owner's key exported as `CLOUD_OPENAI_API_KEY` in your shell:
+
+```sh
+pnpm quality:trial --set tuning --runs 3
+pnpm quality:score --set tuning quality/results/tuning-*.json
+pnpm quality:grading --set tuning --round r2 quality/results/tuning-*.json
+```
+
+Repeat with `blind`. The trial accepts 1–10 repeats and an optional `--out <directory>`.
+It sends real requests and costs money, so never run it in CI. Automated tests use a local
+fake provider and a test-only key. Each output file records the set, prompt version,
+model, repeat, names, failed items, usage and estimated cost at the recorded model prices.
+Files have unique names and private permissions. The trial has no production venue budget;
+keep these manual runs small. It prints file paths, and exits unsuccessfully if a first pass
+or review failed. A failed review retains its first-pass names for diagnosis but cannot
+qualify a complete two-pass quality result.
+
+The page command writes `quality/grading-<set>.html` and its `-keys.json` companion. These
+are ignored local outputs. It rejects malformed, failed, wrong-set or repeated input files
+before replacing either output. Failed trials retain their partial output for diagnosis; both commands refuse them.
+The scorer reports missing coverage for partial files without reported failures,
+including older manually assembled inputs. Given names, placeholders, previously shown names
+and previously marked names are excluded from the choices. Spelling corrections are
+retained in result files but this page grades customer-facing names only. In manually edited
+or older files, the scorer can count an altered given name or text on a placeholder that
+the page excludes. Regenerate these inputs through the production trial instead of treating
+an absent grading choice as accepted. If either output write fails, correct the output path
+and regenerate both files before using them; the pair is not written as one transaction.
+
+To save marks, open the page with its grading database through the existing
+`window.claude.use("db")` bridge. Without it, you can read the page but its mark buttons
+stay disabled. The local browser test uses a controlled store; it does not verify that
+external bridge or publish a grading page. A failed save leaves the last confirmed mark
+and asks you to retry. The owner's existing export process writes one mark per file with
+`pid`, `lang`, `text` and `verdict`; merge the companion keys into the matching shown file
+only after grading, then rescore. Use a new `--round` value for a new reading round;
+reusing it keeps that round's stored done markers. Never treat a newly displayed, unread page as accepted.
+
+Owner Tasks 22–24 in the [approved plan](../../docs/superpowers/plans/2026-10-14-translate-all.md#task-22-owner-involved-needs-the-real-key-score-the-templated-prompt-against-both-graded-sets)
+retain their commands and release criteria. They cover both-set quality, house-style
+measurement and variants, option labels and menu sections. They remain owner-only after
+2 November; this harness does not run or satisfy those measurements.

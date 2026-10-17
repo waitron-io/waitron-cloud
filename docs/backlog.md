@@ -299,8 +299,8 @@ spending checks, installation-scoped job reads and release. Collection reconstru
 submit order from retained outcomes and measures complete compact UTF-8 pages, including the
 actual continuation, against the 16 MiB limit. PostgreSQL tests cover concurrent submits,
 rollback, repeated collection, release locking and a multi-page walk; serializer tests cover
-exact byte boundaries, Unicode and complete outcomes. These foundations expose no translation
-routes; the remaining runtime is still open.
+exact byte boundaries, Unicode and complete outcomes. These foundations are consumed by the signed translation
+routes described below.
 Task 4 adds the contract parser and family/category batch planner. Offline checks cover exact
 field shapes, language and text bounds, the 1,000-item boundary, context-only heads, all nine
 name kinds and house-style examples. Batches keep families whole, including context heads and
@@ -427,7 +427,18 @@ button after pointerdown. Holding the reply passes the same 500 ms delayed-click
 removing the hold restores the original timeout. Every existing assertion and deadline
 remains. The two natural failures retained no request ordering, so their exact trigger stays
 unproved; bounded path/status events now accompany any future failure. Portal production
-code is unchanged by this fixture correction.
+code is unchanged by this fixture correction. Task 21 also reproduces a different gap:
+an initial activity result can be accepted after the clock advance even though the manual
+phase holds new activity requests. A controlled real PostgreSQL/Chromium run delays only
+that valid session body's acceptance. It triggers an automatic consent read and the same
+five-second missing-retry-button failure seen in CI. The fixture now completes initial
+activity and its forced unavailable consent reload before advancing time; the original
+manual 503/429/200 path, all permission and outcome checks, the 61-second advance and every
+deadline remain. That controlled schedule passes with the precondition and fails when it
+is removed in a disposable installed checkout. The natural CI trace did not record JSON
+acceptance, so its exact scheduling remains unproved. Earlier response-listener timeouts
+also lack complete ordering; capture clock-return, listener registration and activity
+acceptance on recurrence rather than claiming all intermittent failures are resolved.
 Task 16 keeps translation out of the three-service configuration, account and diagnostic
 lists, monitoring targets, incident display and alert delivery. A ready translation row alone
 cannot enable those services. PostgreSQL regressions insert that row explicitly and cover
@@ -482,7 +493,7 @@ files before printing a table, and warn about incomplete products and names. A m
 check preserves the complete ungraded list. The copied shown-language keys match the saved
 grading pages, apart from unchanged given names that scoring excludes. These offline checks run in the
 ordinary package suite without a provider or key; they do not measure the templated prompt.
-Task 21's trial runner and grading page, owner Tasks 22–24 and the joint proof remain open.
+Task 21 adds the trial runner and grading page below. Owner Tasks 22–24 and the joint proof remain open.
 A controlled client-error event followed by cleanup-query rejection reproduces a fatal
 line followed by a misleading cleanup-retry line. The worker now stops that retry path
 after a fatal failure; the original exact-output assertions remain. The new subprocess
@@ -507,9 +518,23 @@ filtered submit order, atomic unchanged results, stable retries and release only
 is durably stored. A conservative singleton size calculation uses the existing 1 MiB job bound
 and preserves accepted language tags. Store-level sizing and HTTP serialization are tested; the real Waitron caller still needs joint proof.
 
+Task 21 adds the hand-run production-path trial and new-name grading page. Fake-provider
+checks cover usage, both passes, failed trials and strict command input; a failed review
+keeps diagnostic names but is refused as a successful quality run. The builder filters
+marked, shown, given and placeholder names, keeps run provenance, and escapes embedded
+text. Its separate maintained template preserves the original experiment assets.
+Chromium checks cover English/Spanish, light/dark, phone/desktop, exact mark writes and
+deletions, failed saves and disabled controls without a grading store. Later snapshots
+preserve a save result; both initial snapshots are required, pending choices lock and a
+disconnected store cannot re-enable controls with a late update. These use a local
+controlled store; the external grading bridge and owner measurements remain unqualified.
+The new browser cases register through the original UI test entry point and keep its
+workspace test command unchanged, preserving historical receipt-fixture discovery.
+No real key or provider call is part of this implementation.
+
 Remaining work:
 
-- **Cloud implementation:** implement and test Task 21 with the paging amendment's
+- **Cloud qualification:** Tasks 1–21 are implemented, including the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Complete lock-order qualification across worker, release and installation revocation. The
@@ -1282,7 +1307,11 @@ notifications separately.
   disposable migration setup on this Mac: the D72 run completed 292 cases with
   82 failures, including the unchanged signup, origin, session and rate-limit
   fixtures. Use the same two-file limit for full local database package runs;
-  retain every file, original deadline and portal build. A failed fiscal HTTP
+  retain every file, original deadline and portal build. A later parallel local Task 21 run
+  also killed the unchanged npm-bootstrap probe at its 35-second deadline without
+  retaining npm output. An isolated run passed in 31.36 seconds; that does not
+  explain the earlier deadline. Capture process startup and request timestamps on
+  recurrence, and preserve the original budget. A failed fiscal HTTP
   fixture setup also left its local continuity-authority child open after the
   last test; the run printed its final failures after that recorded child was
   stopped. Make fixture construction close acquired resources on setup failure
