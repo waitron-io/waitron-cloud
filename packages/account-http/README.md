@@ -532,7 +532,8 @@ caller has durably stored every page.
 
 With `CLOUD_TRANSLATION=1`, the account command sweeps retained menu text at startup and
 every minute, including when no translation worker runs. Startup cleanup failure refuses
-listening; later failures retry while serving. See the
+listening; later failures retry while serving and print
+`Account server translation cleanup failed`. See the
 [worker and retention guide](../translation/README.md#spending-and-retained-text)
 for the bounded cleanup and its remaining qualification. The Compose account service
 receives the switch, default `0`, without receiving the provider key.

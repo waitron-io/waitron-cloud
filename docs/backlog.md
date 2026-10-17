@@ -451,7 +451,12 @@ omits the worker; only it receives provider settings, while account receives the
 switch, default off. Compose and runtime checks cover the profile, migration dependency,
 private configuration mount and exact environment boundaries. The package guide documents
 the worker, fixed diagnostics, cap overshoot and bounded retention. CI scope checks retain
-translation package selection. This does not establish full-stack translation delivery,
+translation package selection. A real disposable Compose/PostgreSQL regression starts the
+worker, then refuses a changed migration digest before dispatch. Deleting only the launcher
+schema gate makes that assertion fail. The local source-mounted proof also checks exact child
+environment names and normal idle shutdown (0.27 seconds); its project is removed.
+A built release image and active-provider Compose shutdown still need qualification.
+This does not establish full-stack translation delivery,
 quality, joint Waitron paging or production provider approval.
 Keep translation off until the remaining runtime and joint qualification are complete.
 

@@ -26,7 +26,7 @@ runs two jobs at once, with up to four batches per job. `DATABASE_URL` and a non
 `CLOUD_OPENAI_API_KEY` are required. `CLOUD_OPENAI_BASE_URL` is optional and defaults to
 `https://api.openai.com/v1`; only use an override for your local fake server. It accepts
 HTTPS, or HTTP on `127.0.0.1` or `localhost`. Inside a container, loopback means that
-container. Redirects are refused and each provider call has a 120-second deadline.
+container; a fake server in another Compose service needs HTTPS. Redirects are refused and each provider call has a 120-second deadline.
 
 To run the worker in the [local Compose stack](../../docs/local-deployment.md), build
 and migrate that stack first, export your local provider settings in the shell, then run:
@@ -69,7 +69,8 @@ headers do not enter diagnostics:
 - `Translation worker pass failed; retrying`
 - `Translation worker cleanup failed; retrying`
 
-Database connection errors use the first message too. Inspect configuration, migrations
+Database connection errors use the first message too. The enabled account server reports
+scheduled cleanup failure as `Account server translation cleanup failed`. Inspect configuration, migrations
 and local service availability without logging request or provider response bodies.
 
 ## Verify behavior
