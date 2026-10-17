@@ -1,9 +1,9 @@
 import {randomUUID,verify} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {recordSecurityAuditEvent,transaction,suppressAlertEpisode} from '@waitron-cloud/registration';
+import {recordSecurityAuditEvent,transaction,suppressAlertEpisode,type PlanMode} from '@waitron-cloud/registration';
 import {decode,publicKey,type Proof} from './recovery.ts';
-import {backupFail,lockVenue,uuid,uniqueViolation} from './catalogue.ts';
+import {backupPlan,backupFail,lockVenue,uuid,uniqueViolation} from './catalogue.ts';
 import type {BackupKeyVault} from './keys.ts';
 export interface ReplacementClaims {id:string;localVenueId:string;nodeId:string;publicKey:string;peerPublicKey:string;issuedAt?:number;}
 export interface ReplacementEnvelope extends Proof {id:string;keySignature:string;}
@@ -35,8 +35,8 @@ async function current(client:PoolClient,id:string){
 function bound(row:Record<string,any>,c:ReplacementClaims){if(row.public_key!==c.publicKey||row.peer_public_key!==c.peerPublicKey||row.local_venue_id!==c.localVenueId||row.node_id!==c.nodeId)backupFail('conflict');}
 function view(r:Record<string,any>,p:Record<string,any>){return p.result??{requestId:r.id,pointId:r.point_id,source:r.source_kind==='continuous'?{kind:'continuous',recoverableAt:r.stream_recoverable_at.toISOString(),sourceNodeId:r.stream_source_node_id}:{kind:'snapshot',pointId:r.point_id},venueId:r.venue_id,oldInstallationId:p.old_installation_id,localVenueId:p.local_venue_id,nodeId:p.node_id,environment:'test',publicKey:p.public_key,peerPublicKey:p.peer_public_key,state:'awaiting_owner',expiresAt:r.expires_at.toISOString(),organisationName:r.organisation_name,legalBusinessName:r.business_name,registration:null};}
 export class ReplacementStore {
- readonly pool:Pool;readonly vault:BackupKeyVault;readonly origin:string;
- constructor(pool:Pool,vault:BackupKeyVault,origin:string){this.pool=pool;this.vault=vault;this.origin=origin;}
+ readonly planMode:PlanMode;readonly pool:Pool;readonly vault:BackupKeyVault;readonly origin:string;
+ constructor(pool:Pool,vault:BackupKeyVault,origin:string,planMode:PlanMode='existing'){this.planMode=planMode;this.pool=pool;this.vault=vault;this.origin=origin;}
  async authenticate(action:'prepare'|'status',envelope:ReplacementEnvelope){
   const c=claims(this.origin,action,envelope),r=(await this.pool.query('SELECT target_public_key FROM backup_recoveries WHERE id=$1',[c.id])).rows[0];
   if(!r||!verify(null,decode(envelope.payload,4096),publicKey(r.target_public_key),decode(envelope.signature,86)))backupFail('invalid_proof');return c;
@@ -47,6 +47,7 @@ export class ReplacementStore {
   const r=await recovery(client,id);
   if(token!==undefined){const s=await resolveSession(client,token,{csrfToken:csrf,touch:false});if(s.accountId!==r.account_id)backupFail('permission_denied');}
   await permission(client,r.account_id,r.venue_id);
+  await backupPlan(client,r.venue_id,this.planMode);
   // Serialize changes to the current installation without blocking monitor foreign-key checks.
   await client.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[r.venue_id]);
   const old=(await client.query('SELECT * FROM installations WHERE venue_id=$1 AND superseded_by IS NULL FOR UPDATE',[r.venue_id])).rows[0];
@@ -62,7 +63,7 @@ export class ReplacementStore {
   const c=await this.authenticate(action,envelope);
   return transaction(this.pool,async client=>{
    const prior=(await client.query('SELECT * FROM installation_replacements WHERE id=$1',[c.id])).rows[0];
-   if(prior?.result){bound(prior,c);const result=await this.#activeResult(client,prior);claims(this.origin,action,envelope);return result;}
+   if(prior?.result){bound(prior,c);const r=await recovery(client,c.id);await permission(client,r.account_id,r.venue_id);await backupPlan(client,r.venue_id,this.planMode);const result=await this.#activeResult(client,prior);claims(this.origin,action,envelope);return result;}
    const {r,old,l,p}=await this.#locked(client,c.id);
    if(r.local_venue_id!==c.localVenueId||r.source_node_id!==c.nodeId)backupFail('conflict');
    if(p?.result){bound(p,c);const result=await this.#activeResult(client,p);claims(this.origin,action,envelope);return result;}

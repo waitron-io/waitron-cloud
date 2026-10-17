@@ -2,7 +2,7 @@ import {RecoveryCodes,recoveryCodeKeysFromEnv,type RecoveryCodeKeys} from './rec
 import {verify} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {recordSecurityAuditEvent,transaction} from '@waitron-cloud/registration';
+import {recordSecurityAuditEvent,transaction,type PlanMode} from '@waitron-cloud/registration';
 import {BackupRecovery,decode,publicKey,type Proof,type RecoveryApprovalInput} from './recovery.ts';
 import {backupFail,uuid,uniqueViolation} from './catalogue.ts';
 import type {BackupKeyVault} from './keys.ts';
@@ -24,8 +24,8 @@ async function available(client:PoolClient,row:Row){if(!row.operation_id&&(row.f
 function view(row:Row){return {requestId:row.id,state:row.operation_id?'approved' as const:'awaiting_owner' as const,expiresAt:row.expires_at.toISOString(),operationId:row.operation_id};}
 /** Request locks precede account, membership and venue locks; no recovery operation locks a request. */
 export class RecoveryRequests {
- readonly pool:Pool;readonly vault:BackupKeyVault;readonly origin:string;readonly #codes:RecoveryCodes;
- constructor(pool:Pool,vault:BackupKeyVault,origin:string,keys:RecoveryCodeKeys|null|undefined=recoveryCodeKeysFromEnv(process.env)){this.pool=pool;this.vault=vault;this.origin=origin;this.#codes=new RecoveryCodes(keys??undefined);}
+ readonly planMode:PlanMode;readonly pool:Pool;readonly vault:BackupKeyVault;readonly origin:string;readonly #codes:RecoveryCodes;
+ constructor(pool:Pool,vault:BackupKeyVault,origin:string,keys:RecoveryCodeKeys|null|undefined=recoveryCodeKeysFromEnv(process.env),planMode:PlanMode='existing'){this.planMode=planMode;this.pool=pool;this.vault=vault;this.origin=origin;this.#codes=new RecoveryCodes(keys??undefined);}
  async machine(action:Action,proof:Proof){
   const c=verifyRecoveryRequest(this.origin,action,proof);
   return transaction(this.pool,async client=>{
@@ -43,7 +43,7 @@ export class RecoveryRequests {
    // Check key availability even for malformed guesses, so an outage cannot spend attempts.
    const matches=this.#codes.matches(row,row.code_hash,typeof code==='string'?code:'');
    if(typeof code!=='string'||!/^\d{8}$/.test(code)||!matches){if(!row.operation_id)await client.query('UPDATE backup_recovery_requests SET failed_codes=LEAST(5,failed_codes+1) WHERE id=$1',[id]);return null;}
-   const recovery=new BackupRecovery(this.pool,this.vault,this.origin,client);
+   const recovery=new BackupRecovery(this.pool,this.vault,this.origin,client,this.planMode);
    if(input){
     const operation=await recovery.start(token,csrf,{...input,id,mode:'failure',targetPublicKey:row.public_key});
     await available(client,row);

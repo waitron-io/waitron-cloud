@@ -1,6 +1,7 @@
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
+import {readVenuePlan,readOrganisationPlan,type PlanMode} from './organisation-plans.ts';
 import {transaction} from './transaction.ts';
 import {isPairingUuid} from './pairing-proof.ts';
 import {createLeaseTrust,InstallationError,readMachineClaims,verifyMachine,verifyLease,type LeaseIssuer,type MachineAction,type SignedEnvelope} from './installation-proof.ts';
@@ -59,10 +60,20 @@ async function view(client:PoolClient,id:string,servicesVersion:1|2=1):Promise<I
   // JSON dates give durable operation results the same shape as freshly read results.
   return JSON.parse(JSON.stringify({...rows[0],services:services.rows}));
 }
+async function installationPlan(client:PoolClient,venueId:string,mode:PlanMode) {
+  try{return await readVenuePlan(client,venueId,mode);}
+  catch(error){if(error instanceof Error && error.message==='permission_denied')fail('permission_denied');throw error;}
+}
+function maskPlan(result:InstallationView,plan:string,mode:PlanMode):InstallationView {
+  if(mode==='test-free-paid' && plan!=='paid')for(const s of result.services)if(s.service!=='content_translation') {
+    s.state='unconfigured';s.configuration={};s.health='unknown';s.failure=null;s.observedAt=null;
+  }
+  return result;
+}
 /** Machine proofs are checked against the stored key while holding the same lock as revocation. */
 export class InstallationStore {
-  readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;
-  constructor(pool:Pool,issuer:LeaseIssuer,origin:string,trusted=createLeaseTrust(issuer)){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;}
+  readonly #planMode:PlanMode;readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;
+  constructor(pool:Pool,issuer:LeaseIssuer,origin:string,trusted=createLeaseTrust(issuer),planMode:PlanMode='existing'){this.#planMode=planMode;this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;}
   /** Preliminary authentication protects the per-installation rate allowance; execute rechecks under lock. */
   async authenticate(action:MachineAction,envelope:unknown) {
     const routing=readMachineClaims(envelope);
@@ -73,7 +84,11 @@ export class InstallationStore {
     if(!['renew','configuration','report','revoke'].includes(action))fail('invalid_proof');
     const routing=readMachineClaims(envelope);
     return transaction(this.#pool,async client=>{
+      const initial=(await client.query('SELECT public_key,venue_id FROM installations WHERE id=$1',[routing.installationId])).rows[0];
+      if(!initial)fail('invalid_proof');verifyMachine(envelope,initial.public_key,this.#origin,action);
+      const plan=await installationPlan(client,initial.venue_id,this.#planMode);
       const row=await lock(client,routing.installationId),now=Date.now();
+      if(row.venue_id!==initial.venue_id)fail('invalid_proof');
       const c=verifyMachine(envelope,row.public_key,this.#origin,action,now);
       const body=readBody(action,c.body,now),report=body&&'revision' in body?body:undefined;
       const digest=createHash('sha256').update(JSON.stringify([action,c.body])).digest('hex');
@@ -87,7 +102,13 @@ export class InstallationStore {
         const claims=verifyLease(lease,this.#trusted,this.#origin,now);
         if(claims.installationId!==row.id||claims.venueId!==row.venue_id||claims.environment!==row.environment||claims.publicKey!==row.public_key)fail('invalid_proof');
       }
-      if(prior)return prior.result;
+      if(prior){
+        if(this.#planMode==='existing')return prior.result;
+        const current=await view(client,row.id,body&&'servicesVersion' in body?2:1);
+        if(prior.result.lease)current.lease=prior.result.lease;
+        if(action==='revoke')for(const s of current.services)s.configuration={};
+        return maskPlan(current,plan,this.#planMode);
+      }
       let lease:SignedEnvelope|undefined;
       if(action==='renew'){
         lease=this.#issuer.issue({origin:this.#origin,leaseId:randomUUID(),installationId:row.id,venueId:row.venue_id,environment:row.environment,publicKey:row.public_key,issuedAt:now,expiresAt:now+3600000});
@@ -110,7 +131,7 @@ export class InstallationStore {
       if(action==='renew')await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:row.venue_id,type:'installation.credentials_renewed',actorKind:'installation',actorId:row.id,subjectKind:'installation',subjectId:row.id,sourceId:securityAuditSourceId('installation.credentials_renewed',row.id,c.operationId)});
       if(action==='revoke')await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:row.venue_id,type:'installation.revoked',actorKind:'installation',actorId:row.id,subjectKind:'installation',subjectId:row.id,sourceId:row.id});
       await client.query('INSERT INTO installation_operations(installation_id,operation_id,digest,result) VALUES($1,$2,$3,$4)',[row.id,c.operationId,digest,result]);
-      return result;
+      return maskPlan(result,plan,this.#planMode);
     });
   }
   /** Trusted provisioning only; deliberately has no public HTTP endpoint. */
@@ -120,7 +141,10 @@ export class InstallationStore {
     for(const s of services)if(!object(s,['service','state','configuration'])||!names.includes(s.service)||!['unconfigured','provisioning','ready','failed'].includes(s.state)
       ||!s.configuration||typeof s.configuration!=='object'||Array.isArray(s.configuration)||JSON.stringify(s.configuration).length>4096)fail('invalid_proof');
     return transaction(this.#pool,async client=>{
-      const row=await lock(client,id);if(row.revoked_at)fail('revoked');if(row.configuration_revision!==expectedRevision)fail('conflict');
+      const initial=(await client.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0];if(!initial)fail('unavailable');
+      const plan=await installationPlan(client,initial.venue_id,this.#planMode);
+      if(plan!=='paid')fail('permission_denied');
+      const row=await lock(client,id);if(row.venue_id!==initial.venue_id)fail('conflict');if(row.revoked_at)fail('revoked');if(row.configuration_revision!==expectedRevision)fail('conflict');
       for(const s of services)await client.query('UPDATE installation_services SET state=$3,configuration=$4 WHERE installation_id=$1 AND service=$2',[id,s.service,s.state,s.configuration]);
       await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[id]);return view(client,id);
     });
@@ -129,9 +153,10 @@ export class InstallationStore {
     return transaction(this.#pool,async client=>{
       const session=await resolveSession(client,token,{touch:false});
       const memberships=await client.query('SELECT organisation_id,is_owner FROM organisation_memberships WHERE account_id=$1 FOR SHARE',[session.accountId]);
+      if(this.#planMode!=='existing')for(const m of [...memberships.rows].sort((a,b)=>a.organisation_id.localeCompare(b.organisation_id)))await readOrganisationPlan(client,m.organisation_id);
       const ids=await client.query(`SELECT i.id,v.organisation_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE v.organisation_id=ANY($1::uuid[]) AND i.superseded_by IS NULL ORDER BY i.id`,[memberships.rows.map(m=>m.organisation_id)]);
       const result:InstallationView[]=[];
-      for(const i of ids.rows){const v=await view(client,i.id);v.canRevoke=memberships.rows.find(m=>m.organisation_id===i.organisation_id).is_owner;
+      for(const i of ids.rows){const plan=await installationPlan(client,(await client.query('SELECT venue_id FROM installations WHERE id=$1',[i.id])).rows[0].venue_id,this.#planMode);const v=maskPlan(await view(client,i.id),plan,this.#planMode);v.canRevoke=memberships.rows.find(m=>m.organisation_id===i.organisation_id).is_owner;
         // Provisioning values may contain adapter authority; account screens receive status only.
         for(const s of v.services)s.configuration={};result.push(v);}
       await resolveSession(client,token,{touch:false});return result;

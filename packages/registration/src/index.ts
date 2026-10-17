@@ -16,7 +16,7 @@ export {recordUsageEvent,UsageError,UsageReconciler,UsageStore,usageEventTypes,u
 export {migrationNames} from './migrate.ts';
 export {runWorkerLoop} from './worker-loop.ts';
 export {OrganisationPlanStore, planAllows, readOrganisationPlan, requirePlanService, parsePlanMode, requireTestPlanVenue,
-  type OrganisationPlan, type PlanService, type PlanMode, type OrganisationPlanView} from './organisation-plans.ts';
+  readVenuePlan, advancePlanConfiguration, type OrganisationPlan, type PlanService, type PlanMode, type OrganisationPlanView} from './organisation-plans.ts';
 
 export interface ConnectionBinding {
   operationId: string;

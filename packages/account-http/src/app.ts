@@ -1,3 +1,4 @@
+import type {PlanMode} from '@waitron-cloud/registration';
 import {TranslationMachine} from '@waitron-cloud/translation';
 import {translationPaths,translationResponse} from './translation.ts';
 import {RelayMessages,type RelayAdmissionConfig} from '@waitron-cloud/registration';
@@ -75,7 +76,7 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;fiscalAllocation?:RegistryOptions;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
+export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;fiscalAllocation?:RegistryOptions;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;planMode?:PlanMode;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
   const config = validateConfig(options.config);
   if(options.relay&&!options.leaseIssuer)throw Error('relay.installation_issuer_required');
   if(options.translation&&!options.leaseIssuer)throw Error('translation.installation_issuer_required');
@@ -88,10 +89,10 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
   const recoveryCodeKeys=options.recoveryCodeKeys===undefined?(recoveryCodeKeysFromEnv(process.env)??null):options.recoveryCodeKeys;
   const pairingCodeKeys=options.pairingCodeKeys===undefined?(pairingCodeKeysFromEnv(process.env)??null):options.pairingCodeKeys;
   const origin = new URL(config.portalOrigin); const secure = origin.protocol === 'https:';
-  const captures=options.captures&&options.leaseIssuer?new BackupCaptures(pool,options.leaseIssuer,config.portalOrigin,options.captures,options.leaseTrust):undefined;
+  const captures=options.captures&&options.leaseIssuer?new BackupCaptures(pool,options.leaseIssuer,config.portalOrigin,{...options.captures,planMode:options.planMode},options.leaseTrust):undefined;
   const translation=options.translation&&options.leaseIssuer?new TranslationMachine(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust):undefined;
   const staffExchange=options.staffCertificates&&options.leaseIssuer?new StaffCertificateExchange(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust):undefined;
-  const streams=options.captures?.managedStreams&&options.leaseIssuer?new ManagedStreamMachines(pool,options.leaseIssuer,config.portalOrigin,options.captures.vault,options.captures.managedStreams,options.leaseTrust):undefined;
+  const streams=options.captures?.managedStreams&&options.leaseIssuer?new ManagedStreamMachines(pool,options.leaseIssuer,config.portalOrigin,options.captures.vault,options.captures.managedStreams,options.leaseTrust,options.planMode):undefined;
   const relay=options.relay&&options.leaseIssuer?new RelayMessages(pool,options.leaseIssuer,config.portalOrigin,options.relay,options.leaseTrust):undefined;
   const limiter = new AccountRateLimiter(pool, config.rateKey);
   const signup = new SignupStore(pool, outbox, options.passwordScreening); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
@@ -135,8 +136,8 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if(c.req.path==='/api/account/passkeys'||c.req.path.startsWith('/api/account/passkeys/'))return passkeyResponse(c,{pool,store:passkeys,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path==='/api/account/login/factor'||c.req.path==='/api/account/authenticator'||c.req.path.startsWith('/api/account/authenticator/'))
       return authenticatorResponse(c,{pool,login:passwordLogin,store:authenticator,policy:factor.policy,origin:config.portalOrigin,secure,ip,consume});
-    if(c.req.path.startsWith('/api/replacement/'))return replacementResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures,consume});
-    if(c.req.path.startsWith('/api/recovery/')||c.req.path.startsWith('/api/account/recovery/'))return recoveryResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures,consume,recoveryCodeKeys});
+    if(c.req.path.startsWith('/api/replacement/'))return replacementResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures?{...options.captures,planMode:options.planMode}:undefined,consume});
+    if(c.req.path.startsWith('/api/recovery/')||c.req.path.startsWith('/api/account/recovery/'))return recoveryResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures?{...options.captures,planMode:options.planMode}:undefined,consume,recoveryCodeKeys});
     if(translationPaths.includes(c.req.path))return translationResponse(c,{machine:translation,ip,consume});
     if(['/api/installations/staff-certificate-submit','/api/installations/staff-certificate-status'].includes(c.req.path))return staffCertificateResponse(c,{exchange:staffExchange,ip,consume});
     if(['/api/installations/backup-reserve','/api/installations/backup-publish'].includes(c.req.path))return captureResponse(c,{captures,ip,consume});
@@ -145,7 +146,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if(c.req.path==='/api/account/translation-consent')return translationConsentResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path==='/api/account/alerts')return alertPreferencesResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path.startsWith('/api/account/backups/'))return backupResponse(c,{pool,origin:config.portalOrigin,consume});
-    if(c.req.path.startsWith('/api/installations/')||c.req.path==='/api/account/installations'||c.req.path.startsWith('/api/account/installations/')) return installationResponse(c,{pool,issuer:options.leaseIssuer,trusted:options.leaseTrust,origin:config.portalOrigin,ip,consume});
+    if(c.req.path.startsWith('/api/installations/')||c.req.path==='/api/account/installations'||c.req.path.startsWith('/api/account/installations/')) return installationResponse(c,{pool,issuer:options.leaseIssuer,trusted:options.leaseTrust,planMode:options.planMode,origin:config.portalOrigin,ip,consume});
     if(c.req.path.startsWith('/api/pairing/')||c.req.path.startsWith('/api/account/pairing/')) return pairingResponse(c,{pool,origin:config.portalOrigin,ip,consume,pairingCodeKeys});
     const path = c.req.path.startsWith('/api/account/') ? c.req.path.slice('/api/account'.length) : '';
     const fields = paths[path];

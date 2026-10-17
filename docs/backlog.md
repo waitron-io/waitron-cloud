@@ -855,19 +855,25 @@ notifications separately.
   Real PostgreSQL checks cover concurrent updates, rollback and separate organisations;
   paid status leaves the disabled fiscal API unavailable. See the
   [operator commands](local-deployment.md#inspect-the-test-organisation-plan).
-  Service enforcement is still dormant. Ordinary deployment permissions and retention
-  stay unchanged. The six remaining implementation slices, deployment,
+  The opt-in backup boundary now checks paid permission before provisioning,
+  capture/publication, rotation, stream authority, recovery reads and replacement
+  completion. Plan changes advance installation revisions atomically; downgrades
+  clear paid setup and cached machine replies use current configuration. Explicit
+  reprovisioning restores an existing location/stream binding without discarding
+  objects or key versions. Test-mode expiry pauses while free, and admitted expiry
+  holds policy through deletion. Metadata/status/close and admitted verification
+  remain available. Ordinary deployment permissions and retention stay unchanged.
+  The [backup guide](local-backups.md#exercise-test-free-and-paid-plans) describes
+  these checks and their lock order. Real PostgreSQL barriers cover provider waits,
+  pairing, multiple installations, replacement and rollback. No original test
+  assertion or fiscal policy changed.
+  Deployment enforcement is still off. Five remaining implementation slices,
+  actual direct-storage withdrawal/fresh writers, gateway filtering, LAN deployment,
   two-organisation acceptance and measured headroom remain open. The existing
-  Waitron venue is quarantined; use a separate disposable Waitron test venue for
-  acceptance and leave its running containers and data untouched. Keep address
-  providers disabled and the existing translation release gates in place. A free
-  plan permits a service only after that service's independent prerequisites pass.
-  Before adding service callers, audit policy locks alongside existing transaction
-  locks. The setter's row lock currently also waits for transactions adding an
-  organisation reference. Two transactions that both read policy and then update
-  that same organisation can deadlock; current service code does not do this.
-  Preserve the shared policy fence when qualifying a weaker setter lock, and keep
-  organisation writes in the setter rather than upgrading a policy reader's lock.
+  Waitron venue is quarantined; use a separate disposable Waitron test venue and
+  leave its running containers and data untouched. Keep address providers disabled
+  and the existing translation release gates in place. A free plan permits a
+  service only after that service's independent prerequisites pass.
 - **Operating cost.** The [cost-model design](superpowers/specs/2026-10-14-cloud-cost-model-design.md)
   and [implementation plan](superpowers/plans/2026-10-14-cloud-cost-model.md) define
   how you can compare the AWS platform cost with no venues and the additional cost

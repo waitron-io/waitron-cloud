@@ -13,7 +13,7 @@ export async function replacementResponse(c:Context,options:{pool:Pool;origin:st
  if(!options.captures)throw new AccountHttpError(503,'temporarily_unavailable');
  await options.consume([{scope:'replacement-ip',subject:options.ip,limit:30,windowSeconds:60}]);
  const body=await readAccountBody(c.req.raw,['id','payload','signature','keySignature']);
- const envelope={id:body.id!,payload:body.payload!,signature:body.signature!,keySignature:body.keySignature!},store=new ReplacementStore(options.pool,options.captures.vault,options.origin);
+ const envelope={id:body.id!,payload:body.payload!,signature:body.signature!,keySignature:body.keySignature!},store=new ReplacementStore(options.pool,options.captures.vault,options.origin,options.captures.planMode);
  try{
   const claims=await store.authenticate(action as 'prepare'|'status',envelope);
   await options.consume([{scope:'replacement-key',subject:claims.publicKey,limit:30,windowSeconds:60}]);
