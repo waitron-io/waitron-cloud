@@ -352,18 +352,19 @@ test('each attempted call renews the lease before the next pass',async()=>{
  try{await worker(fake.baseUrl).runOnce(live());assert.equal((await row(job.id)).state,'done');assert.equal(fake.requests.length,2);}finally{await fake.close();}
 });
 
-for(const stage of ['save','finish'] as const)test(`a lease stolen immediately before ${stage} fences that write`,async()=>{
+for(const stage of ['renew','save','finish'] as const)test(`a lease stolen immediately before ${stage} fences that write`,async()=>{
  const {job}=await queue(many('a','A',2)),replacement=randomUUID();
- const condition=stage==='save'?"NEW.lease_until IS DISTINCT FROM OLD.lease_until AND NEW.input_tokens=200 AND NEW.lease_id=OLD.lease_id":"NEW.done>OLD.done";
+ const condition=stage==='renew'?"NEW.input_tokens=100 AND OLD.input_tokens=0 AND NEW.lease_id=OLD.lease_id":stage==='save'?"NEW.lease_until IS DISTINCT FROM OLD.lease_until AND NEW.input_tokens=200 AND NEW.lease_id=OLD.lease_id":"NEW.done>OLD.done";
  await db.pool.query(`CREATE FUNCTION steal_translation_lease() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN
- IF NEW.id='${job.id}' AND ${condition} THEN UPDATE translation_jobs SET lease_id='${replacement}' WHERE id=NEW.id; END IF; RETURN NEW; END$$;
+ IF NEW.id='${job.id}' AND ${condition} THEN UPDATE translation_jobs SET lease_id='${replacement}'${stage==='renew'?",lease_until=clock_timestamp()+interval '1 hour'":''} WHERE id=NEW.id; END IF; RETURN NEW; END$$;
  CREATE TRIGGER steal_translation_lease AFTER UPDATE ON translation_jobs FOR EACH ROW EXECUTE FUNCTION steal_translation_lease()`);
  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
  try{
   await worker(fake.baseUrl).runOnce(live());const ended=await row(job.id);
-  assert.deepEqual([ended.state,ended.lease_id,ended.done],['running',replacement,stage==='save'?0:2]);
-  assert.deepEqual(Object.keys((await saved(job.id))!),stage==='save'?[]:['0']);
-  assert.equal((await db.pool.query('SELECT * FROM usage_events WHERE source_reference=$1',[job.id])).rowCount,0);assert.equal(fake.requests.length,2);
+  assert.deepEqual([ended.state,ended.lease_id,ended.done],['running',replacement,stage==='finish'?2:0]);
+  assert.deepEqual(Object.keys((await saved(job.id))!),stage==='finish'?['0']:[]);
+  assert.equal((await db.pool.query('SELECT * FROM usage_events WHERE source_reference=$1',[job.id])).rowCount,0);assert.equal(fake.requests.length,stage==='renew'?1:2);
+  if(stage==='renew')assert.ok(ended.lease_until.getTime()>Date.now()+30*60000,'old worker shortened the replacement lease');
  }finally{await db.pool.query('DROP TRIGGER steal_translation_lease ON translation_jobs; DROP FUNCTION steal_translation_lease()');await fake.close();}
 });
 test('shutdown never returns a replacement worker lease or decrements its count',async()=>{

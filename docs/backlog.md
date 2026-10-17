@@ -329,7 +329,9 @@ recovery, integer token/cost accounting, cap checks and transactional finish/usa
 Real PostgreSQL and loopback-provider checks cover shutdown during connection waits, body
 loading and either provider pass; stale leases cannot save outcomes or update spend. A failed
 usage write rolls back completion, and the next lease finishes saved batches without a new
-provider call. A greater-than-16-MiB result walks pages in filtered submit order despite family
+provider call. An expired lease or a crash before a batch is saved can repeat provider work;
+recovery only skips durably saved batches. Task 9 must keep production lease duration longer
+than one bounded provider attempt. A greater-than-16-MiB result walks pages in filtered submit order despite family
 regrouping and reversed completion. Names and corrections retain escaped control characters
 and lone surrogates. Append-only migration 040 changes retained results from JSONB to JSON;
 release-39 upgrade, cancellation rollback, repeat/concurrent migration, manifest and recovery
