@@ -420,6 +420,14 @@ replies cannot restore it. The browser sends the session's security token on wri
 and validates complete consent replies. Real PostgreSQL/Chromium tests cover
 agreement, persistence, withdrawal after a lost response body and owner-only display
 in both languages, themes and phone/desktop widths. The wording awaits the owner.
+The manual-retry browser fixture holds its successful session-activity reply until the
+retry read returns. A controlled reply before click reproduces the five-second missing
+retry-button failure: the session update automatically reloads consent and replaces that
+button after pointerdown. Holding the reply passes the same 500 ms delayed-click control;
+removing the hold restores the original timeout. Every existing assertion and deadline
+remains. The two natural failures retained no request ordering, so their exact trigger stays
+unproved; bounded path/status events now accompany any future failure. Portal production
+code is unchanged by this fixture correction.
 Task 16 keeps translation out of the three-service configuration, account and diagnostic
 lists, monitoring targets, incident display and alert delivery. A ready translation row alone
 cannot enable those services. PostgreSQL regressions insert that row explicitly and cover

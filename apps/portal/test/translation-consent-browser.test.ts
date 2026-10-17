@@ -7,7 +7,7 @@ import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
 import {startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: owners allow and stop translation, reconcile lost replies and retain their choice`,async()=>{
- const f=await startPortalFixture();try{
+ const f=await startPortalFixture();let releaseActivity=()=>{};const events:string[]=[];try{
   const email='owner@example.test',password='A long enough venue owner password';
   const signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email);
   const mail=f.db.outbox.open((await f.db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert.ok('token' in mail);
@@ -16,7 +16,16 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await r.start(b);await r.approveCloud(b,owner.accountId);await r.approveLocal(b,randomUUID());const installed=await r.complete(b);
   const context=await f.browser.newContext({locale,colorScheme:theme,viewport:{width,height:900}}),page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
 
+  const record=(entry:string)=>{events.push(entry);if(events.length>20)events.shift();};
+  page.on('request',request=>{const path=new URL(request.url()).pathname;if(path==='/api/account/translation-consent'||path==='/api/account/session/activity')record(`request ${request.method()} ${path}`);});
+  page.on('response',response=>{const path=new URL(response.url()).pathname;if(path==='/api/account/translation-consent'||path==='/api/account/session/activity')record(`response ${response.status()} ${path}`);});
   await page.clock.install();
+  let holdActivity=false;
+  const activityReleased=new Promise<void>(resolve=>{releaseActivity=resolve;});
+  await page.route('**/api/account/session/activity',async route=>{
+   if(holdActivity)await activityReleased;
+   await route.continue();
+  });
   let failedReads=0,heldWrite=false,writeEntered!:()=>void,releaseWrite!:()=>void;
   const entered=new Promise<void>(resolve=>{writeEntered=resolve;}),released=new Promise<void>(resolve=>{releaseWrite=resolve;});
   await page.route('**/api/account/translation-consent',async route=>{
@@ -33,8 +42,12 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await section.getByRole('button',{name:c.refreshStatus,exact:true}).click();
   await section.getByText(c.limited,{exact:true}).waitFor();
   assert.equal(await section.getByRole('button',{name:c.refreshStatus,exact:true}).isEnabled(),false);
+  // A session reply can reload consent and replace its retry button between pointerdown and click.
+  record('manual retry starts');holdActivity=true;
   await page.clock.fastForward(61_000);
-  await section.getByRole('button',{name:c.refreshStatus,exact:true}).click();
+  const retryReply=page.waitForResponse(response=>response.url().endsWith('/api/account/translation-consent')&&response.request().method()==='GET'&&response.status()===200);
+  await Promise.all([retryReply,section.getByRole('button',{name:c.refreshStatus,exact:true}).click()]);
+  record('manual retry replied');holdActivity=false;releaseActivity();
   await section.getByRole('button',{name:allow,exact:true}).waitFor();
   assert.equal(new URL(page.url()).pathname,'/account');
   const help=await section.innerText();for(const provider of ['OpenAI','Anthropic','Google'])assert.ok(help.includes(provider));assert.ok(help.includes('24'));
@@ -55,7 +68,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.reload();await section.getByRole('button',{name:allow,exact:true}).waitFor();
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[owner.accountId]);
   await page.reload();await page.getByRole('heading',{name:/Sol SL/}).waitFor();assert.equal(await section.count(),0);
- }finally{await f.close();}
+ }catch(error){console.error('Translation consent browser stages',JSON.stringify({locale,theme,width,events}));throw error;}finally{releaseActivity();await f.close();}
 });
 
 for(const locale of ['en','es'] as const)test(`${locale}: two venues keep accessible controls and write warnings in the affected venue`,async()=>{
