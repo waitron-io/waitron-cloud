@@ -295,18 +295,30 @@ test('a full paged walk retains submit order and exact text despite regrouped fa
  assert.ok(Buffer.byteLength(text)<=1048576);
  const job=await transaction(db.pool,async c=>{await lockVenue(c,v.venueId);return createJob(c,{installationId:v.installationId,venueId:v.venueId,operationId:randomUUID(),fingerprint:jobFingerprint(text),body:text,total:600});});
  const name='漢'.repeat(498)+'\u0000\ud800',fix={field:'internal',wrong:'\udfff\u0000',right:'\ud800\u0001'};
- let release!:()=>void;const firstHeld=new Promise<void>(resolve=>{release=resolve;});let first=true;const completion:string[]=[];
+ const completion:string[]=[];
  const fake=await startFakeOpenAi(async r=>{
   if(isReview(r))return emptyReview();
   const products=JSON.parse(r.body.input.split('Products:\n')[1]!) as {id:string;internal:string}[];
   const leading=products[0]!.internal;
-  if(first){first=false;await firstHeld;}else release();
+  if(leading==='Staff 0')await until(async()=>Object.hasOwn((await saved(job.id))??{},'1'));
   completion.push(leading);
   return {json:responsesBody(JSON.stringify({products:products.map(p=>({id:p.id,...Object.fromEntries(languages.map(l=>[l,name])),placeholder:false,corrections:[fix]}))}))};
  });
  try{
-  await worker(fake.baseUrl,{},10000).runOnce(live());assert.equal((await row(job.id)).state,'done');
+  const client=createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:10000});
+  const leading=(input:string)=>JSON.parse(input.split('Products:\n')[1]!)[0].internal as string;
+  const reordered={...client,async respond(call:Parameters<typeof client.respond>[0],signal?:AbortSignal){
+   if(call.effort==='low'){
+    const name=leading(call.input);
+    if(name==='Staff 0')await until(()=>fake.requests.some(r=>!isReview(r)&&leading(r.body.input)==='Staff 1'));
+    else if(name!=='Staff 1')await until(()=>fake.requests.some(r=>!isReview(r)&&leading(r.body.input)==='Staff 0'));
+   }
+   return client.respond(call,signal);
+  }};
+  await new TranslationWorker(db.pool,reordered,{wait:async()=>{}}).runOnce(live());assert.equal((await row(job.id)).state,'done');
   assert.notEqual(completion[0],'Staff 0');assert.ok(completion.includes('Staff 0'));
+  assert.ok(completion.indexOf('Staff 1')<completion.indexOf('Staff 0'));
+  assert.deepEqual(fake.requests.filter(r=>!isReview(r)).slice(0,2).map(r=>leading(r.body.input)),['Staff 1','Staff 0']);
   const all:string[]=[];let cursor=0,pages=0;
   for(;;){const page=await transaction(db.pool,async c=>collectJob(c,await readJob(c,v.installationId,job.id),cursor));
    pages++;assert.ok(Buffer.byteLength(JSON.stringify(page))<=16777216);assert.deepEqual(page.failed,[]);
@@ -314,7 +326,7 @@ test('a full paged walk retains submit order and exact text despite regrouped fa
    if(page.nextCursor===null)break;assert.ok(page.nextCursor>cursor);cursor=page.nextCursor;
   }
   assert.ok(pages>1);assert.deepEqual(all,items.map(i=>i.ref));assert.equal(new Set(all).size,600);
- }finally{release();await fake.close();}
+ }finally{await fake.close();}
 });
 
 test('shutdown while loading a repeatedly abandoned job saves no failed batches and returns its lease',async()=>{

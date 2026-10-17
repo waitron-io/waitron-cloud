@@ -370,10 +370,13 @@ Remaining work:
   currently expose one error; both failures from one call's spend/renew callbacks are retained.
   An ordinary failed run keeps its lease until expiry and uses a lease attempt; only caller
   shutdown returns it immediately. Task 18 still needs bounded diagnostics without names.
-  The review's M17 mutation had one unexplained page-walk failure. Three fresh paired walks
-  with that mutation present/absent passed, so its historical cause remains unproved. If it
-  recurs, capture provider and save timing with synthetic data; preserve all current deadlines
-  and outcome assertions.
+  The page-walk fixture now holds the specifically named first batch until the second batch
+  is saved. A controlled second-before-first request schedule reproduced the original failure:
+  the fixture had incorrectly treated the first arriving HTTP request as the first batch.
+  The corrected test preserves every original outcome assertion and deadline, adds the actual
+  request-order check, and proves durable completion in the opposite order before walking pages.
+  The earlier review M17 failure had no retained arrival trace, so that historical trigger
+  remains unproved; the current CI ordering-precondition failure is independently reproduced.
   Keep Task 12's whole-request bound ahead of the fingerprint helper: a small declared
   size with a large actual body still hashes that body before refusing the mismatch.
   A cheap byte-length refusal can be considered there; Task 1 exposes no HTTP route.
