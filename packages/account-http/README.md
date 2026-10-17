@@ -576,3 +576,9 @@ worker runs. Finished jobs become eligible 24 hours after completion; queued and
 jobs become eligible 24 hours after submission. Cleanup keeps accounting and usage records.
 A failed scheduled pass prints `Account server translation cleanup failed` and retries on the
 next pass. The worker runs the same sweep; `--once` sweeps before taking one job.
+
+Cleanup must succeed before the enabled account command listens. If that startup pass fails,
+the command exits with its fixed configuration failure message, so the portal is unavailable.
+The continuous worker also pauses new translation jobs while cleanup is failing. It prints
+`Translation worker cleanup failed; retrying`, waits one minute and retries until cleanup
+succeeds or you stop it. Stopping interrupts that wait. A failed cleanup in `--once` exits 1.

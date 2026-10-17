@@ -435,6 +435,17 @@ repeat-page retention, release waiting for collect and expiry between real bound
 A fake-provider flow submits, finishes, durably stores collected pages and releases through
 both real commands; neither command writes submitted names, generated names, the key or an
 authorization header.
+Cleanup failure keeps the approved startup/work gate closed: the enabled account command
+exits before listening, and the continuous worker pauses new jobs, retries cleanup once per
+minute and stops promptly during that wait. Both use fixed diagnostics. This also makes the
+portal unavailable if its enabled startup cleanup fails; review that availability policy before
+enabling translation. The `--once` regression proves an old queued job never reaches the fake
+provider before its startup sweep.
+The review's 50,000-retained-row probe used a sequential scan (5.4 ms locally). The per-pass
+job limit does not bound rows scanned. Measure retained-history growth at launch volume and
+qualify an append-only indexing migration if needed. The worker's lease query still has no age
+predicate; provider dispatch for a job aging between bounded sweeps remains unverified and
+must be qualified before activation. These are separate from deleting an expired body.
 Keep translation off until the remaining runtime and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).

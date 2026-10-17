@@ -16,7 +16,7 @@ function server(overrides:NodeJS.ProcessEnv,nodeArgs:string[]=[]){
   CLOUD_HTTP_PORT:'0',CLOUD_HTTP_HOST:'127.0.0.1',NODE_ENV:'test',CLOUD_HTTP_TRUSTED_PROXY_IPS:'',CLOUD_INSTALLATION_ISSUER_KEY:issuerKey,...overrides},stdio:['ignore','pipe','pipe']});
  let stdout='',stderr='';child.stdout.on('data',chunk=>{stdout+=chunk;});child.stderr.on('data',chunk=>{stderr+=chunk;});
  const exited=once(child,'close');const deadline=setTimeout(()=>child.kill('SIGKILL'),20000);void exited.finally(()=>clearTimeout(deadline));
- return {output:()=>({stdout,stderr}),async listening(){const end=Date.now()+10000;while(!stdout.includes('\n')){assert.equal(child.exitCode,null,stderr);if(Date.now()>end)throw new Error('no listening line');await delay(20);}},
+ return {exited,output:()=>({stdout,stderr}),async listening(){const end=Date.now()+10000;while(!stdout.includes('\n')){assert.equal(child.exitCode,null,stderr);if(Date.now()>end)throw new Error('no listening line');await delay(20);}},
   async stop(){if(child.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');const [code,signal]=await exited;return {code,signal,stdout,stderr};}};
 }
 async function finished(v:{installationId:string;venueId:string},age:string){
@@ -81,4 +81,14 @@ test('a slow scheduled sweep has only one database pass in flight and shutdown d
   await lock.query('ROLLBACK');lock.release();const out=await (stopping??run.stop());assert.equal(out.code,0);assert.equal(out.stderr,'');
  }
  assert.equal(await passes(),0);
+});
+
+test('failed startup cleanup refuses to listen and never prints the database error text',async()=>{
+ const v=await connectedVenue(db,issuer,'http://localhost');await finished(v,'25 hours');
+ await db.pool.query(`CREATE FUNCTION fail_startup_expiry() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'SENTINEL private startup failure'; END $$`);
+ await db.pool.query("CREATE TRIGGER fail_startup_expiry BEFORE UPDATE ON translation_jobs FOR EACH ROW WHEN (NEW.state='expired') EXECUTE FUNCTION fail_startup_expiry()");
+ try{
+  const run=server({CLOUD_TRANSLATION:'1'});assert.deepEqual(await run.exited,[1,null]);
+  assert.deepEqual(run.output(),{stdout:'',stderr:'Account server failed; check database, migrations and configuration\n'});
+ }finally{await db.pool.query('DROP TRIGGER fail_startup_expiry ON translation_jobs');await db.pool.query('DROP FUNCTION fail_startup_expiry()');}
 });

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {after,before,test} from 'node:test';
+import {Pool} from 'pg';
 import {createLeaseIssuer,transaction} from '@waitron-cloud/registration';
 import {collectJob,createJob,createOpenAiClient,jobFingerprint,lockVenue,monthSpend,parseJob,readJob,releaseJob,sweepTranslationJobs,TranslationError,TranslationWorker,writtenItems} from '../src/index.ts';
 import {connectedVenue,database,giveConsent} from './fixtures.ts';
@@ -88,22 +89,23 @@ test('each invalid limit is refused without changing any row',async()=>{
  }
  await drain();
 });
-test('a locked collect row is skipped while other eligible jobs expire, and rollback preserves both body and state',async()=>{
+test('a locked collect row is skipped while other eligible jobs expire, and rollback preserves both body and state',async t=>{
+ const bounded=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${db.schema} -c lock_timeout=1000`});t.after(()=>bounded.end());
  await drain();const v=await connectedVenue(db,issuer,origin),locked=await aged(v,'done','25 hours'),free=await aged(v,'failed','25 hours');
  const client=await db.pool.connect();
  try{
   await client.query('BEGIN');await readJob(client,v.installationId,locked);
-  assert.deepEqual(await sweepTranslationJobs(db.pool),{expired:1});
+  assert.deepEqual(await sweepTranslationJobs(bounded),{expired:1});
   assert.deepEqual(await look(locked),{state:'done',lease_id:null,bodies:1});
   assert.deepEqual(await look(free),{state:'expired',lease_id:null,bodies:0});
  }finally{await client.query('ROLLBACK');client.release();}
  await db.pool.query(`CREATE FUNCTION reject_translation_expiry() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic expiry failure'; END $$`);
  await db.pool.query('CREATE TRIGGER reject_translation_expiry BEFORE UPDATE ON translation_jobs FOR EACH ROW EXECUTE FUNCTION reject_translation_expiry()');
  try{
-  await assert.rejects(sweepTranslationJobs(db.pool),/synthetic expiry failure/);
+  await assert.rejects(sweepTranslationJobs(bounded),/synthetic expiry failure/);
   assert.deepEqual(await look(locked),{state:'done',lease_id:null,bodies:1});
  }finally{await db.pool.query('DROP TRIGGER reject_translation_expiry ON translation_jobs');await db.pool.query('DROP FUNCTION reject_translation_expiry()');}
- assert.deepEqual(await sweepTranslationJobs(db.pool),{expired:1});
+ assert.deepEqual(await sweepTranslationJobs(bounded),{expired:1});
 });
 test('two simultaneous sweeps expire each retained body once and retain every accounting row',async()=>{
  await drain();const v=await connectedVenue(db,issuer,origin),ids=[];
