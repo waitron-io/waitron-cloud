@@ -845,6 +845,17 @@ notifications separately.
 
 ## Platform work to scope
 
+- **LAN test Cloud with free and paid organisations.** The
+  [test deployment design](superpowers/specs/2026-10-17-test-cloud-free-paid-design.md)
+  and [implementation plan](superpowers/plans/2026-10-17-test-cloud-free-paid.md)
+  describe a separate Cloud Compose project on the owner's test box, with an
+  operator-set pretend plan and service checks enabled only for this test deployment.
+  Ordinary deployment permissions and retention stay unchanged. Implementation, deployment,
+  two-organisation acceptance and measured headroom remain open. The existing
+  Waitron venue is quarantined; use a separate disposable Waitron test venue for
+  acceptance and leave its running containers and data untouched. Keep address
+  providers disabled and the existing translation release gates in place. A free
+  plan permits a service only after that service's independent prerequisites pass.
 - **Operating cost.** The [cost-model design](superpowers/specs/2026-10-14-cloud-cost-model-design.md)
   and [implementation plan](superpowers/plans/2026-10-14-cloud-cost-model.md) define
   how you can compare the AWS platform cost with no venues and the additional cost
