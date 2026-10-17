@@ -376,10 +376,10 @@ four answer 503 `temporarily_unavailable`.
 | submit | 2,113,536 bytes (twice the 1 MiB job, plus 16 KiB) | 60 s |
 | status, collect, release | 16,384 bytes | 5 s |
 
-Every other account route keeps today's reader, which refuses a body over 16,384 bytes or one not
-received within 5 seconds (`packages/account-http/src/request.ts:6,15,22`); the server's own
-request time limit is 5 seconds today (`packages/account-http/src/server.ts:37`). Submit gets its
-own limits because `body` travels as a JSON string inside the envelope: the job is JSON text, and
+Every other account body reader refuses a body over 16,384 bytes or one not received within
+5 seconds. When translation is enabled, the server permits 60 seconds to receive a request;
+the readers preserve the shorter deadline for other actions. Headers retain their five-second
+deadline. Submit gets its own limits because `body` travels as a JSON string inside the envelope: the job is JSON text, and
 escaping JSON text adds at most one backslash per character, so its escaped form is at most twice
 its size. A request over its size limit is refused with 413 (`translation_job_too_large` for
 submit, `invalid_input` for the others); one not received in time with 408.
