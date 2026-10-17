@@ -8,3 +8,4 @@ export {parseJob,translationKinds,writtenItems,type HouseStyleName,type JobItem,
 export {batchIds,firstPassInput,firstPassInstructions,reviewInput,reviewInstructions} from './prompt.ts';
 export {checkFirstPass,extractJson,mergeReview,ReplyError} from './reply.ts';
 export {createOpenAiClient,openAiBaseUrl,ProviderError,type ModelCall,type ModelClient,type ModelReply} from './openai-client.ts';
+export {retryWaitsMs,translateBatch,type BatchHooks,type BatchOutcome} from './batch-runner.ts';
