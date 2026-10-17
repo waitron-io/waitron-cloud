@@ -124,7 +124,8 @@ test('continuous work leases two jobs, leaves a third queued and releases both o
  const fake=await startFakeOpenAi(()=>new Promise(()=>{}));
  const jobs=[await queue(),await queue(),await queue()],run=command([],{CLOUD_OPENAI_BASE_URL:fake.baseUrl});
  try{
-  await until(()=>fake.requests.length===2);
+  await until(()=>fake.requests.length>=2);
+  assert.equal(fake.requests.length,2);
   const rows=(await db.pool.query(`SELECT state,lease_count,extract(epoch FROM lease_until-clock_timestamp())::float8 AS remaining
    FROM translation_jobs WHERE id=ANY($1::uuid[]) ORDER BY created_at,id`,[jobs.map(j=>j.id)])).rows;
   assert.deepEqual(rows.map(r=>[r.state,r.lease_count]),[['running',1],['running',1],['queued',0]]);
