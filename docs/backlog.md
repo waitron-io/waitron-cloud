@@ -294,6 +294,11 @@ actual continuation, against the 16 MiB limit. PostgreSQL tests cover concurrent
 rollback, repeated collection, release locking and a multi-page walk; serializer tests cover
 exact byte boundaries, Unicode and complete outcomes. These foundations expose no translation
 routes or worker; the remaining runtime is still open.
+Task 4 adds the contract parser and family/category batch planner. Offline checks cover exact
+field shapes, language and text bounds, the 1,000-item boundary, context-only heads, all nine
+name kinds and house-style examples. Batches keep families whole, including context heads and
+families larger than 90 items; small categories stay together. Batch order does not change the
+collect contract’s filtered submit order.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies
@@ -304,9 +309,15 @@ and preserves accepted language tags. Store-level page sizing is tested; HTTP se
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 4–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 5–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
+  Before enabling submit, jointly qualify language recognition and canonical duplicates. The
+  approved parser accepts unknown primary codes with subtags such as `xx-BR`, non-language
+  codes `mul`/`zxx`, and case variants as distinct tags. The actual Waitron language validator
+  refuses the unknown/non-language probe inputs and normalizes ordinary regional variants,
+  but direct signed input still needs a policy decision before activation. Preserve the
+  approved accepted-tag set until that contract decision; claim no complete recognition gate.
   Before Task 8 persists provider results, resolve JSONB's refusal of NUL and lone surrogates
   without silently altering accepted names or corrections. The Task 3 PostgreSQL multi-page
   test initially reproduced `22P05` for NUL; its database fixture uses U+0001, while pure page

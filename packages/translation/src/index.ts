@@ -3,3 +3,5 @@ export {checkSubmitBody,jobFingerprint,maxJobBytes,maxJobItems,type SubmitFinger
 export {translationModel,translationPromptVersion,translationProvider} from './service.ts';
 export {collectJob,createJob,findSubmitted,lockVenue,monthSpend,readJob,releaseJob,spendingPolicy,statusView,submitView,type ItemResult,type JobRow,type JobState} from './job-store.ts';
 export {maxCollectBytes,type CollectPage} from './collect-page.ts';
+export {batchTarget,planBatches} from './batching.ts';
+export {parseJob,translationKinds,writtenItems,type HouseStyleName,type JobItem,type ParsedJob,type TranslationKind} from './job-body.ts';
