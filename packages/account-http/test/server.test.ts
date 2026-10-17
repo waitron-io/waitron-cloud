@@ -290,3 +290,27 @@ test('CLI factor configuration survives restart, uses its own keys and emits no 
   ended=await running.stop();assert.equal(ended.code,0);assert.equal(ended.stderr,'');assert.match(ended.stdout,/^\{"status":"listening","port":\d+\}\n$/);
  }finally{if(running.child.exitCode===null)await running.stop();}
 });
+
+test('translation CLI defaults off, enables only with an issuer, and refuses other flag values',async()=>{
+ const issuerKey=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url');
+ for(const overrides of [{CLOUD_TRANSLATION:'private-translation-sentinel',CLOUD_INSTALLATION_ISSUER_KEY:issuerKey},{CLOUD_TRANSLATION:'1',CLOUD_INSTALLATION_ISSUER_KEY:''}]){
+  const running=cli(overrides);
+  try{
+   const outcome=await running.exited;assert.equal(outcome.code,1);assert.equal(outcome.stdout,'');
+   assert.equal(outcome.stderr,'Account server failed; check database, migrations and configuration\n');
+  }finally{if(running.child.exitCode===null)await running.stop();}
+ }
+ for(const flag of [undefined,'0','1']){
+  const running=cli({CLOUD_TRANSLATION:flag,CLOUD_INSTALLATION_ISSUER_KEY:issuerKey});
+  try{
+   const port=await running.ready();
+   const response=await new Promise<{status:number;body:string}>((resolve,reject)=>{
+    const req=request({host:'127.0.0.1',port,path:'/api/installations/translation-status',method:'POST',headers:{host:'localhost','content-type':'application/json'}},res=>{
+     let body='';res.on('data',chunk=>body+=chunk);res.on('error',reject);res.on('end',()=>resolve({status:res.statusCode!,body}));
+    });req.on('error',reject);req.end('{}');
+   });
+   assert.equal(response.status,flag==='1'?401:503);assert.deepEqual(JSON.parse(response.body),{error:flag==='1'?'invalid_proof':'temporarily_unavailable'});
+   const outcome=await running.stop();assert.equal(outcome.code,0);assert.equal(outcome.stderr,'');
+  }finally{if(running.child.exitCode===null)await running.stop();}
+ }
+});
