@@ -862,6 +862,12 @@ notifications separately.
   acceptance and leave its running containers and data untouched. Keep address
   providers disabled and the existing translation release gates in place. A free
   plan permits a service only after that service's independent prerequisites pass.
+  Before adding service callers, audit policy locks alongside existing transaction
+  locks. The setter's row lock currently also waits for transactions adding an
+  organisation reference. Two transactions that both read policy and then update
+  that same organisation can deadlock; current service code does not do this.
+  Preserve the shared policy fence when qualifying a weaker setter lock, and keep
+  organisation writes in the setter rather than upgrading a policy reader's lock.
 - **Operating cost.** The [cost-model design](superpowers/specs/2026-10-14-cloud-cost-model-design.md)
   and [implementation plan](superpowers/plans/2026-10-14-cloud-cost-model.md) define
   how you can compare the AWS platform cost with no venues and the additional cost
