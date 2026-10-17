@@ -3,6 +3,7 @@ import type {RemoteResolver} from './remote-access.ts';
 import type {CaptureOptions} from '@waitron-cloud/backups/captures';
 import { createServer, type Server } from 'node:http';
 import { getRequestListener } from '@hono/node-server';
+import { getPath } from 'hono/utils/url';
 import type { Pool } from 'pg';
 import type { RelayAdmissionConfig, EmailOutbox, LeaseIssuer, PasswordScreeningProvider } from '@waitron-cloud/registration';
 import { validateConfig, type AccountHttpConfig, type FactorConfig } from './config.ts';
@@ -32,7 +33,8 @@ export async function startAccountServer(options: {pool: Pool; outbox: EmailOutb
     if (stopping) return unavailable(request, portalRequest);
     if (portalRequest) return portalResponse(request, options.portalAssets!);
     if (url.pathname === '/api/health/live') return app.fetch(request, bindings);
-    if (options.translation && url.pathname === submitPath) {
+    // Encoded aliases must use the same admission as the router's decoded submit path.
+    if (options.translation && getPath(request) === submitPath) {
       let ip: string | undefined;
       try {ip = clientAddress(bindings.incoming.socket.remoteAddress ?? '', request.headers.get('x-forwarded-for') ?? undefined, config.trustedProxyIps);}
       catch {ip = undefined;}

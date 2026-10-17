@@ -379,6 +379,7 @@ places per process, at most one per canonical client address, outside the eight
 ordinary account places. Excess submits receive 503 before reading or rate charging.
 Real-listener checks cover large escaped jobs, exact request-byte boundaries, slow
 delivery, address grouping, refusal/abort recovery and readiness during stalled submits.
+Admission uses the router's decoded submit path so encoded aliases cannot spend ordinary places.
 Status, collect, release and other account readers keep 16 KiB and five seconds.
 Keep translation off until consent, retention and joint qualification are complete.
 

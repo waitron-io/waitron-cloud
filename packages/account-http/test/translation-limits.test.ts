@@ -252,3 +252,24 @@ test('status, collect and release still enforce a five-second body deadline when
   assert.deepEqual(await error(await pending),[408,'invalid_input']);
  }
 });
+test('encoded submit aliases share the same address place as the literal route',async()=>{
+ const running=await host(['127.0.0.1']),held=hold(running.port,'198.18.7.1','/api/installations/translation%2Dsubmit');
+ try{
+  await until(async()=>Number((await db.pool.query('SELECT COALESCE(sum(attempts),0) AS n FROM account_rate_limits')).rows[0].n)===2);
+  for(const path of ['/api/installations/translation-submit','/api/installations/translation%2dsubmit','/%61pi/installations/%74ranslation-submit']){
+   const response=await send(running.port,path,'{}','198.18.7.1');
+   assert.deepEqual([response.status,response.headers['retry-after']],[503,'1'],path);
+  }
+ }finally{held.abort();await running.close();}
+});
+test('encoded submit aliases cannot bypass four places or spend ordinary admission',async()=>{
+ const running=await host(['127.0.0.1']),held:ReturnType<typeof hold>[]=[];
+ try{
+  for(let i=0;i<4;i++)held.push(hold(running.port,`198.18.8.${i+1}`,'/api/installations/translation%2Dsubmit'));
+  await until(async()=>Number((await db.pool.query('SELECT COALESCE(sum(attempts),0) AS n FROM account_rate_limits')).rows[0].n)===8);
+  const fifth=hold(running.port,'198.18.8.5','/api/installations/%74ranslation-submit');held.push(fifth);
+  const response=await Promise.race([fifth.result,delay(2000).then(()=>assert.fail('an encoded fifth submit waited for its body'))]);
+  assert.deepEqual([response.status,response.headers['retry-after']],[503,'1']);
+  assert.equal((await ready(running.port,'198.18.8.6')).status,200);
+ }finally{for(const h of held)h.abort();await running.close();}
+});
