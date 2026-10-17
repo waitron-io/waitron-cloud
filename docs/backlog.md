@@ -322,7 +322,7 @@ Shutdown during either pass, a callback or retry waiting returns an abort withou
 result. Storage and lease callback failures escape without repeating paid work. These
 callbacks now reach the durable worker in Task 8. If spending and lease renewal both fail,
 an aggregate error retains both failures without retrying the paid call; Task 18 still needs
-to prove sanitized command diagnostics.
+to qualify retention and its command diagnostics.
 
 Task 8 adds the durable worker: exclusive job leases, four concurrent batches, saved-batch
 recovery, integer token/cost accounting, cap checks and transactional finish/usage records.
@@ -330,7 +330,7 @@ Real PostgreSQL and loopback-provider checks cover shutdown during connection wa
 loading and either provider pass; stale leases cannot save outcomes or update spend. A failed
 usage write rolls back completion, and the next lease finishes saved batches without a new
 provider call. An expired lease or a crash before a batch is saved can repeat provider work;
-recovery only skips durably saved batches. Task 9 must keep production lease duration longer
+recovery only skips durably saved batches. The command keeps the production lease longer
 than one bounded provider attempt. A greater-than-16-MiB result walks pages in filtered submit order despite family
 regrouping and reversed completion. Names and corrections retain escaped control characters
 and lone surrogates. Append-only migration 040 changes retained results from JSONB to JSON;
@@ -338,8 +338,23 @@ release-39 upgrade, cancellation rollback, repeat/concurrent migration, manifest
 count checks preserve retained results and existing job/ledger rows. Automated translation tests
 fetch the pinned earlier release so the upgrade proof also runs in GitHub. Historical receipt-selector
 fixtures retain their audited workflow bytes when current checkout settings change; production
-audit guards and their original behavioral assertions stay unchanged. No worker command,
-provider activation or route is introduced. Consent enforcement remains Task 13.
+audit guards and their original behavioral assertions stay unchanged. Provider activation and routes remain open. Consent enforcement remains Task 13.
+
+Task 9 adds `pnpm translation:worker` and its `--once` mode. Startup checks the
+expected migration names, required settings, provider URL and whether the key can form an
+HTTP authorization header. Fatal failures print one fixed diagnostic without private values;
+recoverable pass failures print a separate fixed retry line.
+PostgreSQL and loopback-provider process tests cover silent idle and single-job runs,
+stored results and usage, two simultaneous jobs with ten-minute leases, and SIGTERM/SIGINT
+shutdown during provider work or idle polling. Interrupted batches save no partial results,
+and successful shutdown returns leases without using an attempt. Borrowed-client and
+real disconnect checks cover fixed fatal output; a failed lease return exits 1 in both modes.
+When the database cannot accept that return, the lease remains until its original expiry.
+Signals before module loading installs the handlers still use the operating system’s default
+termination. The command installs its handlers before opening the database pool. Direct Node
+runs are quiet on success; the root pnpm
+script can report a missing optional `.env` file. No real provider request is part of
+these checks; activation and retention remain later tasks.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies
@@ -350,7 +365,7 @@ and preserves accepted language tags. Store-level page sizing is tested; HTTP se
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 9–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 10–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Before enabling submit, jointly qualify language recognition and canonical duplicates. The
@@ -359,8 +374,8 @@ Remaining work:
   refuses the unknown/non-language probe inputs and normalizes ordinary regional variants,
   but direct signed input still needs a policy decision before activation. Preserve the
   approved accepted-tag set until that contract decision; claim no complete recognition gate.
-  Before wiring the worker, validate keys that cannot form an HTTP authorization header;
-  a local newline-key probe currently becomes a retryable network error before sending.
+  The command rejects keys that cannot form an HTTP authorization header before leasing work.
+  Direct client consumers still own their configuration validation.
   Consent rows retain history after membership removal; Task 13 must prove current, enabled,
   verified ownership when consent is recorded and used. A stored account ID alone grants nothing.
   Append migrations at the then-current next numbers without editing landed migrations.
@@ -369,7 +384,8 @@ Remaining work:
   exist. Preserve them without claiming they are unreachable. Parallel infrastructure failures
   currently expose one error; both failures from one call's spend/renew callbacks are retained.
   An ordinary failed run keeps its lease until expiry and uses a lease attempt; only caller
-  shutdown returns it immediately. Task 18 still needs bounded diagnostics without names.
+  shutdown returns it immediately when the database accepts the update. Task 18 still needs
+  bounded diagnostics without names.
   The page-walk fixture now holds the specifically named first batch until the second batch
   is saved. A controlled second-before-first request schedule reproduced the original failure:
   the fixture had incorrectly treated the first arriving HTTP request as the first batch.
