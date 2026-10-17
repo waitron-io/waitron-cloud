@@ -23,7 +23,7 @@ export class TranslationWorker {
  constructor(pool:Pool,client:ModelClient,options:{batchConcurrency?:number;leaseMs?:number;maxLeases?:number;wait?:BatchHooks['wait']}={}){
   this.#pool=pool;this.#client=client;this.#concurrency=options.batchConcurrency??4;this.#leaseMs=options.leaseMs??600000;
   this.#maxLeases=options.maxLeases??3;this.#wait=options.wait??defaultWait;
-  if(![this.#concurrency,this.#leaseMs,this.#maxLeases].every(n=>Number.isSafeInteger(n)&&n>0))throw new Error('translation_worker_options_invalid');
+  if(this.#concurrency>4||![this.#concurrency,this.#leaseMs,this.#maxLeases].every(n=>Number.isSafeInteger(n)&&n>0))throw new Error('translation_worker_options_invalid');
  }
  async runOnce(signal:AbortSignal):Promise<boolean>{
   if(signal.aborted)return false;

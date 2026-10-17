@@ -327,3 +327,52 @@ test('shutdown while loading a repeatedly abandoned job saves no failed batches 
   assert.deepEqual([ended.state,ended.failed,ended.lease_count,ended.lease_free],['running',0,3,true]);assert.deepEqual(await saved(job.id),{});assert.equal(fake.requests.length,0);
  }finally{await held.query('ROLLBACK');held.release();await fake.close();}
 });
+
+test('the four-call concurrency ceiling is enforced',()=>{
+ assert.throws(()=>new TranslationWorker(db.pool,{provider:'openai',model:'gpt-6-luna',respond:async()=>{throw Error('unused');}},{batchConcurrency:5}),/translation_worker_options_invalid/);
+});
+test('an already stopped worker does not lease a queued job',async()=>{
+ const {job}=await queue(many('a','A',1)),controller=new AbortController();controller.abort();
+ const fake=await startFakeOpenAi(()=>{throw Error('unused');});
+ try{assert.equal(await worker(fake.baseUrl).runOnce(controller.signal),false);assert.equal((await row(job.id)).lease_count,0);assert.equal((await row(job.id)).state,'queued');assert.equal(fake.requests.length,0);}finally{await fake.close();}
+});
+test('the oldest submitted job runs first regardless of physical insertion order',async()=>{
+ const a=await queue(many('a','A',1)),b=await queue(many('b','B',1));
+ await db.pool.query("UPDATE translation_jobs SET created_at=clock_timestamp()-interval '1 hour' WHERE id=$1",[b.job.id]);
+ const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
+ try{await worker(fake.baseUrl).runOnce(live());assert.equal((await row(b.job.id)).state,'done');assert.equal((await row(a.job.id)).state,'queued');}finally{await fake.close();}
+});
+test('each attempted call renews the lease before the next pass',async()=>{
+ const {job}=await queue(many('a','A',1));let initial=0;
+ const fake=await startFakeOpenAi(async r=>{
+  const lease=(await row(job.id)).lease_until.getTime();
+  if(!isReview(r)){initial=lease;await delay(15);return echoFirstPass(r);}
+  assert.ok(lease>initial,'lease was not renewed after the first call');return emptyReview();
+ });
+ try{await worker(fake.baseUrl).runOnce(live());assert.equal((await row(job.id)).state,'done');assert.equal(fake.requests.length,2);}finally{await fake.close();}
+});
+
+for(const stage of ['save','finish'] as const)test(`a lease stolen immediately before ${stage} fences that write`,async()=>{
+ const {job}=await queue(many('a','A',2)),replacement=randomUUID();
+ const condition=stage==='save'?"NEW.lease_until IS DISTINCT FROM OLD.lease_until AND NEW.input_tokens=200 AND NEW.lease_id=OLD.lease_id":"NEW.done>OLD.done";
+ await db.pool.query(`CREATE FUNCTION steal_translation_lease() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN
+ IF NEW.id='${job.id}' AND ${condition} THEN UPDATE translation_jobs SET lease_id='${replacement}' WHERE id=NEW.id; END IF; RETURN NEW; END$$;
+ CREATE TRIGGER steal_translation_lease AFTER UPDATE ON translation_jobs FOR EACH ROW EXECUTE FUNCTION steal_translation_lease()`);
+ const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
+ try{
+  await worker(fake.baseUrl).runOnce(live());const ended=await row(job.id);
+  assert.deepEqual([ended.state,ended.lease_id,ended.done],['running',replacement,stage==='save'?0:2]);
+  assert.deepEqual(Object.keys((await saved(job.id))!),stage==='save'?[]:['0']);
+  assert.equal((await db.pool.query('SELECT * FROM usage_events WHERE source_reference=$1',[job.id])).rowCount,0);assert.equal(fake.requests.length,2);
+ }finally{await db.pool.query('DROP TRIGGER steal_translation_lease ON translation_jobs; DROP FUNCTION steal_translation_lease()');await fake.close();}
+});
+test('shutdown never returns a replacement worker lease or decrements its count',async()=>{
+ const {job}=await queue(many('a','A',1)),replacement=randomUUID(),controller=new AbortController();
+ const fake=await startFakeOpenAi(async()=>{
+  await db.pool.query("UPDATE translation_jobs SET lease_id=$2,lease_until=clock_timestamp()+interval '1 hour' WHERE id=$1",[job.id,replacement]);controller.abort();return {delayMs:2000,json:{}};
+ });
+ try{
+  assert.equal(await worker(fake.baseUrl,{},5000).runOnce(controller.signal),true);const ended=await row(job.id);
+  assert.deepEqual([ended.state,ended.lease_id,ended.lease_free,ended.lease_count],['running',replacement,false,1]);assert.deepEqual(await saved(job.id),{});
+ }finally{await fake.close();}
+});
