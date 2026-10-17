@@ -1302,7 +1302,11 @@ notifications separately.
   disposable migration setup on this Mac: the D72 run completed 292 cases with
   82 failures, including the unchanged signup, origin, session and rate-limit
   fixtures. Use the same two-file limit for full local database package runs;
-  retain every file, original deadline and portal build. A failed fiscal HTTP
+  retain every file, original deadline and portal build. A later parallel local Task 21 run
+  also killed the unchanged npm-bootstrap probe at its 35-second deadline without
+  retaining npm output. An isolated run passed in 31.36 seconds; that does not
+  explain the earlier deadline. Capture process startup and request timestamps on
+  recurrence, and preserve the original budget. A failed fiscal HTTP
   fixture setup also left its local continuity-authority child open after the
   last test; the run printed its final failures after that recorded child was
   stopped. Make fixture construction close acquired resources on setup failure
