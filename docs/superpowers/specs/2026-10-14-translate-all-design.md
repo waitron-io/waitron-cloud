@@ -37,8 +37,8 @@ request and its collected results.
 ## How the method was chosen
 
 The trial ran on 2026-10-14. Its harness, data and the owner's blind grades are in
-`~/workspace/experiments/llm-translate/` (outside both repositories); moving it into this
-repository is part of this work (see "Quality check"). Every percentage below is the share of a
+`packages/translation/quality/`. Task 20 preserves the original scripts, both graded sets,
+the owner's grades and six recorded Luna-review runs there (see "Quality check"). Every percentage below is the share of a
 setup's names the owner marked "needs work" or "wrong".
 
 | Setup | Tuning set (32 products) | Blind set (30 products never tuned on) |
@@ -294,12 +294,15 @@ provider and model that served it.
 
 ## Quality check
 
-The trial's harness moves to `packages/translation/quality/`:
+Task 20 preserves the trial in `packages/translation/quality/`:
 
 - the trial script;
 - both graded product sets;
 - the owner's grades, keyed by product, language and name text;
-- the scorer.
+- the offline scorer, which reports names the owner has never seen as ungraded.
+
+The trial runner and grading page remain Task 21. Archived scripts and the template are
+records, not the new runnable harness.
 
 Any change to a prompt, the model or the batching is scored against both sets before it ships, and
 the result goes in the change's description. A run costs cents and needs the real key, so it runs

@@ -1,0 +1,6620 @@
+{
+ "a16776dfc51e9eb5": {
+  "pid": "p01",
+  "lang": "ca",
+  "text": "Hamburguesa amb patates fregides",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "4a23460f51690af7": {
+  "pid": "p01",
+  "lang": "es",
+  "text": "Hamburguesa con patatas fritas",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "e2f68a85edc47949": {
+  "pid": "p01",
+  "lang": "en",
+  "text": "Burger with chips",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3"
+  ]
+ },
+ "37db92bb108ae37c": {
+  "pid": "p02",
+  "lang": "ca",
+  "text": "Bocata de pulled pork amb patates fregides",
+  "runs": [
+   "haiku-low#1"
+  ]
+ },
+ "38a4e328c9c7e32d": {
+  "pid": "p02",
+  "lang": "es",
+  "text": "Bocadillo de pulled pork con patatas fritas",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "f4604d8f7d254ee8": {
+  "pid": "p02",
+  "lang": "en",
+  "text": "Pulled pork bocadillo with chips",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3"
+  ]
+ },
+ "7d7b1e8a434b4b8b": {
+  "pid": "p03",
+  "lang": "ca",
+  "text": "Bocata de coliflor",
+  "runs": [
+   "haiku-low#1"
+  ]
+ },
+ "14fd618c6def898d": {
+  "pid": "p03",
+  "lang": "es",
+  "text": "Bocadillo de coliflor",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "18a494a80073e91e": {
+  "pid": "p03",
+  "lang": "en",
+  "text": "Cauliflower bocadillo",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-medium#1"
+  ]
+ },
+ "922efb64ded48149": {
+  "pid": "p04",
+  "lang": "ca",
+  "text": "Bocata de calamar",
+  "runs": [
+   "haiku-low#1"
+  ]
+ },
+ "a028ca98b474f0b3": {
+  "pid": "p04",
+  "lang": "es",
+  "text": "Bocadillo de calamar",
+  "runs": [
+   "haiku-low#1",
+   "haiku-medium#2",
+   "terra-low-v2#1",
+   "terra-medium-api#1"
+  ]
+ },
+ "b9d6a6bbbaaf9c79": {
+  "pid": "p04",
+  "lang": "en",
+  "text": "Squid bocadillo",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-medium#1"
+  ]
+ },
+ "424af9d188f1709e": {
+  "pid": "p05",
+  "lang": "ca",
+  "text": "Rotllets de salsitxa",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "3ac26db38c036d68": {
+  "pid": "p05",
+  "lang": "es",
+  "text": "Rollitos de salchicha",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "53e6d7ee4cdf529d": {
+  "pid": "p05",
+  "lang": "en",
+  "text": "Sausage rolls",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "72e25755e2868c18": {
+  "pid": "p06",
+  "lang": "ca",
+  "text": "Guindilles",
+  "runs": [
+   "haiku-low#1"
+  ]
+ },
+ "f3fcdb5243fc6c30": {
+  "pid": "p06",
+  "lang": "es",
+  "text": "Guindillas",
+  "runs": [
+   "haiku-low#1"
+  ]
+ },
+ "f65780a0e311d4e9": {
+  "pid": "p06",
+  "lang": "en",
+  "text": "Pickled chillies",
+  "runs": [
+   "haiku-low#1"
+  ]
+ },
+ "3102aab6b488f3e1": {
+  "pid": "p07",
+  "lang": "ca",
+  "text": "Mandonguilles",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "209a9339c21bab2e": {
+  "pid": "p07",
+  "lang": "es",
+  "text": "Albóndigas",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "9654be0bb6f14f66": {
+  "pid": "p07",
+  "lang": "en",
+  "text": "Meatballs",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "053d1d5819263527": {
+  "pid": "p08",
+  "lang": "ca",
+  "text": "Pollastre a l'ast",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#3",
+   "luna-low-v3#1",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#3"
+  ]
+ },
+ "45f8cac6199c94e3": {
+  "pid": "p08",
+  "lang": "es",
+  "text": "Pollo al ast",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#3"
+  ]
+ },
+ "47eb151471258ba9": {
+  "pid": "p08",
+  "lang": "en",
+  "text": "Spit-roast chicken",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#3"
+  ]
+ },
+ "dee026d1a38f66fd": {
+  "pid": "p09",
+  "lang": "ca",
+  "text": "Arròs amb llet i pistatxos",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "terra-low-v3#2"
+  ]
+ },
+ "1c52614ad9a1506c": {
+  "pid": "p09",
+  "lang": "es",
+  "text": "Arroz con leche y pistachos",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "c4e99d5e41406683": {
+  "pid": "p09",
+  "lang": "en",
+  "text": "Rice pudding with pistachios",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "7af453d4aaf5b764": {
+  "pid": "p10",
+  "lang": "ca",
+  "text": "Bunyols de formatge",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "8caf406917129396": {
+  "pid": "p10",
+  "lang": "es",
+  "text": "Buñuelos de queso",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "67ea9409fc3c5ea4": {
+  "pid": "p10",
+  "lang": "en",
+  "text": "Cheese fritters",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "fc68a38c6689fe63": {
+  "pid": "p11",
+  "lang": "ca",
+  "text": "Alvocat sobre pa torrat",
+  "runs": [
+   "haiku-low#1",
+   "haiku-medium#1",
+   "haiku-medium#3"
+  ]
+ },
+ "7c696c19fb34747a": {
+  "pid": "p11",
+  "lang": "es",
+  "text": "Aguacate sobre pan tostado",
+  "runs": [
+   "haiku-low#1",
+   "haiku-medium#1"
+  ]
+ },
+ "6e53fd9dc8073926": {
+  "pid": "p11",
+  "lang": "en",
+  "text": "Avocado on toast",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3"
+  ]
+ },
+ "8ab9e999e2749819": {
+  "pid": "p12",
+  "lang": "ca",
+  "text": "Rotllo d'esmorzar",
+  "runs": [
+   "haiku-low#1",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3"
+  ]
+ },
+ "c5f78e05e6c97c5a": {
+  "pid": "p12",
+  "lang": "es",
+  "text": "Rollo de desayuno",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3"
+  ]
+ },
+ "05533fececc8b783": {
+  "pid": "p12",
+  "lang": "en",
+  "text": "Breakfast roll",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "6ba2b5fe98753e98": {
+  "pid": "p13",
+  "lang": "ca",
+  "text": "Bol de smoothie",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "luna-low-api#2",
+   "luna-low-v2#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#2",
+   "terra-low-api#1",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1"
+  ]
+ },
+ "a965e82dda78756b": {
+  "pid": "p13",
+  "lang": "es",
+  "text": "Bol de smoothie",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "luna-low-api#2",
+   "luna-low-v2#2",
+   "luna-low-v3#1",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#2",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1"
+  ]
+ },
+ "31c5ade350bfb273": {
+  "pid": "p13",
+  "lang": "en",
+  "text": "Smoothie bowl",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "5a39d92695cae799": {
+  "pid": "p14",
+  "lang": "ca",
+  "text": "Entranya",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "c99b4ea26c93387c": {
+  "pid": "p14",
+  "lang": "es",
+  "text": "Entraña",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "5f62c797a1f756be": {
+  "pid": "p14",
+  "lang": "en",
+  "text": "Skirt steak",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "524144fd97bdeaf3": {
+  "pid": "p15",
+  "lang": "ca",
+  "text": "Cha nem vegetal",
+  "runs": [
+   "haiku-low#1"
+  ]
+ },
+ "2188113019576a1e": {
+  "pid": "p15",
+  "lang": "es",
+  "text": "Cha nem vegetal",
+  "runs": [
+   "haiku-low#1"
+  ]
+ },
+ "5954ff3377f01b83": {
+  "pid": "p15",
+  "lang": "en",
+  "text": "Veg cha nem",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#3"
+  ]
+ },
+ "9fb3389103ae69dd": {
+  "pid": "p16",
+  "lang": "ca",
+  "text": "Bikini",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "81c233ecbef6c906": {
+  "pid": "p16",
+  "lang": "es",
+  "text": "Bikini",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "47f21578510f6b7c": {
+  "pid": "p16",
+  "lang": "en",
+  "text": "Bikini",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#3",
+   "terra-medium-api#3"
+  ]
+ },
+ "2404e004557a4bb5": {
+  "pid": "p17",
+  "lang": "ca",
+  "text": "Carn especial",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-medium-api#1",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "d4db9de27b7dfaf6": {
+  "pid": "p17",
+  "lang": "es",
+  "text": "Carne especial",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-medium-api#1",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "96a26ebe4ca19588": {
+  "pid": "p17",
+  "lang": "en",
+  "text": "Special meat",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "sonnet-low#2",
+   "sonnet-medium#2",
+   "terra-low-api#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "420db8c675a06630": {
+  "pid": "p18",
+  "lang": "ca",
+  "text": "Plat del dia",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "2d4d8cf2d54b8ad0": {
+  "pid": "p18",
+  "lang": "es",
+  "text": "Plato del día",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "ce7be4ff04ce627e": {
+  "pid": "p18",
+  "lang": "en",
+  "text": "Dish of the day",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "ee40f340f98ec619": {
+  "pid": "p19",
+  "lang": "ca",
+  "text": "Estrella Galicia",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "terra-low-api#1",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1"
+  ]
+ },
+ "944b7706bcb9e101": {
+  "pid": "p19",
+  "lang": "es",
+  "text": "Estrella Galicia",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "terra-low-api#1",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1"
+  ]
+ },
+ "441baf0f0e5fc4b6": {
+  "pid": "p19",
+  "lang": "en",
+  "text": "Estrella Galicia",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "terra-low-api#1",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1"
+  ]
+ },
+ "644f9f7cc4a1bf23": {
+  "pid": "p20",
+  "lang": "ca",
+  "text": "Alhambra",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "654abb783e18f3a5": {
+  "pid": "p20",
+  "lang": "es",
+  "text": "Alhambra",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "90c83d3bb07c4d46": {
+  "pid": "p20",
+  "lang": "en",
+  "text": "Alhambra",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "738d4e99ca08c925": {
+  "pid": "p21",
+  "lang": "ca",
+  "text": "Hennessy",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "3445b3b9ccaa0a4d": {
+  "pid": "p21",
+  "lang": "es",
+  "text": "Hennessy",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "01293e13642f1911": {
+  "pid": "p21",
+  "lang": "en",
+  "text": "Hennessy",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "8139fb38f71c3142": {
+  "pid": "p22",
+  "lang": "ca",
+  "text": "Zurito de cervesa",
+  "runs": [
+   "haiku-low#1"
+  ]
+ },
+ "b596e2a3b3c3b0de": {
+  "pid": "p22",
+  "lang": "es",
+  "text": "Zurito de cerveza",
+  "runs": [
+   "haiku-low#1"
+  ]
+ },
+ "309a299df309ba32": {
+  "pid": "p22",
+  "lang": "en",
+  "text": "Small draught beer",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#3",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "terra-low-v3#3"
+  ]
+ },
+ "873418d2d698b70c": {
+  "pid": "p23",
+  "lang": "ca",
+  "text": "Cervesa en llauna",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "370aa001c7d72f36": {
+  "pid": "p23",
+  "lang": "es",
+  "text": "Cerveza en lata",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "e9bed26de5e3b27d": {
+  "pid": "p23",
+  "lang": "en",
+  "text": "Canned beer",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "2ca1edd5b457650b": {
+  "pid": "p24",
+  "lang": "ca",
+  "text": "Hot toddy",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#2",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "55d09bd9c968217c": {
+  "pid": "p24",
+  "lang": "es",
+  "text": "Hot toddy",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#2",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "09de7f16ffb65281": {
+  "pid": "p24",
+  "lang": "en",
+  "text": "Hot toddy",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "f9fdb8d41429d7cb": {
+  "pid": "p25",
+  "lang": "ca",
+  "text": "Sbagliato",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#2",
+   "luna-low-v3#1",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#3",
+   "terra-low-v3#2",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "8ab5b33f8f0e2cd2": {
+  "pid": "p25",
+  "lang": "es",
+  "text": "Sbagliato",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#2",
+   "luna-low-v3#1",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#3",
+   "terra-low-v3#2",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "ab6cc2cf15305399": {
+  "pid": "p25",
+  "lang": "en",
+  "text": "Sbagliato",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#2",
+   "luna-low-v3#1",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#3",
+   "terra-low-v3#2",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "739af3c34251790b": {
+  "pid": "p26",
+  "lang": "ca",
+  "text": "Té rooibos",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "terra-low-v2#2"
+  ]
+ },
+ "9408e63b3224dbc9": {
+  "pid": "p26",
+  "lang": "es",
+  "text": "Té rooibos",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "201bc38fb6e5795f": {
+  "pid": "p26",
+  "lang": "en",
+  "text": "Rooibos tea",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "d429402508ef02ff": {
+  "pid": "p27",
+  "lang": "ca",
+  "text": "Ous trencats amb xoriço",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#3",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "3e0d2a5755f15a60": {
+  "pid": "p27",
+  "lang": "es",
+  "text": "Huevos rotos con chorizo",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#3",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "d65b5f037cf4c634": {
+  "pid": "p27",
+  "lang": "en",
+  "text": "Broken eggs with chorizo",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "a74b50b4044aea8f": {
+  "pid": "p28",
+  "lang": "ca",
+  "text": "Pa torrat amb tomàquet i oli d'oliva",
+  "runs": [
+   "haiku-low#1",
+   "haiku-medium#1",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-medium-api#3"
+  ]
+ },
+ "5255c22c043320e7": {
+  "pid": "p28",
+  "lang": "es",
+  "text": "Pan tostado con tomate y aceite de oliva",
+  "runs": [
+   "haiku-low#1",
+   "haiku-medium#1",
+   "luna-low-v4+terra-low#2",
+   "sonnet-low#1",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#3"
+  ]
+ },
+ "645020d21834ba5c": {
+  "pid": "p28",
+  "lang": "en",
+  "text": "Toasted bread rubbed with tomato and olive oil",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "f1f515c5ccca45e3": {
+  "pid": "p29",
+  "lang": "ca",
+  "text": "Croquetes de vedella rostida",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "a94d86af76ff7050": {
+  "pid": "p29",
+  "lang": "es",
+  "text": "Croquetas de ternera asada",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#2",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "cf935bbb93bbc3d0": {
+  "pid": "p29",
+  "lang": "en",
+  "text": "Roast veal croquettes",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#3"
+  ]
+ },
+ "562b93d859ecab07": {
+  "pid": "p30",
+  "lang": "ca",
+  "text": "Escalivada de pebrot i albergínia torrats, per emportar",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3"
+  ]
+ },
+ "fcb9f24c6fc364c0": {
+  "pid": "p30",
+  "lang": "es",
+  "text": "Escalivada de pimiento y berenjena asados, para llevar",
+  "runs": [
+   "haiku-low#1",
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "95a6e56897f4a502": {
+  "pid": "p30",
+  "lang": "en",
+  "text": "Escalivada of roasted peppers and aubergine, to take away",
+  "runs": [
+   "haiku-low#1"
+  ]
+ },
+ "8b51be6411433e29": {
+  "pid": "p02",
+  "lang": "ca",
+  "text": "Entrepà de pulled pork amb patates fregides",
+  "runs": [
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-v2#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "fb87cf63d6f39e17": {
+  "pid": "p03",
+  "lang": "ca",
+  "text": "Entrepà de coliflor",
+  "runs": [
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "4abb2657378d5e72": {
+  "pid": "p04",
+  "lang": "ca",
+  "text": "Entrepà de calamars",
+  "runs": [
+   "haiku-low#2",
+   "haiku-medium#1",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#3"
+  ]
+ },
+ "f80dfe4d67e9408d": {
+  "pid": "p04",
+  "lang": "es",
+  "text": "Bocadillo de calamares",
+  "runs": [
+   "haiku-low#2",
+   "haiku-medium#1",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#3"
+  ]
+ },
+ "39f9b71af2ca1093": {
+  "pid": "p06",
+  "lang": "ca",
+  "text": "Gildes",
+  "runs": [
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "sonnet-low#2",
+   "terra-low-api#1",
+   "terra-low-api#3",
+   "terra-low-v2#2",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "99fd29d80839d263": {
+  "pid": "p06",
+  "lang": "es",
+  "text": "Gildas",
+  "runs": [
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "d6807f040ffdbf47": {
+  "pid": "p06",
+  "lang": "en",
+  "text": "Gildas",
+  "runs": [
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "3fcc739f5c40c07a": {
+  "pid": "p07",
+  "lang": "ca",
+  "text": "Albòndigues",
+  "runs": [
+   "haiku-low#2"
+  ]
+ },
+ "b54be044c224e472": {
+  "pid": "p08",
+  "lang": "ca",
+  "text": "Pollastre a l'ast per emportar",
+  "runs": [
+   "haiku-low#2",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1",
+   "luna-medium-api#1",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v3#2",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "7b2d39a58a1f0972": {
+  "pid": "p08",
+  "lang": "es",
+  "text": "Pollo al ast para llevar",
+  "runs": [
+   "haiku-low#2",
+   "haiku-medium#1"
+  ]
+ },
+ "730c93ed023a5515": {
+  "pid": "p08",
+  "lang": "en",
+  "text": "Spit-roast chicken takeaway",
+  "runs": [
+   "haiku-low#2"
+  ]
+ },
+ "66450783c8b2d4be": {
+  "pid": "p11",
+  "lang": "ca",
+  "text": "Alvocat sobre torrada",
+  "runs": [
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#3",
+   "luna-low-v4#2"
+  ]
+ },
+ "aca1ebe09053d490": {
+  "pid": "p11",
+  "lang": "es",
+  "text": "Aguacate sobre tostada",
+  "runs": [
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#3",
+   "luna-low-v4#2"
+  ]
+ },
+ "4d50e57c338bfe16": {
+  "pid": "p12",
+  "lang": "ca",
+  "text": "Rotllet d'esmorzar",
+  "runs": [
+   "haiku-low#2"
+  ]
+ },
+ "e54cca00268638a3": {
+  "pid": "p12",
+  "lang": "es",
+  "text": "Rollito de desayuno",
+  "runs": [
+   "haiku-low#2"
+  ]
+ },
+ "2692218cf2abe623": {
+  "pid": "p15",
+  "lang": "ca",
+  "text": "Cha nem vegetarià",
+  "runs": [
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v3#3",
+   "terra-medium-api#3"
+  ]
+ },
+ "7a8eccd56f1f9c5b": {
+  "pid": "p15",
+  "lang": "es",
+  "text": "Cha nem vegetariano",
+  "runs": [
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v3#3",
+   "terra-medium-api#3"
+  ]
+ },
+ "dd46ae45f2807c2c": {
+  "pid": "p15",
+  "lang": "en",
+  "text": "Veggie cha nem",
+  "runs": [
+   "haiku-low#2"
+  ]
+ },
+ "ce561579920c0fdf": {
+  "pid": "p22",
+  "lang": "ca",
+  "text": "Zurito",
+  "runs": [
+   "haiku-low#2",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "10e0a51ef4e4ef6b": {
+  "pid": "p22",
+  "lang": "es",
+  "text": "Zurito",
+  "runs": [
+   "haiku-low#2",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "e0c3e1fb24eff8c0": {
+  "pid": "p22",
+  "lang": "en",
+  "text": "Zurito",
+  "runs": [
+   "haiku-low#2",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-medium-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-medium-api#1"
+  ]
+ },
+ "187fe4f65a8a27af": {
+  "pid": "p27",
+  "lang": "ca",
+  "text": "Ous trencats amb xoriç",
+  "runs": [
+   "haiku-low#2"
+  ]
+ },
+ "cd8316e324429fc4": {
+  "pid": "p28",
+  "lang": "ca",
+  "text": "Pa amb tomàquet",
+  "runs": [
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#3",
+   "sonnet-medium#2",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "5a49db25d39ba805": {
+  "pid": "p28",
+  "lang": "es",
+  "text": "Pan con tomate",
+  "runs": [
+   "haiku-low#2",
+   "haiku-low#3",
+   "haiku-medium#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#3",
+   "sonnet-medium#2",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "d66e3877c0e03c90": {
+  "pid": "p30",
+  "lang": "en",
+  "text": "Escalivada of roasted pepper and aubergine, takeaway",
+  "runs": [
+   "haiku-low#2"
+  ]
+ },
+ "25b2a6d5d4d7ebaf": {
+  "pid": "p03",
+  "lang": "es",
+  "text": "Bocata de coliflor",
+  "runs": [
+   "haiku-low#3",
+   "haiku-medium#3"
+  ]
+ },
+ "60d23408986d8df3": {
+  "pid": "p03",
+  "lang": "en",
+  "text": "Cauliflower bocata",
+  "runs": [
+   "haiku-low#3",
+   "haiku-medium#3"
+  ]
+ },
+ "942f6808ec3c40fb": {
+  "pid": "p04",
+  "lang": "ca",
+  "text": "Entrepà de calamar",
+  "runs": [
+   "haiku-low#3",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "terra-medium-api#1"
+  ]
+ },
+ "a662ca90164c9892": {
+  "pid": "p04",
+  "lang": "es",
+  "text": "Bocata de calamar",
+  "runs": [
+   "haiku-low#3",
+   "haiku-medium#3"
+  ]
+ },
+ "d05d4905771721ef": {
+  "pid": "p04",
+  "lang": "en",
+  "text": "Squid bocata",
+  "runs": [
+   "haiku-low#3",
+   "haiku-medium#3"
+  ]
+ },
+ "5bd8f7dfa6565369": {
+  "pid": "p12",
+  "lang": "ca",
+  "text": "Rotllo de l'esmorzar",
+  "runs": [
+   "haiku-low#3"
+  ]
+ },
+ "fb4f010d183318de": {
+  "pid": "p12",
+  "lang": "en",
+  "text": "Brekkie roll",
+  "runs": [
+   "haiku-low#3",
+   "haiku-medium#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3"
+  ]
+ },
+ "c8c066549b6e9035": {
+  "pid": "p13",
+  "lang": "es",
+  "text": "Bowl de smoothie",
+  "runs": [
+   "haiku-low#3",
+   "sonnet-medium#3"
+  ]
+ },
+ "e72aa32438a60801": {
+  "pid": "p14",
+  "lang": "ca",
+  "text": "Entrenya",
+  "runs": [
+   "haiku-low#3"
+  ]
+ },
+ "a27fc89a817ca4c8": {
+  "pid": "p22",
+  "lang": "ca",
+  "text": "Canya",
+  "runs": [
+   "haiku-low#3"
+  ]
+ },
+ "4c817ee08b0d191c": {
+  "pid": "p22",
+  "lang": "es",
+  "text": "Zurrito",
+  "runs": [
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3"
+  ]
+ },
+ "85e38a48ba11da0c": {
+  "pid": "p30",
+  "lang": "ca",
+  "text": "Escalivada de pebrot i albergínia torrats",
+  "runs": [
+   "haiku-low#3"
+  ]
+ },
+ "ee0788d220aa22b2": {
+  "pid": "p30",
+  "lang": "en",
+  "text": "Roasted pepper and aubergine escalivada, to take away",
+  "runs": [
+   "haiku-low#3",
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "b00982ee775f5a81": {
+  "pid": "p01",
+  "lang": "en",
+  "text": "Burger with fries",
+  "runs": [
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "aa996dd24ed8a9da": {
+  "pid": "p02",
+  "lang": "en",
+  "text": "Pulled pork bocadillo with fries",
+  "runs": [
+   "haiku-medium#1",
+   "haiku-medium#3"
+  ]
+ },
+ "754306fb7e6f357d": {
+  "pid": "p08",
+  "lang": "en",
+  "text": "Spit-roasted chicken to take away",
+  "runs": [
+   "haiku-medium#1",
+   "sonnet-low#1"
+  ]
+ },
+ "6f22d9e1c4460783": {
+  "pid": "p15",
+  "lang": "en",
+  "text": "Vegetarian cha nem",
+  "runs": [
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-medium-api#1",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v3#3",
+   "terra-medium-api#3"
+  ]
+ },
+ "228ff0801f4d3b1a": {
+  "pid": "p16",
+  "lang": "en",
+  "text": "Bikini sandwich",
+  "runs": [
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-medium-api#3",
+   "terra-low-api#1",
+   "terra-medium-api#1"
+  ]
+ },
+ "70696f262f487281": {
+  "pid": "p22",
+  "lang": "ca",
+  "text": "Zurrito",
+  "runs": [
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3"
+  ]
+ },
+ "0af42feb2cf881ad": {
+  "pid": "p22",
+  "lang": "en",
+  "text": "Zurrito",
+  "runs": [
+   "haiku-medium#1",
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3"
+  ]
+ },
+ "3265fe5a4047ca95": {
+  "pid": "p29",
+  "lang": "en",
+  "text": "Roast beef croquettes",
+  "runs": [
+   "haiku-medium#1",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "terra-low-v2#3"
+  ]
+ },
+ "47e315abcfba70e6": {
+  "pid": "p02",
+  "lang": "en",
+  "text": "Pulled pork sandwich with fries",
+  "runs": [
+   "haiku-medium#2",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "2ff06c8c6dd4bfec": {
+  "pid": "p03",
+  "lang": "en",
+  "text": "Cauliflower sandwich",
+  "runs": [
+   "haiku-medium#2",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "8dd7cb2755fbcf89": {
+  "pid": "p04",
+  "lang": "en",
+  "text": "Squid sandwich",
+  "runs": [
+   "haiku-medium#2",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-v2#1"
+  ]
+ },
+ "17861719e27f645f": {
+  "pid": "p08",
+  "lang": "es",
+  "text": "Pollo a l'ast para llevar",
+  "runs": [
+   "haiku-medium#2",
+   "haiku-medium#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1",
+   "luna-medium-api#1",
+   "luna-medium-api#3",
+   "sonnet-medium#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "f831851174fa2051": {
+  "pid": "p08",
+  "lang": "en",
+  "text": "Spit-roast chicken to take away",
+  "runs": [
+   "haiku-medium#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3"
+  ]
+ },
+ "4fa4eb0febca1e9d": {
+  "pid": "p16",
+  "lang": "ca",
+  "text": "Entrepà bikini",
+  "runs": [
+   "haiku-medium#2"
+  ]
+ },
+ "6210d62c18e6b4d3": {
+  "pid": "p16",
+  "lang": "es",
+  "text": "Bocadillo bikini",
+  "runs": [
+   "haiku-medium#2"
+  ]
+ },
+ "b8fa6f4a64dae652": {
+  "pid": "p28",
+  "lang": "ca",
+  "text": "Pa torrat fregat amb tomàquet i oli d'oliva",
+  "runs": [
+   "haiku-medium#2",
+   "luna-low-api#1",
+   "luna-medium-api#1",
+   "sonnet-low#2",
+   "terra-low-api#3"
+  ]
+ },
+ "d4a86cdc93aa26d3": {
+  "pid": "p28",
+  "lang": "es",
+  "text": "Pan tostado frotado con tomate y aceite de oliva",
+  "runs": [
+   "haiku-medium#2",
+   "luna-low-api#1",
+   "luna-low-v4#2",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "7c0dabdacd7a1bd1": {
+  "pid": "p08",
+  "lang": "en",
+  "text": "Spit-roast chicken, takeaway",
+  "runs": [
+   "haiku-medium#3"
+  ]
+ },
+ "6d737a0e744ab2b1": {
+  "pid": "p11",
+  "lang": "es",
+  "text": "Tostada de aguacate",
+  "runs": [
+   "haiku-medium#3",
+   "luna-low-v3#1",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3",
+   "luna-medium-api#2",
+   "sonnet-low#1",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-v2#1",
+   "terra-low-v3#1",
+   "terra-low-v3#2"
+  ]
+ },
+ "b211a78dc4c91a1c": {
+  "pid": "p11",
+  "lang": "en",
+  "text": "Avo on toast",
+  "runs": [
+   "haiku-medium#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "927d0362f2c9520a": {
+  "pid": "p13",
+  "lang": "ca",
+  "text": "Bol de batut",
+  "runs": [
+   "haiku-medium#3",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1",
+   "luna-low-v4#3",
+   "sonnet-medium#1",
+   "terra-low-api#2",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "7d4649941574ec17": {
+  "pid": "p13",
+  "lang": "es",
+  "text": "Smoothie bowl",
+  "runs": [
+   "haiku-medium#3",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#2",
+   "sonnet-low#1",
+   "sonnet-low#3",
+   "sonnet-medium#2"
+  ]
+ },
+ "5dec5f95c3474fd5": {
+  "pid": "p26",
+  "lang": "ca",
+  "text": "Te rooibos",
+  "runs": [
+   "haiku-medium#3",
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v3#1",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v3#1",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "022b39d3773744c3": {
+  "pid": "p30",
+  "lang": "en",
+  "text": "Escalivada of roasted peppers and aubergine, takeaway",
+  "runs": [
+   "haiku-medium#3",
+   "luna-medium-api#3"
+  ]
+ },
+ "de2791f52085b95a": {
+  "pid": "p04",
+  "lang": "en",
+  "text": "Calamari sandwich",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "68cc7c97e485a32f": {
+  "pid": "p08",
+  "lang": "es",
+  "text": "Pollo asado para llevar",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-v2#1",
+   "luna-low-v2#3",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "sonnet-low#2",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v3#2",
+   "terra-medium-api#1"
+  ]
+ },
+ "8c5b108505777e40": {
+  "pid": "p08",
+  "lang": "en",
+  "text": "Rotisserie chicken to take away",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "terra-low-v3#2",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "d9585a8010dcce97": {
+  "pid": "p09",
+  "lang": "ca",
+  "text": "Arròs amb llet i festucs",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "471e498708ef64f2": {
+  "pid": "p11",
+  "lang": "ca",
+  "text": "Pa torrat amb alvocat",
+  "runs": [
+   "luna-low-api#1"
+  ]
+ },
+ "2ec622d41339dd39": {
+  "pid": "p11",
+  "lang": "es",
+  "text": "Tostada con aguacate",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-v3#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-medium-api#1",
+   "luna-medium-api#3",
+   "sonnet-low#2",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "2eaedaaa226814ca": {
+  "pid": "p11",
+  "lang": "en",
+  "text": "Avocado toast",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "a87404f85a663609": {
+  "pid": "p12",
+  "lang": "ca",
+  "text": "Entrepà d'esmorzar",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1",
+   "luna-medium-api#1",
+   "luna-medium-api#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "fc2b77ea8d77177f": {
+  "pid": "p12",
+  "lang": "es",
+  "text": "Bocadillo de desayuno",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "9a7f9aef9d8ee8ff": {
+  "pid": "p13",
+  "lang": "ca",
+  "text": "Bol de batut de fruita",
+  "runs": [
+   "luna-low-api#1"
+  ]
+ },
+ "a06154439a47956b": {
+  "pid": "p13",
+  "lang": "es",
+  "text": "Bol de batido de frutas",
+  "runs": [
+   "luna-low-api#1"
+  ]
+ },
+ "865dc97944d3d5ec": {
+  "pid": "p15",
+  "lang": "ca",
+  "text": "Rotllets vietnamites de verdures",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#2"
+  ]
+ },
+ "cacd9eaabbdfd491": {
+  "pid": "p15",
+  "lang": "es",
+  "text": "Rollitos vietnamitas de verduras",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#2"
+  ]
+ },
+ "43be95d4844917bc": {
+  "pid": "p15",
+  "lang": "en",
+  "text": "Vietnamese vegetable spring rolls",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#2"
+  ]
+ },
+ "a599ffcae262fc74": {
+  "pid": "p23",
+  "lang": "en",
+  "text": "Beer can",
+  "runs": [
+   "luna-low-api#1"
+  ]
+ },
+ "9c311d5ca88bb5b9": {
+  "pid": "p25",
+  "lang": "ca",
+  "text": "Negroni sbagliato",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#2",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#3"
+  ]
+ },
+ "db554e09a02338d7": {
+  "pid": "p25",
+  "lang": "es",
+  "text": "Negroni sbagliato",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#2",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#3"
+  ]
+ },
+ "66fb1af1c8d90694": {
+  "pid": "p25",
+  "lang": "en",
+  "text": "Negroni sbagliato",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#2",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#3"
+  ]
+ },
+ "0293c0f72ecefa84": {
+  "pid": "p29",
+  "lang": "es",
+  "text": "Croquetas de ternera",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-v2#1",
+   "luna-low-v2#3",
+   "luna-low-v3#2"
+  ]
+ },
+ "560b1030afc3f42e": {
+  "pid": "p30",
+  "lang": "ca",
+  "text": "Escalivada de pebrots i albergínies rostits, per emportar",
+  "runs": [
+   "luna-low-api#1"
+  ]
+ },
+ "27d8599597e847b0": {
+  "pid": "p30",
+  "lang": "en",
+  "text": "Roasted pepper and aubergine escalivada to take away",
+  "runs": [
+   "luna-low-api#1",
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#3",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-medium-api#1"
+  ]
+ },
+ "84f8fc1f085282c6": {
+  "pid": "p08",
+  "lang": "ca",
+  "text": "Pollastre a l’ast per emportar",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#2"
+  ]
+ },
+ "78416c938e9e8bc8": {
+  "pid": "p08",
+  "lang": "es",
+  "text": "Pollo a l’ast para llevar",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-v2#2",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#2"
+  ]
+ },
+ "485e73e63e1f495a": {
+  "pid": "p11",
+  "lang": "ca",
+  "text": "Torrada amb alvocat",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-v3#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-medium-api#1",
+   "luna-medium-api#3",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "596328408695700a": {
+  "pid": "p12",
+  "lang": "ca",
+  "text": "Entrepà d’esmorzar",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#2"
+  ]
+ },
+ "201f1c745f3a454b": {
+  "pid": "p28",
+  "lang": "ca",
+  "text": "Pa torrat fregat amb tomàquet i oli d’oliva",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-v4#2",
+   "luna-medium-api#2"
+  ]
+ },
+ "cd65532c87e53ff6": {
+  "pid": "p28",
+  "lang": "es",
+  "text": "Pan tostado untado con tomate y aceite de oliva",
+  "runs": [
+   "luna-low-api#2",
+   "luna-low-api#3",
+   "luna-medium-api#3",
+   "sonnet-low#2",
+   "terra-low-api#1"
+  ]
+ },
+ "c4fffb9cc3f04e23": {
+  "pid": "p30",
+  "lang": "ca",
+  "text": "Escalivada de pebrot i albergínia rostits, per emportar",
+  "runs": [
+   "luna-low-api#2",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-v3#2"
+  ]
+ },
+ "d9e7083332c0b421": {
+  "pid": "p02",
+  "lang": "ca",
+  "text": "Entrepà de porc desfilat amb patates fregides",
+  "runs": [
+   "luna-low-api#3"
+  ]
+ },
+ "afe271e1284d17cd": {
+  "pid": "p02",
+  "lang": "es",
+  "text": "Bocadillo de cerdo desmenuzado con patatas fritas",
+  "runs": [
+   "luna-low-api#3"
+  ]
+ },
+ "5bbc93c5024bf31b": {
+  "pid": "p08",
+  "lang": "es",
+  "text": "Pollo asado a l’ast para llevar",
+  "runs": [
+   "luna-low-api#3"
+  ]
+ },
+ "734404f0a42aa44f": {
+  "pid": "p13",
+  "lang": "es",
+  "text": "Bol de batido",
+  "runs": [
+   "luna-low-api#3",
+   "luna-low-v2#1",
+   "luna-low-v2#3",
+   "luna-low-v3#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1",
+   "luna-low-v4#3",
+   "sonnet-medium#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-medium-api#3"
+  ]
+ },
+ "3559ecf2cad2dc4b": {
+  "pid": "p15",
+  "lang": "ca",
+  "text": "Rotllets de primavera vietnamites de verdures",
+  "runs": [
+   "luna-low-api#3"
+  ]
+ },
+ "7b9944692a12fb51": {
+  "pid": "p26",
+  "lang": "ca",
+  "text": "Te de rooibos",
+  "runs": [
+   "luna-low-api#3",
+   "luna-low-v2#3",
+   "luna-low-v3#2",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v2#3",
+   "terra-low-v3#2"
+  ]
+ },
+ "994520238fd82405": {
+  "pid": "p26",
+  "lang": "es",
+  "text": "Té de rooibos",
+  "runs": [
+   "luna-low-api#3",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#2",
+   "terra-low-v2#3"
+  ]
+ },
+ "29156180aac38b9c": {
+  "pid": "p28",
+  "lang": "ca",
+  "text": "Pa torrat sucat amb tomàquet i oli d’oliva",
+  "runs": [
+   "luna-low-api#3"
+  ]
+ },
+ "9b6ea90431db8274": {
+  "pid": "p30",
+  "lang": "ca",
+  "text": "Escalivada de pimiento y berenjena asados, para llevar",
+  "runs": [
+   "luna-low-api#3"
+  ]
+ },
+ "d735556b9ee13476": {
+  "pid": "p02",
+  "lang": "ca",
+  "text": "Entrepà de porc esfilagarsat amb patates fregides",
+  "runs": [
+   "luna-low-v2#1",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3"
+  ]
+ },
+ "153c24785699a06c": {
+  "pid": "p02",
+  "lang": "es",
+  "text": "Bocadillo de cerdo deshilachado con patatas fritas",
+  "runs": [
+   "luna-low-v2#1",
+   "luna-low-v3#2"
+  ]
+ },
+ "15e72603951cd767": {
+  "pid": "p23",
+  "lang": "en",
+  "text": "Beer in a can",
+  "runs": [
+   "luna-low-v2#1"
+  ]
+ },
+ "1827823dff7bcbdb": {
+  "pid": "p24",
+  "lang": "ca",
+  "text": "Tòdi calent",
+  "runs": [
+   "luna-low-v2#1"
+  ]
+ },
+ "8e475a01b8659cc2": {
+  "pid": "p24",
+  "lang": "es",
+  "text": "Toddy caliente",
+  "runs": [
+   "luna-low-v2#1"
+  ]
+ },
+ "3274d1990ec99edd": {
+  "pid": "p27",
+  "lang": "ca",
+  "text": "Huevos rotos con chorizo",
+  "runs": [
+   "luna-low-v2#1"
+  ]
+ },
+ "9026e2c8d3552032": {
+  "pid": "p29",
+  "lang": "en",
+  "text": "Veal croquettes",
+  "runs": [
+   "luna-low-v2#1"
+  ]
+ },
+ "eaf0a18c18b6f879": {
+  "pid": "p30",
+  "lang": "ca",
+  "text": "Escalivada de pebrot i albergínia escalivats, per emportar",
+  "runs": [
+   "luna-low-v2#1",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#3",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "79fac73fac433528": {
+  "pid": "p02",
+  "lang": "ca",
+  "text": "Entrepà de porc esmicolat amb patates fregides",
+  "runs": [
+   "luna-low-v2#2",
+   "luna-low-v3#2",
+   "terra-low-v3#1"
+  ]
+ },
+ "d6b3ab30788c1569": {
+  "pid": "p08",
+  "lang": "en",
+  "text": "Rotisserie chicken to go",
+  "runs": [
+   "luna-low-v2#2",
+   "luna-low-v2#3"
+  ]
+ },
+ "ebbd5c125fdb81a8": {
+  "pid": "p11",
+  "lang": "ca",
+  "text": "Alvocat sobre torrades",
+  "runs": [
+   "luna-low-v2#2"
+  ]
+ },
+ "ddcff9eed3e765d9": {
+  "pid": "p11",
+  "lang": "es",
+  "text": "Aguacate sobre tostadas",
+  "runs": [
+   "luna-low-v2#2"
+  ]
+ },
+ "02dc08a90a408115": {
+  "pid": "p27",
+  "lang": "ca",
+  "text": "Ous trencats",
+  "runs": [
+   "luna-low-v2#2",
+   "luna-low-v3#1",
+   "terra-low-v2#2",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "82dfdad236b369ca": {
+  "pid": "p27",
+  "lang": "es",
+  "text": "Huevos rotos",
+  "runs": [
+   "luna-low-v2#2",
+   "luna-low-v3#1",
+   "terra-low-v2#2",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "db4cf5900c3dd5ef": {
+  "pid": "p30",
+  "lang": "ca",
+  "text": "Escalivada per emportar",
+  "runs": [
+   "luna-low-v2#2",
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2"
+  ]
+ },
+ "bd3d4492a5bfd1a1": {
+  "pid": "p30",
+  "lang": "en",
+  "text": "Escalivada to go",
+  "runs": [
+   "luna-low-v2#2"
+  ]
+ },
+ "0359ec15c0b94e54": {
+  "pid": "p01",
+  "lang": "en",
+  "text": "Hamburger with fries",
+  "runs": [
+   "luna-low-v2#3",
+   "luna-low-v3#1",
+   "terra-low-api#3"
+  ]
+ },
+ "d77857730071b4c7": {
+  "pid": "p16",
+  "lang": "ca",
+  "text": "Biquini",
+  "runs": [
+   "luna-low-v2#3",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3",
+   "terra-low-api#1"
+  ]
+ },
+ "edf64829cce3ab4a": {
+  "pid": "p22",
+  "lang": "en",
+  "text": "Small beer",
+  "runs": [
+   "luna-low-v2#3",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "luna-medium-api#2",
+   "terra-low-api#1",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2"
+  ]
+ },
+ "e4e08a6a3cc61af0": {
+  "pid": "p29",
+  "lang": "en",
+  "text": "Beef croquettes",
+  "runs": [
+   "luna-low-v2#3"
+  ]
+ },
+ "994a510d708c8e89": {
+  "pid": "p02",
+  "lang": "ca",
+  "text": "Entrepà de porc desfilat",
+  "runs": [
+   "luna-low-v3#1"
+  ]
+ },
+ "ab563fa348aa8a84": {
+  "pid": "p02",
+  "lang": "es",
+  "text": "Bocadillo de cerdo deshilachado",
+  "runs": [
+   "luna-low-v3#1"
+  ]
+ },
+ "15ee6af4f14fee7b": {
+  "pid": "p02",
+  "lang": "en",
+  "text": "Pulled pork sandwich",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#3",
+   "luna-medium-api#3"
+  ]
+ },
+ "b134238c93ca9de0": {
+  "pid": "p08",
+  "lang": "es",
+  "text": "Pollo asado a l'ast",
+  "runs": [
+   "luna-low-v3#1"
+  ]
+ },
+ "4b4824d39ec14f72": {
+  "pid": "p08",
+  "lang": "en",
+  "text": "Rotisserie chicken",
+  "runs": [
+   "luna-low-v3#1",
+   "terra-low-v2#1"
+  ]
+ },
+ "837fa47da6634944": {
+  "pid": "p11",
+  "lang": "ca",
+  "text": "Torrada d'alvocat",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#3",
+   "sonnet-low#1",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-api#1",
+   "terra-low-v2#1",
+   "terra-low-v3#1",
+   "terra-low-v3#2"
+  ]
+ },
+ "50b5f420929a30f4": {
+  "pid": "p15",
+  "lang": "en",
+  "text": "Vegetable nem rolls",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "06543352ae477677": {
+  "pid": "p16",
+  "lang": "en",
+  "text": "Grilled ham and cheese sandwich",
+  "runs": [
+   "luna-low-v3#1"
+  ]
+ },
+ "e4ed716ac2914043": {
+  "pid": "p29",
+  "lang": "es",
+  "text": "Croqueta de ternera",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#3"
+  ]
+ },
+ "aad725bf712d5634": {
+  "pid": "p29",
+  "lang": "en",
+  "text": "Beef croquette",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2"
+  ]
+ },
+ "7d865ee1946b8bc4": {
+  "pid": "p30",
+  "lang": "en",
+  "text": "Escalivada with roasted peppers and aubergine, to take away",
+  "runs": [
+   "luna-low-v3#1"
+  ]
+ },
+ "cb5eaa68fb662927": {
+  "pid": "p31",
+  "lang": "ca",
+  "text": "Amanida Cèsar",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "601a84098c8f9db4": {
+  "pid": "p31",
+  "lang": "es",
+  "text": "Ensalada César",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "fa8ab01a33e51d03": {
+  "pid": "p31",
+  "lang": "en",
+  "text": "Cesar salad",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "22fcb6e39629e2af": {
+  "pid": "p32",
+  "lang": "ca",
+  "text": "Pastís de llimona",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "b7678cf6e605dd5f": {
+  "pid": "p32",
+  "lang": "es",
+  "text": "Tarta de limon",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "695415ec4e8cae85": {
+  "pid": "p32",
+  "lang": "en",
+  "text": "Lemon tart",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "58d650699229ba86": {
+  "pid": "p15",
+  "lang": "ca",
+  "text": "Rotllets vietnamites vegetarians",
+  "runs": [
+   "luna-low-v3#2",
+   "terra-low-v2#2",
+   "terra-low-v3#2"
+  ]
+ },
+ "7d5555d0b4e79ce8": {
+  "pid": "p15",
+  "lang": "es",
+  "text": "Rollitos vietnamitas vegetarianos",
+  "runs": [
+   "luna-low-v3#2",
+   "terra-low-v2#2",
+   "terra-low-v3#2"
+  ]
+ },
+ "40066f0fbc5cb1c8": {
+  "pid": "p15",
+  "lang": "en",
+  "text": "Vegetarian Vietnamese spring rolls",
+  "runs": [
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "terra-low-v2#2",
+   "terra-low-v3#2"
+  ]
+ },
+ "2ed619a76dcca977": {
+  "pid": "p02",
+  "lang": "ca",
+  "text": "Entrepà de porc esfilagarsat",
+  "runs": [
+   "luna-low-v3#3"
+  ]
+ },
+ "214522a82a915005": {
+  "pid": "p02",
+  "lang": "es",
+  "text": "Bocadillo de pulled pork",
+  "runs": [
+   "luna-low-v3#3",
+   "luna-medium-api#3"
+  ]
+ },
+ "d40b0bacb3a2023b": {
+  "pid": "p16",
+  "lang": "en",
+  "text": "Toasted ham and cheese sandwich",
+  "runs": [
+   "luna-low-v3#3"
+  ]
+ },
+ "6aa2514b68344ace": {
+  "pid": "p29",
+  "lang": "en",
+  "text": "Roast beef croquette",
+  "runs": [
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "331e7a2c8975f281": {
+  "pid": "p15",
+  "lang": "ca",
+  "text": "Rotllets nem vegetarians",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1",
+   "luna-medium-api#2"
+  ]
+ },
+ "7a953b20ffa639e3": {
+  "pid": "p15",
+  "lang": "es",
+  "text": "Rollitos nem vegetarianos",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1",
+   "luna-medium-api#2"
+  ]
+ },
+ "71bb0c330cb6b5f0": {
+  "pid": "p15",
+  "lang": "en",
+  "text": "Vegetarian nem rolls",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1",
+   "luna-medium-api#2"
+  ]
+ },
+ "30e0070c817c80c3": {
+  "pid": "p19",
+  "lang": "ca",
+  "text": "Estrella Galicia 33 cl",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#3",
+   "sonnet-medium#3",
+   "terra-low-api#2",
+   "terra-medium-api#3"
+  ]
+ },
+ "5d0acb6e1a6e022e": {
+  "pid": "p19",
+  "lang": "es",
+  "text": "Estrella Galicia 33 cl",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#3",
+   "sonnet-medium#3",
+   "terra-low-api#2",
+   "terra-medium-api#3"
+  ]
+ },
+ "05e7a087f55a7914": {
+  "pid": "p19",
+  "lang": "en",
+  "text": "Estrella Galicia 33 cl",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#3",
+   "sonnet-medium#3",
+   "terra-low-api#2",
+   "terra-medium-api#3"
+  ]
+ },
+ "00ff922a7d7277d4": {
+  "pid": "p22",
+  "lang": "en",
+  "text": "Small beer (zurito)",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "d8f359ebb6ca36bb": {
+  "pid": "p29",
+  "lang": "es",
+  "text": "Croqueta de ternera asada",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "039e864ddfc6d839": {
+  "pid": "p30",
+  "lang": "en",
+  "text": "Escalivada to take away",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "eca7256f20595dbc": {
+  "pid": "p13",
+  "lang": "ca",
+  "text": "Smoothie bowl",
+  "runs": [
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#2",
+   "sonnet-low#1",
+   "sonnet-low#3",
+   "sonnet-medium#2"
+  ]
+ },
+ "aff3e50df383af70": {
+  "pid": "p19",
+  "lang": "ca",
+  "text": "Estrella Galicia (33 cl)",
+  "runs": [
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#2"
+  ]
+ },
+ "76ccefce9acb54fa": {
+  "pid": "p19",
+  "lang": "es",
+  "text": "Estrella Galicia (33 cl)",
+  "runs": [
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#2"
+  ]
+ },
+ "4edf36e577e59352": {
+  "pid": "p19",
+  "lang": "en",
+  "text": "Estrella Galicia (33 cl)",
+  "runs": [
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#2"
+  ]
+ },
+ "c26c52295333af7a": {
+  "pid": "p30",
+  "lang": "en",
+  "text": "Roasted peppers and aubergine to take away",
+  "runs": [
+   "luna-low-v4+luna-medium#2"
+  ]
+ },
+ "918a40fdbbc4f720": {
+  "pid": "p11",
+  "lang": "ca",
+  "text": "Torrada d’alvocat",
+  "runs": [
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3",
+   "luna-medium-api#2"
+  ]
+ },
+ "c6870f1594a8f82e": {
+  "pid": "p12",
+  "lang": "ca",
+  "text": "Panet d’esmorzar",
+  "runs": [
+   "luna-low-v4+luna-medium#3"
+  ]
+ },
+ "dbd57bd37200e87d": {
+  "pid": "p12",
+  "lang": "es",
+  "text": "Panecillo de desayuno",
+  "runs": [
+   "luna-low-v4+luna-medium#3"
+  ]
+ },
+ "e21e56ed939bac93": {
+  "pid": "p15",
+  "lang": "ca",
+  "text": "Rotllets nem vegetals",
+  "runs": [
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "52e494442ba2cfa7": {
+  "pid": "p15",
+  "lang": "es",
+  "text": "Rollitos nem vegetales",
+  "runs": [
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "7174f8306190c5c1": {
+  "pid": "p16",
+  "lang": "en",
+  "text": "Ham and cheese toastie",
+  "runs": [
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3",
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "b583f0c1dd40727b": {
+  "pid": "p26",
+  "lang": "ca",
+  "text": "Té de rooibos",
+  "runs": [
+   "luna-low-v4+luna-medium#3"
+  ]
+ },
+ "dc40c757471ac136": {
+  "pid": "p30",
+  "lang": "ca",
+  "text": "Escalivada de pebrot i albergínia rostits per emportar",
+  "runs": [
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3"
+  ]
+ },
+ "2fb001a31f1cc5f2": {
+  "pid": "p22",
+  "lang": "en",
+  "text": "Zurito (small draught beer)",
+  "runs": [
+   "luna-low-v4+terra-low#1"
+  ]
+ },
+ "c56f46f8fd7fac88": {
+  "pid": "p28",
+  "lang": "ca",
+  "text": "Pa torrat amb tomàquet i oli d’oliva",
+  "runs": [
+   "luna-low-v4+terra-low#2"
+  ]
+ },
+ "72c6d078218759d1": {
+  "pid": "p30",
+  "lang": "en",
+  "text": "Roasted peppers and aubergine, takeaway",
+  "runs": [
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#2"
+  ]
+ },
+ "011899f671a00d0e": {
+  "pid": "p26",
+  "lang": "ca",
+  "text": "Infusió de rooibos",
+  "runs": [
+   "luna-low-v4+terra-low#3"
+  ]
+ },
+ "d8d44bc50c6edc27": {
+  "pid": "p08",
+  "lang": "en",
+  "text": "Rotisserie chicken takeaway",
+  "runs": [
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "1b07868e62be325d": {
+  "pid": "p30",
+  "lang": "en",
+  "text": "Roasted pepper and aubergine escalivada takeaway",
+  "runs": [
+   "luna-low-v4#3"
+  ]
+ },
+ "b2e1ee2830c59c94": {
+  "pid": "p15",
+  "lang": "ca",
+  "text": "Cha nem vegetarians",
+  "runs": [
+   "luna-medium-api#1"
+  ]
+ },
+ "00a56cc6775f8d3e": {
+  "pid": "p15",
+  "lang": "es",
+  "text": "Cha nem vegetales",
+  "runs": [
+   "luna-medium-api#1"
+  ]
+ },
+ "09b9b351ffae4634": {
+  "pid": "p17",
+  "lang": "en",
+  "text": "Meat special",
+  "runs": [
+   "luna-medium-api#1",
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "terra-low-api#1",
+   "terra-low-api#3",
+   "terra-low-v2#2",
+   "terra-low-v3#1",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "d0c43c5f22eab5bd": {
+  "pid": "p18",
+  "lang": "en",
+  "text": "Daily special",
+  "runs": [
+   "luna-medium-api#1",
+   "terra-low-api#1"
+  ]
+ },
+ "9a8dce957a6bbeaf": {
+  "pid": "p30",
+  "lang": "ca",
+  "text": "Escalivada de pebrot i albergínia escalivats per emportar",
+  "runs": [
+   "luna-medium-api#1"
+  ]
+ },
+ "892a172371a01924": {
+  "pid": "p06",
+  "lang": "ca",
+  "text": "Gildas",
+  "runs": [
+   "luna-medium-api#2",
+   "luna-medium-api#3",
+   "terra-low-api#2",
+   "terra-low-v2#1",
+   "terra-low-v2#3",
+   "terra-low-v3#3"
+  ]
+ },
+ "a742858d4b1a8618": {
+  "pid": "p17",
+  "lang": "ca",
+  "text": "Especial de carn",
+  "runs": [
+   "luna-medium-api#2",
+   "terra-low-api#1",
+   "terra-low-api#3",
+   "terra-low-v2#2",
+   "terra-low-v3#1",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "fb094c9bdd92962d": {
+  "pid": "p17",
+  "lang": "es",
+  "text": "Especial de carne",
+  "runs": [
+   "luna-medium-api#2",
+   "terra-low-api#1",
+   "terra-low-api#3",
+   "terra-low-v2#2",
+   "terra-low-v3#1",
+   "terra-medium-api#1",
+   "terra-medium-api#3"
+  ]
+ },
+ "656eb50fa76925f0": {
+  "pid": "p30",
+  "lang": "en",
+  "text": "Escalivada of roasted pepper and aubergine, to take away",
+  "runs": [
+   "luna-medium-api#2",
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-medium#3"
+  ]
+ },
+ "f7d1579020cb91d7": {
+  "pid": "p02",
+  "lang": "ca",
+  "text": "Entrepà de pulled pork",
+  "runs": [
+   "luna-medium-api#3"
+  ]
+ },
+ "cf7f041dab26c680": {
+  "pid": "p15",
+  "lang": "ca",
+  "text": "Rotllets vietnamites vegetarians (cha nem)",
+  "runs": [
+   "luna-medium-api#3"
+  ]
+ },
+ "56f71c7fdeba16d4": {
+  "pid": "p15",
+  "lang": "es",
+  "text": "Rollitos vietnamitas vegetarianos (cha nem)",
+  "runs": [
+   "luna-medium-api#3"
+  ]
+ },
+ "24cd718652a3e497": {
+  "pid": "p15",
+  "lang": "en",
+  "text": "Vegetarian Vietnamese spring rolls (cha nem)",
+  "runs": [
+   "luna-medium-api#3"
+  ]
+ },
+ "fa69374289ec7291": {
+  "pid": "p22",
+  "lang": "en",
+  "text": "Zurrito (small beer)",
+  "runs": [
+   "luna-medium-api#3"
+  ]
+ },
+ "d101528c18aa211f": {
+  "pid": "p05",
+  "lang": "ca",
+  "text": "Rotllets de botifarra",
+  "runs": [
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-medium#1"
+  ]
+ },
+ "d54bec33b441702f": {
+  "pid": "p06",
+  "lang": "ca",
+  "text": "Guildes",
+  "runs": [
+   "sonnet-low#1",
+   "sonnet-low#3",
+   "sonnet-medium#2"
+  ]
+ },
+ "e0b7160f29ff6787": {
+  "pid": "p06",
+  "lang": "es",
+  "text": "Guildas",
+  "runs": [
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3"
+  ]
+ },
+ "96fd2a07f7e656fe": {
+  "pid": "p06",
+  "lang": "en",
+  "text": "Guildas",
+  "runs": [
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3"
+  ]
+ },
+ "2e80cb1366d4e112": {
+  "pid": "p08",
+  "lang": "es",
+  "text": "Pollo asado en asador para llevar",
+  "runs": [
+   "sonnet-low#1",
+   "sonnet-low#3"
+  ]
+ },
+ "ac50af1cdac87453": {
+  "pid": "p12",
+  "lang": "ca",
+  "text": "Brekkie roll",
+  "runs": [
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3"
+  ]
+ },
+ "ba204663cf465ae5": {
+  "pid": "p12",
+  "lang": "es",
+  "text": "Brekkie roll",
+  "runs": [
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3"
+  ]
+ },
+ "3c8a4a15ed7656eb": {
+  "pid": "p17",
+  "lang": "en",
+  "text": "Special meat tapa",
+  "runs": [
+   "sonnet-low#1",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#3"
+  ]
+ },
+ "dad78e6d2db06ddc": {
+  "pid": "p23",
+  "lang": "ca",
+  "text": "Cervesa de llauna",
+  "runs": [
+   "sonnet-low#1",
+   "sonnet-low#2"
+  ]
+ },
+ "fa0f74ecc6181b69": {
+  "pid": "p23",
+  "lang": "es",
+  "text": "Cerveza de lata",
+  "runs": [
+   "sonnet-low#1",
+   "sonnet-low#2"
+  ]
+ },
+ "26661d365563a6bb": {
+  "pid": "p27",
+  "lang": "ca",
+  "text": "Ous estrellats amb xoriço",
+  "runs": [
+   "sonnet-low#1",
+   "sonnet-low#2",
+   "sonnet-low#3",
+   "sonnet-medium#1",
+   "sonnet-medium#2",
+   "sonnet-medium#3",
+   "terra-low-v2#3"
+  ]
+ },
+ "df9f2d4fe2d7f644": {
+  "pid": "p08",
+  "lang": "en",
+  "text": "Roast chicken to take away",
+  "runs": [
+   "sonnet-low#2",
+   "terra-low-api#1",
+   "terra-low-api#2",
+   "terra-low-api#3"
+  ]
+ },
+ "ba6d7d41f576478f": {
+  "pid": "p04",
+  "lang": "en",
+  "text": "Fried squid sandwich",
+  "runs": [
+   "sonnet-medium#1"
+  ]
+ },
+ "31cf8761676b04a5": {
+  "pid": "p06",
+  "lang": "ca",
+  "text": "Guildas",
+  "runs": [
+   "sonnet-medium#1",
+   "sonnet-medium#3"
+  ]
+ },
+ "b583f07f158cce16": {
+  "pid": "p05",
+  "lang": "ca",
+  "text": "Rollitos de salsitxa",
+  "runs": [
+   "sonnet-medium#2"
+  ]
+ },
+ "79ba49f47960731e": {
+  "pid": "p05",
+  "lang": "ca",
+  "text": "Rotlets de botifarra",
+  "runs": [
+   "sonnet-medium#3"
+  ]
+ },
+ "f75f8d212435367f": {
+  "pid": "p09",
+  "lang": "ca",
+  "text": "Arròs amb llet amb festucs",
+  "runs": [
+   "sonnet-medium#3"
+  ]
+ },
+ "5bfa15b3b66768db": {
+  "pid": "p09",
+  "lang": "es",
+  "text": "Arroz con leche con pistachos",
+  "runs": [
+   "sonnet-medium#3"
+  ]
+ },
+ "91c2d6543670e8fc": {
+  "pid": "p13",
+  "lang": "ca",
+  "text": "Bowl de smoothie",
+  "runs": [
+   "sonnet-medium#3"
+  ]
+ },
+ "c35a3af653d084d2": {
+  "pid": "p15",
+  "lang": "ca",
+  "text": "Chả nem vegetarià",
+  "runs": [
+   "sonnet-medium#3",
+   "terra-low-v2#3"
+  ]
+ },
+ "3cb8e07fc674b1e5": {
+  "pid": "p15",
+  "lang": "es",
+  "text": "Chả nem vegetariano",
+  "runs": [
+   "sonnet-medium#3",
+   "terra-low-v2#3",
+   "terra-low-v3#1"
+  ]
+ },
+ "b59cdc4653cd562e": {
+  "pid": "p15",
+  "lang": "en",
+  "text": "Vegetarian chả nem",
+  "runs": [
+   "sonnet-medium#3",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-medium-api#1"
+  ]
+ },
+ "61e618cef7fb48b7": {
+  "pid": "p16",
+  "lang": "en",
+  "text": "Bikini toasted sandwich",
+  "runs": [
+   "terra-low-api#2"
+  ]
+ },
+ "dfd82c4907b534fc": {
+  "pid": "p25",
+  "lang": "ca",
+  "text": "Negroni Sbagliato",
+  "runs": [
+   "terra-low-api#2"
+  ]
+ },
+ "7c56d0eeaa15d195": {
+  "pid": "p25",
+  "lang": "es",
+  "text": "Negroni Sbagliato",
+  "runs": [
+   "terra-low-api#2"
+  ]
+ },
+ "a79b385400a9fa96": {
+  "pid": "p25",
+  "lang": "en",
+  "text": "Negroni Sbagliato",
+  "runs": [
+   "terra-low-api#2"
+  ]
+ },
+ "c2921855d2f9a58e": {
+  "pid": "p29",
+  "lang": "en",
+  "text": "Roasted veal croquettes",
+  "runs": [
+   "terra-low-api#3",
+   "terra-medium-api#1"
+  ]
+ },
+ "2d9fab2b90ac84ba": {
+  "pid": "p01",
+  "lang": "en",
+  "text": "Burger and fries",
+  "runs": [
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "7ef154344656de30": {
+  "pid": "p08",
+  "lang": "es",
+  "text": "Pollo asado",
+  "runs": [
+   "terra-low-v2#1",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#3"
+  ]
+ },
+ "eddab54d9162a888": {
+  "pid": "p15",
+  "lang": "ca",
+  "text": "Rotllets de primavera vegetarians",
+  "runs": [
+   "terra-low-v2#1"
+  ]
+ },
+ "8b95d408dc73a337": {
+  "pid": "p15",
+  "lang": "es",
+  "text": "Rollitos de primavera vegetarianos",
+  "runs": [
+   "terra-low-v2#1"
+  ]
+ },
+ "81e3441e7a13c382": {
+  "pid": "p15",
+  "lang": "en",
+  "text": "Vegetarian spring rolls",
+  "runs": [
+   "terra-low-v2#1"
+  ]
+ },
+ "513e11f879f82dc2": {
+  "pid": "p22",
+  "lang": "en",
+  "text": "Small draft beer",
+  "runs": [
+   "terra-low-v2#1",
+   "terra-low-v2#2",
+   "terra-medium-api#3"
+  ]
+ },
+ "c530325375cca462": {
+  "pid": "p08",
+  "lang": "es",
+  "text": "Pollo a l'ast",
+  "runs": [
+   "terra-low-v2#2"
+  ]
+ },
+ "ccaa10464b77c05a": {
+  "pid": "p08",
+  "lang": "en",
+  "text": "Roast chicken",
+  "runs": [
+   "terra-low-v2#2",
+   "terra-low-v2#3",
+   "terra-low-v3#1",
+   "terra-low-v3#3"
+  ]
+ },
+ "d1f8e9047e9c1e76": {
+  "pid": "p22",
+  "lang": "ca",
+  "text": "Canya petita",
+  "runs": [
+   "terra-low-v2#3",
+   "terra-low-v3#3"
+  ]
+ },
+ "933faa7b61d7e3da": {
+  "pid": "p15",
+  "lang": "ca",
+  "text": "Chả nem vegà",
+  "runs": [
+   "terra-low-v3#1"
+  ]
+ },
+ "96dbc302260920b5": {
+  "pid": "p18",
+  "lang": "ca",
+  "text": "Menú del dia",
+  "runs": [
+   "terra-low-v3#1"
+  ]
+ },
+ "bb928e9b131dcd42": {
+  "pid": "p18",
+  "lang": "es",
+  "text": "Menú del día",
+  "runs": [
+   "terra-low-v3#1"
+  ]
+ },
+ "776829a18fd20278": {
+  "pid": "p18",
+  "lang": "en",
+  "text": "Menu of the day",
+  "runs": [
+   "terra-low-v3#1"
+  ]
+ },
+ "c5292147af57b5ad": {
+  "pid": "p24",
+  "lang": "ca",
+  "text": "Ponx calent",
+  "runs": [
+   "terra-low-v3#1",
+   "terra-low-v3#3"
+  ]
+ },
+ "6f5b49a595848289": {
+  "pid": "p24",
+  "lang": "es",
+  "text": "Ponche caliente",
+  "runs": [
+   "terra-low-v3#1",
+   "terra-low-v3#3"
+  ]
+ },
+ "c7ee4492617f0f91": {
+  "pid": "p16",
+  "lang": "es",
+  "text": "Sándwich mixto",
+  "runs": [
+   "terra-low-v3#3"
+  ]
+ },
+ "653581c8759e69d6": {
+  "pid": "p15",
+  "lang": "ca",
+  "text": "Chả nem vegetals",
+  "runs": [
+   "terra-medium-api#1"
+  ]
+ },
+ "e18ef0d641656281": {
+  "pid": "p15",
+  "lang": "es",
+  "text": "Chả nem vegetarianos",
+  "runs": [
+   "terra-medium-api#1"
+  ]
+ },
+ "a26591c6da615254": {
+  "pid": "p28",
+  "lang": "ca",
+  "text": "Pa torrat sucat amb tomàquet i oli d'oliva",
+  "runs": [
+   "terra-medium-api#1"
+  ]
+ },
+ "e22a61a5380caa47": {
+  "pid": "p03",
+  "lang": "fix",
+  "text": "Internal name: COLIFOR → COLIFLOR",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1",
+   "terra-low-v3#1",
+   "terra-low-v3#2"
+  ]
+ },
+ "ba1765aa31ee36f1": {
+  "pid": "p05",
+  "lang": "fix",
+  "text": "Internal name: SALCHICCA → SALCHICHA",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "11dbf9acf87585ea": {
+  "pid": "p06",
+  "lang": "fix",
+  "text": "Internal name: GUILDAS → GILDAS",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2"
+  ]
+ },
+ "7b32c5fe6c5a1626": {
+  "pid": "p10",
+  "lang": "fix",
+  "text": "Internal name: BUNUELOS → BUÑUELOS",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "de4419e88dde85e8": {
+  "pid": "p13",
+  "lang": "fix",
+  "text": "Internal name: SMOOTIE → SMOOTHIE",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "a5c24ec219e366bb": {
+  "pid": "p20",
+  "lang": "fix",
+  "text": "Internal name: ALAMBRA → ALHAMBRA",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "7f9b0027b6039d95": {
+  "pid": "p21",
+  "lang": "fix",
+  "text": "Internal name: HENNESSEY → HENNESSY",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "58d2df5dfac59878": {
+  "pid": "p23",
+  "lang": "fix",
+  "text": "Internal name: CERVESA → CERVEZA",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3"
+  ]
+ },
+ "c1936469bc5c141a": {
+  "pid": "p24",
+  "lang": "fix",
+  "text": "Internal name: TOTTY → TODDY",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v3#3"
+  ]
+ },
+ "05dd5d8ff401b395": {
+  "pid": "p26",
+  "lang": "fix",
+  "text": "Internal name: ROOBIOS → ROOIBOS",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "luna-low-v4#3",
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "4f1c024efa7c7ea5": {
+  "pid": "p31",
+  "lang": "fix",
+  "text": "Internal name: CESAR → CAESAR",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "16d931f51c3e6445": {
+  "pid": "p31",
+  "lang": "fix",
+  "text": "English name: Cesar → Caesar",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3",
+   "terra-low-v3#1",
+   "terra-low-v3#3"
+  ]
+ },
+ "97d5c1af4a7e4f37": {
+  "pid": "p32",
+  "lang": "fix",
+  "text": "Internal name: LIMON → LIMÓN",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "87c1058437083880": {
+  "pid": "p32",
+  "lang": "fix",
+  "text": "Spanish name: limon → limón",
+  "runs": [
+   "luna-low-v3#1",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#3",
+   "luna-low-v4+terra-low#3",
+   "luna-low-v4#3",
+   "terra-low-v3#1",
+   "terra-low-v3#3"
+  ]
+ },
+ "253a22b16db6126f": {
+  "pid": "p09",
+  "lang": "fix",
+  "text": "Internal name: PISTACHIOS → PISTACHOS",
+  "runs": [
+   "luna-low-v3#2",
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "terra-low-v3#1",
+   "terra-low-v3#3"
+  ]
+ },
+ "ac9cec40d77233cc": {
+  "pid": "p31",
+  "lang": "fix",
+  "text": "English name: Cesar salad → Caesar salad",
+  "runs": [
+   "luna-low-v3#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "terra-low-v3#2"
+  ]
+ },
+ "3f892349395f0660": {
+  "pid": "p32",
+  "lang": "fix",
+  "text": "Spanish name: Tarta de limon → Tarta de limón",
+  "runs": [
+   "luna-low-v3#2",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "terra-low-v3#2"
+  ]
+ },
+ "7818ab37c661c89a": {
+  "pid": "p04",
+  "lang": "fix",
+  "text": "Internal name: CALAMARI → CALAMARES",
+  "runs": [
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1"
+  ]
+ },
+ "54b6dff60751c1c9": {
+  "pid": "p07",
+  "lang": "fix",
+  "text": "Internal name: ALBONDIGAS → ALBÓNDIGAS",
+  "runs": [
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2",
+   "terra-low-v3#2"
+  ]
+ },
+ "1af2c084c7dffeb6": {
+  "pid": "p19",
+  "lang": "fix",
+  "text": "Internal name: GALLICIA → GALICIA",
+  "runs": [
+   "luna-low-v3#3"
+  ]
+ },
+ "72e0c81828b8d06d": {
+  "pid": "p22",
+  "lang": "fix",
+  "text": "Internal name: ZURRITO → ZURITO",
+  "runs": [
+   "luna-low-v3#3",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#2",
+   "terra-low-v3#1"
+  ]
+ },
+ "902e5864e6f64412": {
+  "pid": "p18",
+  "lang": "fix",
+  "text": "Internal name: DIA → DÍA",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4#1",
+   "terra-low-v3#2"
+  ]
+ },
+ "73dc8ccfaac4cf58": {
+  "pid": "p31",
+  "lang": "fix",
+  "text": "Internal name: CESAR → CÉSAR",
+  "runs": [
+   "luna-low-v4+luna-medium#1",
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#1",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#1",
+   "luna-low-v4#2"
+  ]
+ },
+ "13ce50f102138c60": {
+  "pid": "p19",
+  "lang": "fix",
+  "text": "Internal name: 33ml → 33cl",
+  "runs": [
+   "luna-low-v4+luna-medium#2",
+   "luna-low-v4+terra-low#2",
+   "luna-low-v4#2"
+  ]
+ },
+ "16e1ae36d9437e77": {
+  "pid": "p08",
+  "lang": "fix",
+  "text": "Internal name: L´AST → L'AST",
+  "runs": [
+   "terra-low-v3#1",
+   "terra-low-v3#2",
+   "terra-low-v3#3"
+  ]
+ },
+ "52e909c72860d074": {
+  "pid": "p24",
+  "lang": "fix",
+  "text": "Internal name: HOT TOTTY → HOT TODDY",
+  "runs": [
+   "terra-low-v3#1",
+   "terra-low-v3#2"
+  ]
+ }
+}

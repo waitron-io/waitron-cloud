@@ -473,6 +473,13 @@ environment names and normal idle shutdown (0.27 seconds); its project is remove
 A built release image and active-provider Compose shutdown still need qualification.
 This does not establish full-stack translation delivery,
 quality, joint Waitron paging or production provider approval.
+Task 20 preserves the original trial scripts, grading template, both product and shown-name
+sets, all 141 owner grades and six Luna-review result files byte for byte. The offline scorer
+reproduces the original totals: tuning 252 names, 6 needing work and 10 wrong; blind 243 names,
+5 needing work and 6 wrong. Unseen names are counted and listed as ungraded, never accepted.
+Command checks refuse missing input and malformed name maps. These offline checks run in the
+ordinary package suite without a provider or key; they do not measure the templated prompt.
+Task 21's trial runner and grading page, owner Tasks 22–24 and the joint proof remain open.
 Keep translation off until the remaining runtime and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
