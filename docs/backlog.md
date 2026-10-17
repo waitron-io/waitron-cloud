@@ -336,7 +336,9 @@ regrouping and reversed completion. Names and corrections retain escaped control
 and lone surrogates. Append-only migration 040 changes retained results from JSONB to JSON;
 release-39 upgrade, cancellation rollback, repeat/concurrent migration, manifest and recovery
 count checks preserve retained results and existing job/ledger rows. Automated translation tests
-fetch the pinned earlier release so the upgrade proof also runs in GitHub. No worker command,
+fetch the pinned earlier release so the upgrade proof also runs in GitHub. Historical receipt-selector
+fixtures retain their audited workflow bytes when current checkout settings change; production
+audit guards and their original behavioral assertions stay unchanged. No worker command,
 provider activation or route is introduced. Consent enforcement remains Task 13.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
