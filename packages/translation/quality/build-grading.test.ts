@@ -51,6 +51,7 @@ test('the command refuses failed, wrong-set, malformed and repeated files before
    assert.notEqual(run(['--set','blind',file]).status,0,JSON.stringify(result));
    assert.equal(readFileSync(page,'utf8'),html);assert.deepEqual(JSON.parse(readFileSync(keys,'utf8')),shown);
   }
+  writeFileSync(file,JSON.stringify({set:'blind',failed:[],names:{f01:{ca:'Fresh name'}}}));
   for(const args of [[],['--set','blind'],['--set','blind',file,file],['--set','blind','--round','r1','--round','r2',file],['--set','blind','--round','bad"round',file]])assert.notEqual(run(args).status,0);
  }finally{
   if(beforePage)writeFileSync(page,beforePage);else rmSync(page,{force:true});

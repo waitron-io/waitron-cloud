@@ -80,12 +80,12 @@ test('a refused first pass records failures; a refused review cannot look fully 
 });
 test('the trial command is strict about options and prints only successful file paths',async()=>{
  assert.equal(typeof trial.runTrial,'function','runTrial must exist');
- for(const args of [[],['--set','blind','--runs','1','--unknown'],['--set','blind','--runs','1','--runs','2'],['--set','blind','--runs','1','--out']]){
-  const r=await command(cli,args,{CLOUD_OPENAI_API_KEY:'private-test-value'});
-  assert.notEqual(r.code,0);assert.equal(r.stdout,'');assert.match(r.stderr,/usage:/);assert.ok(!r.stderr.includes('private-test-value'));
- }
  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r)),dir=mkdtempSync(join(tmpdir(),'translation-trial-cli-'));
  try{
+ for(const args of [[],['--set','blind','--runs','1','--unknown'],['--set','blind','--runs','1','--unknown','value'],['--set','blind','--runs','1','--runs','2'],['--set','blind','--runs','1','--out']]){
+  const r=await command(cli,[...args,'--out',dir],{CLOUD_OPENAI_API_KEY:'private-test-value',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
+  assert.notEqual(r.code,0);assert.equal(r.stdout,'');assert.match(r.stderr,/usage:/);assert.ok(!r.stderr.includes('private-test-value'));
+ }
   const r=await command(cli,['--set','blind','--runs','1','--out',dir],{CLOUD_OPENAI_API_KEY:'private-test-value',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
   assert.equal(r.code,0,r.stderr);assert.equal(r.stderr,'');
   const file=r.stdout.trim();assert.ok(file.startsWith(dir+'/blind-'));assert.ok(file.endsWith('-1.json'));
