@@ -32,10 +32,10 @@ test('an unanswered agree is reported as uncertain, a refused session clears the
  mode='limited';await c.load();assert.equal(c.error,'limited');c.account('two');mode='ok';await c.load();assert.equal(c.loaded,false);assert.ok(c.waiting>0);
 });
 test('anonymous, duplicate and cooling-down requests do not dispatch',async()=>{
- let finish!:(v:ApiResult<unknown>)=>void;let calls=0;
- const c=new TranslationConsentController(()=>{},<T>()=>{calls++;return new Promise<ApiResult<T>>(r=>{finish=r as typeof finish;});});
+ let finish!:(v:ApiResult<unknown>)=>void;let calls=0,delay=false;
+ const c=new TranslationConsentController(()=>{},<T>()=>{calls++;return !delay||calls>1?Promise.resolve(listed(false) as ApiResult<T>):new Promise<ApiResult<T>>(r=>{finish=r as typeof finish;});});
  await c.load();await c.agree(venueId);await c.withdraw(venueId);assert.equal(calls,0);
- c.account('one');const load=c.load();assert.equal(c.pending,true);
+ delay=true;c.account('one');const load=c.load();assert.equal(c.pending,true);
  await c.agree(venueId);await c.withdraw(venueId);await c.load();assert.equal(calls,1);
  finish({ok:false,status:429,code:'rate_limited',retryAfterMs:60000});await load;
  c.account('two');await c.agree(venueId);await c.withdraw(venueId);await c.load();assert.equal(calls,1);assert.ok(c.waiting>0);
