@@ -166,3 +166,15 @@ test('the existing reader bounds declared and streamed bytes, encoding and malfo
  assert.deepEqual(await error(await post(v,'translation-submit','{')),[400,'invalid_input']);
  assert.equal(await jobCount(v),0);
 });
+
+test('forged proofs cannot spend a real installation request allowance',async()=>{
+ const v=await venue(),signed=reference(v,'translation-status',randomUUID()),forged={...signed,signature:'A'.repeat(86)};
+ for(let i=0;i<30;i++)assert.deepEqual(await error(await post(v,'translation-status',forged)),[401,'invalid_proof']);
+ assert.deepEqual(await error(await post(v,'translation-status',signed)),[404,'translation_job_not_found']);
+});
+
+test('non-string unsigned bodies are refused before spending the installation allowance',async()=>{
+ const v=await venue(),signed=v.submit(jobText());
+ for(let i=0;i<30;i++)assert.deepEqual(await error(await post(v,'translation-submit',{...signed,body:5})),[401,'invalid_proof']);
+ assert.equal((await post(v,'translation-submit',signed)).status,200);assert.equal(await jobCount(v),1);
+});
