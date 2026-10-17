@@ -875,8 +875,16 @@ notifications separately.
   handler's existing pending-work gate. A held-response browser check covers both
   languages, themes and screen sizes without changing the original assertions or
   three-second waits. No fiscal policy changed.
-  Deployment enforcement is still off. Five remaining implementation slices,
-  actual direct-storage withdrawal/fresh writers, gateway filtering, LAN deployment,
+  Opted-in remote permission now covers placements, moves, names, certificate
+  submit/status, authorization and publication. Active/staged gateway routes and
+  reconciler jobs share the current paid/test/provisioned eligibility set. Delayed
+  signing/DNS results recheck policy; publication holds policy through the file
+  replacement. Upgrading alone restores no route; explicit existing-placement
+  provision restores cleared setup once. Public setup metadata remains readable.
+  The signed manifest schema and ten-minute authority maximum are unchanged.
+  See the [remote test guide](local-remote-access.md#exercise-test-free-and-paid-plans).
+  Deployment enforcement is still off. Four remaining implementation slices,
+  actual direct-storage withdrawal/fresh writers, LAN deployment,
   two-organisation acceptance and measured headroom remain open. The existing
   Waitron venue is quarantined; use a separate disposable Waitron test venue and
   leave its running containers and data untouched. Keep address providers disabled

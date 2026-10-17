@@ -54,3 +54,12 @@ test('database staff mode is explicit and cannot coexist with a staff file mappi
  await writeFile(value.configFile,JSON.stringify({...config,staffExchange:true}));assert.equal(run(value.configFile,'--status').status,0);
  await writeFile(value.configFile,JSON.stringify({...config,staffExchange:true,certificates:[{installationId:randomUUID(),kind:'staff',csrFile:join(root,'staff.csr'),output:join(root,'staff.crt')}]}));assert.equal(run(value.configFile,'--status').status,1);
 });
+
+test('reconciler refuses a malformed test plan flag before scheduling or publishing',async()=>{
+ const value=await fixture();
+ for(const flag of ['true','2','']){
+  const result=spawnSync(process.execPath,['src/reconciler-cli.ts',value.configFile,'--once'],{cwd:new URL('..',import.meta.url),encoding:'utf8',env:{...process.env,DATABASE_URL:databaseUrl,CLOUD_TEST_SERVICE_PLANS:flag}});
+  assert.equal(result.status,1);assert.equal(result.stdout,'');assert.equal(result.stderr,'Remote configuration reconciler failed; check its trusted configuration and database migrations\n');
+ }
+ assert.equal((await db.pool.query('SELECT count(*)::integer AS n FROM remote_configuration_jobs WHERE target_id=$1',[value.cellId])).rows[0].n,0);
+});

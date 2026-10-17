@@ -19,16 +19,16 @@ before(async()=>{
 after(async()=>{await db?.close();await rm(root,{recursive:true,force:true});});
 
 async function installation(){
- const signup=new SignupStore(db.pool,db.outbox);await signup.request('operator-move@example.test');
+ const signup=new SignupStore(db.pool,db.outbox);await signup.request(`operator-move-${randomUUID()}@example.test`);
  const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
  const owner=await signup.complete(mail.token,{password:'a long enough test password',organisationName:'Cafés',legalBusinessName:'Cafés SL',countryCode:'ES'});
  const binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test' as const,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  const registration=new RegistrationStore(db.pool);await registration.start(binding);await registration.approveCloud(binding,owner.accountId);await registration.approveLocal(binding,randomUUID());return registration.complete(binding);
 }
 
-async function operator(command:string,value:unknown){
+async function operator(command:string,value:unknown,planFlag?:string){
  const file=join(root,randomUUID()+'.json');await writeFile(file,JSON.stringify(value),{mode:0o600});
- return spawnSync(process.execPath,['src/operator-cli.ts',command,file],{cwd:new URL('..',import.meta.url),encoding:'utf8',env:{...process.env,DATABASE_URL:databaseUrl}});
+ return spawnSync(process.execPath,['src/operator-cli.ts',command,file],{cwd:new URL('..',import.meta.url),encoding:'utf8',env:{...process.env,DATABASE_URL:databaseUrl,...(planFlag===undefined?{}:{CLOUD_TEST_SERVICE_PLANS:planFlag})}});
 }
 
 test('trusted commands fail closed and replay the durable completed move after a lost reply',async()=>{
@@ -42,4 +42,12 @@ test('trusted commands fail closed and replay the durable completed move after a
  const completed=await operator('move-commit',{operationId,expectedRevision:1});assert.equal(completed.status,0,completed.stderr);assert.equal(JSON.parse(completed.stdout).state,'completed');
  const replay=await operator('move-commit',{operationId,expectedRevision:1});assert.equal(replay.status,0,replay.stderr);assert.deepEqual(JSON.parse(replay.stdout),JSON.parse(completed.stdout));
  const cancelCompleted=await operator('move-cancel',{operationId,expectedRevision:1});assert.equal(cancelCompleted.status,1);assert.equal(cancelCompleted.stderr,'remote.command_failed\n');
+});
+
+test('operator forwards explicit test mode and rejects malformed mode before changing placement',async()=>{
+ const installed=await installation(),cellId=randomUUID(),key=peerKey();await store.createCell({id:cellId,country:'ES',provider:'aws',environment:'test',suffix:'plan-operator.example.test',subnet:33,publicKey:peerKey(),endpoint:'gateway.example.test:51820'});
+ const input={installationId:installed.installationId,cellId,peerPublicKey:key};
+ for(const flag of ['1','true','2','']){const refused=await operator('provision',input,flag);assert.equal(refused.status,1);assert.equal(refused.stdout,'');}
+ assert.equal((await db.pool.query('SELECT count(*)::integer AS n FROM remote_placements WHERE installation_id=$1',[installed.installationId])).rows[0].n,0);
+ assert.equal((await operator('provision',input,'0')).status,0);
 });

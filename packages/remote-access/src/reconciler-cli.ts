@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {isAbsolute} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {Pool} from 'pg';
-import {runWorkerLoop} from '@waitron-cloud/registration';
+import {runWorkerLoop,parsePlanMode} from '@waitron-cloud/registration';
 import {issueCertificate,type DnsChallengeProvider} from './certificates.ts';
 import {isUuid} from './manifest.ts';
 import {FileReconcilerArtifacts} from './reconciler-files.ts';
@@ -26,6 +26,7 @@ function validate(value:unknown):asserts value is Configuration {
  const url=new URL(config.acme.directoryUrl);if(url.protocol!=='https:'||url.username||url.password||!config.acme.email.includes('@'))throw new Error();
 }
 try{
+ const planMode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS);
  const [configFile,mode,...extra]=process.argv.slice(2);if(!configFile||extra.length||mode&&!['--once','--status'].includes(mode)||!process.env.DATABASE_URL)throw new Error();
  const config:unknown=JSON.parse(await readFile(configFile,'utf8'));validate(config);
  const artifacts=new FileReconcilerArtifacts({routes:config.routes,certificates:config.certificates}),keys=new Map<string,KeyObject>();
@@ -33,7 +34,7 @@ try{
  const dns: DnsChallengeProvider=(await import(pathToFileURL(config.acme.dnsModule).href)).default;if(typeof dns?.present!=='function'||typeof dns?.remove!=='function')throw new Error();
  const accountKey=await readFile(config.acme.accountKeyFile);pool=new Pool({connectionString:process.env.DATABASE_URL,max:5,connectionTimeoutMillis:5000,statement_timeout:10000});pool.on('error',()=>console.error('Remote configuration database connection failed; retrying'));
  await pool.query('SELECT claim_id,lease_until FROM remote_configuration_jobs LIMIT 0');
- const worker=new RemoteConfigurationReconciler(pool,{staffExchange:config.staffExchange,artifacts,signingKeyForCell:async cellId=>{const key=keys.get(cellId);if(!key)throw new Error('route_mapping_missing');return key;},
+ const worker=new RemoteConfigurationReconciler(pool,{planMode,staffExchange:config.staffExchange,artifacts,signingKeyForCell:async cellId=>{const key=keys.get(cellId);if(!key)throw new Error('route_mapping_missing');return key;},
   issueCertificate:target=>issueCertificate({directoryUrl:config.acme.directoryUrl,accountKey,email:config.acme.email,csr:target.csr,hostname:target.hostname,dnsName:target.dnsName,dns,signal:target.signal})});
  if(mode==='--status')console.log(JSON.stringify(await remoteConfigurationStatus(pool)));
  else if(mode==='--once'){await worker.schedule();await worker.runOnce(stop.signal);console.log(JSON.stringify(await remoteConfigurationStatus(pool)));}

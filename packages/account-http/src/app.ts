@@ -91,7 +91,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
   const origin = new URL(config.portalOrigin); const secure = origin.protocol === 'https:';
   const captures=options.captures&&options.leaseIssuer?new BackupCaptures(pool,options.leaseIssuer,config.portalOrigin,{...options.captures,planMode:options.planMode},options.leaseTrust):undefined;
   const translation=options.translation&&options.leaseIssuer?new TranslationMachine(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust):undefined;
-  const staffExchange=options.staffCertificates&&options.leaseIssuer?new StaffCertificateExchange(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust):undefined;
+  const staffExchange=options.staffCertificates&&options.leaseIssuer?new StaffCertificateExchange(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust,options.planMode):undefined;
   const streams=options.captures?.managedStreams&&options.leaseIssuer?new ManagedStreamMachines(pool,options.leaseIssuer,config.portalOrigin,options.captures.vault,options.captures.managedStreams,options.leaseTrust,options.planMode):undefined;
   const relay=options.relay&&options.leaseIssuer?new RelayMessages(pool,options.leaseIssuer,config.portalOrigin,options.relay,options.leaseTrust):undefined;
   const limiter = new AccountRateLimiter(pool, config.rateKey);
@@ -142,7 +142,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if(['/api/installations/staff-certificate-submit','/api/installations/staff-certificate-status'].includes(c.req.path))return staffCertificateResponse(c,{exchange:staffExchange,ip,consume});
     if(['/api/installations/backup-reserve','/api/installations/backup-publish'].includes(c.req.path))return captureResponse(c,{captures,ip,consume});
     if(['/api/installations/backup-stream-configure','/api/installations/backup-stream-observe'].includes(c.req.path))return managedStreamResponse(c,{streams,ip,consume});
-    if(c.req.path.startsWith('/api/account/remote-access/'))return remoteAccessResponse(c,{pool,origin:config.portalOrigin,consume,resolve:options.remoteResolve});
+    if(c.req.path.startsWith('/api/account/remote-access/'))return remoteAccessResponse(c,{pool,origin:config.portalOrigin,consume,resolve:options.remoteResolve,planMode:options.planMode});
     if(c.req.path==='/api/account/translation-consent')return translationConsentResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path==='/api/account/alerts')return alertPreferencesResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path.startsWith('/api/account/backups/'))return backupResponse(c,{pool,origin:config.portalOrigin,consume});

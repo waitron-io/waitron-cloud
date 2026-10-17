@@ -4,6 +4,7 @@ import {pathToFileURL} from 'node:url';
 import {createPrivateKey,randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {Pool} from 'pg';
+import {parsePlanMode,transaction} from '@waitron-cloud/registration';
 import {RemoteAccessStore} from './placement.ts';
 import {signManifest} from './manifest.ts';
 import {issueCertificate,type DnsChallengeProvider} from './certificates.ts';
@@ -14,12 +15,13 @@ const commands=['cell','provision','move-stage','move-ready','move-commit','move
 if(!file||!commands.includes(command??''))throw new Error(`Usage: operator-cli.ts ${commands.join('|')} trusted-input.json`);
 if(!process.env.DATABASE_URL)throw new Error('DATABASE_URL required');
 const config=JSON.parse(await readFile(file,'utf8'));
-const pool=new Pool({connectionString:process.env.DATABASE_URL}),store=new RemoteAccessStore(pool);
+const pool=new Pool({connectionString:process.env.DATABASE_URL});
 async function atomic(path:string,value:string){
  const temporary=path+'.'+randomUUID();try{const handle=await open(temporary,'wx',0o600);try{await handle.writeFile(value);await handle.sync();}finally{await handle.close();}await rename(temporary,path);const dir=await open(dirname(path),'r');try{await dir.sync();}finally{await dir.close();}}finally{await rm(temporary,{force:true});}
 }
 let stopping=false;for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{stopping=true;});
 try{
+ const store=new RemoteAccessStore(pool,parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS));
  if(command==='cell')await store.createCell(config);
  if(command==='provision')console.log(JSON.stringify(await store.provision(config.installationId,config.cellId,config.peerPublicKey,config.port??443)));
  if(command==='move-stage')console.log(JSON.stringify(await store.stageMove(config)));
@@ -30,7 +32,7 @@ try{
  if(command==='hostname')console.log(JSON.stringify(await store.setHostname(config.installationId,config.kind,config.hostname,config.expectedRevision)));
  if(command==='export'){
   const key=createPrivateKey(await readFile(config.signingKeyFile));
-  do{try{await atomic(config.output,JSON.stringify(signManifest(await store.manifest(config.cellId),key)));}catch{if(!config.watch)throw new Error('export_failed');console.error('remote.export_failed');}
+  do{try{await store.publishManifest(config.cellId,async manifest=>atomic(config.output,JSON.stringify(signManifest(manifest,key))));}catch{if(!config.watch)throw new Error('export_failed');console.error('remote.export_failed');}
    if(config.watch)for(let n=0;n<30&&!stopping;n++)await delay(1000);
   }while(config.watch&&!stopping);
  }
@@ -42,8 +44,7 @@ try{
    if(typeof dns?.present!=='function'||typeof dns?.remove!=='function')throw new Error('invalid_dns_provider');
    const certificate=await issueCertificate({directoryUrl:config.directoryUrl,accountKey:await readFile(config.accountKeyFile),email:config.email,csr,...names,dns});
    // Recheck active placement after external ACME work, before publishing a usable chain.
-   const latest=await store.authorizeCertificate(config.installationId,config.kind,csr);if(JSON.stringify(latest)!==JSON.stringify(names))throw new Error('placement_changed');
-   await atomic(config.output,certificate);
+   await transaction(pool,client=>store.publishAuthorizedCertificate(client,config.installationId,config.kind,csr,names,()=>atomic(config.output,certificate)));
   }
  }
 }catch{console.error('remote.command_failed');process.exitCode=1;}finally{await pool.end();}
