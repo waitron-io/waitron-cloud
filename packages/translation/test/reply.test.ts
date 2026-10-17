@@ -6,7 +6,7 @@ const job=parseJob(JSON.stringify({version:1,country:'ES',languages:{default:'ca
   {ref:'variant:2',kind:'variant',family:'product:1',category:'BAR TAPAS',staffName:'DOBLE',existing:{en:'Double'},missing:['ca','es']}],houseStyle:[]}));
 const reason=(name:string)=>(e:unknown)=>e instanceof ReplyError&&e.reason===name;
 test('a fenced reply with prose around it, and a bare reply, both parse; no JSON is a reply error',()=>{
- assert.deepEqual(extractJson('Here you go:\n```json\n{"products": []}\n```\nDone.'),{products:[]});
+ assert.deepEqual(extractJson('Here {ignored} you go:\n```json\n{"products": []}\n```\nDone.'),{products:[]});
  assert.deepEqual(extractJson('{"products": [1]}'),{products:[1]});
  assert.throws(()=>extractJson('sorry, I cannot'),reason('no_json'));
 });
