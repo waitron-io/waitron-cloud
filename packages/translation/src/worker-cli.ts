@@ -1,11 +1,22 @@
 import {validateHeaderValue} from 'node:http';
+import {setTimeout as delay} from 'node:timers/promises';
 import {Pool} from 'pg';
 import {migrationNames,runWorkerLoop} from '@waitron-cloud/registration';
 import {createOpenAiClient,openAiBaseUrl} from './openai-client.ts';
 import {TranslationWorker} from './worker.ts';
+import {sweepTranslationJobs} from './retention.ts';
 let pool:Pool|undefined;
 let failed=false;
 const stop=new AbortController(),shutdown=()=>stop.abort(),jobConcurrency=2;
+async function sweepUntilReady(){
+ while(!stop.signal.aborted){
+  try{await sweepTranslationJobs(pool!);return;}
+  catch{
+   console.error('Translation worker cleanup failed; retrying');
+   try{await delay(60000,undefined,{signal:stop.signal});}catch(error){if(!stop.signal.aborted)throw error;}
+  }
+ }
+}
 function fail(){
  if(!failed){console.error('Translation worker failed; check database, migrations and provider configuration');failed=true;}
  process.exitCode=1;stop.abort();
@@ -23,9 +34,9 @@ try{
  const installed=await pool.query<{count:number}>('SELECT count(*)::integer AS count FROM schema_migrations WHERE name=ANY($1::text[])',[migrationNames]);
  if(installed.rows[0]?.count!==migrationNames.length)throw Error();
  const worker=new TranslationWorker(pool,client);
- if(args[0]==='--once')await worker.runOnce(stop.signal);
+ if(args[0]==='--once'){await sweepTranslationJobs(pool);await worker.runOnce(stop.signal);}
  else await runWorkerLoop({signal:stop.signal,concurrency:jobConcurrency,scheduleIntervalMs:60000,pollIntervalMs:1000,
-  runOnce:signal=>worker.runOnce(signal),onError(error){if(stop.signal.aborted)throw error;console.error('Translation worker pass failed; retrying');}});
+  schedule:sweepUntilReady,runOnce:signal=>worker.runOnce(signal),onError(error){if(stop.signal.aborted)throw error;console.error('Translation worker pass failed; retrying');}});
 }catch{
  // Provider and database errors can carry request text; operational output stays fixed.
  fail();

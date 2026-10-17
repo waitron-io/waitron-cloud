@@ -425,7 +425,28 @@ A configuration request with the exact signed body `{"servicesVersion":2}` recei
 operations replay their original result after a configuration change, while new reads reflect the
 current revision. PostgreSQL and HTTP checks cover exact bytes, invalid versions, lease bindings,
 revocation, replacement and upgrades from an existing schema.
-Keep translation off until retention and joint qualification are complete.
+Task 18 deletes submitted menus and stored results in bounded 24-hour retention passes.
+Finished jobs age from completion; queued or running jobs age from submission. Each pass
+expires at most 100 jobs by default (an explicit limit may be 1–1,000), clears their leases
+and preserves job accounting and usage events. Both the worker and, when translation is on,
+the account server sweep at startup and every minute, so cleanup also runs without a worker.
+PostgreSQL checks cover concurrent sweeps, locked collect rows, rollback, lost worker leases,
+repeat-page retention, release waiting for collect and expiry between real bounded pages.
+A fake-provider flow submits, finishes, durably stores collected pages and releases through
+both real commands; neither command writes submitted names, generated names, the key or an
+authorization header.
+Cleanup failure keeps the approved startup/work gate closed: the enabled account command
+exits before listening, and the continuous worker pauses new jobs, retries cleanup once per
+minute and stops promptly during that wait. Both use fixed diagnostics. This also makes the
+portal unavailable if its enabled startup cleanup fails; review that availability policy before
+enabling translation. The `--once` regression proves an old queued job never reaches the fake
+provider before its startup sweep.
+The review's 50,000-retained-row probe used a sequential scan (5.4 ms locally). The per-pass
+job limit does not bound rows scanned. Measure retained-history growth at launch volume and
+qualify an append-only indexing migration if needed. The worker's lease query still has no age
+predicate; provider dispatch for a job aging between bounded sweeps remains unverified and
+must be qualified before activation. These are separate from deleting an expired body.
+Keep translation off until the remaining runtime and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies
@@ -436,7 +457,7 @@ and preserves accepted language tags. Store-level sizing and HTTP serialization 
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 18–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 19–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Complete lock-order qualification across worker, release and installation revocation. The
@@ -462,8 +483,8 @@ Remaining work:
   exist. Preserve them without claiming they are unreachable. Parallel infrastructure failures
   currently expose one error; both failures from one call's spend/renew callbacks are retained.
   An ordinary failed run keeps its lease until expiry and uses a lease attempt; only caller
-  shutdown returns it immediately when the database accepts the update. Task 18 still needs
-  bounded diagnostics without names.
+  shutdown returns it immediately when the database accepts the update. Task 18 now tests
+  fixed failure diagnostics and no names in process output; broader traffic qualification remains open.
   The page-walk fixture now holds the specifically named first batch until the second batch
   is saved. A controlled second-before-first request schedule reproduced the original failure:
   the fixture had incorrectly treated the first arriving HTTP request as the first batch.

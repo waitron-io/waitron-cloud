@@ -517,7 +517,7 @@ for request fields, cursor paging and refusals.
 
 Translation is off by default, returning 503 on all four routes. The account command
 accepts only `CLOUD_TRANSLATION=0` or `1`; enabling requires
-`CLOUD_INSTALLATION_ISSUER_KEY`. Keep it off until the portal consent control, retention and joint
+`CLOUD_INSTALLATION_ISSUER_KEY`. Keep it off until the remaining runtime and joint
 qualification are complete. Submit accepts up to 2,113,536 UTF-8 request bytes within
 60 seconds, so an escaped 1 MiB job fits inside its signed envelope. Status, collect
 and release keep 16 KiB and five seconds. Submit has four simultaneous places per
@@ -568,3 +568,17 @@ password sign-in, account controls, separate factor keys, explicit shared limits
 and recovery. A 202 password reply is a challenge rather than a session; only successful
 `POST /api/account/login/factor` sets cookies. Password reset keeps the factor and unused
 codes. Successful factor changes end all sessions; passkeys remain independent.
+
+
+When you enable translation, the account server also expires retained menus and results.
+It sweeps up to 100 jobs before listening and every minute thereafter, even if no translation
+worker runs. Finished jobs become eligible 24 hours after completion; queued and running
+jobs become eligible 24 hours after submission. Cleanup keeps accounting and usage records.
+A failed scheduled pass prints `Account server translation cleanup failed` and retries on the
+next pass. The worker runs the same sweep; `--once` sweeps before taking one job.
+
+Cleanup must succeed before the enabled account command listens. If that startup pass fails,
+the command exits with its fixed configuration failure message, so the portal is unavailable.
+The continuous worker also pauses new translation jobs while cleanup is failing. It prints
+`Translation worker cleanup failed; retrying`, waits one minute and retries until cleanup
+succeeds or you stop it. Stopping interrupts that wait. A failed cleanup in `--once` exits 1.
