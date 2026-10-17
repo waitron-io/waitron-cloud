@@ -413,6 +413,11 @@ replies cannot restore it. The browser sends the session's security token on wri
 and validates complete consent replies. Real PostgreSQL/Chromium tests cover
 agreement, persistence, withdrawal after a lost response body and owner-only display
 in both languages, themes and phone/desktop widths. The wording awaits the owner.
+Task 16 keeps translation out of the three-service configuration, account and diagnostic
+lists, monitoring targets, incident display and alert delivery. A ready translation row alone
+cannot enable those services. PostgreSQL regressions insert that row explicitly and cover
+schedule refusal, stopped-service incident suppression, queued-mail cancellation and
+operations status. The fourth-service configuration opt-in and automatic rows remain Task 17.
 Keep translation off until retention and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
@@ -424,7 +429,7 @@ and preserves accepted language tags. Store-level sizing and HTTP serialization 
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 16–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 17–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Complete lock-order qualification across worker, release and installation revocation. The

@@ -242,7 +242,7 @@ export class RegistrationStore {
       v.organisation_id AS "organisationId", v.legal_business_id AS "legalBusinessId",
       jsonb_agg(jsonb_build_object('service', s.service, 'state', s.state) ORDER BY s.service) AS services
       FROM installations i JOIN venues v ON v.id = i.venue_id
-      JOIN installation_services s ON s.installation_id = i.id
+      JOIN installation_services s ON s.installation_id = i.id AND s.service <> 'content_translation'
       WHERE i.public_key = $1 AND i.revoked_at IS NULL
       GROUP BY i.id, v.id`, [installationKey]);
     if (!rows[0]) throw new RegistrationError('installation_unavailable');

@@ -19,9 +19,9 @@ async function diagnostic(client:PoolClient,accountId:string,installationId:stri
     AND o.observed_at>clock_timestamp()-interval '5 minutes' THEN o.health ELSE 'unknown' END AS health,o.observed_at
   FROM installation_services s JOIN installations i ON i.id=s.installation_id
   LEFT JOIN installation_observations o ON o.installation_id=s.installation_id AND o.service=s.service
-  WHERE s.installation_id=$1 ORDER BY s.service`,[installationId])).rows;
+  WHERE s.installation_id=$1 AND s.service<>'content_translation' ORDER BY s.service`,[installationId])).rows;
  const monitor=(await client.query(`SELECT m.checked_at,COALESCE(m.checked_at>clock_timestamp()-interval '5 minutes',false) AS fresh,
-  EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=$2 AND s.state<>'unconfigured') AS enabled
+  EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=$2 AND s.state<>'unconfigured' AND s.service<>'content_translation') AS enabled
   FROM (SELECT $1::uuid AS venue_id) target LEFT JOIN venue_monitors m ON m.venue_id=target.venue_id`,[row.venue_id,installationId])).rows[0];
  const incidents=(await client.query("SELECT kind,opened_at,changed_at FROM venue_incidents WHERE venue_id=$1 AND status='open' ORDER BY kind",[row.venue_id])).rows;
  const remoteRows=(await client.query(`SELECT service.kind,r.status,r.checked_at,r.certificate_not_after,

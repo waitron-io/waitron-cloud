@@ -41,7 +41,7 @@ async function lock(client:PoolClient,id:string):Promise<Row> {
   const {rows}=await client.query<Row>(`SELECT i.*,v.environment,v.organisation_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1 FOR UPDATE OF i`,[id]);
   if(!rows[0])return fail('unavailable');return rows[0];
 }
-async function view(client:PoolClient,id:string):Promise<InstallationView> {
+async function view(client:PoolClient,id:string,servicesVersion:1|2=1):Promise<InstallationView> {
   const {rows}=await client.query(`SELECT i.id AS "installationId",i.venue_id AS "venueId",v.organisation_id AS "organisationId",
     v.legal_business_id AS "legalBusinessId",v.environment,i.configuration_revision AS revision,i.revoked_at AS "revokedAt",
     i.last_contact_at AS "lastContactAt",i.lease_expires_at AS "leaseExpiresAt"
@@ -54,7 +54,7 @@ async function view(client:PoolClient,id:string):Promise<InstallationView> {
     o.observed_at AS "observedAt"
     FROM installation_services s JOIN installations i ON i.id=s.installation_id
     LEFT JOIN installation_observations o ON o.installation_id=s.installation_id AND o.service=s.service
-    WHERE s.installation_id=$1 ORDER BY s.service`,[id]);
+    WHERE s.installation_id=$1 AND ($2::integer=2 OR s.service<>'content_translation') ORDER BY s.service`,[id,servicesVersion]);
   // JSON dates give durable operation results the same shape as freshly read results.
   return JSON.parse(JSON.stringify({...rows[0],services:services.rows}));
 }
