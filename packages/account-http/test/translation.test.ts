@@ -157,10 +157,10 @@ test('all routes enforce existing address and installation request allowances',a
 });
 test('the existing reader bounds declared and streamed bytes, encoding and malformed JSON',async()=>{
  const v=await venue();
- const cases:Record<string,string>[]=[{'content-length':'16385'},{}, {'content-encoding':'gzip'}];
+ const cases:Record<string,string>[]=[{'content-length':'2113537'},{}, {'content-encoding':'gzip'}];
  for(const headers of cases){
-  const response=await post(v,'translation-submit','x'.repeat(16385),headers);
-  assert.deepEqual(await error(response),[headers['content-encoding']?415:413,'invalid_input']);
+  const response=await post(v,'translation-submit','x'.repeat(2113537),headers);
+  assert.deepEqual(await error(response),[headers['content-encoding']?415:413,headers['content-encoding']?'invalid_input':'translation_job_too_large']);
   assert.equal(response.headers.get('cache-control'),'no-store');
  }
  assert.deepEqual(await error(await post(v,'translation-submit','{')),[400,'invalid_input']);

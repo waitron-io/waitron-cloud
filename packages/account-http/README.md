@@ -230,11 +230,11 @@ All responses disable caching and referrer forwarding, and set `nosniff`. Errors
 | 429 | `rate_limited` | Shared request allowance exhausted; obey `Retry-After` |
 | 503 | `temporarily_unavailable` | Database or password-screening failure, admission limit or shutdown; retry after the advertised delay |
 
-Bodies are limited to 16 KiB, including streamed bodies, and headers to 8 KiB.
-Header/body receive deadlines are five seconds, checked by Node at one-second
-intervals; the body reader also has a five-second deadline. Each process permits
-200 connections and eight simultaneous account operations. Additional operations
-receive 503 with `Retry-After: 1`.
+Bodies are limited to 16 KiB, including streamed bodies, except for translation
+submit below. Headers remain limited to 8 KiB and five seconds. Ordinary body
+readers retain a five-second deadline even when translation enables the server's
+longer request timeout. Each process permits 200 connections and eight simultaneous
+ordinary account operations. Additional operations receive 503 with `Retry-After: 1`.
 
 PostgreSQL counters apply across all API instances and survive restarts:
 
@@ -492,9 +492,13 @@ for request fields, cursor paging and refusals.
 Translation is off by default, returning 503 on all four routes. The account command
 accepts only `CLOUD_TRANSLATION=0` or `1`; enabling requires
 `CLOUD_INSTALLATION_ISSUER_KEY`. Keep it off until consent, retention and joint
-qualification are complete. All four routes currently use the existing 16 KiB,
-five-second request reader; submit's larger limits and separate admission are still
-open. Collect returns the same compact JSON that the page builder sizes, bounded to
+qualification are complete. Submit accepts up to 2,113,536 UTF-8 request bytes within
+60 seconds, so an escaped 1 MiB job fits inside its signed envelope. Status, collect
+and release keep 16 KiB and five seconds. Submit has four simultaneous places per
+process, at most one per client address, outside the eight ordinary account places.
+An additional submit receives 503 with `Retry-After: 1` before its body is read or
+its rate allowance is spent. Address grouping follows the existing trusted-proxy,
+IPv4 and IPv6 rules. Collect returns the same compact JSON that the page builder sizes, bounded to
 16,777,216 UTF-8 bytes. Collect retains results; release deletes them after your
 caller has durably stored every page.
 
