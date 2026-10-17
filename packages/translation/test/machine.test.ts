@@ -4,7 +4,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {after,before,test} from 'node:test';
 import {createLeaseIssuer,InstallationError,type SignedEnvelope} from '@waitron-cloud/registration';
 import {jobFingerprint,maxCollectBytes,TranslationError,TranslationMachine,type TranslationAction,type ItemResult} from '../src/index.ts';
-import {connectedVenue,database,readyForTranslation} from './fixtures.ts';
+import {connectedVenue,database,giveConsent,readyForTranslation} from './fixtures.ts';
 let db:Awaited<ReturnType<typeof database>>;
 const origin='https://cloud.example.test';
 const newIssuer=()=>createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
@@ -12,7 +12,7 @@ const issuer=newIssuer();
 type LeaseInput=Parameters<typeof issuer.issue>[0];
 const machine=()=>new TranslationMachine(db.pool,issuer,origin);
 before(async()=>{db=await database();});after(async()=>db?.close());
-async function venue(){const v=await connectedVenue(db,issuer,origin);await readyForTranslation(db,v);return v;}
+async function venue(){const v=await connectedVenue(db,issuer,origin);await readyForTranslation(db,v);await giveConsent(db,v);return v;}
 type Venue=Awaited<ReturnType<typeof venue>>;
 type Action='translation-status'|'translation-collect'|'translation-release';
 const code=(name:string)=>(e:unknown)=>(e instanceof TranslationError||e instanceof InstallationError)&&e.code===name;
@@ -270,4 +270,16 @@ test('a failed body insert rolls back the written job and permits the same opera
   assert.equal((await db.pool.query('SELECT count(*)::integer AS n FROM translation_job_bodies b JOIN translation_jobs j ON j.id=b.job_id WHERE j.installation_id=$1',[v.installationId])).rows[0].n,0);
  }finally{await db.pool.query('DROP TRIGGER refuse_translation_body ON translation_job_bodies; DROP FUNCTION refuse_translation_body()');}
  const retry=await submit(v,jobText(),op);assert.equal(retry.state,'queued');assert.equal(await jobs(v),1);
+});
+
+test('submit without consent is refused and stores nothing, after the entitlement check; a retry from before the withdrawal still returns its job',async()=>{
+ const v=await connectedVenue(db,issuer,origin),text=jobText();await readyForTranslation(db,v);
+ await assert.rejects(machine().execute('translation-submit',envelopeOf(v.submit(text)),text),code('consent_required'));
+ assert.equal(await jobs(v),0);
+ await setService(v,'unconfigured');
+ await assert.rejects(machine().execute('translation-submit',envelopeOf(v.submit(text)),text),code('permission_denied'));
+ await setService(v,'ready');await giveConsent(db,v);
+ const signed=v.submit(text),first=await machine().execute('translation-submit',envelopeOf(signed),text);
+ await db.pool.query('UPDATE translation_consents SET withdrawn_at=clock_timestamp() WHERE venue_id=$1',[v.venueId]);
+ assert.deepEqual(await machine().execute('translation-submit',envelopeOf(signed),text),first);
 });

@@ -4,7 +4,7 @@ import {after,before,beforeEach,test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createLeaseIssuer,transaction} from '@waitron-cloud/registration';
 import {collectJob,createJob,createOpenAiClient,jobFingerprint,lockVenue,parseJob,readJob,writtenItems} from '../src/index.ts';
-import {connectedVenue,database} from './fixtures.ts';
+import {connectedVenue,database,giveConsent} from './fixtures.ts';
 import {echoFirstPass,emptyReview,isReview,responsesBody,startFakeOpenAi,type FakeReply} from './fake-openai.ts';
 import {TranslationWorker} from '../src/index.ts';
 let db:Awaited<ReturnType<typeof database>>;
@@ -20,7 +20,7 @@ const item=(ref:string,category:string,staffName:string,over:Record<string,unkno
 const many=(prefix:string,category:string,n:number,staff=(i:number)=>`${prefix}-${i}`)=>Array.from({length:n},(_,i)=>item(`${prefix}:${i}`,category,staff(i)));
 const body=(items:object[])=>JSON.stringify({version:1,country:'ES',languages:{default:'ca',enabled:['ca','es']},items,houseStyle:[]});
 async function queue(items:object[]):Promise<{v:Venue;job:{id:string}}>{
- const v=await connectedVenue(db,issuer,origin),text=body(items);
+ const v=await connectedVenue(db,issuer,origin),text=body(items);await giveConsent(db,v);
  const job=await transaction(db.pool,async c=>{await lockVenue(c,v.venueId);
   return createJob(c,{installationId:v.installationId,venueId:v.venueId,operationId:randomUUID(),fingerprint:jobFingerprint(text),body:text,total:writtenItems(parseJob(text)).length});});
  return {v,job};
@@ -292,6 +292,7 @@ test('a full paged walk retains submit order and exact text despite regrouped fa
  const languages=['ca','es','en','fr','de','it','pt','nl','sv','da','no','fi','pl','cs','sk','hu','ro','el','tr','ar'];
  const items=Array.from({length:600},(_,i)=>item('p'+i,'A','Staff '+i,{family:'family'+(i%10),missing:languages}));
  const v=await connectedVenue(db,issuer,origin),text=JSON.stringify({version:1,country:'ES',languages:{default:'ca',enabled:languages},items,houseStyle:[]});
+ await giveConsent(db,v);
  assert.ok(Buffer.byteLength(text)<=1048576);
  const job=await transaction(db.pool,async c=>{await lockVenue(c,v.venueId);return createJob(c,{installationId:v.installationId,venueId:v.venueId,operationId:randomUUID(),fingerprint:jobFingerprint(text),body:text,total:600});});
  const name='漢'.repeat(498)+'\u0000\ud800',fix={field:'internal',wrong:'\udfff\u0000',right:'\ud800\u0001'};
@@ -405,4 +406,50 @@ test('shutdown between exhausted-lease batch saves leaves later batches pending'
   const ended=await row(job.id);assert.deepEqual([ended.state,ended.failed,ended.lease_count,ended.lease_free],['running',60,3,true]);
   assert.deepEqual(Object.keys((await saved(job.id))!),['0']);assert.equal(fake.requests.length,0);
  }finally{await held.query('ROLLBACK');held.release();await fake.close();}
+});
+
+test('a job whose consent was withdrawn before it was leased ends failed with consent_required and calls nothing',async()=>{
+ const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
+ try{
+  const {v,job}=await queue(many('a','A',3));
+  await db.pool.query('UPDATE translation_consents SET withdrawn_at=clock_timestamp() WHERE venue_id=$1',[v.venueId]);
+  assert.equal(await worker(fake.baseUrl).runOnce(live()),true);
+  const ended=await row(job.id);
+  assert.deepEqual([ended.state,ended.reason,ended.done,ended.failed,ended.lease_id],['failed','consent_required',0,3,null]);
+  assert.equal(fake.requests.length,0);
+  assert.equal((await db.pool.query('SELECT count(*)::integer AS n FROM usage_events WHERE source_reference=$1',[job.id])).rows[0].n,0);
+ }finally{await fake.close();}
+});
+
+for(const [name,change] of [
+ ['missing', 'DELETE FROM translation_consents WHERE venue_id=$1'],
+ ['old version', "UPDATE translation_consents SET consent_version='old' WHERE venue_id=$1"],
+ ['former owner', 'UPDATE organisation_memberships SET is_owner=false WHERE organisation_id=(SELECT organisation_id FROM venues WHERE id=$1)'],
+ ['disabled owner', 'UPDATE cloud_accounts SET disabled_at=clock_timestamp() WHERE id IN (SELECT account_id FROM translation_consents WHERE venue_id=$1)'],
+ ['unverified owner', 'UPDATE cloud_credentials SET email_verified_at=NULL WHERE account_id IN (SELECT account_id FROM translation_consents WHERE venue_id=$1)'],
+] as const)
+test(`a leased job with ${name} consent finishes without provider traffic or usage`,async()=>{
+ const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
+ try{
+  const {v,job}=await queue(many('a','A',2));await db.pool.query(change,[v.venueId]);
+  assert.equal(await worker(fake.baseUrl).runOnce(live()),true);
+  const ended=await row(job.id);
+  assert.deepEqual([ended.state,ended.reason,ended.done,ended.failed,ended.lease_id,ended.lease_until],['failed','consent_required',0,2,null,null]);
+  assert.ok(ended.finished_at);assert.equal(fake.requests.length,0);
+  assert.equal((await db.pool.query('SELECT * FROM usage_events WHERE source_reference=$1',[job.id])).rowCount,0);
+ }finally{await fake.close();}
+});
+
+test('a stale worker cannot fail a replacement lease when consent is missing',async()=>{
+ const {v,job}=await queue(many('a','A',2)),replacement=randomUUID();
+ await db.pool.query('UPDATE translation_consents SET withdrawn_at=clock_timestamp() WHERE venue_id=$1',[v.venueId]);
+ await db.pool.query(`CREATE FUNCTION replace_consent_lease() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN
+  IF NEW.id='${job.id}' AND OLD.state='queued' THEN UPDATE translation_jobs SET lease_id='${replacement}' WHERE id=NEW.id; END IF;
+  RETURN NEW; END$$; CREATE TRIGGER replace_consent_lease AFTER UPDATE ON translation_jobs FOR EACH ROW EXECUTE FUNCTION replace_consent_lease()`);
+ const fake=await startFakeOpenAi(()=>({status:500}));
+ try{
+  await worker(fake.baseUrl).runOnce(live());
+  const ended=await row(job.id);assert.deepEqual([ended.state,ended.reason,ended.done,ended.failed,ended.lease_id],['running',null,0,0,replacement]);
+  assert.equal(fake.requests.length,0);assert.equal((await db.pool.query('SELECT * FROM usage_events WHERE source_reference=$1',[job.id])).rowCount,0);
+ }finally{await db.pool.query('DROP TRIGGER replace_consent_lease ON translation_jobs; DROP FUNCTION replace_consent_lease()');await fake.close();}
 });

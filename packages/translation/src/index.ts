@@ -11,3 +11,4 @@ export {createOpenAiClient,openAiBaseUrl,ProviderError,type ModelCall,type Model
 export {retryWaitsMs,translateBatch,type BatchHooks,type BatchOutcome} from './batch-runner.ts';
 export {TranslationWorker} from './worker.ts';
 export {TranslationMachine,type TranslationAction} from './machine.ts';
+export {agreeConsent,hasConsent,listConsents,translationConsentVersion,translationProviders,withdrawConsent,type ConsentView} from './consent.ts';

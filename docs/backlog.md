@@ -338,7 +338,7 @@ release-39 upgrade, cancellation rollback, repeat/concurrent migration, manifest
 count checks preserve retained results and existing job/ledger rows. Automated translation tests
 fetch the pinned earlier release so the upgrade proof also runs in GitHub. Historical receipt-selector
 fixtures retain their audited workflow bytes when current checkout settings change; production
-audit guards and their original behavioral assertions stay unchanged. Provider activation and routes remain open. Consent enforcement remains Task 13.
+audit guards and their original behavioral assertions stay unchanged. Provider activation and routes remain open. Consent enforcement is described under Task 13 below.
 
 Task 9 adds `pnpm translation:worker` and its `--once` mode. Startup checks the
 expected migration names, required settings, provider URL and whether the key can form an
@@ -365,7 +365,7 @@ then validate lowercase job UUIDs before reading jobs scoped to the signing inst
 then applies state rules. PostgreSQL checks cover crossed and expired leases, revocation
 during a lock wait, rollback after a body insert fails, mixed outcomes and a signed multi-page walk
 larger than 16 MiB with unchanged text. Collection retains results; release deletes them.
-These store methods are now used by the HTTP routes below; consent enforcement remains Task 13.
+These store methods are now used by the HTTP routes below, with the consent checks described under Task 13.
 
 Task 11 adds the four translation HTTP routes, off by default. The account server
 accepts only `CLOUD_TRANSLATION=0` or `1`; enabling requires an installation issuer.
@@ -381,7 +381,20 @@ Real-listener checks cover large escaped jobs, exact request-byte boundaries, sl
 delivery, address grouping, refusal/abort recovery and readiness during stalled submits.
 Admission uses the router's decoded submit path so encoded aliases cannot spend ordinary places.
 Status, collect, release and other account readers keep 16 KiB and five seconds.
-Keep translation off until consent, retention and joint qualification are complete.
+Task 13 requires current consent before accepting a new submit and after leasing a job.
+Only an enabled, email-verified owner can agree or withdraw. Consent names OpenAI,
+Anthropic and Google at version `providers-2026-10-14`; withdrawal keeps its history.
+A former owner's consent no longer counts, and a new agreement closes that stale record.
+Agreement and withdrawal share a venue lock so withdrawal also closes a concurrently
+replaced record. Recording consent locks account, credential and membership authority
+through the transaction. PostgreSQL tests cover authority changes during lock waits,
+repeat and concurrent agreements, rollback, history and account-scoped listing.
+A worker without current consent finishes with `consent_required` before provider traffic
+or usage writes; a replacement worker's lease cannot be failed by the old worker.
+Submit still checks entitlement before consent and returns an existing operation before
+either gate. Real HTTP tests cover the 403 reply and retry after withdrawal.
+The account route and portal controls remain Tasks 14–15. Keep translation off until
+those controls, retention and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies
@@ -392,7 +405,7 @@ and preserves accepted language tags. Store-level sizing and HTTP serialization 
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 13–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 14–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Complete lock-order qualification across worker, release and installation revocation. The
@@ -405,8 +418,10 @@ Remaining work:
   approved accepted-tag set until that contract decision; claim no complete recognition gate.
   The command rejects keys that cannot form an HTTP authorization header before leasing work.
   Direct client consumers still own their configuration validation.
-  Consent rows retain history after membership removal; Task 13 must prove current, enabled,
-  verified ownership when consent is recorded and used. A stored account ID alone grants nothing.
+  Consent rows retain history after membership removal. Current, enabled, verified ownership
+  is checked when consent is recorded and used; a stored account ID alone grants nothing.
+  The worker checks consent once after leasing. Withdrawal after that check does not cancel
+  a job already in flight; it prevents new submits and subsequent leases.
   Append migrations at the then-current next numbers without editing landed migrations.
   Task 8 retains two defensive checks whose independent role in normal worker runs is not
   proved: refusing an already-saved batch write, and refusing finish before all batch entries

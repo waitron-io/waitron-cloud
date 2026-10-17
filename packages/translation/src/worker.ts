@@ -3,6 +3,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import type {Pool,PoolClient} from 'pg';
 import {recordUsageEvent,transaction} from '@waitron-cloud/registration';
 import {translateBatch,type BatchHooks} from './batch-runner.ts';
+import {hasConsent} from './consent.ts';
 import {planBatches} from './batching.ts';
 import {parseJob,type JobItem} from './job-body.ts';
 import {monthSpend,spendingPolicy,type ItemResult,type JobRow} from './job-store.ts';
@@ -34,6 +35,11 @@ export class TranslationWorker {
   signal.addEventListener('abort',stop,{once:true});
   if(signal.aborted)stop();
   try{
+   if(!await transaction(this.#pool,client=>hasConsent(client,job.venue_id))){
+    await this.#pool.query(`UPDATE translation_jobs SET state='failed',reason='consent_required',done=0,failed=total,finished_at=clock_timestamp(),lease_id=NULL,lease_until=NULL
+     WHERE id=$1 AND lease_id=$2 AND state='running'`,[job.id,leaseId]);
+    return true;
+   }
    const stored=(await this.#pool.query<{body:string;batch_results:StoredBatches}>('SELECT body,batch_results FROM translation_job_bodies WHERE job_id=$1',[job.id])).rows[0];
    if(!stored)return true;
    const parsed=parseJob(stored.body),batches=planBatches(parsed.items);

@@ -25,3 +25,8 @@ export async function readyForTranslation(db:Awaited<ReturnType<typeof database>
  await db.pool.query(`INSERT INTO installation_services(installation_id,service,state) VALUES($1,'content_translation','ready')
   ON CONFLICT (installation_id,service) DO UPDATE SET state='ready'`,[v.installationId]);
 }
+
+export async function giveConsent(db:Awaited<ReturnType<typeof database>>,v:{venueId:string;organisationId:string;accountId:string}){
+ await db.pool.query(`INSERT INTO translation_consents(id,venue_id,organisation_id,account_id,consent_version,providers)
+  VALUES($1,$2,$3,$4,'providers-2026-10-14',ARRAY['openai','anthropic','google'])`,[randomUUID(),v.venueId,v.organisationId,v.accountId]);
+}
