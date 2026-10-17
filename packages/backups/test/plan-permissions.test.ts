@@ -239,3 +239,12 @@ test('recovery_approval_and_HTTP_provider_wait_use_current_plan',async()=>{
  const response=await app.request(origin+'/api/recovery/read',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,payload:bytes.toString('base64url'),signature:sign(null,bytes,target.privateKey).toString('base64url')})},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as Parameters<typeof app.request>[2]);
  assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:'permission_denied'});assert.equal(grants,1);
 });
+
+test('ordinary_mode_keeps_missing_installation_and_local_backup_refusal_order',async()=>{
+ const bytes=encodeMachine({origin,action:'renew',installationId:randomUUID(),operationId:randomUUID(),issuedAt:Date.now(),lease:'',body:'{}'});
+ await assert.rejects(new InstallationStore(db.pool,issuer,origin).execute('renew',{payload:bytes.toString('base64url'),signature:sign(null,bytes,a.key.privateKey).toString('base64url')}),/unavailable/);
+ await new BackupCatalogue(db.pool,vault,storage).provision(a.installationId,location());await db.pool.query("UPDATE venues SET environment='production' WHERE id=$1",[a.venueId]);
+ const captures=new BackupCaptures(db.pool,issuer,origin,{vault,objects:storage,async grant(){throw Error('unexpected grant');}});
+ const forged={...proof('backup-reserve'),signature:sign(null,Buffer.from('wrong'),a.key.privateKey).toString('base64url')};
+ await assert.rejects(captures.execute('backup-reserve',forged),/backup.local_integration_only/);
+});

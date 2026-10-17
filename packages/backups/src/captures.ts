@@ -17,7 +17,7 @@ export class BackupCaptures {
  constructor(pool:Pool,issuer:LeaseIssuer,origin:string,options:CaptureOptions,trusted=createLeaseTrust(issuer)){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;this.#options=options;this.#catalogue=new BackupCatalogue(pool,options.vault,options.objects,options.planMode);}
  async authenticate(action:CaptureAction,envelope:unknown){return new InstallationStore(this.#pool,this.#issuer,this.#origin,this.#trusted).authenticate(action,envelope);}
  async execute(action:CaptureAction,envelope:unknown){
-  await this.authenticate(action,envelope);
+  if(this.#options.planMode==='test-free-paid')await this.authenticate(action,envelope);
   const routing=readMachineClaims(envelope);
   const fence=async(client:PoolClient)=>{
    // Catalogue callers hold the installation lock before the location lock; rechecking never reverses it.

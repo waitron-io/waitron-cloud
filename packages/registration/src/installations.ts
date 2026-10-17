@@ -85,7 +85,7 @@ export class InstallationStore {
     const routing=readMachineClaims(envelope);
     return transaction(this.#pool,async client=>{
       const initial=(await client.query('SELECT public_key,venue_id FROM installations WHERE id=$1',[routing.installationId])).rows[0];
-      if(!initial)fail('invalid_proof');verifyMachine(envelope,initial.public_key,this.#origin,action);
+      if(!initial)fail('unavailable');verifyMachine(envelope,initial.public_key,this.#origin,action);
       const plan=await installationPlan(client,initial.venue_id,this.#planMode);
       const row=await lock(client,routing.installationId),now=Date.now();
       if(row.venue_id!==initial.venue_id)fail('invalid_proof');
