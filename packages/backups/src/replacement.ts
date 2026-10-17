@@ -95,7 +95,7 @@ export class ReplacementStore {
    const installationId=randomUUID();
    await client.query('UPDATE installations SET revoked_at=COALESCE(revoked_at,clock_timestamp()),superseded_by=$2 WHERE id=$1',[old.id,installationId]);
    await client.query('INSERT INTO installations(id,venue_id,public_key,configuration_revision) VALUES($1,$2,$3,1)',[installationId,r.venue_id,p.public_key]);
-   await client.query("INSERT INTO installation_services(installation_id,service) VALUES($1,'remote_access'),($1,'continuous_backup'),($1,'retained_snapshots')",[installationId]);
+   await client.query("INSERT INTO installation_services(installation_id,service,state) VALUES($1,'remote_access','unconfigured'),($1,'continuous_backup','unconfigured'),($1,'retained_snapshots','unconfigured'),($1,'content_translation','ready')",[installationId]);
    const version=l.active_key_version+1;
    await client.query('INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,$2,$3)',[r.venue_id,version,this.vault.create(r.venue_id,version)]);
    await client.query('UPDATE backup_locations SET installation_id=$2,active_key_version=$3 WHERE venue_id=$1',[r.venue_id,installationId,version]);

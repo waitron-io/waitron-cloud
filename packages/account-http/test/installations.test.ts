@@ -17,7 +17,7 @@ const key=generateKeyPairSync('ed25519'),issuer=createLeaseIssuer(generateKeyPai
 let db:Awaited<ReturnType<typeof database>>,app:ReturnType<typeof createAccountApp>,id:string,cookie:string,csrf:string;
 const config=()=>({portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]});
 function request(path:string,body?:unknown,headers:Record<string,string>={}){return app.request(origin+path,{method:body===undefined?'GET':'POST',headers:{'content-type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body)},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings);}
-function proof(action:MachineAction,lease?:SignedEnvelope){const bytes=encodeMachine({origin,action,installationId:id,operationId:randomUUID(),issuedAt:Date.now(),lease:lease?JSON.stringify(lease):'',body:'{}'});return {payload:bytes.toString('base64url'),signature:sign(null,bytes,key.privateKey).toString('base64url')};}
+function proof(action:MachineAction,lease?:SignedEnvelope,body='{}'){const bytes=encodeMachine({origin,action,installationId:id,operationId:randomUUID(),issuedAt:Date.now(),lease:lease?JSON.stringify(lease):'',body});return {payload:bytes.toString('base64url'),signature:sign(null,bytes,key.privateKey).toString('base64url')};}
 const browser=(action:string,body?:unknown,headers:Record<string,string>={})=>request('/api/account/installations'+action,body,{origin,cookie,'x-csrf-token':csrf,...headers});
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
@@ -28,6 +28,20 @@ beforeEach(async()=>{
  const r=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await r.start(binding);await r.approveCloud(binding,owner.accountId);await r.approveLocal(binding,randomUUID());id=(await r.complete(binding)).installationId;
  const login=await request('/api/account/login',{email:'owner@example.test',password},{origin});assert.equal(login.status,200);cookie=login.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;
+});
+test('machine configuration exposes translation only through the exact signed version-2 opt-in',async()=>{
+ const renewed=await request('/api/installations/renew',proof('renew'));assert.equal(renewed.status,200);
+ const initial=await renewed.json() as {lease:SignedEnvelope;services:{service:string}[]};assert.equal(initial.services.length,3);
+ const read=async(body:string)=>request('/api/installations/configuration',proof('configuration',initial.lease,body));
+ const legacy=await read('{}');assert.equal(legacy.status,200);assert.equal((await legacy.json() as {services:unknown[]}).services.length,3);
+ const current=await read('{"servicesVersion":2}');assert.equal(current.status,200);
+ const result=await current.json() as {services:{service:string}[]};assert.equal(result.services.length,4);
+ assert.deepEqual(result.services.find(s=>s.service==='content_translation'),{service:'content_translation',state:'ready',configuration:{},health:'unknown',failure:null,observedAt:null});
+ for(const body of ['{"servicesVersion":1}','{"servicesVersion": 2}','{"servicesVersion":2,"extra":true}']){
+  const invalid=await read(body);assert.equal(invalid.status,401);assert.deepEqual(await invalid.json(),{error:'invalid_proof'});
+ }
+ assert.equal((await request('/api/installations/configuration',proof('configuration',undefined,'{"servicesVersion":2}'))).status,401);
+ assert.equal((await request('/api/installations/configuration',proof('configuration',initial.lease,'{"servicesVersion":2}'),{origin})).status,403);
 });
 test('machine authority, browser sessions and configured issuer remain separate',async()=>{
  assert.equal((await request('/api/installations/renew',proof('renew'),{origin})).status,403);

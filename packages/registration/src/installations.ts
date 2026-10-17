@@ -14,7 +14,7 @@ export interface DesiredService {service:Service;state:State;configuration:Recor
 export interface InstallationView {
   installationId:string;venueId:string;organisationId:string;legalBusinessId:string;environment:string;
   revision:number;revokedAt:string|null;lastContactAt:string|null;leaseExpiresAt:string|null;
-  services:(DesiredService & {health:Health;failure:Failure|null;observedAt:string|null})[];
+  services:{service:Service|'content_translation';state:State;configuration:Record<string,unknown>;health:Health;failure:Failure|null;observedAt:string|null}[];
   lease?:SignedEnvelope;canRevoke?:boolean;
 }
 interface Row {id:string;venue_id:string;organisation_id:string;public_key:string;revoked_at:Date|null;configuration_revision:number;environment:'test'|'production'}
@@ -23,8 +23,9 @@ function fail(code:InstallationError['code']):never {throw new InstallationError
 function object(value:unknown,keys:string[]):value is Record<string,unknown> {
   return !!value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).sort().join(',')===[...keys].sort().join(',');
 }
-function readBody(action:MachineAction,text:string,now:number):Report|undefined {
+function readBody(action:MachineAction,text:string,now:number):Report|{servicesVersion:2}|undefined {
   let v:unknown;try{v=JSON.parse(text);}catch{return fail('invalid_proof');}
+  if(action==='configuration'&&text==='{"servicesVersion":2}')return {servicesVersion:2};
   if(action!=='report'){if(text!=='{}')fail('invalid_proof');return;}
   if(!object(v,['revision','observedAt','services'])||!Number.isSafeInteger(v.revision)||Number(v.revision)<0
     ||!Number.isSafeInteger(v.observedAt)||Number(v.observedAt)<0||Number(v.observedAt)>now+60000||!Array.isArray(v.services)||v.services.length<1||v.services.length>3)fail('invalid_proof');
@@ -74,7 +75,7 @@ export class InstallationStore {
     return transaction(this.#pool,async client=>{
       const row=await lock(client,routing.installationId),now=Date.now();
       const c=verifyMachine(envelope,row.public_key,this.#origin,action,now);
-      const report=readBody(action,c.body,now);
+      const body=readBody(action,c.body,now),report=body&&'revision' in body?body:undefined;
       const digest=createHash('sha256').update(JSON.stringify([action,c.body])).digest('hex');
       const prior=(await client.query('SELECT digest,result FROM installation_operations WHERE installation_id=$1 AND operation_id=$2',[row.id,c.operationId])).rows[0];
       if(prior&&prior.digest!==digest)fail('conflict');
@@ -102,7 +103,7 @@ export class InstallationStore {
       }
       if(action==='revoke')await client.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[row.id]);
       await client.query('UPDATE installations SET last_contact_at=clock_timestamp() WHERE id=$1',[row.id]);
-      const result=await view(client,row.id);if(lease)result.lease=lease;
+      const result=await view(client,row.id,body&&'servicesVersion' in body?2:1);if(lease)result.lease=lease;
       if(action==='revoke')for(const s of result.services)s.configuration={};
       verifyMachine(envelope,row.public_key,this.#origin,action);
       if(action==='revoke')await client.query("INSERT INTO installation_revocations(installation_id,actor_kind,actor_id,reason,result) VALUES($1,'installation',$1,'user_requested',$2) ON CONFLICT DO NOTHING",[row.id,result]);

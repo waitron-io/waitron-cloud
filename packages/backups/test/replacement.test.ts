@@ -60,7 +60,9 @@ test('restored replacement preserves venue and history, retires old authority, a
  assert.equal((await db.pool.query('SELECT installation_id FROM backup_points WHERE id=$1',[f.point.id])).rows[0].installation_id,f.installed.installationId);
  await assert.rejects(f.catalogue.reserveCapture(f.installed.installationId,randomUUID()),/revoked/);
  const capture=await f.catalogue.reserveCapture(result.registration.installationId,randomUUID());assert.equal(capture.keyVersion,2);assert.notEqual(capture.keys.recoveryKey,f.capture.keys.recoveryKey);
- const states=(await db.pool.query('SELECT * FROM installation_services WHERE installation_id=$1',[result.registration.installationId])).rows;assert.equal(states.length,3);assert(states.every(s=>s.state!=='ready'));
+ const states=(await db.pool.query('SELECT * FROM installation_services WHERE installation_id=$1',[result.registration.installationId])).rows;
+ const originalStates=states.filter(s=>s.service!=='content_translation');assert.equal(originalStates.length,3);assert(originalStates.every(s=>s.state!=='ready'));
+ assert.deepEqual(states.filter(s=>s.service==='content_translation').map(s=>[s.state,s.configuration]),[['ready',{}]]);
  await db.pool.query("UPDATE backup_recoveries SET expires_at=clock_timestamp()-interval '1 day',status='closed' WHERE id=$1",[f.t.id]);
  assert.deepEqual(await f.store.machine('status',f.envelope('status')),result);
  assert.deepEqual(await f.store.machine('prepare',f.envelope('prepare')),result);
