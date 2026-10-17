@@ -20,6 +20,7 @@ import {BackupCaptures,type CaptureOptions} from '@waitron-cloud/backups/capture
 import {captureResponse} from './captures.ts';
 import {ManagedStreamMachines,managedStreamResponse} from './managed-streams.ts';
 import {alertPreferencesResponse} from './alerts.ts';
+import {translationConsentResponse} from './translation-consent.ts';
 import {backupResponse} from './backups.ts';
 import {installationResponse} from './installations.ts';
 import {InstallationError,SecurityAuditError,UsageError,migrationNames,type LeaseIssuer} from '@waitron-cloud/registration';
@@ -141,6 +142,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if(['/api/installations/backup-reserve','/api/installations/backup-publish'].includes(c.req.path))return captureResponse(c,{captures,ip,consume});
     if(['/api/installations/backup-stream-configure','/api/installations/backup-stream-observe'].includes(c.req.path))return managedStreamResponse(c,{streams,ip,consume});
     if(c.req.path.startsWith('/api/account/remote-access/'))return remoteAccessResponse(c,{pool,origin:config.portalOrigin,consume,resolve:options.remoteResolve});
+    if(c.req.path==='/api/account/translation-consent')return translationConsentResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path==='/api/account/alerts')return alertPreferencesResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path.startsWith('/api/account/backups/'))return backupResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path.startsWith('/api/installations/')||c.req.path==='/api/account/installations'||c.req.path.startsWith('/api/account/installations/')) return installationResponse(c,{pool,issuer:options.leaseIssuer,trusted:options.leaseTrust,origin:config.portalOrigin,ip,consume});
