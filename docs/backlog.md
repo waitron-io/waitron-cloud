@@ -870,7 +870,11 @@ notifications separately.
   pairing, multiple installations, replacement and rollback. Keep organisation
   writes in the setter; two shared policy readers that both update their organisation
   can still deadlock while upgrading locks. No current service caller does that.
-  No original test assertion or fiscal policy changed.
+  CI also exposed an enabled Sign out button whose handler refused clicks while
+  authenticator startup was pending. The three Sign out views now share the
+  handler's existing pending-work gate. A held-response browser check covers both
+  languages, themes and screen sizes without changing the original assertions or
+  three-second waits. No fiscal policy changed.
   Deployment enforcement is still off. Five remaining implementation slices,
   actual direct-storage withdrawal/fresh writers, gateway filtering, LAN deployment,
   two-organisation acceptance and measured headroom remain open. The existing

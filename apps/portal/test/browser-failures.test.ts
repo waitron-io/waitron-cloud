@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {mkdir} from 'node:fs/promises';
 import { test } from 'node:test';
 import { startPortalFixture } from './fixtures.ts';
+import {translations} from '../src/locale.ts';
 test('pending requests, language changes, resend cooldown and Retry-After do not duplicate writes', async () => {
   const f = await startPortalFixture();
   try {
@@ -141,6 +143,34 @@ test('logout failures remain visible until a successful retry confirms sign-out'
     assert.equal(successfulLogout.status(),204);
     await page.getByText('You have signed out.').waitFor();assert.equal(attempts,2);
   } finally {await f.close();}
+});
+test('sign-out stays disabled until authenticator startup settles',async()=>{
+ const f=await startPortalFixture(),releases:(()=>void)[]=[];
+ try{
+  for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark'] as const)for(const width of [390,1280]){
+   const context=await f.browser.newContext({locale,colorScheme,viewport:{width,height:900}}),page=await context.newPage(),c=translations[locale];page.setDefaultTimeout(3000);
+   let entered!:()=>void,release!:()=>void,attempts=0;const started=new Promise<void>(r=>entered=r),held=new Promise<void>(r=>release=r);releases.push(release);
+   await page.route('**/api/account/**',async route=>{
+    const path=new URL(route.request().url()).pathname;
+    if(path.endsWith('/authenticator')){entered();await held;return route.fulfill({json:{active:false,version:0,recoveryCodesRemaining:0,available:true}});}
+    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+600_000).toISOString()}});
+    if(path.endsWith('/sessions'))return route.fulfill({json:{sessions:[{id:'12345678-1234-4234-8234-123456789abc',createdAt:'2026-01-01T00:00:00.000Z',lastUsedAt:'2026-01-01T00:01:00.000Z',expiresAt:'2027-01-01T00:00:00.000Z',current:true}]}});
+    if(path.endsWith('/passkeys'))return route.fulfill({json:{passkeys:[]}});
+    if(path.endsWith('/translation-consent'))return route.fulfill({json:{consents:[]}});
+    if(path.endsWith('/alerts'))return route.fulfill({json:{enabled:false,locale}});
+    if(path.endsWith('/installations'))return route.fulfill({json:{installations:[]}});
+    if(path.endsWith('/logout')){attempts++;return route.fulfill({status:204});}
+    return route.continue();
+   });
+   await page.goto(f.origin+'/account');await started;
+   await page.getByText(c.currentSession,{exact:true}).waitFor();await page.getByText(c.noInstallations,{exact:true}).waitFor();
+   const signOut=page.getByRole('button',{name:c.signout,exact:true});assert.equal(await signOut.isDisabled(),true);assert.equal(attempts,0);
+   if(process.env.CLOUD_LOGOUT_SHOTS){await mkdir(process.env.CLOUD_LOGOUT_SHOTS,{recursive:true});await page.screenshot({path:`${process.env.CLOUD_LOGOUT_SHOTS}/${locale}-${colorScheme}-${width}.png`,fullPage:true});}
+   const settled=page.waitForResponse('**/api/account/authenticator');release();await settled;
+   const [response]=await Promise.all([page.waitForResponse('**/api/account/logout'),signOut.click()]);assert.equal(response.status(),204);assert.equal(attempts,1);
+   await page.getByText(c.signedOut,{exact:true}).waitFor();await context.close();
+  }
+ }finally{for(const release of releases)release();await f.close();}
 });
 test('email requests have the same accepted screen and real invalid links offer recovery',async()=>{
   const f=await startPortalFixture();
