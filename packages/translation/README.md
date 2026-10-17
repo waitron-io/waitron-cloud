@@ -104,6 +104,12 @@ appear to improve quality merely by producing unseen text.
 Result files contain a JSON object with a `names` map keyed by product id. The scorer trims
 written text and compares only Catalan, Spanish and English, matching these recorded sets.
 It prints menu text locally for grading; it is not a production worker diagnostic.
+The command refuses errored runs, reported failures, wrong-set ids, non-text names,
+empty scores and repeated files. It validates every file before printing a table.
+For partial results it names the missing products and languages on standard error;
+percentages still cover only the names actually written. They do not establish complete
+coverage or a release-quality pass. Whole-number percentages round exact halves up,
+as the approved port specifies; the original Python formatter rounded ties to even.
 Keep new results under the ignored `quality/results/` directory.
 
 `quality/original/` and `quality/grading.template.html` preserve the experiment verbatim;

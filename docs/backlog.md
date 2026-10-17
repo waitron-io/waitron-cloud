@@ -477,7 +477,10 @@ Task 20 preserves the original trial scripts, grading template, both product and
 sets, all 141 owner grades and six Luna-review result files byte for byte. The offline scorer
 reproduces the original totals: tuning 252 names, 6 needing work and 10 wrong; blind 243 names,
 5 needing work and 6 wrong. Unseen names are counted and listed as ungraded, never accepted.
-Command checks refuse missing input and malformed name maps. These offline checks run in the
+Command checks refuse missing input, failed or wrong-set runs, malformed values and repeated
+files before printing a table, and warn about incomplete products and names. A multi-file
+check preserves the complete ungraded list. The copied shown-language keys match the saved
+grading pages, apart from unchanged given names that scoring excludes. These offline checks run in the
 ordinary package suite without a provider or key; they do not measure the templated prompt.
 Task 21's trial runner and grading page, owner Tasks 22–24 and the joint proof remain open.
 Keep translation off until the remaining runtime and joint qualification are complete.

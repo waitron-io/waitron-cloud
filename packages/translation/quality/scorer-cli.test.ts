@@ -67,3 +67,72 @@ test('only written names in the graded products and languages count, after trimm
   assert.equal(scoreLine('empty', {names: 0, fix: 0, wrong: 0, ungraded: 0, ungradedNames: []}),
     '| empty | 0 | - | - | - | 0 |');
 });
+
+test('failed, wrong-set and malformed values cannot look like a successful quality run', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'translation-score-failures-'));
+  const file = join(dir, 'bad.json');
+  try {
+    for (const value of [
+      {error: 'provider failed', names: {f01: {ca: 'A valid written name'}}},
+      {failed: ['f01'], names: {f02: {ca: 'New name'}}},
+      {set: 'tuning', names: {f01: {ca: 'New name'}}},
+      {names: {p01: {ca: 'Wrong set name'}, f01: {ca: 'A valid written name'}}},
+      {names: {f01: {ca: 17, es: 'A valid written name'}}},
+      {names: {f01: {ca: ''}}},
+    ]) {
+      writeFileSync(file, JSON.stringify(value));
+      const got = run(['--set', 'blind', file]);
+      assert.notEqual(got.status, 0, JSON.stringify(value));
+      assert.equal(got.stdout, '', 'an invalid file must not leave a score table');
+    }
+  } finally {
+    rmSync(dir, {recursive: true, force: true});
+  }
+});
+
+test('incomplete results name their missing coverage beside the score', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'translation-score-partial-'));
+  try {
+    const file = join(dir, 'partial.json');
+    writeFileSync(file, JSON.stringify({names: {f01: {ca: 'Unseen café name'}}}));
+    const got = run(['--set', 'blind', file]);
+    assert.equal(got.status, 0, got.stderr);
+    assert.match(got.stderr, /incomplete: partial.json: 29 products absent, 85 names missing/);
+    assert.ok(got.stdout.includes('| total | 1 | 0% | 0% | 0% | 1 |'));
+  } finally {
+    rmSync(dir, {recursive: true, force: true});
+  }
+});
+
+test('a repeated file is refused and a bad later file leaves no partial table', () => {
+  const good = fileURLToPath(new URL('./data/trial-results/blind/luna-low-v4+luna-medium-1.json', import.meta.url));
+  const dir = mkdtempSync(join(tmpdir(), 'translation-score-atomic-'));
+  try {
+    const bad = join(dir, 'bad.json');
+    writeFileSync(bad, '{');
+    for (const files of [[good, good], [good, bad]]) {
+      const got = run(['--set', 'blind', ...files]);
+      assert.notEqual(got.status, 0);
+      assert.equal(got.stdout, '');
+    }
+  } finally {
+    rmSync(dir, {recursive: true, force: true});
+  }
+});
+
+test('the command retains every ungraded name across several input files', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'translation-score-many-'));
+  try {
+    const first = join(dir, 'first.json'), second = join(dir, 'second.json');
+    writeFileSync(first, JSON.stringify({names: {f01: {ca: 'Unseen first name'}}}));
+    writeFileSync(second, JSON.stringify({names: {f02: {es: 'Unseen second name'}}}));
+    const got = run(['--set', 'blind', first, second]);
+    assert.equal(got.status, 0, got.stderr);
+    assert.ok(got.stdout.includes('| total | 2 | 0% | 0% | 0% | 2 |'));
+    assert.deepEqual(got.stdout.split('\n').filter(line => line.startsWith('ungraded:')), [
+      'ungraded: f01 ca Unseen first name', 'ungraded: f02 es Unseen second name',
+    ]);
+  } finally {
+    rmSync(dir, {recursive: true, force: true});
+  }
+});

@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {readdirSync,readFileSync} from 'node:fs';
+import {readdirSync,readFileSync,realpathSync} from 'node:fs';
 import {basename} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import type {TranslationKind} from '../src/index.ts';
@@ -41,19 +41,43 @@ const percent=(part:number,whole:number)=>whole?`${Math.round(part/whole*100)}%`
 export function scoreLine(label:string,s:Score){return `| ${label} | ${s.names} | ${percent(s.fix,s.names)} | ${percent(s.wrong,s.names)} | ${percent(s.fix+s.wrong,s.names)} | ${s.ungraded} |`;}
 function main(args:string[]){
  const at=args.indexOf('--set'),name=args[at+1];
- if(at<0||(name!=='tuning'&&name!=='blind'))throw new Error('usage: node quality/scorer.ts --set tuning|blind <results files…>');
+ const usage='usage: node quality/scorer.ts --set tuning|blind <results files…>';
+ if(at<0||(name!=='tuning'&&name!=='blind'))throw new Error(usage);
  const files=args.filter((_,i)=>i!==at&&i!==at+1);
- if(!files.length)throw new Error('usage: node quality/scorer.ts --set tuning|blind <results files…>');
- const set=loadSet(name);
- let total:Score={names:0,fix:0,wrong:0,ungraded:0,ungradedNames:[]};
- console.log('| run | names | needs work | wrong | marked | ungraded |');console.log('|---|---|---|---|---|---|');
- for(const file of files){
+ if(!files.length)throw new Error(usage);
+ if(new Set(files.map(file=>realpathSync(file))).size!==files.length)throw new Error('Repeated result file');
+ const set=loadSet(name),ids=new Set(set.products.map(p=>p.id));
+ const record=(value:unknown):value is Record<string,unknown>=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+ const inputs=files.map(file=>{
   const result:unknown=JSON.parse(readFileSync(file,'utf8'));
-  const record=(value:unknown):value is Record<string,unknown>=>value!==null&&typeof value==='object'&&!Array.isArray(value);
   if(!record(result)||!record(result.names)||!Object.values(result.names).every(record))
    throw new Error(`Invalid names map: ${file}`);
-  const s=gradeRun(result.names as Record<string,Record<string,unknown>>,set);
-  total=addScores(total,s);console.log(scoreLine(basename(file),s));
+  if(Object.hasOwn(result,'error')||(Object.hasOwn(result,'failed')&&(!Array.isArray(result.failed)||result.failed.length>0)))
+   throw new Error(`Failed trial: ${file}`);
+  if(Object.hasOwn(result,'set')&&result.set!==name)throw new Error(`Wrong graded set: ${file}`);
+  const names=result.names as Record<string,Record<string,unknown>>;
+  for(const [pid,entry] of Object.entries(names)){
+   if(!ids.has(pid))throw new Error(`Unknown product: ${file}: ${pid}`);
+   if(languages.some(lang=>Object.hasOwn(entry,lang)&&typeof entry[lang]!=='string'))
+    throw new Error(`Non-text name: ${file}: ${pid}`);
+  }
+  const score=gradeRun(names,set);
+  if(!score.names)throw new Error(`No written names to score: ${file}`);
+  let absent=0,missing=0;
+  for(const p of set.products){
+   if(languages.every(lang=>Object.hasOwn(p.existing??{},lang)))continue;
+   const got=names[p.id];
+   if(!got)absent++;
+   if(got?.placeholder===true)continue;
+   for(const lang of languages)if(!Object.hasOwn(p.existing??{},lang)&&!(typeof got?.[lang]==='string'&&got[lang].trim()))missing++;
+  }
+  return {file,score,absent,missing};
+ });
+ let total:Score={names:0,fix:0,wrong:0,ungraded:0,ungradedNames:[]};
+ console.log('| run | names | needs work | wrong | marked | ungraded |');console.log('|---|---|---|---|---|---|');
+ for(const {file,score,absent,missing} of inputs){
+  if(absent||missing)console.error(`incomplete: ${basename(file)}: ${absent} products absent, ${missing} names missing`);
+  total=addScores(total,score);console.log(scoreLine(basename(file),score));
  }
  console.log(scoreLine('total',total));
  for(const n of total.ungradedNames)console.log(`ungraded: ${n.pid} ${n.lang} ${n.text}`);
