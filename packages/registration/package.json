@@ -22,5 +22,6 @@
     "@types/pg": "^8.23.1",
     "@types/smtp-server": "^3.5.13",
     "smtp-server": "^3.19.13"
-  }
+  },
+  "license": "SEE LICENSE IN LICENSE"
 }

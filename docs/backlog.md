@@ -28,6 +28,13 @@ candidate list and previous commercial reasoning. Remote access and backups are 
 agreed initial services. The first integration milestone is complete locally; the
 production release scope remains open.
 
+## Repository licence
+
+The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
+All eleven workspace and root manifests identify it with `SEE LICENSE IN LICENSE`.
+Waitron's separate grants are not included. The owner and watcher control the repository's
+visibility; this change does not switch it or alter settings and workflows.
+
 ## First working milestone
 
 The [combined local receipt](launch-evidence.md#read-the-local-evidence-narrowly)

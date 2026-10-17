@@ -28,5 +28,6 @@
     "./recovery-codes": "./src/recovery-codes.ts",
     "./recovery-request": "./src/recovery-request.ts",
     "./replacement": "./src/replacement.ts"
-  }
+  },
+  "license": "SEE LICENSE IN LICENSE"
 }
