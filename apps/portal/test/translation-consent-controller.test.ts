@@ -58,3 +58,17 @@ test('same account keeps its loaded choices while sign-out clears them',async()=
  c.account('one');await c.load();c.account('one');assert.equal(c.loaded,true);assert.equal(c.consented(venueId),true);
  c.account(undefined);assert.deepEqual(c.consents,[]);assert.equal(c.loaded,false);assert.equal(c.error,undefined);
 });
+test('write warnings name their venue and disappear on an account change or a new read',async()=>{
+ let status=200;
+ const c=new TranslationConsentController(()=>{},async<T>():Promise<ApiResult<T>>=>status===200?listed(false) as ApiResult<T>:{ok:false,status,code:'unavailable',retryAfterMs:0});
+ c.account('one');await c.load();status=503;await c.agree(venueId);
+ assert.equal(c.error,'translationConsentUncertain');assert.equal(c.errorVenueId,venueId);
+ c.account('two');assert.equal(c.errorVenueId,undefined);await c.load();assert.equal(c.error,'unavailable');assert.equal(c.errorVenueId,undefined);
+});
+test('a backward clock change during a request cannot shorten the preceding retry deadline',async t=>{
+ let now=0,calls=0,finish!:(v:ApiResult<unknown>)=>void;t.mock.method(Date,'now',()=>now);
+ const c=new TranslationConsentController(()=>{},<T>()=>++calls===1?Promise.resolve({ok:false as const,status:429,code:'rate_limited',retryAfterMs:60000}):new Promise<ApiResult<T>>(resolve=>{finish=resolve as typeof finish;}));
+ c.account('one');await c.load();assert.equal(c.waiting,60);
+ now=61000;const loading=c.load();now=30000;finish({ok:false,status:503,code:'unavailable',retryAfterMs:0});await loading;
+ assert.equal(c.waiting,30);
+});

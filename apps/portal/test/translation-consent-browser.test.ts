@@ -25,7 +25,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    await route.continue();
   });
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
-  const section=page.getByRole('region',{name:locale==='en'?'Menu translation':'Traducción del menú',exact:true});
+  const section=page.getByRole('group',{name:locale==='en'?'Menu translation':'Traducción del menú',exact:true});
   const allow=locale==='en'?'Allow menu translation':'Permitir la traducción del menú',stop=locale==='en'?'Stop menu translation':'Dejar de traducir el menú';
   const allowed=locale==='en'?'Menu translation is allowed for this venue.':'La traducción del menú está permitida en este local.';
   await section.getByText(c.unavailable,{exact:true}).waitFor();
@@ -55,5 +55,24 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.reload();await section.getByRole('button',{name:allow,exact:true}).waitFor();
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[owner.accountId]);
   await page.reload();await page.getByRole('heading',{name:/Sol SL/}).waitFor();assert.equal(await section.count(),0);
+ }finally{await f.close();}
+});
+
+for(const locale of ['en','es'] as const)test(`${locale}: two venues keep accessible controls and write warnings in the affected venue`,async()=>{
+ const f=await startPortalFixture();try{
+  const email='owner@example.test',password='A long enough venue owner password',signup=new SignupStore(f.db.pool,f.db.outbox);
+  await signup.request(email);const mail=f.db.outbox.open((await f.db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert.ok('token' in mail);
+  const owner=await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'}),r=new RegistrationStore(f.db.pool);
+  for(let n=0;n<2;n++){
+   const b={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+   await r.start(b);await r.approveCloud(b,owner.accountId);await r.approveLocal(b,randomUUID());await r.complete(b);
+  }
+  const context=await f.browser.newContext({locale}),page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
+  await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
+  const articles=page.locator('article.installation');await articles.first().getByRole('button',{name:c.translationConsentAgree,exact:true}).waitFor();assert.equal(await articles.count(),2);
+  await page.evaluate(axe.source);const violations=await page.evaluate(async()=> (await window.axe.run(document)).violations);
+  f.loseAccountReply('/translation-consent','body');await articles.first().getByRole('button',{name:c.translationConsentAgree,exact:true}).click();await page.getByText(c.translationConsentUncertain,{exact:true}).first().waitFor();
+  assert.equal((await f.db.pool.query('SELECT count(*) FROM translation_consents WHERE withdrawn_at IS NULL')).rows[0].count,'1');
+  assert.deepEqual({violations:violations.map(v=>v.id),firstErrors:await articles.first().getByText(c.translationConsentUncertain,{exact:true}).count(),otherErrors:await articles.nth(1).getByText(c.translationConsentUncertain,{exact:true}).count()}, {violations:[],firstErrors:1,otherErrors:0});
  }finally{await f.close();}
 });

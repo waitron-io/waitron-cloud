@@ -2,8 +2,8 @@ import {html,nothing} from 'lit';
 import type {PortalApp} from './app.ts';
 export function translationConsentScreen(app:PortalApp,venueId:string){
  const t=app.translationConsent,c=app.copy,on=t.consented(venueId),disabled=t.pending||!!t.waiting||!t.loaded;
- return html`<section aria-label=${c.translationConsent}><h4>${c.translationConsent}</h4><p class="help">${c.translationConsentHelp}</p>
-  ${t.error?html`<p role="alert">${c[t.error]}</p>`:nothing}
+ return html`<section role="group" aria-label=${c.translationConsent}><h4>${c.translationConsent}</h4><p class="help">${c.translationConsentHelp}</p>
+  ${t.error&&(!t.errorVenueId||t.errorVenueId===venueId)?html`<p role="alert">${c[t.error]}</p>`:nothing}
   ${!t.loaded?html`<wt-button .disabled=${t.pending||!!t.waiting} @click=${()=>{void t.load();}}>${c.refreshStatus}</wt-button>`:nothing}
   ${on?html`<p role="status">${c.translationConsentOn}</p>`:nothing}
   <wt-button .disabled=${disabled} @click=${()=>{void (on?t.withdraw(venueId):t.agree(venueId));}}>${on?c.translationConsentWithdraw:c.translationConsentAgree}</wt-button></section>`;

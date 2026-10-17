@@ -407,7 +407,8 @@ and machine refusal before agreement and after withdrawal.
 Task 15 adds the owner-only menu-translation control in each installation's entry
 on `/account`, with draft English and Spanish wording. You can agree, withdraw or
 retry a failed read; an unanswered write keeps the last confirmed choice and asks
-you to retry. Account changes and refused sessions clear that choice, and late
+you to retry in that venue's control. The controls are groups within their venue
+entries, so multiple venues do not create identically named page regions. Account changes and refused sessions clear that choice, and late
 replies cannot restore it. The browser sends the session's security token on writes
 and validates complete consent replies. Real PostgreSQL/Chromium tests cover
 agreement, persistence, withdrawal after a lost response body and owner-only display
