@@ -356,6 +356,18 @@ runs are quiet on success; the root pnpm
 script can report a missing optional `.env` file. No real provider request is part of
 these checks; activation and retention remain later tasks.
 
+Task 10 adds the four signed machine actions at the store boundary. Each execution
+checks the installation proof, revocation and current lease under an installation lock.
+Submit verifies the fingerprint before parsing, then returns a repeated operation before
+checking entitlement, open jobs or spending. Concurrent retries create one job.
+Status, collect and release reject repeated fields and alternate version spellings,
+then validate lowercase job UUIDs before reading jobs scoped to the signing installation. Collect checks ownership before cursor validity,
+then applies state rules. PostgreSQL checks cover crossed and expired leases, revocation
+during a lock wait, rollback after a body insert fails, mixed outcomes and a signed multi-page walk
+larger than 16 MiB with unchanged text. Collection retains results; release deletes them.
+These are store methods. HTTP routes remain Task 11 and consent enforcement remains Task 13;
+no installation gains translation access from this task.
+
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies
 compact full-body replies of at most 16,777,216 decoded UTF-8 bytes, signed optional cursors in
@@ -365,9 +377,11 @@ and preserves accepted language tags. Store-level page sizing is tested; HTTP se
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 10–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 11–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
+  Complete lock-order qualification across worker, release and installation revocation. The
+  controlled revocation wait is covered; a mixed-traffic probe samples only one ordering.
   Before enabling submit, jointly qualify language recognition and canonical duplicates. The
   approved parser accepts unknown primary codes with subtags such as `xx-BR`, non-language
   codes `mul`/`zxx`, and case variants as distinct tags. The actual Waitron language validator
