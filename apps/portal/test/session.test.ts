@@ -11,6 +11,7 @@ test('passive reads do not renew; real activity is throttled and late activity c
     await page.route('**/api/account/**', async route => {
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith('/authenticator')) { await route.fulfill({json:{active:false,version:0,recoveryCodesRemaining:0,available:false}}); return; }
+      if (path.endsWith('/translation-consent')) { await route.fulfill({json:{consents:[]}}); return; }
       if (path.endsWith('/alerts')) { await route.fulfill({json:{enabled:false,locale:'en'}}); return; }
       if (path.endsWith('/installations')) { await route.fulfill({json:{installations:[]}}); return; }
       if (path.endsWith('/passkeys')) { await route.fulfill({json:{passkeys:[]}}); return; }
@@ -49,6 +50,7 @@ test('expiry and visibility rechecks do not renew, and 401 fences a delayed acti
     let reads=0,activity=0;let release:(()=>void)|undefined;
     await page.route('**/api/account/**',async route=>{
       if(route.request().url().endsWith('/authenticator')) {await route.fulfill({json:{active:false,version:0,recoveryCodesRemaining:0,available:false}});return;}
+      if(route.request().url().endsWith('/translation-consent')) {await route.fulfill({json:{consents:[]}});return;}
       if(route.request().url().endsWith('/alerts')) {await route.fulfill({json:{enabled:false,locale:'en'}});return;}
       if(route.request().url().endsWith('/installations')) {await route.fulfill({json:{installations:[]}});return;}
       if(route.request().url().endsWith('/passkeys')) {await route.fulfill({json:{passkeys:[]}});return;}

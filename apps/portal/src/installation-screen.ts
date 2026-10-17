@@ -1,3 +1,4 @@
+import {translationConsentScreen} from './translation-consent-screen.ts';
 import {remoteScreen} from './remote-screen.ts';
 import {alertScreen,monitoringScreen} from './alert-screen.ts';
 import {backupScreen} from './backup-screen.ts';
@@ -26,6 +27,7 @@ export function installationScreen(app:PortalApp){
     ${i.canRevoke&&!i.revokedAt?remoteScreen(app,i.installationId):nothing}
     ${monitoringScreen(app,i)}
     ${i.canRevoke?backupScreen(app,i.venueId):nothing}
+    ${i.canRevoke?translationConsentScreen(app,i.venueId):nothing}
     ${i.canRevoke?html`<p class="help">${c.diagnosticHelp}</p><wt-button .disabled=${app.diagnostics.pending||!!app.diagnostics.waiting}
       .loading=${app.diagnostics.pending&&app.diagnostics.selected===i.installationId} @click=${()=>{void app.diagnostics.download(i.installationId);}}>${c.diagnosticDownload}</wt-button>`:nothing}
     ${controller.confirming===i.installationId?html`<div role="group" aria-label=${c.stopAccess}><p>${c.stopHelp}</p>

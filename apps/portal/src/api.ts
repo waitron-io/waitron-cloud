@@ -32,6 +32,7 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path.startsWith('/recovery/'))return validRecoveryView(value);
   if(path==='/remote-access/status'||path==='/remote-access/apply')return validRemoteView(value);
   if(path==='/remote-access/dns')return validRemoteDns(value);
+  if(path==='/translation-consent')return status===200&&validTranslationConsents(value);
   if(path==='/alerts')return typeof data.enabled==='boolean'&&typeof data.locale==='string'&&['en','es'].includes(data.locale);
   if(path==='/usage/read')return validUsageSummary(value);
   if(path==='/diagnostics/read')return validDiagnosticExport(value);
@@ -49,7 +50,7 @@ function validResult(path: string, value: unknown, status: number): boolean {
 export async function accountRequest<T>(path: string, body?: Record<string, unknown>): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
-  if (path.startsWith('/fiscal-allocations/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || path === '/backups/list' || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || path === '/installations/revoke' || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
+  if (path.startsWith('/fiscal-allocations/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || path === '/installations/revoke' || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
     const name = location.protocol === 'https:' ? '__Host-cloud_csrf' : 'cloud_csrf';
     const values = document.cookie.split(';').map(v => v.trim()).filter(v => v.startsWith(`${name}=`));
     headers['X-CSRF-Token'] = values.length === 1 ? values[0]!.slice(name.length + 1) : '';
@@ -67,4 +68,18 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
       ? value.error : 'unexpected_response';
     return {ok: false, status: response.ok ? 503 : response.status, code, retryAfterMs};
   } catch { return {ok: false, status: 0, code: 'network_error', retryAfterMs: 0}; }
+}
+
+function validTranslationConsents(value:unknown):boolean{
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const consents=(value as Record<string,unknown>).consents;
+ if(!Array.isArray(consents))return false;
+ const seen=new Set<string>();
+ return consents.every(choice=>{
+  if(!choice||typeof choice!=='object'||Array.isArray(choice))return false;
+  const c=choice as Record<string,unknown>;
+  if(typeof c.venueId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(c.venueId)||seen.has(c.venueId))return false;
+  seen.add(c.venueId);
+  return typeof c.consented==='boolean'&&(c.consented?typeof c.consentedAt==='string'&&Number.isFinite(Date.parse(c.consentedAt)):c.consentedAt===null);
+ });
 }
