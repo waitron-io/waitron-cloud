@@ -483,6 +483,12 @@ check preserves the complete ungraded list. The copied shown-language keys match
 grading pages, apart from unchanged given names that scoring excludes. These offline checks run in the
 ordinary package suite without a provider or key; they do not measure the templated prompt.
 Task 21's trial runner and grading page, owner Tasks 22–24 and the joint proof remain open.
+A controlled client-error event followed by cleanup-query rejection reproduces a fatal
+line followed by a misleading cleanup-retry line. The worker now stops that retry path
+after a fatal failure; the original exact-output assertions remain. The new subprocess
+case and ordinary cleanup retry/recovery checks cover this ordering. CI exposed the
+same duplicate output without retaining its exact query stages, so the historical
+database timing remains unproved.
 Keep translation off until the remaining runtime and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).

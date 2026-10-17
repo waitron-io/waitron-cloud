@@ -69,7 +69,8 @@ headers do not enter diagnostics:
 - `Translation worker pass failed; retrying`
 - `Translation worker cleanup failed; retrying`
 
-Database connection errors use the first message too. The enabled account server reports
+A fatal database-client error exits with the first message alone; interrupted cleanup
+does not announce another retry. Database connection errors use the first message too. The enabled account server reports
 scheduled cleanup failure as `Account server translation cleanup failed`. Inspect configuration, migrations
 and local service availability without logging request or provider response bodies.
 
