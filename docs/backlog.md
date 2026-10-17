@@ -351,7 +351,8 @@ and successful shutdown returns leases without using an attempt. Borrowed-client
 real disconnect checks cover fixed fatal output; a failed lease return exits 1 in both modes.
 When the database cannot accept that return, the lease remains until its original expiry.
 Signals before module loading installs the handlers still use the operating system’s default
-termination and cannot affect a job. Direct Node runs are quiet on success; the root pnpm
+termination. The command installs its handlers before opening the database pool. Direct Node
+runs are quiet on success; the root pnpm
 script can report a missing optional `.env` file. No real provider request is part of
 these checks; activation and retention remain later tasks.
 
@@ -383,7 +384,8 @@ Remaining work:
   exist. Preserve them without claiming they are unreachable. Parallel infrastructure failures
   currently expose one error; both failures from one call's spend/renew callbacks are retained.
   An ordinary failed run keeps its lease until expiry and uses a lease attempt; only caller
-  shutdown returns it immediately. Task 18 still needs bounded diagnostics without names.
+  shutdown returns it immediately when the database accepts the update. Task 18 still needs
+  bounded diagnostics without names.
   The page-walk fixture now holds the specifically named first batch until the second batch
   is saved. A controlled second-before-first request schedule reproduced the original failure:
   the fixture had incorrectly treated the first arriving HTTP request as the first batch.
