@@ -427,7 +427,13 @@ button after pointerdown. Holding the reply passes the same 500 ms delayed-click
 removing the hold restores the original timeout. Every existing assertion and deadline
 remains. The two natural failures retained no request ordering, so their exact trigger stays
 unproved; bounded path/status events now accompany any future failure. Portal production
-code is unchanged by this fixture correction.
+code is unchanged by this fixture correction. A later full local Task 21 run recorded two
+5-second response-listener timeouts at `translation-consent-browser.test.ts:48` in English
+phone views. Its bounded events include a successful consent reply but do not timestamp
+listener installation or the return from clock advancement, so they do not establish the
+ordering. On recurrence, capture those boundaries and the activity-route hold decision;
+keep the original checks and deadlines. This observation does not establish a regression
+in the separate grading page.
 Task 16 keeps translation out of the three-service configuration, account and diagnostic
 lists, monitoring targets, incident display and alert delivery. A ready translation row alone
 cannot enable those services. PostgreSQL regressions insert that row explicitly and cover
