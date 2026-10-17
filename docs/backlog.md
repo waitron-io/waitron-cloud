@@ -882,8 +882,9 @@ notifications separately.
   emitted failures and left its sole `relay-control.test.ts` child alive for more
   than nine minutes despite the 30-second test timeout. The driver stopped that
   recorded child; this is an interrupted failed run, with no established cause.
-  The complete registration suite passes all 679 tests with two file workers on
-  the corrected branch. Capture the full output of the default-concurrency command,
+  The review's default-concurrency account suite also emitted failures. Complete
+  registration/account suites pass all 679/382 tests with two file workers on
+  the corrected branch. Capture the full output of both default-concurrency commands,
   without piping it through `head`, and diagnose failure cleanup and resource
   contention. Preserve every assertion and deadline; do not treat a rerun as a fix.
 - **Operating cost.** The [cost-model design](superpowers/specs/2026-10-14-cloud-cost-model-design.md)
