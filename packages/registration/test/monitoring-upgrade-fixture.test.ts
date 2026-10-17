@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import {test,after} from 'node:test';
 import {randomBytes} from 'node:crypto';
+import {symlink} from 'node:fs/promises';
+import {join} from 'node:path';
 import {fixture} from './fixtures/relay-worker.ts';
 import {migrationRelease} from './fixtures/migration-release.ts';
 import {migrate} from '../src/migrate.ts';
@@ -12,7 +14,9 @@ test('monitoring upgrade fixture preserves legacy payloads and restored deadline
   const {seed}=await import(new URL('../../../scripts/schema-upgrade-fixture.mjs',import.meta.url).href);
   const {seedMonitoring,monitoringState,legacyMonitoring,restoredMonitoring}=await import(new URL('../../../scripts/schema-upgrade-monitoring-fixture.mjs',import.meta.url).href);
   const email={activeKeyId:'upgrade',keys:{upgrade:randomBytes(32).toString('hex')}},pairing={activeKeyId:'pairing',keys:{pairing:randomBytes(32).toString('hex')}};
-  const state=await seed(root,f.pool,email,pairing);await seedMonitoring(root,f.pool,state,email);
+  // Seed the old schema with its registration code before exercising current upgrade consumers.
+  await symlink(new URL('../node_modules',import.meta.url),join(release.root,'packages/registration/node_modules'));
+  const state=await seed(release.root,f.pool,email,pairing);await seedMonitoring(root,f.pool,state,email);
   const old=await monitoringState(f.pool);await migrate(f.pool);
   assert.deepEqual((await monitoringState(f.pool)).mail,old.mail,'migration never rewrites delivery payloads or receipts');
   await f.pool.query('UPDATE installations SET last_contact_at=clock_timestamp() WHERE id=$1',[state.installations[0].installationId]);
