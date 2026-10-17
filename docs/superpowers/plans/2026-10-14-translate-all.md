@@ -3575,6 +3575,12 @@ Then check nothing was missed: `git grep -n "unconfigured'" -- 'packages/*/src/*
 
 The filters at `monitoring.ts:34` and `:163` cover for each other. Measured on 2026-10-14, on a scratch copy holding this plan's code: with the filter removed at `:34` alone, or at `:163` alone, all four registration cases still passed; with both removed, "a monitored venue whose original services all stop raises no alert" failed. So that case pins the pair, not either one; keep both.
 
+The overview's incident-query filter is also masked: `venue-overview.ts` empties the
+incident list whenever monitoring is off. Removing that filter alone leaves the five
+HTTP cases passing; removing it together with the monitor-enabled filter fails the
+incident-list assertion. The case protects the visible reply and the pair, not that
+SQL predicate on its own. Keep both filters.
+
 - [ ] **Step 4: Run the three new files plus the existing suites the edited queries serve:** `test/monitoring.test.ts`, `test/monitoring-quiet.test.ts`, `test/email-outbox.test.ts`, `test/installations.test.ts`, `test/pairing.test.ts`, `test/registration.test.ts` (registration); `test/diagnostics.test.ts`, `test/installations.test.ts` (account-http); `test/status.test.ts` (operations).
 - [ ] **Step 5: Commit**
 
