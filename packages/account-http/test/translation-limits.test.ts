@@ -7,7 +7,7 @@ import type {HttpBindings} from '@hono/node-server';
 import {createLeaseIssuer} from '@waitron-cloud/registration';
 import {createAccountApp} from '../src/app.ts';
 import {startAccountServer} from '../src/server.ts';
-import {connectedVenue,database,readyForTranslation} from '../../translation/test/fixtures.ts';
+import {connectedVenue,database,giveConsent,readyForTranslation} from '../../translation/test/fixtures.ts';
 const origin='http://localhost';
 const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
 let db:Awaited<ReturnType<typeof database>>,app:ReturnType<typeof createAccountApp>,addresses=0;
@@ -16,7 +16,7 @@ before(async()=>{db=await database();app=createAccountApp({translation:true,leas
 after(async()=>db?.close());
 beforeEach(async()=>{await db.pool.query('TRUNCATE account_rate_limits');});
 type Venue=Awaited<ReturnType<typeof connectedVenue>>&{ip:string};
-async function venue():Promise<Venue>{const v=await connectedVenue(db,issuer,origin);await readyForTranslation(db,v);return {...v,ip:`198.51.100.${++addresses}`};}
+async function venue():Promise<Venue>{const v=await connectedVenue(db,issuer,origin);await readyForTranslation(db,v);await giveConsent(db,v);return {...v,ip:`198.51.100.${++addresses}`};}
 const post=(v:{ip:string},action:string,body:string)=>app.request(`${origin}/api/installations/${action}`,{method:'POST',headers:{'content-type':'application/json'},body},{incoming:{socket:{remoteAddress:v.ip}}} as HttpBindings);
 const error=async(response:Response)=>[response.status,((await response.json()) as {error:string}).error];
 const item=(ref:string,staffName='CAFE',category:string|null='x')=>({ref,kind:'product',family:ref,category,staffName,existing:{},missing:['ca','es','en']});

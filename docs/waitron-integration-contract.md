@@ -566,7 +566,7 @@ A `partly_done` or `failed` status also carries `reason`, one of this list:
 | `partly_done` | `limit_reached` | The cap stopped the job. | `content.suggestion_limit_reached` (`fits` 0) |
 | `partly_done` | `provider_failed` | Some batches failed at the provider. | how many could not be done |
 | `failed` | `provider_unavailable` | Every batch failed at the provider. | `content.suggestion_service_unavailable` |
-| `failed` | `consent_required` | Consent was withdrawn before the job started. | `content.suggestion_consent_required` |
+| `failed` | `consent_required` | Consent is unavailable when the worker leases or resumes the job. Earlier batches are withheld; cost already spent is retained. | `content.suggestion_consent_required` |
 | `failed` | `limit_reached` | The cap was reached before any item was done. | `content.suggestion_limit_reached` (`fits` 0) |
 
 Poll every five seconds at most.

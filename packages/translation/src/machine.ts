@@ -1,5 +1,6 @@
 import type {Pool} from 'pg';
 import {createLeaseTrust,InstallationError,InstallationStore,readMachineClaims,transaction,verifyLease,verifyMachine,type LeaseIssuer} from '@waitron-cloud/registration';
+import {hasConsent} from './consent.ts';
 import {TranslationError} from './errors.ts';
 import {parseJob,writtenItems} from './job-body.ts';
 import {collectJob,createJob,findSubmitted,lockVenue,readJob,releaseJob,statusView,submitView} from './job-store.ts';
@@ -62,6 +63,7 @@ export class TranslationMachine {
     const prior=await findSubmitted(client,row.id,claims.operationId,fingerprint);
     if(prior)return submitView(prior);
     if(row.translation_state!=='ready')throw new InstallationError('permission_denied');
+    if(!await hasConsent(client,row.venue_id))throw new TranslationError('consent_required');
     return submitView(await createJob(client,{installationId:row.id,venueId:row.venue_id,operationId:claims.operationId,fingerprint,body:jobBody,total:writtenItems(parsed).length}));
    }
    const reference=jobReference(claims.body,action==='translation-collect');

@@ -2878,6 +2878,16 @@ git commit -s -m "Give translation submit its own limits: a 2 MiB request read w
 
 ### Task 13: Consent — the store, and the checks at submit and in the worker
 
+**Implementation note (2026-10-17):** agreement and withdrawal both serialize on the
+same consent lock. Recording and withdrawing consent also hold shared locks on the
+account, credential, membership and venue rows in that order, following relay
+authorization, to recheck changes that commit during a wait without the reproduced
+account-first writer deadlock. Listing omits disabled or unverified accounts. The worker checks
+after leasing, within its existing shutdown cleanup, and fences a refusal by its lease.
+All earlier behavioral assertions and deadlines remain; fixtures now record consent,
+including the direct paged-worker fixture that does not use `queue()` and the
+bounded-collect HTTP fixtures introduced by the paging amendment.
+
 **Files:**
 - Create: `packages/translation/src/consent.ts`, `packages/translation/test/consent.test.ts`
 - Modify: `packages/translation/src/machine.ts` (submit), `src/worker.ts` (after leasing), `src/index.ts`, `test/fixtures.ts` (add `giveConsent`), and the earlier tests that now need a consenting venue: `packages/translation/test/machine.test.ts`, `test/worker.test.ts`, `test/worker-cli.test.ts`, `packages/account-http/test/translation.test.ts`, `test/translation-limits.test.ts`

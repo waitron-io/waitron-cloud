@@ -5,7 +5,7 @@ import type {HttpBindings} from '@hono/node-server';
 import {createLeaseIssuer} from '@waitron-cloud/registration';
 import {jobFingerprint} from '@waitron-cloud/translation';
 import {createAccountApp} from '../src/app.ts';
-import {connectedVenue,database,readyForTranslation} from '../../translation/test/fixtures.ts';
+import {connectedVenue,database,giveConsent,readyForTranslation} from '../../translation/test/fixtures.ts';
 const origin='https://cloud.example.test';
 const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
 let db:Awaited<ReturnType<typeof database>>,app:ReturnType<typeof createAccountApp>,addresses=0;
@@ -13,7 +13,7 @@ const config=()=>({portalOrigin:origin,production:true,rateKey:db.rateKey,truste
 before(async()=>{db=await database();app=createAccountApp({translation:true,leaseIssuer:issuer,pool:db.pool,outbox:db.outbox,config:config()});});
 after(async()=>db?.close());
 type Venue=Awaited<ReturnType<typeof connectedVenue>>&{ip:string};
-async function venue():Promise<Venue>{const v=await connectedVenue(db,issuer,origin);await readyForTranslation(db,v);return {...v,ip:`203.0.113.${++addresses}`};}
+async function venue():Promise<Venue>{const v=await connectedVenue(db,issuer,origin);await readyForTranslation(db,v);await giveConsent(db,v);return {...v,ip:`203.0.113.${++addresses}`};}
 function post(v:{ip:string},action:string,body:unknown,headers:Record<string,string>={},target=app){
  return target.request(`${origin}/api/installations/${action}`,{method:'POST',headers:{'content-type':'application/json',...headers},
   body:typeof body==='string'?body:JSON.stringify(body)},{incoming:{socket:{remoteAddress:v.ip}}} as HttpBindings);
@@ -196,4 +196,16 @@ test('every route spends the client address allowance before parsing malformed b
   for(let i=0;i<60;i++)assert.deepEqual(await error(await post(v,action,'{')),[400,'invalid_input']);
   assert.deepEqual(await error(await post(v,action,'{')),[429,'rate_limited']);assert.equal(await jobCount(v),0);
  }
+});
+
+test('submit returns the consent refusal and preserves a retry after withdrawal',async()=>{
+ const v=await venue(),text=jobText();
+ await db.pool.query('UPDATE translation_consents SET withdrawn_at=clock_timestamp() WHERE venue_id=$1',[v.venueId]);
+ assert.deepEqual(await error(await post(v,'translation-submit',v.submit(text))),[403,'translation_consent_required']);
+ assert.equal(await jobCount(v),0);
+ await giveConsent(db,v);
+ const signed=v.submit(text),first=await (await post(v,'translation-submit',signed)).json();
+ await db.pool.query('UPDATE translation_consents SET withdrawn_at=clock_timestamp() WHERE venue_id=$1',[v.venueId]);
+ assert.deepEqual(await (await post(v,'translation-submit',signed)).json(),first);
+ assert.equal(await jobCount(v),1);
 });

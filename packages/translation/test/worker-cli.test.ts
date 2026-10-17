@@ -6,7 +6,7 @@ import {after,afterEach,before,beforeEach,test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createLeaseIssuer,transaction} from '@waitron-cloud/registration';
 import {createJob,jobFingerprint,lockVenue,parseJob,writtenItems} from '../src/index.ts';
-import {connectedVenue,database} from './fixtures.ts';
+import {connectedVenue,database,giveConsent} from './fixtures.ts';
 import {echoFirstPass,emptyReview,isReview,startFakeOpenAi} from './fake-openai.ts';
 let db:Awaited<ReturnType<typeof database>>;
 const origin='https://cloud.example.test',issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
@@ -27,7 +27,7 @@ function command(args:string[],overrides:NodeJS.ProcessEnv={},nodeArgs:string[]=
  return {child,exited,dispose,applicationName,output:()=>({stdout,stderr})};
 }
 async function queue(){
- const v=await connectedVenue(db,issuer,origin);
+ const v=await connectedVenue(db,issuer,origin);await giveConsent(db,v);
  const text=JSON.stringify({version:1,country:'ES',languages:{default:'ca',enabled:['ca','es']},
   items:[{ref:'product:1',kind:'product',family:'product:1',category:'BAR',staffName:'CAFE',existing:{},missing:['ca','es']}],houseStyle:[]});
  return transaction(db.pool,async c=>{await lockVenue(c,v.venueId);
