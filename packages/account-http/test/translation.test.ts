@@ -178,3 +178,22 @@ test('non-string unsigned bodies are refused before spending the installation al
  for(let i=0;i<30;i++)assert.deepEqual(await error(await post(v,'translation-submit',{...signed,body:5})),[401,'invalid_proof']);
  assert.equal((await post(v,'translation-submit',signed)).status,200);assert.equal(await jobCount(v),1);
 });
+
+test('submit, collect and release also spend the shared installation request allowance',async()=>{
+ for(const action of ['translation-submit','translation-collect','translation-release']){
+  const v=await venue(),signed=action==='translation-submit'?v.submit(jobText()):reference(v,action,randomUUID());
+  for(let i=0;i<30;i++){
+   const response=await post(v,action,signed);
+   if(action==='translation-submit')assert.equal(response.status,200);
+   else assert.deepEqual(await error(response),[404,'translation_job_not_found']);
+  }
+  const blocked=await post(v,action,signed);assert.deepEqual(await error(blocked),[429,'rate_limited']);assert(Number(blocked.headers.get('retry-after'))>0);
+ }
+});
+test('every route spends the client address allowance before parsing malformed bodies',async()=>{
+ for(const action of ['translation-submit','translation-status','translation-collect','translation-release']){
+  const v=await venue();
+  for(let i=0;i<60;i++)assert.deepEqual(await error(await post(v,action,'{')),[400,'invalid_input']);
+  assert.deepEqual(await error(await post(v,action,'{')),[429,'rate_limited']);assert.equal(await jobCount(v),0);
+ }
+});
