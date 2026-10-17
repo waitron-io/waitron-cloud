@@ -139,7 +139,7 @@ test('the exact submit request byte limit is accepted by declared and streamed r
   const exact=JSON.stringify({payload:'x',signature:'y',body:'é'.repeat(Math.floor(gap/2))+'x'.repeat(gap%2)});
   assert.equal(Buffer.byteLength(exact),2113536);
   for(const declared of [false,true])for(const extra of ['', 'x']){
-   const body=exact+extra,response=await send(running.port,'/api/installations/translation-submit',body,undefined,declared?{'content-length':String(Buffer.byteLength(body))}:{});
+   const body=exact+extra,response=await send(running.port,'/api/installations/translation-submit',body,undefined,declared?{'content-length':String(Buffer.byteLength(body))}:{'transfer-encoding':'chunked'});
    assert.deepEqual([response.status,JSON.parse(response.body).error],extra?[413,'translation_job_too_large']:[401,'invalid_proof']);
   }
  }finally{await running.close();}
