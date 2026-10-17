@@ -84,7 +84,7 @@ packages/translation/test/*.test.ts, test/fixtures.ts, test/fake-openai.ts
 packages/translation/test/make-submit-vectors.ts, test/submit-vectors.json
 packages/translation/quality/…                 the hand-run quality harness (Tasks 20 and 21)
 packages/registration/migrations/039_translation_jobs.sql
-packages/registration/migrations/040_content_translation_service.sql
+packages/registration/migrations/041_content_translation_service.sql
 packages/registration/test/content-translation-readers.test.ts, test/content-translation-service.test.ts
 packages/account-http/src/translation.ts, src/translation-consent.ts
 packages/account-http/test/translation.test.ts, test/translation-limits.test.ts, test/translation-consent.test.ts,
@@ -3591,14 +3591,14 @@ git commit -s -m "Count only remote access and backups when deciding whether a v
 
 ---
 
-### Task 17: Migration 040 — the fourth service, and the configuration reply's servicesVersion 2
+### Task 17: Migration 041 — the fourth service, and the configuration reply's servicesVersion 2
 
 > **Migration numbers are conditional:** follow the [append-only rule](2026-10-16-translation-collect-pages.md#current-migrations-and-push-policy).
-> Recheck the directory and `migrationNames`; the 040 filenames/counts/indices below must follow
+> Recheck the directory and `migrationNames`; the 041 filenames/counts/indices below must follow
 > the actual next number after Task 2, without changing any landed migration.
 
 **Files:**
-- Create: `packages/registration/migrations/040_content_translation_service.sql`, `packages/registration/test/content-translation-service.test.ts`
+- Create: `packages/registration/migrations/041_content_translation_service.sql`, `packages/registration/test/content-translation-service.test.ts`
 - Modify: `packages/registration/src/migrate.ts`, `src/index.ts:218-219` (registration inserts four rows), `packages/backups/src/replacement.ts:98` (replacement inserts four rows), `packages/registration/src/installations.ts:17,25-27,77,105` (`InstallationView`, `readBody` accepts the version-2 configuration body; `execute` passes it to `view`), and the tests this breaks (Step 4)
 
 **Interfaces:**
@@ -3639,9 +3639,9 @@ test('a new installation has the three original services unconfigured and transl
  assert.deepEqual(await services(),[{service:'content_translation',state:'ready'},{service:'continuous_backup',state:'unconfigured'},
   {service:'remote_access',state:'unconfigured'},{service:'retained_snapshots',state:'unconfigured'}]);
 });
-test("040's backfill gives an installation that lacks translation one ready row, once",async()=>{
+test("041's backfill gives an installation that lacks translation one ready row, once",async()=>{
  await db.pool.query("DELETE FROM installation_services WHERE installation_id=$1 AND service='content_translation'",[venue.installationId]);
- const sql=await readFile(new URL('../migrations/040_content_translation_service.sql',import.meta.url),'utf8');
+ const sql=await readFile(new URL('../migrations/041_content_translation_service.sql',import.meta.url),'utf8');
  await db.pool.query(sql);await db.pool.query(sql);
  assert.deepEqual((await services()).filter(s=>s.service==='content_translation'),[{service:'content_translation',state:'ready'}]);
 });
@@ -3664,7 +3664,7 @@ Run: `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec 
 
 - [ ] **Step 2: Write the migration and the inserts**
 
-`packages/registration/migrations/040_content_translation_service.sql`:
+`packages/registration/migrations/041_content_translation_service.sql`:
 
 ```sql
 INSERT INTO installation_services(installation_id,service,state)
@@ -3672,7 +3672,7 @@ INSERT INTO installation_services(installation_id,service,state)
  ON CONFLICT (installation_id,service) DO NOTHING;
 ```
 
-Append `'040_content_translation_service.sql'` to `migrationNames`.
+Append `'041_content_translation_service.sql'` to `migrationNames`.
 
 `packages/registration/src/index.ts:218-219`: the insert becomes
 
@@ -3702,7 +3702,8 @@ In `execute`, the `report` it reads at `:77` is now `const body=readBody(action,
 
 - [ ] **Step 4: Fix the tests this migration breaks**
 
-- `packages/registration/test/registration.test.ts:79` (39 since Task 2) becomes `assert.equal(migrationNames.length,40);`, and after the `migrationNames[38]` line Task 2 added, add `assert.equal(migrationNames[39],'040_content_translation_service.sql');`.
+- `packages/registration/test/registration.test.ts:79` (40 before Task 17) becomes `assert.equal(migrationNames.length,41);`, and keep the existing `migrationNames[39]` check for `040_translation_result_json.sql`, and add `assert.equal(migrationNames[40],'041_content_translation_service.sql');`.
+- `packages/translation/test/result-storage-upgrade.test.ts` pins 41 migrations, preserves the 040 name/digest checks and adds the 041 name. Its manifest guard accepts 41 and refuses both 40 and 42; all retained-job, interruption, outcome and text assertions stay unchanged.
 - `packages/registration/test/installations.test.ts:95`: `'6'` becomes `'8'` (two installations, four rows each).
 - `packages/backups/test/replacement.test.ts:63`: the line `const states=(await db.pool.query('SELECT * FROM installation_services WHERE installation_id=$1',[result.registration.installationId])).rows;assert.equal(states.length,3);assert(states.every(s=>s.state!=='ready'));` becomes:
 
@@ -3719,7 +3720,7 @@ In `execute`, the `report` it reads at `:77` is now `const body=readBody(action,
 ```
 
   and, in `'populated release37 upgrades concurrently without changing any old row or digest'`, after the `deepEqual` of the two states, add `assert.equal((await f.pool.query("SELECT count(*)::integer AS n FROM installations i WHERE NOT EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=i.id AND s.service='content_translation' AND s.state='ready')")).rows[0].n, 0);`.
-- `packages/registration/test/monitoring-quiet.test.ts:132` copies the current schema's `installation_services` rows into a release-36 schema, whose check refuses `content_translation`. Change the copy line to `for(const table of tables)await client.query('INSERT INTO '+legacy.schema+'.'+table+' SELECT * FROM '+table+(table==='installation_services'?" WHERE service<>'content_translation'":''));` — the test's `migrate(legacy.pool)` then backfills the row through 040.
+- `packages/registration/test/monitoring-quiet.test.ts:132` copies the current schema's `installation_services` rows into a release-36 schema, whose check refuses `content_translation`. Change the copy line to `for(const table of tables)await client.query('INSERT INTO '+legacy.schema+'.'+table+' SELECT * FROM '+table+(table==='installation_services'?" WHERE service<>'content_translation'":''));` — the test's `migrate(legacy.pool)` then backfills the row through 041.
 
 - [ ] **Step 5: Run** the new file, then `test/installations.test.ts`, `test/registration.test.ts`, `test/pairing.test.ts`, `test/monitoring-quiet.test.ts`, `test/content-translation-readers.test.ts` (registration), `packages/backups/test/replacement.test.ts`, `packages/fiscal-allocation/test/schema.test.ts`, and `packages/account-http/test/translation.test.ts` (its `readyForTranslation` call is now a no-op upsert and stays).
 - [ ] **Step 6: Commit**

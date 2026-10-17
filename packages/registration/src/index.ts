@@ -215,8 +215,8 @@ export class RegistrationStore {
           const inserted = await client.query('INSERT INTO installations (id, venue_id, public_key) VALUES ($1, $2, $3) RETURNING *',
             [randomUUID(), venue.id, binding.installationKey]);
           installation = inserted.rows[0];
-          await client.query(`INSERT INTO installation_services (installation_id, service)
-            VALUES ($1, 'remote_access'), ($1, 'continuous_backup'), ($1, 'retained_snapshots')`, [installation.id]);
+          await client.query(`INSERT INTO installation_services (installation_id, service, state)
+            VALUES ($1, 'remote_access', 'unconfigured'), ($1, 'continuous_backup', 'unconfigured'), ($1, 'retained_snapshots', 'unconfigured'), ($1, 'content_translation', 'ready')`, [installation.id]);
         }
         // A competing venue/installation insert may wait past expiry; roll back all writes then.
         await requireUnexpired(client, binding);

@@ -92,7 +92,7 @@ test('owner revocation serializes with renewal, persists and preserves the other
   const security=(await db.pool.query("SELECT * FROM security_audit_events WHERE event_type='installation.revoked'")).rows[0];assert.equal(security.actor_kind,'account');assert.equal(security.actor_id,owner.accountId);assert.equal(security.subject_id,a.installationId);assert.equal(security.source_id,a.installationId);
   await assert.rejects(store.execute('renew',proof),/revoked/);await assert.rejects(config(a),/revoked/);
   assert.equal((await db.pool.query('SELECT count(*) FROM venues')).rows[0].count,'2');
-  assert.equal((await db.pool.query('SELECT count(*) FROM installation_services')).rows[0].count,'6');
+  assert.equal((await db.pool.query('SELECT count(*) FROM installation_services')).rows[0].count,'8');
   assert.ok((await store.execute('renew',request(b))).lease);
   const list=await store.listWithSession(session.token);assert.equal(list.length,2);assert.ok(list.find(i=>i.installationId===a.installationId)?.revokedAt);
   assert.equal(JSON.stringify(list).includes('signature'),false);assert.equal(JSON.stringify(list).includes(a.publicKey),false);

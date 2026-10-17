@@ -352,7 +352,7 @@ not local operator authentication, and no registry call belongs on the sale path
 Owner-approved design; Cloud store, worker and four HTTP routes are implemented, with
 translation off by default. Submit has its separate 2,113,536-byte, 60-second reader
 and admission limit. Current owner consent is enforced at submit and worker lease;
-the account consent API is implemented. The portal control, retention and joint
+the account consent API is implemented. The portal consent control is implemented; retention and joint
 qualification remain open. Keep the operator flag off until those gates pass. The bounded-collect
 prerequisite is documented on 2026-10-16 in the
 [paging amendment](superpowers/plans/2026-10-16-translation-collect-pages.md).
@@ -396,8 +396,7 @@ allowance. Never drop fields, names or corrections, or truncate text, to make a 
 
 ### Seeing the service
 
-The `configuration` reply returns exactly three services today, and Waitron refuses any other
-count. A `configuration` request whose signed body is exactly `{"servicesVersion":2}` receives four
+The default `configuration` reply returns exactly three services for existing callers. A `configuration` request whose signed body is exactly `{"servicesVersion":2}` receives four
 services: the three it receives today and this one:
 
 ```json

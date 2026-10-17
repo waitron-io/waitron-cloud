@@ -40,7 +40,7 @@ test('a partly done or failed job carries a reason from its own list',async()=>{
 });
 test('the fourth service name is accepted and an unknown one is not',async()=>{
  const v=await connectedVenue(db,issuer,origin);
- // An upsert, because from migration 040 on (Task 17) every installation already has this row.
+ // Registration already creates the translation row, so the fixture uses an upsert.
  await db.pool.query(`INSERT INTO installation_services(installation_id,service,state) VALUES($1,'content_translation','ready')
   ON CONFLICT (installation_id,service) DO UPDATE SET state='ready'`,[v.installationId]);
  await assert.rejects(db.pool.query("INSERT INTO installation_services(installation_id,service) VALUES($1,'bogus')",[v.installationId]),refusedBy('installation_services_service_check'));

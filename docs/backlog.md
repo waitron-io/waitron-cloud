@@ -283,7 +283,7 @@ prices and the spending policy. PostgreSQL checks constrain job bounds, reasons,
 per venue and repeat operations. A composite foreign key also binds each job to its
 installation’s own venue. Usage metering accepts four translation quantities with
 per-job replay checks and keeps its existing accounting guards. The service name is allowed
-in the schema; existing installations still receive only their original three service rows.
+in the schema. Task 17 adds its ready row to existing, newly registered and replacement installations.
 Historical receipt-selector fixtures use their saved migration module and directory membership,
 so new migrations still exercise the original omission and refusal assertions. Production receipt
 audits remain unchanged and retain work for the new schema.
@@ -417,7 +417,14 @@ Task 16 keeps translation out of the three-service configuration, account and di
 lists, monitoring targets, incident display and alert delivery. A ready translation row alone
 cannot enable those services. PostgreSQL regressions insert that row explicitly and cover
 schedule refusal, stopped-service incident suppression, queued-mail cancellation and
-operations status. The fourth-service configuration opt-in and automatic rows remain Task 17.
+operations status.
+Task 17 appends migration 041 and creates the ready translation row for new and replacement
+installations. Its backfill preserves existing service rows, configuration, revisions and revocation.
+A configuration request with the exact signed body `{"servicesVersion":2}` receives four services;
+`{}`, renewal, reports, revocation and account lists keep the original three. Retried configuration
+operations replay their original result after a configuration change, while new reads reflect the
+current revision. PostgreSQL and HTTP checks cover exact bytes, invalid versions, lease bindings,
+revocation, replacement and upgrades from an existing schema.
 Keep translation off until retention and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
@@ -429,7 +436,7 @@ and preserves accepted language tags. Store-level sizing and HTTP serialization 
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 17–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 18–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Complete lock-order qualification across worker, release and installation revocation. The
