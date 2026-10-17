@@ -488,7 +488,16 @@ line followed by a misleading cleanup-retry line. The worker now stops that retr
 after a fatal failure; the original exact-output assertions remain. The new subprocess
 case and ordinary cleanup retry/recovery checks cover this ordering. CI exposed the
 same duplicate output without retaining its exact query stages, so the historical
-database timing remains unproved.
+database timing remains unproved. The runtime reviewer later saw this original disconnect
+case fail once among ten two-file runs, but its output filter discarded the assertion diff.
+Twenty driver repeats then pass all 580 cases, including 60 original idle disconnections,
+with complete logs retained. These passes do not explain that uncaptured failure. A real
+PostgreSQL self-termination during cleanup passes three times with the guard and fails
+with the guard deleted. Treat that as qualification of the fatal-then-retry mechanism,
+not proof that every intermittent disconnect failure is resolved. On recurrence, keep the
+complete assertion output, selected backend ids and termination results before changing
+the original check. Active-job failure ordering at direct pool queries remains separately
+unqualified; the reviewed idle scenario leases no job.
 Keep translation off until the remaining runtime and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
