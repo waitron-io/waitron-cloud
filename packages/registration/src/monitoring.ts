@@ -15,7 +15,7 @@ export class MonitorWorker {
   const result=await this.#pool.query(`INSERT INTO venue_monitors(venue_id)
    SELECT i.venue_id FROM installations i JOIN venues v ON v.id=i.venue_id
    WHERE v.environment='test' AND i.revoked_at IS NULL
-    AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=i.id AND s.state<>'unconfigured')
+    AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=i.id AND s.state<>'unconfigured' AND s.service<>'content_translation')
     AND NOT EXISTS(SELECT 1 FROM venue_monitors m WHERE m.venue_id=i.venue_id)
    ORDER BY i.venue_id LIMIT 100 ON CONFLICT DO NOTHING`);return result.rowCount??0;
  }
@@ -31,7 +31,7 @@ export class MonitorWorker {
     return true;
    }
    const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
-   const services=(await client.query("SELECT service FROM installation_services WHERE installation_id=$1 AND state<>'unconfigured'",[installation?.id])).rows.map(r=>r.service);
+   const services=(await client.query("SELECT service FROM installation_services WHERE installation_id=$1 AND state<>'unconfigured' AND service<>'content_translation'",[installation?.id])).rows.map(r=>r.service);
    const active=installation&&installation.environment==='test'&&!installation.revoked_at&&services.length>0;
    const snapshots=active&&services.includes('retained_snapshots');
    const contactSince:Date|null=active?(monitor.contact_since??now):null;
@@ -160,7 +160,7 @@ export class MonitorWorker {
    WHERE v.id=$1 AND m.is_owner AND a.disabled_at IS NULL AND c.email_verified_at IS NOT NULL AND p.enabled
     AND v.environment='test' AND n.revoked_at IS NULL AND n.superseded_by IS NULL
     AND ($4::uuid IS NULL OR EXISTS(SELECT 1 FROM venue_alert_recipients r WHERE r.episode_id=$4 AND r.account_id=a.id))
-    AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured'
+    AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured' AND s.service<>'content_translation'
      AND ($2='disconnected' OR ($2 IN ('snapshot_stale','verification_failed') AND s.service='retained_snapshots')
       OR ($2 IN ('public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale','public_certificate_expiring','staff_certificate_expiring') AND s.service='remote_access'
        AND EXISTS(SELECT 1 FROM remote_placements rp JOIN remote_hostnames h ON h.venue_id=rp.venue_id WHERE rp.installation_id=n.id AND rp.venue_id=v.id

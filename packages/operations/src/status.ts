@@ -57,7 +57,7 @@ export async function operationsStatus(pool:Pool,options:OperationsStatusOptions
   pool.query(`SELECT count(*)::integer AS venues,count(*) FILTER(WHERE m.next_check_at<=clock_timestamp())::integer AS due,
    count(*) FILTER(WHERE m.checked_at IS NULL OR m.checked_at<=clock_timestamp()-$1*interval '1 second')::integer AS unknown,
    min(m.checked_at) AS oldest FROM(SELECT DISTINCT i.venue_id FROM installations i JOIN venues v ON v.id=i.venue_id
-    WHERE v.environment='test' AND i.revoked_at IS NULL AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=i.id AND s.state<>'unconfigured'))targets
+    WHERE v.environment='test' AND i.revoked_at IS NULL AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=i.id AND s.state<>'unconfigured' AND s.service<>'content_translation'))targets
    LEFT JOIN venue_monitors m ON m.venue_id=targets.venue_id`,[evidenceStale]),
   pool.query(`SELECT status,count(*)::integer AS count,
    count(*) FILTER(WHERE status='pending' AND created_at<=clock_timestamp()-$1*interval '1 second'

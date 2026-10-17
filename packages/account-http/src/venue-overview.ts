@@ -14,9 +14,9 @@ export async function venueOverview(pool:Pool,token:string,installations:Install
    (SELECT max(p.captured_at) FROM backup_points p WHERE p.venue_id=v.id AND p.kind='snapshot' AND NOT p.deleting AND p.deleted_at IS NULL) AS latest_snapshot_at,
    (SELECT max(p.captured_at) FROM backup_points p WHERE p.venue_id=v.id AND p.kind='snapshot' AND p.verification='verified' AND NOT p.deleting AND p.deleted_at IS NULL) AS verified_snapshot_at,
    mon.checked_at,COALESCE(mon.checked_at>clock_timestamp()-interval '5 minutes',false) AS monitor_fresh,
-   (v.environment='test' AND n.revoked_at IS NULL AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured')) AS monitor_enabled,
+   (v.environment='test' AND n.revoked_at IS NULL AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured' AND s.service<>'content_translation')) AS monitor_enabled,
    COALESCE((SELECT jsonb_agg(jsonb_build_object('kind',x.kind,'openedAt',x.opened_at,'changedAt',x.changed_at) ORDER BY x.kind) FROM venue_incidents x WHERE x.venue_id=v.id AND x.status='open'
-    AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured'
+    AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured' AND s.service<>'content_translation'
      AND (x.kind='disconnected' OR (x.kind IN ('snapshot_stale','verification_failed') AND s.service='retained_snapshots')
       OR (x.kind IN ('public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale','public_certificate_expiring','staff_certificate_expiring') AND s.service='remote_access'
        AND EXISTS(SELECT 1 FROM remote_placements p JOIN remote_hostnames h ON h.venue_id=p.venue_id WHERE p.installation_id=n.id AND p.venue_id=v.id
