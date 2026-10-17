@@ -404,8 +404,15 @@ before charging, then before and after the database change; expiry during a lock
 wait rolls the change back. PostgreSQL HTTP tests cover that rollback for agreement
 and withdrawal, a session ended during body delivery, strict bodies, owner isolation,
 and machine refusal before agreement and after withdrawal.
-The portal control remains Task 15. Keep translation off until that control,
-retention and joint qualification are complete.
+Task 15 adds the owner-only menu-translation control in each installation's entry
+on `/account`, with draft English and Spanish wording. You can agree, withdraw or
+retry a failed read; an unanswered write keeps the last confirmed choice and asks
+you to retry. Account changes and refused sessions clear that choice, and late
+replies cannot restore it. The browser sends the session's security token on writes
+and validates complete consent replies. Real PostgreSQL/Chromium tests cover
+agreement, persistence, withdrawal after a lost response body and owner-only display
+in both languages, themes and phone/desktop widths. The wording awaits the owner.
+Keep translation off until retention and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies
@@ -416,7 +423,7 @@ and preserves accepted language tags. Store-level sizing and HTTP serialization 
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 15–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 16–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Complete lock-order qualification across worker, release and installation revocation. The

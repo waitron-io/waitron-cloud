@@ -114,3 +114,38 @@ test('authenticator responses use exact unions and matching status codes; manage
   value={status:'changed',active:false};assert.equal((await accountRequest('/authenticator/remove',{})).ok,true);
   status=204;assert.equal((await accountRequest('/authenticator/cancel',{pendingToken:token})).ok,true);
 });
+
+test('translation consent accepts complete venue choices and refuses malformed or contradictory replies',async t=>{
+ const venueId='12345678-1234-4234-8234-123456789abc';
+ const choice={venueId,consented:true,consentedAt:'2026-10-14T10:00:00.000Z'};
+ let value:unknown={consents:[choice]},status=200;
+ t.mock.method(globalThis,'fetch',async()=>Response.json(value,{status}));
+ assert.deepEqual(await accountRequest('/translation-consent'),{ok:true,value:{consents:[choice]}});
+ for(const valid of [{consents:[]},{consents:[{venueId,consented:false,consentedAt:null}]}]){
+  value=valid;assert.equal((await accountRequest('/translation-consent')).ok,true);
+ }
+ for(const invalid of [null,{},[],{consents:{}},{consents:[null]},
+  {consents:[{...choice,venueId:'bad'}]},{consents:[{...choice,consented:'yes'}]},
+  {consents:[{...choice,consentedAt:null}]},{consents:[{...choice,consentedAt:'bad'}]},
+  {consents:[{...choice,consented:false}]},{consents:[choice,choice]}]){
+  value=invalid;assert.deepEqual(await accountRequest('/translation-consent'),{ok:false,status:503,code:'unexpected_response',retryAfterMs:0});
+ }
+ value={consents:[choice]};status=202;assert.equal((await accountRequest('/translation-consent')).ok,false);
+});
+
+test('translation consent writes carry the unique browser token and never retry',async t=>{
+ const priorLocation=Object.getOwnPropertyDescriptor(globalThis,'location'),priorDocument=Object.getOwnPropertyDescriptor(globalThis,'document');
+ const document={cookie:'__Host-cloud_csrf=browser-proof'};
+ Object.defineProperty(globalThis,'location',{configurable:true,value:{protocol:'https:'}});
+ Object.defineProperty(globalThis,'document',{configurable:true,value:document});
+ t.after(()=>{for(const [key,prior] of [['location',priorLocation],['document',priorDocument]] as const){if(prior)Object.defineProperty(globalThis,key,prior);else Reflect.deleteProperty(globalThis,key);}});
+ let options:RequestInit|undefined,calls=0;
+ t.mock.method(globalThis,'fetch',async(_url:unknown,init?:RequestInit)=>{calls++;options=init;return Response.json({consents:[]});});
+ const body={venueId:'12345678-1234-4234-8234-123456789abc',choice:'agree',consentVersion:'providers-2026-10-14'};
+ await accountRequest('/translation-consent',body);
+ assert.equal((options?.headers as Record<string,string>)['X-CSRF-Token'],'browser-proof');
+ assert.equal(options?.method,'POST');assert.equal(options?.body,JSON.stringify(body));assert.equal(options?.credentials,'same-origin');assert.equal(calls,1);
+ document.cookie='__Host-cloud_csrf=one; __Host-cloud_csrf=two';await accountRequest('/translation-consent',body);
+ assert.equal((options?.headers as Record<string,string>)['X-CSRF-Token'],'');
+ await accountRequest('/translation-consent');assert.equal((options?.headers as Record<string,string>)['X-CSRF-Token'],undefined);assert.equal(options?.method,'GET');
+});

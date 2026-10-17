@@ -89,6 +89,7 @@ test('an expired session explains the sign-in redirect in both languages', async
         }
         if (path.endsWith('/sessions')) return route.fulfill({json: {sessions: []}});
         if (path.endsWith('/passkeys')) return route.fulfill({json: {passkeys: []}});
+        if (path.endsWith('/translation-consent')) return route.fulfill({json:{consents:[]}});
         if (path.endsWith('/alerts')) return route.fulfill({json: {enabled: false, locale}});
         if (path.endsWith('/installations')) return route.fulfill({json: {installations: []}});
         return route.continue();
@@ -126,6 +127,7 @@ test('logout failures remain visible until a successful retry confirms sign-out'
     await page.route('**/api/account/session/activity',route=>route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+600_000).toISOString()}}));
     await page.route('**/api/account/sessions',route=>route.fulfill({json:{sessions:[{id:'12345678-1234-4234-8234-123456789abc',createdAt:'2026-01-01T00:00:00.000Z',lastUsedAt:'2026-01-01T00:01:00.000Z',expiresAt:'2027-01-01T00:00:00.000Z',current:true}]}}));
     await page.route('**/api/account/passkeys',route=>route.fulfill({json:{passkeys:[]}}));
+    await page.route('**/api/account/translation-consent',route=>route.fulfill({json:{consents:[]}}));
     await page.route('**/api/account/alerts',route=>route.fulfill({json:{enabled:false,locale:'en'}}));
     await page.route('**/api/account/installations',route=>route.fulfill({json:{installations:[]}}));
     await page.route('**/api/account/logout',route=>{attempts++;return route.fulfill(attempts===1?{status:503,json:{error:'temporarily_unavailable'}}:{status:204});});

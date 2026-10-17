@@ -2,6 +2,7 @@ import {FiscalAllocationController} from './fiscal-allocation-controller.ts';
 import {AuthenticatorController} from './authenticator-controller.ts';
 import {RecoveryController} from './recovery-controller.ts';
 import {RemoteController} from './remote-controller.ts';
+import {TranslationConsentController} from './translation-consent-controller.ts';
 import {AlertController} from './alert-controller.ts';
 import {BackupController} from './backup-controller.ts';
 import {InstallationController} from './installation-controller.ts';
@@ -40,6 +41,7 @@ export class PortalApp {
   fiscal: FiscalAllocationController;
   remote: RemoteController;
   alerts: AlertController;
+  translationConsent: TranslationConsentController;
   passkeys: PasskeyController;
   security: AccountSecurityController;
   authenticator: AuthenticatorController;
@@ -59,6 +61,7 @@ export class PortalApp {
     this.security = new AccountSecurityController(() => this.draw(), () => {void this.session.check();});
     void this.passkeys.checkSupport();
     this.alerts = new AlertController(() => this.draw());
+    this.translationConsent = new TranslationConsentController(() => this.draw());
     this.usage = new UsageController(() => this.draw());
     this.diagnostics = new DiagnosticController(() => this.draw());
     this.remote = new RemoteController(() => this.draw());
@@ -84,7 +87,7 @@ export class PortalApp {
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (['/account','/connect','/recover','/fiscal-allocations'].includes(this.path)) void this.session.activity(event); });
     document.addEventListener('pointerdown', event => { if (['/account','/connect','/recover','/fiscal-allocations'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.fiscal.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.fiscal.account(undefined); this.remote.account(undefined); this.alerts.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.fiscal.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.fiscal.account(undefined); this.remote.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -105,6 +108,8 @@ export class PortalApp {
     this.recovery.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.alerts.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.alerts.loaded) void this.alerts.load();
+    this.translationConsent.account(state.kind === 'authenticated' ? state.accountId : undefined);
+    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.translationConsent.loaded) void this.translationConsent.load();
     this.remote.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.backups.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.installations.account(state.kind === 'authenticated' ? state.accountId : undefined);
@@ -130,7 +135,7 @@ export class PortalApp {
     if (this.path === '/fiscal-allocations') return Math.max(this.fiscal.waiting,this.installations.waiting,Math.max(0,Math.ceil((this.session.retryAt-Date.now())/1000)));
     if (this.path === '/recover') return Math.max(this.recovery.waiting,this.backups.waiting,this.installations.waiting,Math.max(0,Math.ceil((this.session.retryAt-Date.now())/1000)));
     if (this.path === '/connect') return Math.max(this.pairing.waiting, Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)));
-    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt,this.alerts.retryAt,this.remote.retryAt,this.usage.retryAt,this.diagnostics.retryAt,this.authenticator.retryAt) : Math.max(this.cooldownOperation === this.operation ? this.cooldownUntil : 0, this.path === '/login' ? this.authenticator.retryAt : 0);
+    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt,this.alerts.retryAt,this.translationConsent.retryAt,this.remote.retryAt,this.usage.retryAt,this.diagnostics.retryAt,this.authenticator.retryAt) : Math.max(this.cooldownOperation === this.operation ? this.cooldownUntil : 0, this.path === '/login' ? this.authenticator.retryAt : 0);
     return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
   }
   draw() {
