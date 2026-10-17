@@ -865,8 +865,10 @@ notifications separately.
   remain available. Ordinary deployment permissions and retention stay unchanged.
   The [backup guide](local-backups.md#exercise-test-free-and-paid-plans) describes
   these checks and their lock order. Real PostgreSQL barriers cover provider waits,
-  pairing, multiple installations, replacement and rollback. No original test
-  assertion or fiscal policy changed.
+  pairing, multiple installations, replacement and rollback. Keep organisation
+  writes in the setter; two shared policy readers that both update their organisation
+  can still deadlock while upgrading locks. No current service caller does that.
+  No original test assertion or fiscal policy changed.
   Deployment enforcement is still off. Five remaining implementation slices,
   actual direct-storage withdrawal/fresh writers, gateway filtering, LAN deployment,
   two-organisation acceptance and measured headroom remain open. The existing

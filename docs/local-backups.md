@@ -47,7 +47,9 @@ and `ReplacementStore` default to ordinary mode; a backup worker uses its inject
 catalogue's mode. The lock order is request/session and membership first where needed,
 then organisation policy, installations in UUID order and existing service/location
 locks. The plan setter takes no account locks. Its policy lock allows foreign-key
-checks to complete while still fencing policy readers.
+checks to complete while still fencing policy readers. Keep organisation writes in
+the setter: two shared policy readers that both try to update that organisation
+can deadlock while upgrading their locks.
 
 ## Run the proof
 
