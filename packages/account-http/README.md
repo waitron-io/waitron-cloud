@@ -481,6 +481,32 @@ per-account, per-minute allowance and do not renew passive sessions. Venue overv
 responses include bounded monitoring evidence for your current organisation memberships.
 See [local monitoring](../../docs/local-monitoring.md) for thresholds and delivery rules.
 
+## Translation consent
+
+Use `GET /api/account/translation-consent` to list the consent state of every venue
+you own, including venues without an installation. `POST` records your choice:
+
+```json
+{"venueId":"11111111-1111-4111-8111-111111111111","choice":"agree","consentVersion":"providers-2026-10-14"}
+```
+
+Use your venue's id. To withdraw, send the same id with `"choice":"withdraw"` and
+omit `consentVersion`. Both methods return a `consents` array with each venue's
+`venueId`, `consented` and `consentedAt`. Withdrawal returns `false` and `null` for
+the last two fields and preserves the old
+agreement in history. Only a current, enabled, email-verified owner can change it.
+Unknown fields, an old provider version or a version attached to withdrawal return
+400 `invalid_input`; another organisation's venue returns 403 `forbidden`.
+
+Writes need the exact portal Origin and your live session's CSRF token. Reads need
+only the session cookie. Reads and writes share 30 requests per minute per account,
+across client addresses, and never renew passive activity. The session is checked
+before charging and before and after the database change, so expiry during a lock
+wait rolls the change back. Bodies retain the ordinary 16 KiB, five-second reader.
+You can manage consent while the machine routes are off; doing so does not enable
+them. The portal control remains to be built. See the
+[request and reply example](../../docs/waitron-integration-contract.md#consent).
+
 ## Translation machine routes
 
 The four POST routes under `/api/installations/translation-` are `submit`, `status`,
@@ -491,7 +517,7 @@ for request fields, cursor paging and refusals.
 
 Translation is off by default, returning 503 on all four routes. The account command
 accepts only `CLOUD_TRANSLATION=0` or `1`; enabling requires
-`CLOUD_INSTALLATION_ISSUER_KEY`. Keep it off until consent, retention and joint
+`CLOUD_INSTALLATION_ISSUER_KEY`. Keep it off until the portal consent control, retention and joint
 qualification are complete. Submit accepts up to 2,113,536 UTF-8 request bytes within
 60 seconds, so an escaped 1 MiB job fits inside its signed envelope. Status, collect
 and release keep 16 KiB and five seconds. Submit has four simultaneous places per
