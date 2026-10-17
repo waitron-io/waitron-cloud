@@ -5,3 +5,5 @@ export {collectJob,createJob,findSubmitted,lockVenue,monthSpend,readJob,releaseJ
 export {maxCollectBytes,type CollectPage} from './collect-page.ts';
 export {batchTarget,planBatches} from './batching.ts';
 export {parseJob,translationKinds,writtenItems,type HouseStyleName,type JobItem,type ParsedJob,type TranslationKind} from './job-body.ts';
+export {batchIds,firstPassInput,firstPassInstructions,reviewInput,reviewInstructions} from './prompt.ts';
+export {checkFirstPass,extractJson,mergeReview,ReplyError} from './reply.ts';
