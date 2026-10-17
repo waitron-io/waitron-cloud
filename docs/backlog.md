@@ -855,19 +855,48 @@ notifications separately.
   Real PostgreSQL checks cover concurrent updates, rollback and separate organisations;
   paid status leaves the disabled fiscal API unavailable. See the
   [operator commands](local-deployment.md#inspect-the-test-organisation-plan).
-  Service enforcement is still dormant. Ordinary deployment permissions and retention
-  stay unchanged. The six remaining implementation slices, deployment,
+  The opt-in backup boundary now checks paid permission before provisioning,
+  capture/publication, rotation, stream authority, recovery reads and replacement
+  completion. Plan changes advance installation revisions atomically; downgrades
+  clear paid setup and cached machine replies use current configuration. Explicit
+  reprovisioning restores an existing location/stream binding without discarding
+  objects or key versions. Test-mode expiry pauses while free, and admitted expiry
+  holds policy through deletion. The backup worker CLI validates and forwards the
+  test plan flag; ordinary completed replacement replies retain their original
+  authority rules. Metadata/status/close and admitted verification
+  remain available. Ordinary deployment permissions and retention stay unchanged.
+  The [backup guide](local-backups.md#exercise-test-free-and-paid-plans) describes
+  these checks and their lock order. Real PostgreSQL barriers cover provider waits,
+  pairing, multiple installations, replacement and rollback. Keep organisation
+  writes in the setter; two shared policy readers that both update their organisation
+  can still deadlock while upgrading locks. No current service caller does that.
+  CI also exposed an enabled Sign out button whose handler refused clicks while
+  authenticator startup was pending. The three Sign out views now share the
+  handler's existing pending-work gate. A held-response browser check covers both
+  languages, themes and screen sizes without changing the original assertions or
+  three-second waits. No fiscal policy changed.
+  Deployment enforcement is still off. Five remaining implementation slices,
+  actual direct-storage withdrawal/fresh writers, gateway filtering, LAN deployment,
   two-organisation acceptance and measured headroom remain open. The existing
-  Waitron venue is quarantined; use a separate disposable Waitron test venue for
-  acceptance and leave its running containers and data untouched. Keep address
-  providers disabled and the existing translation release gates in place. A free
-  plan permits a service only after that service's independent prerequisites pass.
-  Before adding service callers, audit policy locks alongside existing transaction
-  locks. The setter's row lock currently also waits for transactions adding an
-  organisation reference. Two transactions that both read policy and then update
-  that same organisation can deadlock; current service code does not do this.
-  Preserve the shared policy fence when qualifying a weaker setter lock, and keep
-  organisation writes in the setter rather than upgrading a policy reader's lock.
+  Waitron venue is quarantined; use a separate disposable Waitron test venue and
+  leave its running containers and data untouched. Keep address providers disabled
+  and the existing translation release gates in place. A free plan permits a
+  service only after that service's independent prerequisites pass.
+- **Local registration run stalls after earlier failures.** In the test-plan
+  review checkout at `cc99eef378bd9db2716a2325cd07fbe491ab06c9`,
+  `node scripts/test-postgres.mjs exec pnpm --dir packages/registration test`
+  emitted failures and left its sole `relay-control.test.ts` child alive for more
+  than nine minutes despite the 30-second test timeout. The driver stopped that
+  recorded child. An isolated run of the same command on landed base
+  `f56b4c8595ed3cb81d0931352c0bac2880648e18` reproduces PostgreSQL
+  `out of shared memory` within seven seconds; it was stopped after that observed
+  failure. This proves a baseline resource failure, but not the cause of the
+  nine-minute child stall. Neither interrupted run is a pass.
+  The review's default-concurrency account suite also emitted failures. Complete
+  registration/account suites pass all 679/382 tests with two file workers on
+  the corrected branch. Capture the full output of both default-concurrency commands,
+  without piping it through `head`, and diagnose failure cleanup and resource
+  contention. Preserve every assertion and deadline; do not treat a rerun as a fix.
 - **Operating cost.** The [cost-model design](superpowers/specs/2026-10-14-cloud-cost-model-design.md)
   and [implementation plan](superpowers/plans/2026-10-14-cloud-cost-model.md) define
   how you can compare the AWS platform cost with no venues and the additional cost

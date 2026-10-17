@@ -14,7 +14,7 @@ export async function captureResponse(c:Context,options:{captures?:BackupCapture
  try{return c.json(await options.captures.execute(action,envelope));}
  catch(error){
   const code=error instanceof Error?error.message:'';
-  const status:Record<string,400|403|409|410>={'backup.invalid_metadata':400,'backup.object_mismatch':409,'backup.conflict':409,'backup.capture_expired':410,'backup.revoked':403,'backup.local_integration_only':403};
+  const status:Record<string,400|403|409|410>={'backup.invalid_metadata':400,'backup.object_mismatch':409,'backup.conflict':409,'backup.capture_expired':410,'backup.permission_denied':403,'backup.revoked':403,'backup.local_integration_only':403};
   if(status[code])throw new AccountHttpError(status[code],code.slice(7));throw error;
  }
 }

@@ -1,7 +1,7 @@
 import {retentionExpirySql} from './retention.ts';
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { transaction } from "@waitron-cloud/registration";
+import { readVenuePlan, type PlanMode, transaction } from "@waitron-cloud/registration";
 import { BackupKeyVault, type BackupKeys } from "./keys.ts";
 import {
   validateLocation,
@@ -65,6 +65,10 @@ export const uuid = (v: string) =>
 export function backupFail(code: string): never {
   throw new Error("backup." + code);
 }
+export async function backupPlan(client: PoolClient, venueId: string, mode: PlanMode): Promise<void> {
+  try { if (await readVenuePlan(client, venueId, mode) !== 'paid') backupFail('permission_denied'); }
+  catch (error) { if (error instanceof Error && error.message === 'permission_denied') backupFail('permission_denied'); throw error; }
+}
 export async function lockVenue(client: PoolClient, id: string) {
   const row = (
     await client.query(
@@ -99,8 +103,11 @@ export function location(row: {
 }): StorageLocation {
   return { endpoint: row.endpoint, bucket: row.bucket, region: row.region };
 }
-async function active(client: PoolClient, id: string) {
+async function active(client: PoolClient, id: string, mode: PlanMode) {
   if (!uuid(id)) backupFail("unavailable");
+  const initial=(await client.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0];
+  if(!initial)backupFail('unavailable');
+  await backupPlan(client,initial.venue_id,mode);
   const row = (
     await client.query(
       "SELECT i.*,v.environment FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1 FOR UPDATE OF i",
@@ -201,10 +208,12 @@ function sameMetadata(p: BackupPoint, m: PointMetadata) {
 }
 /** Trusted local control-plane API. There is no unauthenticated customer provisioning endpoint. */
 export class BackupCatalogue {
+  readonly #planMode: PlanMode;
   readonly #pool: Pool;
   readonly #vault: BackupKeyVault;
   readonly #objects: ObjectFactory;
-  constructor(pool: Pool, vault: BackupKeyVault, objects: ObjectFactory) {
+  constructor(pool: Pool, vault: BackupKeyVault, objects: ObjectFactory, planMode: PlanMode = 'existing') {
+    this.#planMode = planMode;
     this.#pool = pool;
     this.#vault = vault;
     this.#objects = objects;
@@ -212,7 +221,7 @@ export class BackupCatalogue {
   async provision(installationId: string, l: StorageLocation) {
     validateLocation(l);
     return transaction(this.#pool, async (client) => {
-      const install = await active(client, installationId),
+      const install = await active(client, installationId, this.#planMode),
         prior = (
           await client.query(
             "SELECT * FROM backup_locations WHERE venue_id=$1",
@@ -225,6 +234,11 @@ export class BackupCatalogue {
           prior.installation_id !== installationId
         )
           backupFail("conflict");
+        const setup=(await client.query("SELECT state FROM installation_services WHERE installation_id=$1 AND service='retained_snapshots'",[installationId])).rows[0];
+        if(this.#planMode==='test-free-paid' && setup?.state==='unconfigured') {
+          await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='retained_snapshots'",[installationId,{version:1,provider:'local-s3',bucket:l.bucket}]);
+          await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[installationId]);
+        }
         return;
       }
       await client.query(
@@ -254,7 +268,7 @@ export class BackupCatalogue {
   }
   async rotate(installationId: string) {
     return transaction(this.#pool, async (client) => {
-      const install = await active(client, installationId),
+      const install = await active(client, installationId, this.#planMode),
         l = await lockVenue(client, install.venue_id),
         version = l.active_key_version + 1;
       await client.query(
@@ -275,7 +289,7 @@ export class BackupCatalogue {
   async reserveCapture(installationId: string, id: string, fence?: MutationFence) {
     if (!uuid(id)) backupFail("conflict");
     return transaction(this.#pool, async (client) => {
-      const install = await active(client, installationId),
+      const install = await active(client, installationId, this.#planMode),
         l = await lockVenue(client, install.venue_id);
       await fence?.(client);
       await client.query(
@@ -312,7 +326,7 @@ export class BackupCatalogue {
     if (!uuid(id)) backupFail("unavailable");
     validateMetadata(m);
     const published = await transaction(this.#pool, async (client) => {
-      const install = await active(client, installationId),
+      const install = await active(client, installationId, this.#planMode),
         l = await lockVenue(client, install.venue_id),
         capture = (
           await client.query(
@@ -449,6 +463,7 @@ export class BackupCatalogue {
     if (!uuid(venueId) || !Number.isFinite(now.getTime()))
       backupFail("unavailable");
     const selected = await transaction(this.#pool, async (client) => {
+      if (await readVenuePlan(client,venueId,this.#planMode) !== 'paid') return null;
       const l = await lockVenue(client, venueId);
       await fence?.(client);
       await expireRecoveries(client, venueId);
@@ -472,6 +487,17 @@ export class BackupCatalogue {
       };
     });
     if (!selected) return null;
+    if(this.#planMode==='test-free-paid') {
+      return transaction(this.#pool,async client=>{
+        if(await readVenuePlan(client,venueId,this.#planMode)!=='paid')return null;
+        await lockVenue(client,venueId);await fence?.(client);
+        // Keep policy through deletion so a committed downgrade cannot be followed by expiry.
+        await this.#objects(selected.location).remove(selected.key);
+        await fence?.(client);
+        await client.query('UPDATE backup_points SET deleted_at=COALESCE(deleted_at,clock_timestamp()) WHERE id=$1 AND deleting',[selected.id]);
+        return selected.id;
+      });
+    }
     await this.#objects(selected.location).remove(selected.key);
     await transaction(this.#pool, async (client) => {
       await lockVenue(client, venueId);

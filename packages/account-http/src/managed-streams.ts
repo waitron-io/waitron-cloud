@@ -1,6 +1,6 @@
 import type {Context} from 'hono';
 import type {Pool,PoolClient} from 'pg';
-import {createLeaseTrust,InstallationError,InstallationStore,readMachineClaims,verifyLease,verifyMachine,type LeaseIssuer} from '@waitron-cloud/registration';
+import {createLeaseTrust,InstallationError,InstallationStore,readMachineClaims,verifyLease,verifyMachine,type LeaseIssuer,type PlanMode} from '@waitron-cloud/registration';
 import {ManagedStreams,type ManagedStreamInput,type ManagedStreamAuthority} from '@waitron-cloud/backups/managed-streams';
 import type {BackupKeyVault} from '@waitron-cloud/backups/keys';
 import {readAccountBody} from './request.ts';
@@ -21,7 +21,7 @@ function body(action:StreamAction,text:string):{revision:number;input:ManagedStr
 async function revision(pool:Pool,installationId:string){const row=(await pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[installationId])).rows[0];if(!row)throw new InstallationError('unavailable');return Number(row.configuration_revision);}
 export class ManagedStreamMachines{
  readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;readonly #streams:ManagedStreams;
- constructor(pool:Pool,issuer:LeaseIssuer,origin:string,vault:BackupKeyVault,authority:ManagedStreamAuthority,trusted=createLeaseTrust(issuer)){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;this.#streams=new ManagedStreams(pool,vault,authority);}
+ constructor(pool:Pool,issuer:LeaseIssuer,origin:string,vault:BackupKeyVault,authority:ManagedStreamAuthority,trusted=createLeaseTrust(issuer),planMode:PlanMode='existing'){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;this.#streams=new ManagedStreams(pool,vault,authority,planMode);}
  async authenticate(action:StreamAction,envelope:unknown){return new InstallationStore(this.#pool,this.#issuer,this.#origin,this.#trusted).authenticate(action,envelope);}
  async execute(action:StreamAction,envelope:unknown){
   const routing=readMachineClaims(envelope),parsed=body(action,routing.body);
@@ -48,5 +48,5 @@ export async function managedStreamResponse(c:Context,options:{streams?:ManagedS
  const envelope=await readAccountBody(c.req.raw,['payload','signature']),action=c.req.path.slice('/api/installations/'.length) as StreamAction;
  const claims=await options.streams.authenticate(action,envelope);await options.consume([{scope:'installation-key',subject:claims.installationId,limit:30,windowSeconds:60}]);
  try{return c.json(await options.streams.execute(action,envelope));}
- catch(error){const code=error instanceof Error?error.message:'';const status:Record<string,400|403|409>={'backup.invalid_stream_configuration':400,'backup.invalid_stream_pointer':409,'backup.conflict':409,'backup.revoked':403,'backup.local_integration_only':403};if(status[code])throw new AccountHttpError(status[code],code.slice(7));throw error;}
+ catch(error){const code=error instanceof Error?error.message:'';const status:Record<string,400|403|409>={'backup.invalid_stream_configuration':400,'backup.invalid_stream_pointer':409,'backup.conflict':409,'backup.permission_denied':403,'backup.revoked':403,'backup.local_integration_only':403};if(status[code])throw new AccountHttpError(status[code],code.slice(7));throw error;}
 }

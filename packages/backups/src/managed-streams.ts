@@ -1,7 +1,7 @@
 import { createPublicKey, verify } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { transaction } from "@waitron-cloud/registration";
-import { backupFail, location, pointKeys, uuid } from "./catalogue.ts";
+import { type PlanMode, transaction } from "@waitron-cloud/registration";
+import { backupPlan, backupFail, location, pointKeys, uuid } from "./catalogue.ts";
 import type { BackupKeyVault } from "./keys.ts";
 import type { StorageCredentials, StorageLocation } from "./storage.ts";
 
@@ -181,8 +181,10 @@ function decodeRow(row: StreamRow): ManagedStreamRecovery {
   };
 }
 
-async function lockedInstallation(client: PoolClient, installationId: string) {
+async function lockedInstallation(client: PoolClient, installationId: string, mode: PlanMode) {
   if (!uuid(installationId)) backupFail("unavailable");
+  const initial=(await client.query('SELECT venue_id FROM installations WHERE id=$1',[installationId])).rows[0];if(!initial)backupFail('unavailable');
+  await backupPlan(client,initial.venue_id,mode);
   const row = (
     await client.query(
       `SELECT i.*,v.environment,l.endpoint,l.bucket,l.region,l.active_key_version
@@ -285,11 +287,13 @@ function pointer(bytes: Buffer, expected: StreamRow): PointerBody & { signature:
 
 /** Cloud's internal managed-stream boundary. Provider references are persisted; credentials are not. */
 export class ManagedStreams {
+  readonly #planMode: PlanMode;
   readonly #pool: Pool;
   readonly #vault: BackupKeyVault;
   readonly #authority: ManagedStreamAuthority;
 
-  constructor(pool: Pool, vault: BackupKeyVault, authority: ManagedStreamAuthority) {
+  constructor(pool: Pool, vault: BackupKeyVault, authority: ManagedStreamAuthority, planMode: PlanMode = 'existing') {
+    this.#planMode = planMode;
     this.#pool = pool;
     this.#vault = vault;
     this.#authority = authority;
@@ -304,12 +308,14 @@ export class ManagedStreams {
     if (!Number.isSafeInteger(revision) || revision < 0) backupFail("invalid_stream_configuration");
     validInput(input);
     const initial = await transaction(this.#pool, async (client) => {
-      const install = await lockedInstallation(client, installationId);
+      const install = await lockedInstallation(client, installationId, this.#planMode);
       await fence?.(client);
       const existing = await streamRow(client, install.venue_id);
-      if (existing && !sameInput(existing, revision, input)) backupFail("conflict");
+      const cleared=this.#planMode==='test-free-paid' && existing && install.configuration_revision===revision
+        && (await client.query("SELECT state FROM installation_services WHERE installation_id=$1 AND service='continuous_backup'",[installationId])).rows[0]?.state==='unconfigured';
+      if (existing && !sameInput(existing, revision, input) && !(cleared && existing.local_venue_id===input.localVenueId && existing.source_node_id===input.sourceNodeId && existing.pointer_signer_public_key===input.pointerSignerPublicKey)) backupFail("conflict");
       if (!existing && install.configuration_revision !== revision) backupFail("conflict");
-      return { install, existing };
+      return { install, existing, cleared };
     });
     const prefix = `streams/${initial.install.venue_id}/`;
     const provision = await this.#authority.provision({
@@ -319,10 +325,16 @@ export class ManagedStreams {
     });
     validProvision(provision);
     return transaction(this.#pool, async (client) => {
-      const install = await lockedInstallation(client, installationId);
+      const install = await lockedInstallation(client, installationId, this.#planMode);
       await fence?.(client);
       let row = await streamRow(client, install.venue_id, true);
-      if (row) {
+      if (row && initial.cleared) {
+        if(install.configuration_revision!==revision || row.configuration_revision!==initial.existing!.configuration_revision)backupFail('conflict');
+        row=(await client.query<StreamRow>(`UPDATE backup_managed_streams SET requested_revision=$2,configuration_revision=$2+1,writer_reference=$3,reader_reference=$4
+          WHERE venue_id=$1 RETURNING *,$5::text AS endpoint,$6::text AS bucket,$7::text AS region`,[install.venue_id,revision,provision.writerReference,provision.readerReference,install.endpoint,install.bucket,install.region])).rows[0]!;
+        await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='continuous_backup'",[installationId,{version:1,managed:true}]);
+        await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[installationId]);
+      } else if (row) {
         if (
           !sameInput(row, revision, input) ||
           row.writer_reference !== provision.writerReference ||
@@ -376,7 +388,7 @@ export class ManagedStreams {
   async observe(installationId: string, revision: number, fence?: ManagedStreamFence): Promise<ManagedStreamRecovery> {
     if (!Number.isSafeInteger(revision) || revision < 0) backupFail("conflict");
     const initial = await transaction(this.#pool, async (client) => {
-      const install = await lockedInstallation(client, installationId);
+      const install = await lockedInstallation(client, installationId, this.#planMode);
       await fence?.(client);
       const row = await streamRow(client, install.venue_id);
       if (!row || row.installation_id !== installationId || row.configuration_revision !== revision)
@@ -391,7 +403,7 @@ export class ManagedStreams {
     );
     const observed = pointer(bytes, initial);
     return transaction(this.#pool, async (client) => {
-      const install = await lockedInstallation(client, installationId);
+      const install = await lockedInstallation(client, installationId, this.#planMode);
       await fence?.(client);
       const row = await streamRow(client, install.venue_id, true);
       if (
@@ -425,6 +437,7 @@ export class ManagedStreams {
   async recovery(venueId: string, revision: number): Promise<ManagedStreamRecovery | undefined> {
     if (!uuid(venueId) || !Number.isSafeInteger(revision) || revision < 0) return;
     return transaction(this.#pool, async (client) => {
+      await backupPlan(client,venueId,this.#planMode);
       const row = await streamRow(client, venueId);
       if (!row || row.configuration_revision !== revision) return;
       return decodeRow(row);

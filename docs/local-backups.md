@@ -5,6 +5,53 @@ databases, retain encrypted snapshots and restore both sources through Waitron's
 recovery code.
 It creates no AWS resources and requires no live customer credentials.
 
+## Exercise test free and paid plans
+
+The opt-in test plan boundary rejects new backup provisioning, capture reservation,
+publication, key rotation, stream configuration/observation and recovery access for a
+free organisation. Ownership and signed machine proofs still apply to paid accounts.
+A refused machine backup request returns `403` with `{"error":"permission_denied"}`;
+it creates no storage grant or recovery key. Ordinary deployments retain their existing
+permissions. Keep the deployment flag off until the remaining gateway, direct-storage
+and integration work in the [test Cloud plan](superpowers/plans/2026-10-17-test-cloud-free-paid.md) is complete.
+
+Use the [operator command](local-deployment.md#inspect-the-test-organisation-plan)
+to switch a test organisation between free and paid. A real change advances each
+installation's configuration revision once. Downgrading clears backup and remote setup,
+so replaying an old machine response cannot recover its paid configuration. You can
+still inspect stored snapshot metadata, check a recovery's status and close it. New
+recovery reads and replacement completion require paid permission, including retries.
+
+Stored snapshots and key versions survive a downgrade. In the opted-in test mode,
+retained-snapshot expiry pauses while free; verification of admitted snapshots and
+abandoned-upload cleanup can finish. This preserves test data without choosing a
+customer cancellation or retention policy. An expiry operation already deleting an
+object holds policy until it finishes, so the downgrade cannot commit ahead of it.
+
+After upgrading, explicitly provision the existing backup location again, then configure
+the managed stream with the current installation revision and its original source
+binding. Those operations restore cleared setup while preserving snapshots and keys.
+Paid status alone creates no provider resources and does not withdraw credentials that
+storage has already accepted. Direct-storage withdrawal and fresh writer identities
+remain a separate test-deployment step.
+
+To run the database and signed-request permission checks locally:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test --test-timeout=30000 test/plan-permissions.test.ts
+```
+
+Trusted callers pass `planMode: 'test-free-paid'` explicitly to the account app and the
+matching stores. `BackupCatalogue`, `ManagedStreams`, `BackupRecovery`, `RecoveryRequests`
+and `ReplacementStore` default to ordinary mode. The backup worker CLI validates
+`CLOUD_TEST_SERVICE_PLANS` at startup and passes its mode to the catalogue, including
+retention work; an injected worker uses its catalogue's mode. The lock order is request/session and membership first where needed,
+then organisation policy, installations in UUID order and existing service/location
+locks. The plan setter takes no account locks. Its policy lock allows foreign-key
+checks to complete while still fencing policy readers. Keep organisation writes in
+the setter: two shared policy readers that both try to update that organisation
+can deadlock while upgrading their locks.
+
 ## Run the proof
 
 Install both repositories with their frozen pnpm lockfiles. Use Node 26 with network permission support for the restore verifier (tested with

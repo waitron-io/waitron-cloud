@@ -36,7 +36,7 @@ export function planAllows(plan: OrganisationPlan, service: PlanService): boolea
 }
 
 interface PlanRow {id: string; service_plan: OrganisationPlan; service_plan_revision: number}
-async function readRow(client: PoolClient, organisationId: string, lock: 'SHARE' | 'UPDATE'): Promise<PlanRow> {
+async function readRow(client: PoolClient, organisationId: string, lock: 'SHARE' | 'NO KEY UPDATE'): Promise<PlanRow> {
   requireId(organisationId);
   const row = (await client.query<PlanRow>(`SELECT id,service_plan,service_plan_revision FROM organisations WHERE id=$1 FOR ${lock}`, [organisationId])).rows[0];
   if (!row) throw new Error('organisation_not_found');
@@ -66,11 +66,33 @@ export class OrganisationPlanStore {
   async set(organisationId: string, plan: OrganisationPlan): Promise<OrganisationPlanView> {
     if (plan !== 'free' && plan !== 'paid') throw new Error('invalid_service_plan');
     return transaction(this.pool, async client => {
-      const row = await readRow(client, organisationId, 'UPDATE');
+      const row = await readRow(client, organisationId, 'NO KEY UPDATE');
       if (row.service_plan === plan) return view(row);
       const updated = (await client.query<PlanRow>(`UPDATE organisations SET service_plan=$2,service_plan_revision=service_plan_revision+1
         WHERE id=$1 RETURNING id,service_plan,service_plan_revision`, [organisationId, plan])).rows[0]!;
+      await advancePlanConfiguration(client, organisationId, plan === 'free');
       return view(updated, true);
     });
+  }
+}
+
+// Policy precedes installation and service locks. NO KEY UPDATE in the setter
+// fences these SHARE readers without blocking foreign-key KEY SHARE readers.
+export async function readVenuePlan(client: PoolClient, venueId: string, mode: PlanMode): Promise<OrganisationPlan> {
+  requireMode(mode);
+  if (mode === 'existing') return 'paid';
+  const row = (await client.query('SELECT organisation_id,environment FROM venues WHERE id=$1', [venueId])).rows[0];
+  if (!row) throw new Error('permission_denied');
+  requireTestPlanVenue(row.environment, mode);
+  return readOrganisationPlan(client, row.organisation_id);
+}
+
+export async function advancePlanConfiguration(client: PoolClient, organisationId: string, downgrade: boolean): Promise<void> {
+  const rows = (await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id
+    WHERE v.organisation_id=$1 ORDER BY i.id FOR UPDATE OF i`, [organisationId])).rows;
+  for (const row of rows) {
+    await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1', [row.id]);
+    if (downgrade) await client.query(`UPDATE installation_services SET state='unconfigured',configuration='{}'
+      WHERE installation_id=$1 AND service IN ('continuous_backup','retained_snapshots','remote_access')`, [row.id]);
   }
 }

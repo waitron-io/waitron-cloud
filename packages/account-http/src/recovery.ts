@@ -18,8 +18,8 @@ export async function recoveryResponse(c:Context,options:{recoveryCodeKeys:Recov
  const owner=c.req.path.startsWith('/api/account/'),action=c.req.path.split('/').at(-1)!;
  if(!(owner?['inspect','approve','close','replace']:['start','status','info','read','restored']).includes(action))throw new AccountHttpError(404,'not_found');
  if(owner?c.req.header('origin')!==origin:c.req.header('origin')!==undefined)throw new AccountHttpError(403,'forbidden');
- const replacements=new ReplacementStore(pool,captures.vault,origin);
- const requests=new RecoveryRequests(pool,captures.vault,origin,options.recoveryCodeKeys),recovery=new BackupRecovery(pool,captures.vault,origin);
+ const replacements=new ReplacementStore(pool,captures.vault,origin,captures.planMode);
+ const requests=new RecoveryRequests(pool,captures.vault,origin,options.recoveryCodeKeys,captures.planMode),recovery=new BackupRecovery(pool,captures.vault,origin,undefined,captures.planMode);
  try{
   if(owner){
    const token=readSessionCookie(c,new URL(origin).protocol==='https:')??'',csrf=c.req.header('x-csrf-token')??'';

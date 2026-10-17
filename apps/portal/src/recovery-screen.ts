@@ -36,5 +36,5 @@ export function recoveryScreen(app:PortalApp){
       <label class="disclosure"><input type="checkbox" .checked=${r.stopped} ?disabled=${disabled||r.uncertain} @change=${(e:Event)=>{r.stopped=(e.target as HTMLInputElement).checked;app.draw();}}> ${c.recoveryStopped}</label>
       <label class="disclosure"><input type="checkbox" .checked=${r.acceptLoss} ?disabled=${disabled||r.uncertain} @change=${(e:Event)=>{r.acceptLoss=(e.target as HTMLInputElement).checked;app.draw();}}> ${c.recoveryAcceptLoss}</label>
       <wt-button variant="primary" .disabled=${disabled||r.uncertain||!r.stopped||!r.acceptLoss} @click=${()=>{void r.approve();}}>${c.recoveryApprove}</wt-button>`:nothing}`:nothing}
-  <wt-form-actions><wt-button .disabled=${disabled||!!app.logoutWaiting} @click=${()=>{void app.logout();}}>${c.signout}</wt-button><a href="/account" @click=${(e:MouseEvent)=>app.follow(e,'/account')}>${c.account}</a></wt-form-actions>`;
+  <wt-form-actions><wt-button .disabled=${disabled||app.logoutDisabled} @click=${()=>{void app.logout();}}>${c.signout}</wt-button><a href="/account" @click=${(e:MouseEvent)=>app.follow(e,'/account')}>${c.account}</a></wt-form-actions>`;
 }

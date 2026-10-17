@@ -1,5 +1,5 @@
 import type {Pool,PoolClient} from 'pg';
-import {createLeaseTrust,InstallationStore,InstallationError,readMachineClaims,verifyMachine,verifyLease,type LeaseIssuer} from '@waitron-cloud/registration';
+import {createLeaseTrust,InstallationStore,InstallationError,readMachineClaims,verifyMachine,verifyLease,type LeaseIssuer,type PlanMode} from '@waitron-cloud/registration';
 import {BackupCatalogue,backupFail,type ObjectFactory,type PointMetadata} from './catalogue.ts';
 import type {BackupKeyVault} from './keys.ts';
 import type {StorageLocation,StorageScope,StorageCredentials} from './storage.ts';
@@ -8,14 +8,16 @@ export interface CaptureOptions {
  vault:BackupKeyVault;
  objects:ObjectFactory;
  grant(location:StorageLocation,scope:StorageScope):Promise<{credentials:StorageCredentials;expiresAt:string}>;
+ planMode?:PlanMode;
  managedStreams?:ManagedStreamAuthority;
 }
 export type CaptureAction='backup-reserve'|'backup-publish';
 export class BackupCaptures {
  readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;readonly #options:CaptureOptions;readonly #catalogue:BackupCatalogue;
- constructor(pool:Pool,issuer:LeaseIssuer,origin:string,options:CaptureOptions,trusted=createLeaseTrust(issuer)){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;this.#options=options;this.#catalogue=new BackupCatalogue(pool,options.vault,options.objects);}
+ constructor(pool:Pool,issuer:LeaseIssuer,origin:string,options:CaptureOptions,trusted=createLeaseTrust(issuer)){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;this.#options=options;this.#catalogue=new BackupCatalogue(pool,options.vault,options.objects,options.planMode);}
  async authenticate(action:CaptureAction,envelope:unknown){return new InstallationStore(this.#pool,this.#issuer,this.#origin,this.#trusted).authenticate(action,envelope);}
  async execute(action:CaptureAction,envelope:unknown){
+  if(this.#options.planMode==='test-free-paid')await this.authenticate(action,envelope);
   const routing=readMachineClaims(envelope);
   const fence=async(client:PoolClient)=>{
    // Catalogue callers hold the installation lock before the location lock; rechecking never reverses it.

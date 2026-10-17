@@ -2,18 +2,18 @@ import {venueOverview} from './venue-overview.ts';
 import type {Context} from 'hono';
 import type {Pool} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {InstallationStore,transaction,type LeaseIssuer,type MachineAction} from '@waitron-cloud/registration';
+import {InstallationStore,transaction,type LeaseIssuer,type MachineAction,type PlanMode} from '@waitron-cloud/registration';
 import {readAccountBody} from './request.ts';
 import {readSessionCookie} from './cookies.ts';
 import {AccountHttpError} from './errors.ts';
 import type {RateRule} from './rate-limit.ts';
-export async function installationResponse(c:Context,options:{pool:Pool;issuer?:LeaseIssuer;trusted?:ReadonlyMap<string,string>;origin:string;ip:string;consume:(rules:RateRule[])=>Promise<void>}):Promise<Response>{
+export async function installationResponse(c:Context,options:{pool:Pool;issuer?:LeaseIssuer;trusted?:ReadonlyMap<string,string>;planMode?:PlanMode;origin:string;ip:string;consume:(rules:RateRule[])=>Promise<void>}):Promise<Response>{
  const {pool,issuer,trusted,origin,ip,consume}=options,machine=c.req.path.startsWith('/api/installations/');
  const action=c.req.path.slice((machine?'/api/installations/':'/api/account/installations').length);
  if(!(machine?['renew','configuration','report','revoke']:['','/revoke']).includes(action))throw new AccountHttpError(404,'not_found');
  if(c.req.method!==(action===''?'GET':'POST'))throw new AccountHttpError(405,'method_not_allowed');
  if(!issuer)throw new AccountHttpError(503,'temporarily_unavailable');
- const store=new InstallationStore(pool,issuer,origin,trusted);
+ const store=new InstallationStore(pool,issuer,origin,trusted,options.planMode);
  if(machine){
   if(c.req.header('origin')!==undefined)throw new AccountHttpError(403,'forbidden');
   await consume([{scope:'installation-ip',subject:ip,limit:60,windowSeconds:60}]);

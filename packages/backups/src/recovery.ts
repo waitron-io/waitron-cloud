@@ -1,9 +1,10 @@
 import { createHash, createPublicKey, verify } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { resolveSession } from "@waitron-cloud/identity";
-import { transaction } from "@waitron-cloud/registration";
+import { type PlanMode, transaction } from "@waitron-cloud/registration";
 import { BackupKeyVault } from "./keys.ts";
 import {
+  backupPlan,
   backupFail,
   expireRecoveries,
   uniqueViolation,
@@ -165,11 +166,13 @@ function view(row: Record<string, unknown>):RecoveryView {
 }
 /** Owner grants authorise data recovery; target reports never activate trading or change routing. */
 export class BackupRecovery {
+  readonly #planMode: PlanMode;
   readonly #pool: Pool;
   readonly #vault: BackupKeyVault;
   readonly #origin: string;
   readonly #client?: PoolClient;
-  constructor(pool: Pool, vault: BackupKeyVault, origin: string, client?: PoolClient) {
+  constructor(pool: Pool, vault: BackupKeyVault, origin: string, client?: PoolClient, planMode: PlanMode = 'existing') {
+    this.#planMode = planMode;
     this.#pool = pool;
     this.#vault = vault;
     this.#origin = origin;
@@ -189,8 +192,8 @@ export class BackupRecovery {
     return this.#transaction(async (client) => {
       const session = await resolveSession(client, token, {csrfToken,touch:false});
       let venueId:string,p:Awaited<ReturnType<typeof point>>|undefined,stream:StreamRow|undefined;
-      if(continuous){venueId=input.venueId;await permission(client,session.accountId,venueId);await lockVenue(client,venueId);stream=await currentStream(client,venueId,true);}
-      else{const first=await point(client,input.pointId);if(!first)backupFail('unavailable');venueId=first.venueId;await permission(client,session.accountId,venueId);await lockVenue(client,venueId);p=await point(client,input.pointId);if(!p||p.kind!=="snapshot"||p.deleting||p.deletedAt)backupFail("unavailable");if(p.verification!=="verified")backupFail("unverified");}
+      if(continuous){venueId=input.venueId;await permission(client,session.accountId,venueId);await backupPlan(client,venueId,this.#planMode);await lockVenue(client,venueId);stream=await currentStream(client,venueId,true);}
+      else{const first=await point(client,input.pointId);if(!first)backupFail('unavailable');venueId=first.venueId;await permission(client,session.accountId,venueId);await backupPlan(client,venueId,this.#planMode);await lockVenue(client,venueId);p=await point(client,input.pointId);if(!p||p.kind!=="snapshot"||p.deleting||p.deletedAt)backupFail("unavailable");if(p.verification!=="verified")backupFail("unverified");}
       await expireRecoveries(client,venueId);
       const prior = (
         await client.query("SELECT * FROM backup_recoveries WHERE id=$1", [
@@ -275,7 +278,12 @@ export class BackupRecovery {
       backupFail("invalid_proof");
     return this.#transaction(async (client) => {
       const first = await operation(client, id);
+      if(this.#planMode!=='existing') {
+        const firstPoint=first.source_kind==='snapshot'?await point(client,first.point_id):undefined;
+        validateProof(this.#origin,id,action,action==='info'?'':first.source_kind==='continuous'?streamRecoveryDigest(first.stream_generation):firstPoint?.digest??'',first.target_public_key,proof);
+      }
       await permission(client, first.account_id, first.venue_id);
+      await backupPlan(client,first.venue_id,this.#planMode);
       // Approval outlives observation freshness; the comparison below still binds delivery to the exact frozen generation.
       const l = await lockVenue(client, first.venue_id),row = await operation(client,id),continuous=row.source_kind==='continuous',p=continuous?undefined:await point(client,row.point_id),stream=continuous?await currentStream(client,row.venue_id,true,false):undefined;
       if (

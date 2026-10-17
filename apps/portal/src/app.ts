@@ -306,8 +306,10 @@ export class PortalApp {
   }
   async revokeSession(id: string) { await this.security.revoke(id); }
   get logoutWaiting() { return Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)); }
+  // Share admission with the buttons so startup reads cannot leave an enabled, ignored sign-out.
+  get logoutDisabled() { return this.pending || !!this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.fiscal.pending || this.security.pending || this.usage.pending || this.authenticator.pending; }
   async logout() {
-    if (this.pending || this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.fiscal.pending || this.security.pending || this.usage.pending || this.authenticator.pending) return;
+    if (this.logoutDisabled) return;
     this.pending = true; this.error = undefined; this.draw();
     const route = this.#route;
     const success = await this.session.logout();

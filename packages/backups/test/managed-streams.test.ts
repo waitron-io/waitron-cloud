@@ -8,7 +8,7 @@ import {
   type KeyObject,
 } from "node:crypto";
 import { after, before, beforeEach, test } from "node:test";
-import { RegistrationStore, SignupStore } from "@waitron-cloud/registration";
+import { RegistrationStore, SignupStore, OrganisationPlanStore } from "@waitron-cloud/registration";
 import { database } from "../../account-http/test/fixtures.ts";
 import { BackupCatalogue } from "../src/catalogue.ts";
 import { BackupKeyVault } from "../src/keys.ts";
@@ -165,6 +165,18 @@ function storePointer(
     bytes,
   );
 }
+
+test('test-plan observe refuses after downgrade during a valid signed pointer read',async()=>{
+ const item=await installed('Observe plan'),plans=new OrganisationPlanStore(db.pool),key=signer();
+ await plans.set(item.organisationId,'paid');
+ const revision=Number((await db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[item.installationId])).rows[0].configuration_revision);
+ const stream=new ManagedStreams(db.pool,vault,authority,'test-free-paid'),desired=input(item,key.publicKey);
+ const configured=await stream.configure(item.installationId,revision,desired);
+ storePointer(configured,pointer(item.localVenueId,desired.sourceNodeId,key.privateKey));
+ readWait=async()=>{await plans.set(item.organisationId,'free');};
+ await assert.rejects(stream.observe(item.installationId,configured.configurationRevision),/permission_denied/);
+ assert.equal((await db.pool.query('SELECT generation FROM backup_managed_streams WHERE venue_id=$1',[item.venueId])).rows[0].generation,null);
+});
 
 test("configuration retries preserve one venue-scoped authority and reject changed or crossed bindings", async () => {
   const a = await installed("Stream A"),

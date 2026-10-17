@@ -73,8 +73,12 @@ CLOUD_TEST_SERVICE_PLANS=1 node packages/registration/src/organisation-plan-cli.
 
 The first change returns `"plan":"paid","revision":1,"changed":true` in the
 same JSON shape. Repeating it returns revision 1 with `changed:false`. Set
-`--plan free` to change it back. Each actual change advances the revision once;
-the command prints its result only after the database commits.
+`--plan free` to change it back. Each actual change advances the organisation revision and each installation's
+configuration revision once; the command prints its result only after the database
+commits. A downgrade clears the three paid service configurations. In the opted-in
+mode, backup permission and current machine replies now follow that policy; see
+[backup plan checks](local-backups.md#exercise-test-free-and-paid-plans). Other service
+boundaries and direct-storage withdrawal remain open, so keep deployment enforcement off.
 
 Apply all migrations first. Missing or changed migration entries, unknown
 organisations, invalid arguments and database failures return a non-zero exit
