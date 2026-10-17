@@ -374,9 +374,14 @@ shared request allowances and security headers. Submit validates its three outer
 before passing only the signed two-field envelope to authentication. Real-listener
 checks prove compact collect replies at exactly 16,777,216 UTF-8 bytes, splitting at one
 byte over, stable cursor retries and unchanged names/corrections across multiple pages.
-All four routes still use the existing 16 KiB, five-second request reader; Task 12 adds
-submit's larger bounds and separate admission. Keep translation off until consent,
-retention and joint qualification are complete.
+Task 12 gives submit its own 2,113,536-byte, 60-second reader and four simultaneous
+places per process, at most one per canonical client address, outside the eight
+ordinary account places. Excess submits receive 503 before reading or rate charging.
+Real-listener checks cover large escaped jobs, exact request-byte boundaries, slow
+delivery, address grouping, refusal/abort recovery and readiness during stalled submits.
+Admission uses the router's decoded submit path so encoded aliases cannot spend ordinary places.
+Status, collect, release and other account readers keep 16 KiB and five seconds.
+Keep translation off until consent, retention and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies
@@ -387,7 +392,7 @@ and preserves accepted language tags. Store-level sizing and HTTP serialization 
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 12–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 13–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Complete lock-order qualification across worker, release and installation revocation. The

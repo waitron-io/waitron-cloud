@@ -4,6 +4,7 @@ import {TranslationError,type TranslationAction,type TranslationMachine} from '@
 import {readBoundedJsonObject} from './request.ts';
 import {AccountHttpError,type ErrorStatus} from './errors.ts';
 import type {RateRule} from './rate-limit.ts';
+export const maxSubmitRequestBytes=2*1048576+16384,submitRequestMs=60000,submitSlots=4,submitPath='/api/installations/translation-submit';
 export const translationPaths=['/api/installations/translation-submit','/api/installations/translation-status','/api/installations/translation-collect','/api/installations/translation-release'];
 const codes:Record<TranslationError['code'],[ErrorStatus,string]>={invalid_request:[400,'invalid_request'],consent_required:[403,'translation_consent_required'],
  job_not_found:[404,'translation_job_not_found'],job_running:[409,'translation_job_running'],limit_reached:[409,'translation_limit_reached'],
@@ -14,7 +15,9 @@ export async function translationResponse(c:Context,options:{machine?:Translatio
  if(!options.machine)throw new AccountHttpError(503,'temporarily_unavailable');
  await options.consume([{scope:'installation-ip',subject:options.ip,limit:60,windowSeconds:60}]);
  const action=c.req.path.slice('/api/installations/'.length) as TranslationAction,submit=action==='translation-submit';
- const parsed=await readBoundedJsonObject(c.req.raw);
+ let parsed:Record<string,unknown>;
+ try{parsed=await readBoundedJsonObject(c.req.raw,submit?maxSubmitRequestBytes:16384,submit?submitRequestMs:5000);}
+ catch(error){if(submit&&error instanceof AccountHttpError&&error.status===413)throw new AccountHttpError(413,'translation_job_too_large');throw error;}
  const fields=submit?['body','payload','signature']:['payload','signature'];
  if(Object.keys(parsed).sort().join(',')!==fields.join(',')||fields.some(f=>typeof parsed[f]!=='string'))throw new InstallationError('invalid_proof');
  const envelope={payload:parsed.payload as string,signature:parsed.signature as string};
