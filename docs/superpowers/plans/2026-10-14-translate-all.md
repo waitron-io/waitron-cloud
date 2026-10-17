@@ -3703,6 +3703,7 @@ In `execute`, the `report` it reads at `:77` is now `const body=readBody(action,
 - [ ] **Step 4: Fix the tests this migration breaks**
 
 - `packages/registration/test/registration.test.ts:79` (40 before Task 17) becomes `assert.equal(migrationNames.length,41);`, and keep the existing `migrationNames[39]` check for `040_translation_result_json.sql`, and add `assert.equal(migrationNames[40],'041_content_translation_service.sql');`.
+- `packages/translation/test/result-storage-upgrade.test.ts` pins 41 migrations, preserves the 040 name/digest checks and adds the 041 name. Its manifest guard accepts 41 and refuses both 40 and 42; all retained-job, interruption, outcome and text assertions stay unchanged.
 - `packages/registration/test/installations.test.ts:95`: `'6'` becomes `'8'` (two installations, four rows each).
 - `packages/backups/test/replacement.test.ts:63`: the line `const states=(await db.pool.query('SELECT * FROM installation_services WHERE installation_id=$1',[result.registration.installationId])).rows;assert.equal(states.length,3);assert(states.every(s=>s.state!=='ready'));` becomes:
 

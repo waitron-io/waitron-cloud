@@ -41,8 +41,8 @@ test('release 39 upgrades retained batches without changing outcomes, jobs or ex
   assert.deepEqual((await db.pool.query('SELECT * FROM translation_jobs')).rows,rows);
   assert.deepEqual((await db.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows.slice(0,39),ledger);
   assert.deepEqual((await db.pool.query('SELECT body,batch_results FROM translation_job_bodies WHERE job_id=$1',[job.id])).rows,[{body,batch_results:batch}]);
-  assert.equal(migrationNames.length,40);assert.equal(migrationNames[39],'040_translation_result_json.sql');
-  assert.equal(hasReleaseMigrationCount('40'),true);assert.equal(hasReleaseMigrationCount('41'),false);
+  assert.equal(migrationNames.length,41);assert.equal(migrationNames[39],'040_translation_result_json.sql');assert.equal(migrationNames[40],'041_content_translation_service.sql');
+  assert.equal(hasReleaseMigrationCount('41'),true);assert.equal(hasReleaseMigrationCount('40'),false);assert.equal(hasReleaseMigrationCount('42'),false);
   await checkConsumerSchema(db.pool,new URL('../../../',import.meta.url).pathname);
   const sql=await readFile(new URL('../../registration/migrations/040_translation_result_json.sql',import.meta.url));
   assert.equal((await db.pool.query('SELECT digest FROM schema_migrations WHERE name=$1',[migrationNames[39]])).rows[0].digest,createHash('sha256').update(sql).digest('hex'));
