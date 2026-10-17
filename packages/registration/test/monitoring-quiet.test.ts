@@ -128,7 +128,10 @@ test('enabledTimingsDoNotAdmitLegacyMailAfterUpgrade',async()=>{
   await legacy.pool.query('DROP SCHEMA '+legacy.schema+' CASCADE; CREATE SCHEMA '+legacy.schema);await old.migrate(legacy.pool);
   const client=await db.pool.connect();try{
    const tables=['cloud_accounts','cloud_credentials','organisations','organisation_memberships','legal_businesses','venues','installations','installation_services','account_alert_preferences'];
-   for(const table of tables)await client.query('INSERT INTO '+legacy.schema+'.'+table+' SELECT * FROM '+table+(table==='installation_services'?" WHERE service<>'content_translation'":''));
+   for(const table of tables){
+    const columns=table==='organisations'?'id,name':'*';
+    await client.query('INSERT INTO '+legacy.schema+'.'+table+' SELECT '+columns+' FROM '+table+(table==='installation_services'?" WHERE service<>'content_translation'":''));
+   }
   }finally{client.release();}
   await legacy.pool.query("UPDATE installations SET last_contact_at=clock_timestamp()-interval '16 minutes'");
   const incident=randomUUID();await legacy.pool.query("INSERT INTO venue_incidents(id,venue_id,kind,status,revision,opened_at,changed_at) VALUES($1,$2,'disconnected','open',1,clock_timestamp()-interval '1 hour',clock_timestamp()-interval '1 hour')",[incident,venue.venueId]);

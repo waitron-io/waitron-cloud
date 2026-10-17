@@ -43,6 +43,48 @@ when it resolves to the same loopback interface.
 
 ## Know what stays on your machine
 
+### Inspect the test organisation plan
+
+You can record a free or pretend-paid plan for an organisation without a billing
+provider. This is an operator primitive for the separate
+[LAN test deployment](superpowers/specs/2026-10-17-test-cloud-free-paid-design.md).
+Service enforcement and that deployment are still being implemented. Keep the
+deployment's plan flag off until every service boundary and the full integration
+proof pass. Ordinary deployments keep their existing permissions and retention.
+
+In an operator process inside the Cloud project, use its private database
+configuration and explicitly set `CLOUD_TEST_SERVICE_PLANS=1` for the command:
+
+```sh
+CLOUD_TEST_SERVICE_PLANS=1 node packages/registration/src/organisation-plan-cli.ts show --organisation 11111111-1111-4111-8111-111111111111
+```
+
+For an existing organisation with no plan changes, the output is:
+
+```json
+{"organisationId":"11111111-1111-4111-8111-111111111111","plan":"free","revision":0,"changed":false}
+```
+
+Use that organisation's real ID to change its plan:
+
+```sh
+CLOUD_TEST_SERVICE_PLANS=1 node packages/registration/src/organisation-plan-cli.ts set --organisation 11111111-1111-4111-8111-111111111111 --plan paid
+```
+
+The first change returns `"plan":"paid","revision":1,"changed":true` in the
+same JSON shape. Repeating it returns revision 1 with `changed:false`. Set
+`--plan free` to change it back. Each actual change advances the revision once;
+the command prints its result only after the database commits.
+
+Apply all migrations first. Missing or changed migration entries, unknown
+organisations, invalid arguments and database failures return a non-zero exit
+with `Organisation plan failed; check test mode, arguments, database and migrations`.
+The command prints no database credentials. It does not create an organisation,
+provision a service or enable fiscal operations. Plan eligibility alone never
+replaces ownership, test-venue checks, consent or a service's release gate.
+
+### Local service addresses
+
 You can override the public settings in `deploy/local-stack/local.env` before starting the
 stack. Every published port remains bound to `127.0.0.1`.
 

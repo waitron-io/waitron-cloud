@@ -15,6 +15,8 @@ export {SupportGrantError,SupportGrantStore,type SupportGrant,type SupportGrantA
 export {recordUsageEvent,UsageError,UsageReconciler,UsageStore,usageEventTypes,usageReconciliationSourceNames,usageSourceKinds,type UsageEventInput,type UsageEventReceipt,type UsageEventType,type UsageReconciliationResult,type UsageReconciliationSource,type UsageReconciliationStatus,type UsageSourceKind,type UsageSummary} from './usage-metering.ts';
 export {migrationNames} from './migrate.ts';
 export {runWorkerLoop} from './worker-loop.ts';
+export {OrganisationPlanStore, planAllows, readOrganisationPlan, requirePlanService, parsePlanMode, requireTestPlanVenue,
+  type OrganisationPlan, type PlanService, type PlanMode, type OrganisationPlanView} from './organisation-plans.ts';
 
 export interface ConnectionBinding {
   operationId: string;

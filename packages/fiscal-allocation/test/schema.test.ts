@@ -31,7 +31,7 @@ async function oldState(pool: Pool) {
   ).rows)
     result[tablename] = (
       await pool.query(
-        `SELECT to_jsonb(t) AS value FROM "${tablename}" t${tablename === 'installation_services' ? " WHERE t.service <> 'content_translation'" : ''} ORDER BY to_jsonb(t)::text`,
+        `SELECT to_jsonb(t) AS value FROM ${tablename === 'organisations' ? '(SELECT id,name FROM organisations)' : '"' + tablename + '"'} t${tablename === 'installation_services' ? " WHERE t.service <> 'content_translation'" : ''} ORDER BY to_jsonb(t)::text`,
       )
     ).rows;
   return result;
@@ -78,6 +78,8 @@ test('populated release37 upgrades concurrently without changing any old row or 
     await migrate(second);
     const after = await oldState(f.pool);
     assert.deepEqual({ ...after, schema_migrations: before.schema_migrations }, before);
+    assert.deepEqual((await f.pool.query('SELECT service_plan,service_plan_revision FROM organisations')).rows,
+      [{service_plan: 'free', service_plan_revision: 0}]);
     assert.equal((await f.pool.query("SELECT count(*)::integer AS n FROM installations i WHERE NOT EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=i.id AND s.service='content_translation' AND s.state='ready')")).rows[0].n, 0);
     const ledger = (await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
     assert.equal(ledger.length, migrationNames.length);
