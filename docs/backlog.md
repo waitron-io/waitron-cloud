@@ -491,7 +491,7 @@ and preserves accepted language tags. Store-level sizing and HTTP serialization 
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 20–21 with the paging amendment's
+- **Cloud implementation:** implement and test Task 21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Complete lock-order qualification across worker, release and installation revocation. The

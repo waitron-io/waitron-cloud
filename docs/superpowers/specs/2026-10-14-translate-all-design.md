@@ -38,8 +38,8 @@ request and its collected results.
 
 The trial ran on 2026-10-14. Its harness, data and the owner's blind grades are in
 `packages/translation/quality/`. Task 20 preserves the original scripts, both graded sets,
-the owner's grades and six recorded Luna-review runs there (see "Quality check"). Every percentage below is the share of a
-setup's names the owner marked "needs work" or "wrong".
+the owner's grades and six recorded Luna-review runs there (see "Quality check"). Every
+percentage below is the share of a setup's names the owner marked "needs work" or "wrong".
 
 | Setup | Tuning set (32 products) | Blind set (30 products never tuned on) |
 |---|---|---|
