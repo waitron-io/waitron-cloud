@@ -147,8 +147,19 @@ test('a session ended while its body is read cannot authorise the later write',a
  const body=new ReadableStream<Uint8Array>({pull(controller){reading();return new Promise<void>(resolve=>{finish=value=>{controller.enqueue(value);controller.close();resolve();};});}},{highWaterMark:0});
  const pending=Promise.resolve(app.request(origin+path,{method:'POST',headers:{origin,'content-type':'application/json',cookie:'__Host-cloud_session='+session.token,'x-csrf-token':session.csrfToken},body,duplex:'half'} as RequestInit,bindings()));
  await Promise.race([read,pending.then(response=>assert.fail(`response ${response.status} before reading body`))]);
- await transaction(db.pool,c=>endSession(c,session.token));finish(new TextEncoder().encode(JSON.stringify(agree(v.venueId))));
- await status(await pending,401,'unauthenticated');assert.equal((await rows(v.venueId)).length,0);
+ await transaction(db.pool,c=>endSession(c,session.token));
+ const block=await db.secondPool.connect();let response:Response|undefined,waited=false;
+ await block.query('BEGIN');
+ try{
+  await block.query("SELECT pg_advisory_xact_lock(hashtextextended('translation-consent:'||$1,0))",[v.venueId]);
+  void pending.then(value=>{response=value;});finish(new TextEncoder().encode(JSON.stringify(agree(v.venueId))));
+  for(let n=0;n<150&&!response;n++){
+   if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE $2",[db.schema,"SELECT pg_advisory_xact_lock(hashtextextended('translation-consent:%"])).rowCount){waited=true;break;}
+   await delay(10);
+  }
+ }finally{await block.query('COMMIT');block.release();}
+ const refused=await pending;assert.equal(waited,false,'an ended session must be refused before waiting on consent');
+ await status(refused,401,'unauthenticated');assert.equal((await rows(v.venueId)).length,0);
 });
 for(const choice of ['agree','withdraw'] as const)test(`session expiry during a blocked ${choice} rolls back the entire change`,async()=>{
  const {v,session}=await owner();
