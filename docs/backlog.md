@@ -361,6 +361,16 @@ Remaining work:
   Consent rows retain history after membership removal; Task 13 must prove current, enabled,
   verified ownership when consent is recorded and used. A stored account ID alone grants nothing.
   Append migrations at the then-current next numbers without editing landed migrations.
+  Task 8 retains two defensive checks whose independent role in normal worker runs is not
+  proved: refusing an already-saved batch write, and refusing finish before all batch entries
+  exist. Preserve them without claiming they are unreachable. Parallel infrastructure failures
+  currently expose one error; both failures from one call's spend/renew callbacks are retained.
+  An ordinary failed run keeps its lease until expiry and uses a lease attempt; only caller
+  shutdown returns it immediately. Task 18 still needs bounded diagnostics without names.
+  The review's M17 mutation had one unexplained page-walk failure. Three fresh paired walks
+  with that mutation present/absent passed, so its historical cause remains unproved. If it
+  recurs, capture provider and save timing with synthetic data; preserve all current deadlines
+  and outcome assertions.
   Keep Task 12's whole-request bound ahead of the fingerprint helper: a small declared
   size with a large actual body still hashes that body before refusing the mismatch.
   A cheap byte-length refusal can be considered there; Task 1 exposes no HTTP route.

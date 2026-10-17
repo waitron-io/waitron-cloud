@@ -280,11 +280,13 @@ test('review totals are saved with the batch, while provider calls hold no job t
 test('the oldest unlocked job is leased while another queued job is locked',async()=>{
  const a=await queue(many('a','A',1)),b=await queue(many('b','B',1)),held=await db.secondPool.connect();
  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
+ const {Pool}=await import('pg'),selectionPool=new Pool({...db.pool.options,options:db.pool.options.options+' -c lock_timeout=500ms'});
  try{
   await held.query('BEGIN');await held.query('SELECT id FROM translation_jobs WHERE id=$1 FOR UPDATE',[a.job.id]);
-  await worker(fake.baseUrl).runOnce(live());assert.equal((await row(b.job.id)).state,'done');assert.equal((await row(a.job.id)).state,'queued');
+  await new TranslationWorker(selectionPool,createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:100}),{wait:async()=>{}}).runOnce(live());
+  assert.equal((await row(b.job.id)).state,'done');assert.equal((await row(a.job.id)).state,'queued');
   await held.query('ROLLBACK');await worker(fake.baseUrl).runOnce(live());assert.equal((await row(a.job.id)).state,'done');
- }finally{await held.query('ROLLBACK');held.release();await fake.close();}
+ }finally{await held.query('ROLLBACK');held.release();await selectionPool.end();await fake.close();}
 });
 test('a full paged walk retains submit order and exact text despite regrouped families and reversed completion',async()=>{
  const languages=['ca','es','en','fr','de','it','pt','nl','sv','da','no','fi','pl','cs','sk','hu','ro','el','tr','ar'];
@@ -353,14 +355,14 @@ test('each attempted call renews the lease before the next pass',async()=>{
 });
 
 for(const stage of ['renew','save','finish'] as const)test(`a lease stolen immediately before ${stage} fences that write`,async()=>{
- const {job}=await queue(many('a','A',2)),replacement=randomUUID();
+ const {job}=await queue(stage==='save'?[...many('a','A',60),...many('b','B',60)]:many('a','A',2)),replacement=randomUUID();
  const condition=stage==='renew'?"NEW.input_tokens=100 AND OLD.input_tokens=0 AND NEW.lease_id=OLD.lease_id":stage==='save'?"NEW.lease_until IS DISTINCT FROM OLD.lease_until AND NEW.input_tokens=200 AND NEW.lease_id=OLD.lease_id":"NEW.done>OLD.done";
  await db.pool.query(`CREATE FUNCTION steal_translation_lease() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN
  IF NEW.id='${job.id}' AND ${condition} THEN UPDATE translation_jobs SET lease_id='${replacement}'${stage==='renew'?",lease_until=clock_timestamp()+interval '1 hour'":''} WHERE id=NEW.id; END IF; RETURN NEW; END$$;
  CREATE TRIGGER steal_translation_lease AFTER UPDATE ON translation_jobs FOR EACH ROW EXECUTE FUNCTION steal_translation_lease()`);
  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
  try{
-  await worker(fake.baseUrl).runOnce(live());const ended=await row(job.id);
+  await worker(fake.baseUrl,{batchConcurrency:1}).runOnce(live());const ended=await row(job.id);
   assert.deepEqual([ended.state,ended.lease_id,ended.done],['running',replacement,stage==='finish'?2:0]);
   assert.deepEqual(Object.keys((await saved(job.id))!),stage==='finish'?['0']:[]);
   assert.equal((await db.pool.query('SELECT * FROM usage_events WHERE source_reference=$1',[job.id])).rowCount,0);assert.equal(fake.requests.length,stage==='renew'?1:2);
@@ -376,4 +378,19 @@ test('shutdown never returns a replacement worker lease or decrements its count'
   assert.equal(await worker(fake.baseUrl,{},5000).runOnce(controller.signal),true);const ended=await row(job.id);
   assert.deepEqual([ended.state,ended.lease_id,ended.lease_free,ended.lease_count],['running',replacement,false,1]);assert.deepEqual(await saved(job.id),{});
  }finally{await fake.close();}
+});
+
+test('shutdown between exhausted-lease batch saves leaves later batches pending',async()=>{
+ const {job}=await queue([...many('a','A',60),...many('b','B',60)]);
+ await db.pool.query('UPDATE translation_jobs SET lease_count=3 WHERE id=$1',[job.id]);
+ const held=await db.secondPool.connect(),controller=new AbortController();
+ const fake=await startFakeOpenAi(()=>{throw Error('must not call');});
+ try{
+  await held.query('BEGIN');await held.query('SELECT job_id FROM translation_job_bodies WHERE job_id=$1 FOR UPDATE',[job.id]);
+  const running=worker(fake.baseUrl).runOnce(controller.signal);
+  await until(async()=>(await db.secondPool.query("SELECT count(*)::integer AS n FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'UPDATE translation_job_bodies%'",[db.schema])).rows[0].n>0);
+  controller.abort();await held.query('ROLLBACK');assert.equal(await running,true);
+  const ended=await row(job.id);assert.deepEqual([ended.state,ended.failed,ended.lease_count,ended.lease_free],['running',60,3,true]);
+  assert.deepEqual(Object.keys((await saved(job.id))!),['0']);assert.equal(fake.requests.length,0);
+ }finally{await held.query('ROLLBACK');held.release();await fake.close();}
 });
