@@ -342,11 +342,17 @@ audit guards and their original behavioral assertions stay unchanged. Provider a
 
 Task 9 adds `pnpm translation:worker` and its `--once` mode. Startup checks the
 expected migration names, required settings, provider URL and whether the key can form an
-HTTP authorization header. Failures print a fixed diagnostic without private values.
+HTTP authorization header. Fatal failures print one fixed diagnostic without private values;
+recoverable pass failures print a separate fixed retry line.
 PostgreSQL and loopback-provider process tests cover silent idle and single-job runs,
 stored results and usage, two simultaneous jobs with ten-minute leases, and SIGTERM/SIGINT
 shutdown during provider work or idle polling. Interrupted batches save no partial results,
-and shutdown returns leases without using an attempt. No real provider request is part of
+and successful shutdown returns leases without using an attempt. Borrowed-client and
+real disconnect checks cover fixed fatal output; a failed lease return exits 1 in both modes.
+When the database cannot accept that return, the lease remains until its original expiry.
+Signals before module loading installs the handlers still use the operating system’s default
+termination and cannot affect a job. Direct Node runs are quiet on success; the root pnpm
+script can report a missing optional `.env` file. No real provider request is part of
 these checks; activation and retention remain later tasks.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).

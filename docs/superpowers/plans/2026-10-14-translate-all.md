@@ -2180,7 +2180,7 @@ git commit -s -m "Run translation jobs in a worker: lease a job, send up to four
 
 **Interfaces:**
 - Consumes: `TranslationWorker` (Task 8); `createOpenAiClient`, `openAiBaseUrl` (Task 6); `migrationNames`, `runWorkerLoop` from `@waitron-cloud/registration`.
-- Produces: the command `node packages/translation/src/worker-cli.ts [--once]`, needing `DATABASE_URL` and `CLOUD_OPENAI_API_KEY`, optional `CLOUD_OPENAI_BASE_URL`. Any failure prints exactly `Translation worker failed; check database, migrations and provider configuration` on stderr and exits 1; SIGTERM or SIGINT stops it cleanly with exit 0. Task 18 adds the retention sweep to it.
+- Produces: the command `node packages/translation/src/worker-cli.ts [--once]`, needing `DATABASE_URL` and `CLOUD_OPENAI_API_KEY`, optional `CLOUD_OPENAI_BASE_URL`. A fatal failure prints exactly `Translation worker failed; check database, migrations and provider configuration` once on stderr and exits 1. Recoverable loop-pass errors print `Translation worker pass failed; retrying`. After module loading installs the handlers, SIGTERM or SIGINT stops it with exit 0 if cleanup succeeds; a failed lease return exits 1. Task 18 adds the retention sweep to it.
 
 - [x] **Step 1: Write the failing command tests**
 
@@ -2261,30 +2261,39 @@ Run: `node scripts/test-postgres.mjs exec pnpm --dir packages/translation exec n
 Shaped like `packages/registration/src/email-worker-cli.ts`:
 
 ```ts
+import {validateHeaderValue} from 'node:http';
 import {Pool} from 'pg';
 import {migrationNames,runWorkerLoop} from '@waitron-cloud/registration';
 import {createOpenAiClient,openAiBaseUrl} from './openai-client.ts';
 import {TranslationWorker} from './worker.ts';
 let pool:Pool|undefined;
+let failed=false;
 const stop=new AbortController(),shutdown=()=>stop.abort(),jobConcurrency=2;
+function fail(){
+ if(!failed){console.error('Translation worker failed; check database, migrations and provider configuration');failed=true;}
+ process.exitCode=1;stop.abort();
+}
 process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
 try{
  const args=process.argv.slice(2);
- if(args.length>1||(args.length===1&&args[0]!=='--once')||!process.env.DATABASE_URL||!process.env.CLOUD_OPENAI_API_KEY)throw Error();
+ if(args.length>1||(args.length===1&&args[0]!=='--once')||!process.env.DATABASE_URL||!process.env.CLOUD_OPENAI_API_KEY?.trim())throw Error();
+ validateHeaderValue('authorization',`Bearer ${process.env.CLOUD_OPENAI_API_KEY}`);
  const client=createOpenAiClient({apiKey:process.env.CLOUD_OPENAI_API_KEY,baseUrl:openAiBaseUrl(process.env)});
  pool=new Pool({connectionString:process.env.DATABASE_URL,max:jobConcurrency+2,connectionTimeoutMillis:5000,statement_timeout:10000});
- pool.on('error',()=>{console.error('Translation worker database connection failed');process.exitCode=1;stop.abort();});
+ // A client can emit an error while borrowed or being discarded, outside the idle pool handler.
+ pool.on('connect',client=>{client.on('error',fail);});
+ pool.on('error',fail);
  const installed=await pool.query<{count:number}>('SELECT count(*)::integer AS count FROM schema_migrations WHERE name=ANY($1::text[])',[migrationNames]);
  if(installed.rows[0]?.count!==migrationNames.length)throw Error();
  const worker=new TranslationWorker(pool,client);
  if(args[0]==='--once')await worker.runOnce(stop.signal);
  else await runWorkerLoop({signal:stop.signal,concurrency:jobConcurrency,scheduleIntervalMs:60000,pollIntervalMs:1000,
-  runOnce:signal=>worker.runOnce(signal),onError(){console.error('Translation worker pass failed; retrying');}});
+  runOnce:signal=>worker.runOnce(signal),onError(error){if(stop.signal.aborted)throw error;console.error('Translation worker pass failed; retrying');}});
 }catch{
  // Provider and database errors can carry request text; operational output stays fixed.
- console.error('Translation worker failed; check database, migrations and provider configuration');process.exitCode=1;
+ fail();
 }finally{
- try{await pool?.end();}catch{process.exitCode=1;}
+ try{await pool?.end();}catch{fail();}
  process.removeListener('SIGINT',shutdown);process.removeListener('SIGTERM',shutdown);
 }
 ```
@@ -2293,7 +2302,7 @@ Two jobs side by side at four batches each is at most eight provider calls at on
 
 Add the two `package.json` scripts named in **Files**.
 
-- [x] **Step 3: Run the command tests and watch them pass.** Same command as Step 1; expected: 17 passing, including header validation, idle signals and two-job concurrency.
+- [x] **Step 3: Run the command tests and watch them pass.** Same command as Step 1; expected: 23 passing, including header validation, idle signals, two-job concurrency and database-failure diagnostics.
 
 - [x] **Step 4: Commit**
 

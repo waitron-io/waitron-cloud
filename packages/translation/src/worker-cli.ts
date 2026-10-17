@@ -4,7 +4,12 @@ import {migrationNames,runWorkerLoop} from '@waitron-cloud/registration';
 import {createOpenAiClient,openAiBaseUrl} from './openai-client.ts';
 import {TranslationWorker} from './worker.ts';
 let pool:Pool|undefined;
+let failed=false;
 const stop=new AbortController(),shutdown=()=>stop.abort(),jobConcurrency=2;
+function fail(){
+ if(!failed){console.error('Translation worker failed; check database, migrations and provider configuration');failed=true;}
+ process.exitCode=1;stop.abort();
+}
 process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
 try{
  const args=process.argv.slice(2);
@@ -12,17 +17,19 @@ try{
  validateHeaderValue('authorization',`Bearer ${process.env.CLOUD_OPENAI_API_KEY}`);
  const client=createOpenAiClient({apiKey:process.env.CLOUD_OPENAI_API_KEY,baseUrl:openAiBaseUrl(process.env)});
  pool=new Pool({connectionString:process.env.DATABASE_URL,max:jobConcurrency+2,connectionTimeoutMillis:5000,statement_timeout:10000});
- pool.on('error',()=>{console.error('Translation worker database connection failed');process.exitCode=1;stop.abort();});
+ // A client can emit an error while borrowed or being discarded, outside the idle pool handler.
+ pool.on('connect',client=>{client.on('error',fail);});
+ pool.on('error',fail);
  const installed=await pool.query<{count:number}>('SELECT count(*)::integer AS count FROM schema_migrations WHERE name=ANY($1::text[])',[migrationNames]);
  if(installed.rows[0]?.count!==migrationNames.length)throw Error();
  const worker=new TranslationWorker(pool,client);
  if(args[0]==='--once')await worker.runOnce(stop.signal);
  else await runWorkerLoop({signal:stop.signal,concurrency:jobConcurrency,scheduleIntervalMs:60000,pollIntervalMs:1000,
-  runOnce:signal=>worker.runOnce(signal),onError(){console.error('Translation worker pass failed; retrying');}});
+  runOnce:signal=>worker.runOnce(signal),onError(error){if(stop.signal.aborted)throw error;console.error('Translation worker pass failed; retrying');}});
 }catch{
  // Provider and database errors can carry request text; operational output stays fixed.
- console.error('Translation worker failed; check database, migrations and provider configuration');process.exitCode=1;
+ fail();
 }finally{
- try{await pool?.end();}catch{process.exitCode=1;}
+ try{await pool?.end();}catch{fail();}
  process.removeListener('SIGINT',shutdown);process.removeListener('SIGTERM',shutdown);
 }

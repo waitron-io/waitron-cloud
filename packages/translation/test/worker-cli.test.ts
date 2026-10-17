@@ -15,16 +15,16 @@ before(async()=>{db=await database();});after(async()=>db?.close());
 const children=new Set<()=>Promise<void>>();
 afterEach(async()=>{await Promise.all([...children].map(dispose=>dispose()));children.clear();});
 beforeEach(async()=>{await db.pool.query('DELETE FROM translation_job_bodies');await db.pool.query('DELETE FROM translation_jobs');});
-function command(args:string[],overrides:NodeJS.ProcessEnv={}){
+function command(args:string[],overrides:NodeJS.ProcessEnv={},nodeArgs:string[]=[]){
  const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options',`-c search_path=${db.schema}`);const applicationName=randomUUID();url.searchParams.set('application_name',applicationName);
- const child=spawn(process.execPath,[new URL('../src/worker-cli.ts',import.meta.url).pathname,...args],{env:{...process.env,
+ const child=spawn(process.execPath,[...nodeArgs,new URL('../src/worker-cli.ts',import.meta.url).pathname,...args],{env:{...process.env,
   DATABASE_URL:url.href,CLOUD_OPENAI_API_KEY:'sk-private-cli-key',CLOUD_OPENAI_BASE_URL:'',...overrides},stdio:['ignore','pipe','pipe']});
  let stdout='',stderr='';child.stdout.on('data',chunk=>{stdout+=chunk;});child.stderr.on('data',chunk=>{stderr+=chunk;});
  const deadline=setTimeout(()=>child.kill('SIGKILL'),20000);
  const exited=once(child,'close').then(([code,signal])=>{clearTimeout(deadline);return {code,signal,stdout,stderr};});
  const dispose=async()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await exited;};
  children.add(dispose);
- return {child,exited,dispose,applicationName};
+ return {child,exited,dispose,applicationName,output:()=>({stdout,stderr})};
 }
 async function queue(){
  const v=await connectedVenue(db,issuer,origin);
@@ -160,4 +160,65 @@ test('DATABASE_URL is required even when PostgreSQL fallback settings can connec
   PGUSER:decodeURIComponent(url.username),PGPASSWORD:decodeURIComponent(url.password),PGDATABASE:url.pathname.slice(1),
   PGOPTIONS:`-c search_path=${db.schema}`}).exited;
  assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);
+});
+
+test('disconnected database clients exit with one fixed line and no raw error',async()=>{
+ for(let repeat=0;repeat<3;repeat++){
+  const run=command([]);
+  try{
+   await until(async()=>Number((await db.pool.query(`SELECT count(*) AS n FROM pg_stat_activity
+    WHERE application_name=$1 AND state='idle' AND xact_start IS NULL`,[run.applicationName])).rows[0].n)>0);
+   const killed=await db.pool.query('SELECT pg_terminate_backend(pid) AS killed FROM pg_stat_activity WHERE application_name=$1',[run.applicationName]);
+   assert.ok(killed.rows.length>0);assert.ok(killed.rows.every(row=>row.killed));
+   const out=await run.exited;
+   assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);
+  }finally{await run.dispose();}
+ }
+});
+for(const args of [[],['--once']])
+test(`shutdown fails visibly when its lease cannot be returned (${args.length?'once':'loop'})`,async()=>{
+ const fake=await startFakeOpenAi(()=>new Promise(()=>{})),job=await queue();
+ const run=command(args,{CLOUD_OPENAI_BASE_URL:fake.baseUrl});let renamed=false;
+ try{
+  await until(()=>fake.requests.length===1);
+  await db.pool.query('ALTER TABLE translation_jobs RENAME TO unavailable_private_jobs');renamed=true;
+  run.child.kill('SIGTERM');const out=await run.exited;
+  assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);
+  assert.deepEqual((await db.pool.query('SELECT state,lease_count,lease_until>clock_timestamp() AS held FROM unavailable_private_jobs WHERE id=$1',[job.id])).rows,
+   [{state:'running',lease_count:1,held:true}]);
+ }finally{
+  await run.dispose();if(renamed)await db.pool.query('ALTER TABLE unavailable_private_jobs RENAME TO translation_jobs');await fake.close();
+ }
+});
+test('invalid configuration leaves a real queued job untouched',async()=>{
+ const fake=await startFakeOpenAi(()=>{throw new Error('configuration must precede work');}),job=await queue();
+ try{
+  const out=await command(['--once'],{CLOUD_OPENAI_API_KEY:'private\nkey',CLOUD_OPENAI_BASE_URL:fake.baseUrl}).exited;
+  assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);
+  assert.deepEqual((await db.pool.query('SELECT state,lease_count FROM translation_jobs WHERE id=$1',[job.id])).rows,[{state:'queued',lease_count:0}]);
+  assert.equal(fake.requests.length,0);
+ }finally{await fake.close();}
+});
+
+test('a borrowed client error never prints its private text',async()=>{
+ const pgUrl=new URL('../node_modules/pg/lib/index.js',import.meta.url).href;
+ const preload=`import pg from ${JSON.stringify(pgUrl)};
+  const emit=pg.Pool.prototype.emit;let acquisitions=0;
+  pg.Pool.prototype.emit=function(event,...args){
+   if(event==='acquire'&&++acquisitions===2)queueMicrotask(()=>args[0].emit('error',new Error('SENTINEL private database failure')));
+   return emit.call(this,event,...args);
+  };`;
+ const out=await command([],{},['--import','data:text/javascript;base64,'+Buffer.from(preload).toString('base64')]).exited;
+ assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);
+});
+test('a failed pass logs one fixed retry line and keeps its lease until expiry',async()=>{
+ const job=await queue();await db.pool.query('ALTER TABLE translation_job_bodies RENAME TO unavailable_private_bodies');
+ const run=command([]);
+ try{
+  await until(()=>run.output().stderr.includes('\n'));
+  run.child.kill('SIGTERM');const out=await run.exited;
+  assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[0,null,'','Translation worker pass failed; retrying\n']);
+  assert.deepEqual((await db.pool.query('SELECT state,lease_count,lease_until>clock_timestamp() AS held FROM translation_jobs WHERE id=$1',[job.id])).rows,
+   [{state:'running',lease_count:1,held:true}]);
+ }finally{await run.dispose();await db.pool.query('ALTER TABLE unavailable_private_bodies RENAME TO translation_job_bodies');}
 });
