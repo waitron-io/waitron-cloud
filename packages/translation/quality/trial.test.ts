@@ -61,7 +61,7 @@ test('invalid trial options fail before any provider request or output',async()=
  const fake=await startFakeOpenAi(()=>({status:401})),dir=mkdtempSync(join(tmpdir(),'translation-trial-invalid-'));
  try{
   for(const runs of [0,11,1.5,NaN])await assert.rejects(trial.runTrial({set:'blind',runs,outDir:pathToFileURL(dir+'/'),env:{CLOUD_OPENAI_API_KEY:'test-key',CLOUD_OPENAI_BASE_URL:fake.baseUrl}}),/runs/);
-  await assert.rejects(trial.runTrial({set:'blind',runs:1,outDir:pathToFileURL(dir+'/'),env:{}}),/CLOUD_OPENAI_API_KEY/);
+  await assert.rejects(trial.runTrial({set:'blind',runs:1,outDir:pathToFileURL(dir+'/'),env:{CLOUD_OPENAI_BASE_URL:fake.baseUrl}}),/CLOUD_OPENAI_API_KEY/);
   assert.equal(fake.requests.length,0);assert.deepEqual(readdirSync(dir),[]);
  }finally{await fake.close();rmSync(dir,{recursive:true,force:true});}
 });

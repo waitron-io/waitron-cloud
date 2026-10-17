@@ -46,7 +46,7 @@ test('the command refuses failed, wrong-set, malformed and repeated files before
   assert.match(good.stdout,/1 new names/);
   const html=readFileSync(page,'utf8'),shown=JSON.parse(readFileSync(keys,'utf8'));
   assert.deepEqual(shown,{[gradeKey('f01','ca','Fresh name')]:{pid:'f01',lang:'ca',text:'Fresh name',runs:['run.json']}});
-  for(const result of [{names:null},{error:'failed',names:{}},{failed:['f01'],names:{}},{set:'tuning',names:{}},{names:{f01:null}},{names:{f01:{ca:4}}},{names:{unknown:{ca:'Name'}}}]){
+  for(const result of [{names:null},{names:[]},{names:'invalid'},{error:'failed',names:{}},{failed:['f01'],names:{}},{set:'tuning',names:{}},{names:{f01:null}},{names:{f01:{ca:4}}},{names:{unknown:{ca:'Name'}}}]){
    writeFileSync(file,JSON.stringify(result));
    assert.notEqual(run(['--set','blind',file]).status,0,JSON.stringify(result));
    assert.equal(readFileSync(page,'utf8'),html);assert.deepEqual(JSON.parse(readFileSync(keys,'utf8')),shown);
