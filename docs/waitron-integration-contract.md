@@ -350,9 +350,10 @@ not local operator authentication, and no registry call belongs on the sale path
 ## Translate all, version 1
 
 Owner-approved design; Cloud store, worker and four HTTP routes are implemented, with
-translation off by default. Submit still uses the existing 16 KiB, five-second reader;
-its larger request limits, consent enforcement, retention and joint qualification remain
-open. Keep the operator flag off until those gates pass. The bounded-collect
+translation off by default. Submit has its separate 2,113,536-byte, 60-second reader
+and admission limit. Current owner consent is enforced at submit and worker lease;
+the account consent API is implemented. The portal control, retention and joint
+qualification remain open. Keep the operator flag off until those gates pass. The bounded-collect
 prerequisite is documented on 2026-10-16 in the
 [paging amendment](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The bound preserves the existing input limits;
@@ -657,7 +658,41 @@ deduplication, bounded decoded reads and release only after durable completion.
 
 The account owner agrees, or withdraws, on the portal's account page, `<Cloud origin>/account`,
 in the venue's entry (owners only). Waitron's dialog links there when submit is refused with
-`translation_consent_required`.
+`translation_consent_required`. The portal control remains to be built; keep translation off.
+
+The account API is `GET|POST /api/account/translation-consent`. Reads need your live
+session cookie. Writes also need the portal `Origin` and the session's
+`X-CSRF-Token`, so a page on another site cannot change your choice. For example,
+using your own session cookie and CSRF token:
+
+```sh
+curl "$CLOUD_ORIGIN/api/account/translation-consent" \
+  --cookie "__Host-cloud_session=$SESSION_TOKEN" \
+  -H "Origin: $CLOUD_ORIGIN" -H "X-CSRF-Token: $CSRF_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data '{"venueId":"11111111-1111-4111-8111-111111111111","choice":"agree","consentVersion":"providers-2026-10-14"}'
+```
+
+The reply lists every venue you currently own, including venues without an installation:
+
+```json
+{"consents":[{"venueId":"11111111-1111-4111-8111-111111111111","consented":true,"consentedAt":"2026-10-17T12:00:00.000Z"}]}
+```
+
+Use your venue's id in the example. To withdraw, send
+`{"venueId":"11111111-1111-4111-8111-111111111111","choice":"withdraw"}` without a
+consent version. The reply has `consented:false` and `consentedAt:null`; the stored
+agreement remains in history. Only a current, enabled, email-verified owner can
+agree or withdraw. Unknown fields, another provider version and a version attached
+to withdrawal return 400 `invalid_input`. A different organisation's venue returns
+403 `forbidden`.
+
+Reads and writes share 30 requests per minute per account, across client addresses;
+excess requests return 429 `rate_limited` with `Retry-After`. Both leave your session's
+activity time unchanged. The session is checked again after any database wait, so an
+expired session rolls back the change. These account bodies retain the ordinary
+16 KiB, five-second reader. You can manage consent while the translation machine
+routes are switched off; recording consent does not enable them.
 
 ### Refusals
 

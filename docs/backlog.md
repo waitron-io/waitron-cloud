@@ -395,8 +395,17 @@ A worker without current consent finishes with `consent_required` before provide
 or usage writes; a replacement worker's lease cannot be failed by the old worker.
 Submit still checks entitlement before consent and returns an existing operation before
 either gate. Real HTTP tests cover the 403 reply and retry after withdrawal.
-The account route and portal controls remain Tasks 14–15. Keep translation off until
-those controls, retention and joint qualification are complete.
+Task 14 adds `GET|POST /api/account/translation-consent`. You can list your owned
+venues, agree to the exact provider version or withdraw while retaining history.
+Writes require the portal Origin and your session's CSRF token, which proves that
+this browser started the request. Reads and writes share 30 requests per minute per
+account and never renew a passive session. The route resolves the live session
+before charging, then before and after the database change; expiry during a lock
+wait rolls the change back. PostgreSQL HTTP tests cover that rollback for agreement
+and withdrawal, a session ended during body delivery, strict bodies, owner isolation,
+and machine refusal before agreement and after withdrawal.
+The portal control remains Task 15. Keep translation off until that control,
+retention and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies
@@ -407,7 +416,7 @@ and preserves accepted language tags. Store-level sizing and HTTP serialization 
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 14–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 15–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Complete lock-order qualification across worker, release and installation revocation. The
