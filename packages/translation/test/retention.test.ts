@@ -19,7 +19,7 @@ async function aged(v:Venue,state:string,age:string){
  return id;
 }
 const look=async(id:string)=>(await db.pool.query('SELECT j.state,j.lease_id,(SELECT count(*)::integer FROM translation_job_bodies b WHERE b.job_id=j.id) AS bodies FROM translation_jobs j WHERE j.id=$1',[id])).rows[0];
-async function drain(){while((await sweepTranslationJobs(db.pool)).expired>0);}
+async function drain(){for(let pass=0;pass<100;pass++)if((await sweepTranslationJobs(db.pool)).expired===0)return;assert.fail('sweep did not finish the bounded fixture');}
 test('a finished job keeps its body for 24 hours, then loses it, expires, and can no longer be collected',async()=>{
  const v=await connectedVenue(db,issuer,origin),kept=await aged(v,'done','23 hours 59 minutes'),gone=await aged(v,'done','24 hours');
  const partly=await aged(v,'partly_done','25 hours'),failed=await aged(v,'failed','25 hours');
