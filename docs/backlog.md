@@ -314,6 +314,13 @@ accepts the actual assembled first-pass and review prompts. Retry hints reject m
 base URLs reject even empty query and fragment delimiters. Connection-close checks protect
 both response cancellation paths, and real HTTP checks pin the default byte limit. No real provider request or quality
 measurement is part of these checks.
+Task 7 adds the two-pass batch runner. Loopback HTTP checks cover four calls per pass,
+2/8/30-second backoff or bounded provider hints, refusal handling and review fallback.
+Every billed reply reaches the spending callback, including unusable text and incomplete
+responses; every attempt reaches the lease callback once. The cap is checked before each call.
+Shutdown during either pass, a callback or retry waiting returns an abort without a batch
+result. Storage and lease callback failures escape without repeating paid work. These
+callbacks still need the durable worker integration in Task 8.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](waitron-integration-contract.md#translate-all-version-1) now specifies
@@ -324,7 +331,7 @@ and preserves accepted language tags. Store-level page sizing is tested; HTTP se
 
 Remaining work:
 
-- **Cloud runtime:** implement and test Tasks 7–21 with the paging amendment's
+- **Cloud runtime:** implement and test Tasks 8–21 with the paging amendment's
   replacements for Tasks 3, 8, 10, 11 and 18. Preserve proof/lease and installation isolation,
   consent, cap/usage accounting, context omission, worker recovery and 24-hour deletion.
   Before enabling submit, jointly qualify language recognition and canonical duplicates. The
