@@ -427,13 +427,18 @@ button after pointerdown. Holding the reply passes the same 500 ms delayed-click
 removing the hold restores the original timeout. Every existing assertion and deadline
 remains. The two natural failures retained no request ordering, so their exact trigger stays
 unproved; bounded path/status events now accompany any future failure. Portal production
-code is unchanged by this fixture correction. A later full local Task 21 run recorded two
-5-second response-listener timeouts at `translation-consent-browser.test.ts:48` in English
-phone views. Its bounded events include a successful consent reply but do not timestamp
-listener installation or the return from clock advancement, so they do not establish the
-ordering. On recurrence, capture those boundaries and the activity-route hold decision;
-keep the original checks and deadlines. This observation does not establish a regression
-in the separate grading page.
+code is unchanged by this fixture correction. Task 21 also reproduces a different gap:
+an initial activity result can be accepted after the clock advance even though the manual
+phase holds new activity requests. A controlled real PostgreSQL/Chromium run delays only
+that valid session body's acceptance. It triggers an automatic consent read and the same
+five-second missing-retry-button failure seen in CI. The fixture now completes initial
+activity and its forced unavailable consent reload before advancing time; the original
+manual 503/429/200 path, all permission and outcome checks, the 61-second advance and every
+deadline remain. That controlled schedule passes with the precondition and fails when it
+is removed in a disposable installed checkout. The natural CI trace did not record JSON
+acceptance, so its exact scheduling remains unproved. Earlier response-listener timeouts
+also lack complete ordering; capture clock-return, listener registration and activity
+acceptance on recurrence rather than claiming all intermittent failures are resolved.
 Task 16 keeps translation out of the three-service configuration, account and diagnostic
 lists, monitoring targets, incident display and alert delivery. A ready translation row alone
 cannot enable those services. PostgreSQL regressions insert that row explicitly and cover
