@@ -77,7 +77,7 @@ test('concurrent retries create one job, while competing operations receive job_
  for(const a of attempts)if(a.status==='rejected')assert(code('job_running')(a.reason),String(a.reason));
  assert.equal(await jobs(w),1);
 });
-test('open-job refusal precedes the cap and a cap refusal rolls back all body/job writes',async()=>{
+test('open-job refusal precedes the cap and a cap refusal creates no body or job',async()=>{
  const v=await venue(),first=await submit(v);
  await db.pool.query('UPDATE translation_jobs SET cost_micro_usd=4999000 WHERE id=$1',[first.jobId]);
  await assert.rejects(submit(v),code('job_running'));
@@ -173,7 +173,7 @@ test('status keeps reason and counts, and existing work is readable after entitl
 });
 test('collect checks installation ownership before cursor validity, then cursor before state',async()=>{
  const a=await venue(),b=await venue(),{jobId}=await submit(a,jobText(['a','b']));
- for(const cursor of [-1,0.5,Number.MAX_SAFE_INTEGER+1,'0',null,true,2,3]){
+ for(const cursor of [-1,0.5,Number.MAX_SAFE_INTEGER+1,'0',null,true,[0],{cursor:1,version:1},'"version":2,"jobId":"x"','":',2,3]){
   await assert.rejects(act(a,'translation-collect',{version:1,jobId,cursor}),code('invalid_request'),JSON.stringify(cursor));
   for(const id of [jobId,randomUUID()])await assert.rejects(act(b,'translation-collect',{version:1,jobId:id,cursor}),code('job_not_found'));
  }
@@ -238,4 +238,36 @@ test('other machine action names cannot fall through to translation release',asy
  await assert.rejects(machine().execute(action,e),code('invalid_proof'));
  await assert.rejects(machine().authenticate(action,e),code('invalid_proof'));
  assert.equal((await act(v,'translation-status',{version:1,jobId})).state,'done');
+});
+
+test('action bodies reject repeated fields and alternate version spellings without reading a different job',async()=>{
+ const v=await venue(),w=await venue(),{jobId}=await submit(v,jobText(['a','b'])),foreign=await submit(w);
+ await outcomes(jobId,{0:{results:[result('a'),result('b')],failed:[]}});await finish(jobId);
+ for(const action of ['translation-status','translation-collect','translation-release'] as const){
+  const bodies=[`{"version":2,"version":1,"jobId":"${jobId}"}`,
+   `{"version":1,"jobId":"${foreign.jobId}","jobId":"${jobId}"}`,
+   String.raw`{"version":1,"\u0076ersion":1,"jobId":"${jobId}"}`,
+   ...['1.0','1e0','0.1e1'].map(version=>`{"version":${version},"jobId":"${jobId}"}`),
+   ...(action==='translation-collect'?[`{"version":1,"jobId":"${jobId}","cursor":5,"cursor":1}`]:[])];
+  for(const raw of bodies)await assert.rejects(machine().execute(action,v.proof(action,{},randomUUID(),v.lease,raw)),code('invalid_request'),raw);
+ }
+ assert.equal((await act(v,'translation-status',{version:1,jobId})).state,'done');
+ for(const cursor of ['1.0','1e0']){
+  const raw=`{ "jobId" : "${jobId}", "cursor":${cursor}, "version" : 1 }`;
+  assert.deepEqual(await machine().execute('translation-collect',v.proof('translation-collect',{},randomUUID(),v.lease,raw)),
+   {version:1,jobId,state:'done',results:[result('b')],failed:[],nextCursor:null});
+ }
+});
+test('a failed body insert rolls back the written job and permits the same operation to retry',async()=>{
+ const v=await venue(),op=randomUUID();
+ await db.pool.query(`CREATE FUNCTION refuse_translation_body() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+  IF NOT EXISTS(SELECT 1 FROM translation_jobs WHERE id=NEW.job_id) THEN RAISE EXCEPTION 'job_was_not_written'; END IF;
+  RAISE EXCEPTION 'translation_body_refused'; END $$;
+  CREATE TRIGGER refuse_translation_body BEFORE INSERT ON translation_job_bodies FOR EACH ROW EXECUTE FUNCTION refuse_translation_body()`);
+ try{
+  await assert.rejects(submit(v,jobText(),op),(e:unknown)=>!!e&&typeof e==='object'&&'code' in e&&e.code==='P0001'&&'message' in e&&e.message==='translation_body_refused');
+  assert.equal(await jobs(v),0);
+  assert.equal((await db.pool.query('SELECT count(*)::integer AS n FROM translation_job_bodies b JOIN translation_jobs j ON j.id=b.job_id WHERE j.installation_id=$1',[v.installationId])).rows[0].n,0);
+ }finally{await db.pool.query('DROP TRIGGER refuse_translation_body ON translation_job_bodies; DROP FUNCTION refuse_translation_body()');}
+ const retry=await submit(v,jobText(),op);assert.equal(retry.state,'queued');assert.equal(await jobs(v),1);
 });

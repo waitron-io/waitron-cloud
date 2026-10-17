@@ -8,9 +8,27 @@ export type TranslationAction='translation-submit'|'translation-status'|'transla
 function fail(code:'invalid_request'):never{throw new TranslationError(code);}
 const actions:readonly string[]=['translation-submit','translation-status','translation-collect','translation-release'];
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
+function unambiguousReference(body:string):boolean{
+ const fields=new Set<string>();let depth=0;
+ // Repeated keys can differ between JSON readers. Nested cursor values still need ownership-first validation.
+ for(let i=0;i<body.length;i++){
+  const c=body[i];
+  if(c==='"'){
+   const start=i;
+   for(i++;i<body.length;i++){if(body[i]==='\\')i++;else if(body[i]==='"')break;}
+   if(depth!==1)continue;
+   const tail=body.slice(i+1);if(!/^\s*:/.test(tail))continue;
+   const key=JSON.parse(body.slice(start,i+1)) as string;
+   if(fields.has(key))return false;fields.add(key);
+   if(key==='version'&&!/^\s*:\s*1\s*[,}]/.test(tail))return false;
+  }else if(c==='{'||c==='[')depth++;
+  else if(c==='}'||c===']')depth--;
+ }
+ return true;
+}
 function jobReference(body:string,collect:boolean):{jobId:string;cursor:unknown}{
  let value:unknown;try{value=JSON.parse(body);}catch{return fail('invalid_request');}
- if(!value||typeof value!=='object'||Array.isArray(value))fail('invalid_request');
+ if(!value||typeof value!=='object'||Array.isArray(value)||!unambiguousReference(body))fail('invalid_request');
  const v=value as Record<string,unknown>,fields=Object.keys(v).sort().join(',');
  if((fields!=='jobId,version'&&(!collect||fields!=='cursor,jobId,version'))||v.version!==1||typeof v.jobId!=='string'||!uuid.test(v.jobId))fail('invalid_request');
  // Cursor values are checked only after the installation-scoped job lookup.
