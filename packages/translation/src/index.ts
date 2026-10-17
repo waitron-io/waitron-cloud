@@ -12,3 +12,4 @@ export {retryWaitsMs,translateBatch,type BatchHooks,type BatchOutcome} from './b
 export {TranslationWorker} from './worker.ts';
 export {TranslationMachine,type TranslationAction} from './machine.ts';
 export {agreeConsent,hasConsent,listConsents,translationConsentVersion,translationProviders,withdrawConsent,type ConsentView} from './consent.ts';
+export {sweepTranslationJobs} from './retention.ts';

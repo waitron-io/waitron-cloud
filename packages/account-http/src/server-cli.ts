@@ -1,3 +1,4 @@
+import {sweepTranslationJobs} from '@waitron-cloud/translation';
 import {captureRuntime} from '@waitron-cloud/backups/capture-config';
 import { Pool } from 'pg';
 import { EmailOutbox, createLeaseIssuer, createLeaseTrust, migrationNames } from '@waitron-cloud/registration';
@@ -9,13 +10,14 @@ let captures:ReturnType<typeof captureRuntime>;
 let pool: Pool | undefined;
 let running: Awaited<ReturnType<typeof startAccountServer>> | undefined;
 let cleanup: ReturnType<typeof setInterval> | undefined;
+let sweep: ReturnType<typeof setInterval> | undefined;
 let hardDeadline: ReturnType<typeof setTimeout> | undefined;
 let stopRequested = false;
 let resolveStop: () => void = () => {};
 const stopped = new Promise<void>(resolve => {resolveStop = resolve;});
 const stop = () => {
   if (stopRequested) return;
-  stopRequested = true; clearInterval(cleanup); resolveStop();
+  stopRequested = true; clearInterval(cleanup); clearInterval(sweep); resolveStop();
   // A database operation may outlive the socket drain; bound the process lifetime too.
   hardDeadline = setTimeout(() => {console.error('Account server shutdown deadline exceeded'); process.exit(1);}, 11000);
   hardDeadline.unref();
@@ -42,6 +44,7 @@ try {
     if(process.env.CLOUD_INSTALLATION_TRUSTED_KEYS&&!leaseIssuer)throw new Error();
     const leaseTrust=leaseIssuer?createLeaseTrust(leaseIssuer,process.env.CLOUD_INSTALLATION_TRUSTED_KEYS):undefined;
     captures=captureRuntime(process.env);
+    if (translation) await sweepTranslationJobs(pool);
     running = await startAccountServer({staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
@@ -53,6 +56,15 @@ try {
       try {await limiter.prune();} catch {console.error('Account server rate cleanup failed');}
       finally {pruning = false;}
     }, 60000); cleanup.unref();
+    let sweeping = false;
+    if (translation) {
+      sweep = setInterval(async () => {
+        if (sweeping || stopRequested) return;
+        sweeping = true;
+        try {await sweepTranslationJobs(pool!);} catch {console.error('Account server translation cleanup failed');}
+        finally {sweeping = false;}
+      }, 60000); sweep.unref();
+    }
     await stopped;
   }
 } catch(error) {
@@ -62,6 +74,6 @@ try {
 } finally {
   stop();
   try {await running?.close(); captures?.close(); await pool?.end();} catch {process.exitCode = 1;}
-  clearInterval(cleanup); clearTimeout(hardDeadline);
+  clearInterval(cleanup); clearInterval(sweep); clearTimeout(hardDeadline);
   process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop);
 }
