@@ -2293,7 +2293,7 @@ Two jobs side by side at four batches each is at most eight provider calls at on
 
 Add the two `package.json` scripts named in **Files**.
 
-- [x] **Step 3: Run the command tests and watch them pass.** Same command as Step 1; expected: 16 passing, including header validation, idle signals and two-job concurrency.
+- [x] **Step 3: Run the command tests and watch them pass.** Same command as Step 1; expected: 17 passing, including header validation, idle signals and two-job concurrency.
 
 - [x] **Step 4: Commit**
 

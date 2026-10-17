@@ -152,3 +152,11 @@ test('an unknown migration cannot replace a missing expected migration',async()=
   await db.pool.query('INSERT INTO schema_migrations(name,digest,applied_at) VALUES($1,$2,$3)',[saved.name,saved.digest,saved.applied_at]);
  }
 });
+
+test('DATABASE_URL is required even when PostgreSQL fallback settings can connect',async()=>{
+ const url=new URL(process.env.TEST_DATABASE_URL!);
+ const out=await command(['--once'],{DATABASE_URL:'',PGHOST:url.hostname,PGPORT:url.port,
+  PGUSER:decodeURIComponent(url.username),PGPASSWORD:decodeURIComponent(url.password),PGDATABASE:url.pathname.slice(1),
+  PGOPTIONS:`-c search_path=${db.schema}`}).exited;
+ assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);
+});
