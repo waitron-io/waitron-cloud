@@ -142,8 +142,8 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          # Registration runs populated upgrades with pinned historical runners.
-          fetch-depth: ${{ (matrix.package == '@waitron-cloud/registration' || matrix.package == '@waitron-cloud/fiscal-allocation') && '0' || '1' }}
+          # Upgrade tests run against pinned historical releases.
+          fetch-depth: ${{ (matrix.package == '@waitron-cloud/registration' || matrix.package == '@waitron-cloud/fiscal-allocation' || matrix.package == '@waitron-cloud/translation') && '0' || '1' }}
       - uses: pnpm/action-setup@v6
         env:
           npm_config_fetch_timeout: '15000'
