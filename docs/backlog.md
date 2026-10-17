@@ -876,6 +876,16 @@ notifications separately.
   leave its running containers and data untouched. Keep address providers disabled
   and the existing translation release gates in place. A free plan permits a
   service only after that service's independent prerequisites pass.
+- **Local registration run stalls after earlier failures.** In the test-plan
+  review checkout at `cc99eef378bd9db2716a2325cd07fbe491ab06c9`,
+  `node scripts/test-postgres.mjs exec pnpm --dir packages/registration test`
+  emitted failures and left its sole `relay-control.test.ts` child alive for more
+  than nine minutes despite the 30-second test timeout. The driver stopped that
+  recorded child; this is an interrupted failed run, with no established cause.
+  The complete registration suite passes all 679 tests with two file workers on
+  the corrected branch. Capture the full output of the default-concurrency command,
+  without piping it through `head`, and diagnose failure cleanup and resource
+  contention. Preserve every assertion and deadline; do not treat a rerun as a fix.
 - **Operating cost.** The [cost-model design](superpowers/specs/2026-10-14-cloud-cost-model-design.md)
   and [implementation plan](superpowers/plans/2026-10-14-cloud-cost-model.md) define
   how you can compare the AWS platform cost with no venues and the additional cost
