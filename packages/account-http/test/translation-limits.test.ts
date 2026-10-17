@@ -52,11 +52,11 @@ function trickle(port:number,path:string,body:string,pieces:number,pauseMs:numbe
  });
 }
 // An unfinished request sends one byte and keeps its body reader waiting.
-function hold(port:number,from:string,path='/api/installations/translation-submit'){
+function hold(port:number,from:string,path='/api/installations/translation-submit',headers:Record<string,string>={}){
  let req:ReturnType<typeof request>;
  const result=new Promise<Reply>((resolve,reject)=>{
   req=request({host:'127.0.0.1',port,path,method:'POST',
-   headers:{host:'localhost','content-type':'application/json','content-length':'1000','x-forwarded-for':from}},res=>{
+   headers:{host:'localhost','content-type':'application/json','content-length':'1000','x-forwarded-for':from,...headers}},res=>{
     let text='';res.on('data',chunk=>{text+=chunk;});res.on('end',()=>resolve({status:res.statusCode!,headers:res.headers,body:text}));res.on('error',reject);
    });
   req.on('error',reject);req.write('{');
@@ -164,11 +164,19 @@ test('a fifth unfinished submit is refused before reading or charging a rate all
   for(let i=0;i<4;i++)held.push(hold(running.port,`198.18.2.${i+1}`));
   await until(async()=>await attempts()===8);
   const rejected=hold(running.port,'198.18.2.5');held.push(rejected);
-  const response=await rejected.result;
+  const response=await Promise.race([rejected.result,delay(2000).then(()=>assert.fail('the fifth submit waited for an unfinished body'))]);
   assert.deepEqual([response.status,response.headers['retry-after'],JSON.parse(response.body)],[503,'1',{error:'temporarily_unavailable'}]);
   assert.equal(await attempts(),8);
   assert.equal((await ready(running.port,'198.18.2.6')).status,200);
  }finally{for(const h of held)h.abort();await running.close();}
+});
+test('a declared oversized submit is refused before its body finishes',async()=>{
+ const running=await host(),pending=hold(running.port,'198.18.6.1',undefined,{'content-length':'2113537'});
+ try{
+  const response=await Promise.race([pending.result,delay(2000).then(()=>assert.fail('oversized submit waited for its body'))]);
+  assert.deepEqual([response.status,JSON.parse(response.body).error],[413,'translation_job_too_large']);
+  assert.equal((await send(running.port,'/api/installations/translation-status','{}')).status,401);
+ }finally{pending.abort();await running.close();}
 });
 test('admission groups IPv4 mapped addresses and IPv6 prefixes; untrusted forwarding cannot bypass it',async()=>{
  for(const [trusted,first,second] of [
