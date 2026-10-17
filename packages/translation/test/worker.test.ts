@@ -453,3 +453,33 @@ test('a stale worker cannot fail a replacement lease when consent is missing',as
   assert.equal(fake.requests.length,0);assert.equal((await db.pool.query('SELECT * FROM usage_events WHERE source_reference=$1',[job.id])).rowCount,0);
  }finally{await db.pool.query('DROP TRIGGER replace_consent_lease ON translation_jobs; DROP FUNCTION replace_consent_lease()');await fake.close();}
 });
+
+test('a consent refusal cannot overwrite a job expired after leasing',async()=>{
+ const {v,job}=await queue(many('a','A',2));
+ await db.pool.query('UPDATE translation_consents SET withdrawn_at=clock_timestamp() WHERE venue_id=$1',[v.venueId]);
+ await db.pool.query(`CREATE FUNCTION expire_consent_lease() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN
+  IF NEW.id='${job.id}' AND OLD.state='queued' THEN UPDATE translation_jobs SET state='expired' WHERE id=NEW.id; END IF;
+  RETURN NEW; END$$; CREATE TRIGGER expire_consent_lease AFTER UPDATE ON translation_jobs FOR EACH ROW EXECUTE FUNCTION expire_consent_lease()`);
+ const fake=await startFakeOpenAi(()=>({status:500}));
+ try{
+  await worker(fake.baseUrl).runOnce(live());
+  const ended=await row(job.id);assert.deepEqual([ended.state,ended.reason,ended.done,ended.failed,ended.finished_at],['expired',null,0,0,null]);
+  assert.equal(fake.requests.length,0);assert.equal((await db.pool.query('SELECT * FROM usage_events WHERE source_reference=$1',[job.id])).rowCount,0);
+ }finally{await db.pool.query('DROP TRIGGER expire_consent_lease ON translation_jobs; DROP FUNCTION expire_consent_lease()');await fake.close();}
+});
+
+test('consent withdrawn before crash recovery withholds saved batches and retains earlier cost',async()=>{
+ const {v,job}=await queue([...many('a','A',1),...many('b','B',3)]);
+ const batches={0:{results:[{ref:'a:0',names:{ca:'Nom',es:'Nombre'},placeholder:false,corrections:[]}],failed:[]}};
+ await db.pool.query('UPDATE translation_job_bodies SET batch_results=$2 WHERE job_id=$1',[job.id,JSON.stringify(batches)]);
+ await db.pool.query("UPDATE translation_jobs SET state='running',done=1,cost_micro_usd=7,lease_id=$2,lease_until=clock_timestamp()-interval '1 second',lease_count=1,started_at=clock_timestamp() WHERE id=$1",[job.id,randomUUID()]);
+ await db.pool.query('UPDATE translation_consents SET withdrawn_at=clock_timestamp() WHERE venue_id=$1',[v.venueId]);
+ const fake=await startFakeOpenAi(()=>({status:500}));
+ try{
+  await worker(fake.baseUrl).runOnce(live());
+  const ended=await row(job.id);
+  assert.deepEqual([ended.state,ended.reason,ended.done,ended.failed,ended.cost_micro_usd,ended.lease_id],['failed','consent_required',0,4,'7',null]);
+  await assert.rejects(collected(v,job.id),/not_ready/);assert.deepEqual(await saved(job.id),batches);
+  assert.equal(fake.requests.length,0);assert.equal((await db.pool.query('SELECT * FROM usage_events WHERE source_reference=$1',[job.id])).rowCount,0);
+ }finally{await fake.close();}
+});

@@ -387,7 +387,9 @@ Anthropic and Google at version `providers-2026-10-14`; withdrawal keeps its his
 A former owner's consent no longer counts, and a new agreement closes that stale record.
 Agreement and withdrawal share a venue lock so withdrawal also closes a concurrently
 replaced record. Recording consent locks account, credential and membership authority
-through the transaction. PostgreSQL tests cover authority changes during lock waits,
+through the transaction, in account, credential, membership and venue order.
+This avoids the reproduced deadlock with account changes that also update ownership.
+PostgreSQL tests cover authority changes during lock waits,
 repeat and concurrent agreements, rollback, history and account-scoped listing.
 A worker without current consent finishes with `consent_required` before provider traffic
 or usage writes; a replacement worker's lease cannot be failed by the old worker.
@@ -421,7 +423,10 @@ Remaining work:
   Consent rows retain history after membership removal. Current, enabled, verified ownership
   is checked when consent is recorded and used; a stored account ID alone grants nothing.
   The worker checks consent once after leasing. Withdrawal after that check does not cancel
-  a job already in flight; it prevents new submits and subsequent leases.
+  a job already in flight; it prevents new submits and subsequent leases. A resumed
+  job without consent withholds previously saved batches and keeps cost already spent,
+  as the contract now states. Listing currently reads consent once per owned venue;
+  measure this path before optimizing it for large accounts.
   Append migrations at the then-current next numbers without editing landed migrations.
   Task 8 retains two defensive checks whose independent role in normal worker runs is not
   proved: refusing an already-saved batch write, and refusing finish before all batch entries

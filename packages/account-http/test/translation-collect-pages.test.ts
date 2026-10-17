@@ -7,12 +7,12 @@ import {createLeaseIssuer} from '@waitron-cloud/registration';
 import {maxCollectBytes,TranslationMachine,type CollectPage,type ItemResult} from '@waitron-cloud/translation';
 import {createAccountApp} from '../src/app.ts';
 import {startAccountServer} from '../src/server.ts';
-import {connectedVenue,database,readyForTranslation} from '../../translation/test/fixtures.ts';
+import {connectedVenue,database,giveConsent,readyForTranslation} from '../../translation/test/fixtures.ts';
 const origin='http://localhost',issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
 let db:Awaited<ReturnType<typeof database>>,app:ReturnType<typeof createAccountApp>,addresses=0;
 const config=()=>({portalOrigin:origin,production:false,rateKey:db.rateKey,trustedProxyIps:[] as string[]});
 before(async()=>{db=await database();app=createAccountApp({translation:true,leaseIssuer:issuer,pool:db.pool,outbox:db.outbox,config:config()});});after(async()=>db?.close());
-async function venue(){const v=await connectedVenue(db,issuer,origin);await readyForTranslation(db,v);return {...v,ip:`203.0.113.${++addresses}`};}
+async function venue(){const v=await connectedVenue(db,issuer,origin);await readyForTranslation(db,v);await giveConsent(db,v);return {...v,ip:`203.0.113.${++addresses}`};}
 type Venue=Awaited<ReturnType<typeof venue>>;
 const proof=(v:Venue,action:string,body:unknown)=>v.proof(action,body,randomUUID(),v.lease);
 const post=(v:Venue,action:string,body:unknown)=>app.request(`${origin}/api/installations/${action}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(proof(v,action,body))},{incoming:{socket:{remoteAddress:v.ip}}} as HttpBindings);

@@ -2880,11 +2880,13 @@ git commit -s -m "Give translation submit its own limits: a 2 MiB request read w
 
 **Implementation note (2026-10-17):** agreement and withdrawal both serialize on the
 same consent lock. Recording and withdrawing consent also hold shared locks on the
-account and credential rows, alongside venue and membership, to recheck changes that
-commit during a wait. Listing omits disabled or unverified accounts. The worker checks
+account, credential, membership and venue rows in that order, following relay
+authorization, to recheck changes that commit during a wait without the reproduced
+account-first writer deadlock. Listing omits disabled or unverified accounts. The worker checks
 after leasing, within its existing shutdown cleanup, and fences a refusal by its lease.
 All earlier behavioral assertions and deadlines remain; fixtures now record consent,
-including the direct paged-worker fixture that does not use `queue()`.
+including the direct paged-worker fixture that does not use `queue()` and the
+bounded-collect HTTP fixtures introduced by the paging amendment.
 
 **Files:**
 - Create: `packages/translation/src/consent.ts`, `packages/translation/test/consent.test.ts`

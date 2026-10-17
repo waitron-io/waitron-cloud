@@ -21,12 +21,14 @@ async function view(client:PoolClient,venueId:string):Promise<ConsentView>{
 }
 async function ownedVenue(client:PoolClient,accountId:string,venueId:string):Promise<{organisation_id:string}>{
  if(!uuid.test(venueId))fail('invalid_request');
- const row=(await client.query<{organisation_id:string}>(`SELECT v.organisation_id FROM venues v
-  JOIN organisation_memberships m ON m.organisation_id=v.organisation_id AND m.account_id=$2 AND m.is_owner
-  JOIN cloud_accounts a ON a.id=m.account_id AND a.disabled_at IS NULL
-  JOIN cloud_credentials k ON k.account_id=m.account_id AND k.email_verified_at IS NOT NULL
-  WHERE v.id=$1 FOR SHARE OF v,m,a,k`,[venueId,accountId])).rows[0];
- return row??fail('forbidden');
+ // Match account authorization's lock order before taking membership and venue locks.
+ if(!(await client.query('SELECT id FROM cloud_accounts WHERE id=$1 AND disabled_at IS NULL FOR SHARE',[accountId])).rowCount)fail('forbidden');
+ if(!(await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 AND email_verified_at IS NOT NULL FOR SHARE',[accountId])).rowCount)fail('forbidden');
+ const candidate=(await client.query<{organisation_id:string}>('SELECT organisation_id FROM venues WHERE id=$1',[venueId])).rows[0];
+ if(!candidate)fail('forbidden');
+ if(!(await client.query('SELECT account_id FROM organisation_memberships WHERE organisation_id=$1 AND account_id=$2 AND is_owner FOR SHARE',[candidate.organisation_id,accountId])).rowCount)fail('forbidden');
+ const venue=(await client.query<{organisation_id:string}>('SELECT organisation_id FROM venues WHERE id=$1 AND organisation_id=$2 FOR SHARE',[venueId,candidate.organisation_id])).rows[0];
+ return venue??fail('forbidden');
 }
 export async function listConsents(client:PoolClient,accountId:string):Promise<ConsentView[]>{
  const venues=(await client.query<{id:string}>(`SELECT v.id FROM venues v JOIN organisation_memberships m ON m.organisation_id=v.organisation_id

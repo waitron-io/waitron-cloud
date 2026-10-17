@@ -143,3 +143,22 @@ test('listing includes owned venues in id order with current consent and exclude
  await assert.rejects(tx(c=>withdrawConsent(c,v.accountId,{venueId:foreign.venueId})),code('forbidden'));
  await assert.rejects(tx(c=>withdrawConsent(c,v.accountId,{venueId:'not-a-venue'})),code('invalid_request'));
 });
+
+for(const target of ['membership','venue'] as const)
+test(`an account change may update its ${target} while agreement waits without a deadlock`,async()=>{
+ const v=await connectedVenue(db,issuer,origin),client=await db.pool.connect();let operation:Promise<unknown>|undefined;
+ try{
+  await client.query('BEGIN');await client.query('UPDATE cloud_accounts SET disabled_at=clock_timestamp() WHERE id=$1',[v.accountId]);
+  const pid=(await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  operation=tx(c=>agreeConsent(c,v.accountId,{venueId:v.venueId,consentVersion:translationConsentVersion})).then(value=>({value}),error=>({error}));
+  const end=Date.now()+5000;
+  while(!(await db.pool.query('SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))',[pid])).rowCount){
+   if(Date.now()>end)throw new Error('agreement did not wait for account change');await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  const changed=await client.query(target==='membership'?'UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1':'UPDATE venues SET organisation_id=organisation_id WHERE id=$1',[target==='membership'?v.accountId:v.venueId]).then(()=>true,error=>error);
+  await client.query(changed===true?'COMMIT':'ROLLBACK');
+  const result=await operation as {error?:unknown};
+  assert.equal(changed,true,String(changed));assert.ok(code('forbidden')(result.error),String(result.error));
+  assert.equal((await db.pool.query('SELECT * FROM translation_consents WHERE venue_id=$1',[v.venueId])).rowCount,0);
+ }finally{await client.query('ROLLBACK');client.release();await operation;}
+});
