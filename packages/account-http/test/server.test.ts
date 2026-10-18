@@ -320,7 +320,7 @@ test('translation CLI defaults off, enables only with an issuer, and refuses oth
 test('CLI refuses malformed test plan flags before opening a listener',async()=>{
  for(const value of ['private-plan-sentinel','2','']){
   const running=cli({CLOUD_TEST_SERVICE_PLANS:value});
-  try{const outcome=await Promise.race([running.exited,delay(1000).then(()=>{throw Error('invalid test plan mode started a server');})]);assert.equal(outcome.code,1);assert.equal(outcome.stdout,'');assert.equal(outcome.stderr,'Account server failed; check database, migrations and configuration\n');}
+  try{const outcome=await Promise.race([running.exited,new Promise<never>((_resolve,reject)=>running.child.stdout.once('data',()=>reject(Error('invalid test plan mode started a server'))))]);assert.equal(outcome.code,1);assert.equal(outcome.stdout,'');assert.equal(outcome.stderr,'Account server failed; check database, migrations and configuration\n');}
   finally{if(running.child.exitCode===null)await running.stop();}
  }
 });
