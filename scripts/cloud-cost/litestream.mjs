@@ -112,13 +112,14 @@ export function createLitestreamRequestAudit({ phase }) {
 
 // This first-hop counter shares no byte events with the downstream storage observer.
 // It measures transferred HTTP bodies, not application consumption or TCP/TLS overhead.
-export async function createLitestreamTransport({ target, meter, phase }) {
+export async function createLitestreamTransport({ target, meter, phase, lifetimes }) {
   let endpoint;
   try {
     endpoint = new URL(target);
     requireThat(endpoint.protocol === 'http:' && endpoint.hostname === '127.0.0.1' && endpoint.port !== ''
       && endpoint.pathname === '/' && endpoint.search === '' && endpoint.hash === '' && endpoint.username === '' && endpoint.password === '');
     requireThat(phases.includes(phase) && typeof meter?.observeAttempt === 'function' && typeof meter?.invalidate === 'function');
+    requireThat(lifetimes === undefined || typeof lifetimes?.begin === 'function');
   } catch { fail(); }
   let invalid = false, closing;
   const invocations = new Map(), pending = new Set(), connections = new Set();
@@ -129,7 +130,7 @@ export async function createLitestreamTransport({ target, meter, phase }) {
     const n = Number(value ?? 0); requireThat(Number.isSafeInteger(n)); return n;
   };
   const server = createServer((source, destination) => {
-    let id, name, expectedOut;
+    let id, name, expectedOut, completeLifetime;
     try {
       requireThat(!invalid && !closing && !Object.hasOwn(source.headers, 'x-amz-copy-source'));
       id = identity(source.headers['amz-sdk-invocation-id'], source.headers['amz-sdk-request']);
@@ -138,6 +139,10 @@ export async function createLitestreamTransport({ target, meter, phase }) {
       requireThat(id.ordinal === (previous?.ordinal ?? -1) + 1 && (!previous || previous.name === name && previous.path === source.url)
         && invocations.size < 100000);
       expectedOut = size(source.headers['content-length']);
+      if (lifetimes) {
+        completeLifetime = lifetimes.begin({ method: source.method, path: source.url, headers: source.headers });
+        requireThat(typeof completeLifetime === 'function');
+      }
       invocations.set(id.invocation, { ordinal: id.ordinal, name, path: source.url });
       pending.add(id.key);
     } catch { poison(); source.resume(); destination.writeHead(400); destination.end(); return; }
@@ -146,6 +151,7 @@ export async function createLitestreamTransport({ target, meter, phase }) {
       if (settled || !interrupted && (!sent || !received)) return;
       settled = true; pending.delete(id.key); completed++;
       try {
+        completeLifetime?.({ statusCode, bytesOut, interrupted });
         const outcome = interrupted ? 'transport-error' : statusCode >= 500 ? 'server-error' : statusCode >= 300 ? 'client-error' : 'success';
         meter.observeAttempt({ token: id.key, phase, operation: name, retryOrdinal: id.ordinal, channel: 'producer', outcome,
           statusCode, errorCode: null, sameAccount: null, bytesIn, bytesOut,

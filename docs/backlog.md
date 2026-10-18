@@ -1161,11 +1161,23 @@ notifications separately.
   duplicate attempts, conflicting retries and copy requests before forwarding them.
   You can use this as bounded HTTP body evidence, not application-consumed bytes,
   TCP/TLS overhead or retained storage. Header-only evidence keeps its existing
-  unknown status, and stream object lifetimes still need independent reconciliation.
-  The native stream check does not run application restore hooks or grant fiscal
-  activation authority.
-  This is the base service fixture plus bounded synthetic stream request/body evidence;
-  complete stream lifetime integration, the real public/staff tunnel journeys, complete accounting,
+  unknown status. You can now also check the native stream's retained objects against
+  a separate metered inventory in an initially empty, unversioned bucket. The check
+  bounds storage duration between request admission and successful completion;
+  a failed reply may still have stored the object, so its earlier possible write
+  remains in the upper bound. Repeated writes of the same size keep one retained
+  object. An independent inventory confirms its size and presence. Missing, extra,
+  duplicate or changed-size entries refuse evidence, as do unfinished transfers,
+  version history, deletion, multipart and size-changing replacements. Synthetic
+  clocks check the exact bounds; the real binary check also verifies positive
+  bounds against its retained inventory and restores both synthetic sales.
+  This qualifies the short unversioned, upload-only storage history. It observes no
+  scheduled snapshot or compaction boundary and does not establish complete stream
+  retention. The native stream check does not run application restore hooks or grant
+  fiscal activation authority.
+  This is the base service fixture plus bounded synthetic stream request, body and
+  upload-only lifetime evidence; wider stream lifetime integration, the real public/staff
+  tunnel journeys, complete accounting,
   local replay orchestration, the offline calculator, private local sales replay,
   measured storage and remote traffic, and synthetic-only AWS comparison
   remain open. Keep raw venue data on the Mac, distinguish measured

@@ -9,9 +9,11 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { openReplay } from '/code/cost-waitron-adapter.mjs';
 import { createLitestreamRequestAudit, createLitestreamTransport } from '/code/litestream.mjs';
+
 import { createMeter, createMeteringProxy, classifyStorageOperation, instrumentStorageClient, correlatedStorageAttempt } from '/code/meter.mjs';
 const require = createRequire('/app/packages/backups/package.json');
-const { S3Client, CreateBucketCommand, ListObjectsV2Command, DeleteObjectCommand, DeleteBucketCommand } = require('@aws-sdk/client-s3');
+const sdk = require('@aws-sdk/client-s3');
+const { S3Client, CreateBucketCommand, ListObjectsV2Command, DeleteObjectCommand, DeleteBucketCommand } = sdk;
 const fail = () => { throw Error('Synthetic Litestream check failed'); };
 async function smoke() {
   const stateRoot = '/state/synthetic-litestream-proof', Bucket = 'synthetic-litestream';
@@ -30,16 +32,16 @@ async function smoke() {
     upstream.on('error', () => res.destroy()); req.on('aborted', () => upstream.destroy()); req.pipe(upstream);
   });
   fault.listen(0, '127.0.0.1'); await once(fault, 'listening');
+  let lifetimes, replication, restore;
   const phase = async name => {
     const audit = createLitestreamRequestAudit({ phase: name });
     const meter = createMeter({ phase: name, clock: () => performance.now() / 1000 });
     const proxy = await createMeteringProxy({ target: `http://127.0.0.1:${fault.address().port}`, meter,
       classify: input => audit.observe({ headers: input.headers, operation: classifyStorageOperation(input) }) });
     const transport = process.env.COST_LITESTREAM_TRANSPORT === '1'
-      ? await createLitestreamTransport({ target: proxy.url, meter, phase: name }) : null;
+      ? await createLitestreamTransport({ target: proxy.url, meter, phase: name, lifetimes }) : null;
     return { audit, meter, proxy, transport, endpoint: transport?.url ?? proxy.url };
   };
-  const replication = await phase('workload'), restore = await phase('restore');
   const adminMeter = createMeter({ phase: 'observer', clock: () => performance.now() / 1000 });
   const adminProxy = await createMeteringProxy({ target: 'http://127.0.0.1:8333', meter: adminMeter, classify: correlatedStorageAttempt });
   const clients = ['setup', 'observer', 'cleanup'].map(phase => {
@@ -87,7 +89,12 @@ async function smoke() {
     if (result.IsTruncated) fail(); return result.Contents ?? [];
   };
   try {
-    stage = 'bucket'; await clients[0].send(new CreateBucketCommand({ Bucket })); await sale(1);
+    stage = 'bucket'; await clients[0].send(new CreateBucketCommand({ Bucket }));
+    if (process.env.COST_LITESTREAM_LIFETIMES === '1') {
+      const { openLitestreamLifetimes } = await import('/code/storage-lifetimes.mjs');
+      lifetimes = await openLitestreamLifetimes({ client: clients[1], sdk, meter: adminMeter, bucket: Bucket, clock: () => performance.now() / 1000 });
+    }
+    replication = await phase('workload'); restore = await phase('restore'); await sale(1);
     stage = 'replicate'; replicator = launch(['replicate', '-config', configFile('replicate', replication.endpoint)], replication.audit);
     let uploaded = false;
     for (let n = 0; n < 40; n++) {
@@ -119,6 +126,12 @@ async function smoke() {
     const result = { version, injectedFailures, restoredSales, integrity, sales: replay.counts(), fiscal: await replay.verify(),
       replication: replication.audit.snapshot(), restore: restore.audit.snapshot(), observed: replication.meter.snapshot() };
     if (replication.transport) result.transport = { replication: replication.transport.snapshot(), restore: restore.transport.snapshot() };
+    if (lifetimes) {
+      stage = 'lifetimes'; await lifetimes.verify();
+      const inventory = await list();
+      result.lifetimes = lifetimes.snapshot();
+      result.inventoryBytes = inventory.reduce((sum, row) => sum + row.Size, 0); result.inventoryObjects = inventory.length;
+    }
     stage = 'delete'; for (const row of await list()) await clients[2].send(new DeleteObjectCommand({ Bucket, Key: row.Key }));
     result.cleanedObjects = (await list()).length === 0;
     await clients[2].send(new DeleteBucketCommand({ Bucket }));
@@ -130,8 +143,8 @@ async function smoke() {
     for (const child of children) child.kill('SIGKILL');
     if (children.size) await Promise.all([...children].map(child => once(child, 'close')));
     for (const client of clients) client.destroy();
-    const transports = await Promise.allSettled([replication.transport?.close(), restore.transport?.close()]);
-    const closed = await Promise.allSettled([replication.proxy.close(), restore.proxy.close(), adminProxy.close()]);
+    const transports = await Promise.allSettled([replication?.transport?.close(), restore?.transport?.close()]);
+    const closed = await Promise.allSettled([replication?.proxy.close(), restore?.proxy.close(), adminProxy.close()]);
     fault.closeAllConnections(); await new Promise(resolve => fault.close(resolve));
     await replay.close(); rmSync(stateRoot, { recursive: true, force: true });
     if ([...transports, ...closed].some(result => result.status === 'rejected')) fail();

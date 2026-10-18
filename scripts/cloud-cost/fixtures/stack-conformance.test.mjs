@@ -307,3 +307,40 @@ test('genuineLitestreamTransportBodyBytesAgreeWithSeparateStorageObserver', asyn
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
+
+// Request completion cannot stand in for provider commit time or independent retained-object evidence.
+test('genuineLitestreamStorageLifetimesAgreeWithIndependentInventoriesAndBoundCommitTime', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  cpSync(prepared.litestreamBinary, join(f.codeRoot, 'litestream'));
+  cpSync(new URL('../litestream.mjs', import.meta.url), join(f.codeRoot, 'litestream.mjs'));
+  cpSync(new URL('../storage-lifetimes.mjs', import.meta.url), join(f.codeRoot, 'storage-lifetimes.mjs'));
+  cpSync(new URL('./litestream-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-litestream-smoke.mjs'));
+  let stack;
+  f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(execFileSync('docker', ['exec', '-e', 'COST_LITESTREAM_TRANSPORT=1', '-e', 'COST_LITESTREAM_LIFETIMES=1',
+    s3, 'node', '/code/cost-litestream-smoke.mjs'],
+    { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 95000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  assert.ok(result.lifetimes, 'the native binary needs independently verified retained-object evidence');
+  assert.equal(result.version, '0.5.17'); assert.equal(result.injectedFailures, 1);
+  assert.equal(result.restoredSales, 2); assert.equal(result.integrity, 'ok');
+  assert.deepEqual(result.sales, { attempted: 2, successful: 2, failed: 0 });
+  assert.deepEqual(result.fiscal, { ok: true, issues: 0 });
+  const proof = result.lifetimes;
+  assert.equal(proof.status, 'measured'); assert.equal(proof.scope, 'unversioned-put-only');
+  assert.equal(proof.objects.bytes, result.inventoryBytes); assert.ok(proof.objects.bytes > 1000);
+  assert.equal(proof.objects.currentVersions, result.inventoryObjects); assert.ok(proof.objects.currentVersions >= 2);
+  assert.equal(proof.objects.noncurrentVersions, 0); assert.equal(proof.objects.unfinishedMultipart, 0);
+  assert.ok(proof.byteSeconds.low > 0); assert.ok(proof.byteSeconds.high > proof.byteSeconds.low);
+  assert.ok(proof.byteSeconds.high <= proof.objects.bytes * proof.windowSeconds);
+  assert.equal(result.transport.replication.reconciled, true); assert.equal(result.transport.restore.reconciled, true);
+  assert.equal(result.replication.requestsReconciled, true); assert.equal(result.restore.requestsReconciled, true);
+  assert.equal(result.replication.status, 'unknown', 'bounded storage alone does not qualify the full scenario');
+  assert.equal(result.administration.reconciled, true); assert.equal(result.cleanedObjects, true); assert.equal(result.leaked, false);
+  t.diagnostic(JSON.stringify({ lifetimes: proof, inventoryBytes: result.inventoryBytes,
+    replication: result.transport.replication.accounting.producer, restore: result.transport.restore.accounting.producer }));
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});

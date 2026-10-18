@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { assertStorageClientBinding } from './meter.mjs';
+import { assertStorageClientBinding, classifyStorageOperation } from './meter.mjs';
 
 const fail = () => { throw Error('Invalid cloud cost storage lifetimes'); };
 const requireThat = value => { if (!value) fail(); };
@@ -172,4 +172,112 @@ export async function openStorageLifetimes({ clients, sdk, meter, bucket, versio
     requireThat(!invalid && !busy && verified);
     return meter.snapshot();
   } };
+}
+
+// Owned, initially empty unversioned buckets only. No deletion or size-changing replacement is admitted.
+// A failed reply can follow a commit; bound its first possible write until an independent inventory.
+export async function openLitestreamLifetimes({ client, sdk, meter, bucket, clock }) {
+  const rows = new Map(), pending = new Set();
+  let invalid = false, verifying = false, verified = false, last = -Infinity, endpoint;
+  const poison = () => { invalid = true; meter?.invalidate(); fail(); };
+  const guarded = fn => (...args) => {
+    try { requireThat(!invalid); return fn(...args); } catch { poison(); }
+  };
+  const now = () => {
+    const time = clock(); requireThat(Number.isFinite(time) && time >= 0 && time >= last);
+    last = time; return time;
+  };
+  let start;
+  try {
+    requireThat(typeof clock === 'function' && /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)
+      && typeof meter?.invalidate === 'function');
+    endpoint = assertStorageClientBinding(client, meter, 'observer');
+    requireThat(['GetBucketVersioningCommand', 'ListObjectsV2Command', 'ListMultipartUploadsCommand']
+      .every(name => typeof sdk[name] === 'function'));
+    start = now();
+  } catch { poison(); }
+  const inspect = async (name, input = {}) => {
+    requireThat(assertStorageClientBinding(client, meter, 'observer') === endpoint);
+    const result = await client.send(new sdk[name]({ Bucket: bucket, ...input }));
+    requireThat(result.$metadata?.httpStatusCode === 200 && result.$metadata.attempts === 1);
+    return result;
+  };
+  const begin = guarded(({ method, path, headers }) => {
+    requireThat(!verifying && pending.size < 100000);
+    const operation = classifyStorageOperation({ method, path });
+    requireThat(['put', 'get', 'head', 'list'].includes(operation));
+    const rawPath = path.split('?')[0], segments = rawPath.slice(1).split('/');
+    requireThat(segments[0] === bucket && !/%2f|%5c/i.test(rawPath));
+    const key = decodeURIComponent(segments.slice(1).join('/'));
+    requireThat(!key.split('/').some(segment => segment === '.' || segment === '..'));
+    let row, bytes;
+    if (operation === 'put') {
+      requireThat(key.length > 0 && Buffer.byteLength(key) <= 1024
+        && !Object.hasOwn(headers, 'x-amz-copy-source') && !Object.hasOwn(headers, 'content-encoding')
+        && /^(0|[1-9]\d*)$/.test(headers['content-length']));
+      bytes = Number(headers['content-length']); requireThat(count(bytes));
+      row = rows.get(key);
+      requireThat(!row || row.bytes === bytes && !row.pending);
+      const time = now();
+      if (!row) { requireThat(rows.size < 100000); row = { bytes, from: time, by: null }; rows.set(key, row); }
+      row.pending = true; verified = false;
+    } else now();
+    const token = {}; pending.add(token);
+    return guarded(({ statusCode, bytesOut, interrupted = false }) => {
+      requireThat(pending.has(token) && !interrupted && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
+      const time = now();
+      if (row) {
+        requireThat(bytesOut === bytes);
+        if (statusCode < 300) row.by ??= time;
+        row.pending = false;
+      }
+      pending.delete(token);
+    });
+  });
+  const verify = async () => {
+    try {
+      requireThat(!invalid && !verifying && pending.size === 0); verifying = true; verified = false; now();
+      const versioning = await inspect('GetBucketVersioningCommand');
+      requireThat(versioning.Status === undefined);
+      const found = new Set(), tokens = new Set(); let continuation;
+      for (let pageNumber = 0; ; pageNumber++) {
+        requireThat(pageNumber < 1000);
+        const page = await inspect('ListObjectsV2Command', continuation ? { ContinuationToken: continuation } : {});
+        requireThat(typeof page.IsTruncated === 'boolean' && (page.Contents === undefined || Array.isArray(page.Contents)));
+        for (const entry of page.Contents ?? []) {
+          const row = rows.get(entry.Key);
+          requireThat(row && !found.has(entry.Key) && count(entry.Size) && row.bytes === entry.Size);
+          found.add(entry.Key);
+        }
+        if (!page.IsTruncated) break;
+        continuation = page.NextContinuationToken;
+        requireThat(text(continuation) && !tokens.has(continuation)); tokens.add(continuation);
+      }
+      const uploads = await inspect('ListMultipartUploadsCommand');
+      requireThat(uploads.IsTruncated === false && (uploads.Uploads === undefined || Array.isArray(uploads.Uploads) && uploads.Uploads.length === 0));
+      const time = now();
+      for (const [key, row] of rows) {
+        if (found.has(key)) row.by ??= time;
+        else { requireThat(row.by === null); rows.delete(key); }
+      }
+      verified = true;
+    } catch { poison(); }
+    finally { verifying = false; }
+  };
+  const snapshot = () => {
+    requireThat(!invalid && !verifying && verified && pending.size === 0);
+    return guarded(() => {
+      const time = now(); let bytes = 0, low = 0, high = 0;
+      for (const row of rows.values()) {
+        requireThat(row.by !== null); bytes += row.bytes;
+        low += row.bytes * (time - row.by); high += row.bytes * (time - row.from);
+      }
+      requireThat(count(bytes) && Number.isFinite(low) && Number.isFinite(high) && low >= 0 && high >= low);
+      return { status: 'measured', scope: 'unversioned-put-only', windowSeconds: time - start,
+        objects: { class: 'stream', bytes, currentVersions: rows.size, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 },
+        byteSeconds: { low, high } };
+    })();
+  };
+  await verify();
+  return { begin, verify, snapshot };
 }
