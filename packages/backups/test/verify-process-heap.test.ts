@@ -39,5 +39,7 @@ test('a split fatal heap report stops the child without exposing its diagnostics
 test('ordinary heap words and non-heap fatal reports do not become early resource refusals',async()=>{
  const value=await runNodeVerifier(['-e',"console.error('heap out of memory');console.log('{}')"],{input:{}});
  assert.deepEqual(value,{});
+ const quoted=await runNodeVerifier(['-e',"console.error('x FATAL ERROR: heap limit');console.log('{}')"],{input:{}});
+ assert.deepEqual(quoted,{});
  await assert.rejects(runNodeVerifier(['-e',"console.error('FATAL ERROR: private unrelated failure');process.exit(3)"],{input:{}}),/^Error: backup.verifier_failed$/);
 });

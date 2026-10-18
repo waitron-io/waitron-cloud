@@ -48,6 +48,9 @@ kills the child, then waits for its process and output pipes to close. Linux cra
 collection can delay a fatal process exit even with core-file size set to zero, so
 waiting for exit alone can turn a known resource refusal into a watchdog timeout.
 The same output bound still applies, and private error text stays inside the parent.
+This is an advisory stderr classification: a child that prints a matching fatal line
+is stopped even if it would otherwise return valid JSON. The marker is not an
+independent measurement of memory use.
 You can exercise delayed exit and split diagnostic chunks with
 `node --test packages/backups/test/verify-process-heap.test.ts`.
 

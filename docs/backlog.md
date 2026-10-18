@@ -2118,6 +2118,13 @@ notifications separately.
   output bound and deadlines remain unchanged. The earlier main failure
   [39111146785](https://github.com/waitron-io/waitron-cloud/actions/runs/39111146785)
   did not capture child stages, so its precise historical crash-collection timing remains unproved.
+  The fatal marker remains advisory: printing a matching line stops even a child
+  that would otherwise return valid JSON. Qualify untrusted diagnostic forwarding
+  before expanding this trusted-local-archive adapter's scope. The reviewer also
+  measured about 0.2–0.6 seconds of extra parent CPU for 40,000 one-byte stderr
+  writes from rescanning the accumulated text. The existing 64 KiB output limit
+  bounds this work. A separately tested incremental detector is an efficiency
+  follow-up; preserve split-line detection, the line-start anchor and output ordering.
   Production host/kernel isolation, hostile native exploits, fleet sizing and large archives remain
   unverified; the process-only development adapter still lacks these total-resource bounds.
   The verifier distinguishes bounded infrastructure failures from archive verdicts:
