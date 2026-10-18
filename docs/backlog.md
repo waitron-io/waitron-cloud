@@ -1278,7 +1278,7 @@ notifications separately.
   no helper inputs. An existence check alone also adds no root helpers, and a
   shared helper scanning its own directory does not scan the repository root.
   This bounded scan can keep extra consumers when identifiers are reused; it does
-  not resolve aliased directory calls, other type annotations, computed
+  not resolve directory aliases precisely, other type annotations, computed
   assignments or other directory APIs. A reachable source mentioning `glob` or
   `globSync` now keeps every package. Package-only planning names that source
   in its fallback reason; lockfile planning can report a generic full fallback.
@@ -1295,7 +1295,7 @@ notifications separately.
   revision despite dirty local helpers. Nonrecursive scans still exclude nested
   helpers, and comments cannot hide the full fallback for explicit root options.
   Line comments end at each JavaScript line terminator. This remains a bounded
-  source scan; aliases, comments between the tokens of `import.meta.url` and
+  source scan; comments between the tokens of `import.meta.url` and
   other unsupported expressions still need qualification. The immediate-entry rule also covers `readdir` from
   `node:fs/promises`, `opendir` and `opendirSync`, directly or through a supported
   URL declaration. Executed scans retain the loaded helper consumer without
@@ -1313,7 +1313,17 @@ notifications separately.
   depth are covered. Query, fragment, encoded-dot and ancestor runtime checks keep
   enumeration inside an owned directory. Calls without options retain their immediate-entry rule;
   options on a helper's own non-root directory do not imply a root scan. Resolving
-  options precisely remains open. Repository-root working directories, computed
+  options precisely remains open. A reachable `readdirSync`, `readdir`,
+  `opendirSync` or `opendir` renamed with `as` now keeps all package suites and
+  names the source path in the planner's reason. The renamed call can load a
+  helper without spelling a directory API at its call site. Executed Node scans
+  prove that consumer, while saved-tree and batched-read controls cover readers
+  from either revision despite dirty local helpers. Unreachable alias helpers
+  retain narrow package selection. Block and line comments before `as` also keep
+  the fallback. This bounded token scan can select extra work for inert text or
+  unrelated names; precise alias resolution, assignment/destructuring aliases
+  and other unsupported calls remain open. Existing assertions and reader-audit
+  certificates are unchanged. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain
   unresolved. This does not complete the plan's dynamic input and directory rules. Identity still selects all nine packages in the current graph;
   portal alone remains isolated. Unaudited root, unknown and empty changes run everything.
