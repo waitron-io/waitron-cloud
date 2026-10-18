@@ -1441,7 +1441,12 @@ notifications separately.
   Type checking stays whole-workspace. The root command compiles the shared
   backend configuration once, then runs the portal and UI-smoke configurations.
   The seven backend package commands use the same root configuration, so repeating
-  them does not check additional sources. Real-compiler controls retain errors in
+  them does not check additional sources. The package-revision checks are split
+  across four files discovered by the existing CI command, preserving every test
+  body, assertion and fixture while allowing Node to run the files in parallel.
+  This follows an eight-minute job cancellation after all 671 root checks and
+  compiler checks completed; the test step alone took 457.9 seconds. The roughly
+  five-minute job target still needs qualification. Real-compiler controls retain errors in
   every backend package, a newly added package, portal source/tests and UI
   declarations. A workspace inventory check refuses an unaccounted compiler
   command or configuration. Individual package commands remain available. Measure
