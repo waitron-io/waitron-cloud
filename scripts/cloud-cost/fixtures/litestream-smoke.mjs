@@ -1,0 +1,135 @@
+let stage = 'prepare';
+// Synthetic venue only. SDK log lines are consumed in memory and never written or returned.
+import { createRequire } from 'node:module';
+import { mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { createServer, request } from 'node:http';
+import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
+import { DatabaseSync } from 'node:sqlite';
+import { openReplay } from '/code/cost-waitron-adapter.mjs';
+import { createLitestreamRequestAudit } from '/code/litestream.mjs';
+import { createMeter, createMeteringProxy, classifyStorageOperation, instrumentStorageClient, correlatedStorageAttempt } from '/code/meter.mjs';
+const require = createRequire('/app/packages/backups/package.json');
+const { S3Client, CreateBucketCommand, ListObjectsV2Command, DeleteObjectCommand, DeleteBucketCommand } = require('@aws-sdk/client-s3');
+const fail = () => { throw Error('Synthetic Litestream check failed'); };
+async function smoke() {
+  const stateRoot = '/state/synthetic-litestream-proof', Bucket = 'synthetic-litestream';
+  mkdirSync(stateRoot, { mode: 0o700 });
+  const { config, initial } = JSON.parse(readFileSync('/state/replay-config.json', 'utf8'));
+  const replay = await openReplay({ codeRoot: '/code', stateRoot, config, initial });
+  const database = stateRoot + '/venue/venue.db', output = stateRoot + '/restored.db';
+  const children = new Set(); let injectedFailures = 0;
+  const fault = createServer((req, res) => {
+    if (req.method === 'PUT' && injectedFailures === 0) {
+      injectedFailures++; req.resume(); req.on('end', () => { res.writeHead(503, { 'content-length': '0' }); res.end(); }); return;
+    }
+    const upstream = request('http://127.0.0.1:8333', { method: req.method, path: req.url, headers: req.headers }, incoming => {
+      res.writeHead(incoming.statusCode, incoming.headers); incoming.on('error', () => res.destroy()); incoming.pipe(res);
+    });
+    upstream.on('error', () => res.destroy()); req.on('aborted', () => upstream.destroy()); req.pipe(upstream);
+  });
+  fault.listen(0, '127.0.0.1'); await once(fault, 'listening');
+  const phase = async name => {
+    const audit = createLitestreamRequestAudit({ phase: name });
+    const meter = createMeter({ phase: name, clock: () => performance.now() / 1000 });
+    const proxy = await createMeteringProxy({ target: `http://127.0.0.1:${fault.address().port}`, meter,
+      classify: input => audit.observe({ headers: input.headers, operation: classifyStorageOperation(input) }) });
+    return { audit, meter, proxy };
+  };
+  const replication = await phase('workload'), restore = await phase('restore');
+  const adminMeter = createMeter({ phase: 'observer', clock: () => performance.now() / 1000 });
+  const adminProxy = await createMeteringProxy({ target: 'http://127.0.0.1:8333', meter: adminMeter, classify: correlatedStorageAttempt });
+  const clients = ['setup', 'observer', 'cleanup'].map(phase => {
+    const client = new S3Client({ endpoint: adminProxy.url, region: 'eu-north-1', forcePathStyle: true, maxAttempts: 1,
+      credentials: { accessKeyId: 'SYNTHETIC', secretAccessKey: 'SYNTHETIC' } });
+    instrumentStorageClient({ client, meter: adminMeter, phase, endpoint: adminProxy.url }); return client;
+  });
+  const env = { PATH: process.env.PATH, HOME: stateRoot, AWS_ACCESS_KEY_ID: 'SYNTHETIC', AWS_SECRET_ACCESS_KEY: 'SYNTHETIC',
+    AWS_EC2_METADATA_DISABLED: 'true', LITESTREAM_S3_DEBUG: 'request,retries' };
+  const version = spawnSync('/code/litestream', ['version'], { env, encoding: 'utf8', timeout: 2000 }).stdout.trim();
+  const launch = (args, audit) => {
+    const child = spawn('/code/litestream', args, { env, stdio: ['ignore', 'ignore', 'pipe'] });
+    children.add(child); let invalid = false;
+    child.stderr.on('data', bytes => { try { audit.write(bytes); } catch { invalid = true; child.kill('SIGTERM'); } });
+    const timer = setTimeout(() => child.kill('SIGKILL'), 80000);
+    const done = new Promise(resolve => {
+      child.once('error', () => { invalid = true; });
+      child.once('close', code => { clearTimeout(timer); children.delete(child); resolve({ code, invalid }); });
+    });
+    return { child, done };
+  };
+  const stop = async process => {
+    if (!children.has(process.child)) return process.done;
+    process.child.kill('SIGTERM'); const force = setTimeout(() => process.child.kill('SIGKILL'), 2000);
+    try { return await process.done; } finally { clearTimeout(force); }
+  };
+  const configFile = (name, endpoint) => {
+    const file = stateRoot + '/' + name + '.json';
+    writeFileSync(file, JSON.stringify({ snapshot: { interval: '24h', retention: '168h' },
+      dbs: [{ path: database, 'monitor-interval': '1s', replica: { type: 's3', bucket: Bucket, path: 'stream', endpoint,
+        region: 'eu-north-1', 'force-path-style': true, 'sync-interval': '1s' } }] }), { mode: 0o600 });
+    return file;
+  };
+  const sale = async number => {
+    const instant = new Date(`2026-01-01T12:00:0${number}Z`);
+    await replay.recordSale({ origin: { source: 'operator_script', deviceId: null }, locale: 'es', invoiceLocales: ['es'],
+      total: '12.10', lines: [{ lineNo: 1, name: 'Synthetic item', descriptions: { es: 'Synthetic item' }, quantity: '1',
+        unitPrice: '10.00', vatRate: '21.00', lineTotal: '10.00' }],
+      clock: { now: () => ({ instant, offsetMinutes: 60, confident: true, confidence: 'anchored', anchorAgeSeconds: 0 }) },
+      settlement: { kind: 'immediate', tenders: [{ method: 'cash', amount: '12.10', tipAmount: '0', settledAt: instant }] } });
+  };
+  let replicator;
+  const list = async () => {
+    const result = await clients[1].send(new ListObjectsV2Command({ Bucket }));
+    if (result.IsTruncated) fail(); return result.Contents ?? [];
+  };
+  try {
+    stage = 'bucket'; await clients[0].send(new CreateBucketCommand({ Bucket })); await sale(1);
+    stage = 'replicate'; replicator = launch(['replicate', '-config', configFile('replicate', replication.proxy.url)], replication.audit);
+    let uploaded = false;
+    for (let n = 0; n < 40; n++) {
+      if (!children.has(replicator.child)) fail();
+      if ((await list()).some(r => r.Key.endsWith('.ltx'))) { uploaded = true; break; }
+      await delay(500);
+    }
+    if (!uploaded) fail(); stage = 'second-sale'; await sale(2);
+    stage = 'restore'; let restoredSales = 0, integrity;
+    for (let n = 0; n < 12; n++) {
+      rmSync(output, { force: true });
+      const run = launch(['restore', '-config', configFile('restore', restore.proxy.url), '-o', output, database], restore.audit);
+      const result = await run.done;
+      if (result.invalid) fail();
+      if (result.code === 0) {
+        const db = new DatabaseSync(output, { readOnly: true });
+        try { integrity = db.prepare('PRAGMA integrity_check').get().integrity_check;
+          restoredSales = Number(db.prepare('SELECT count(*) AS n FROM sales').get().n); }
+        finally { db.close(); }
+        if (restoredSales === 2) break;
+      }
+      await delay(1000);
+    }
+    if (restoredSales !== 2 || integrity !== 'ok') fail();
+    stage = 'stop'; const ended = await stop(replicator); if (ended.invalid || ended.code !== 0) fail();
+    stage = 'audit-end'; replication.audit.end(); restore.audit.end();
+    await delay(20);
+    const result = { version, injectedFailures, restoredSales, integrity, sales: replay.counts(), fiscal: await replay.verify(),
+      replication: replication.audit.snapshot(), restore: restore.audit.snapshot(), observed: replication.meter.snapshot() };
+    stage = 'delete'; for (const row of await list()) await clients[2].send(new DeleteObjectCommand({ Bucket, Key: row.Key }));
+    result.cleanedObjects = (await list()).length === 0;
+    await clients[2].send(new DeleteBucketCommand({ Bucket }));
+    result.administration = adminMeter.snapshot();
+    result.leaked = /synthetic-litestream|Authorization|Invocation|127\.0\.0\.1|\/state\/|\.ltx/.test(JSON.stringify(result));
+    return result;
+  } finally {
+    if (replicator) await stop(replicator);
+    for (const child of children) child.kill('SIGKILL');
+    if (children.size) await Promise.all([...children].map(child => once(child, 'close')));
+    for (const client of clients) client.destroy();
+    const closed = await Promise.allSettled([replication.proxy.close(), restore.proxy.close(), adminProxy.close()]);
+    fault.closeAllConnections(); await new Promise(resolve => fault.close(resolve));
+    await replay.close(); rmSync(stateRoot, { recursive: true, force: true });
+    if (closed.some(result => result.status === 'rejected')) fail();
+  }
+}
+smoke().then(result => process.stdout.write(JSON.stringify(result)), () => { console.error('Synthetic Litestream phase: ' + stage); process.exitCode = 1; });

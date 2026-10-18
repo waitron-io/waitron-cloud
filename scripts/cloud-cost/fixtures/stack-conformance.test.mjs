@@ -236,3 +236,35 @@ test('genuineVersionAndMultipartLifetimesMatchMeteredStorageInventories', async 
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
+
+// The unmodified pinned Go binary must emit its own attempts, survive a real retry, and restore real sale writes.
+test('genuineLitestreamRequestLogsIndependentlyMatchReplicationRetryAndRestore', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  cpSync(prepared.litestreamBinary, join(f.codeRoot, 'litestream'));
+  cpSync(new URL('../litestream.mjs', import.meta.url), join(f.codeRoot, 'litestream.mjs'));
+  cpSync(new URL('./litestream-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-litestream-smoke.mjs'));
+  let stack;
+  f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-litestream-smoke.mjs'],
+    { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 95000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  assert.equal(result.version, '0.5.17'); assert.equal(result.injectedFailures, 1);
+  assert.equal(result.restoredSales, 2); assert.equal(result.integrity, 'ok');
+  assert.deepEqual(result.sales, { attempted: 2, successful: 2, failed: 0 });
+  assert.deepEqual(result.fiscal, { ok: true, issues: 0 });
+  assert.equal(result.replication.requestsReconciled, true); assert.equal(result.restore.requestsReconciled, true);
+  assert.equal(result.replication.status, 'unknown'); assert.equal(result.restore.status, 'unknown');
+  assert.ok(result.replication.requests.some(r => r.operation === 'put' && r.retryOrdinal === 1));
+  assert.ok(result.replication.requests.some(r => r.operation === 'list'));
+  assert.ok(result.restore.requests.some(r => r.operation === 'get'));
+  assert.equal(result.observed.reconciled, false, 'header evidence must not invent producer byte measurements');
+  assert.ok(result.observed.accounting.observer.bytesOut > 1000);
+  assert.equal(result.administration.reconciled, true, 'setup, inventory and cleanup calls need their own independent accounting');
+  assert.equal(result.cleanedObjects, true); assert.equal(result.leaked, false);
+  t.diagnostic(JSON.stringify({ replication: result.replication.producerAttempts, restore: result.restore.producerAttempts,
+    observerBytes: result.observed.accounting.observer, saleWrites: result.restoredSales }));
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});

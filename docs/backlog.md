@@ -1146,8 +1146,18 @@ notifications separately.
   backend before a complete replay using them can qualify; the independent signed-SDK
   HTTP check retains the exact replacement-size assertion. The existing archive and
   stack assertions remain unchanged.
-  This is the base service fixture with passive storage accounting;
-  stream replication, the real public/staff tunnel journeys, complete accounting,
+  The unmodified pinned Litestream 0.5.17 binary now replicates two synthetic
+  Waitron sale writes into local storage, retries an injected upload failure and
+  restores both sales into an integrity-checked SQLite database. Its header-only SDK
+  request logs independently reconcile physical request identities, operations and
+  retry numbers with the passive proxy. The parser discards paths and signed headers,
+  rejects malformed, duplicate or truncated evidence and keeps workload and restore
+  phases separate. Read the result as request evidence only: header logs do not prove
+  producer body bytes or retained-object lifetimes, so its overall status stays
+  unknown. The passive byte totals do not fill those gaps. The native stream check
+  does not run application restore hooks or grant fiscal activation authority.
+  This is the base service fixture plus bounded synthetic stream/request evidence;
+  complete stream byte/lifetime integration, the real public/staff tunnel journeys, complete accounting,
   local replay orchestration, the offline calculator, private local sales replay,
   measured storage and remote traffic, and synthetic-only AWS comparison
   remain open. Keep raw venue data on the Mac, distinguish measured
