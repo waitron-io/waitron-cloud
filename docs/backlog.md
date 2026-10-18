@@ -933,8 +933,8 @@ notifications separately.
   failure. This proves a baseline resource failure, but not the cause of the
   nine-minute child stall. Neither interrupted run is a pass.
   The review's default-concurrency account suite also emitted failures. Complete
-  registration/account suites pass all 679/382 tests with two file workers on
-  the corrected branch. Capture the full output of both default-concurrency commands,
+  registration/account suites passed all 679/382 tests with two file workers on
+  the corrected PR2 branch. PR3 passes 679/384 and runs full packages sequentially. Capture the full output of both default-concurrency commands,
   without piping it through `head`, and diagnose failure cleanup and resource
   contention. Preserve every assertion and deadline; do not treat a rerun as a fix.
 - **Operating cost.** The [cost-model design](superpowers/specs/2026-10-14-cloud-cost-model-design.md)
