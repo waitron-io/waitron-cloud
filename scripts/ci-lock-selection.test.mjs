@@ -337,3 +337,28 @@ for (const name of ${expression}(directory)) {
     });
   }
 });
+
+
+test('audited lock changes retain consumers behind deep namespace middle array readers', () => {
+  for (const expression of ['[0, ns.fs.readdirSync, null][1]', '[[], ns!.nested?.fs!.readdirSync!, null][1]']) {
+    for (const reader of [false, true]) fixture(({git, write, lock, save, audit, commit, plan}) => {
+      if (reader) {
+        write('packages/catalogue/src/adapter.mjs', 'export const price = 1;\n');
+        write('catalogue-adapter.mjs', "import './packages/catalogue/src/adapter.mjs';\nconsole.log('deep lock helper loaded');\n");
+        write('packages/page/test/scan.mts', `import * as fs from 'node:fs';
+const ns = {fs, nested: {fs}};
+const directory = new URL('../../../', import.meta.url);
+for (const name of ${expression}(directory)) {
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`);
+      }
+      audit(); const base = commit();
+      lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+      const head = commit();
+      if (reader) assert.equal(execFileSync(process.execPath, ['packages/page/test/scan.mts'],
+        {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8'}), 'deep lock helper loaded\n');
+      assertSelected(plan(base, head), reader ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
+    });
+  }
+});
