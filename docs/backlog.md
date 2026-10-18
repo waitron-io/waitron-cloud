@@ -1405,10 +1405,19 @@ notifications separately.
   revision and unchanged transitive consumers despite dirty local files; audited
   lock changes retain full work with these readers and narrow work without them.
   Unused helpers and ordinary named imports still keep narrow work. This bounded
-  guard can select extra work for inert text and unrelated names. Deeper members
-  such as `fs.promises.readdir`, computed members such as `fs['readdirSync']` and
-  parenthesized namespaces such as `(fs).readdirSync` remain unresolved; executed
-  controls miss their loaded consumers on both the original and changed scanner.
+  guard can select extra work for inert text and unrelated names. Middle-array
+  readers now also retain full package work through chains of named members,
+  including `[0, fs.promises.readdir, null][1]` and a reader immediately after a
+  nested array or object. Executed Node controls cover all four APIs through two
+  and three member segments, comment-separated tokens, optional access and
+  non-null assertions, plus native `fs.promises.readdir` and `opendir`. Saved
+  helpers retain base, head and unchanged transitive consumers despite dirty
+  local files. Audited lock changes retain full work with these readers and
+  narrow work without them; unreachable helpers stay narrow. These guards do
+  not resolve member identities and may select extra work for unrelated names
+  or inert text. Computed members such as `fs['readdirSync']` and parenthesized
+  namespaces such as `(fs).readdirSync` remain unresolved, as do deeper members
+  in other expression positions; this is not a general expression parser.
   Other nested predecessors such as `[[], 0, readdirSync, null][2]` also remain
   unresolved on both scanners.
   Adversarial repeated delimiter/comment

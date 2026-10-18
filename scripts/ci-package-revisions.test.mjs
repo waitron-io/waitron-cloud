@@ -2043,3 +2043,92 @@ const directory = new URL('../', import.meta.url);
   const head = commit();
   assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
 }));
+
+
+test('deep namespace middle array readers retain actually loaded consumers', async t => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
+    for (const prefix of ['0', '[]']) {
+      for (const member of ['ns.fs.', 'ns.nested.fs.', 'ns /* a */ ! ?. nested /* b */ . fs /* c */ ! ?. ']) {
+        await t.test(`${prefix}, ${member}${api}`, () => fixture(({root, write, commit, plan}) => {
+          write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('deep helper loaded');\n");
+          write('packages/portal/src/reader.mts', `import * as fs from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+const ns = {fs, nested: {fs}};
+const directory = new URL('../../../', import.meta.url);
+for await (const item of await [${prefix}, ${member}${api}!, null][1](directory)) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`);
+          const base = commit();
+          write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+          const head = commit();
+          assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'deep helper loaded\n');
+          const result = plan(base, head);
+          assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+          assert.match(result.reason, /Unresolved indirect directory call at packages\/portal\/src\/reader\.mts/);
+        }));
+      }
+    }
+  }
+});
+
+test('native fs promises middle array readers retain loaded consumers', async t => {
+  for (const api of ['readdir', 'opendir']) await t.test(api, () => fixture(({root, write, commit, plan}) => {
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('native promises helper loaded');\n");
+    write('packages/portal/src/reader.mjs', `import * as fs from 'node:fs';
+const directory = new URL('../../../', import.meta.url);
+for await (const item of await [0, fs.promises.${api}, null][1](directory)) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mjs'], {cwd: root, encoding: 'utf8'}), 'native promises helper loaded\n');
+    assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+  }));
+});
+
+test('saved deep namespace middle array readers retain revisions despite dirty local helpers', () => {
+  for (const expression of ['[0, ns.fs.readdirSync, null][1]', '[[], ns!.nested?.fs!.readdirSync!, null][1]']) {
+    for (const revision of ['base', 'head', 'unchanged']) fixture(({root, git, write, commit, plan}) => {
+      write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('saved deep helper loaded');\n");
+      const reader = `import * as fs from 'node:fs';
+const ns = {fs, nested: {fs}};
+const directory = new URL('../', import.meta.url);
+for (const name of ${expression}(directory)) {
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`;
+      write('tools/scan.mts', revision === 'head' ? 'export const value = 1;\n' : reader);
+      write('packages/portal/src/index.mjs', "import '../../../tools/scan.mts';\n");
+      write('packages/gateway/src/index.mjs', "import '../../portal/src/index.mjs';\n");
+      const base = commit();
+      if (revision !== 'head') assert.equal(execFileSync(process.execPath, ['packages/gateway/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'saved deep helper loaded\n');
+      if (revision !== 'unchanged') write('tools/scan.mts', revision === 'head' ? reader : 'export const value = 2;\n');
+      write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+      const head = commit();
+      if (revision !== 'base') assert.equal(execFileSync(process.execPath, ['packages/gateway/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'saved deep helper loaded\n');
+      write('tools/scan.mts', 'export const changedLocally = true;\n');
+      write('catalogue-adapter.mjs', 'export const changedLocally = true;\n');
+      const read = (...args) => git(...args);
+      read.readBlobs = ids => packageInputs.readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input}));
+      assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, read),
+        /Unresolved indirect directory call at tools\/scan\.mts/, revision);
+      assert.deepEqual(plan(base, head, read).packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+    });
+  }
+});
+
+test('unused deep namespace directory helpers retain narrow package work', () => fixture(({write, commit, plan}) => {
+  write('tools/unused.mjs', `import * as fs from 'node:fs';
+const ns = {fs, nested: {fs}};
+[0, ns.fs.readdirSync, null][1](new URL('../', import.meta.url));
+[[], ns.nested.fs.readdirSync, null][1](new URL('../', import.meta.url));
+`);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
+}));
