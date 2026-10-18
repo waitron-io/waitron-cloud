@@ -2105,6 +2105,18 @@ notifications separately.
   deadline, but did not record the build duration separately. The same controlled
   build delay now passes its unchanged 30-second worker test after image preparation
   moves into the setup hook; the historical CI stage timings remain unproved.
+  The process adapter stops and reaps a child when V8 reports fatal heap exhaustion,
+  before kernel crash collection can replace that resource refusal with a watchdog timeout.
+  [Synthetic Ubuntu tracing](https://github.com/waitron-io/waitron-cloud/actions/runs/39111778828)
+  observed the heap report at 75–349 ms, then concurrent children waiting in crash-dump
+  pipe writes until all eight reached the unchanged five-second watchdog.
+  [A controlled eight-second core collector](https://github.com/waitron-io/waitron-cloud/actions/runs/39111842785)
+  reproduces the original strict heap test's resource-versus-timeout failure. New tests
+  pause a genuinely exhausted child, split the fatal report across chunks and preserve
+  ordinary stderr outcomes. The original nine process tests, heap limit, permissions,
+  output bound and deadlines remain unchanged. The earlier main failure
+  [39111146785](https://github.com/waitron-io/waitron-cloud/actions/runs/39111146785)
+  did not capture child stages, so its precise historical crash-collection timing remains unproved.
   Production host/kernel isolation, hostile native exploits, fleet sizing and large archives remain
   unverified; the process-only development adapter still lacks these total-resource bounds.
   The verifier distinguishes bounded infrastructure failures from archive verdicts:

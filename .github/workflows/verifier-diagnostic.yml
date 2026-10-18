@@ -30,8 +30,5 @@ jobs:
           sudo chmod 755 /tmp/d81-core-helper
           printf '|/tmp/d81-core-helper' | sudo tee /proc/sys/kernel/core_pattern >/dev/null
           node scripts/verifier-diagnostic.mjs ../packages/backups/src/verify-process.ts 1
-          if node --test --test-name-pattern='JavaScript allocations' packages/backups/test/verify-process.test.ts; then
-            echo 'Expected the original resource assertion to expose delayed core collection'
-            exit 1
-          fi
+          node --test --test-name-pattern='JavaScript allocations' packages/backups/test/verify-process.test.ts
           sleep 8

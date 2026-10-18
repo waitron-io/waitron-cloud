@@ -43,6 +43,14 @@ verification. It means that this copy did not restore within the configured limi
 necessarily that its bytes are corrupt. Archive output and error details are not returned
 in diagnostics.
 
+The process adapter recognises V8's fatal heap-exhaustion report as it arrives and
+kills the child, then waits for its process and output pipes to close. Linux crash
+collection can delay a fatal process exit even with core-file size set to zero, so
+waiting for exit alone can turn a known resource refusal into a watchdog timeout.
+The same output bound still applies, and private error text stays inside the parent.
+You can exercise delayed exit and split diagnostic chunks with
+`node --test packages/backups/test/verify-process-heap.test.ts`.
+
 A failed download, Docker connection or start, container cleanup, configuration, input
 transfer or result protocol leaves the snapshot's last verification state unchanged.
 The worker records `verification_unavailable` and retries the same snapshot. It does not
