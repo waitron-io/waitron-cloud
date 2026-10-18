@@ -171,3 +171,9 @@ TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
 ```
 
 The disposable fixture captures an encrypted archive with genuine Waitron code at `e52c997c02d2fcd66d0e7239cbfd79ced4ddd0ee`, uploads it using scoped credentials and publishes it through the signed account API. Cloud now reads that revision's validated database file instead of assuming it returns database bytes. The subsequent restore hook refuses with `restore.hook_failed` / `sif.allocation_invalid`: Waitron's fiscal restore requires an authorised allocation operation. The Cloud verifier supplies none. A separate verification contract must settle that authority before you can mark this proof green. Do not skip the hook, mint an allocation automatically or enable the deployment to bypass the refusal.
+
+The proposed [backup-verification contract](superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md)
+separates recovery checks from permission to activate a server. It requires owner
+approval and a separately owned Waitron implementation before Cloud can use it.
+Keep snapshots unavailable and deployment enforcement off until the contract and
+the complete integration proof pass their gates.

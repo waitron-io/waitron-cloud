@@ -129,7 +129,10 @@ The scoped controller and file-backed archive adapter are implemented and locall
 tested. Genuine snapshot capture/publication reaches the pinned Waitron fiscal
 restore hook, which refuses `sif.allocation_invalid`; the verifier supplies no
 authorised allocation operation. PR 5 is blocked pending an explicitly agreed
-verification contract. Do not skip that hook or grant fiscal writes implicitly.
+verification contract. The owner selected a separate contract that grants Cloud
+no fiscal authority. The [design proposal](../specs/2026-10-18-backup-verification-without-fiscal-authority.md)
+needs approval and a Waitron implementation before Cloud adapter work can use it.
+Do not skip that hook or grant fiscal writes implicitly.
 The backup profile remains unavailable. Deployment enforcement stays off.
 Current runner instructions assign required package
 suites to CI and retire this plan's earlier local-full-suite and CI-cost instructions.
