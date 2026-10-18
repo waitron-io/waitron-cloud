@@ -1443,9 +1443,16 @@ notifications separately.
   or an escape in that first token remain unresolved. Executed base/final probes
   still miss consumers when the escape appears in a later concatenated string,
   a comma expression or a template nested inside the key's template.
-  Parenthesized dot-member
-  namespaces such as `(fs).readdirSync` remain unresolved, as do deeper members
-  in other expression positions; this is not a general expression parser.
+  Parenthesized dot-member receivers such as `(fs).readdirSync` now retain
+  full package work for all four directory APIs. Executed Node controls cover
+  optional access, comments, erased assertions, deeper namespace receivers and
+  stored array references. Saved-helper controls retain either revision and
+  unchanged transitive consumers despite dirty local files; audited lock changes
+  retain full work with these readers and narrow work without them. Unused
+  helpers stay narrow. The guard does not resolve receiver identities, so unrelated
+  objects with these member names and inert text can also select extra work.
+  Other deeper members and expression positions remain unresolved; this is not
+  a general expression parser.
   Other nested predecessors such as `[[], 0, readdirSync, null][2]` also remain
   unresolved on both scanners.
   Adversarial repeated delimiter/comment

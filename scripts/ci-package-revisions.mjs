@@ -73,6 +73,10 @@ function workspaceAt(sha, workspace, git) {
       // Glob patterns, options and the default working directory can reach inputs
       // outside the quoted paths; unresolved scans must keep every package.
       assert.doesNotMatch(source.source, /\b(?:globSync|glob)\b/, `Unresolved glob scan at ${source.path}`);
+      // Parentheses preserve a namespace receiver but hide it from direct-call
+      // path matching. Keep possible consumers without resolving the receiver.
+      assert.doesNotMatch(source.source, directoryPattern(/\)\s*(?:!\s*)*(?:\?\.|\.)\s*(?:readdirSync|readdir|opendirSync|opendir)\b/),
+        `Unresolved parenthesized directory member at ${source.path}`);
       // Optional calls and function members can enumerate a directory without
       // matching a direct call; unresolved arguments retain every consumer.
       // TypeScript non-null assertions leave the runtime function unchanged,
