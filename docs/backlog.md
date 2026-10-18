@@ -1342,7 +1342,10 @@ notifications separately.
   triggers the package planner guard; unused helpers keep narrow work.
   This conservative rule can also select extra work for inert text or unrelated
   members. Precise alias resolution, assignment/destructuring aliases, escaped
-  API references and other unsupported calls remain open. Existing assertions and reader-audit
+  API references and other unsupported calls remain open. In particular, direct
+  TypeScript calls such as `readdirSync!(directory)` still need qualification;
+  this guard covers assertions followed by optional or member access.
+  Existing assertions and reader-audit
   certificates are unchanged. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain
   unresolved. This does not complete the plan's dynamic input and directory rules. Identity still selects all nine packages in the current graph;
