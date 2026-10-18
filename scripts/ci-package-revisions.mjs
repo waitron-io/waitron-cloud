@@ -73,6 +73,10 @@ function workspaceAt(sha, workspace, git) {
       // Glob patterns, options and the default working directory can reach inputs
       // outside the quoted paths; unresolved scans must keep every package.
       assert.doesNotMatch(source.source, /\b(?:globSync|glob)\b/, `Unresolved glob scan at ${source.path}`);
+      // Optional calls and function members can enumerate a directory without
+      // matching a direct call; unresolved arguments retain every consumer.
+      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:\?\.|\.|\[)/),
+        `Unresolved indirect directory call at ${source.path}`);
       // An imported alias can enumerate helpers without naming a directory API
       // at its call site. Quoted names and escaped alias tokens stay unresolved;
       // those bindings must retain every possible consumer without decoding code.
