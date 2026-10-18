@@ -1110,8 +1110,14 @@ notifications separately.
   mail and a sale through HTTPS, then verify fiscal integrity and remove the owned
   containers and network. Every service passes the outbound connection checks.
   Startup refuses a changed plan, extra private configuration, mismatched endpoints,
-  an existing private key and
-  resources created before that invocation. This is the base service fixture;
+  an existing private key and resources created before that invocation. The storage
+  fixture now observes object, listing, multipart and bucket-control requests through
+  a streaming proxy. Its backend and accounting socket stay inside the storage
+  container. Synthetic client counts independently check attempts and body bytes,
+  including a HEAD response that reports object size without downloading it.
+  Unclassified or unfinished requests prevent a valid accounting snapshot. Observer
+  counts alone remain unreconciled, and bucket-control pricing stays unknown.
+  This is the base service fixture with passive storage accounting;
   stream replication, the real public/staff tunnel journeys, complete accounting,
   local replay orchestration, the offline calculator, private local sales replay,
   measured storage and remote traffic, and synthetic-only AWS comparison

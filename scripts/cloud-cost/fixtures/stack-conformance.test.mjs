@@ -133,3 +133,39 @@ test('stackRefusesExtraPrivateConfigurationBeforePreparingRuntimeFiles', async t
   await assert.rejects(async () => { stack = await local.startIsolatedStack({ ...f, prepared: preparedPlan }); }, /Invalid cloud cost local run/);
   assert.equal(existsSync(join(f.codeRoot, 'cost-stack-runtime.mjs')), false);
 });
+
+test('genuineStorageTrafficIsPassivelyCountedWithoutInventingReconciliation', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  cpSync(new URL('./storage-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-storage-smoke.mjs'));
+  let stack;
+  f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(docker('exec', s3, 'node', '/code/cost-storage-smoke.mjs'));
+  assert.equal(result.ready, true, 'the actual storage service must expose anonymous passive accounting');
+  assert.equal(result.producer.attempts, 11);
+  assert.equal(result.producer.bytesOut, 10);
+  assert.ok(result.producer.bytesIn > 6);
+  assert.deepEqual(result.observer, result.producer, 'independent client body-byte and attempt counts must agree');
+  assert.equal(result.status, 'unknown'); assert.equal(result.reconciled, false);
+  assert.equal(result.refusedPhase, 400); assert.equal(result.leaked, false);
+  assert.equal(result.refusedExtraPhase, 400);
+  assert.equal(result.refusedOperation, 400); assert.equal(result.invalidSnapshot, 400);
+  assert.deepEqual(result.observed.map(r => [r.operation, r.attempts]), [
+    ['bucket-create', 1], ['put', 1], ['get', 1], ['head', 1], ['list', 2],
+    ['multipart-create', 1], ['multipart-upload', 1], ['multipart-abort', 1], ['delete', 1], ['bucket-delete', 1],
+  ]);
+  const head = result.observed.find(r => r.operation === 'head');
+  assert.equal(head.bytesIn, 0); assert.equal(head.attemptedBytesIn, 0);
+  const waitron = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 'waitron');
+  const privateSockets = JSON.parse(docker('exec', waitron, 'node', '-e', `
+    const net=require('node:net');
+    const blocked=port=>new Promise(resolve=>{const s=net.connect(port,'s3');s.setTimeout(1000,()=>s.destroy());
+      let connected=false;s.on('connect',()=>{connected=true;s.destroy()});s.on('error',()=>{});s.on('close',()=>resolve(!connected));});
+    Promise.all([blocked(8334),blocked(8335)]).then(v=>process.stdout.write(JSON.stringify(v)));
+  `));
+  assert.deepEqual(privateSockets, [true, true], 'peers cannot bypass storage accounting or access its control socket');
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});

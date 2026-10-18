@@ -345,7 +345,7 @@ export async function startIsolatedStack(args) {
     }
     for (const name of ['gateway-key.pem', 'gateway-cert.pem', 'gateway.pem'])
       requireThat(!existsSync(join(stateRoot, name)));
-    for (const [from, to] of [['stack-runtime.mjs', 'cost-stack-runtime.mjs'], ['waitron-adapter.mjs', 'cost-waitron-adapter.mjs']])
+    for (const [from, to] of [['stack-runtime.mjs', 'cost-stack-runtime.mjs'], ['waitron-adapter.mjs', 'cost-waitron-adapter.mjs'], ['meter.mjs', 'meter.mjs']])
       copyFileSync(new URL(from, import.meta.url), join(codeRoot, to), constants.COPYFILE_EXCL);
     await runPrivate('/usr/bin/openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
       '-subj', '/CN=gateway', '-addext', 'subjectAltName=DNS:gateway', '-keyout', join(stateRoot, 'gateway-key.pem'),

@@ -4,6 +4,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import http from 'node:http';
 import https from 'node:https';
 import { pathToFileURL } from 'node:url';
+import { randomUUID } from 'node:crypto';
+import { createMeter, createMeteringProxy, classifyStorageOperation } from './meter.mjs';
 
 const fail = () => { throw Error('Invalid cloud cost stack runtime'); };
 const config = () => JSON.parse(readFileSync('/state/replay-config.json', 'utf8'));
@@ -18,11 +20,11 @@ const request = (url, { method = 'GET', body, tls = false } = {}) => new Promise
   });
   req.setTimeout(2000, () => req.destroy(Error('timeout'))); req.on('error', reject); req.end(bytes);
 });
-async function server(handler) {
+async function server(handler, { port = 8080, host = '0.0.0.0' } = {}) {
   const s = http.createServer(async (req, res) => {
     try { await handler(req, res); } catch { res.writeHead(400); res.end(); }
   });
-  await new Promise((resolve, reject) => { s.once('error', reject); s.listen(8080, '0.0.0.0', resolve); });
+  await new Promise((resolve, reject) => { s.once('error', reject); s.listen(port, host, resolve); });
   return s;
 }
 async function body(req) {
@@ -61,8 +63,23 @@ export async function runStackService(role) {
   }
   if (role === 's3') {
     mkdirSync('/state/storage', { mode: 0o700 });
-    binary('weed', ['mini', '-dir=/state/storage', '-ip=s3', '-ip.bind=0.0.0.0', '-master.port=9333', '-master.port.grpc=19333',
-      '-volume.port=8080', '-volume.port.grpc=18080', '-filer.port=8888', '-filer.port.grpc=18888', '-s3.port=8333',
+    let phase = 'startup';
+    const meter = createMeter({ phase, clock: () => performance.now() / 1000 });
+    // Per-attempt IDs do not identify client retries; these unpaired observations cannot qualify an export.
+    await createMeteringProxy({ target: 'http://127.0.0.1:8334', meter, listenHost: '0.0.0.0', listenPort: 8333,
+      classify: input => ({ token: randomUUID(), phase, operation: classifyStorageOperation(input),
+        retryOrdinal: 0, errorCode: null, sameAccount: null }) });
+    // This control socket stays inside the storage container; it never forwards a provider request.
+    await server(async (req, res) => {
+      if (req.method === 'GET' && req.url === '/snapshot') res.end(JSON.stringify(meter.snapshot()));
+      else if (req.method === 'POST' && req.url === '/phase') {
+        const value = await body(req);
+        if (Object.keys(value).join(',') !== 'phase' || !['setup', 'startup', 'workload', 'idle', 'verification', 'restore', 'observer', 'cleanup'].includes(value.phase)) fail();
+        phase = value.phase; res.end();
+      } else { res.writeHead(404); res.end(); }
+    }, { port: 8335, host: '127.0.0.1' });
+    binary('weed', ['mini', '-dir=/state/storage', '-ip=127.0.0.1', '-ip.bind=127.0.0.1', '-master.port=9333', '-master.port.grpc=19333',
+      '-volume.port=8080', '-volume.port.grpc=18080', '-filer.port=8888', '-filer.port.grpc=18888', '-s3.port=8334',
       '-admin.ui=false', '-webdav=false', '-s3.port.iceberg=0', '-s3.port.lance=0']); return;
   }
   if (role === 'mailpit') { binary('mailpit', ['--smtp', '0.0.0.0:1025', '--listen', '0.0.0.0:8025', '--database', '/state/mail.db']); return; }
