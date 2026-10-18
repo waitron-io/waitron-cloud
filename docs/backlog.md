@@ -1374,11 +1374,17 @@ notifications separately.
   work with a middle reader and narrow work without it. Unreachable helpers
   remain narrow. The middle-element guard requires an array opener so ordinary
   named imports preserve existing package isolation. Inert text can still select
-  extra work. Nested preceding arrays or objects and delimiter-bearing comments
-  or strings, logical expressions such as `readdirSync || null` and conditional
-  elements such as `true ? readdirSync : null` are not fully resolved. The logical
-  and conditional gaps are reproduced with real Node calls on both the prior and
-  current scanners. A direct multi-name import control preserves narrow work.
+  extra work. Logical and conditional operands adjacent to a directory reader
+  now retain full package work: either branch can preserve the function for a
+  later call. Executed Node scans cover all four APIs on either side of `&&`,
+  `||` and `??`, both conditional branches, comments and TypeScript assertions.
+  Saved-helper controls retain both revisions and unchanged transitive consumers
+  despite dirty local files; audited lock changes keep full work with these
+  readers and narrow work without them. Unreachable helpers and ordinary named
+  imports still keep narrow work. This bounded guard can select extra work for
+  inert text and unrelated names; it does not evaluate branch conditions.
+  Nested preceding arrays or objects and delimiter-bearing comments or strings
+  remain unresolved. A direct multi-name import control preserves narrow work.
   Precise resolution,
   assignment/destructuring aliases and escaped API references remain open.
   A final element's trailing comma also keeps full work, including multiline and
