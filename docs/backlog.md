@@ -1378,11 +1378,14 @@ notifications separately.
   now retain full package work: either branch can preserve the function for a
   later call. Executed Node scans cover all four APIs on either side of `&&`,
   `||` and `??`, both conditional branches, comments and TypeScript assertions.
+  Simple namespace references such as `null || fs.readdirSync` also keep full
+  work, including a comment-separated member in a conditional branch.
   Saved-helper controls retain both revisions and unchanged transitive consumers
   despite dirty local files; audited lock changes keep full work with these
   readers and narrow work without them. Unreachable helpers and ordinary named
   imports still keep narrow work. This bounded guard can select extra work for
-  inert text and unrelated names; it does not evaluate branch conditions.
+  inert text, unrelated names and direct calls inside a branch or right operand;
+  it does not evaluate branch conditions or resolve these calls precisely.
   Nested preceding arrays or objects and delimiter-bearing comments or strings
   remain unresolved. A direct multi-name import control preserves narrow work.
   Precise resolution,
