@@ -338,3 +338,7 @@ uses real host Node processes, PostgreSQL 18 and Mailpit; container packaging re
 covered by the separate lifecycle proof. It covers this version pair only, with stopped
 consumers. Provider backups, online migration, production traffic routing, capacity and
 recovery objectives still need deployment-specific evidence.
+
+## Use the isolated LAN test deployment
+
+Use the [test Cloud guide](test-cloud.md) for the separate HTTPS project, private CA, capture mailer and image-only deployment commands. The files and local proof are implemented; the test box is not deployed yet. Keep plan enforcement and translation off until their remaining integration gates pass. Your ordinary loopback stack keeps its existing origin and lifecycle commands.

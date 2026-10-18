@@ -896,7 +896,21 @@ notifications separately.
   that export's locked policy set; the next export includes it.
   The signed manifest schema and ten-minute authority maximum are unchanged.
   See the [remote test guide](local-remote-access.md#exercise-test-free-and-paid-plans).
-  Deployment enforcement is still off. Four remaining implementation slices,
+  The isolated LAN HTTPS override, persistent private CA/leaf bootstrap, fixed
+  capture mailer and dedicated test runtime are implemented. The runtime validates
+  and forwards plan mode explicitly while translation stays off. Rendered Compose
+  checks keep the backend unpublished, replace bindings and cap all container
+  limits at 1,824 MiB. Real native-Mac Docker proofs cover trusted HTTPS signup,
+  captured canonical links, independent proxy Host/Origin/header checks, restart
+  identity, account replacement without restarting its proxy and owned stop with preserved volumes. They do not prove amd64 box
+  deployment. The image-only driver checks platform, capacity, ports, network
+  overlap, rendered bindings and recorded IDs; startup monitoring checks resource
+  floors and existing Waitron health once per five seconds. Interrupted state with unrecorded IDs is refused; scoped Docker discovery and stop attempts survive a failed host inventory or state write. Cleanup that cannot reach Docker is reported as incomplete. See the [test Cloud guide](test-cloud.md).
+  The thirty-day leaf and one-year CA currently fail closed on expiry; same-CA
+  in-volume renewal remains a maintenance follow-up. Continuous box supervision,
+  coordinated image/schema upgrades and volume-to-volume rollback still need the
+  final deployment slice; the driver refuses an image change meanwhile.
+  Deployment enforcement is still off. Three remaining implementation slices,
   actual direct-storage withdrawal/fresh writers, LAN deployment,
   two-organisation acceptance and measured headroom remain open. The existing
   Waitron venue is quarantined; use a separate disposable Waitron test venue and
