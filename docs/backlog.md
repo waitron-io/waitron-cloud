@@ -1370,8 +1370,13 @@ notifications separately.
   These guards can also select extra work for inert text or unrelated names.
   Middle elements preceded and followed by other elements, assignment/destructuring
   aliases and escaped API references still need resolution under D69.
-  TypeScript `as` wrappers already retain full work, but
-  report an import-alias reason. Precise resolution and clearer reasons remain open.
+  Executed review probes still omit middle elements surrounded by other elements.
+  A final element's trailing comma also keeps full work, including multiline and
+  comment-separated forms. Saved-helper and lockfile controls independently exercise
+  final elements, so the first-element guard cannot mask a missing final-element guard.
+  TypeScript `as` wrappers already retain full work; the diagnostic can name an
+  import alias or an indirect call, depending on the surrounding expression.
+  Precise resolution and clearer reasons remain open.
   Existing assertions and reader-audit
   certificates are unchanged. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain

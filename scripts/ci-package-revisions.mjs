@@ -84,7 +84,7 @@ function workspaceAt(sha, workspace, git) {
       // first-element and closing-bracket references have unresolved consumers.
       assert.doesNotMatch(source.source, directoryPattern(/\[\s*(?:readdirSync|readdir|opendirSync|opendir)\b/),
         `Unresolved indirect directory call at ${source.path}`);
-      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|\]|\)|<|satisfies\b)|(?:!\s*)+\()/),
+      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|(?:,\s*)?\]|\)|<|satisfies\b)|(?:!\s*)+\()/),
         `Unresolved indirect directory call at ${source.path}`);
       // An imported alias can enumerate helpers without naming a directory API
       // at its call site. Quoted names and escaped alias tokens stay unresolved;

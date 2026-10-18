@@ -223,7 +223,7 @@ for (const name of ${expression}(directory)) {
 
 
 test('audited lock changes retain consumers behind array directory readers', () => {
-  for (const expression of ['[readdirSync][0]', '[readdirSync!,][0]']) {
+  for (const expression of ['[readdirSync][0]', '[readdirSync!,][0]', '[null, readdirSync][1]', '[null, readdirSync!,][1]']) {
     for (const reader of [false, true]) fixture(({git, write, lock, save, audit, commit, plan}) => {
       if (reader) {
         write('packages/catalogue/src/adapter.mjs', 'export const price = 1;\n');
