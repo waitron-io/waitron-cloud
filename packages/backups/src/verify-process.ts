@@ -21,7 +21,14 @@ export async function runNodeVerifier(args:string[],options:{input:unknown;timeo
   const fail=(code:string)=>{failure??=code;kill();};
   const abort=()=>fail('backup.verifier_cancelled');options.signal?.addEventListener('abort',abort,{once:true});
   const timer=setTimeout(()=>fail('backup.verifier_timeout'),timeout);
-  const collect=(bytes:Buffer,stdout:boolean)=>{size+=bytes.length;if(size>65536){fail('backup.verifier_output');return;}if(stdout)output+=bytes.toString('utf8');else errors+=bytes.toString('utf8');};
+  const collect=(bytes:Buffer,stdout:boolean)=>{
+   size+=bytes.length;if(size>65536){fail('backup.verifier_output');return;}
+   if(stdout)output+=bytes.toString('utf8');else{
+    errors+=bytes.toString('utf8');
+    // Fatal heap exhaustion is final; kernel crash collection can delay process exit past the watchdog.
+    if(/(?:^|\n)FATAL ERROR: [^\r\n]*(?:heap out of memory|heap limit)/i.test(errors))fail('backup.verifier_resource');
+   }
+  };
   child.stdout.on('data',bytes=>collect(bytes,true));child.stderr.on('data',bytes=>collect(bytes,false));
   child.on('error',()=>fail('backup.verifier_failed'));child.stdin.on('error',()=>fail('backup.verifier_failed'));
   // Wait for process close after killing it; callers may then remove the private restore directory.
