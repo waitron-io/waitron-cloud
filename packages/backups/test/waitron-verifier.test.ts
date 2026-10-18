@@ -32,3 +32,21 @@ test('the isolated verifier runs Waitron restore hooks and removes its private s
   assert.deepEqual(await readdir(scratch),[]);
  }finally{await rm(fixture,{recursive:true,force:true});}
 });
+
+test('file-backed validated archives retain integrity, identity and restore-hook checks',async()=>{
+ const fixture=await mkdtemp(join(tmpdir(),'cloud-file-verifier-')),checkout=join(fixture,'waitron'),scratch=join(fixture,'scratch'),server=join(checkout,'apps/server'),source=join(fixture,'source.db');
+ await mkdir(join(server,'src'),{recursive:true});await mkdir(join(server,'node_modules/tsx'),{recursive:true});await mkdir(scratch);
+ await writeFile(join(server,'package.json'),'{"type":"module"}');await writeFile(join(server,'node_modules/tsx/package.json'),'{"name":"tsx","type":"module","exports":"./loader.mjs"}');await writeFile(join(server,'node_modules/tsx/loader.mjs'),'');
+ await writeFile(join(server,'src/restore.ts'),`import assert from 'node:assert/strict';import {mkdir,writeFile,copyFile} from 'node:fs/promises';import {join} from 'node:path';export async function validateArtifact({artifact,stateDir}){const databasePath=join(stateDir,'validated.db');await writeFile(databasePath,artifact,{mode:0o600});return {databasePath,manifest:{modules:{fake:1},createdAt:'2026-09-26T00:00:00.000Z'},secretEntries:[{name:'secrets/trading.env',bytes:Buffer.from('WAITRON_TILL_NODE_ID=node-a')}]};}export async function writeValidated(checked,deps){assert.equal(checked.dumpEntry,undefined);await mkdir(deps.venueDir,{recursive:true});await copyFile(checked.databasePath,join(deps.venueDir,'venue.db'));deps.log('info','restore.hook.done',{module:'fake'});}`);
+ await writeFile(join(server,'src/modules.ts'),`export const ALL_MODULES=[{name:'fake',backup:{restore(){}}}]`);await writeFile(join(server,'src/env-file.ts'),`export function parseEnvFile(value){return Object.fromEntries(value.trim().split('\\n').map(line=>line.split('=')))}`);
+ const db=new DatabaseSync(source);db.exec('CREATE TABLE proof(value TEXT)');db.close();
+ try{
+  const verify=await createWaitronVerifier(checkout,{temporaryRoot:scratch}),bytes=await readFile(source),signal=new AbortController().signal,keys={recoveryKey:'test-key',streamKey:'test-stream'},point={sourceNodeId:'node-a',modules:{fake:1},capturedAt:'2026-09-26T00:00:00.000Z'};
+  const result=await verify(chunked(bytes,()=>{}),keys,point as never,signal) as {integrityOk:boolean;hooks:string[]};assert.equal(result.integrityOk,true);assert.deepEqual(result.hooks,['fake']);
+  await assert.rejects(verify(chunked(Buffer.alloc(64,255),()=>{}),keys,point as never,signal),/^Error: backup.verifier_failed$/);
+  await assert.rejects(verify(chunked(bytes,()=>{}),keys,{...point,sourceNodeId:'another-node'} as never,signal),/^Error: backup.verifier_failed$/);
+  await assert.rejects(verify(chunked(bytes,()=>{}),keys,{...point,modules:{foreign:1}} as never,signal),/^Error: backup.verifier_failed$/);
+  await assert.rejects(verify(chunked(bytes,()=>{}),keys,{...point,capturedAt:'2026-09-27T00:00:00.000Z'} as never,signal),/^Error: backup.verifier_failed$/);
+  assert.deepEqual(await readdir(scratch),[]);
+ }finally{await rm(fixture,{recursive:true,force:true});}
+});

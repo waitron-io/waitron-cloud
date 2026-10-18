@@ -1180,8 +1180,22 @@ notifications separately.
   measured withdrawal was 1,162 ms, including the operator command; it is not a
   production deadline. The assigned local names use r.waitron.local; there is no
   public DNS or outside-home availability. The backup worker selects the canonical
-  endpoint and LAN CA in test mode, but its scoped verifier/controller and paid
-  snapshot proof remain unfinished, along with final LAN/client integration. The first real fifteen-minute STS
+  endpoint and LAN CA in test mode. Its dedicated controller now records a private
+  child ID and token before admitting further work, checks image and ownership
+  before deletion, and refuses missing or uncertain state. One database session
+  admits one trusted worker; its verifier retains the 1,024 MiB memory and 256 MiB
+  scratch limits, no network, no socket and no host mounts. Local Docker checks
+  cover decoys, interrupted creation and resource boundaries. The verifier also
+  accepts Waitron's file-backed validated database while retaining integrity,
+  node, module, capture-time and restore-hook checks and the older fixture path.
+  Genuine paid snapshot verification is **blocked**, not proved: the pinned
+  Waitron revision `e52c997c02d2fcd66d0e7239cbfd79ced4ddd0ee` captures and publishes
+  an archive, but its fiscal restore hook refuses verification with
+  `restore.hook_failed` / `sif.allocation_invalid`. A separately agreed verification
+  contract must resolve the required allocation authority without silently
+  granting fiscal writes or skipping that hook. Keep the backup profile unavailable
+  and deployment enforcement off. Final LAN/client integration also remains open.
+  The first real fifteen-minute STS
   run observed InvalidAccessKeyId after its recorded expiry, but its new assertion
   wrongly expected the expired-identity error from the STS endpoint. That run is
   failed evidence, not a green test. A corrected full-duration run now passes:

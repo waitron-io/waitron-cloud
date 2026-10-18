@@ -66,3 +66,11 @@ test('test backup worker uses canonical storage and normal LAN trust in enabled 
  assert.equal(value.CLOUD_BACKUP_ENDPOINT,'https://waitron.local:8333');assert.equal(value.CLOUD_BACKUP_CA_FILE,'/run/local-stack/lan/ca.pem');
  assert.equal(api.testRuntimeEnvironment('backup',config,{}).CLOUD_BACKUP_ENDPOINT,'https://storage:8333');
 });
+
+// Dropping the pinned image while building the child environment makes verification unavailable.
+test('test backup selects the scoped controller and forwards only explicit pinned verifier inputs',async t=>{
+ const api=await import('./runtime.mjs'),dir=await mkdtemp(join(tmpdir(),'cloud-verifier-env-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
+ const value=api.testRuntimeEnvironment('backup',config,{CLOUD_TEST_SERVICE_PLANS:'1',CLOUD_VERIFIER_IMAGE:'sha256:'+'a'.repeat(64),CLOUD_VERIFIER_OWNER:'foreign',CLOUD_VERIFIER_MEMORY_MIB:'4096'});
+ assert.equal(api.testRuntimeCommand('backup'),'deploy/test-cloud/backup-worker.mjs');
+ assert.equal(value.CLOUD_VERIFIER_IMAGE,'sha256:'+'a'.repeat(64));assert.equal(value.CLOUD_VERIFIER_OWNER,undefined);assert.equal(value.CLOUD_VERIFIER_MEMORY_MIB,undefined);
+});

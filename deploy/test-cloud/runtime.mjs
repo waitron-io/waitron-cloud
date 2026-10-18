@@ -1,7 +1,7 @@
 import {spawn} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 import {loadRuntime,runtimeEnvironment,checkConsumerDatabase} from '../local-stack/runtime.mjs';
-const commands={migrate:'packages/registration/src/migrate-cli.ts',account:'deploy/test-cloud/account-worker.mjs',storage:'deploy/test-cloud/storage-worker.mjs',email:'deploy/test-cloud/email-worker.mjs',monitor:'packages/registration/src/monitor-cli.ts',usage:'packages/registration/src/usage-reconcile-cli.ts',probe:'packages/remote-access/src/probe-cli.ts',backup:'packages/backups/src/worker-cli.ts',gateway:'packages/remote-access/src/gateway-cli.ts',manifest:'deploy/test-cloud/remote-worker.mjs',reconcile:'packages/remote-access/src/reconciler-cli.ts',translation:'packages/translation/src/worker-cli.ts'};
+const commands={migrate:'packages/registration/src/migrate-cli.ts',account:'deploy/test-cloud/account-worker.mjs',storage:'deploy/test-cloud/storage-worker.mjs',email:'deploy/test-cloud/email-worker.mjs',monitor:'packages/registration/src/monitor-cli.ts',usage:'packages/registration/src/usage-reconcile-cli.ts',probe:'packages/remote-access/src/probe-cli.ts',backup:'deploy/test-cloud/backup-worker.mjs',gateway:'packages/remote-access/src/gateway-cli.ts',manifest:'deploy/test-cloud/remote-worker.mjs',reconcile:'packages/remote-access/src/reconciler-cli.ts',translation:'packages/translation/src/worker-cli.ts'};
 export function testRuntimeCommand(role){if(!Object.hasOwn(commands,role))throw new Error('test_cloud.role_invalid');return commands[role];}
 export function testRuntimeEnvironment(role,config,environment={}){
  testRuntimeCommand(role);
@@ -11,7 +11,7 @@ export function testRuntimeEnvironment(role,config,environment={}){
  if(role==='account'){result.CLOUD_TRANSLATION='0';result.CLOUD_HTTP_TRUSTED_PROXY_IPS='10.79.0.2';if(flag==='1')result.CLOUD_STAFF_CERTIFICATES='1';}
  if(role==='gateway'){result.GATEWAY_UPSTREAM_CA='/run/local-stack/lan/ca.pem';result.GATEWAY_CERTIFICATE_REFRESH='1';}
  if(role==='email')result.CLOUD_MAIL_TRANSPORT='test-capture';
- if(role==='backup'&&flag==='1'){result.CLOUD_BACKUP_ENDPOINT='https://waitron.local:8333';result.CLOUD_BACKUP_CA_FILE='/run/local-stack/lan/ca.pem';}
+ if(role==='backup'&&flag==='1'){result.CLOUD_BACKUP_ENDPOINT='https://waitron.local:8333';result.CLOUD_BACKUP_CA_FILE='/run/local-stack/lan/ca.pem';if(environment.CLOUD_VERIFIER_IMAGE!==undefined)result.CLOUD_VERIFIER_IMAGE=environment.CLOUD_VERIFIER_IMAGE;}
  return result;
 }
 export async function launchTestRuntime(role,directory=process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack'){

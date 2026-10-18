@@ -126,7 +126,7 @@ TEST_CLOUD_STORAGE_PROOF_IMAGE=<local-image> node --test \
 
 This proof sends signed requests through the trusted HTTPS proxy. Free snapshot and stream requests return `403 permission_denied`; paid requests receive distinct scoped credentials. It tests a normal downgrade and one committed while storage is stopped. After restart, old writers fail at storage, the neighbouring paid writer still works, and explicit upgrade returns a fresh writer with the original recovery key, reader and retained data. It also checks normal TLS trust from a host client. Generated fixture keys stay inside the disposable private volume, and cleanup removes only this proof's project.
 
-The backup worker now selects the same canonical storage endpoint and LAN CA in explicit test plan mode. Its scoped verifier/controller and paid snapshot verification still need wiring and proof. These storage checks do not prove genuine Waitron integration, LAN publication or test-box readiness. Keep plan enforcement off until the complete integration proof passes.
+The backup worker selects the same canonical storage endpoint and LAN CA in explicit test plan mode. Its dedicated controller is implemented, but genuine paid snapshot verification remains blocked at the fiscal restore boundary described below. These storage checks do not prove complete Waitron integration, LAN publication or test-box readiness. Keep plan enforcement off until the complete integration proof passes.
 
 ## Local remote authority
 
@@ -148,3 +148,26 @@ The disposable Mac project keeps generated fixture keys in its private volume. T
 On 18 October 2026, the passing renewal proof observed route withdrawal in 1,162 milliseconds, including its operator-command time. An earlier clean repeat measured 4,655 milliseconds. The first run observed 1,868 milliseconds but failed during cleanup. These are local fixture observations, not a promised deadline or test-box measurements. The initial renewal check failed because the running proxy retained its old certificate; the passing check observes a different trusted certificate on a new TLS connection. A first proof also failed cleanup after listing peer IDs twice; its leftover owned network and volumes were removed before the clean repeat.
 
 The gateway ports remain on loopback. This proof does not connect the quarantined box venue or provide public remote access. The separate backup-verifier boundary, free-service proof and genuine disposable Waitron integration remain before deployment activation.
+
+## Backup verifier boundary
+
+An interrupted worker must recover its own verifier without removing another venue's or project's container. The dedicated test worker holds one database session lock, records each create attempt in its private volume, and uses the recorded container ID for attachment, inspection and deletion. Removal checks the owner, private project scope, attempt token and pinned image. An uncertain create reply keeps the attempt reserved; a missing journal over an existing child stops startup. After the sixty-second ownership deadline, startup can reclaim the exact recorded attempt. You must resolve an ownership refusal before restarting; deleting the journal does not authorise cleanup.
+
+The trusted controller requires the Docker socket. The untrusted restore child receives no socket, network or host mount. Its memory is capped at 1,024 MiB, including a 256 MiB scratch filesystem. The image must have a complete image ID and the pinned Waitron revision label. The ordinary verifier retains its existing path. The backup profile remains unavailable in the deployment override, which still grants no Docker socket.
+
+Run the controller's local Docker checks with:
+
+```sh
+TEST_CLOUD_VERIFIER_CONTROLLER_PROOF=1 node --test \
+  deploy/test-cloud/verifier-controller.test.mjs
+```
+
+The complete snapshot proof is currently a failing integration check:
+
+```sh
+TEST_CLOUD_SNAPSHOT_PROOF_IMAGE=<local-cloud-image-id> \
+TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
+  node --test deploy/test-cloud/snapshot-proof.test.mjs
+```
+
+The disposable fixture captures an encrypted archive with genuine Waitron code at `e52c997c02d2fcd66d0e7239cbfd79ced4ddd0ee`, uploads it using scoped credentials and publishes it through the signed account API. Cloud now reads that revision's validated database file instead of assuming it returns database bytes. The subsequent restore hook refuses with `restore.hook_failed` / `sif.allocation_invalid`: Waitron's fiscal restore requires an authorised allocation operation. The Cloud verifier supplies none. A separate verification contract must settle that authority before you can mark this proof green. Do not skip the hook, mint an allocation automatically or enable the deployment to bypass the refusal.

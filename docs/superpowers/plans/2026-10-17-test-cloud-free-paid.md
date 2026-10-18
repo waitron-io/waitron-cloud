@@ -125,7 +125,13 @@ volume-backed remote reconciliation and the delivered gateway's live certificate
 replacement/downgrade/restart proofs now pass. The backup worker selects the canonical
 storage endpoint and LAN CA in enabled mode. Its scoped verifier/controller, pinned
 Waitron image and paid snapshot verification remain before PR 5 review and landing.
-Deployment enforcement stays off. Current runner instructions assign required package
+The scoped controller and file-backed archive adapter are implemented and locally
+tested. Genuine snapshot capture/publication reaches the pinned Waitron fiscal
+restore hook, which refuses `sif.allocation_invalid`; the verifier supplies no
+authorised allocation operation. PR 5 is blocked pending an explicitly agreed
+verification contract. Do not skip that hook or grant fiscal writes implicitly.
+The backup profile remains unavailable. Deployment enforcement stays off.
+Current runner instructions assign required package
 suites to CI and retire this plan's earlier local-full-suite and CI-cost instructions.
 
 ### PR 6: Pin free-service proof and honest availability
