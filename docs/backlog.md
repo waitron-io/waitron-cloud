@@ -1103,9 +1103,17 @@ notifications separately.
   archives also pass through Waitron's archive creation and restore, including its
   fiscal restore hook, recovered identity and private state. Refused restores remove
   their own partial destination and preserve a replacement directory. The archive and
-  restore checks also run inside the isolated Node container. The complete isolated service stack,
-  offline calculator, private local sales replay, measured storage and remote traffic,
-  and synthetic-only AWS comparison
+  restore checks also run inside the isolated Node container. A prepared local image
+  now runs PostgreSQL, SeaweedFS, captured mail, the genuine Waitron sale writer,
+  a capture-only fiscal endpoint and an HTTPS gateway on one internal network.
+  Synthetic checks exercise database access, storage upload/read/delete, captured
+  mail and a sale through HTTPS, then verify fiscal integrity and remove the owned
+  containers and network. Every service passes the outbound connection checks.
+  Startup refuses a changed plan, mismatched endpoints, an existing private key and
+  resources created before that invocation. This is the base service fixture;
+  stream replication, the real public/staff tunnel journeys, complete accounting,
+  local replay orchestration, the offline calculator, private local sales replay,
+  measured storage and remote traffic, and synthetic-only AWS comparison
   remain open. Keep raw venue data on the Mac, distinguish measured
   usage from extrapolation, and compare list-price usage separately from credits.
   Storage-only evidence cannot validate the fixed infrastructure or fleet capacity.

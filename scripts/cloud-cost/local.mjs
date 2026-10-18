@@ -1,10 +1,10 @@
 
 import { DatabaseSync } from 'node:sqlite';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import { constants, openSync, closeSync, fstatSync, lstatSync, realpathSync, existsSync,
-  mkdirSync, chmodSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
+  mkdirSync, chmodSync, rmSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
 import { join, relative, isAbsolute, posix } from 'node:path';
 import { assertOwnedRoot } from './schema.mjs';
 
@@ -278,4 +278,139 @@ export async function proveDockerIsolation(args) {
       containers: dockerRead(['inspect', ...args.containerIds]) });
     return { ...validated, blockedConnections, blockedDns, localControl: true };
   } catch { fail(); }
+}
+
+export function prepareIsolatedStack(args) {
+  try {
+    const { source, root, journal, codeRoot, stateRoot, image } = args;
+    owned({ source, root, journal });
+    requireThat(/^sha256:[a-f0-9]{64}$/.test(image));
+    for (const path of [codeRoot, stateRoot]) requireThat(isAbsolute(path) && inside(root, path)
+      && realpathSync(path) === path && lstatSync(path).isDirectory());
+    requireThat(codeRoot !== stateRoot && !inside(codeRoot, stateRoot) && !inside(stateRoot, codeRoot));
+    const project = `cloud-cost-${randomUUID()}`;
+    const plan = JSON.parse(readFileSync(new URL('./isolated.compose.yaml', import.meta.url), 'utf8'));
+    const owner = { 'io.waitron.cloud-cost.owner': journal.token };
+    plan.name = project;
+    plan.networks.isolated.name = project;
+    plan.networks.isolated.labels = owner;
+    for (const [role, service] of Object.entries(plan.services)) {
+      service.image = image;
+      service.user = `${process.getuid()}:${process.getgid()}`;
+      service.container_name = `${project}-${role}`;
+      service.labels = { ...owner, 'io.waitron.cloud-cost.role': role };
+      service.volumes = [{ type: 'bind', source: codeRoot, target: '/code', read_only: true },
+        { type: 'bind', source: stateRoot, target: '/state', read_only: false }];
+    }
+    const file = join(root, `${project}.json`);
+    record(args, { kind: 'compose-plan', state: 'intent', project, path: file });
+    writeFileSync(file, JSON.stringify(plan), { flag: 'wx', mode: 0o600 });
+    record(args, { kind: 'compose-plan', state: 'ready', project, path: file, sha256: createHash('sha256').update(readFileSync(file)).digest('hex') });
+    return { project, file };
+  } catch { fail(); }
+}
+
+function dockerCommand(argv, timeout = 15000) {
+  const result = spawnSync('docker', argv, { env: environment(), encoding: 'utf8', timeout,
+    maxBuffer: 2 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+  requireThat(result.status === 0 && !result.error);
+  return result.stdout.trim();
+}
+
+export async function startIsolatedStack(args) {
+  let close, abort;
+  try {
+    const { root, journal, codeRoot, stateRoot, image, prepared, signal } = args;
+    const value = owned(args);
+    requireThat(!signal?.aborted);
+    requireThat(prepared && inside(root, prepared.file)); canonicalFile(prepared.file);
+    const entry = value.localResources?.find(v => v.kind === 'compose-plan' && v.state === 'ready'
+      && v.path === prepared.file && v.project === prepared.project);
+    requireThat(entry && entry.sha256 === createHash('sha256').update(readFileSync(prepared.file)).digest('hex'));
+    const plan = JSON.parse(readFileSync(prepared.file, 'utf8'));
+    requireThat(plan.name === prepared.project && Object.values(plan.services).every(v => v.image === image
+      && v.volumes[0].source === codeRoot && v.volumes[1].source === stateRoot));
+    const configFile = join(stateRoot, 'replay-config.json');
+    requireThat((canonicalFile(configFile).mode & 0o777) === 0o600);
+    const { validateReplayConfig } = await import('./waitron-adapter.mjs');
+    const replayConfig = validateReplayConfig(JSON.parse(readFileSync(configFile, 'utf8')).config);
+    // Every endpoint must name the service this stack actually starts.
+    for (const [key, host, port] of [['postgres', 'postgres', '5432'], ['s3', 's3', '8333'],
+      ['smtp', 'mailpit', '1025'], ['fiscal', 'fiscal', '8080'], ['gateway', 'gateway', '8443']]) {
+      const endpoint = new URL(replayConfig.localEndpoints[key]);
+      requireThat(endpoint.hostname === host && endpoint.port === port
+        && (key !== 'postgres' || endpoint.pathname === '/postgres'));
+    }
+    for (const name of ['gateway-key.pem', 'gateway-cert.pem', 'gateway.pem'])
+      requireThat(!existsSync(join(stateRoot, name)));
+    for (const [from, to] of [['stack-runtime.mjs', 'cost-stack-runtime.mjs'], ['waitron-adapter.mjs', 'cost-waitron-adapter.mjs']])
+      copyFileSync(new URL(from, import.meta.url), join(codeRoot, to), constants.COPYFILE_EXCL);
+    await runPrivate('/usr/bin/openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+      '-subj', '/CN=gateway', '-addext', 'subjectAltName=DNS:gateway', '-keyout', join(stateRoot, 'gateway-key.pem'),
+      '-out', join(stateRoot, 'gateway-cert.pem')], { ownership: args, timeoutMs: 10000, signal });
+    writeFileSync(join(stateRoot, 'gateway.pem'), readFileSync(join(stateRoot, 'gateway-cert.pem'))
+      + readFileSync(join(stateRoot, 'gateway-key.pem')), { mode: 0o600, flag: 'wx' });
+    const project = prepared.project;
+    const filters = ['--filter', `label=io.waitron.cloud-cost.owner=${journal.token}`, '--filter', `label=com.docker.compose.project=${project}`];
+    const discover = () => {
+      const ids = dockerCommand(['ps', '-aq', ...filters]).split('\n').filter(Boolean);
+      const networks = dockerCommand(['network', 'ls', '-q', ...filters]).split('\n').filter(Boolean);
+      const containers = ids.length ? dockerRead(['inspect', ...ids]) : [];
+      const networkRows = networks.length ? dockerRead(['network', 'inspect', ...networks]) : [];
+      for (const c of containers) requireThat(c.Config.Labels['io.waitron.cloud-cost.owner'] === journal.token
+        && c.Config.Labels['com.docker.compose.project'] === project
+        && c.Name === '/' + plan.services[c.Config.Labels['io.waitron.cloud-cost.role']]?.container_name);
+      for (const n of networkRows) requireThat(n.Labels['io.waitron.cloud-cost.owner'] === journal.token && n.Name === project);
+      return { containers, networks: networkRows };
+    };
+    // Matching labels alone do not establish that this invocation created a resource.
+    const before = discover();
+    requireThat(before.containers.length === 0 && before.networks.length === 0);
+    let closed = false;
+    close = async () => {
+      if (closed) return;
+      owned(args);
+      const current = discover();
+      for (const c of current.containers) {
+        record(args, { kind: 'container', state: 'cleanup-intent', id: c.Id });
+        dockerCommand(['rm', '-f', '-v', c.Id]);
+      }
+      for (const n of current.networks) {
+        record(args, { kind: 'network', state: 'cleanup-intent', id: n.Id });
+        dockerCommand(['network', 'rm', n.Id]);
+      }
+      const remaining = discover();
+      requireThat(remaining.containers.length === 0 && remaining.networks.length === 0);
+      record(args, { kind: 'stack', state: 'removed', project });
+      signal?.removeEventListener('abort', abort);
+      closed = true;
+    };
+    // Intent precedes Compose so a lost create reply can be reconciled by exact labels and names.
+    record(args, { kind: 'stack', state: 'intent', project });
+    dockerCommand(['compose', '-f', prepared.file, 'up', '--detach', '--no-build', '--pull', 'never'], 120000);
+    const current = discover();
+    requireThat(current.containers.length === 6 && current.networks.length === 1);
+    for (const c of current.containers) record(args, { kind: 'container', state: 'started', id: c.Id });
+    record(args, { kind: 'network', state: 'started', id: current.networks[0].Id });
+    const networkId = current.networks[0].Id, containerIds = current.containers.map(c => c.Id);
+    for (const c of current.containers) requireThat(c.HostConfig.ReadonlyRootfs === true
+      && c.HostConfig.CapDrop?.includes('ALL') && c.HostConfig.LogConfig.Type === 'none'
+      && c.Config.Image === image && c.Config.User === `${process.getuid()}:${process.getgid()}`);
+    const isolation = await proveDockerIsolation({ ...args, networkId, containerIds });
+    const waitron = current.containers.find(c => c.Config.Labels['io.waitron.cloud-cost.role'] === 'waitron');
+    let ready;
+    const deadline = Date.now() + 60000;
+    while (Date.now() < deadline) {
+      requireThat(!signal?.aborted);
+      ready = dockerRead(['exec', waitron.Id, 'node', '/code/cost-stack-runtime.mjs', 'check']);
+      requireThat(Object.keys(ready).length === 6 && Object.values(ready).every(v => typeof v === 'boolean'));
+      if (Object.values(ready).every(v => v)) break;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    requireThat(Object.values(ready).every(v => v));
+    abort = () => { close().catch(() => {}); };
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) { await close(); fail(); }
+    return { ready, isolation, networkId, containerIds, close };
+  } catch { await close?.(); fail(); }
 }

@@ -1,0 +1,124 @@
+// Explicit local integration: prepared public dependencies and generated venue state only.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
+import { mkdtempSync, realpathSync, mkdirSync, writeFileSync, readFileSync, cpSync, rmSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import * as local from '../local.mjs';
+const prepared = JSON.parse(readFileSync(process.env.COST_STACK_FIXTURE, 'utf8'));
+const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', env: { PATH: process.env.PATH }, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+function fixture(t) {
+  const parent = realpathSync(mkdtempSync(join(tmpdir(), 'd68-stack-proof-'))), source = join(parent, 'source'), root = join(parent, 'private');
+  mkdirSync(source, { mode: 0o700 }); mkdirSync(root, { mode: 0o700 });
+  const codeRoot = join(root, 'code'), stateRoot = join(root, 'state');
+  cpSync(prepared.codeCache, codeRoot, { recursive: true });
+  mkdirSync(stateRoot, { mode: 0o700 });
+  cpSync(new URL('./stack-smoke.mjs', import.meta.url), join(codeRoot, 'cost-stack-smoke.mjs'));
+  writeFileSync(join(stateRoot, 'replay-config.json'), JSON.stringify({
+    initial: {
+      taxpayer: { country: 'ES', taxId: '12345678Z', legalName: 'Synthetic SL' },
+      location: { name: 'Synthetic venue', invoiceLocales: ['es'], operationDescription: 'Servicio',
+        timeZone: 'Europe/Madrid', dayCutover: '06:00:00' },
+      nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', idSistemaInformatico: 'WR',
+    },
+    config: {
+      localEndpoints: { s3: 'http://s3:8333', postgres: 'postgresql://fixture:fixture@postgres:5432/postgres',
+        smtp: 'smtp://mailpit:1025', fiscal: 'http://fiscal:8080', gateway: 'https://gateway:8443' },
+      senders: { fiscal: 'disabled', mail: 'capture', acme: 'disabled', dns: 'disabled' },
+    },
+  }), { mode: 0o600 });
+  const token = randomBytes(32).toString('hex'), path = join(root, 'journal.json');
+  writeFileSync(join(root, '.cloud-cost-owner'), token, { mode: 0o600 });
+  writeFileSync(path, JSON.stringify({ schemaVersion: 1, source, root, ownershipToken: token }), { mode: 0o600 });
+  let cleanup;
+  t.after(async () => {
+    writeFileSync(join(root, '.cloud-cost-owner'), token, { mode: 0o600 });
+    await cleanup?.();
+    rmSync(parent, { recursive: true, force: true });
+  });
+  return { source, root, codeRoot, stateRoot, journal: { path, token }, image: prepared.image,
+    onCleanup: action => { cleanup = action; } };
+}
+// A missing service, broken real runtime, external route or incomplete cleanup fails this journey.
+test('completeSyntheticStackRunsRealServicesAndCleansOnlyItsOwnedResources', async t => {
+  assert.equal(typeof local.startIsolatedStack, 'function', 'start and audit the complete prepared stack');
+  const f = fixture(t);
+  const plan = local.prepareIsolatedStack(f);
+  let stack;
+  f.onCleanup(async () => { await stack?.close(); });
+  const controller = new AbortController();
+  stack = await local.startIsolatedStack({ ...f, prepared: plan, signal: controller.signal });
+  assert.deepEqual(stack.ready, { postgres: true, s3: true, mailpit: true, fiscal: true, waitron: true, gateway: true });
+  assert.deepEqual(stack.isolation, { isolated: true, containers: 6, blockedConnections: 18, blockedDns: 12, localControl: true });
+  const ids = docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`).split('\n');
+  assert.equal(ids.length, 6);
+  const waitron = ids.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 'waitron');
+  const smoke = JSON.parse(docker('exec', waitron, 'node', '/code/cost-stack-smoke.mjs'));
+  assert.deepEqual(smoke, { postgres: 42, storageRoundTrip: true, capturedMail: 1, fiscalCalls: 1,
+    sales: { attempted: 1, successful: 1, failed: 0 }, integrity: { ok: true, issues: 0 } });
+  const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
+  assert.ok(entries.some(v => v.kind === 'stack' && v.state === 'intent'));
+  for (const id of stack.containerIds) assert.ok(entries.some(v => v.kind === 'container' && v.state === 'started' && v.id === id));
+  const networkId = stack.networkId;
+  writeFileSync(join(f.root, '.cloud-cost-owner'), '0'.repeat(64));
+  await assert.rejects(stack.close(), /Invalid cloud cost evidence/);
+  assert.equal(docker('ps', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`).split('\n').length, 6);
+  writeFileSync(join(f.root, '.cloud-cost-owner'), f.journal.token);
+  controller.abort();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '', 'cancellation must remove the owned services before returning');
+  await stack.close(); await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.throws(() => docker('network', 'inspect', networkId));
+});
+test('tamperedPlanIsRefusedBeforeDockerCreatesResources', async t => {
+  assert.equal(typeof local.startIsolatedStack, 'function', 'bind startup to the journalled plan');
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  const changed = JSON.parse(readFileSync(plan.file, 'utf8'));
+  changed.services.waitron.command = ['node', '-e', 'process.exit(1)'];
+  writeFileSync(plan.file, JSON.stringify(changed), { mode: 0o600 });
+  await assert.rejects(local.startIsolatedStack({ ...f, prepared: plan }), /Invalid cloud cost local run/);
+  assert.equal(existsSync(join(f.codeRoot, 'cost-stack-runtime.mjs')), false, 'reject tampering before preparing or starting a runtime');
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});
+
+// Reusing a recorded name must not turn a refused start into permission to delete an earlier resource.
+test('refusedStartPreservesResourcesThatAlreadyExisted', async t => {
+  const f = fixture(t), preparedPlan = local.prepareIsolatedStack(f);
+  const plan = JSON.parse(readFileSync(preparedPlan.file, 'utf8'));
+  const owner = `io.waitron.cloud-cost.owner=${f.journal.token}`;
+  const project = `com.docker.compose.project=${preparedPlan.project}`;
+  const networkId = docker('network', 'create', '--internal', '--label', owner, '--label', project, preparedPlan.project);
+  let containerId;
+  t.after(() => { if (containerId) { try { docker('rm', '-f', containerId); } catch {} } try { docker('network', 'rm', networkId); } catch {} });
+  containerId = docker('run', '-d', '--network', preparedPlan.project, '--name', plan.services.waitron.container_name,
+    '--label', owner, '--label', project, '--label', 'io.waitron.cloud-cost.role=waitron',
+    f.image, 'node', '-e', 'setInterval(()=>{},1000)');
+  await assert.rejects(local.startIsolatedStack({ ...f, prepared: preparedPlan }), /Invalid cloud cost local run/);
+  assert.equal(docker('ps', '-q', '--no-trunc', '--filter', 'id=' + containerId), containerId, 'a refused start must preserve the earlier running container');
+  assert.equal(docker('network', 'inspect', '--format', '{{.Id}}', networkId), networkId);
+});
+
+test('stackRefusesConfigurationThatDoesNotNameItsInternalServices', async t => {
+  const f = fixture(t), preparedPlan = local.prepareIsolatedStack(f);
+  const path = join(f.stateRoot, 'replay-config.json'), config = JSON.parse(readFileSync(path, 'utf8'));
+  config.config.localEndpoints.s3 = 'http://127.0.0.1:8333';
+  writeFileSync(path, JSON.stringify(config), { mode: 0o600 });
+  let stack;
+  try {
+    await assert.rejects(async () => { stack = await local.startIsolatedStack({ ...f, prepared: preparedPlan }); }, /Invalid cloud cost local run/);
+    assert.equal(existsSync(join(f.codeRoot, 'cost-stack-runtime.mjs')), false, 'do not run a stack that would ignore its configured endpoint');
+  } finally { await stack?.close(); }
+});
+
+test('stackDoesNotOverwriteAnExistingPrivateKeyOnARefusedStart', async t => {
+  const f = fixture(t), preparedPlan = local.prepareIsolatedStack(f);
+  writeFileSync(join(f.stateRoot, 'gateway-key.pem'), 'earlier private key sentinel', { mode: 0o600 });
+  writeFileSync(join(f.stateRoot, 'gateway.pem'), 'earlier combined certificate sentinel', { mode: 0o600 });
+  await assert.rejects(local.startIsolatedStack({ ...f, prepared: preparedPlan }), /Invalid cloud cost local run/);
+  assert.equal(readFileSync(join(f.stateRoot, 'gateway-key.pem'), 'utf8') === 'earlier private key sentinel', true, 'preserve the existing key without printing key bytes');
+  assert.equal(readFileSync(join(f.stateRoot, 'gateway.pem'), 'utf8') === 'earlier combined certificate sentinel', true);
+});
