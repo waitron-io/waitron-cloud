@@ -8,7 +8,7 @@ import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { openReplay } from '/code/cost-waitron-adapter.mjs';
-import { createLitestreamRequestAudit } from '/code/litestream.mjs';
+import { createLitestreamRequestAudit, createLitestreamTransport } from '/code/litestream.mjs';
 import { createMeter, createMeteringProxy, classifyStorageOperation, instrumentStorageClient, correlatedStorageAttempt } from '/code/meter.mjs';
 const require = createRequire('/app/packages/backups/package.json');
 const { S3Client, CreateBucketCommand, ListObjectsV2Command, DeleteObjectCommand, DeleteBucketCommand } = require('@aws-sdk/client-s3');
@@ -35,7 +35,9 @@ async function smoke() {
     const meter = createMeter({ phase: name, clock: () => performance.now() / 1000 });
     const proxy = await createMeteringProxy({ target: `http://127.0.0.1:${fault.address().port}`, meter,
       classify: input => audit.observe({ headers: input.headers, operation: classifyStorageOperation(input) }) });
-    return { audit, meter, proxy };
+    const transport = process.env.COST_LITESTREAM_TRANSPORT === '1'
+      ? await createLitestreamTransport({ target: proxy.url, meter, phase: name }) : null;
+    return { audit, meter, proxy, transport, endpoint: transport?.url ?? proxy.url };
   };
   const replication = await phase('workload'), restore = await phase('restore');
   const adminMeter = createMeter({ phase: 'observer', clock: () => performance.now() / 1000 });
@@ -86,7 +88,7 @@ async function smoke() {
   };
   try {
     stage = 'bucket'; await clients[0].send(new CreateBucketCommand({ Bucket })); await sale(1);
-    stage = 'replicate'; replicator = launch(['replicate', '-config', configFile('replicate', replication.proxy.url)], replication.audit);
+    stage = 'replicate'; replicator = launch(['replicate', '-config', configFile('replicate', replication.endpoint)], replication.audit);
     let uploaded = false;
     for (let n = 0; n < 40; n++) {
       if (!children.has(replicator.child)) fail();
@@ -97,7 +99,7 @@ async function smoke() {
     stage = 'restore'; let restoredSales = 0, integrity;
     for (let n = 0; n < 12; n++) {
       rmSync(output, { force: true });
-      const run = launch(['restore', '-config', configFile('restore', restore.proxy.url), '-o', output, database], restore.audit);
+      const run = launch(['restore', '-config', configFile('restore', restore.endpoint), '-o', output, database], restore.audit);
       const result = await run.done;
       if (result.invalid) fail();
       if (result.code === 0) {
@@ -113,8 +115,10 @@ async function smoke() {
     stage = 'stop'; const ended = await stop(replicator); if (ended.invalid || ended.code !== 0) fail();
     stage = 'audit-end'; replication.audit.end(); restore.audit.end();
     await delay(20);
+    stage = 'transport-close'; await replication.transport?.close(); await restore.transport?.close();
     const result = { version, injectedFailures, restoredSales, integrity, sales: replay.counts(), fiscal: await replay.verify(),
       replication: replication.audit.snapshot(), restore: restore.audit.snapshot(), observed: replication.meter.snapshot() };
+    if (replication.transport) result.transport = { replication: replication.transport.snapshot(), restore: restore.transport.snapshot() };
     stage = 'delete'; for (const row of await list()) await clients[2].send(new DeleteObjectCommand({ Bucket, Key: row.Key }));
     result.cleanedObjects = (await list()).length === 0;
     await clients[2].send(new DeleteBucketCommand({ Bucket }));
@@ -126,10 +130,11 @@ async function smoke() {
     for (const child of children) child.kill('SIGKILL');
     if (children.size) await Promise.all([...children].map(child => once(child, 'close')));
     for (const client of clients) client.destroy();
+    const transports = await Promise.allSettled([replication.transport?.close(), restore.transport?.close()]);
     const closed = await Promise.allSettled([replication.proxy.close(), restore.proxy.close(), adminProxy.close()]);
     fault.closeAllConnections(); await new Promise(resolve => fault.close(resolve));
     await replay.close(); rmSync(stateRoot, { recursive: true, force: true });
-    if (closed.some(result => result.status === 'rejected')) fail();
+    if ([...transports, ...closed].some(result => result.status === 'rejected')) fail();
   }
 }
 smoke().then(result => process.stdout.write(JSON.stringify(result)), () => { console.error('Synthetic Litestream phase: ' + stage); process.exitCode = 1; });

@@ -1152,12 +1152,20 @@ notifications separately.
   request logs independently reconcile physical request identities, operations and
   retry numbers with the passive proxy. The parser discards paths and signed headers,
   rejects malformed, duplicate or truncated evidence and keeps workload and restore
-  phases separate. Read the result as request evidence only: header logs do not prove
-  producer body bytes or retained-object lifetimes, so its overall status stays
-  unknown. The passive byte totals do not fill those gaps. The native stream check
-  does not run application restore hooks or grant fiscal activation authority.
-  This is the base service fixture plus bounded synthetic stream/request evidence;
-  complete stream byte/lifetime integration, the real public/staff tunnel journeys, complete accounting,
+  phases separate. Those logs remain request evidence only. A separate loopback
+  transport endpoint now counts HTTP body bytes from the unmodified binary,
+  independently of the storage observer. The synthetic replication, failed upload,
+  retry and native restore reconcile every attempt's identity, operation, retry
+  number, status and actual/attempted body sizes. Empty, unfinished, interrupted or
+  malformed transfers cannot qualify; the endpoint refuses external destinations,
+  duplicate attempts, conflicting retries and copy requests before forwarding them.
+  You can use this as bounded HTTP body evidence, not application-consumed bytes,
+  TCP/TLS overhead or retained storage. Header-only evidence keeps its existing
+  unknown status, and stream object lifetimes still need independent reconciliation.
+  The native stream check does not run application restore hooks or grant fiscal
+  activation authority.
+  This is the base service fixture plus bounded synthetic stream request/body evidence;
+  complete stream lifetime integration, the real public/staff tunnel journeys, complete accounting,
   local replay orchestration, the offline calculator, private local sales replay,
   measured storage and remote traffic, and synthetic-only AWS comparison
   remain open. Keep raw venue data on the Mac, distinguish measured

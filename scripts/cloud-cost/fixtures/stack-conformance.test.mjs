@@ -268,3 +268,42 @@ test('genuineLitestreamRequestLogsIndependentlyMatchReplicationRetryAndRestore',
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
+
+// A second independent counter must qualify actual body transfers, including the binary's failed upload and retry.
+test('genuineLitestreamTransportBodyBytesAgreeWithSeparateStorageObserver', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  cpSync(prepared.litestreamBinary, join(f.codeRoot, 'litestream'));
+  cpSync(new URL('../litestream.mjs', import.meta.url), join(f.codeRoot, 'litestream.mjs'));
+  cpSync(new URL('./litestream-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-litestream-smoke.mjs'));
+  let stack;
+  f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(execFileSync('docker', ['exec', '-e', 'COST_LITESTREAM_TRANSPORT=1', s3, 'node', '/code/cost-litestream-smoke.mjs'],
+    { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 95000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  assert.equal(result.version, '0.5.17'); assert.equal(result.injectedFailures, 1);
+  assert.equal(result.restoredSales, 2); assert.equal(result.integrity, 'ok');
+  assert.deepEqual(result.sales, { attempted: 2, successful: 2, failed: 0 });
+  assert.deepEqual(result.fiscal, { ok: true, issues: 0 });
+  assert.equal(result.replication.requestsReconciled, true); assert.equal(result.restore.requestsReconciled, true);
+  assert.ok(result.transport, 'require first-hop body evidence independent of header logs and storage observer');
+  for (const [name, requestProof] of [['replication', result.replication], ['restore', result.restore]]) {
+    const proof = result.transport[name];
+    assert.equal(proof.reconciled, true);
+    assert.deepEqual(proof.accounting.producer, proof.accounting.observer);
+    assert.equal(proof.accounting.producer.attempts, requestProof.producerAttempts);
+    assert.ok(proof.accounting.producer.bytesIn > 0);
+    assert.equal(requestProof.status, 'unknown', 'body transfers do not fill the separate retained-object lifetime gap');
+  }
+  assert.ok(result.transport.replication.accounting.producer.bytesOut > 1000);
+  assert.ok(result.transport.replication.accounting.requests.some(r => r.operation === 'put' && r.outcome === 'server-error'));
+  assert.ok(result.transport.replication.accounting.requests.some(r => r.operation === 'put' && r.retryOrdinal === 1 && r.outcome === 'success'));
+  assert.ok(result.transport.restore.accounting.requests.some(r => r.operation === 'get' && r.bytesIn > 1000));
+  assert.equal(result.administration.reconciled, true);
+  assert.equal(result.cleanedObjects, true); assert.equal(result.leaked, false);
+  t.diagnostic(JSON.stringify({ replication: result.transport.replication.accounting.producer,
+    restore: result.transport.restore.accounting.producer, saleWrites: result.restoredSales }));
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});
