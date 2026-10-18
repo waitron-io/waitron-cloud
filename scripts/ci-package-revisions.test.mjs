@@ -2132,3 +2132,20 @@ const ns = {fs, nested: {fs}};
   const head = commit();
   assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
 }));
+
+
+test('deep namespace reader after a nested object retains its loaded consumer', () => fixture(({root, write, commit, plan}) => {
+  write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('object deep helper loaded');\n");
+  write('packages/portal/src/reader.mjs', `import * as fs from 'node:fs';
+const ns = {nested: {fs}};
+const directory = new URL('../../../', import.meta.url);
+for (const name of [{nested: [0]}, ns.nested.fs.readdirSync, null][1](directory)) {
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mjs'], {cwd: root, encoding: 'utf8'}), 'object deep helper loaded\n');
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+}));
