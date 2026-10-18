@@ -1350,7 +1350,10 @@ notifications separately.
   files; the lockfile control retains full work while its reader-free control
   still narrows selection. Unreachable helpers keep narrow package work.
   Precise alias resolution, assignment/destructuring aliases, escaped
-  API references and other unsupported calls remain open.
+  API references and other unsupported calls remain open. Parenthesized function
+  expressions such as `(readdirSync)(directory)` and `(readdirSync!)(directory)`
+  still miss consumers. Executed Node/planner probes reproduce both forms on
+  the prior and current scanner; qualify these before narrowing their work.
   Existing assertions and reader-audit
   certificates are unchanged. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain
