@@ -936,6 +936,16 @@ notifications separately.
   The earlier unexplained observations remain separate unless their exact trace
   matches this reproducer. No provider retry policy, production code or deadline
   changed.
+- **Password-login recovery-row expiry setup.** The recovery-row test now starts
+  its unchanged 500 ms challenge expiry after acquiring the row it will hold.
+  A deliberate 650 ms setup delay reproduces the earlier missing-lock assertion
+  with the old ordering and passes with this precondition. The 550 ms held-row
+  wait, lock observation, zero sessions, one spent attempt, unconsumed recovery
+  code and 30-second test deadline remain unchanged. No authentication code or
+  policy changes. [Run 39112504573](https://github.com/waitron-io/waitron-cloud/actions/runs/39112504573)
+  did not capture expiry/setup stages, so its exact historical ordering remains
+  unproved. Capture those stages if the same assertion fails again; do not extend
+  its authority window or test deadline to hide a failure.
 - **Local package validation must avoid concurrent full-package groups.** Four
   two-file-worker groups overlapped during D79 and the registration control CLI
   exceeded its unchanged five-second command bound. A landed-base phase probe

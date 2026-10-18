@@ -189,10 +189,12 @@ test('expiry during a challenge lock wait creates no session and spends no attem
 });
 test('expiry during a recovery-row wait preserves the code while durably spending the attempt', async () => {
   await enrol(); const code='33333333333333333333333333333333'; await seedCode(code); const token=await challenge();
-  await pool.query("UPDATE cloud_factor_login_challenges SET expires_at=clock_timestamp()+interval '500 milliseconds'");
   const blocker=await pool.connect(); let completion:Promise<void>|undefined;
   try {
+    await blocker.query('SELECT pg_sleep(0.65)');
     await blocker.query('BEGIN'); await blocker.query('SELECT * FROM cloud_factor_recovery_codes FOR UPDATE');
+    // Start the short expiry after slow setup so the held recovery row is reached while authority is valid.
+    await pool.query("UPDATE cloud_factor_login_challenges SET expires_at=clock_timestamp()+interval '500 milliseconds'");
     completion=refused(store().complete(token,recovery(code))); await blocked('cloud_factor_recovery_codes');
     const {setTimeout:delay}=await import('node:timers/promises'); await delay(550);
     await blocker.query('COMMIT'); await completion;
