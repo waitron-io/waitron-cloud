@@ -2108,12 +2108,13 @@ notifications separately.
   The process adapter stops and reaps a child when V8 reports fatal heap exhaustion,
   before kernel crash collection can replace that resource refusal with a watchdog timeout.
   [Synthetic Ubuntu tracing](https://github.com/waitron-io/waitron-cloud/actions/runs/39111778828)
-  observed the heap report at 75–349 ms, then concurrent children waiting in crash-dump
+  observed the heap report at 75–372 ms, then concurrent children waiting in crash-dump
   pipe writes until all eight reached the unchanged five-second watchdog.
   [A controlled eight-second core collector](https://github.com/waitron-io/waitron-cloud/actions/runs/39111842785)
   reproduces the original strict heap test's resource-versus-timeout failure. New tests
   pause a genuinely exhausted child, split the fatal report across chunks and preserve
-  ordinary stderr outcomes. The original nine process tests, heap limit, permissions,
+  ordinary stderr outcomes. The [same controlled collector with the fix](https://github.com/waitron-io/waitron-cloud/actions/runs/39111967260)
+  passes the unchanged heap assertion. The original nine process tests, heap limit, permissions,
   output bound and deadlines remain unchanged. The earlier main failure
   [39111146785](https://github.com/waitron-io/waitron-cloud/actions/runs/39111146785)
   did not capture child stages, so its precise historical crash-collection timing remains unproved.
