@@ -1350,10 +1350,20 @@ notifications separately.
   files; the lockfile control retains full work while its reader-free control
   still narrows selection. Unreachable helpers keep narrow package work.
   Precise alias resolution, assignment/destructuring aliases, escaped
-  API references and other unsupported calls remain open. Parenthesized function
-  expressions such as `(readdirSync)(directory)` and `(readdirSync!)(directory)`
-  still miss consumers. Executed Node/planner probes reproduce both forms on
-  the prior and current scanner; qualify these before narrowing their work.
+  API references and other unsupported calls remain open. Directory reader names
+  wrapped directly in parentheses now retain every package suite because wrapping
+  the function leaves its runtime readers unchanged. Executed Node controls cover all four APIs,
+  nested parentheses, TypeScript assertions, optional invocation and comments.
+  TypeScript `satisfies` and generic-type references, including unparenthesized
+  generic calls, also retain full package work because Node erases their types.
+  Saved-helper controls cover either revision, unchanged readers, transitive
+  consumers and dirty local files; lockfile controls keep full work for the reader
+  and narrow work without it. Unreachable helpers still keep narrow selection.
+  The closing-parenthesis fallback is conservative: inert text and passing a
+  reader as an argument can also select extra work. Array wrappers such as
+  `[readdirSync][0](directory)` still miss consumers; executed review probes
+  reproduce that gap. TypeScript `as` wrappers already retain full work, but
+  report an import-alias reason. Precise resolution and clearer reasons remain open.
   Existing assertions and reader-audit
   certificates are unchanged. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain
