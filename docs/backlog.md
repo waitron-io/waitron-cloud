@@ -1361,16 +1361,20 @@ notifications separately.
   and narrow work without it. Unreachable helpers still keep narrow selection.
   The closing-parenthesis fallback is conservative: inert text and passing a
   reader as an argument can also select extra work. Directory readers stored as
-  the first or final array element now retain every package suite; indexing the
+  any array element now retain every package suite; indexing the
   array preserves the function that Node invokes. Real Node checks cover all four
   APIs, nested arrays, comments, trailing commas, TypeScript assertions and `at`.
   Saved-helper controls cover either revision and unchanged transitive consumers
   despite dirty local files. Audited lockfile controls retain full package work
   with these readers and narrow work without them; unused helpers stay narrow.
   These guards can also select extra work for inert text or unrelated names.
-  Middle elements preceded and followed by other elements, assignment/destructuring
-  aliases and escaped API references still need resolution under D69.
-  Executed review probes still omit middle elements surrounded by other elements.
+  Middle elements retain full work with all four APIs, comments, TypeScript
+  assertions and indexed or `at` calls. Saved-helper controls cover either
+  revision and unchanged transitive consumers; audited lock changes keep full
+  work with a middle reader and narrow work without it. Unreachable helpers
+  remain narrow. Comma references conservatively include imports and inert text,
+  because the reader can escape before invocation. Precise resolution,
+  assignment/destructuring aliases and escaped API references remain open.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.
