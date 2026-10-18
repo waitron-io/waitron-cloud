@@ -1,0 +1,196 @@
+name: waitron-cloud-test
+
+# !override requires Compose 2.24.4; no default loopback publication may survive by appending.
+services:
+  bootstrap:
+    mem_limit: 96m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    build: !reset null
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    command: ["node", "deploy/test-cloud/bootstrap.mjs"]
+  postgres:
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    ports: !override ["127.0.0.1:55432:5432"]
+  mailpit:
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    ports: !override ["127.0.0.1:1125:1025", "127.0.0.1:8125:8025"]
+  migrate:
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    build: !reset null
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    command: ["node", "deploy/test-cloud/runtime.mjs", "migrate"]
+    environment:
+      CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
+  storage:
+    mem_limit: 384m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    build: !reset null
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    ports: !override ["127.0.0.1:8333:8333"]
+  account:
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    build: !reset null
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    command: ["node", "deploy/test-cloud/runtime.mjs", "account"]
+    environment:
+      CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
+    ports: !reset []
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--header", "Host: waitron.local:3000", "http://localhost:3000/api/health/ready"]
+  email-worker:
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    build: !reset null
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    command: ["node", "deploy/test-cloud/runtime.mjs", "email"]
+    environment:
+      CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
+  monitor-worker:
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    build: !reset null
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    command: ["node", "deploy/test-cloud/runtime.mjs", "monitor"]
+    environment:
+      CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
+  usage-reconciler:
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    build: !reset null
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    command: ["node", "deploy/test-cloud/runtime.mjs", "usage"]
+    environment:
+      CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
+  remote-probe:
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    build: !reset null
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    command: ["node", "deploy/test-cloud/runtime.mjs", "probe"]
+    environment:
+      CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
+  gateway-manifest:
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    build: !reset null
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    command: ["node", "deploy/test-cloud/runtime.mjs", "manifest"]
+    environment:
+      CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
+  gateway:
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    build: !reset null
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    command: ["node", "deploy/test-cloud/runtime.mjs", "gateway"]
+    environment:
+      CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
+    ports: !override ["127.0.0.1:8443:443", "127.0.0.1:51820:51820/udp"]
+  backup-worker:
+    mem_limit: 32m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    build: !reset null
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    command: ["node", "deploy/test-cloud/runtime.mjs", "backup"]
+    environment:
+      CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
+    profiles: !override [unavailable]
+    volumes: !override
+      - local-stack-config:/run/local-stack:ro
+  remote-reconciler:
+    mem_limit: 32m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    build: !reset null
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    command: ["node", "deploy/test-cloud/runtime.mjs", "reconcile"]
+    environment:
+      CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
+    profiles: !override [unavailable]
+    volumes: !override
+      - local-stack-config:/run/local-stack:ro
+  translation-worker:
+    mem_limit: 32m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    build: !reset null
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    command: ["node", "deploy/test-cloud/runtime.mjs", "translation"]
+    environment:
+      CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
+    profiles: !override [unavailable]
+  operations-collector:
+    mem_limit: 32m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    build: !reset null
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    profiles: !override [unavailable]
+  proxy:
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    init: true
+    read_only: true
+    tmpfs: [/tmp:mode=0700]
+    command: ["haproxy", "-W", "-db", "-f", "/app/deploy/test-cloud/proxy.cfg"]
+    volumes:
+      - local-stack-config:/run/local-stack:ro
+    ports: !override ["${TEST_CLOUD_BIND:-192.168.10.10}:3000:3000"]
+    networks:
+      default:
+        ipv4_address: 10.79.0.2
+    depends_on:
+      account:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--cacert", "/run/local-stack/lan/ca.pem", "--resolve", "waitron.local:3000:127.0.0.1", "https://waitron.local:3000/api/health/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    restart: unless-stopped
+    stop_grace_period: 10s
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 10.79.0.0/24
+          ip_range: 10.79.0.128/25
+
+secrets: !reset {}
