@@ -1341,10 +1341,16 @@ notifications separately.
   transitive consumers despite dirty local files. An unchanged saved helper also
   triggers the package planner guard; unused helpers keep narrow work.
   This conservative rule can also select extra work for inert text or unrelated
-  members. Precise alias resolution, assignment/destructuring aliases, escaped
-  API references and other unsupported calls remain open. In particular, direct
-  TypeScript calls such as `readdirSync!(directory)` still need qualification;
-  this guard covers assertions followed by optional or member access.
+  members. Direct TypeScript non-null calls such as `readdirSync!(directory)`
+  now also retain every package suite: an assertion does not change the function
+  Node invokes, but previously prevented the direct-call resolver from seeing its
+  directory. Executed Node checks cover all four APIs, repeated assertions and
+  block comments before and after assertions. Saved-reader checks cover either
+  revision and unchanged shared helpers, transitive consumers and dirty local
+  files; the lockfile control retains full work while its reader-free control
+  still narrows selection. Unreachable helpers keep narrow package work.
+  Precise alias resolution, assignment/destructuring aliases, escaped
+  API references and other unsupported calls remain open.
   Existing assertions and reader-audit
   certificates are unchanged. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain
