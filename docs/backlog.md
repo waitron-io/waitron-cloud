@@ -1017,7 +1017,7 @@ notifications separately.
   receipt inputs can select their actual checks. The first implementation selects
   one Markdown check for a documentation-only change under `docs/` (excluding
   receipts) or at the repository root when both immutable trees match the audited
-  non-document input inventory in `scripts/ci-docs-audit.json`. The check reads the
+  non-document input inventory in `scripts/ci-input-audit.json`. The check reads the
   selected git blobs and requires valid UTF-8, no NUL and a final newline; deleted
   regular documents are accepted. Package Markdown, receipt data, mixed changes
   and missing or stale audit evidence retain the existing selection or full fallback.
@@ -1034,7 +1034,7 @@ notifications separately.
   to `scripts/identity-upstream.mjs` or its behavioral test can select only syntax
   checks and that test, without
   package, receipt or compiler work. Both saved Git trees must match the complete
-  other-input digest in `scripts/ci-scripts-audit.json`; a new reader, changed
+  other-input digest in `scripts/ci-input-audit.json`; a new reader, changed
   installation input, missing test, symbolic link or stale audit retains full work.
   The gateway-reconnection validator and its behavioral test have another
   audited exemption. Their script job checks both files and the measurement
@@ -1043,28 +1043,25 @@ notifications separately.
   other-input digest, including the published receipt and generator. Changed
   readers or installation inputs retain full work. Each family pins the other
   family, so changes spanning both families also retain full work. The script
-  certificates are currently stale: they and the documentation certificate pin
-  each other. The lockfile certificate also pins the documentation certificate.
-  Restore these shortcuts together through a coordinated reader-audit design in
-  the remaining precise-selection work. The new diagnostics are advisory so
-  renewing one certificate cannot permanently block another; every selector
-  retains its strict comparisons and full fallback.
-  A local committed-tree control reproduced the renewal cycle at `e1f28ae`:
-  renewing the script certificate made documentation stale, and renewing
-  documentation made scripts stale again. The reviewed
+  inventories now share one strict policy, so renewing a fixed reviewed tree no
+  longer makes peer certificates stale. Each mode keeps its existing content
+  exemptions; damaged fields, stale base or head evidence, unknown paths and mixed
+  changes retain full work. The
   [coordinated-audit design](superpowers/specs/2026-10-16-coordinated-ci-audits.md)
   and [implementation plan](superpowers/plans/2026-10-16-coordinated-ci-audits.md)
-  specify one shared policy with four independent inventories and explicit manual
-  renewal. The shared reader and selector migration have focused tests, including
-  real file-mode, symbolic-link and submodule refusals. Renewal is blocked by a
-  conflict between current workspace evidence and the saved receipt fixtures:
-  the workspace has ten manifests, including translation, while the saved fixture
-  has nine without the current licence metadata. Its exact membership and metadata
-  assertions must remain. Decide how to keep independently pinned historical
-  fixture evidence alongside the complete current policy before renewal; do not
-  refresh the saved data or weaken its assertions. The shared policy still has
-  invalidating placeholder hashes. Simultaneous four-mode qualification, renewal
-  tooling, the remaining fixture/guide checks and whole-branch review remain open.
+  describe explicit staged generation and committed four-mode checking.
+  Historical receipt fixtures retain their independently pinned nine-manifest
+  certificate and exact metadata assertions. Production validation independently
+  discovers all ten current manifests, including translation and licence metadata.
+  Saved dependency, execution, schema and deployment inputs are unchanged.
+  Focused reader, fixture and renewal tests cover malformed policy fields, real
+  file modes, symbolic links, submodules, missing manifests, staged/unstaged drift
+  and committed-only checking. Complete committed-tree controls qualify all four
+  inventories together, execute isolated document/script checks, and select the
+  isolated lock importer with every receipt and compiler check retained. Mixed,
+  unknown and changed-reader controls retain full work. The explicit generator
+  never stages its output or follows a live policy link. Wider path selection,
+  remaining receipt-audit renewal and job-duration work stay open.
   Mixed changes also retain the existing fallback. The script job verifies the
   exact checkout and changed paths, and the summary requires its successful result.
   The identity audit covers that helper's only executable consumer, its own spawned test;
@@ -1092,7 +1089,7 @@ notifications separately.
   A lockfile PR, alone or with workspace manifest dependency edits, can select the
   affected packages and their saved source/helper
   consumers when both revisions match the complete other-input audit in
-  `scripts/ci-lock-selection-audit.json`. Version 2 pins each manifest with its four dependency fields removed and every
+  `scripts/ci-input-audit.json`. Version 2 pins each manifest with its four dependency fields removed and every
   other tracked file, including installation policy, root readers and documentation. Any
   change to those inputs invalidates it until you review them again; follow the
   [lockfile audit procedure](ci-lockfile-audit.md). The selected packages
@@ -1385,10 +1382,12 @@ notifications separately.
   plan, refusing missing, duplicated, cancelled, unfinished or failed required
   jobs, and any unexpected executed job. Unused job families must finish skipped.
   Every PR job checks out its exact
-  head SHA. A merge can reuse the latest successful same-workflow head run only
-  when its complete job records and exact git tree match; uncertain evidence or
-  a behind merge runs everything. Direct and multiple-commit pushes run everything.
-  Local regressions exercise the real summary command and both squash-merge trees.
+  head SHA. Every push to main runs the complete package, receipt and compiler
+  suites, even when the merge tree equals a green pull-request head. This follows
+  the owner's 2026-10-18 decision; daily-only main testing is withdrawn. Local
+  regressions exercise the real planner and summary commands and both equal-tree
+  and advanced-main squash merges without depending on the pull-request API.
+  The reuse helper and its evidence checks remain historical controls.
   The planner explicitly disables setup-node's automatic package cache because
   it does not install dependencies. The lockfile control selected all 20 package
   jobs, then reproduced a missing-store failure in the cache-saving cleanup step
@@ -1406,8 +1405,8 @@ notifications separately.
   refuses reuse and passes the full suite. The portal head and its merge use
   18 + 2 = 20 rounded job-minutes, compared with the previous full-run pair's
   70 + 70 = 140. These are timestamp-based rounding estimates, not invoices.
-  Your normal backlog-bearing PR still takes the full route because docs changes
-  are outside packages. Its observed full head uses 72 minutes; adding the measured
+  That historical backlog-bearing PR took the full route because mixed docs and
+  code changes remain outside the narrow selectors. Its observed full head uses 72 minutes; adding the measured
   two-minute reuse gives a 74-minute pair estimate. The final production pair is
   recorded in the [PR evidence](https://github.com/waitron-io/waitron-cloud/pull/124).
   The simultaneous proof runs queued behind each other: identity took 13m54s

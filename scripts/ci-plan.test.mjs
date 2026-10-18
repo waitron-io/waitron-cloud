@@ -24,13 +24,17 @@ test('every direct, multi-commit, unknown and failed-evidence push falls back to
   assert.equal(plan.packages.length,17);
 });
 
-test('forced, multiple, direct and non-parent pushes cannot reuse even when API evidence is green',()=>{
+test('every main push runs full work even when equal-tree PR evidence is green',()=>{
   const prHead='d'.repeat(40);
   const green=path=>path.includes('/commits/')?[{state:'closed',merged_at:'2026-10-14T09:00:00Z',merge_commit_sha:head,base:{ref:'main',repo:{full_name:repository}},head:{sha:prHead,ref:'feature',repo:{full_name:repository}}}]:path.includes('/jobs?')?{total_count:2,jobs:['changes','summary'].map(name=>({name,status:'completed',conclusion:'success'}))}:{workflow_runs:[{id:42,head_sha:prHead,head_branch:'feature',head_repository:{full_name:repository},event:'pull_request',path:'.github/workflows/ci.yml',status:'completed',conclusion:'success'}]};
   const git=(...args)=>args[1].endsWith('^')?before:'e'.repeat(40);
-  assert.deepEqual(createPlan({before,commits:[{}]},{sha:head,repository,branch:'main'},workspace,git,green).reuse,{sha:prHead,runId:42});
-  for (const event of [{}, {before,commits:[{},{}]}, {before,commits:[{}],forced:true}, {before:'f'.repeat(40),commits:[{}]}]) {
-    const plan=createPlan(event,{sha:head,repository,branch:'main'},workspace,git,green);
+  let apiCalls = 0;
+  const observed = path => {apiCalls++; return green(path);};
+  for (const event of [{}, {before,commits:[{}]}, {before,commits:[{},{}]}, {before,commits:[{}],forced:true}, {before:'f'.repeat(40),commits:[{}]}]) {
+    const plan=createPlan(event,{sha:head,repository,branch:'main'},workspace,git,observed);
     assert.equal(plan.reuse,null);assert.equal(plan.packages.length,17);
+    assert.equal(plan.typecheck,true);
+    assert.deepEqual(plan.receipts,['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt']);
   }
+  assert.equal(apiCalls, 0, 'Main cannot depend on PR API availability');
 });

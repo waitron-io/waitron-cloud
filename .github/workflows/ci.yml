@@ -39,7 +39,7 @@ jobs:
           node-version: '26'
           # No dependency install means there may be no package store to cache.
           package-manager-cache: false
-      # Cloud cannot enforce up-to-date branches: only equal git trees may reuse CI.
+      # Pull requests select affected work; every main push runs the full suite.
       - id: plan
         run: node scripts/ci-plan.mjs
         env:

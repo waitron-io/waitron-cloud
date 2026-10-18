@@ -1,14 +1,29 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {appendFileSync, cpSync, mkdtempSync, readFileSync, readdirSync, rmSync} from 'node:fs';
+import {appendFileSync, cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
 
 test('receipt selector fixtures retain their assertions after dependency inputs change', () => {
   const inputs = JSON.parse(readFileSync(new URL('./fixtures/ci-dependency-inputs.json', import.meta.url), 'utf8'));
-  const audit = JSON.parse(readFileSync(new URL('./ci-input-audit.json', import.meta.url), 'utf8'));
+  const certificate = new URL('./fixtures/ci-historical-manifests.json', import.meta.url);
+  assert.ok(existsSync(certificate), 'Missing independent historical manifest certificate');
+  const audit = JSON.parse(readFileSync(certificate, 'utf8'));
+  assert.deepEqual(audit, {
+    "manifests": {
+      "apps/portal/package.json": "d50ea3ff6254050ace02a8739ae7b83130f8e4a75dc4a2ea6c5b40380aab6d76",
+      "packages/account-http/package.json": "2741c09445a8141969a5f5f051144eb61f8c762ff9afb7c4433b4e9bab681811",
+      "packages/backups/package.json": "ae439c7a9f978fa926cfffe93b4011c6b6038b9fb07556594de61676057113f2",
+      "packages/fiscal-allocation/package.json": "764e62f73ff0cee22c33c4ebc97d14ace6b3d9669472e2b08cf88a8359abe4ac",
+      "packages/identity/package.json": "a620ea90e55cf3f38ace9fc79a1181d95f2a485e7faf196c9f39af795ac39ec1",
+      "packages/operations/package.json": "3f9975e5fcf2146b680b151f34f35da22adbe57bfb3f6f4663c9f89fa126e9a5",
+      "packages/registration/package.json": "42aa16d5c38b9264408381fe5ab5f5285f6583bc9be8671dc16b55f732d508ea",
+      "packages/remote-access/package.json": "f3a47e3c2732ed839ab8440796627f40996d1badc3957abafd32707cbff74f05",
+      "packages/ui-smoke/package.json": "7ad9d87459b73546a124fd3dee526dd0f8aa7e382178460e0cad6f81dc89efc3"
+    }
+  }, 'Historical manifest evidence must retain its independently pinned original map');
   assert.deepEqual(Object.keys(audit.manifests).sort(), Object.keys(inputs).filter(path => /^(apps|packages)\/.+\/package\.json$/.test(path)).sort());
   for (const [path, expected] of Object.entries(audit.manifests)) {
     const metadata = JSON.parse(inputs[path]);
