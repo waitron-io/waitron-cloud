@@ -1175,8 +1175,22 @@ notifications separately.
   scheduled snapshot or compaction boundary and does not establish complete stream
   retention. The native stream check does not run application restore hooks or grant
   fiscal activation authority.
+  You can now measure the real Cloud fiscal HTTP routes through a separate local
+  proxy. The generated PostgreSQL fixture reserves a name, repeats that reservation,
+  consumes it, reads its status and list, submits a signed machine report and
+  exercises a refused request. Independent client and proxy counts agree on all
+  seven HTTP bodies. The authority history and allocation counter confirm that
+  replay and inspection issue no additional name. A separate refused-session check
+  leaves the authority unchanged. Machine reports omit browser authentication
+  headers, as the existing route requires. Synthetic transport checks also count
+  failed replies and retries, refuse external destinations and incomplete transfers,
+  and stop their own request on cancellation. Payloads and credentials stay private.
+  These figures cover Cloud API HTTP bodies only. Authority-service traffic,
+  connection overhead, monthly frequency and fiscal service pricing remain unknown;
+  this fixture does not activate a Waitron installation.
   This is the base service fixture plus bounded synthetic stream request, body and
-  upload-only lifetime evidence; wider stream lifetime integration, the real public/staff
+  upload-only lifetime evidence and a local fiscal API scenario;
+  wider stream lifetime integration, the real public/staff
   tunnel journeys, complete accounting,
   local replay orchestration, the offline calculator, private local sales replay,
   measured storage and remote traffic, and synthetic-only AWS comparison

@@ -7,6 +7,7 @@ import { constants, openSync, closeSync, fstatSync, lstatSync, realpathSync, exi
   mkdirSync, chmodSync, rmSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
 import { join, relative, isAbsolute, posix } from 'node:path';
 import { assertOwnedRoot } from './schema.mjs';
+export { openFiscalMeasurement } from './fiscal.mjs';
 
 const fail = () => { throw new Error('Invalid cloud cost local run'); };
 const requireThat = value => { if (!value) fail(); };
