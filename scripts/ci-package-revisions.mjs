@@ -82,6 +82,10 @@ function workspaceAt(sha, workspace, git) {
       // unresolved references must retain their possible consumers.
       // Array elements can preserve the reader until a later indexed call;
       // simple comma-separated and closing-bracket references stay unresolved.
+      // Literal keys can preserve directory readers through erased assertions
+      // and parentheses. Without resolving the remaining expression, keep consumers.
+      assert.doesNotMatch(source.source, directoryPattern(/\[\s*(?:\(\s*)*(['"`])(?:readdirSync|readdir|opendirSync|opendir)\1/),
+        `Unresolved indirect directory call at ${source.path}`);
       assert.doesNotMatch(source.source, directoryPattern(/\[\s*(?:readdirSync|readdir|opendirSync|opendir)\b/),
         `Unresolved indirect directory call at ${source.path}`);
       assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|(?:,\s*)?\]|\)|<|satisfies\b)|(?:!\s*)+\()/),
