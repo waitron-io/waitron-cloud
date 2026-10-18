@@ -100,6 +100,13 @@ Planner validation at the pinned base: `node --test scripts/ci-docs.test.mjs scr
 
 ### PR 5: Supply real local backup and remote adapters for the test project
 
+**Backup verification dependency:** the owner approved the
+[separate verification contract](../specs/2026-10-18-backup-verification-without-fiscal-authority.md)
+on 18 October 2026. Waitron implements its interface in A850 after A679; Cloud
+integration follows after A850 lands. The design publication adds no PR5 service
+code. Keep snapshots unavailable and deployment enforcement off until the genuine
+proof and release gates pass. Ordinary fiscal activation authority is unchanged.
+
 **Files:** create `deploy/test-cloud/{storage-authority.mjs,storage-authority.test.mjs,service-runtime.mjs,service-runtime.test.mjs}`; extend its bootstrap/Compose/proxy as needed. Reuse interfaces in `packages/backups/src/{capture-config,managed-streams}.ts`, `packages/remote-access/src/{placement,reconciler,operator-cli}.ts`, and scope patterns in `scripts/backup-storage-fixture.mjs`, `scripts/test-local-{backups,remote}.mjs`. Any package adapter edits carry corresponding package tests. Update `docs/test-cloud.md` and `docs/backlog.md`.
 
 **Interfaces:** persistent local implementation of `CaptureOptions` and `ManagedStreamAuthority`, including its optional recovery reader; advertise `https://waitron.local:8333`. Keep identities, issuer and provider references in private volumes. Add internal `withdrawWriter(venueId:string): Promise<void>` to this local adapter and a restart-safe reconciler that compares current plans; no Waitron action or credential-field change. Use existing gateway/certificate interfaces with volume-backed inputs instead of the base empty-route publisher.
