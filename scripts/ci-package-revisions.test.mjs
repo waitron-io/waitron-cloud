@@ -1388,7 +1388,7 @@ for await (const item of await ${invocation}) {
       /Unresolved indirect directory call at tools\/scan\.mjs/, `${api} ${revision}`);
     const result = plan(base, head, read);
     assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
-    assert.match(result.reason, /Unresolved indirect directory call at tools\/scan\.mjs/);
+    assert.match(result.reason, /full suite.*tools\/scan\.mjs/);
   });
 });
 
