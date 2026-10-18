@@ -1320,8 +1320,11 @@ notifications separately.
   prove that consumer, while saved-tree and batched-read controls cover readers
   from either revision despite dirty local helpers. Unreachable alias helpers
   retain narrow package selection. Block and line comments before `as` also keep
-  the fallback. This bounded token scan can select extra work for inert text or
-  unrelated names; precise alias resolution, assignment/destructuring aliases
+  the fallback. Quoted import names and escaped alias tokens also keep all package
+  work; real Node checks cover both quote forms, Unicode and hexadecimal escapes
+  and a quoted line continuation. The scan does not decode or execute source text.
+  It can select extra work for inert text, unrelated names or an escaped alias
+  for a different import; precise alias resolution, assignment/destructuring aliases
   and other unsupported calls remain open. Existing assertions and reader-audit
   certificates are unchanged. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain

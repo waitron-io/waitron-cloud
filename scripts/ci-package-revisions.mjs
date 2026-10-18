@@ -74,8 +74,9 @@ function workspaceAt(sha, workspace, git) {
       // outside the quoted paths; unresolved scans must keep every package.
       assert.doesNotMatch(source.source, /\b(?:globSync|glob)\b/, `Unresolved glob scan at ${source.path}`);
       // An imported alias can enumerate helpers without naming a directory API
-      // at its call site. Unresolved bindings must retain every possible consumer.
-      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s+as\b/),
+      // at its call site. Quoted names and escaped alias tokens stay unresolved;
+      // those bindings must retain every possible consumer without decoding code.
+      assert.doesNotMatch(source.source, directoryPattern(/(?:\b(?:readdirSync|readdir|opendirSync|opendir)['"]?|\\[\s\S][\w$\\{}'"]*)\s+as\b/),
         `Unresolved directory import alias at ${source.path}`);
       const rootReads = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*,?\s*\)\s*,?\s*\)/g))].map(match => match[2]));
       // Options may enable recursion or supply a computed policy; an unresolved

@@ -1259,3 +1259,27 @@ test('an unreachable directory import alias does not expand package work', () =>
   const head = commit();
   assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
 }));
+
+test('quoted and escaped directory import names retain helpers Node actually loads', () => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
+    const names = [api.replace('r', '\\u0072'), `'${api}'`, `"${api}"`,
+      `'${api.replace('r', '\\x72')}'`, `"${api.replace('r', '\\u{72}')}"`,
+      `'${api.slice(0, 2)}\\\n${api.slice(2)}'`];
+    for (const name of names) fixture(({root, write, commit, plan}) => {
+      write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('encoded alias helper loaded');\n");
+      write('packages/portal/src/index.mjs', `import {${name} as scanDirectory} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+for await (const item of await scanDirectory(new URL('../../../', import.meta.url))) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL('../../../' + name, import.meta.url));
+}
+`);
+      const base = commit();
+      write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+      const head = commit();
+      assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'encoded alias helper loaded\n');
+      const result = plan(base, head);
+      assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], name);
+      assert.match(result.reason, /Unresolved directory import alias at packages\/portal\/src\/index\.mjs/);
+    });
+  }
+});
