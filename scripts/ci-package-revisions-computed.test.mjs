@@ -232,7 +232,7 @@ test('parenthesized namespace directory readers retain consumers Node actually l
     await t.test(api, () => fixture(({root, write, commit, plan}) => {
       write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('parenthesized helper loaded');\n");
       write('packages/portal/src/reader.mts', `import * as fs from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
-const directory = new URL('../../../', import.meta.url);
+const directory = new URL(['..', '..', '..', ''].join('/'), import.meta.url);
 for await (const item of await (fs).${api}(directory)) {
   const name = typeof item === 'string' ? item : item.name;
   if (name.endsWith('.mjs')) await import(new URL(name, directory));
@@ -265,7 +265,7 @@ test('parenthesized namespace readers survive erased wrappers and expression pos
     write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('wrapped namespace helper loaded');\n");
     write('packages/portal/src/reader.mts', `import * as fs from 'node:fs';
 const ns = {nested: {fs}};
-const directory = new URL('../../../', import.meta.url);
+const directory = new URL(['..', '..', '..', ''].join('/'), import.meta.url);
 for (const name of ${expression}(directory)) {
   if (name.endsWith('.mjs')) await import(new URL(name, directory));
 }
@@ -282,7 +282,7 @@ test('saved parenthesized namespace readers retain either revision and unchanged
   for (const revision of ['base', 'head', 'unchanged']) await t.test(revision, () => fixture(({root, git, write, commit, plan}) => {
     write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('saved namespace helper loaded');\n");
     const reader = `import * as fs from 'node:fs';
-const directory = new URL('../', import.meta.url);
+const directory = new URL(['..', ''].join('/'), import.meta.url);
 for (const name of (fs).readdirSync(directory)) {
   if (name.endsWith('.mjs')) await import(new URL(name, directory));
 }
@@ -308,7 +308,7 @@ for (const name of (fs).readdirSync(directory)) {
 
 test('unused parenthesized namespace helpers retain narrow package work', () => fixture(({write, commit, plan}) => {
   write('tools/unused.mjs', `import * as fs from 'node:fs';
-(fs).readdirSync(new URL('../', import.meta.url));
+(fs).readdirSync(new URL(['..', ''].join('/'), import.meta.url));
 `);
   const base = commit();
   write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');

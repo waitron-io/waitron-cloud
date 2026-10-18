@@ -412,7 +412,7 @@ test('audited lock changes retain consumers behind parenthesized namespace reade
       write('packages/catalogue/src/adapter.mjs', 'export const price = 1;\n');
       write('catalogue-adapter.mjs', "import './packages/catalogue/src/adapter.mjs';\nconsole.log('parenthesized lock helper loaded');\n");
       write('packages/page/test/scan.mjs', `import * as fs from 'node:fs';
-const directory = new URL('../../../', import.meta.url);
+const directory = new URL(['..', '..', '..', ''].join('/'), import.meta.url);
 for (const name of (fs).readdirSync(directory)) {
   if (name.endsWith('.mjs')) await import(new URL(name, directory));
 }
