@@ -1397,8 +1397,15 @@ notifications separately.
   unrelated names or function arguments. It does not parse arbitrary expressions:
   other nested predecessors and delimiter-bearing comments or strings remain
   unresolved. Namespace readers after simple values, such as
-  `[0, fs.readdirSync, null][1]`, also remain unresolved; executed base and final
-  controls both miss their loaded consumers. Adversarial repeated delimiter/comment
+  `[0, fs.readdirSync, null][1]`, now retain every package suite. Executed Node
+  controls cover all four directory APIs, comment-separated members, non-null
+  assertions and optional namespace access. Saved-helper checks cover either
+  revision and unchanged transitive consumers despite dirty local files; audited
+  lock changes retain full work with these readers and narrow work without them.
+  Unused helpers and ordinary named imports still keep narrow work. This bounded
+  guard can select extra work for inert text and unrelated names. Other nested
+  predecessors such as `[[], 0, readdirSync, null][2]` remain unresolved.
+  Adversarial repeated delimiter/comment
   text can increase scan time; comprehensive parser performance remains unqualified.
   Precise resolution,
   assignment/destructuring aliases and escaped API references remain open.

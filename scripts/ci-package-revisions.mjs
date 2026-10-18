@@ -87,8 +87,9 @@ function workspaceAt(sha, workspace, git) {
       assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|(?:,\s*)?\]|\)|<|satisfies\b)|(?:!\s*)+\()/),
         `Unresolved indirect directory call at ${source.path}`);
       // A comma can store the reader between other elements. Require an array
-      // opener so ordinary named imports do not force full package work.
-      assert.doesNotMatch(source.source, directoryPattern(/\[[^\[\]{};]*,\s*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/),
+      // opener so ordinary named imports do not force full package work. A simple
+      // namespace and non-null assertions preserve the stored function too.
+      assert.doesNotMatch(source.source, directoryPattern(/\[[^\[\]{};]*,\s*(?:[A-Za-z_$][\w$]*\s*(?:!\s*)*(?:\?\.|\.)\s*)?(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/),
         `Unresolved indirect directory call at ${source.path}`);
       // A nested value can precede a stored reader. Its closing delimiter
       // breaks the simple array-prefix match but leaves the callable unchanged.
