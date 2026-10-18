@@ -1083,7 +1083,15 @@ notifications separately.
   the runtime roles and wider candidates, and the [public price snapshot](cost-model/prices.json)
   records dated Spain, Stockholm and global rates with explicit gaps. Anonymous
   export validation rejects unknown fields and source/scratch overlap. These inputs
-  establish no measured venue cost. The pure calculations now cover aggregate request
+  establish no measured venue cost. A private replay scheduler sends each selected
+  sale in order, using original or accelerated target times, and reports any delay.
+  Synthetic SQLite checks verify that writes do not accumulate extra waiting time. Both modes
+  pass through the pinned Waitron writer with its normal fiscal integrity checks;
+  a refused sale preserves rollback and stops the remaining schedule. Cancellation
+  and deadlines stop new sales and wait for admitted writes before returning. The
+  scheduler returns counts and durations only. Source-day selection, isolated full
+  replay, idle measurement and a complete cost export still need separate evidence.
+  The pure calculations now cover aggregate request
   tiers, explicit resource capacities, dated growth and calendar retention, including
   protected recovery copies. Synthetic local HTTP checks reconcile retries, denied
   calls and interrupted transfers with a streaming meter; unknown billing dimensions

@@ -9,6 +9,7 @@ import { join, relative, isAbsolute, posix } from 'node:path';
 import { assertOwnedRoot } from './schema.mjs';
 export { openFiscalMeasurement } from './fiscal.mjs';
 export { openMailMeasurement } from './mail.mjs';
+export { replayScheduledSales } from './cadence.mjs';
 
 const fail = () => { throw new Error('Invalid cloud cost local run'); };
 const requireThat = value => { if (!value) fail(); };
