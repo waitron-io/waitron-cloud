@@ -1387,15 +1387,19 @@ notifications separately.
   inert text, unrelated names and direct calls inside a branch or right operand;
   it does not evaluate branch conditions or resolve these calls precisely.
   Middle readers immediately after a nested array or object now retain full
-  package work, including simple namespace references, comments and TypeScript
-  assertions. Executed Node controls cover all four directory APIs. Saved-reader
+  package work, including simple namespace references, comments, non-null
+  assertions on the reader or namespace and optional namespace access. Executed
+  Node controls cover all four directory APIs. Saved-reader
   controls cover either revision and unchanged transitive consumers despite dirty
   local files; audited lock changes retain full work with these readers and narrow
   work without them. Unused helpers and ordinary multi-name imports stay narrow.
   This closing-delimiter guard can also select extra work for inert text,
   unrelated names or function arguments. It does not parse arbitrary expressions:
   other nested predecessors and delimiter-bearing comments or strings remain
-  unresolved. A direct multi-name import control preserves narrow work.
+  unresolved. Namespace readers after simple values, such as
+  `[0, fs.readdirSync, null][1]`, also remain unresolved; executed base and final
+  controls both miss their loaded consumers. Adversarial repeated delimiter/comment
+  text can increase scan time; comprehensive parser performance remains unqualified.
   Precise resolution,
   assignment/destructuring aliases and escaped API references remain open.
   A final element's trailing comma also keeps full work, including multiline and
