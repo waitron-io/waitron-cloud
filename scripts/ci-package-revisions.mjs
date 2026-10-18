@@ -90,6 +90,11 @@ function workspaceAt(sha, workspace, git) {
       // opener so ordinary named imports do not force full package work.
       assert.doesNotMatch(source.source, directoryPattern(/\[[^\[\]{};]*,\s*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/),
         `Unresolved indirect directory call at ${source.path}`);
+      // Logical and conditional operands can preserve the reader for a later
+      // call. Bare and simple namespace references stay unresolved on either
+      // side without evaluating the expression.
+      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*(?:&&|\|\||\?\?|\?(?!\.)|:)|(?:&&|\|\||\?\?|\?|:)\s*(?:[A-Za-z_$][\w$]*\s*\.\s*)?(?:readdirSync|readdir|opendirSync|opendir)\b/),
+        `Unresolved indirect directory call at ${source.path}`);
       // An imported alias can enumerate helpers without naming a directory API
       // at its call site. Quoted names and escaped alias tokens stay unresolved;
       // those bindings must retain every possible consumer without decoding code.
