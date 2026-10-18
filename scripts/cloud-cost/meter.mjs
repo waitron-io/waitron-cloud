@@ -72,11 +72,12 @@ export function createMeter({ phase, clock }) {
     try {
       exact(event, ['token', 'action', 'class', 'bytes']); token(event.token);
       requireThat(classes.includes(event.class) && count(event.bytes));
-      requireThat(['create', 'noncurrent', 'delete', 'marker', 'multipart-create', 'multipart-part', 'multipart-complete', 'multipart-abort'].includes(event.action));
+      requireThat(['create', 'noncurrent', 'current', 'delete', 'marker', 'multipart-create', 'multipart-part', 'multipart-resize', 'multipart-complete', 'multipart-abort'].includes(event.action));
       const e = structuredClone(event); const existing = objects.get(e.token);
       if (['create', 'marker', 'multipart-create'].includes(e.action)) requireThat(!existing);
       else requireThat(existing && !existing.deleted && existing.class === e.class);
       if (e.action === 'noncurrent') requireThat(existing.state === 'current' && e.bytes === 0);
+      if (e.action === 'current') requireThat(existing.state === 'noncurrent' && e.bytes === 0);
       if (e.action.startsWith('multipart-') && e.action !== 'multipart-create') requireThat(existing.state === 'multipart');
       if (['delete', 'multipart-abort', 'multipart-create'].includes(e.action)) requireThat(e.bytes === 0);
       if (e.action === 'multipart-complete') requireThat(e.bytes === existing.bytes);
@@ -86,8 +87,10 @@ export function createMeter({ phase, clock }) {
       if (['create', 'marker', 'multipart-create'].includes(e.action)) objects.set(e.token, { class: e.class, bytes: e.bytes,
         state: e.action === 'marker' ? 'marker' : e.action === 'multipart-create' ? 'multipart' : 'current', deleted: false });
       else if (e.action === 'noncurrent') existing.state = 'noncurrent';
+      else if (e.action === 'current') existing.state = 'current';
       else if (['delete', 'multipart-abort'].includes(e.action)) existing.deleted = true;
       else if (e.action === 'multipart-part') { requireThat(count(existing.bytes + e.bytes)); existing.bytes += e.bytes; }
+      else if (e.action === 'multipart-resize') existing.bytes = e.bytes;
       else if (e.action === 'multipart-complete') existing.state = 'current';
     } catch { invalid = true; fail(); }
   };
@@ -199,6 +202,13 @@ export function classifyStorageOperation({ method, path, copySource = false }) {
   } catch { fail(); }
 }
 
+const storageBindings = new WeakMap();
+export function assertStorageClientBinding(client, meter, phase) {
+  const binding = storageBindings.get(client);
+  requireThat(binding && binding.meter === meter && binding.phase === phase && binding.handler === client.config.requestHandler);
+  return binding.endpoint;
+}
+
 const correlationHeaders = ['x-cloud-cost-attempt', 'x-cloud-cost-retry', 'x-cloud-cost-phase'];
 export function correlatedStorageAttempt(input) {
   const headers = input.headers;
@@ -285,6 +295,7 @@ export function instrumentStorageClient({ client, meter, phase, endpoint }) {
       }
     },
   };
+  storageBindings.set(client, { meter, phase, endpoint: target.href, handler: client.config.requestHandler });
 }
 
 export async function createMeteringProxy({ target, meter, classify, listenHost = '127.0.0.1', listenPort = 0 }) {

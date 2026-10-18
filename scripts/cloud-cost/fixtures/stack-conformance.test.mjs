@@ -204,3 +204,35 @@ test('genuineArchiveAndSignedSdkTrafficReconcileThroughRealStorage', async t => 
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
+
+// Wrong overwrite, marker promotion, replacement part size or completion size changes the literal integral.
+test('genuineVersionAndMultipartLifetimesMatchMeteredStorageInventories', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  cpSync(new URL('./lifetime-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-lifetime-smoke.mjs'));
+  cpSync(new URL('./lifetime-replacement-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-lifetime-replacement-smoke.mjs'));
+  cpSync(new URL('../storage-lifetimes.mjs', import.meta.url), join(f.codeRoot, 'storage-lifetimes.mjs'));
+  let stack;
+  f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(docker('exec', s3, 'node', '/code/cost-lifetime-smoke.mjs'));
+  assert.equal(result.ready, true, 'track real successful SDK mutations and independently verify retained state');
+  assert.deepEqual(result.checks.map(rows => rows.map(r => [r.bytes, r.currentVersions, r.noncurrentVersions, r.deleteMarkers, r.unfinishedMultipart])),
+    [[[8, 1, 1, 0, 0]], [[10, 0, 2, 1, 0]], [[8, 1, 1, 0, 0]], [[12, 1, 0, 0, 1]], [[9, 2, 0, 0, 0]]]);
+  assert.deepEqual(result.result.accounting.objects, [{ class: 'stream', bytes: 0, byteSeconds: 134,
+    currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 }]);
+  assert.deepEqual(result.plainRetained.find(row => row.class === 'scratch'), { class: 'scratch', bytes: 5, byteSeconds: 6,
+    currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
+  assert.deepEqual(result.plainResult.accounting.objects.find(row => row.class === 'scratch'), { class: 'scratch', bytes: 0, byteSeconds: 19,
+    currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
+  assert.equal(result.plainResult.reconciled, true);
+  assert.equal(result.result.reconciled, true); assert.equal(result.result.status, 'measured');
+  assert.deepEqual(result.result.accounting.producer, result.result.accounting.observer);
+  assert.ok(result.result.accounting.requests.some(r => r.phase === 'observer' && r.operation === 'list'));
+  assert.equal(result.leaked, false);
+  const replacement = JSON.parse(docker('exec', s3, 'node', '/code/cost-lifetime-replacement-smoke.mjs'));
+  assert.deepEqual(replacement, { ready: true, refused: true, invalid: true }, 'SeaweedFS duplicate overwritten parts cannot qualify retained storage evidence');
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});

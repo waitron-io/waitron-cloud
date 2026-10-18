@@ -1125,7 +1125,27 @@ notifications separately.
   restore with fiscal integrity checks. Its eleven requests, including multipart
   cleanup, reconcile across both meters. Setup includes the SDK's bucket-creation
   body; it is separate from archive workload. This proves that bounded synthetic
-  flow, not complete replay accounting or stored-object lifetimes.
+  flow, not complete replay accounting. A private storage-lifetime wrapper now tracks
+  successful writes, versions, delete markers and multipart parts. Metered inventory
+  reads must agree before you can obtain its totals. Synthetic clocks give exact,
+  independently calculated byte-time checks; they are not measured venue traffic.
+  Event times follow completed requests; the provider's commit time during a request
+  remains unmeasured and needs bounds in the future replay evidence.
+  The wrapper requires initially empty buckets, matching metered clients and serial
+  writes. Unknown body sizes, changed clients, ambiguous retries and incomplete or
+  mismatched inventories refuse evidence. Overwriting an unversioned object,
+  promoting an earlier version, completing selected parts and aborting an upload
+  preserve the stored-byte integral. Delete markers use the UTF-8 key length described
+  in the [AWS delete-marker guide](https://docs.aws.amazon.com/AmazonS3/latest/userguide/DeleteMarker.html)
+  (read 18 October 2026); bucket-control pricing stays unknown.
+  The genuine SeaweedFS 4.47 check also exposes a multipart replacement mismatch:
+  after uploading a 4-byte part and replacing it with 2 bytes, its listing contains
+  both entries. `genuineVersionAndMultipartLifetimesMatchMeteredStorageInventories`
+  requires the wrapper to refuse that evidence. Do not deduplicate the listing or
+  weaken the inventory comparison. Replacement parts still need a compatible local
+  backend before a complete replay using them can qualify; the independent signed-SDK
+  HTTP check retains the exact replacement-size assertion. The existing archive and
+  stack assertions remain unchanged.
   This is the base service fixture with passive storage accounting;
   stream replication, the real public/staff tunnel journeys, complete accounting,
   local replay orchestration, the offline calculator, private local sales replay,
