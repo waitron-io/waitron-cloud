@@ -1360,9 +1360,17 @@ notifications separately.
   consumers and dirty local files; lockfile controls keep full work for the reader
   and narrow work without it. Unreachable helpers still keep narrow selection.
   The closing-parenthesis fallback is conservative: inert text and passing a
-  reader as an argument can also select extra work. Array wrappers such as
-  `[readdirSync][0](directory)` still miss consumers; executed review probes
-  reproduce that gap. TypeScript `as` wrappers already retain full work, but
+  reader as an argument can also select extra work. Directory readers stored as
+  the first or final array element now retain every package suite; indexing the
+  array preserves the function that Node invokes. Real Node checks cover all four
+  APIs, nested arrays, comments, trailing commas, TypeScript assertions and `at`.
+  Saved-helper controls cover either revision and unchanged transitive consumers
+  despite dirty local files. Audited lockfile controls retain full package work
+  with these readers and narrow work without them; unused helpers stay narrow.
+  These guards can also select extra work for inert text or unrelated names.
+  Middle elements preceded and followed by other elements, assignment/destructuring
+  aliases and escaped API references still need resolution under D69.
+  TypeScript `as` wrappers already retain full work, but
   report an import-alias reason. Precise resolution and clearer reasons remain open.
   Existing assertions and reader-audit
   certificates are unchanged. Repository-root working directories, computed
