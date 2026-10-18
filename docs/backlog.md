@@ -1427,8 +1427,9 @@ notifications separately.
   changes keep full work with these readers and narrow work without them;
   unreachable helpers stay narrow. This guard does not resolve member identities
   and can select extra work for unrelated keys, arrays of API names or inert text.
-  Escaped quoted keys now retain full package work too: Unicode, hexadecimal
-  escapes and line continuations can spell a reader without its literal name.
+  Keys whose first quoted token contains an escape before the next matching
+  quote now retain full package work too: Unicode, hexadecimal escapes and
+  line continuations can spell a reader without its literal name.
   Executed Node controls cover all four APIs, all three quote forms, comments,
   parentheses and erased assertions. Saved-reader checks retain either revision
   and unchanged transitive consumers despite dirty local files; audited lock
@@ -1438,8 +1439,10 @@ notifications separately.
   plain escaped array values narrow, including arrays after `of` and `return`.
   Receiver matching covers plain names and closing call/index delimiters, with
   comments, optional access and non-null assertions; arbitrary receiver
-  expressions remain unqualified. Computed keys
-  without a literal API-name prefix or a quoted escape remain unresolved.
+  expressions remain unqualified. Computed keys without a literal API-name prefix
+  or an escape in that first token remain unresolved. Executed base/final probes
+  still miss consumers when the escape appears in a later concatenated string,
+  a comma expression or a template nested inside the key's template.
   Parenthesized dot-member
   namespaces such as `(fs).readdirSync` remain unresolved, as do deeper members
   in other expression positions; this is not a general expression parser.
