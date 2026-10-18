@@ -22,3 +22,16 @@ jobs:
           node scripts/verifier-diagnostic.mjs ../packages/backups/src/verify-process.ts 1
           node scripts/verifier-diagnostic.mjs ../packages/backups/src/verify-process.ts 8
           node --test packages/backups/test/verify-process.test.ts
+      - name: Reproduce delayed core collection without changing verifier deadlines
+        run: |
+          original=$(cat /proc/sys/kernel/core_pattern)
+          trap 'printf "%s" "$original" | sudo tee /proc/sys/kernel/core_pattern >/dev/null' EXIT
+          printf '#!/bin/sh\nsleep 8\ncat >/dev/null\n' | sudo tee /tmp/d81-core-helper >/dev/null
+          sudo chmod 755 /tmp/d81-core-helper
+          printf '|/tmp/d81-core-helper' | sudo tee /proc/sys/kernel/core_pattern >/dev/null
+          node scripts/verifier-diagnostic.mjs ../packages/backups/src/verify-process.ts 1
+          if node --test --test-name-pattern='JavaScript allocations' packages/backups/test/verify-process.test.ts; then
+            echo 'Expected the original resource assertion to expose delayed core collection'
+            exit 1
+          fi
+          sleep 8
