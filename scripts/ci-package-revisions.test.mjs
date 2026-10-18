@@ -1200,3 +1200,111 @@ console.log(JSON.stringify(scopeForRevisions(['packages/catalogue/src/index.mjs'
   assert.deepEqual(JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', program],
     {cwd: root, encoding: 'utf8', timeout: 10_000})), {full: false, packages: ['catalogue']});
 }));
+
+test('directory import aliases retain consumers of helpers Node actually loads', () => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
+    for (const gap of [' ', ' /* alias */ ', ' // alias\n']) fixture(({root, write, commit, plan}) => {
+      write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('aliased helper loaded');\n");
+      write('packages/portal/src/index.mjs', `import {${api}${gap}as scanDirectory} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+for await (const item of await scanDirectory(new URL('../../../', import.meta.url))) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL('../../../' + name, import.meta.url));
+}
+`);
+      const base = commit();
+      write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+      const head = commit();
+      assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'aliased helper loaded\n');
+      const result = plan(base, head);
+      assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], `${api} ${gap}`);
+      assert.match(result.reason, /Unresolved directory import alias at packages\/portal\/src\/index\.mjs/);
+    });
+  }
+});
+
+test('directory import aliases in saved helpers keep full work from either revision', () => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
+    for (const revision of ['base', 'head']) fixture(({root, git, write, commit}) => {
+      write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('saved alias helper loaded');\n");
+      const reader = `import {${api} as scanDirectory} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+const directory = new URL('../', import.meta.url);
+for await (const item of await scanDirectory(directory)) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`;
+      write('tools/scan.mjs', revision === 'base' ? reader : 'export const value = 1;\n');
+      write('packages/portal/src/index.mjs', "import '../../../tools/scan.mjs';\n");
+      write('packages/gateway/src/index.mjs', "import '../../portal/src/index.mjs';\n");
+      const base = commit();
+      if (revision === 'base') assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'saved alias helper loaded\n');
+      write('tools/scan.mjs', revision === 'head' ? reader : 'export const value = 2;\n');
+      write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+      const head = commit();
+      if (revision === 'head') assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'saved alias helper loaded\n');
+      write('tools/scan.mjs', 'export const changedLocally = true;\n');
+      write('catalogue-adapter.mjs', 'export const changedLocally = true;\n');
+      const read = (...args) => git(...args);
+      read.readBlobs = ids => packageInputs.readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input}));
+      assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, read),
+        /Unresolved directory import alias at tools\/scan\.mjs/, `${api} ${revision}`);
+    });
+  }
+});
+
+test('an unreachable directory import alias does not expand package work', () => fixture(({write, commit, plan}) => {
+  write('tools/unused.mjs', "import {readdirSync as scanDirectory} from 'node:fs';\nscanDirectory(new URL('../', import.meta.url));\n");
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
+}));
+
+test('quoted and escaped directory import names retain helpers Node actually loads', () => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
+    const names = [api.replace('r', '\\u0072'), `'${api}'`, `"${api}"`,
+      `'${api.replace('r', '\\x72')}'`, `"${api.replace('r', '\\u{72}')}"`,
+      `'${api.slice(0, 2)}\\\n${api.slice(2)}'`];
+    for (const name of names) fixture(({root, write, commit, plan}) => {
+      write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('encoded alias helper loaded');\n");
+      write('packages/portal/src/index.mjs', `import {${name} as scanDirectory} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+for await (const item of await scanDirectory(new URL('../../../', import.meta.url))) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL('../../../' + name, import.meta.url));
+}
+`);
+      const base = commit();
+      write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+      const head = commit();
+      assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'encoded alias helper loaded\n');
+      const result = plan(base, head);
+      assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], name);
+      assert.match(result.reason, /Unresolved directory import alias at packages\/portal\/src\/index\.mjs/);
+    });
+  }
+});
+
+test('large escaped source strings cannot trap package selection in backtracking', () => {
+  for (const text of ['\\'.repeat(50_000), 'a'.repeat(100_000)]) fixture(({root, write, commit}) => {
+    write('packages/portal/src/index.mjs', `export const text = ${JSON.stringify(text)};\n`);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), '');
+    const program = `import {execFileSync} from 'node:child_process';
+import {scopeForRevisions} from ${JSON.stringify(new URL('./ci-package-revisions.mjs', import.meta.url).href)};
+const git = (...args) => execFileSync('git', args, {encoding: 'utf8'});
+console.log(JSON.stringify(scopeForRevisions(['packages/catalogue/src/index.mjs'], ${JSON.stringify(loadWorkspace(root))}, '${base}', '${head}', git)));
+`;
+    assert.deepEqual(JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', program],
+    {cwd: root, encoding: 'utf8', timeout: 5_000})), {full: false, packages: ['catalogue']});
+  });
+});
+
+test('an ordinary escaped token does not borrow as from later unrelated text', () => fixture(({write, commit, plan}) => {
+  write('packages/portal/src/index.mjs', `export const path = ${JSON.stringify('\\')};\nconst label = 'unrelated as text';\n`);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
+}));
