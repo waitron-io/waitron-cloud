@@ -81,7 +81,7 @@ export async function runStackService(role) {
   } else if (role === 'waitron') {
     const { openReplay } = await import('/code/cost-waitron-adapter.mjs');
     const run = config(); mkdirSync('/state/replay', { mode: 0o700 });
-    replay = await openReplay({ codeRoot: '/code', stateRoot: '/state/replay', ...run });
+    replay = await openReplay({ codeRoot: '/code', stateRoot: '/state/replay', config: run.config, initial: run.initial });
     s = await server(async (req, res) => {
       let result;
       if (req.method === 'GET' && req.url === '/health') result = { ready: true };

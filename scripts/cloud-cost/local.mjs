@@ -333,7 +333,9 @@ export async function startIsolatedStack(args) {
     const configFile = join(stateRoot, 'replay-config.json');
     requireThat((canonicalFile(configFile).mode & 0o777) === 0o600);
     const { validateReplayConfig } = await import('./waitron-adapter.mjs');
-    const replayConfig = validateReplayConfig(JSON.parse(readFileSync(configFile, 'utf8')).config);
+    const privateConfig = JSON.parse(readFileSync(configFile, 'utf8'));
+    requireThat(Object.keys(privateConfig).sort().join(',') === 'config,initial');
+    const replayConfig = validateReplayConfig(privateConfig.config);
     // Every endpoint must name the service this stack actually starts.
     for (const [key, host, port] of [['postgres', 'postgres', '5432'], ['s3', 's3', '8333'],
       ['smtp', 'mailpit', '1025'], ['fiscal', 'fiscal', '8080'], ['gateway', 'gateway', '8443']]) {

@@ -122,3 +122,14 @@ test('stackDoesNotOverwriteAnExistingPrivateKeyOnARefusedStart', async t => {
   assert.equal(readFileSync(join(f.stateRoot, 'gateway-key.pem'), 'utf8') === 'earlier private key sentinel', true, 'preserve the existing key without printing key bytes');
   assert.equal(readFileSync(join(f.stateRoot, 'gateway.pem'), 'utf8') === 'earlier combined certificate sentinel', true);
 });
+
+test('stackRefusesExtraPrivateConfigurationBeforePreparingRuntimeFiles', async t => {
+  const f = fixture(t), preparedPlan = local.prepareIsolatedStack(f);
+  const path = join(f.stateRoot, 'replay-config.json'), config = JSON.parse(readFileSync(path, 'utf8'));
+  config.stateRoot = '/state/replay';
+  writeFileSync(path, JSON.stringify(config), { mode: 0o600 });
+  let stack;
+  f.onCleanup(async () => { await stack?.close(); });
+  await assert.rejects(async () => { stack = await local.startIsolatedStack({ ...f, prepared: preparedPlan }); }, /Invalid cloud cost local run/);
+  assert.equal(existsSync(join(f.codeRoot, 'cost-stack-runtime.mjs')), false);
+});

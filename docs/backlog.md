@@ -1109,7 +1109,8 @@ notifications separately.
   Synthetic checks exercise database access, storage upload/read/delete, captured
   mail and a sale through HTTPS, then verify fiscal integrity and remove the owned
   containers and network. Every service passes the outbound connection checks.
-  Startup refuses a changed plan, mismatched endpoints, an existing private key and
+  Startup refuses a changed plan, extra private configuration, mismatched endpoints,
+  an existing private key and
   resources created before that invocation. This is the base service fixture;
   stream replication, the real public/staff tunnel journeys, complete accounting,
   local replay orchestration, the offline calculator, private local sales replay,
