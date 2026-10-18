@@ -123,3 +123,92 @@ fs['readdirSync'](new URL('../', import.meta.url));
   const head = commit();
   assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
 }));
+
+test('escaped computed directory keys retain consumers Node actually loads', async t => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
+    for (const [quote, prefix] of [["'", String.raw`\u0072`], ['"', String.raw`\x72`], ['`', String.raw`\u{72}`]]) {
+      const key = quote + (api.startsWith('r') ? prefix + api.slice(1) : prefix.replace('72', '6f') + api.slice(1)) + quote;
+      await t.test(`${api} ${key}`, () => fixture(({root, write, commit, plan}) => {
+        write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('escaped helper loaded');\n");
+        write('packages/portal/src/reader.mts', `import * as fs from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+const directory = new URL('../../../', import.meta.url);
+for await (const item of await fs[${key}](directory)) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`);
+        const base = commit();
+        write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+        const head = commit();
+        assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'escaped helper loaded\n');
+        const result = plan(base, head);
+        assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+        assert.match(result.reason, /Unresolved escaped directory key at packages\/portal\/src\/reader\.mts/);
+      }));
+    }
+  }
+});
+
+test('escaped computed keys survive line continuations comments and erased wrappers', async t => {
+  for (const expression of [
+    String.raw`fs['read\u0064irSync']`,
+    "fs['read\\\ndirSync']",
+    'fs[`read\\\r\ndirSync`]',
+    String.raw`fs[ /* key */ ( /* nested */ ('\u0072eaddirSync' satisfies string) )]`,
+    String.raw`fs!?.[ // key
+      "\x72eaddirSync"! // close
+    ]!`,
+    String.raw`[[], 0, fs['\u{72}eaddirSync'], null][2]`,
+  ]) await t.test(expression, () => fixture(({root, write, commit, plan}) => {
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('wrapped escaped helper loaded');\n");
+    write('packages/portal/src/reader.mts', `import * as fs from 'node:fs';
+const directory = new URL('../../../', import.meta.url);
+for (const name of ${expression}(directory)) {
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'wrapped escaped helper loaded\n');
+    assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+  }));
+});
+
+test('saved escaped keys retain both revisions and unchanged transitive readers', async t => {
+  for (const revision of ['base', 'head', 'unchanged']) await t.test(revision, () => fixture(({root, git, write, commit, plan}) => {
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('saved escaped helper loaded');\n");
+    const reader = String.raw`import * as fs from 'node:fs';
+const directory = new URL('../', import.meta.url);
+for (const name of fs['\u0072eaddirSync'](directory)) {
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`;
+    write('tools/scan.mjs', revision === 'head' ? 'export const value = 1;\n' : reader);
+    write('packages/portal/src/index.mjs', "import '../../../tools/scan.mjs';\n");
+    write('packages/gateway/src/index.mjs', "import '../../portal/src/index.mjs';\n");
+    const base = commit();
+    if (revision !== 'head') assert.equal(execFileSync(process.execPath, ['packages/gateway/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'saved escaped helper loaded\n');
+    if (revision !== 'unchanged') write('tools/scan.mjs', revision === 'head' ? reader : 'export const value = 2;\n');
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    if (revision !== 'base') assert.equal(execFileSync(process.execPath, ['packages/gateway/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'saved escaped helper loaded\n');
+    write('tools/scan.mjs', 'export const dirty = true;\n');
+    write('catalogue-adapter.mjs', 'export const dirty = true;\n');
+    const read = (...args) => git(...args);
+    read.readBlobs = ids => packageInputs.readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input}));
+    assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, read),
+      /Unresolved escaped directory key at tools\/scan\.mjs/);
+    assert.deepEqual(plan(base, head, read).packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+  }));
+});
+
+test('unused escaped key helpers retain narrow package work', () => fixture(({write, commit, plan}) => {
+  write('tools/unused.mjs', String.raw`import * as fs from 'node:fs';
+fs['\u0072eaddirSync'](new URL('../', import.meta.url));
+`);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
+}));
