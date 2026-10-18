@@ -2,7 +2,7 @@
 
 You need a separate Cloud account service to exercise your test server without touching its existing venue. The test deployment uses its own Compose project, database, storage and private configuration. Its canonical address is `https://waitron.local:3000`.
 
-The deployment files and local HTTPS proof are implemented. **The test box is not deployed yet.** Plan enforcement remains off until the storage adapters, free-service checks and disposable Waitron integration proof pass. Address providers stay disabled. Translation stays off pending the pinned joint paging proof and owner trials after 2 November 2026. Outside-home remote access needs a separately approved domain, certificates and deployment.
+The deployment files and local HTTPS, storage and remote proofs are implemented. **The test box is not deployed yet.** Plan enforcement remains off until the scoped backup verifier, free-service checks and disposable Waitron integration proof pass. Address providers stay disabled. Translation stays off pending the pinned joint paging proof and owner trials after 2 November 2026. Outside-home remote access needs a separately approved domain, certificates and deployment.
 
 ## What is reachable
 
@@ -126,4 +126,25 @@ TEST_CLOUD_STORAGE_PROOF_IMAGE=<local-image> node --test \
 
 This proof sends signed requests through the trusted HTTPS proxy. Free snapshot and stream requests return `403 permission_denied`; paid requests receive distinct scoped credentials. It tests a normal downgrade and one committed while storage is stopped. After restart, old writers fail at storage, the neighbouring paid writer still works, and explicit upgrade returns a fresh writer with the original recovery key, reader and retained data. It also checks normal TLS trust from a host client. Generated fixture keys stay inside the disposable private volume, and cleanup removes only this proof's project.
 
-The gateway, backup worker and verifier/controller still need PR5 wiring and their own proofs. These storage checks do not prove genuine Waitron integration, LAN publication or test-box readiness. Keep plan enforcement off until the complete integration proof passes.
+The backup worker now selects the same canonical storage endpoint and LAN CA in explicit test plan mode. Its scoped verifier/controller and paid snapshot verification still need wiring and proof. These storage checks do not prove genuine Waitron integration, LAN publication or test-box readiness. Keep plan enforcement off until the complete integration proof passes.
+
+## Local remote authority
+
+A gateway must remove a route that was already working when its organisation becomes free. In explicit test plan mode, the test project's manifest worker now runs the real remote reconciler against the project database. It signs current route manifests with the private gateway key and issues local staff and public certificates under the LAN CA. Staff requests use the existing signed account exchange; public keys and requests stay in the private volume. Dormant mode keeps the ordinary empty-route publisher.
+
+The assigned names end in `r.waitron.local`. This short suffix keeps the generated staff name within the certificate subject limit. These are local test names, with no public DNS or outside-home reachability. A mismatch between the saved cell, WireGuard key or signing identity is refused rather than overwritten. Startup preserves the signed sequence so an earlier empty manifest cannot supersede the real routes. The schema's existing provider field remains `aws`; this local cell creates no AWS resource.
+
+The test gateway checks readiness for both empty and populated route sets and refuses status older than five seconds. It watches public certificate files and reloads its own proxy after replacement. The ordinary gateway does not enable that watch by default. Renewal of the LAN account/storage leaf and its CA remains the separate maintenance follow-up above.
+
+Run the real worker and gateway together:
+
+```sh
+TEST_CLOUD_REMOTE_PROOF_IMAGE=<local-image> node --test \
+  deploy/test-cloud/remote-proof.test.mjs
+```
+
+The disposable Mac project keeps generated fixture keys in its private volume. Two signed clients obtain trusted staff certificates and two WireGuard peers serve distinct venue bodies. The proof also checks public TLS and the browser-challenge endpoint, live public certificate replacement, actual route/peer removal on downgrade, a paid neighbour that keeps working, explicit reprovisioning after upgrade, and withdrawal committed while the reconciler is stopped. Free provisioning and signed certificate status return permission refusal. Cleanup removes only the recorded proof project and its peers.
+
+On 18 October 2026, the passing renewal proof observed route withdrawal in 1,162 milliseconds, including its operator-command time. An earlier clean repeat measured 4,655 milliseconds. The first run observed 1,868 milliseconds but failed during cleanup. These are local fixture observations, not a promised deadline or test-box measurements. The initial renewal check failed because the running proxy retained its old certificate; the passing check observes a different trusted certificate on a new TLS connection. A first proof also failed cleanup after listing peer IDs twice; its leftover owned network and volumes were removed before the clean repeat.
+
+The gateway ports remain on loopback. This proof does not connect the quarantined box venue or provide public remote access. The separate backup-verifier boundary, free-service proof and genuine disposable Waitron integration remain before deployment activation.

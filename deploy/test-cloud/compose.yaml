@@ -116,6 +116,9 @@ services:
     environment:
       CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
   gateway-manifest:
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     mem_limit: 64m
     logging:
       driver: json-file
@@ -126,6 +129,8 @@ services:
     environment:
       CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
   gateway:
+    healthcheck:
+      test: ["CMD", "node", "deploy/test-cloud/gateway-health.mjs"]
     mem_limit: 128m
     logging:
       driver: json-file

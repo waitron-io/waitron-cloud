@@ -120,6 +120,14 @@ Ordinary fiscal activation authority is unchanged.
 - [ ] Extract/adapt the existing local proof mechanisms without exporting storage admin secrets. Persist writer/reader identities separately and reload only the owned SeaweedFS IAM configuration on withdrawal; retry pending withdrawal after restart. Preserve recovery readers privately, prevent new free grants, and measure bounded old STS exposure. Wire account backup authority, a scoped verifier image/controller and the test remote reconciler with local CA/DNS inputs. Leave ordinary local stack/profiles unchanged; gateway health must no longer assume zero routes in this opt-in project.
 - [ ] Re-run real boundary tests and restart/withdrawal proofs to green; remove critical plan/scope/withdrawal guards in a disposable installed copy and observe failures. Audit verifier child labels/IDs and all Docker actions against the quarantine restriction. Finish with whole-workspace suites if scripts changed, otherwise all touched/dependant packages; finish/land. If existing wire cannot support the proof, give the parent the exact incompatibility instead of designing a new action.
 
+PR 5 checkpoint: persistent storage/account authority, real fifteen-minute expiry,
+volume-backed remote reconciliation and the delivered gateway's live certificate
+replacement/downgrade/restart proofs now pass. The backup worker selects the canonical
+storage endpoint and LAN CA in enabled mode. Its scoped verifier/controller, pinned
+Waitron image and paid snapshot verification remain before PR 5 review and landing.
+Deployment enforcement stays off. Current runner instructions assign required package
+suites to CI and retire this plan's earlier local-full-suite and CI-cost instructions.
+
 ### PR 6: Pin free-service proof and honest availability
 
 **Files:** extend `packages/registration/test/{relay-grants,relay-worker,relay-control,content-translation-service}.test.ts`, `packages/translation/test/{machine,worker,collect-page}.test.ts`, `packages/account-http/test/{relay-disabled,content-translation-readers}.test.ts` and `packages/translation/test/fake-openai.ts` as needed. Add `scripts/test-cloud-free-services.mjs`, `scripts/test-cloud-free-services.test.mjs` and redacted receipt validation; update `docs/test-cloud.md`, relay contract and backlog only where the new proof supplies evidence.

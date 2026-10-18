@@ -1169,8 +1169,19 @@ notifications separately.
   preserving the neighbour, retained data, recovery key and reader. Explicit
   upgrade returns a fresh writer. Reprovisioning now compares location fields
   independently of object property order; PostgreSQL tests preserve all three
-  location and installation-ownership fences. Worker, gateway, verifier/controller
-  wiring and final LAN proofs remain unfinished. The first real fifteen-minute STS
+  location and installation-ownership fences. In explicit test mode, the test manifest
+  worker now runs the real remote reconciler with private local certificate inputs.
+  Signed staff requests receive LAN-CA chains; public keys remain volume-backed.
+  The gateway accepts populated readiness and rejects stale status. Its opt-in
+  certificate watch reloads the proxy after renewal; a real failing renewal proof
+  preceded the fix. The delivered Docker proof covers two distinct WireGuard peers,
+  staff bodies, trusted public TLS/challenge, replacement certificates, downgrade
+  and pending-at-restart withdrawal while preserving the paid neighbour. Latest
+  measured withdrawal was 1,162 ms, including the operator command; it is not a
+  production deadline. The assigned local names use r.waitron.local; there is no
+  public DNS or outside-home availability. The backup worker selects the canonical
+  endpoint and LAN CA in test mode, but its scoped verifier/controller and paid
+  snapshot proof remain unfinished, along with final LAN/client integration. The first real fifteen-minute STS
   run observed InvalidAccessKeyId after its recorded expiry, but its new assertion
   wrongly expected the expired-identity error from the STS endpoint. That run is
   failed evidence, not a green test. A corrected full-duration run now passes:

@@ -1,5 +1,5 @@
-import {createPublicKey} from 'node:crypto';
-import {readFile,rename,mkdir,open} from 'node:fs/promises';
+import {createHash,createPublicKey} from 'node:crypto';
+import {readFile,readdir,rename,mkdir,open} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createServer} from 'node:http';
 import {spawn,execFileSync,type ChildProcess} from 'node:child_process';
@@ -9,6 +9,7 @@ import {renderHaproxy,renderWireGuard} from './config.ts';
 import {createPublicGate} from './public-gate.ts';
 import {isUuid,isPeerKey,type GatewayRoute} from './manifest.ts';
 const root=process.env.GATEWAY_STATE_DIR??'/state',input=process.env.GATEWAY_MANIFEST??'/input/manifest.json',cell=process.env.GATEWAY_CELL_ID??'';
+const certificateRefresh=process.env.GATEWAY_CERTIFICATE_REFRESH??'0';if(!['0','1'].includes(certificateRefresh))throw new Error('Invalid gateway certificate refresh');
 if(!isUuid(cell))throw new Error('GATEWAY_CELL_ID required');
 const trust=createPublicKey(await readFile(process.env.GATEWAY_TRUST_KEY??'/input/issuer.pem'));
 const wgKey=(await readFile(process.env.GATEWAY_WIREGUARD_KEY??'/input/wireguard.key','utf8')).trim();if(!isPeerKey(wgKey))throw new Error('Invalid WireGuard key');
@@ -25,7 +26,8 @@ const children=new Set<ChildProcess>();let current:ChildProcess|undefined,lastRo
 const alive=()=>current?.exitCode===null&&current?.signalCode===null;
 async function stop(){for(const child of children)child.kill('SIGTERM');current=undefined;lastRoutes='';await atomic('wireguard.conf',`[Interface]\nPrivateKey = ${wgKey}\nListenPort = 51820\n`);run('wg',['syncconf','wg-cloud',join(root,'wireguard.conf')]);}
 async function apply(routes:GatewayRoute[]){
- const fingerprint=JSON.stringify(routes);if(fingerprint===lastRoutes&&alive())return;
+ const certificates=certificateRefresh==='1'?await Promise.all((await readdir('/input/public-certs')).filter(name=>name.endsWith('.pem')).sort().map(async name=>[name,createHash('sha256').update(await readFile(join('/input/public-certs',name))).digest('hex')])):[];
+ const fingerprint=JSON.stringify([routes,certificates]);if(fingerprint===lastRoutes&&alive())return;
  await atomic('wireguard.conf',`[Interface]\nPrivateKey = ${wgKey}\nListenPort = 51820\n\n${renderWireGuard(routes)}`);
  run('wg',['syncconf','wg-cloud',join(root,'wireguard.conf')]);
  await atomic('haproxy.cfg',renderHaproxy(routes,{port:443,publicTlsPort:8444,gatePort:8080,certificateDirectory:'/input/public-certs'}));
@@ -47,7 +49,7 @@ try{while(!stopping){
  await authority.tick();
  try{const text=await readFile(input,'utf8');if(text!==lastInput){await authority.accept(JSON.parse(text));lastInput=text;}}
  catch(error){if(error instanceof Error&&error.message!=='invalid_manifest')console.error('gateway.refresh_unavailable');}
- if(authority.hasAuthority&&!alive()){
+ if(authority.hasAuthority&&(!alive()||certificateRefresh==='1')){
   try{await apply(authority.routes);}catch{await stop();console.error('gateway.restart_unavailable');}
  }
  const ready=authority.hasAuthority&&alive();
