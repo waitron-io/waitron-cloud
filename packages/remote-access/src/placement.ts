@@ -1,7 +1,8 @@
 import type {Pool,PoolClient} from 'pg';
 import {resolveCname} from 'node:dns/promises';
 import {dnsInstructions,verifyDelegation,validateCsr} from './certificates.ts';
-import {transaction} from '@waitron-cloud/registration';
+import {requireRemotePlan,eligibleRemoteInstallations} from './plan-permissions.ts';
+import {transaction,type PlanMode} from '@waitron-cloud/registration';
 import {isUuid,isHostname,isPeerKey,type GatewayManifest,type GatewayRoute} from './manifest.ts';
 export interface CellInput {id:string;country:string;provider:string;environment:string;suffix:string;subnet:number;publicKey:string;endpoint:string}
 export interface Placement extends GatewayRoute {cellId:string;gatewayPublicKey:string;endpoint:string}
@@ -24,7 +25,8 @@ async function placement(client:PoolClient,id:string):Promise<Placement|undefine
   JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff'
   JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public' WHERE p.installation_id=$1`,[id]);return rows[0];
 }
-async function certificateAuthorization(client:PoolClient,id:string,kind:'staff'|'public',csr:string,lock:'share'|'update'):Promise<CertificateAuthorization>{
+async function certificateAuthorization(client:PoolClient,id:string,kind:'staff'|'public',csr:string,lock:'share'|'update',mode:PlanMode):Promise<CertificateAuthorization>{
+ await requireRemotePlan(client,id,mode);
  const row=(await client.query(`SELECT i.revoked_at,i.configuration_revision,p.venue_id,c.suffix,s.hostname AS staff_hostname,u.hostname AS public_hostname
   FROM installations i JOIN remote_placements p ON p.installation_id=i.id JOIN remote_cells c ON c.id=p.cell_id
   JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff' JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public'
@@ -51,8 +53,8 @@ async function move(client:PoolClient,id:string,lock=false):Promise<CellMove|und
 }
 /** Operator provisioning only. Customer calls must not choose cells, addresses or peer keys here. */
 export class RemoteAccessStore {
- readonly #pool:Pool;
- constructor(pool:Pool){this.#pool=pool;}
+ readonly #pool:Pool;readonly #planMode:PlanMode;
+ constructor(pool:Pool,planMode:PlanMode='existing'){this.#pool=pool;this.#planMode=planMode;}
  async createCell(c:CellInput){
   const endpoint=c.endpoint.split(':');
   if(!isUuid(c.id)||c.country!=='ES'||c.provider!=='aws'||!['test','production'].includes(c.environment)||!isHostname(c.suffix)||c.suffix.length>180
@@ -62,12 +64,17 @@ export class RemoteAccessStore {
  async provision(installationId:string,cellId:string,peerPublicKey:string,port=443):Promise<Placement>{
   if(!isUuid(installationId)||!isUuid(cellId)||!isPeerKey(peerPublicKey)||!Number.isInteger(port)||port<1||port>65535)fail('invalid_placement');
   try{return await transaction(this.#pool,async client=>{
+   await requireRemotePlan(client,installationId,this.#planMode,false);
    const install=(await client.query('SELECT i.*,v.environment FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1 FOR UPDATE OF i',[installationId])).rows[0];
    if(!install)fail('installation_unavailable');if(install.revoked_at)fail('revoked');
    const cell=(await client.query('SELECT * FROM remote_cells WHERE id=$1 FOR UPDATE',[cellId])).rows[0];
    if(!cell||cell.environment!==install.environment)fail('cell_unavailable');
    const prior=await placement(client,installationId);
-   if(prior){if(prior.cellId!==cellId||prior.peerPublicKey!==peerPublicKey||prior.port!==port)fail('placement_conflict');return prior;}
+   if(prior){if(prior.cellId!==cellId||prior.peerPublicKey!==peerPublicKey||prior.port!==port)fail('placement_conflict');
+    if(this.#planMode==='test-free-paid'){
+     const restored=await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='remote_access' AND state='unconfigured' RETURNING 1",[installationId,{version:1,...prior}]);
+     if(restored.rowCount)await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[installationId]);
+    }return prior;}
    await lockPeerKey(client,peerPublicKey);
    if((await client.query("SELECT 1 FROM remote_cell_moves WHERE target_peer_public_key=$1 AND state IN ('staged','ready') LIMIT 1",[peerPublicKey])).rowCount)fail('placement_conflict');
    if(cell.next_address>=66)fail('cell_full');
@@ -85,6 +92,7 @@ export class RemoteAccessStore {
   const port=input.port??443;
   if(!isUuid(input.operationId)||!isUuid(input.installationId)||!isUuid(input.targetCellId)||!isPeerKey(input.targetPeerPublicKey)||!Number.isInteger(port)||port<1||port>65535||!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0)fail('invalid_move');
   try{return await transaction(this.#pool,async client=>{
+   await requireRemotePlan(client,input.installationId,this.#planMode);
    const install=(await client.query('SELECT i.*,v.environment FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1 FOR UPDATE OF i',[input.installationId])).rows[0];
    if(!install)fail('installation_unavailable');
    const prior=await move(client,input.operationId,true);
@@ -109,6 +117,7 @@ export class RemoteAccessStore {
   if(!isUuid(operationId)||!Number.isSafeInteger(expectedRevision)||expectedRevision<0||!Number.isSafeInteger(sequence)||sequence<1)fail('invalid_move');
   return transaction(this.#pool,async client=>{
    const found=(await client.query('SELECT installation_id FROM remote_cell_moves WHERE id=$1',[operationId])).rows[0];if(!found)fail('move_unavailable');
+   await requireRemotePlan(client,found.installation_id,this.#planMode);
    const install=(await client.query('SELECT * FROM installations WHERE id=$1 FOR UPDATE',[found.installation_id])).rows[0],current=(await move(client,operationId,true))!;
    if(current.expectedRevision!==expectedRevision)fail('move_conflict');if(current.state==='completed')return current;if(current.state==='cancelled')fail('move_conflict');
    if(install.revoked_at)fail('revoked');if(install.configuration_revision!==expectedRevision)fail('revision_conflict');
@@ -123,6 +132,7 @@ export class RemoteAccessStore {
   if(!isUuid(operationId)||!Number.isSafeInteger(expectedRevision)||expectedRevision<0)fail('invalid_move');
   try{return await transaction(this.#pool,async client=>{
    const found=(await client.query('SELECT installation_id FROM remote_cell_moves WHERE id=$1',[operationId])).rows[0];if(!found)fail('move_unavailable');
+   await requireRemotePlan(client,found.installation_id,this.#planMode);
    const install=(await client.query('SELECT * FROM installations WHERE id=$1 FOR UPDATE',[found.installation_id])).rows[0],current=(await move(client,operationId,true))!;
    if(current.expectedRevision!==expectedRevision)fail('move_conflict');if(current.state==='completed')return current;if(current.state==='cancelled')fail('move_conflict');if(current.state!=='ready')fail('move_not_ready');
    if(install.revoked_at)fail('revoked');if(install.configuration_revision!==expectedRevision)fail('revision_conflict');
@@ -144,8 +154,11 @@ export class RemoteAccessStore {
  }
  async #assigned(id:string,kind:'staff'|'public'){
   if(!isUuid(id)||!['staff','public'].includes(kind))fail('invalid_placement');
-  const row=(await this.#pool.query(`SELECT p.venue_id,c.suffix,i.revoked_at FROM remote_placements p JOIN remote_cells c ON c.id=p.cell_id JOIN installations i ON i.id=p.installation_id WHERE i.id=$1`,[id])).rows[0];
+  return transaction(this.#pool,async client=>{
+  await requireRemotePlan(client,id,this.#planMode);
+  const row=(await client.query(`SELECT p.venue_id,c.suffix,i.revoked_at FROM remote_placements p JOIN remote_cells c ON c.id=p.cell_id JOIN installations i ON i.id=p.installation_id WHERE i.id=$1`,[id])).rows[0];
   if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');return `${kind==='staff'?'staff-':''}v-${row.venue_id}.${row.suffix}`;
+  });
  }
  async hostnameInstructions(id:string,kind:'staff'|'public',custom:string){return dnsInstructions(custom,await this.#assigned(id,kind));}
  async setHostname(id:string,kind:'staff'|'public',custom:string,expectedRevision:number,resolve:typeof resolveCname=resolveCname,authorize?:(client:PoolClient)=>Promise<string>):Promise<Placement>{
@@ -158,6 +171,7 @@ export class RemoteAccessStore {
   }
   try{return await transaction(this.#pool,async client=>{
    const actor=await authorize?.(client);
+   await requireRemotePlan(client,id,this.#planMode);
    const row=(await client.query('SELECT * FROM installations WHERE id=$1 FOR UPDATE',[id])).rows[0];
    if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');if(row.configuration_revision!==expectedRevision)fail('revision_conflict');
    // Assigned names are reserved even when a venue elects to use a custom name.
@@ -174,24 +188,30 @@ export class RemoteAccessStore {
  }
  async authorizeCertificate(id:string,kind:'staff'|'public',csr:string){
   if(!isUuid(id)||!['staff','public'].includes(kind))fail('invalid_placement');
-  return transaction(this.#pool,client=>certificateAuthorization(client,id,kind,csr,'share'));
+  return transaction(this.#pool,client=>certificateAuthorization(client,id,kind,csr,'share',this.#planMode));
  }
  async publishAuthorizedCertificate(client:PoolClient,id:string,kind:'staff'|'public',csr:string,expected:CertificateAuthorization,publish:()=>Promise<void>){
   if(!isUuid(id)||!['staff','public'].includes(kind))fail('invalid_placement');
-  const current=await certificateAuthorization(client,id,kind,csr,'update');
+  const current=await certificateAuthorization(client,id,kind,csr,'update',this.#planMode);
   if(JSON.stringify(current)!==JSON.stringify(expected))fail('placement_changed');await publish();return current;
  }
  async manifest(cellId:string,now=Date.now()):Promise<GatewayManifest>{
   if(!isUuid(cellId))fail('invalid_cell');
-  return transaction(this.#pool,async client=>{
+  return transaction(this.#pool,client=>this.#manifest(client,cellId,now));
+ }
+ async publishManifest(cellId:string,publish:(manifest:GatewayManifest)=>Promise<void>,now=Date.now()):Promise<void>{
+  if(!isUuid(cellId))fail('invalid_cell');
+  await transaction(this.#pool,async client=>{await publish(await this.#manifest(client,cellId,now));});
+ }
+ async #manifest(client:PoolClient,cellId:string,now:number):Promise<GatewayManifest>{
+   const eligible=await eligibleRemoteInstallations(client,this.#planMode);
    const cell=(await client.query('UPDATE remote_cells SET sequence=sequence+1 WHERE id=$1 RETURNING sequence',[cellId])).rows[0];if(!cell)fail('cell_unavailable');
    const ids=await client.query('SELECT p.installation_id FROM remote_placements p JOIN installations i ON i.id=p.installation_id WHERE p.cell_id=$1 AND i.revoked_at IS NULL ORDER BY p.venue_id',[cellId]);
    const routes:GatewayRoute[]=[];
-   for(const row of ids.rows){routes.push(route((await placement(client,row.installation_id))!));}
-   const moves=await client.query(`SELECT m.id FROM remote_cell_moves m JOIN installations i ON i.id=m.installation_id
+   for(const row of ids.rows){if(eligible&&!eligible.includes(row.installation_id))continue;routes.push(route((await placement(client,row.installation_id))!));}
+   const moves=await client.query(`SELECT m.id,m.installation_id FROM remote_cell_moves m JOIN installations i ON i.id=m.installation_id
     WHERE m.target_cell_id=$1 AND m.state IN ('staged','ready') AND i.configuration_revision=m.expected_revision AND i.revoked_at IS NULL ORDER BY m.venue_id`,[cellId]);
-   for(const row of moves.rows){routes.push(route((await move(client,row.id))!.target));}routes.sort((a,b)=>a.venueId.localeCompare(b.venueId));
+   for(const row of moves.rows){if(eligible&&!eligible.includes(row.installation_id))continue;routes.push(route((await move(client,row.id))!.target));}routes.sort((a,b)=>a.venueId.localeCompare(b.venueId));
    return {version:1,audience:'waitron-cloud-gateway',cellId,sequence:Number(cell.sequence),issuedAt:now,expiresAt:now+600000,routes};
-  });
  }
 }

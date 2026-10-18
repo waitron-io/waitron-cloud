@@ -481,3 +481,62 @@ The profile retains those policy values. You still need to choose per-venue
 fairness and an authenticated automated-client policy. These local synthetic
 bursts do not establish a production throughput target, real-carrier false-positive
 rate, multi-gateway coordination, browser/device mix, or acceptable customer latency.
+
+
+## Exercise test free and paid plans
+
+Keep `CLOUD_TEST_SERVICE_PLANS=0` for ordinary deployments. The isolated test
+Cloud will use `1` after its remaining storage, LAN and client proofs pass. Both
+remote operator commands and the reconciler validate this flag and pass the same
+mode to their stores. The account server CLI also rejects malformed values and
+passes its validated mode through lifecycle and remote certificate handlers.
+
+With test enforcement enabled, a free organisation cannot provision remote
+access, move cells, change hostnames, request DNS instructions or submit/read a
+staff certificate. Machine requests return `403 permission_denied`; account
+hostname requests return `403 forbidden`. You can still inspect public setup
+metadata. A paid organisation needs a test venue and explicit remote provisioning;
+the plan alone supplies neither a tunnel nor a certificate.
+
+For a disposable organisation, set its plan with the
+[organisation plan command](local-deployment.md#inspect-the-test-organisation-plan).
+Run the permission and race checks with two test-file workers:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/remote-access exec node \
+  --test --test-concurrency=2 --test-timeout=30000 test/plan-permissions.test.ts
+```
+
+A downgrade clears paid setup and advances the installation revision. The next
+signed gateway export excludes both its active route and any staged destination;
+other paid venues stay routed. The reconciler uses the same eligible installation
+set, disables unstarted certificate work and rechecks current permission before
+publishing or completing a delayed job. A signing or DNS reply that arrives after
+the downgrade cannot restore access. Publication holds organisation policy before
+installation, cell and job locks, so an admitted file replacement finishes before
+a competing downgrade commits. Gateway withdrawal is a later observation, separate
+from the plan command's successful database update.
+
+If exports stop, the last signed gateway authority still expires within its
+existing ten-minute maximum. Restarting a gateway does not extend that signed
+expiry. This is a remaining authority window, not an immediate disconnection
+promise. The later test-deployment integration proof must measure actual withdrawal.
+
+After upgrading, run the existing `provision` operator command explicitly with
+the original installation, cell, peer key and port. It restores the cleared setup
+and advances the revision once; an unchanged repeated provision remains a no-op.
+Old staged moves stay excluded by their old revision; cancel them before staging
+a replacement. Retained placements, names and certificates are not permission to
+resume service. Outside-home remote access still needs a separately approved
+domain, certificates and deployment.
+
+
+The 2026-10-18 disposable Mac gateway proof used two actual TLS upstreams and
+WireGuard peers. After one plan changed to free, its route and peer disappeared
+in 4,053 ms while its paid neighbour continued returning its own venue response.
+A separate 2,500 ms signed lease expired on the wall clock; refusal was observed
+689 ms after its expiry, and restarting with that expired cache restored no route
+or peer. The shorter lease tests the existing expiry mechanism; it is not a
+measurement of a ten-minute wait. All owned containers, network, image tag and
+fixture directories were removed. This proves the local synthetic gateway
+boundary, not LAN deployment or a connection to the quarantined Waitron venue.

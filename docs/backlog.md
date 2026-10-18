@@ -875,13 +875,53 @@ notifications separately.
   handler's existing pending-work gate. A held-response browser check covers both
   languages, themes and screen sizes without changing the original assertions or
   three-second waits. No fiscal policy changed.
-  Deployment enforcement is still off. Five remaining implementation slices,
-  actual direct-storage withdrawal/fresh writers, gateway filtering, LAN deployment,
+  Opted-in remote permission now covers placements, moves, names, certificate
+  submit/status, authorization and publication. Active/staged gateway routes and
+  reconciler jobs share the current paid/test/provisioned eligibility set. Delayed
+  signing/DNS results recheck policy; publication holds policy through the file
+  replacement. Upgrading alone restores no route; explicit existing-placement
+  provision restores cleared setup once. Public setup metadata remains readable.
+  The account server CLI now validates and forwards the same mode; real listener
+  tests cover free lifecycle masking and staff refusal, ordinary defaults and
+  malformed-flag startup refusal. Fresh-health and direct-store forged-proof
+  checks cover the account/status and authentication boundaries too.
+  Remote eligibility currently scans the placed organisations and rebuilds target
+  lists for current-work checks. Its array lookup and broad policy locking have no
+  production-scale measurement; narrow that work before claiming larger capacity.
+  A real two-peer Docker gateway proof withdrew the downgraded route/peer in
+  4,053 ms while its paid neighbour still served its own body; wall-clock short-lease
+  expiry and an expired-cache restart restored no access. This is local synthetic
+  gateway evidence, not test-box deployment or the later client acceptance proof.
+  A barrier test also excludes a new placement whose organisation was absent from
+  that export's locked policy set; the next export includes it.
+  The signed manifest schema and ten-minute authority maximum are unchanged.
+  See the [remote test guide](local-remote-access.md#exercise-test-free-and-paid-plans).
+  Deployment enforcement is still off. Four remaining implementation slices,
+  actual direct-storage withdrawal/fresh writers, LAN deployment,
   two-organisation acceptance and measured headroom remain open. The existing
   Waitron venue is quarantined; use a separate disposable Waitron test venue and
   leave its running containers and data untouched. Keep address providers disabled
   and the existing translation release gates in place. A free plan permits a
   service only after that service's independent prerequisites pass.
+- **Translation worker lock-probe timing is now independently exercised.** The
+  existing review-totals case put a PostgreSQL lock probe inside its fake HTTP
+  response while the real client allowed 100 ms. A controlled 150 ms probe on
+  landed base `050084752f1c57b00183582a2d16d33b0555f5e8` produces a provider timeout
+  and three requests instead of the expected two. The probe now runs at the
+  worker's provider-call boundary before starting that same HTTP deadline, with a
+  deliberate 150 ms database delay. The original done/review totals, NOWAIT lock
+  check and exact two-request assertion remain; both provider calls are probed.
+  The earlier unexplained observations remain separate unless their exact trace
+  matches this reproducer. No provider retry policy, production code or deadline
+  changed.
+- **Local package validation must avoid concurrent full-package groups.** Four
+  two-file-worker groups overlapped during D79 and the registration control CLI
+  exceeded its unchanged five-second command bound. A landed-base phase probe
+  completed every node/root/package command in under 700 ms after reducing the
+  overlap; acknowledgement-to-close took at most a few tens of milliseconds.
+  This does not prove the cause of the earlier nine-minute stall. Run local full
+  package suites sequentially with two file workers and retain the five-second
+  assertion. Capture process/phase timings if it fails under that arrangement.
 - **Local registration run stalls after earlier failures.** In the test-plan
   review checkout at `cc99eef378bd9db2716a2325cd07fbe491ab06c9`,
   `node scripts/test-postgres.mjs exec pnpm --dir packages/registration test`
@@ -893,8 +933,8 @@ notifications separately.
   failure. This proves a baseline resource failure, but not the cause of the
   nine-minute child stall. Neither interrupted run is a pass.
   The review's default-concurrency account suite also emitted failures. Complete
-  registration/account suites pass all 679/382 tests with two file workers on
-  the corrected branch. Capture the full output of both default-concurrency commands,
+  registration/account suites passed all 679/382 tests with two file workers on
+  the corrected PR2 branch. PR3 passes 679/384 and runs full packages sequentially. Capture the full output of both default-concurrency commands,
   without piping it through `head`, and diagnose failure cleanup and resource
   contention. Preserve every assertion and deadline; do not treat a rerun as a fix.
 - **Operating cost.** The [cost-model design](superpowers/specs/2026-10-14-cloud-cost-model-design.md)

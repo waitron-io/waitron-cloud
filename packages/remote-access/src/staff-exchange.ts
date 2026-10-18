@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
-import {createLeaseTrust,InstallationError,InstallationStore,readMachineClaims,transaction,verifyLease,verifyMachine,type LeaseIssuer} from '@waitron-cloud/registration';
+import {createLeaseTrust,InstallationError,InstallationStore,readMachineClaims,transaction,verifyLease,verifyMachine,type LeaseIssuer,type PlanMode} from '@waitron-cloud/registration';
+import {requireRemotePlan} from './plan-permissions.ts';
 import {isUuid} from './manifest.ts';
 import {validateCsr} from './certificates.ts';
 import {certificateNeedsRenewal} from './renewal.ts';
@@ -18,12 +19,14 @@ export async function publishStaffCertificate(client:PoolClient,request:StaffCer
  if(result.rowCount!==1)fail('conflict');
 }
 export class StaffCertificateExchange {
- readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;
- constructor(pool:Pool,issuer:LeaseIssuer,origin:string,trusted=createLeaseTrust(issuer)){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;}
+ readonly #planMode:PlanMode;readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;
+ constructor(pool:Pool,issuer:LeaseIssuer,origin:string,trusted=createLeaseTrust(issuer),planMode:PlanMode='existing'){this.#planMode=planMode;this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;}
  authenticate(action:StaffCertificateAction,envelope:unknown){return new InstallationStore(this.#pool,this.#issuer,this.#origin,this.#trusted).authenticate(action,envelope);}
  async execute(action:StaffCertificateAction,envelope:unknown){
+  if(this.#planMode!=='existing')await this.authenticate(action,envelope);
   const routing=readMachineClaims(envelope);
   return transaction(this.#pool,async client=>{
+   try{await requireRemotePlan(client,routing.installationId,this.#planMode);}catch(error){if(error instanceof Error&&error.message==='permission_denied')throw new InstallationError('permission_denied');throw error;}
    const row=(await client.query(`SELECT i.*,v.environment,h.hostname,s.state FROM installations i JOIN venues v ON v.id=i.venue_id
     LEFT JOIN remote_placements p ON p.installation_id=i.id LEFT JOIN remote_hostnames h ON h.venue_id=p.venue_id AND h.kind='staff'
     JOIN installation_services s ON s.installation_id=i.id AND s.service='remote_access' WHERE i.id=$1 FOR UPDATE OF i`,[routing.installationId])).rows[0];
