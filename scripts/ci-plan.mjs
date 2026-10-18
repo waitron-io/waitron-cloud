@@ -85,10 +85,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   git.readBlobs = readGitBlobs;
   const api = path => JSON.parse(execFileSync('gh',['api',path],{encoding:'utf8',timeout:30_000,stdio:['ignore','pipe','ignore']}));
   // Warn on every plan, including paths that never enter the document selector.
-  // Independent audit certificates can pin each other, so currency is advisory.
+  // Audit renewal requires explicit reader review; warnings never bypass admission checks.
   try { auditDocumentation(git('rev-parse', 'HEAD').trim(), git); }
   catch {
-    console.log('::warning title=Documentation-only CI unavailable::Review changed executable inputs and renew scripts/ci-docs-audit.json using docs/ci-documentation-audit.md. Docs-only changes retain full CI until reviewed.');
+    console.log('::warning title=Documentation-only CI unavailable::Review changed executable inputs and renew scripts/ci-input-audit.json with --write-staged using docs/ci-documentation-audit.md. Docs-only changes retain full CI until reviewed.');
   }
   const plan = createPlan(event,context,loadWorkspace(),git,api);
   const outputs = {

@@ -1,13 +1,10 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {createHash} from 'node:crypto';
+import {auditInputMode, unreadMarkdown} from './ci-input-audit.mjs';
+export {unreadMarkdown} from './ci-input-audit.mjs';
 import {pathToFileURL} from 'node:url';
 
-const auditPath = 'scripts/ci-docs-audit.json';
 const shaPattern = /^[a-f0-9]{40}$/;
-export const unreadMarkdown = path => typeof path === 'string' &&
-  /^(?:docs\/(?!receipts\/)(?:[^/]+\/)*[^/]+\.md|[^/]+\.md)$/.test(path) &&
-  !path.split('/').some(part => part === '.' || part === '..' || part.includes('\\'));
 
 export function assertDocumentation(documentation) {
   assert.ok(documentation && shaPattern.test(documentation.base) && shaPattern.test(documentation.head), 'Missing document revisions');
@@ -15,30 +12,10 @@ export function assertDocumentation(documentation) {
     documentation.paths.every(unreadMarkdown) && new Set(documentation.paths).size === documentation.paths.length, 'Invalid document paths');
 }
 
-function inventory(git, sha) {
-  const entries = git('ls-tree', '-rz', '--full-tree', sha).split('\0');
-  assert.equal(entries.pop(), '', 'Incomplete tree inventory');
-  const inputs = [], documents = new Set();
-  for (const entry of entries) {
-    const match = entry.match(/^([0-7]{6}) (blob|commit) ([a-f0-9]{40})\t([\s\S]+)$/);
-    assert.ok(match, 'Malformed tree inventory');
-    const [, mode, type, , path] = match;
-    // Only regular prose belongs to the audited unread set. Links and submodules
-    // remain inputs, so adding either invalidates the certificate.
-    if (mode === '100644' && type === 'blob' && unreadMarkdown(path)) documents.add(path);
-    else if (path !== auditPath) inputs.push(`${entry}\0`);
-  }
-  return {documents, digest: createHash('sha256').update(inputs.join('')).digest('hex')};
-}
-
 export function auditDocumentation(sha, git) {
   assert.match(sha, shaPattern, 'Invalid document audit revision');
-  const audit = JSON.parse(git('show', `${sha}:${auditPath}`));
-  assert.equal(audit.version, 1, 'Unsupported document audit');
-  assert.match(audit.inputSha256, /^[a-f0-9]{64}$/);
-  const tree = inventory(git, sha);
-  assert.equal(tree.digest, audit.inputSha256, 'Executable inputs changed since the document audit');
-  return tree;
+  const {documents, inputSha256} = auditInputMode('docs', sha, git);
+  return {documents, digest: inputSha256};
 }
 
 export function documentationPlan(paths, base, head, git) {
@@ -56,7 +33,7 @@ export function checkDocumentation(plan, git) {
   assert.equal(actual.pop(), '');
   assert.deepEqual([...paths].sort(), actual.sort(), 'Document plan omits changed inputs');
   documentationPlan(paths, base, head, git);
-  const current = inventory(git, head).documents;
+  const current = auditDocumentation(head, git).documents;
   for (const path of paths) {
     if (!current.has(path)) continue;
     const content = git('show', `${head}:${path}`, {binary: true});

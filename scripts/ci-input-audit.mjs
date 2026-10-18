@@ -133,7 +133,9 @@ export function fingerprintInputMode(mode, revision, git, entries, manifestPaths
 export function auditInputMode(mode, revision, git, manifestPaths = []) {
   const {policy, entries} = readInputAudit(revision, git);
   const result = fingerprintInputMode(mode, revision, git, entries, manifestPaths);
-  assert.equal(result.inputSha256, policy[digestFields[mode]], `Inputs changed since the ${mode} audit`);
+  const message = mode === 'docs' ? 'Executable inputs changed since the document audit' :
+    mode === 'lock' ? 'Inputs changed since the lock reader audit' : 'Inputs changed since the root-script consumer audit';
+  assert.equal(result.inputSha256, policy[digestFields[mode]], message);
   if (mode === 'lock') assert.deepEqual(result.manifests, policy.manifests, 'Manifest readers changed since audit');
   return result;
 }

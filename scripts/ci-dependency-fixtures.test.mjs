@@ -8,7 +8,7 @@ import test from 'node:test';
 
 test('receipt selector fixtures retain their assertions after dependency inputs change', () => {
   const inputs = JSON.parse(readFileSync(new URL('./fixtures/ci-dependency-inputs.json', import.meta.url), 'utf8'));
-  const audit = JSON.parse(readFileSync(new URL('./ci-lock-selection-audit.json', import.meta.url), 'utf8'));
+  const audit = JSON.parse(readFileSync(new URL('./ci-input-audit.json', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(audit.manifests).sort(), Object.keys(inputs).filter(path => /^(apps|packages)\/.+\/package\.json$/.test(path)).sort());
   for (const [path, expected] of Object.entries(audit.manifests)) {
     const metadata = JSON.parse(inputs[path]);

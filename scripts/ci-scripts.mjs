@@ -1,13 +1,12 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {createHash} from 'node:crypto';
+import {auditInputMode} from './ci-input-audit.mjs';
 import {pathToFileURL} from 'node:url';
 
-const policy = 'scripts/ci-scripts-audit.json';
 const families = [
-  {targets: ['scripts/identity-upstream.mjs', 'scripts/identity-upstream.test.mjs'], digest: 'inputSha256'},
+  {targets: ['scripts/identity-upstream.mjs', 'scripts/identity-upstream.test.mjs'], mode: 'identity'},
   {targets: ['scripts/verify-gateway-reconnection-receipt.mjs', 'scripts/verify-gateway-reconnection-receipt.test.mjs'],
-    digest: 'gatewayInputSha256', callers: ['scripts/gateway-reconnection-receipt.mjs']},
+    mode: 'gateway', callers: ['scripts/gateway-reconnection-receipt.mjs']},
 ];
 
 function familyForPaths(paths) {
@@ -27,34 +26,13 @@ export function assertScriptWork(plan) {
   familyForPaths(paths);
 }
 
-function auditTree(sha, git, family) {
-  const entries = git('ls-tree', '-rz', '--full-tree', sha).split('\0');
-  assert.equal(entries.pop(), '', 'Incomplete script input inventory');
-  const inputs = [], found = new Set();
-  for (const entry of entries) {
-    const match = entry.match(/^([0-7]{6}) (blob|commit) ([a-f0-9]{40})\t([\s\S]+)$/);
-    assert.ok(match, 'Malformed script input inventory');
-    const [, mode, type, , path] = match;
-    if (family.targets.includes(path) || path === policy) {
-      assert.ok(mode === '100644' && type === 'blob', `Nonregular script input: ${path}`);
-      found.add(path);
-    } else inputs.push(`${entry}\0`);
-  }
-  assert.equal(found.size, 3, 'Missing script, behavioral check or certificate');
-  const audit = JSON.parse(git('show', `${sha}:${policy}`));
-  assert.equal(audit.version, 1, 'Unsupported script audit');
-  assert.match(audit[family.digest], /^[a-f0-9]{64}$/);
-  // Pin every other tracked input: a new or changed reader must invalidate this
-  // bounded exemption until its consumption of the helper has been reviewed.
-  assert.equal(createHash('sha256').update(inputs.join('')).digest('hex'), audit[family.digest], 'Inputs changed since the root-script consumer audit');
-}
 
 export function scriptPlan(paths, base, head, git) {
   if (!paths.length || !families.some(family => paths.every(path => family.targets.includes(path)))) return null;
   const scripts = {base, head, paths};
   assertScriptWork({scripts, packages: [], receipts: [], typecheck: false});
   const family = familyForPaths(paths);
-  for (const sha of [base, head]) auditTree(sha, git, family);
+  for (const sha of [base, head]) auditInputMode(family.mode, sha, git);
   return scripts;
 }
 

@@ -7,7 +7,13 @@ import {join} from 'node:path';
 import test from 'node:test';
 import {createPlan} from './ci-plan.mjs';
 
-const policy = 'scripts/ci-lock-selection-audit.json';
+const policy = 'scripts/ci-input-audit.json';
+const completeAudit = values => ({
+  version: 1,
+  docsInputSha256: '1'.repeat(64), identityInputSha256: '2'.repeat(64),
+  gatewayInputSha256: '3'.repeat(64), lockInputSha256: '4'.repeat(64),
+  manifests: {}, ...values,
+});
 
 function fixture(run, unrelatedDirectory = 'packages/unrelated') {
   const root = mkdtempSync(join(tmpdir(), 'cloud-lock-selection-'));
@@ -30,8 +36,10 @@ function fixture(run, unrelatedDirectory = 'packages/unrelated') {
   const audit = () => {
     git('add', '.');
     const entries = git('ls-files', '--stage', '-z').split('\0').filter(Boolean).map(entry => entry.replace(/ 0\t/, '\t'));
-    const inputs = entries.filter(entry => !['pnpm-lock.yaml', policy].includes(entry.split('\t')[1]));
-    write(policy, JSON.stringify({version: 1, inputSha256: createHash('sha256').update(inputs.map(entry => entry.replace(/^([0-7]+) /, '$1 blob ') + '\0').join('')).digest('hex')}) + '\n');
+    const manifests = Object.fromEntries(workspace.map(pkg => [`${pkg.directory}/package.json`,
+      createHash('sha256').update(JSON.stringify({directory: pkg.directory, name: pkg.name, scripts: pkg.scripts})).digest('hex')]));
+    const inputs = entries.filter(entry => !['pnpm-lock.yaml', policy, ...Object.keys(manifests)].includes(entry.split('\t')[1]));
+    write(policy, JSON.stringify(completeAudit({manifests, lockInputSha256: createHash('sha256').update(inputs.map(entry => entry.replace(/^([0-7]+) /, '$1 blob ') + '\0').join('')).digest('hex')})) + '\n');
   };
   const plan = (base, head, read = git) => createPlan({pull_request: {base: {sha: base}, head: {sha: head}}},
     {sha: head, repository: 'waitron-io/waitron-cloud'}, workspace, read, () => {throw Error('No API expected');});
@@ -90,12 +98,12 @@ test('stale, missing or malformed reader audit in either tree retains the full s
     const read = (...args) => {
       if (args[0] === 'show' && args[1] === `${sha}:${policy}`) {
         if (fault === 'missing') throw Error('Missing audit');
-        if (fault === 'digest') return JSON.stringify({version: 1, inputSha256: '0'.repeat(64)});
+        if (fault === 'digest') return JSON.stringify(completeAudit({lockInputSha256: '0'.repeat(64)}));
         if (fault === 'version') return JSON.stringify({...JSON.parse(git(...args)), version: 2});
       }
       if (args[0] === 'ls-tree' && args.includes(sha) && args.includes('--full-tree')) {
         if (fault === 'inventory') return 'malformed\0';
-        if (fault === 'symlink') return git(...args).replace(/100644(?= blob [a-f0-9]+\tscripts\/ci-lock-selection-audit.json)/, '120000');
+        if (fault === 'symlink') return git(...args).replace(/100644(?= blob [a-f0-9]+\tscripts\/ci-input-audit.json)/, '120000');
         if (fault === 'lock-symlink') return git(...args).replace(/100644(?= blob [a-f0-9]+\tpnpm-lock.yaml)/, '120000');
       }
       return git(...args);

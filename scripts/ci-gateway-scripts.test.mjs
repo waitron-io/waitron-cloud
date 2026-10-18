@@ -12,7 +12,13 @@ import {assertSummary} from './ci-summary.mjs';
 const helper = 'scripts/verify-gateway-reconnection-receipt.mjs';
 const checks = 'scripts/verify-gateway-reconnection-receipt.test.mjs';
 const caller = 'scripts/gateway-reconnection-receipt.mjs';
-const policy = 'scripts/ci-scripts-audit.json';
+const policy = 'scripts/ci-input-audit.json';
+const completeAudit = values => ({
+  version: 1,
+  docsInputSha256: '1'.repeat(64), identityInputSha256: '2'.repeat(64),
+  gatewayInputSha256: '3'.repeat(64), lockInputSha256: '4'.repeat(64),
+  manifests: {}, ...values,
+});
 const identity = ['scripts/identity-upstream.mjs', 'scripts/identity-upstream.test.mjs'];
 const workspace = loadWorkspace();
 const runner = resolve('scripts/ci-scripts.mjs');
@@ -27,7 +33,7 @@ function fixture(run) {
     const rows = git('ls-files', '--stage', '-z').split('\0').filter(Boolean);
     const digest = excluded => createHash('sha256').update(rows.filter(row => ![...excluded, policy].includes(row.split('\t')[1]))
       .map(row => row.replace(/^([0-7]{6}) ([a-f0-9]{40}) 0\t/, '$1 blob $2\t') + '\0').join('')).digest('hex');
-    put(policy, JSON.stringify({version: 1, inputSha256: digest(identity), gatewayInputSha256: digest([helper, checks])}) + '\n');
+    put(policy, JSON.stringify(completeAudit({identityInputSha256: digest(identity), gatewayInputSha256: digest([helper, checks])})) + '\n');
     return commit();
   };
   try {

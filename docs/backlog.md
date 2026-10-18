@@ -1055,9 +1055,16 @@ notifications separately.
   [coordinated-audit design](superpowers/specs/2026-10-16-coordinated-ci-audits.md)
   and [implementation plan](superpowers/plans/2026-10-16-coordinated-ci-audits.md)
   specify one shared policy with four independent inventories and explicit manual
-  renewal. This is a design milestone only. The three existing certificates,
-  production readers and strict fallbacks remain unchanged; implementation and
-  simultaneous four-mode qualification are still open.
+  renewal. The shared reader and selector migration have focused tests, including
+  real file-mode, symbolic-link and submodule refusals. Renewal is blocked by a
+  conflict between current workspace evidence and the saved receipt fixtures:
+  the workspace has ten manifests, including translation, while the saved fixture
+  has nine without the current licence metadata. Its exact membership and metadata
+  assertions must remain. Decide how to keep independently pinned historical
+  fixture evidence alongside the complete current policy before renewal; do not
+  refresh the saved data or weaken its assertions. The shared policy still has
+  invalidating placeholder hashes. Simultaneous four-mode qualification, renewal
+  tooling, the remaining fixture/guide checks and whole-branch review remain open.
   Mixed changes also retain the existing fallback. The script job verifies the
   exact checkout and changed paths, and the summary requires its successful result.
   The identity audit covers that helper's only executable consumer, its own spawned test;
