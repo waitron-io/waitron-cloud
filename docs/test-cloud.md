@@ -83,3 +83,31 @@ The interface's source release does not qualify a Cloud image or snapshot.
 Keep snapshots unavailable and deployment
 enforcement off until the implementation, full integration proof and release gates
 pass. Ordinary fiscal restore still requires its existing activation authority.
+
+## Direct storage authority development
+
+A plan change must reach storage itself because a venue can keep writing with credentials it already holds. The new private adapter records separate stream writer and recovery-reader identities, then publishes the storage permissions and checks them with signed requests. A downgrade disables the writer without discarding stored objects or its recovery reader. Explicit provisioning after an upgrade creates a fresh writer.
+
+The plan wrapper checks the stored test venue and organisation revision before and after provider work. It also compares revisions during reconciliation, so a free-to-paid change between polls cannot restore an old writer. If the policy database fails, it withdraws existing writers before reporting the error. A failed provider reload is incomplete withdrawal; reopening reapplies the saved intent and checks the old credentials again. Missing state over an existing managed identity file is refused.
+
+SeaweedFS 4.47 merges static identity reloads. Removing a writer from the file leaves its old key active, so the adapter replaces it with a disabled identity containing no credentials. The native storage test exercises both real refusals and the neighbouring paid venue. The persistent private issuer serves only public discovery and signing keys over trusted HTTPS; its capture and recovery policies remain restricted to the signed object scope.
+
+Run the storage and policy checks through the isolated PostgreSQL runner:
+
+```sh
+node scripts/test-postgres.mjs exec node --test \
+  deploy/test-cloud/storage-authority.test.mjs \
+  deploy/test-cloud/service-runtime.test.mjs \
+  deploy/test-cloud/storage-issuer.test.mjs \
+  deploy/test-cloud/storage-cache.test.mjs
+```
+
+The separate expiry proof waits for a real fifteen-minute snapshot credential. It is deliberately outside ordinary CI runs:
+
+```sh
+TEST_CLOUD_REAL_STS_EXPIRY=1 node --test \
+  deploy/test-cloud/storage-expiry-proof.test.mjs
+```
+
+These components are not wired into the deployment yet. The issuer still needs its private volume and storage-process integration; the account and backup runtimes, gateway and verifier need the remaining PR5 work. The native fixture proofs do not establish the final LAN endpoint, a working deployed storage service, or test-box readiness. Keep plan enforcement off until the complete integration proof passes.
+

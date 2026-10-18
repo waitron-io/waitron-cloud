@@ -1150,6 +1150,21 @@ notifications separately.
   in-volume renewal remains a maintenance follow-up. Continuous box supervision,
   coordinated image/schema upgrades and volume-to-volume rollback still need the
   final deployment slice; the driver refuses an image change meanwhile.
+  The next storage component persists separate stream writers and recovery readers,
+  saves withdrawal intent before provider reload, checks actual signed storage
+  refusals and creates a fresh writer after explicit upgrade provisioning. Its
+  plan wrapper rejects free/production venues, catches a free/paid change between
+  polls and withdraws writers on a policy database failure. Reopening retries an
+  interrupted withdrawal. Native SeaweedFS tests exposed static reload merging:
+  deletion alone left the old writer active, so withdrawal uses an explicit
+  disabled identity. Missing private state cannot silently reset an existing
+  managed identity file. A private persistent issuer supplies scoped OIDC tokens
+  and fifteen-minute STS configuration; account/storage/worker/gateway wiring
+  and final LAN proofs remain unfinished. The isolated local-stack receipt now
+  supplies PostgreSQL to these policy tests. Concurrent native fixtures reuse a
+  verified cached archive without rewriting it, and publish downloads by atomic
+  rename; the first combined run exposed a truncated shared-archive read, and a
+  read-only-cache regression test covers the corrected path.
   Deployment enforcement is still off. Three remaining implementation slices,
   actual direct-storage withdrawal/fresh writers, LAN deployment,
   two-organisation acceptance and measured headroom remain open. The existing
