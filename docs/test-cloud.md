@@ -63,3 +63,18 @@ TEST_CLOUD_DOCKER_PROOF_IMAGE=<local-image> node --test \
 The first proof starts a separate disposable Mac project with random loopback ports. It checks trusted HTTPS, normal refusal without the CA or with the wrong hostname, actual signup mail and its canonical link, proxy refusals, restart identity, account replacement without a proxy restart and a stop that preserves volumes. It then removes only its own test containers, network and volumes. The second runs the real TLS proxy against an independent backend, so backend security cannot hide a missing proxy check.
 
 These are local synthetic checks. They do not establish an amd64 test-box deployment, a connected Waitron venue, free/paid storage withdrawal, public remote access or measured box capacity. The final deployment runbook will add the two-organisation connection steps after those proofs pass. Keep the quarantined test-box venue and its containers unchanged.
+
+## Backup verifier boundary
+
+The owner-approved [backup-verification contract](superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md)
+checks whether an archive restores its data without giving Cloud permission to
+activate a fiscal server. Its worked examples describe required outcomes, not
+executed results. Earlier local PR5 candidate receipts reached genuine encrypted
+capture and signed publication, then ordinary fiscal restore refused with
+`restore.hook_failed / sif.allocation_invalid / reauthentication_required`.
+That candidate code remains unpublished; this design publication adds no verifier.
+
+Waitron must implement the separate interface in A850, queued after A679. Cloud
+integration follows after A850 lands. Keep snapshots unavailable and deployment
+enforcement off until the implementation, full integration proof and release gates
+pass. Ordinary fiscal restore still requires its existing activation authority.

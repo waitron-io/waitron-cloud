@@ -207,6 +207,14 @@ payment services, or send customer notifications. The full replacement test sepa
 proves authorised activation. Until the required check passes, report verification
 as pending or failed and preserve the previously verified snapshot.
 
+The approved [non-activating verification design](superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md)
+defines a separate Waitron-owned data restore check when ordinary restore hooks
+require fiscal activation authority. Waitron's implementation is A850, queued after
+A679; Cloud result admission, catalogue qualification and version-bound recovery
+follow after A850 lands. The design is not implemented or runtime proved. Keep the
+affected snapshots unavailable until the implementation and evidence gates pass;
+fiscal activation authority remains unchanged.
+
 Automatic expiry keeps the last verified snapshot while the backup subscription is
 active. Cleanup must recheck protection when deleting and tolerate concurrent new
 snapshots or verification failures. Key deletion must respect the same retained

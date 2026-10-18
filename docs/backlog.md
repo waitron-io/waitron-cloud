@@ -906,6 +906,14 @@ notifications separately.
   deployment. The image-only driver checks platform, capacity, ports, network
   overlap, rendered bindings and recorded IDs; startup monitoring checks resource
   floors and existing Waitron health once per five seconds. Interrupted state with unrecorded IDs is refused; scoped Docker discovery and stop attempts survive a failed host inventory or state write. Cleanup that cannot reach Docker is reported as incomplete. See the [test Cloud guide](test-cloud.md).
+  The owner-approved
+  [backup-verification contract](superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md)
+  separates data recovery checks from permission to activate a fiscal server.
+  Its five worked cases and acceptance checks are a design, not runtime evidence.
+  Waitron's separately owned interface is queued as A850 after A679; Cloud adapter,
+  catalogue and recovery-version integration follows after A850 lands. Snapshots
+  remain unavailable on this test deployment, and enforcement stays off until the
+  implementation, evidence and release gates pass.
   The thirty-day leaf and one-year CA currently fail closed on expiry; same-CA
   in-volume renewal remains a maintenance follow-up. Continuous box supervision,
   coordinated image/schema upgrades and volume-to-volume rollback still need the
