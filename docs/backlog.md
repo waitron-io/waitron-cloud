@@ -902,10 +902,10 @@ notifications separately.
   checks keep the backend unpublished, replace bindings and cap all container
   limits at 1,824 MiB. Real native-Mac Docker proofs cover trusted HTTPS signup,
   captured canonical links, independent proxy Host/Origin/header checks, restart
-  identity and owned stop with preserved volumes. They do not prove amd64 box
+  identity, account replacement without restarting its proxy and owned stop with preserved volumes. They do not prove amd64 box
   deployment. The image-only driver checks platform, capacity, ports, network
   overlap, rendered bindings and recorded IDs; startup monitoring checks resource
-  floors and existing Waitron health. See the [test Cloud guide](test-cloud.md).
+  floors and existing Waitron health once per five seconds. Interrupted state with unrecorded IDs is refused; scoped Docker discovery and stop attempts survive a failed host inventory or state write. Cleanup that cannot reach Docker is reported as incomplete. See the [test Cloud guide](test-cloud.md).
   The thirty-day leaf and one-year CA currently fail closed on expiry; same-CA
   in-volume renewal remains a maintenance follow-up. Continuous box supervision,
   coordinated image/schema upgrades and volume-to-volume rollback still need the

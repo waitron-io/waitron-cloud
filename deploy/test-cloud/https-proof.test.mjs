@@ -42,10 +42,15 @@ test('real HTTPS signup, proxy authority, private restart identity and owned rol
  assert.match(message?.Text??'',/https:\/\/waitron\.local:3000\/signup#token=/);
  assert.equal((await fetchTLS({path:'/signup'})).status,200);
  const before=await docker(['exec',proxy.ID,'sha256sum','/run/local-stack/runtime.json','/run/local-stack/lan/proxy.pem']);
+ const address=async id=>JSON.parse(await docker(['inspect','--format','{{json .NetworkSettings.Networks}}',id]))[project+'_default'].IPAddress;assert.equal(await address(account.ID),'10.79.0.3');
+ await docker([...prefix,'up','--no-build','--pull','never','--detach','--no-deps','--force-recreate','account']);
+ let recreated;for(let n=0;n<80;n++){try{if((await fetchTLS()).status===200){recreated=true;break;}}catch{}await new Promise(r=>setTimeout(r,250));}assert.equal(recreated,true,'proxy must recover after account recreation without proxy restart');
+ const accountId=await docker([...prefix,'ps','-q','account']);assert.notEqual(accountId,account.ID);assert.equal(await address(accountId),'10.79.0.3');
+ ids=(await docker(['ps','-aq','--no-trunc','--filter',`label=com.docker.compose.project=${project}`])).split(/\s+/).filter(Boolean);
  await docker([...prefix,'restart','account','proxy','email-worker']);port=Number((await docker([...prefix,'port','proxy','3000'])).split(':').at(-1));
  for(let n=0;n<60;n++){try{if((await fetchTLS()).status===200)break;}catch{}await new Promise(r=>setTimeout(r,250));}
  assert.equal((await fetchTLS()).status,200);assert.equal(await docker(['exec',proxy.ID,'sha256sum','/run/local-stack/runtime.json','/run/local-stack/lan/proxy.pem']),before);
  await docker(['stop','--time','10',...ids]);assert.equal((await docker(['ps','-q','--filter',`label=com.docker.compose.project=${project}`])).length,0);
  const preserved=await docker(['volume','ls','-q','--filter',`label=com.docker.compose.project=${project}`]);assert.ok(preserved.includes('local-stack-config'));assert.ok(preserved.includes('local-stack-postgres'));
- console.log(JSON.stringify({project,containers:ids.length,https:true,signupCaptured:true,proxyGuards:true,restartIdentity:true,stopPreservedVolumes:true,accountBackendPublished:account.Publishers?.some(p=>p.PublishedPort>0)??false}));
+ console.log(JSON.stringify({project,containers:ids.length,https:true,signupCaptured:true,proxyGuards:true,restartIdentity:true,backendRecreatedWithoutProxyRestart:true,stopPreservedVolumes:true,accountBackendPublished:account.Publishers?.some(p=>p.PublishedPort>0)??false}));
 });

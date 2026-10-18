@@ -3,10 +3,11 @@ import {execFileSync} from 'node:child_process';
 import test from 'node:test';
 import {existsSync} from 'node:fs';
 const root=new URL('../../',import.meta.url).pathname;
-test('LAN override replaces ports, isolates private state and keeps independent launch gates off',()=>{
+test('LAN override replaces ports, isolates private state and keeps independent launch gates off',async()=>{
  assert.ok(existsSync(new URL('compose.yaml',import.meta.url)),'LAN override is missing');
  const value=JSON.parse(execFileSync('docker',['compose','--profile','*','--env-file','deploy/test-cloud/test.env','-f','compose.yaml','-f','deploy/test-cloud/compose.yaml','config','--format','json'],{cwd:root,encoding:'utf8',env:{...process.env,NODE_AUTH_TOKEN:'not-a-credential'}}));
- assert.equal(value.name,'waitron-cloud-test');assert.deepEqual(value.services.account.ports,undefined);
+ const {validateDeployment}=await import('../../scripts/test-cloud-deploy.mjs');assert.equal(validateDeployment(value,{image:value.services.account.image}).ready,true);const excessive=structuredClone(value);excessive.services.account.mem_limit=String(4096*1024*1024);assert.throws(()=>validateDeployment(excessive,{image:value.services.account.image}),/test_cloud.rendered/);
+ assert.equal(value.services.account.networks.default.ipv4_address,'10.79.0.3');assert.equal(value.name,'waitron-cloud-test');assert.deepEqual(value.services.account.ports,undefined);
  assert.deepEqual(value.services.proxy.ports.map(p=>[p.host_ip,p.published,p.target]),[['192.168.10.10','3000',3000]]);
  for(const service of ['postgres','mailpit','storage','gateway'])for(const port of value.services[service].ports)assert.equal(port.host_ip,'127.0.0.1',service);
  assert.equal(value.services.mailpit.ports.length,2);assert.equal(value.services.postgres.ports.length,1);

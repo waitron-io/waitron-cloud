@@ -12,8 +12,8 @@ test('real TLS proxy enforces authority before an independent backend and remove
  const port=Number((await run(['port',id,'3000/tcp'])).split(':').at(-1));
  const send=headers=>new Promise((yes,no)=>{const req=request({host:'127.0.0.1',port,servername:'waitron.local',ca,headers:{host:'waitron.local:3000',...headers}},res=>{let body='';res.on('data',c=>body+=c);res.on('end',()=>yes({status:res.statusCode,body}));});req.on('error',no);req.end();});
  let response;for(let n=0;n<50;n++){try{response=await send({});break;}catch{}await new Promise(r=>setTimeout(r,100));}assert.equal(response?.status,200);
- assert.equal((await send({host:'wrong.local:3000'})).status,403,'proxy Host guard');assert.equal((await send({origin:'https://evil.test'})).status,403,'proxy Origin guard');
+ assert.equal((await send({host:'wrong.local:3000'})).status,403,'proxy Host guard');assert.equal((await send({host:['waitron.local:3000','evil.test']})).status,400,'duplicate Host guard');assert.equal((await send({origin:['https://waitron.local:3000','https://waitron.local:3000']})).status,403,'duplicate Origin guard');assert.equal((await send({origin:'https://evil.test'})).status,403,'proxy Origin guard');
  const value=JSON.parse((await send({origin:'https://waitron.local:3000','x-forwarded-for':'spoof','x-forwarded-host':'evil.test','x-forwarded-proto':'http','x-forwarded-port':'1',forwarded:'for=evil','x-real-ip':'evil'})).body);
- assert.equal(value.host,'waitron.local:3000');assert.equal(value.origin,'https://waitron.local:3000');assert.notEqual(value['x-forwarded-for'],'spoof');assert.equal(value['x-forwarded-proto'],'https');
+ assert.equal(value.host,'waitron.local:3000');assert.equal(value.origin,'https://waitron.local:3000');assert.notEqual(value['x-forwarded-for'],'spoof');assert.match(value['x-forwarded-for'],/^\d+\.\d+\.\d+\.\d+$/);assert.equal(value['x-forwarded-proto'],'https');
  for(const name of ['forwarded','x-forwarded-host','x-forwarded-port','x-real-ip'])assert.equal(value[name],undefined,name);
 });

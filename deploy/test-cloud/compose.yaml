@@ -41,6 +41,9 @@ services:
     image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
     ports: !override ["127.0.0.1:8333:8333"]
   account:
+    networks:
+      default:
+        ipv4_address: 10.79.0.3
     mem_limit: 256m
     logging:
       driver: json-file
