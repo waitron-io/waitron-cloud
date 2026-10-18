@@ -269,12 +269,15 @@ test('a cap reached before work makes every pending ref failed without a provide
 });
 test('review totals are saved with the batch, while provider calls hold no job transaction lock',async()=>{
  const {job}=await queue(many('a','A',2));
- const fake=await startFakeOpenAi(async r=>{
-  await transaction(db.secondPool,async c=>{await c.query('SELECT id FROM translation_jobs WHERE id=$1 FOR UPDATE NOWAIT',[job.id]);});
-  return isReview(r)?{json:responsesBody(JSON.stringify({changes:[{id:'p01',language:'ca',name:'Cervesa'},{id:'p01',language:'fr',name:'Refused'}]}))}:echoFirstPass(r);
- });
- try{await worker(fake.baseUrl).runOnce(live());const ended=await row(job.id);
+ const fake=await startFakeOpenAi(r=>isReview(r)?{json:responsesBody(JSON.stringify({changes:[{id:'p01',language:'ca',name:'Cervesa'},{id:'p01',language:'fr',name:'Refused'}]}))}:echoFirstPass(r));
+ const client=createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:100});let probes=0;
+ try{await new TranslationWorker(db.pool,{...client,async respond(call,signal){
+  // Probe at the provider boundary without charging database instrumentation to its HTTP deadline.
+  await transaction(db.secondPool,async c=>{if(++probes===1)await c.query('SELECT pg_sleep(0.15)');await c.query('SELECT id FROM translation_jobs WHERE id=$1 FOR UPDATE NOWAIT',[job.id]);});
+  return client.respond(call,signal);
+ }},{wait:async()=>{}}).runOnce(live());const ended=await row(job.id);
   assert.deepEqual([ended.state,ended.review_applied,ended.review_dropped],['done',1,1]);assert.equal(fake.requests.length,2);
+  assert.equal(probes,2);
  }finally{await fake.close();}
 });
 test('the oldest unlocked job is leased while another queued job is locked',async()=>{

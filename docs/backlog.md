@@ -903,6 +903,25 @@ notifications separately.
   leave its running containers and data untouched. Keep address providers disabled
   and the existing translation release gates in place. A free plan permits a
   service only after that service's independent prerequisites pass.
+- **Translation worker lock-probe timing is now independently exercised.** The
+  existing review-totals case put a PostgreSQL lock probe inside its fake HTTP
+  response while the real client allowed 100 ms. A controlled 150 ms probe on
+  landed base `050084752f1c57b00183582a2d16d33b0555f5e8` produces a provider timeout
+  and three requests instead of the expected two. The probe now runs at the
+  worker's provider-call boundary before starting that same HTTP deadline, with a
+  deliberate 150 ms database delay. The original done/review totals, NOWAIT lock
+  check and exact two-request assertion remain; both provider calls are probed.
+  The earlier unexplained observations remain separate unless their exact trace
+  matches this reproducer. No provider retry policy, production code or deadline
+  changed.
+- **Local package validation must avoid concurrent full-package groups.** Four
+  two-file-worker groups overlapped during D79 and the registration control CLI
+  exceeded its unchanged five-second command bound. A landed-base phase probe
+  completed every node/root/package command in under 700 ms after reducing the
+  overlap; acknowledgement-to-close took at most a few tens of milliseconds.
+  This does not prove the cause of the earlier nine-minute stall. Run local full
+  package suites sequentially with two file workers and retain the five-second
+  assertion. Capture process/phase timings if it fails under that arrangement.
 - **Local registration run stalls after earlier failures.** In the test-plan
   review checkout at `cc99eef378bd9db2716a2325cd07fbe491ab06c9`,
   `node scripts/test-postgres.mjs exec pnpm --dir packages/registration test`
