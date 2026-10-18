@@ -1049,6 +1049,15 @@ notifications separately.
   the remaining precise-selection work. The new diagnostics are advisory so
   renewing one certificate cannot permanently block another; every selector
   retains its strict comparisons and full fallback.
+  A local committed-tree control reproduced the renewal cycle at `e1f28ae`:
+  renewing the script certificate made documentation stale, and renewing
+  documentation made scripts stale again. The reviewed
+  [coordinated-audit design](superpowers/specs/2026-10-16-coordinated-ci-audits.md)
+  and [implementation plan](superpowers/plans/2026-10-16-coordinated-ci-audits.md)
+  specify one shared policy with four independent inventories and explicit manual
+  renewal. This is a design milestone only. The three existing certificates,
+  production readers and strict fallbacks remain unchanged; implementation and
+  simultaneous four-mode qualification are still open.
   Mixed changes also retain the existing fallback. The script job verifies the
   exact checkout and changed paths, and the summary requires its successful result.
   The identity audit covers that helper's only executable consumer, its own spawned test;
