@@ -1350,7 +1350,7 @@ notifications separately.
   files; the lockfile control retains full work while its reader-free control
   still narrows selection. Unreachable helpers keep narrow package work.
   Precise alias resolution, assignment/destructuring aliases, escaped
-  API references and other unsupported calls remain open. Directory reader names
+  API identifiers and other unsupported calls remain open. Directory reader names
   wrapped directly in parentheses now retain every package suite because wrapping
   the function leaves its runtime readers unchanged. Executed Node controls cover all four APIs,
   nested parentheses, TypeScript assertions, optional invocation and comments.
@@ -1427,7 +1427,22 @@ notifications separately.
   changes keep full work with these readers and narrow work without them;
   unreachable helpers stay narrow. This guard does not resolve member identities
   and can select extra work for unrelated keys, arrays of API names or inert text.
-  Escaped keys and expressions without a literal API-name prefix remain unresolved.
+  Keys whose first quoted token contains an escape before the next matching
+  quote now retain full package work too: Unicode, hexadecimal escapes and
+  line continuations can spell a reader without its literal name.
+  Executed Node controls cover all four APIs, all three quote forms, comments,
+  parentheses and erased assertions. Saved-reader checks retain either revision
+  and unchanged transitive consumers despite dirty local files; audited lock
+  changes retain full work with a reader and narrow work without one. Unused
+  helpers remain narrow. The guard does not decode keys, so unrelated escaped
+  member keys and inert text can also select extra work. A receiver check keeps
+  plain escaped array values narrow, including arrays after `of` and `return`.
+  Receiver matching covers plain names and closing call/index delimiters, with
+  comments, optional access and non-null assertions; arbitrary receiver
+  expressions remain unqualified. Computed keys without a literal API-name prefix
+  or an escape in that first token remain unresolved. Executed base/final probes
+  still miss consumers when the escape appears in a later concatenated string,
+  a comma expression or a template nested inside the key's template.
   Parenthesized dot-member
   namespaces such as `(fs).readdirSync` remain unresolved, as do deeper members
   in other expression positions; this is not a general expression parser.
@@ -1436,7 +1451,7 @@ notifications separately.
   Adversarial repeated delimiter/comment
   text can increase scan time; comprehensive parser performance remains unqualified.
   Precise resolution,
-  assignment/destructuring aliases and escaped API references remain open.
+  assignment/destructuring aliases and escaped API identifiers remain open.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.
