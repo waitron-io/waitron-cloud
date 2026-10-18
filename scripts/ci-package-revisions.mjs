@@ -90,6 +90,10 @@ function workspaceAt(sha, workspace, git) {
       // opener so ordinary named imports do not force full package work.
       assert.doesNotMatch(source.source, directoryPattern(/\[[^\[\]{};]*,\s*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/),
         `Unresolved indirect directory call at ${source.path}`);
+      // A nested value can precede a stored reader. Its closing delimiter
+      // breaks the simple array-prefix match but leaves the callable unchanged.
+      assert.doesNotMatch(source.source, directoryPattern(/[\]}]\s*,\s*(?:[A-Za-z_$][\w$]*\s*\.\s*)?(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/),
+        `Unresolved indirect directory call at ${source.path}`);
       // Logical and conditional operands can preserve the reader for a later
       // call. Bare and simple namespace references stay unresolved on either
       // side without evaluating the expression.

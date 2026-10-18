@@ -1386,8 +1386,16 @@ notifications separately.
   imports still keep narrow work. This bounded guard can select extra work for
   inert text, unrelated names and direct calls inside a branch or right operand;
   it does not evaluate branch conditions or resolve these calls precisely.
-  Nested preceding arrays or objects and delimiter-bearing comments or strings
-  remain unresolved. A direct multi-name import control preserves narrow work.
+  Middle readers immediately after a nested array or object now retain full
+  package work, including simple namespace references, comments and TypeScript
+  assertions. Executed Node controls cover all four directory APIs. Saved-reader
+  controls cover either revision and unchanged transitive consumers despite dirty
+  local files; audited lock changes retain full work with these readers and narrow
+  work without them. Unused helpers and ordinary multi-name imports stay narrow.
+  This closing-delimiter guard can also select extra work for inert text,
+  unrelated names or function arguments. It does not parse arbitrary expressions:
+  other nested predecessors and delimiter-bearing comments or strings remain
+  unresolved. A direct multi-name import control preserves narrow work.
   Precise resolution,
   assignment/destructuring aliases and escaped API references remain open.
   A final element's trailing comma also keeps full work, including multiline and
