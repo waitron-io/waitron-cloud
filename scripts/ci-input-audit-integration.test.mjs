@@ -83,6 +83,9 @@ test('complete candidate audits independently pin all ten current manifests and 
 }));
 
 test('one audited committed baseline admits isolated docs scripts and locks while mixed and new readers stay full', () => completeFixture(({root, git, read, write, node, commit, renew}) => {
+  rmSync(join(root, 'docs/ci-lockfile-audit.md'), {force: true});
+  write('docs/audit-control-prose.md', 'Independent fixture prose.\n');
+  write('docs/audit-control-deleted-prose.md', 'Independent deletion fixture.\n');
   const base = renew();
   const plan = head => {
     const scratch = mkdtempSync(join(tmpdir(), 'cloud-audit-plan-'));
@@ -98,8 +101,8 @@ test('one audited committed baseline admits isolated docs scripts and locks whil
     } finally {rmSync(scratch, {recursive: true, force: true});}
   };
   for (const change of [
-    () => appendFileSync(join(root, 'docs/backlog.md'), '\nProse control.\n'),
-    () => rmSync(join(root, 'docs/ci-lockfile-audit.md')),
+    () => appendFileSync(join(root, 'docs/audit-control-prose.md'), '\nProse control.\n'),
+    () => rmSync(join(root, 'docs/audit-control-deleted-prose.md')),
     () => appendFileSync(join(root, 'scripts/identity-upstream.mjs'), '\n// Isolated control\n'),
     () => appendFileSync(join(root, 'scripts/identity-upstream.test.mjs'), '\n// Isolated control\n'),
     () => appendFileSync(join(root, 'scripts/verify-gateway-reconnection-receipt.mjs'), '\n// Isolated control\n'),
@@ -138,9 +141,9 @@ test('one audited committed baseline admits isolated docs scripts and locks whil
     assert.equal(selected.typecheck, true); assert.deepEqual(selected.receipts, receipts);
   }
   for (const paths of [
-    ['docs/backlog.md', 'scripts/identity-upstream.mjs'],
+    ['docs/audit-control-prose.md', 'scripts/identity-upstream.mjs'],
     ['scripts/identity-upstream.mjs', 'scripts/verify-gateway-reconnection-receipt.mjs'],
-    ['docs/backlog.md', 'pnpm-lock.yaml'], ['unmapped-input'], ['scripts/new-reader.mjs'],
+    ['docs/audit-control-prose.md', 'pnpm-lock.yaml'], ['unmapped-input'], ['scripts/new-reader.mjs'],
     ['scripts/ci-input-audit.mjs'], ['scripts/ci-plan.mjs'], [policyPath],
   ]) {
     git('reset', '--hard', base);
