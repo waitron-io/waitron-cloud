@@ -8,6 +8,7 @@ import { constants, openSync, closeSync, fstatSync, lstatSync, realpathSync, exi
 import { join, relative, isAbsolute, posix } from 'node:path';
 import { assertOwnedRoot } from './schema.mjs';
 export { openFiscalMeasurement } from './fiscal.mjs';
+export { openMailMeasurement } from './mail.mjs';
 
 const fail = () => { throw new Error('Invalid cloud cost local run'); };
 const requireThat = value => { if (!value) fail(); };

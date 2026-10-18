@@ -1188,8 +1188,22 @@ notifications separately.
   These figures cover Cloud API HTTP bodies only. Authority-service traffic,
   connection overhead, monthly frequency and fiscal service pricing remain unknown;
   this fixture does not activate a Waitron installation.
+  You can also count captured email operations independently at the mailer and at
+  a loopback SMTP proxy. Generated PostgreSQL/Mailpit checks queue three messages,
+  observe one refusal and its scheduled retry, then confirm three deliveries and
+  removal of the encrypted queued payloads. A separate real signup
+  and password-recovery journey queues and delivers verification, reset and
+  password-change messages. Both journeys reconcile every delivery attempt;
+  English and Spanish subjects are checked privately. All four existing mail
+  renderers, including service alerts, retain their action class in synthetic
+  transport checks. The proxy refuses concurrent or unpaired connections, multiple
+  recipients, oversized messages, incomplete replies and client/server disagreement.
+  Cancellation closes only its own sockets, and a bounded attempt budget stops
+  before the next connection. Exported counters contain no recipient, link, message
+  body or delivery identity. These are local operation counts only: SMTP bytes,
+  provider billing, monthly frequency and real alert eligibility remain unmeasured.
   This is the base service fixture plus bounded synthetic stream request, body and
-  upload-only lifetime evidence and a local fiscal API scenario;
+  upload-only lifetime evidence, local fiscal API and captured-email scenarios;
   wider stream lifetime integration, the real public/staff
   tunnel journeys, complete accounting,
   local replay orchestration, the offline calculator, private local sales replay,
