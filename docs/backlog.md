@@ -1117,6 +1117,15 @@ notifications separately.
   including a HEAD response that reports object size without downloading it.
   Unclassified or unfinished requests prevent a valid accounting snapshot. Observer
   counts alone remain unreconciled, and bucket-control pricing stays unknown.
+  The installed storage SDK now records each physical attempt separately from the
+  proxy, with independent command classification, retry counts and streamed body
+  bytes. Synthetic checks cover failed and refused connections, parallel calls,
+  discarded downloads and denied requests. A genuine synthetic Waitron archive
+  passes through signed SeaweedFS upload, size and range checks, download and
+  restore with fiscal integrity checks. Its eleven requests, including multipart
+  cleanup, reconcile across both meters. Setup includes the SDK's bucket-creation
+  body; it is separate from archive workload. This proves that bounded synthetic
+  flow, not complete replay accounting or stored-object lifetimes.
   This is the base service fixture with passive storage accounting;
   stream replication, the real public/staff tunnel journeys, complete accounting,
   local replay orchestration, the offline calculator, private local sales replay,

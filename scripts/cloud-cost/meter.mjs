@@ -1,5 +1,8 @@
 import { createServer, request } from 'node:http';
 import { once } from 'node:events';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { Readable } from 'node:stream';
+import { randomUUID } from 'node:crypto';
 
 const fail = () => { throw new Error('Invalid cloud cost meter'); };
 const requireThat = condition => { if (!condition) fail(); };
@@ -196,6 +199,94 @@ export function classifyStorageOperation({ method, path, copySource = false }) {
   } catch { fail(); }
 }
 
+const correlationHeaders = ['x-cloud-cost-attempt', 'x-cloud-cost-retry', 'x-cloud-cost-phase'];
+export function correlatedStorageAttempt(input) {
+  const headers = input.headers;
+  requireThat(headers && /^[a-f0-9-]{36}$/.test(headers[correlationHeaders[0]])
+    && /^(0|[1-9]\d*)$/.test(headers[correlationHeaders[1]])
+    && count(Number(headers[correlationHeaders[1]])) && phases.includes(headers[correlationHeaders[2]]));
+  return { token: headers[correlationHeaders[0]], retryOrdinal: Number(headers[correlationHeaders[1]]),
+    phase: headers[correlationHeaders[2]], operation: classifyStorageOperation(input), errorCode: null, sameAccount: null };
+}
+
+// The SDK command names are independent of the proxy's HTTP operation classifier.
+const producerOperations = { PutObjectCommand: 'put', GetObjectCommand: 'get', HeadObjectCommand: 'head',
+  DeleteObjectCommand: 'delete', ListBucketsCommand: 'list', ListObjectsCommand: 'list', ListObjectsV2Command: 'list', ListObjectVersionsCommand: 'list',
+  ListMultipartUploadsCommand: 'list', ListPartsCommand: 'list', CreateBucketCommand: 'bucket-create',
+  DeleteBucketCommand: 'bucket-delete', HeadBucketCommand: 'bucket-inspect', GetBucketLocationCommand: 'bucket-inspect',
+  GetBucketVersioningCommand: 'bucket-inspect', PutBucketVersioningCommand: 'bucket-configure',
+  CreateMultipartUploadCommand: 'multipart-create', UploadPartCommand: 'multipart-upload',
+  CompleteMultipartUploadCommand: 'multipart-complete', AbortMultipartUploadCommand: 'multipart-abort' };
+
+export function instrumentStorageClient({ client, meter, phase, endpoint }) {
+  let target;
+  try {
+    target = new URL(endpoint);
+    requireThat(target.protocol === 'http:' && ['127.0.0.1', 's3'].includes(target.hostname) && target.port !== ''
+      && target.pathname === '/' && target.search === '' && target.hash === '' && target.username === '' && target.password === '');
+    requireThat(phases.includes(phase) && typeof meter.observeAttempt === 'function' && typeof meter.invalidate === 'function'
+      && typeof client.config.requestHandler.handle === 'function' && !client.middlewareStack.identify().includes('cloudCostProducer - initialize'));
+  } catch { fail(); }
+  const scope = new AsyncLocalStorage(), handler = client.config.requestHandler;
+  client.middlewareStack.add((next, context) => async args => {
+    const operation = producerOperations[context.commandName];
+    if (typeof operation !== 'string') { meter.invalidate(); fail(); }
+    return scope.run({ operation, ordinal: 0 }, () => next(args));
+  }, { name: 'cloudCostProducer', step: 'initialize' });
+  client.config.requestHandler = {
+    metadata: handler.metadata,
+    destroy: () => handler.destroy?.(),
+    handle: async (input, options) => {
+      const command = scope.getStore();
+      if (!command || input.protocol !== target.protocol || input.hostname !== target.hostname || Number(input.port) !== Number(target.port)) {
+        meter.invalidate(); fail();
+      }
+      const metadata = { token: randomUUID(), channel: 'producer', operation: command.operation, phase,
+        retryOrdinal: command.ordinal++, errorCode: null, sameAccount: null };
+      let bytesOut = 0, bytesIn = 0, statusCode = null, expectedIn = 0, completed = false;
+      const expectedOut = Number(input.headers['content-length'] ?? 0);
+      const finish = interrupted => {
+        if (completed) return; completed = true;
+        meter.observeAttempt({ ...metadata, outcome: interrupted ? 'transport-error'
+          : statusCode >= 500 ? 'server-error' : statusCode >= 300 ? 'client-error' : 'success', statusCode,
+          bytesIn, bytesOut, attemptedBytesIn: Math.max(bytesIn, expectedIn), attemptedBytesOut: Math.max(bytesOut, expectedOut) });
+      };
+      const headers = { ...input.headers, [correlationHeaders[0]]: metadata.token,
+        [correlationHeaders[1]]: String(metadata.retryOrdinal), [correlationHeaders[2]]: phase };
+      const originalBody = input.body;
+      const body = originalBody == null ? undefined : Readable.from((async function* () {
+        const source = typeof originalBody === 'string' || originalBody instanceof Uint8Array ? [originalBody] : originalBody;
+        for await (const chunk of source) { bytesOut += Buffer.byteLength(chunk); yield chunk; }
+      })());
+      try {
+        const result = await handler.handle({ ...input, headers, body }, options);
+        const response = result.response; statusCode = response.statusCode;
+        expectedIn = input.method === 'HEAD' ? 0 : Number(response.headers['content-length'] ?? 0);
+        if (input.method === 'HEAD' || !response.body) { response.body?.resume?.(); finish(false); }
+        else {
+          const source = response.body;
+          response.body = Readable.from((async function* () {
+            let ended = false;
+            try {
+              for await (const chunk of source) { bytesIn += Buffer.byteLength(chunk); yield chunk; }
+              ended = true;
+            } finally { finish(!ended); }
+          })());
+          response.body.once('close', () => { if (!completed) { source.destroy(); finish(true); } });
+        }
+        return result;
+      } catch (error) {
+        body?.destroy(); finish(true);
+        // Retry classification survives, while provider paths and messages stay private.
+        const failure = new Error('Invalid cloud cost meter');
+        if (['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT'].includes(error.code)) failure.code = error.code;
+        if (['TimeoutError', 'AbortError'].includes(error.name)) failure.name = error.name;
+        throw failure;
+      }
+    },
+  };
+}
+
 export async function createMeteringProxy({ target, meter, classify, listenHost = '127.0.0.1', listenPort = 0 }) {
   let endpoint;
   try {
@@ -210,7 +301,7 @@ export async function createMeteringProxy({ target, meter, classify, listenHost 
   const server = createServer((incoming, outgoing) => {
     let metadata;
     try {
-      metadata = classify({ method: incoming.method, path: incoming.url, copySource: Object.hasOwn(incoming.headers, 'x-amz-copy-source') });
+      metadata = classify({ method: incoming.method, path: incoming.url, copySource: Object.hasOwn(incoming.headers, 'x-amz-copy-source'), headers: incoming.headers });
       exact(metadata, ['token', 'retryOrdinal', 'phase', 'operation', 'errorCode', 'sameAccount']);
       validateAttempt({ ...metadata, channel: 'observer', outcome: 'transport-error', statusCode: null,
         bytesIn: 0, bytesOut: 0, attemptedBytesIn: 0, attemptedBytesOut: 0 });

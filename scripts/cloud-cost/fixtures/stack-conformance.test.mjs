@@ -169,3 +169,38 @@ test('genuineStorageTrafficIsPassivelyCountedWithoutInventingReconciliation', as
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
+
+// A real signed archive/read/restore and abandoned multipart must agree across two independent meters.
+test('genuineArchiveAndSignedSdkTrafficReconcileThroughRealStorage', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  cpSync(new URL('./archive-storage-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-archive-storage-smoke.mjs'));
+  let stack;
+  f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(docker('exec', s3, 'node', '/code/cost-archive-storage-smoke.mjs'));
+  assert.equal(result.accounting.reconciled, true);
+  assert.equal(result.accounting.status, 'measured');
+  assert.equal(result.accounting.accounting.producer.attempts, 11);
+  assert.deepEqual(result.accounting.accounting.producer, result.accounting.accounting.observer);
+  const phaseBytes = Object.fromEntries(['setup', 'workload', 'cleanup'].map(phase => [phase,
+    result.accounting.accounting.requests.filter(r => r.phase === phase).reduce((sum, r) => sum + r.bytesOut, 0)]));
+  t.diagnostic(JSON.stringify({ attempts: result.accounting.accounting.producer.attempts, capturedBytes: result.capturedBytes, phaseBytes }));
+  assert.deepEqual(phaseBytes, { setup: 192, workload: result.capturedBytes + 4, cleanup: 0 });
+  assert.equal(result.accounting.accounting.producer.bytesOut, result.capturedBytes + 4 + 192);
+  assert.ok(result.capturedBytes > 1000);
+  assert.equal(result.headBytes, result.capturedBytes); assert.equal(result.downloadedBytes, result.capturedBytes);
+  assert.equal(result.rangeBytes, 11); assert.equal(result.parts, 1); assert.equal(result.leaked, false);
+  assert.deepEqual(result.restored, { ok: true, issues: 0, sales: 1 });
+  assert.deepEqual(result.integrity, { ok: true, issues: 0 });
+  assert.deepEqual(result.sales, { attempted: 1, successful: 1, failed: 0 });
+  assert.deepEqual(result.accounting.accounting.requests.map(r => [r.phase, r.operation, r.attempts]), [
+    ['setup', 'bucket-create', 1], ['workload', 'put', 1], ['workload', 'head', 1], ['workload', 'get', 2],
+    ['workload', 'multipart-create', 1], ['workload', 'multipart-upload', 1], ['workload', 'list', 1],
+    ['cleanup', 'multipart-abort', 1], ['cleanup', 'delete', 1], ['cleanup', 'bucket-delete', 1],
+  ]);
+  assert.equal(result.accounting.billing.find(r => r.requestClass === 's3-control').status, 'unknown');
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});
