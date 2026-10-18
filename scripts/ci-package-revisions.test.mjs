@@ -1471,3 +1471,72 @@ test('inert directory member text conservatively retains full package work', () 
   assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
   assert.match(result.reason, /Unresolved indirect directory call at packages\/portal\/src\/index\.mjs/);
 }));
+
+test('direct non-null directory calls retain helpers Node actually loads', async t => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
+    for (const assertion of ['!', '! /* asserted */ !', '/* scan */ !', '! /* asserted */ ! /* call */ ']) {
+      await t.test(`${api} ${JSON.stringify(assertion)}`, () => fixture(({root, write, commit, plan}) => {
+        write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('direct non-null helper loaded');\n");
+        write('packages/portal/src/reader.mts', `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+const directory = new URL('../../../', import.meta.url);
+for await (const item of await ${api}${assertion}(directory)) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`);
+        const base = commit();
+        write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+        const head = commit();
+        assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'direct non-null helper loaded\n');
+        const result = plan(base, head);
+        assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+        assert.match(result.reason, /Unresolved indirect directory call at packages\/portal\/src\/reader\.mts/);
+      }));
+    }
+  }
+});
+
+test('saved direct non-null helpers retain consumers from both revisions and unchanged readers', () => {
+  for (const revision of ['base', 'head', 'unchanged']) fixture(({root, git, write, commit, plan}) => {
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('saved non-null helper loaded');\n");
+    const reader = `import {readdirSync} from 'node:fs';
+const directory = new URL('../', import.meta.url);
+for (const name of readdirSync!(directory)) {
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`;
+    write('tools/scan.mts', revision === 'head' ? 'export const value = 1;\n' : reader);
+    write('packages/portal/src/index.mjs', "import '../../../tools/scan.mts';\n");
+    write('packages/gateway/src/index.mjs', "import '../../portal/src/index.mjs';\n");
+    const base = commit();
+    if (revision !== 'head') assert.equal(execFileSync(process.execPath, ['packages/gateway/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'saved non-null helper loaded\n');
+    if (revision !== 'unchanged') write('tools/scan.mts', revision === 'head' ? reader : 'export const value = 2;\n');
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    if (revision !== 'base') assert.equal(execFileSync(process.execPath, ['packages/gateway/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'saved non-null helper loaded\n');
+    write('tools/scan.mts', 'export const changedLocally = true;\n');
+    write('catalogue-adapter.mjs', 'export const changedLocally = true;\n');
+    const read = (...args) => git(...args);
+    read.readBlobs = ids => packageInputs.readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input}));
+    assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, read),
+      /Unresolved indirect directory call at tools\/scan\.mts/, revision);
+    const result = plan(base, head, read);
+    assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+    if (revision === 'unchanged') assert.match(result.reason, /Unverified package revisions:.*tools\/scan\.mts/);
+  });
+});
+
+test('unused direct non-null helpers keep narrow package work', () => fixture(({write, commit, plan}) => {
+  write('tools/unused.mts', `import {readdirSync, opendirSync} from 'node:fs';
+import {readdir, opendir} from 'node:fs/promises';
+const directory = new URL('../', import.meta.url);
+readdirSync!(directory);
+readdir!(directory);
+opendirSync!(directory);
+opendir!(directory);
+`);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
+}));

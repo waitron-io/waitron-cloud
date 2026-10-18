@@ -176,3 +176,24 @@ for (const name of readdirSync?.call(null, new URL('../../../', import.meta.url)
     assertSelected(plan(base, head), reader ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
   });
 });
+
+test('audited lock changes retain consumers behind direct non-null directory calls', () => {
+  for (const reader of [false, true]) fixture(({git, write, lock, save, audit, commit, plan}) => {
+    if (reader) {
+      write('packages/catalogue/src/adapter.mjs', 'export const price = 1;\n');
+      write('catalogue-adapter.mjs', "import './packages/catalogue/src/adapter.mjs';\nconsole.log('non-null lock helper loaded');\n");
+      write('packages/page/test/scan.mts', `import {readdirSync} from 'node:fs';
+const directory = new URL('../../../', import.meta.url);
+for (const name of readdirSync!(directory)) {
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`);
+    }
+    audit(); const base = commit();
+    lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+    const head = commit();
+    if (reader) assert.equal(execFileSync(process.execPath, ['packages/page/test/scan.mts'],
+      {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8'}), 'non-null lock helper loaded\n');
+    assertSelected(plan(base, head), reader ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
+  });
+});
