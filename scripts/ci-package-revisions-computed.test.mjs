@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync, rmSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
 import {createPlan} from './ci-plan.mjs';
-import {loadWorkspace, scopeForPaths} from './ci-scope.mjs';
+import {loadWorkspace} from './ci-scope.mjs';
 import {scopeForRevisions} from './ci-package-revisions.mjs';
 import * as packageInputs from './ci-package-revisions.mjs';
 
@@ -61,6 +61,10 @@ for await (const item of await fs[${quote}${api}${quote}](directory)) {
 test('computed directory members survive wrappers comments and stored references', async t => {
   for (const expression of [
     "(fs)[ /* open */ 'readdirSync' /* close */ ]",
+    "fs['readdirSync'!]",
+    "fs['readdirSync' satisfies string]",
+    "fs[('readdirSync')]",
+    "fs[ /* key */ ( /* nested */ ('readdirSync') )]",
     'fs!?.[ // open\n "readdirSync" // close\n ]!',
     "[fs['readdirSync'], null][0]",
     "[[], 0, fs['readdirSync'], null][2]",

@@ -1420,13 +1420,15 @@ notifications separately.
   and dot-member namespace readers as the first array element remain unresolved.
   Quoted computed members such as `fs['readdirSync']` now retain full package
   work for all four directory APIs, including double-quoted and plain template
-  keys, comments, optional access, assertions and stored references. Executed
+  keys, comments, optional access, assertions on the object, key or result,
+  parenthesized keys and stored references. Executed
   Node controls cover loaded consumers; saved-helper checks cover either revision
   and unchanged transitive consumers despite dirty local files. Audited lock
   changes keep full work with these readers and narrow work without them;
   unreachable helpers stay narrow. This guard does not resolve member identities
-  and can select extra work for unrelated keys or inert text. Escaped and computed
-  key expressions remain unresolved. Parenthesized dot-member
+  and can select extra work for unrelated keys, arrays of API names or inert text.
+  Escaped keys and expressions without a literal API-name prefix remain unresolved.
+  Parenthesized dot-member
   namespaces such as `(fs).readdirSync` remain unresolved, as do deeper members
   in other expression positions; this is not a general expression parser.
   Other nested predecessors such as `[[], 0, readdirSync, null][2]` also remain
