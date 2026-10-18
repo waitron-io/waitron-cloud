@@ -76,8 +76,15 @@ function workspaceAt(sha, workspace, git) {
       // An imported alias can enumerate helpers without naming a directory API
       // at its call site. Quoted names and escaped alias tokens stay unresolved;
       // those bindings must retain every possible consumer without decoding code.
-      assert.doesNotMatch(source.source, directoryPattern(/(?:\b(?:readdirSync|readdir|opendirSync|opendir)['"]?|\\[\s\S][\w$\\{}'"]*)\s+as\b/),
+      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)['"]?\s+as\b/),
         `Unresolved directory import alias at ${source.path}`);
+      // Consume each escaped token before testing its suffix, so a long ordinary
+      // string cannot restart the same suffix scan at every backslash.
+      const aliasSuffix = directoryPattern(/\s+as\b/y);
+      for (const token of source.source.matchAll(/(?<![\w$\\{}'"])[\w${}'"]*(?:\\[\s\S][\w${}'"]*)+/g)) {
+        aliasSuffix.lastIndex = token.index + token[0].length;
+        assert.ok(!aliasSuffix.test(source.source), `Unresolved directory import alias at ${source.path}`);
+      }
       const rootReads = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*,?\s*\)\s*,?\s*\)/g))].map(match => match[2]));
       // Options may enable recursion or supply a computed policy; an unresolved
       // root scan cannot justify omitting any package consumer.

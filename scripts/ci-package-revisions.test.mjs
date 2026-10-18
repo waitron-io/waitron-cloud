@@ -1283,3 +1283,28 @@ for await (const item of await scanDirectory(new URL('../../../', import.meta.ur
     });
   }
 });
+
+test('large escaped source strings cannot trap package selection in backtracking', () => {
+  for (const text of ['\\'.repeat(50_000), 'a'.repeat(100_000)]) fixture(({root, write, commit}) => {
+    write('packages/portal/src/index.mjs', `export const text = ${JSON.stringify(text)};\n`);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), '');
+    const program = `import {execFileSync} from 'node:child_process';
+import {scopeForRevisions} from ${JSON.stringify(new URL('./ci-package-revisions.mjs', import.meta.url).href)};
+const git = (...args) => execFileSync('git', args, {encoding: 'utf8'});
+console.log(JSON.stringify(scopeForRevisions(['packages/catalogue/src/index.mjs'], ${JSON.stringify(loadWorkspace(root))}, '${base}', '${head}', git)));
+`;
+    assert.deepEqual(JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', program],
+    {cwd: root, encoding: 'utf8', timeout: 5_000})), {full: false, packages: ['catalogue']});
+  });
+});
+
+test('an ordinary escaped token does not borrow as from later unrelated text', () => fixture(({write, commit, plan}) => {
+  write('packages/portal/src/index.mjs', `export const path = ${JSON.stringify('\\')};\nconst label = 'unrelated as text';\n`);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
+}));
