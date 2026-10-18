@@ -78,8 +78,9 @@ function workspaceAt(sha, workspace, git) {
       // TypeScript non-null assertions leave the runtime function unchanged,
       // including when the assertion is followed by a direct invocation.
       // Closing parentheses can wrap the reader before invocation or member
-      // access; unresolved references must retain their possible consumers.
-      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|\))|(?:!\s*)+\()/),
+      // access. Type arguments and satisfies checks are erased before execution;
+      // unresolved references must retain their possible consumers.
+      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|\)|<|satisfies\b)|(?:!\s*)+\()/),
         `Unresolved indirect directory call at ${source.path}`);
       // An imported alias can enumerate helpers without naming a directory API
       // at its call site. Quoted names and escaped alias tokens stay unresolved;
