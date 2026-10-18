@@ -1375,7 +1375,11 @@ notifications separately.
   remain narrow. The middle-element guard requires an array opener so ordinary
   named imports preserve existing package isolation. Inert text can still select
   extra work. Nested preceding arrays or objects and delimiter-bearing comments
-  or strings are not fully resolved. Precise resolution,
+  or strings, logical expressions such as `readdirSync || null` and conditional
+  elements such as `true ? readdirSync : null` are not fully resolved. The logical
+  and conditional gaps are reproduced with real Node calls on both the prior and
+  current scanners. A direct multi-name import control preserves narrow work.
+  Precise resolution,
   assignment/destructuring aliases and escaped API references remain open.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise

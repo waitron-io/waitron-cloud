@@ -1772,3 +1772,16 @@ const directory = new URL('../', import.meta.url);
   const head = commit();
   assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
 }));
+
+
+test('ordinary multi-name directory imports preserve narrow package selection', () => fixture(({root, write, commit, plan}) => {
+  write('packages/portal/src/reader.mts', `import {readdir, stat} from 'node:fs/promises';
+const directory = new URL('./', import.meta.url);
+console.log((await readdir(directory)).length, (await stat(directory)).isDirectory());
+`);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), '2 true\n');
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
+}));
