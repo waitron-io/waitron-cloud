@@ -1329,8 +1329,23 @@ notifications separately.
   seconds with 100,000 backslashes. Unrelated later `as` text does not turn a token
   into an alias.
   It can select extra work for inert text, unrelated names or an escaped alias
-  for a different import; precise alias resolution, assignment/destructuring aliases
-  and other unsupported calls remain open. Existing assertions and reader-audit
+  for a different import. Reachable directory API names followed by optional
+  access, member access or computed member access now retain all package suites
+  and name the saved source when the package-revision branch falls back.
+  The lockfile path also retains full work, with its existing generic reader reason.
+  Real Node calls cover optional
+  invocation, `call`, `apply`, `bind`, computed `call` and comment-separated access
+  for all four directory APIs, including TypeScript non-null assertions.
+  An unchanged-reader lock control retains every package; its reader-free control
+  still narrows selection. Saved-helper controls retain both revisions and
+  transitive consumers despite dirty local files. An unchanged saved helper also
+  triggers the package planner guard; unused helpers keep narrow work.
+  This conservative rule can also select extra work for inert text or unrelated
+  members. Precise alias resolution, assignment/destructuring aliases, escaped
+  API references and other unsupported calls remain open. In particular, direct
+  TypeScript calls such as `readdirSync!(directory)` still need qualification;
+  this guard covers assertions followed by optional or member access.
+  Existing assertions and reader-audit
   certificates are unchanged. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain
   unresolved. This does not complete the plan's dynamic input and directory rules. Identity still selects all nine packages in the current graph;
