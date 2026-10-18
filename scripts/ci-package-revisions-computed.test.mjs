@@ -212,3 +212,16 @@ fs['\u0072eaddirSync'](new URL('../', import.meta.url));
   const head = commit();
   assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
 }));
+
+test('escaped array values without member access retain narrow package work', async t => {
+  for (const value of [String.raw`'bad\ninput'`, String.raw`"bad\ninput"`, '`bad\\ninput`']) {
+    await t.test(value, () => fixture(({root, write, commit, plan}) => {
+      write('packages/portal/src/values.mjs', `const values = [${value}];\nfunction array() { return [${value}]; }\nfor (const item of [${value}]) console.log(values.length + array().length);\n`);
+      const base = commit();
+      write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+      const head = commit();
+      assert.equal(execFileSync(process.execPath, ['packages/portal/src/values.mjs'], {cwd: root, encoding: 'utf8'}), '2\n');
+      assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
+    }));
+  }
+});

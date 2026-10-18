@@ -1350,7 +1350,7 @@ notifications separately.
   files; the lockfile control retains full work while its reader-free control
   still narrows selection. Unreachable helpers keep narrow package work.
   Precise alias resolution, assignment/destructuring aliases, escaped
-  API references and other unsupported calls remain open. Directory reader names
+  API identifiers and other unsupported calls remain open. Directory reader names
   wrapped directly in parentheses now retain every package suite because wrapping
   the function leaves its runtime readers unchanged. Executed Node controls cover all four APIs,
   nested parentheses, TypeScript assertions, optional invocation and comments.
@@ -1434,7 +1434,11 @@ notifications separately.
   and unchanged transitive consumers despite dirty local files; audited lock
   changes retain full work with a reader and narrow work without one. Unused
   helpers remain narrow. The guard does not decode keys, so unrelated escaped
-  keys, array strings and inert text can also select extra work. Computed keys
+  member keys and inert text can also select extra work. A receiver check keeps
+  plain escaped array values narrow, including arrays after `of` and `return`.
+  Receiver matching covers plain names and closing call/index delimiters, with
+  comments, optional access and non-null assertions; arbitrary receiver
+  expressions remain unqualified. Computed keys
   without a literal API-name prefix or a quoted escape remain unresolved.
   Parenthesized dot-member
   namespaces such as `(fs).readdirSync` remain unresolved, as do deeper members
