@@ -2,7 +2,6 @@ import {execFileSync} from 'node:child_process';
 import {appendFileSync, readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {loadWorkspace, scopeForPaths, workPlan, receiptSuites} from './ci-scope.mjs';
-import {findReuse} from './ci-reuse.mjs';
 import {auditDocumentation, documentationPlan} from './ci-docs.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
 import {scriptPlan} from './ci-scripts.mjs';
@@ -12,10 +11,9 @@ import {lockPackageScope} from './ci-lock-selection.mjs';
 
 export function createPlan(event, context, workspace, git, api) {
   let scope = scopeForPaths([],workspace);
-  let reuse = null;
   let revisions;
   let lockSelection;
-  let reason = 'Unverified merge or unknown diff: full suite';
+  let reason = 'Main push or unknown diff: full suite';
   if (event.pull_request) {
     try {
       const {head,base} = event.pull_request;
@@ -53,14 +51,7 @@ export function createPlan(event, context, workspace, git, api) {
     } catch {
       reason = 'Cannot determine PR diff: full suite';
     }
-  } else if (!event.forced && event.commits?.length===1 && event.before) {
-    try {
-      if (git('rev-parse',`${context.sha}^`).trim()===event.before) {
-        reuse = findReuse(context,api,sha=>git('rev-parse',`${sha}^{tree}`).trim(), message=>{reason=`${message}: full suite`;});
-      }
-    } catch { /* Failed evidence leaves the full suite selected. */ }
   }
-  if (reuse) return {packages:[],receipts:[],typecheck:false,reuse,reason:`same tree as PR head ${reuse.sha}, run ${reuse.runId}`};
   const work = workPlan(scope,workspace);
   if (lockSelection) work.receipts = [...receiptSuites];
   if (revisions && !lockSelection) {
@@ -85,10 +76,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   git.readBlobs = readGitBlobs;
   const api = path => JSON.parse(execFileSync('gh',['api',path],{encoding:'utf8',timeout:30_000,stdio:['ignore','pipe','ignore']}));
   // Warn on every plan, including paths that never enter the document selector.
-  // Independent audit certificates can pin each other, so currency is advisory.
+  // Audit renewal requires explicit reader review; warnings never bypass admission checks.
   try { auditDocumentation(git('rev-parse', 'HEAD').trim(), git); }
   catch {
-    console.log('::warning title=Documentation-only CI unavailable::Review changed executable inputs and renew scripts/ci-docs-audit.json using docs/ci-documentation-audit.md. Docs-only changes retain full CI until reviewed.');
+    console.log('::warning title=Documentation-only CI unavailable::Review changed executable inputs and renew scripts/ci-input-audit.json with --write-staged using docs/ci-documentation-audit.md. Docs-only changes retain full CI until reviewed.');
   }
   const plan = createPlan(event,context,loadWorkspace(),git,api);
   const outputs = {

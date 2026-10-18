@@ -21,7 +21,7 @@ const cases = [
   ['ci-database-receipt.test.mjs', 'unrelated package changes omit database recovery while retaining packages, types and other receipts'],
   ['ci-gateway-receipt.test.mjs', 'unrelated package changes omit public gateway while retaining packages, types and other receipts'],
   ['ci-local-stack-receipt.test.mjs', 'unrelated package changes omit all audited receipts and retain actual package and type checks'],
-  ['ci-cli.test.mjs', 'real squash merges reuse equal trees and run full when main has advanced'],
+  ['ci-cli.test.mjs', 'real squash merges run full on main for equal trees and advanced main without API access'],
   ['ci-docs.test.mjs', 'audited unread Markdown selects only the document check, including spaces and deletion'],
   ['ci-gateway-scripts.test.mjs', 'an audited gateway validator or its test runs only its syntax, caller syntax and behavioral checks'],
   ['ci-dependency-fixtures.test.mjs', 'receipt selector fixtures retain their assertions after dependency inputs change'],

@@ -12,7 +12,13 @@ import {assertSummary} from './ci-summary.mjs';
 const workspace = loadWorkspace();
 const helper = 'scripts/identity-upstream.mjs';
 const checks = 'scripts/identity-upstream.test.mjs';
-const policy = 'scripts/ci-scripts-audit.json';
+const policy = 'scripts/ci-input-audit.json';
+const completeAudit = values => ({
+  version: 1,
+  docsInputSha256: '1'.repeat(64), identityInputSha256: '2'.repeat(64),
+  gatewayInputSha256: '3'.repeat(64), lockInputSha256: '4'.repeat(64),
+  manifests: {}, ...values,
+});
 const runner = resolve('scripts/ci-scripts.mjs');
 
 function fixture(run) {
@@ -30,7 +36,7 @@ function fixture(run) {
     // Independent fixture certificate: exactly these two other files are pinned.
     const rows = git('ls-tree', '-rz', '--full-tree', initial).split('\0').filter(row =>
       ['docs/backlog.md', 'scripts/consumer.mjs'].includes(row.split('\t')[1]));
-    put(policy, JSON.stringify({version: 1, inputSha256: createHash('sha256').update(rows.map(row => row + '\0').join('')).digest('hex')}) + '\n');
+    put(policy, JSON.stringify(completeAudit({identityInputSha256: createHash('sha256').update(rows.map(row => row + '\0').join('')).digest('hex')})) + '\n');
     const base = commit();
     const plan = (head, old = base, gitOverride = git) => createPlan({pull_request: {base: {sha: old}, head: {sha: head}}}, {sha: head}, workspace, gitOverride, () => {throw Error('no API');});
     const execute = selected => {
@@ -89,7 +95,7 @@ test('mixed paths, missing checks, symbolic links and executable modes cannot ea
 test('missing, malformed and stale certificates fail closed with the changed path in the log', () => {
   for (const change of ['missing', 'malformed', 'stale', 'version']) fixture(({root, put, commit, plan}) => {
     if (change === 'missing') unlinkSync(join(root, policy));
-    else put(policy, change === 'malformed' ? '{' : JSON.stringify({version: change === 'version' ? 2 : 1, inputSha256: '0'.repeat(64)}));
+    else put(policy, change === 'malformed' ? '{' : JSON.stringify(completeAudit({version: change === 'version' ? 2 : 1, identityInputSha256: '0'.repeat(64)})));
     const old = commit();
     put(helper, 'export const result = 1; // edited\n');
     const selected = plan(commit(), old);
@@ -157,7 +163,7 @@ test('old-only stale evidence and forged incomplete inventories cannot omit cons
   put('scripts/consumer.mjs', 'readFileSync("scripts/identity-upstream.mjs");\n');
   const stale = commit();
   const rows = git('ls-tree', '-rz', '--full-tree', stale).split('\0').filter(row => ['docs/backlog.md', 'scripts/consumer.mjs'].includes(row.split('\t')[1]));
-  put(policy, JSON.stringify({version: 1, inputSha256: createHash('sha256').update(rows.map(row => row + '\0').join('')).digest('hex')}) + '\n');
+  put(policy, JSON.stringify(completeAudit({identityInputSha256: createHash('sha256').update(rows.map(row => row + '\0').join('')).digest('hex')})) + '\n');
   const certified = commit();
   put(helper, 'export const result = 1; // change\n');
   const head = commit();
@@ -179,7 +185,7 @@ test('unreadable or corrupted audit evidence from either immutable revision reta
           if (failure === 'missing') throw Error('Object unavailable');
           const audit = JSON.parse(git(...args));
           if (failure === 'version') audit.version = 2;
-          else audit.inputSha256 = '0'.repeat(64);
+          else audit.identityInputSha256 = '0'.repeat(64);
           return JSON.stringify(audit);
         }
         return git(...args);
@@ -223,7 +229,7 @@ test('executed planner emits the script-only job and summary consumes its needs 
   for (const name of ['one', 'two']) put(`packages/${name}/package.json`, JSON.stringify({name, scripts: {test: 'node --test'}}));
   const initial = commit();
   const rows = git('ls-tree', '-rz', '--full-tree', initial).split('\0').filter(row => row && ![helper, checks, policy].includes(row.split('\t')[1]));
-  put(policy, JSON.stringify({version: 1, inputSha256: createHash('sha256').update(rows.map(row => row + '\0').join('')).digest('hex')}) + '\n');
+  put(policy, JSON.stringify(completeAudit({identityInputSha256: createHash('sha256').update(rows.map(row => row + '\0').join('')).digest('hex')})) + '\n');
   const base = commit();
   put(helper, 'export const result = 1; // edited\n');
   const head = commit();

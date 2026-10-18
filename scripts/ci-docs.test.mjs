@@ -11,7 +11,13 @@ import {assertSummary} from './ci-summary.mjs';
 
 const workspace = loadWorkspace();
 const checker = resolve('scripts/ci-docs.mjs');
-const policy = 'scripts/ci-docs-audit.json';
+const policy = 'scripts/ci-input-audit.json';
+const completeAudit = values => ({
+  version: 1,
+  docsInputSha256: '1'.repeat(64), identityInputSha256: '2'.repeat(64),
+  gatewayInputSha256: '3'.repeat(64), lockInputSha256: '4'.repeat(64),
+  manifests: {}, ...values,
+});
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-docs-ci-'));
   const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
@@ -25,8 +31,8 @@ function fixture(run) {
     const initial = commit();
     // The fixture has exactly one audited input. Its digest does not use planner helpers.
     const entry = git('ls-tree', '-rz', '--full-tree', initial).split('\0').find(row => row.endsWith('\tscripts/reader.mjs'));
-    const inputSha256 = createHash('sha256').update(`${entry}\0`).digest('hex');
-    put(policy, JSON.stringify({version: 1, inputSha256}) + '\n');
+    const docsInputSha256 = createHash('sha256').update(`${entry}\0`).digest('hex');
+    put(policy, JSON.stringify(completeAudit({docsInputSha256})) + '\n');
     const base = commit();
     const plan = (head, old = base) => createPlan({pull_request: {base: {sha: old}, head: {sha: head}}}, {sha: head}, workspace, git, () => {throw Error('no API');});
     run({root, git, put, commit, base, plan});
@@ -59,7 +65,7 @@ test('changed or removed audited inputs and missing, malformed or stale audit ev
     if (change === 'removed') unlinkSync(join(root, 'scripts/reader.mjs'));
     if (change === 'missing') unlinkSync(join(root, policy));
     if (change === 'malformed') put(policy, '{');
-    if (change === 'stale') put(policy, JSON.stringify({version: 1, inputSha256: '0'.repeat(64)}) + '\n');
+    if (change === 'stale') put(policy, JSON.stringify(completeAudit({docsInputSha256: '0'.repeat(64)})) + '\n');
     const changed = commit();
     put('docs/backlog.md', '# Updated\n');
     assert.equal(plan(commit(), changed).packages.length, 17, change);
@@ -127,7 +133,7 @@ test('real planner command emits document output and reports unaudited fallbacks
   const inputs = ['package.json', 'pnpm-workspace.yaml', 'packages/one/package.json', 'packages/two/package.json', 'scripts/reader.mjs'];
   const tree = commit();
   const rows = git('ls-tree', '-rz', '--full-tree', tree).split('\0').filter(row => inputs.includes(row.split('\t')[1]));
-  put(policy, JSON.stringify({version: 1, inputSha256: createHash('sha256').update(rows.map(row => row + '\0').join('')).digest('hex')}) + '\n');
+  put(policy, JSON.stringify(completeAudit({docsInputSha256: createHash('sha256').update(rows.map(row => row + '\0').join('')).digest('hex')})) + '\n');
   let base = commit();
   const run = (head, old = base) => {
     put('event.json', JSON.stringify({pull_request: {base: {sha: old}, head: {sha: head}}}));
@@ -191,7 +197,7 @@ test('planner command prominently warns about an unreviewed documentation audit 
       env: {...process.env, GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_OUTPUT: output}, encoding: 'utf8'});
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /::warning title=Documentation-only CI unavailable::/);
-    assert.match(result.stdout, /review.*scripts\/ci-docs-audit\.json.*docs\/ci-documentation-audit\.md/i);
+    assert.match(result.stdout, /review.*scripts\/ci-input-audit\.json.*docs\/ci-documentation-audit\.md/i);
     const selected = JSON.parse(readFileSync(output, 'utf8').split('\n').find(line => line.startsWith('plan=')).slice(5));
     assert.ok(selected.packages.length > 0);
     assert.equal(selected.typecheck, true);

@@ -7,7 +7,13 @@ import {join} from 'node:path';
 import test from 'node:test';
 import {createPlan} from './ci-plan.mjs';
 
-const policy = 'scripts/ci-lock-selection-audit.json';
+const policy = 'scripts/ci-input-audit.json';
+const completeAudit = values => ({
+  version: 1,
+  docsInputSha256: '1'.repeat(64), identityInputSha256: '2'.repeat(64),
+  gatewayInputSha256: '3'.repeat(64), lockInputSha256: '4'.repeat(64),
+  manifests: {}, ...values,
+});
 const dependencyFields = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
 const hash = text => createHash('sha256').update(text).digest('hex');
 
@@ -31,7 +37,7 @@ function fixture(run) {
       `${directory}/package.json`, hash(JSON.stringify(Object.fromEntries(Object.entries(manifest).filter(([key]) => !dependencyFields.includes(key)).sort(([a], [b]) => a.localeCompare(b, 'en'))))),
     ]));
     const inputs = entries.filter(entry => !['pnpm-lock.yaml', policy, ...Object.keys(projected)].includes(entry.split('\t')[1]));
-    write(policy, JSON.stringify({version: 2, inputSha256: hash(inputs.map(entry => entry + '\0').join('')), manifests: projected}) + '\n');
+    write(policy, JSON.stringify(completeAudit({lockInputSha256: hash(inputs.map(entry => entry + '\0').join('')), manifests: projected})) + '\n');
   };
   const add = (directory = 'packages/catalogue', kind = 'dependencies', name = 'adapter') => {
     manifests[directory][kind] = {...manifests[directory][kind], [name]: '^1.0.0'};

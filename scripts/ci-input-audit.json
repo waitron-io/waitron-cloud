@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "docsInputSha256": "ccd8dc956e6e176740b6cdc3f947c34204108724358fd3a4a7eda42767238b4b",
+  "identityInputSha256": "9eea432f14147f61f333bb2fde84b8242d5aba71f02017bf7de2a2417dde5b69",
+  "gatewayInputSha256": "30f77592b331491da929944065a2b717f6dae754043adadfaa2650a18e81b2b7",
+  "lockInputSha256": "366da4d0b11a0b3f9bdcc5f29eff28c39d6258154e7368c7a93cee076374e20a",
+  "manifests": {
+    "apps/portal/package.json": "04c1855ea1518f15bafa0391f68bbcdd1b2d43047003b9c66f441ca9a561f8e2",
+    "packages/account-http/package.json": "e4ddd9b067630faa906cce0b698af7685ff7b320a6e413a0349a915c07deef7b",
+    "packages/backups/package.json": "d519a10136174f7984796c492bf9361282302d006a5355630940de1ad26caca0",
+    "packages/fiscal-allocation/package.json": "e98e714f06989e78d04567f45e81dadcc4da4c0874749cbe839b1ddc006a44de",
+    "packages/identity/package.json": "5830e4a7c12f734a91f732dc07b6e1f3078c7e66a077ee2610291b432b3c144f",
+    "packages/operations/package.json": "f9ec2d43430f744cda841e6d351de9bf2a3bc29a653f965e9af1bc3e09009ce8",
+    "packages/registration/package.json": "54547e74018bd0bb03e64a05473d2d992fa9f586e70231cd0d85eb7075afe8d7",
+    "packages/remote-access/package.json": "18339bd36c51ad61c34606bafe4dc2d28fd4979548de97a495e32dc6518e8788",
+    "packages/translation/package.json": "ddb210d1fb6a29546cc968518f5bb2c89d30babadeb5b6dcfdd5d2ecdab05df2",
+    "packages/ui-smoke/package.json": "3c8296968eef61929b51b4b72a1a47f4148809dda007c39ac13b35f39a8c5a8f"
+  }
+}
