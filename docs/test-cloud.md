@@ -109,5 +109,9 @@ TEST_CLOUD_REAL_STS_EXPIRY=1 node --test \
   deploy/test-cloud/storage-expiry-proof.test.mjs
 ```
 
+Use `TEST_CLOUD_STS_EXPIRY_SECONDS=12` only for a short diagnostic of the provider's refusal. The output labels it separately; it cannot count as the fifteen-minute proof. The S3 request after an issued credential expires must return `403 InvalidAccessKeyId`. An expired identity token at the STS endpoint has a different error.
+
+The first fifteen-minute run observed a storage refusal but failed an incorrect response-code expectation. The corrected full-duration run is still required before this slice is ready to finish.
+
 These components are not wired into the deployment yet. The issuer still needs its private volume and storage-process integration; the account and backup runtimes, gateway and verifier need the remaining PR5 work. The native fixture proofs do not establish the final LAN endpoint, a working deployed storage service, or test-box readiness. Keep plan enforcement off until the complete integration proof passes.
 

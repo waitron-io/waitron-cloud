@@ -1160,7 +1160,12 @@ notifications separately.
   disabled identity. Missing private state cannot silently reset an existing
   managed identity file. A private persistent issuer supplies scoped OIDC tokens
   and fifteen-minute STS configuration; account/storage/worker/gateway wiring
-  and final LAN proofs remain unfinished. The isolated local-stack receipt now
+  and final LAN proofs remain unfinished. The first real fifteen-minute STS
+  run observed InvalidAccessKeyId after its recorded expiry, but its new assertion
+  wrongly expected the expired-identity error from the STS endpoint. That run is
+  failed evidence, not a green test. A separately labelled short diagnostic checks
+  the S3 403 refusal; repeat the corrected full-duration proof before finishing
+  this slice. The isolated local-stack receipt now
   supplies PostgreSQL to these policy tests. Concurrent native fixtures reuse a
   verified cached archive without rewriting it, and publish downloads by atomic
   rename; the first combined run exposed a truncated shared-archive read, and a
