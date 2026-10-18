@@ -1331,10 +1331,15 @@ notifications separately.
   It can select extra work for inert text, unrelated names or an escaped alias
   for a different import. Reachable directory API names followed by optional
   access, member access or computed member access now retain all package suites
-  and name the saved source in the fallback reason. Real Node calls cover optional
+  and name the saved source when the package-revision branch falls back.
+  The lockfile path also retains full work, with its existing generic reader reason.
+  Real Node calls cover optional
   invocation, `call`, `apply`, `bind`, computed `call` and comment-separated access
-  for all four directory APIs. Saved-helper controls retain both revisions and
-  transitive consumers despite dirty local files; unused helpers keep narrow work.
+  for all four directory APIs, including TypeScript non-null assertions.
+  An unchanged-reader lock control retains every package; its reader-free control
+  still narrows selection. Saved-helper controls retain both revisions and
+  transitive consumers despite dirty local files. An unchanged saved helper also
+  triggers the package planner guard; unused helpers keep narrow work.
   This conservative rule can also select extra work for inert text or unrelated
   members. Precise alias resolution, assignment/destructuring aliases, escaped
   API references and other unsupported calls remain open. Existing assertions and reader-audit

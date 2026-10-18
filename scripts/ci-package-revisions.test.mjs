@@ -1406,3 +1406,68 @@ opendir.bind(null)(directory);
   const head = commit();
   assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
 }));
+
+test('TypeScript non-null directory calls retain actual helper consumers', () => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
+    for (const assertion of ['!', '! /* asserted */ !']) {
+      for (const binding of ['optional', 'call', 'apply', 'bind']) fixture(({root, write, commit, plan}) => {
+        write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('TypeScript indirect helper loaded');\n");
+        const directory = "new URL('../../../', import.meta.url)";
+        const fn = `${api}${assertion}`;
+        const invocation = binding === 'optional' ? `${fn}?.(${directory})`
+          : binding === 'call' ? `${fn}.call(null, ${directory})`
+          : binding === 'apply' ? `${fn}.apply(null, [${directory}])`
+          : `${fn}.bind(null)(${directory})`;
+        write('packages/portal/src/reader.mts', `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+for await (const item of await ${invocation}) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL('../../../' + name, import.meta.url));
+}
+`);
+        const base = commit();
+        write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+        const head = commit();
+        assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'TypeScript indirect helper loaded\n');
+        const result = plan(base, head);
+        assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], `${api} ${assertion} ${binding}`);
+        assert.match(result.reason, /Unresolved indirect directory call at packages\/portal\/src\/reader\.mts/);
+      });
+    }
+  }
+});
+
+test('unchanged saved indirect helpers trigger the package planner guard', () => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) fixture(({root, git, write, commit, plan}) => {
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('unchanged indirect helper loaded');\n");
+    write('tools/scan.mjs', `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+const directory = new URL('../', import.meta.url);
+for await (const item of await ${api}.call(null, directory)) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`);
+    write('packages/portal/src/index.mjs', "import '../../../tools/scan.mjs';\n");
+    write('packages/gateway/src/index.mjs', "import '../../portal/src/index.mjs';\n");
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/gateway/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'unchanged indirect helper loaded\n');
+    write('tools/scan.mjs', 'export const changedLocally = true;\n');
+    const read = (...args) => git(...args);
+    read.readBlobs = ids => packageInputs.readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input}));
+    const result = plan(base, head, read);
+    assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+    assert.match(result.reason, /Unverified package revisions:.*Unresolved indirect directory call at tools\/scan\.mjs/);
+  });
+});
+
+test('inert directory member text conservatively retains full package work', () => fixture(({root, write, commit, plan}) => {
+  write('packages/portal/src/index.mjs', "console.log('readdirSync.name');\n");
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'readdirSync.name\n');
+  const result = plan(base, head);
+  assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+  assert.match(result.reason, /Unresolved indirect directory call at packages\/portal\/src\/index\.mjs/);
+}));
