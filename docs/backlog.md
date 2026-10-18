@@ -1452,9 +1452,19 @@ notifications separately.
   retain full work with these readers and narrow work without them. Unused
   helpers stay narrow. The guard does not resolve receiver identities, so unrelated
   objects with these member names and inert text can also select extra work.
-  Other deeper members such as `(fs).promises.readdir`, escaped member names and
-  other expression positions remain unresolved; this is not a general expression
-  parser.
+  Deeper member chains such as `(fs).promises.readdir` now also retain full
+  package work when intermediate names use ASCII letters, digits, `_` or `$`.
+  This includes optional access, comments, non-null assertions,
+  erased receiver assertions and stored reader references. Executed Node controls
+  cover all four directory APIs and actual loaded consumers. Saved-reader checks
+  cover either revision and unchanged transitive consumers despite dirty local
+  files; audited lock changes retain full work with these readers and narrow work
+  without them. Unused helpers stay narrow. Receiver and member identities remain
+  unresolved, so unrelated objects and inert text with the same member spelling
+  can also select extra work. Escaped, non-ASCII and private member names,
+  computed intermediate members and other expression positions remain unresolved;
+  this is not a general
+  expression parser.
   Other nested predecessors such as `[[], 0, readdirSync, null][2]` also remain
   unresolved on both scanners.
   Adversarial repeated delimiter/comment
