@@ -22,3 +22,13 @@ test('LAN override replaces ports, isolates private state and keeps independent 
  assert.ok(Object.values(value.volumes).every(v=>v.name.startsWith('waitron-cloud-test_')));
  assert.ok(Object.values(value.services).reduce((sum,s)=>sum+Number(s.mem_limit),0)<=2048*1024*1024);
 });
+
+test('test storage role owns its issuer and exposes a canonical internal name without Docker authority',()=>{
+ const value=JSON.parse(execFileSync('docker',['compose','--profile','*','--env-file','deploy/test-cloud/test.env','-f','compose.yaml','-f','deploy/test-cloud/compose.yaml','config','--format','json'],{cwd:root,encoding:'utf8',env:{...process.env,NODE_AUTH_TOKEN:'not-a-credential'}}));
+ assert.deepEqual(value.services.storage.command,['node','deploy/test-cloud/runtime.mjs','storage']);
+ assert.ok(value.services.storage.networks.default.aliases.includes('waitron.local'));
+ assert.ok(value.services.storage.volumes.some(v=>v.target==='/run/local-stack'&&!v.read_only));
+ assert.ok(value.services.account.volumes.some(v=>v.target==='/run/local-stack'&&!v.read_only));
+ assert.equal(value.services.account.depends_on.storage.condition,'service_healthy');
+ for(const role of ['account','storage'])assert.ok(!value.services[role].volumes.some(v=>v.source?.includes('docker.sock')));
+});

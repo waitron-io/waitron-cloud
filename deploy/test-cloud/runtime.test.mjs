@@ -35,3 +35,15 @@ test('test Cloud drops local AI proof settings for every runtime role',async t=>
   if(role==='account')assert.equal(environment.CLOUD_TRANSLATION,'0');
  }
 });
+
+// Returning the base account/storage commands silently leaves the real adapters unused.
+test('dedicated storage and account roles select private service adapters',async t=>{
+ const api=await import('./runtime.mjs');
+ assert.equal(api.testRuntimeCommand('account'),'deploy/test-cloud/account-worker.mjs');
+ assert.equal(api.testRuntimeCommand('storage'),'deploy/test-cloud/storage-worker.mjs');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-services-runtime-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
+ const storage=api.testRuntimeEnvironment('storage',config,{CLOUD_TEST_SERVICE_PLANS:'1'});
+ assert.equal(storage.CLOUD_TEST_SERVICE_PLANS,'1');assert.match(storage.DATABASE_URL,/postgres:5432/);
+ const account=api.testRuntimeEnvironment('account',config,{CLOUD_TEST_SERVICE_PLANS:'1'});
+ assert.equal(account.NODE_EXTRA_CA_CERTS,'/run/local-stack/lan/ca.pem');
+});

@@ -83,3 +83,21 @@ test('ManagedStreams persists the adapter references and reprovisions a fresh wr
  const upgraded=new S3Client({endpoint:storage.endpoint,region:'local',credentials:{accessKeyId:next.bucket.accessKeyId,secretAccessKey:next.bucket.secretAccessKey},forcePathStyle:true,maxAttempts:1,requestHandler:{httpsAgent:new Agent({ca:storage.ca})}});t.after(()=>upgraded.destroy());
  await upgraded.send(new PutObjectCommand({Bucket:location.bucket,Key:next.bucket.prefix+'upgraded',Body:'fresh stream data'}));
 });
+
+// The wired runtime must refuse invalid/default mode before reading private state or issuing grants.
+test('capture runtime fails closed outside the explicit test plan mode',async()=>{
+ const api=await import('./service-runtime.mjs');assert.equal(typeof api.openTestCaptureRuntime,'function');
+ await assert.rejects(api.openTestCaptureRuntime({mode:'existing',directory:'/not-read'}),/test_cloud.plan_mode/);
+});
+
+// Dormant runtime mode must not silently activate the organisation policy scanner.
+test('storage runtime selects plan enforcement explicitly and leaves ordinary authority independent of policy', {timeout:30000},async t=>{
+ const {openRuntimeStorage}=await import('./service-runtime.mjs');assert.equal(typeof openRuntimeStorage,'function');
+ const storage=await startBackupStorage();t.after(()=>storage.stop());const venueId=randomUUID(),location=await storage.bucket('ordinary-runtime');
+ const options={directory:join(storage.root,'ordinary-managed'),iamPath:join(storage.root,'iam.json'),admin:storage.admin,endpoint:storage.endpoint,region:'local',ca:storage.ca,reload:()=>storage.reloadIdentityFile()};
+ await assert.rejects(openRuntimeStorage({...options,mode:'invalid'}),/test_cloud.plan_mode/);
+ let authority;await assert.doesNotReject(async()=>{authority=await openRuntimeStorage({...options,mode:'existing'});});
+ const grant=await authority.provision({venueId,location,prefix:`streams/${venueId}/`});
+ const client=new S3Client({endpoint:storage.endpoint,region:'local',credentials:grant.writerCredentials,forcePathStyle:true,maxAttempts:1,requestHandler:{httpsAgent:new Agent({ca:storage.ca})}});t.after(()=>client.destroy());
+ await authority.reconcile();await client.send(new PutObjectCommand({Bucket:location.bucket,Key:`streams/${venueId}/ordinary`,Body:'ordinary mode remains available'}));
+});

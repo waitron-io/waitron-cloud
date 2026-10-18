@@ -230,7 +230,7 @@ export class BackupCatalogue {
         ).rows[0];
       if (prior) {
         if (
-          JSON.stringify(location(prior)) !== JSON.stringify(l) ||
+          prior.endpoint !== l.endpoint || prior.bucket !== l.bucket || prior.region !== l.region ||
           prior.installation_id !== installationId
         )
           backupFail("conflict");

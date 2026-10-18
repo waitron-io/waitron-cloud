@@ -62,7 +62,7 @@ TEST_CLOUD_DOCKER_PROOF_IMAGE=<local-image> node --test \
 
 The first proof starts a separate disposable Mac project with random loopback ports. It checks trusted HTTPS, normal refusal without the CA or with the wrong hostname, actual signup mail and its canonical link, proxy refusals, restart identity, account replacement without a proxy restart and a stop that preserves volumes. It then removes only its own test containers, network and volumes. The second runs the real TLS proxy against an independent backend, so backend security cannot hide a missing proxy check.
 
-These are local synthetic checks. They do not establish an amd64 test-box deployment, a connected Waitron venue, free/paid storage withdrawal, public remote access or measured box capacity. The final deployment runbook will add the two-organisation connection steps after those proofs pass. Keep the quarantined test-box venue and its containers unchanged.
+These HTTPS checks do not establish an amd64 test-box deployment, a connected Waitron venue, public remote access or measured box capacity. The separate storage proof below exercises free/paid withdrawal with signed Cloud clients. The final deployment runbook will add the two-organisation connection steps after those proofs pass. Keep the quarantined test-box venue and its containers unchanged.
 
 ## Backup verifier boundary
 
@@ -84,7 +84,7 @@ Keep snapshots unavailable and deployment
 enforcement off until the implementation, full integration proof and release gates
 pass. Ordinary fiscal restore still requires its existing activation authority.
 
-## Direct storage authority development
+## Direct storage authority
 
 A plan change must reach storage itself because a venue can keep writing with credentials it already holds. The new private adapter records separate stream writer and recovery-reader identities, then publishes the storage permissions and checks them with signed requests. A downgrade disables the writer without discarding stored objects or its recovery reader. Explicit provisioning after an upgrade creates a fresh writer.
 
@@ -111,7 +111,19 @@ TEST_CLOUD_REAL_STS_EXPIRY=1 node --test \
 
 Use `TEST_CLOUD_STS_EXPIRY_SECONDS=12` only for a short diagnostic of the provider's refusal. The output labels it separately; it cannot count as the fifteen-minute proof. The S3 request after an issued credential expires must return `403 InvalidAccessKeyId`. An expired identity token at the STS endpoint has a different error.
 
-The first fifteen-minute run observed a storage refusal but failed an incorrect response-code expectation. The corrected full-duration run is still required before this slice is ready to finish.
+The corrected fifteen-minute proof passed on 18 October 2026. Its write was accepted before the recorded `02:43:00Z` expiry; the request at `02:43:01.013Z` returned `403 InvalidAccessKeyId`. This measures an issued credential at the native storage boundary. The earlier run with an incorrect error predicate remains failed evidence; the short diagnostic is separate. The delivered container proof above also obtains and uses a real scoped grant from the persistent issuer, but it does not repeat the full-duration wait.
 
-These components are not wired into the deployment yet. The issuer still needs its private volume and storage-process integration; the account and backup runtimes, gateway and verifier need the remaining PR5 work. The native fixture proofs do not establish the final LAN endpoint, a working deployed storage service, or test-box readiness. Keep plan enforcement off until the complete integration proof passes.
+The dedicated storage process now runs the persistent issuer and SeaweedFS in the same container. Both use the private configuration volume. Inside the project, `waitron.local` resolves to storage; clients receive `https://waitron.local:8333` with the same trusted LAN CA. Account and storage containers have no Docker socket. The account asks for reload through a private Unix socket, a local connection stored in that volume. The storage process signals only the child it started, then the adapter verifies the changed permissions with signed requests.
 
+At restart, storage begins without venue keys. In explicit test plan mode, current policy reconciliation restores permitted writers and recovery readers before its health check passes. Dormant mode uses the ordinary local authority without reading organisation plans. Account startup waits for healthy storage. In explicit test plan mode, the dedicated account process supplies the real snapshot authority and managed-stream adapter. The deployed flag remains `0`, so this does not activate plan enforcement.
+
+Run the delivered container layout separately with a current native image:
+
+```sh
+TEST_CLOUD_STORAGE_PROOF_IMAGE=<local-image> node --test \
+  deploy/test-cloud/storage-proof.test.mjs
+```
+
+This proof sends signed requests through the trusted HTTPS proxy. Free snapshot and stream requests return `403 permission_denied`; paid requests receive distinct scoped credentials. It tests a normal downgrade and one committed while storage is stopped. After restart, old writers fail at storage, the neighbouring paid writer still works, and explicit upgrade returns a fresh writer with the original recovery key, reader and retained data. It also checks normal TLS trust from a host client. Generated fixture keys stay inside the disposable private volume, and cleanup removes only this proof's project.
+
+The gateway, backup worker and verifier/controller still need PR5 wiring and their own proofs. These storage checks do not prove genuine Waitron integration, LAN publication or test-box readiness. Keep plan enforcement off until the complete integration proof passes.

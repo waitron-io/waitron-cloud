@@ -1150,7 +1150,7 @@ notifications separately.
   in-volume renewal remains a maintenance follow-up. Continuous box supervision,
   coordinated image/schema upgrades and volume-to-volume rollback still need the
   final deployment slice; the driver refuses an image change meanwhile.
-  The next storage component persists separate stream writers and recovery readers,
+  The private storage adapter persists separate stream writers and recovery readers,
   saves withdrawal intent before provider reload, checks actual signed storage
   refusals and creates a fresh writer after explicit upgrade provisioning. Its
   plan wrapper rejects free/production venues, catches a free/paid change between
@@ -1159,19 +1159,30 @@ notifications separately.
   deletion alone left the old writer active, so withdrawal uses an explicit
   disabled identity. Missing private state cannot silently reset an existing
   managed identity file. A private persistent issuer supplies scoped OIDC tokens
-  and fifteen-minute STS configuration; account/storage/worker/gateway wiring
-  and final LAN proofs remain unfinished. The first real fifteen-minute STS
+  and fifteen-minute STS configuration. The dedicated storage process and account
+  runtime now share private volume state and a reload socket without Docker access.
+  Storage starts without venue keys, reconciles current plans before healthy status,
+  and advertises trusted `https://waitron.local:8333` through internal resolution.
+  A real disposable-container proof sends signed account HTTPS requests: free
+  snapshot/stream requests return 403 permission_denied, paid credentials are
+  distinct and scoped, and normal/restart downgrade rejects old writers while
+  preserving the neighbour, retained data, recovery key and reader. Explicit
+  upgrade returns a fresh writer. Reprovisioning now compares location fields
+  independently of object property order; PostgreSQL tests preserve all three
+  location and installation-ownership fences. Worker, gateway, verifier/controller
+  wiring and final LAN proofs remain unfinished. The first real fifteen-minute STS
   run observed InvalidAccessKeyId after its recorded expiry, but its new assertion
   wrongly expected the expired-identity error from the STS endpoint. That run is
-  failed evidence, not a green test. A separately labelled short diagnostic checks
-  the S3 403 refusal; repeat the corrected full-duration proof before finishing
-  this slice. The isolated local-stack receipt now
+  failed evidence, not a green test. A corrected full-duration run now passes:
+  an accepted write before its 02:43:00Z expiry is refused with S3 403
+  InvalidAccessKeyId at 02:43:01.013Z on 18 October 2026. The short diagnostic
+  remains separate. The isolated local-stack receipt now
   supplies PostgreSQL to these policy tests. Concurrent native fixtures reuse a
   verified cached archive without rewriting it, and publish downloads by atomic
   rename; the first combined run exposed a truncated shared-archive read, and a
   read-only-cache regression test covers the corrected path.
   Deployment enforcement is still off. Three remaining implementation slices,
-  actual direct-storage withdrawal/fresh writers, LAN deployment,
+  real remote/verifier adapters, LAN deployment,
   two-organisation acceptance and measured headroom remain open. The existing
   Waitron venue is quarantined; use a separate disposable Waitron test venue and
   leave its running containers and data untouched. Keep address providers disabled

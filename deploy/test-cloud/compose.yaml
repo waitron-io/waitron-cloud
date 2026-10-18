@@ -33,6 +33,20 @@ services:
     environment:
       CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
   storage:
+    command: ["node", "deploy/test-cloud/runtime.mjs", "storage"]
+    environment:
+      CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
+    networks:
+      default:
+        aliases: [waitron.local]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes: !override
+      - local-stack-config:/run/local-stack
+      - local-stack-storage:/data
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/test-cloud-storage-ready && curl --fail --silent --cacert /run/local-stack/lan/ca.pem --resolve waitron.local:8444:127.0.0.1 https://waitron.local:8444/jwks >/dev/null"]
     mem_limit: 384m
     logging:
       driver: json-file
@@ -41,6 +55,11 @@ services:
     image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
     ports: !override ["127.0.0.1:8333:8333"]
   account:
+    depends_on:
+      storage:
+        condition: service_healthy
+    volumes: !override
+      - local-stack-config:/run/local-stack
     networks:
       default:
         ipv4_address: 10.79.0.3

@@ -448,3 +448,11 @@ for(const change of ['expire','remove'] as const)test('publication final check r
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_points')).rows[0].count,'0');
  assert.equal(stages,disposals);
 });
+
+test('reprovisioning compares location values independently of property order and preserves ownership',async()=>{
+ const keysBefore=(await db.pool.query('SELECT sealed FROM backup_key_versions WHERE venue_id=$1',[a.venueId])).rows;
+ await store.provision(a.installationId,{region:'local',bucket:'venue-a',endpoint:'https://store.test'});
+ assert.deepEqual((await db.pool.query('SELECT sealed FROM backup_key_versions WHERE venue_id=$1',[a.venueId])).rows,keysBefore);
+ for(const value of [{region:'elsewhere',bucket:'venue-a',endpoint:'https://store.test'},{region:'local',bucket:'another-bucket',endpoint:'https://store.test'},{region:'local',bucket:'venue-a',endpoint:'https://other.test'}])await assert.rejects(store.provision(a.installationId,value),/^Error: backup.conflict$/);
+ await assert.rejects(store.provision(b.installationId,{region:'local',bucket:'venue-a',endpoint:'https://store.test'}),/^Error: backup.conflict$/);
+});

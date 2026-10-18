@@ -1,6 +1,35 @@
 import {transaction} from '../../packages/registration/src/transaction.ts';
 import {readVenuePlan} from '../../packages/registration/src/organisation-plans.ts';
 import {openStorageAuthority} from './storage-authority.mjs';
+import {readFile} from 'node:fs/promises';
+import {join} from 'node:path';
+import {request} from 'node:http';
+import {bootstrapStorageIssuer} from './storage-issuer.mjs';
+import {loadRuntime} from '../local-stack/runtime.mjs';
+import {captureRuntime} from '../../packages/backups/src/capture-config.ts';
+
+export function reloadTestStorage(directory){
+ return new Promise((resolve,reject)=>{
+  const req=request({socketPath:join(directory,'storage-authority/reload.sock'),path:'/reload',method:'POST'},res=>{res.resume();res.once('end',()=>res.statusCode===204?resolve():reject(Error('test_cloud.storage_reload')));});
+  req.setTimeout(5000,()=>req.destroy(Error('test_cloud.storage_reload')));req.once('error',()=>reject(Error('test_cloud.storage_reload')));req.end();
+ });
+}
+export async function testStorageOptions({pool,directory,reload=()=>reloadTestStorage(directory)}){
+ const config=await loadRuntime(directory);
+ return {pool,mode:'test-free-paid',directory:join(directory,'storage-authority/managed'),iamPath:join(directory,'storage-authority/iam.json'),admin:{accessKeyId:config.storage.accessKeyId,secretAccessKey:config.storage.secretAccessKey},endpoint:'https://waitron.local:8333',region:'local',ca:await readFile(join(directory,'lan/ca.pem'),'utf8'),reload};
+}
+export async function openTestCaptureRuntime({pool,mode,directory}){
+ if(mode!=='test-free-paid')throw Error('test_cloud.plan_mode');
+ await bootstrapStorageIssuer(directory);
+ const config=await loadRuntime(directory),storage=await testStorageOptions({pool,directory});
+ const managedStreams=await openPlanStorage(storage);
+ const runtime=captureRuntime({CLOUD_BACKUP_MASTER_KEY:config.backup.masterKey,CLOUD_BACKUP_AUTHORITY:await readFile(join(directory,'storage-authority/issuer.json'),'utf8'),CLOUD_BACKUP_CA_FILE:join(directory,'lan/ca.pem'),CLOUD_BACKUP_ENDPOINT:storage.endpoint,CLOUD_BACKUP_REGION:storage.region,CLOUD_BACKUP_ACCESS_KEY:storage.admin.accessKeyId,CLOUD_BACKUP_SECRET_KEY:storage.admin.secretAccessKey});
+ runtime.options.planMode=mode;runtime.options.managedStreams=managedStreams;return runtime;
+}
+export async function openRuntimeStorage({mode,...options}){
+ if(!['existing','test-free-paid'].includes(mode))throw Error('test_cloud.plan_mode');
+ return mode==='test-free-paid'?openPlanStorage({...options,mode}):openStorageAuthority(options);
+}
 
 // Provider work runs without database locks. The final policy read checks the
 // original revision; a free/paid toggle must not revive a prior writer generation.
