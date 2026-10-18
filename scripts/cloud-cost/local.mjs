@@ -1,5 +1,6 @@
 
-import { DatabaseSync, backup } from 'node:sqlite';
+import { DatabaseSync } from 'node:sqlite';
+import { randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import { constants, openSync, closeSync, fstatSync, lstatSync, realpathSync, existsSync,
@@ -44,10 +45,22 @@ function removal(args, path, identity, recursive = false) {
   };
 }
 
-export async function preparePrivateCopy({ source, database, root, journal }) {
+const copyWorker = `
+import { DatabaseSync, backup } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
+import { assertOwnedRoot } from ${JSON.stringify(new URL('./schema.mjs', import.meta.url).href)};
+const args = JSON.parse(readFileSync(process.argv[1], 'utf8'));
+assertOwnedRoot(args);
+const reader = new DatabaseSync(args.database, { readOnly: true });
+try { reader.exec('PRAGMA query_only=ON'); await backup(reader, args.destination); }
+finally { reader.close(); }
+`;
+
+export async function preparePrivateCopy({ source, database, root, journal, signal, timeoutMs = 30000 }) {
   const args = { source, root, journal }; const destination = join(root, 'venue-copy.db');
-  let reader, copy, close;
+  let copy, close, removeConfig;
   try {
+    requireThat(!signal?.aborted);
     owned(args); canonicalFile(database);
     requireThat(inside(source, database));
     requireThat(!existsSync(destination));
@@ -55,22 +68,26 @@ export async function preparePrivateCopy({ source, database, root, journal }) {
     const fd = openSync(destination, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
     const identity = fstatSync(fd); closeSync(fd);
     close = removal(args, destination, identity);
-    // Online backup reads the committed WAL without checkpointing or migrating the source.
-    reader = new DatabaseSync(database, { readOnly: true });
-    reader.exec('PRAGMA query_only=ON');
-    await backup(reader, destination);
-    reader.close(); reader = null;
+    const config = join(root, `copy-${randomUUID()}.json`);
+    writeFileSync(config, JSON.stringify({ ...args, database, destination }), { mode: 0o600, flag: 'wx' });
+    removeConfig = removal(args, config, lstatSync(config));
+    // A separate child bounds native SQLite work while keeping raw output private.
+    await runPrivate(process.execPath, ['--input-type=module', '-e', copyWorker, config],
+      { signal, timeoutMs, ownership: args });
+    await removeConfig();
     chmodSync(destination, 0o600);
-    copy = new DatabaseSync(destination, { readOnly: true });
+    copy = new DatabaseSync(destination);
+    // The selection copy is self-contained; read-only WAL readers leave sidecars after closing.
+    copy.exec('PRAGMA journal_mode=DELETE');
     requireThat(copy.prepare('PRAGMA integrity_check').get().integrity_check === 'ok');
     copy.close(); copy = null;
     record(args, { kind: 'database-copy', path: destination, state: 'ready', ino: identity.ino, dev: identity.dev });
     return { database: destination, close };
   } catch {
-    reader?.close(); copy?.close();
+    copy?.close();
     await close?.();
     fail();
-  }
+  } finally { await removeConfig?.(); }
 }
 
 function git(codeRoot, argv, input) {
@@ -132,9 +149,10 @@ export async function prepareCodeCopy({ source, codeRoot, root, journal }) {
   } catch { await close?.(); fail(); }
 }
 
-export async function runPrivate(command, argv, { signal, cwd, ownership } = {}) {
-  let child, closed, timer, aborted = false;
+export async function runPrivate(command, argv, { signal, cwd, ownership, timeoutMs = 120000 } = {}) {
+  let child, closed, timer, deadline, aborted = false;
   const abort = () => {
+    if (aborted) return;
     aborted = true;
     if (child && child.exitCode === null && child.signalCode === null) {
       child.kill('SIGTERM');
@@ -143,6 +161,7 @@ export async function runPrivate(command, argv, { signal, cwd, ownership } = {})
   };
   try {
     requireThat(isAbsolute(command) && Array.isArray(argv) && argv.every(v => typeof v === 'string'));
+    requireThat(Number.isInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 120000);
     requireThat(!signal?.aborted);
     if (ownership) record(ownership, { kind: 'process', state: 'intent' });
     child = spawn(command, argv, { env: environment(), cwd, stdio: ['ignore', 'ignore', 'ignore'] });
@@ -152,13 +171,14 @@ export async function runPrivate(command, argv, { signal, cwd, ownership } = {})
     });
     if (ownership) record(ownership, { kind: 'process', state: 'started', pid: child.pid });
     signal?.addEventListener('abort', abort, { once: true });
+    deadline = setTimeout(abort, timeoutMs);
     if (signal?.aborted) abort();
     const exitCode = await closed;
     requireThat(exitCode === 0 && !spawnError && !aborted);
     return { exitCode };
   } catch { fail(); }
   finally {
-    signal?.removeEventListener('abort', abort); clearTimeout(timer);
+    signal?.removeEventListener('abort', abort); clearTimeout(timer); clearTimeout(deadline);
     if (child && child.exitCode === null && child.signalCode === null && child.pid) child.kill('SIGKILL');
     await closed;
   }

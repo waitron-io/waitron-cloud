@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "checkedAt": "2026-10-14T11:51:20.888Z",
-  "cloudRevision": "c30e043ae7f9601ba21541f5fbecbf189972f604",
+  "checkedAt": "2026-10-18T04:13:01.408Z",
+  "cloudRevision": "488eba20eacd6138a9d36fd58a6d43ed42e6e6f6",
   "defaultRegion": "eu-south-2",
   "comparisonRegion": "eu-north-1",
   "scope": "Initial remote access and backups; optional product candidates excluded.",
@@ -80,6 +80,11 @@
       "role": "remote-reconciler",
       "inventoryId": "control-runtime",
       "reason": "optional DNS/certificate reconciliation"
+    },
+    {
+      "role": "translation-worker",
+      "inventoryId": "translation",
+      "reason": "optional translation profile; disabled in the initial remote-access and backup scenario"
     }
   ],
   "scenarios": [
@@ -1517,6 +1522,30 @@
       "sources": [
         "docs/product-and-platform.md",
         "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "translation",
+      "capability": "optional-product",
+      "scope": "usage",
+      "inclusion": "excluded",
+      "reason": "Optional translation profile; excluded from the initial remote-access and backup total.",
+      "driver": "translation worker, source text and images, model input and output tokens",
+      "dimensions": [
+        "compute",
+        "storage",
+        "transfer",
+        "provider-API"
+      ],
+      "priceIds": [],
+      "gap": "Translation workload and provider rates are outside this scenario.",
+      "choiceGroup": null,
+      "dependsOn": [
+        "control-runtime"
+      ],
+      "sources": [
+        "docs/local-deployment.md",
+        "docs/superpowers/specs/2026-10-14-translate-all-design.md"
       ]
     }
   ],

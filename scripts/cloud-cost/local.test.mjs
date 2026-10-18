@@ -273,3 +273,65 @@ test('realDockerCanaryDeniesInternetMetadataAndExternalDnsBeforeDataMounts', asy
   await assert.rejects(local.proveDockerIsolation({ ...f, codeRoot: join(f.root, 'code-copy'), stateRoot: join(f.root, 'state'), networkId, containerIds: [containerId] }),
     /Invalid cloud cost local run/);
 });
+
+// A locked source must not keep a firing alive or leave a child or half-copy behind.
+test('copyDeadlineStopsBlockedReadAndRemovesPartialCopy', async t => {
+  const f = fixture(t);
+  f.db.exec('PRAGMA journal_mode=DELETE; BEGIN EXCLUSIVE');
+  const started = performance.now();
+  try {
+    await assert.rejects(local.preparePrivateCopy({ ...f, timeoutMs: 200 }), /Invalid cloud cost local run/);
+  } finally { f.db.exec('ROLLBACK'); }
+  assert.ok(performance.now() - started < 2500, 'copy deadline includes termination and cleanup');
+  assert.equal(existsSync(join(f.root, 'venue-copy.db')), false);
+  const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
+  const startedChild = entries.find(v => v.kind === 'process' && v.state === 'started');
+  assert.ok(startedChild?.pid, 'record the owned child before waiting');
+  assert.throws(() => process.kill(startedChild.pid, 0), { code: 'ESRCH' });
+});
+
+test('abortedCopyNeverStartsAChildOrCreatesDestination', async t => {
+  const f = fixture(t); const controller = new AbortController(); controller.abort();
+  await assert.rejects(local.preparePrivateCopy({ ...f, signal: controller.signal }), /Invalid cloud cost local run/);
+  assert.equal(existsSync(join(f.root, 'venue-copy.db')), false);
+  const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources ?? [];
+  assert.equal(entries.some(v => v.kind === 'process' && v.state === 'started'), false);
+});
+
+test('privateChildDeadlineWaitsForUnresponsiveChildToExit', async t => {
+  const f = fixture(t); const controller = new AbortController();
+  const fallback = setTimeout(() => controller.abort(), 3500);
+  const started = performance.now();
+  try {
+    await assert.rejects(local.runPrivate(process.execPath,
+      ['-e', 'process.on("SIGTERM",()=>{});setInterval(()=>{},100)'],
+      { signal: controller.signal, ownership: f, timeoutMs: 100 }), /Invalid cloud cost local run/);
+  } finally { clearTimeout(fallback); }
+  assert.ok(performance.now() - started < 2500, 'deadline must stop an unresponsive child before the fallback');
+  const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
+  const child = entries.find(v => v.kind === 'process' && v.state === 'started');
+  assert.throws(() => process.kill(child.pid, 0), { code: 'ESRCH' });
+});
+
+test('invalidPrivateChildDeadlineRefusedBeforeSpawn', async t => {
+  const f = fixture(t);
+  for (const timeoutMs of [0, -1, NaN, Infinity, '100', 120001])
+    await assert.rejects(local.runPrivate(process.execPath, ['-e', 'process.exit(0)'],
+      { ownership: f, timeoutMs }), /Invalid cloud cost local run/);
+  const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources ?? [];
+  assert.equal(entries.some(v => v.kind === 'process' && v.state === 'started'), false);
+});
+
+test('copyPrivateConfigRemovedOnSuccessAndFailure', async t => {
+  const { readdirSync } = await import('node:fs'); const f = fixture(t);
+  const copy = await local.preparePrivateCopy(f);
+  const reader = new DatabaseSync(copy.database, { readOnly: true });
+  try { assert.equal(reader.prepare('SELECT sum(amount) AS n FROM sales').get().n, 42); }
+  finally { reader.close(); }
+  await copy.close();
+  assert.deepEqual(readdirSync(f.root).sort(), ['.cloud-cost-owner', 'journal.json']);
+  f.db.exec('PRAGMA journal_mode=DELETE; BEGIN EXCLUSIVE');
+  try { await assert.rejects(local.preparePrivateCopy(f), /Invalid cloud cost local run/); }
+  finally { f.db.exec('ROLLBACK'); }
+  assert.deepEqual(readdirSync(f.root).sort(), ['.cloud-cost-owner', 'journal.json']);
+});

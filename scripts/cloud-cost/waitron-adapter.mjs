@@ -1,5 +1,5 @@
 
-import { readFileSync, realpathSync, lstatSync } from 'node:fs';
+import { readFileSync, realpathSync, lstatSync, writeFileSync, readdirSync, mkdirSync, rmSync } from 'node:fs';
 import { join, relative, isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -85,29 +85,45 @@ function replayPaths(codeRoot, stateRoot, initial) {
     requireThat(Array.isArray(set.appendOnlyTables) && set.appendOnlyTables.every(v => typeof v === 'string' && /^[a-z][a-z_]*$/.test(v)));
     return { migrationsFolder, migrationsTable: set.table, appendOnlyTables: [...set.appendOnlyTables] };
   });
-  return { runtime, migrations };
+  return { runtime, migrations, sets };
 }
 
 export async function openReplay({ codeRoot, stateRoot, config, initial }) {
   let store;
   try {
     validateReplayConfig(config);
-    const { runtime, migrations } = replayPaths(codeRoot, stateRoot, initial);
+    const { runtime, migrations, sets } = replayPaths(codeRoot, stateRoot, initial);
     const r = await import(pathToFileURL(runtime).href);
     await r.applyMigrations(join(stateRoot, 'venue'), migrations);
     store = await r.openVenueDatabase(join(stateRoot, 'venue'));
     const db = store.venue;
-    const { nodeId, standard, full } = await r.withTransaction(db, async tx => {
+    const { nodeId, locationId, standard, full } = await r.withTransaction(db, async tx => {
       await tx.insert(r.tenants).values({ id: 1, ...initial.taxpayer });
       const [location] = await tx.insert(r.locations).values(initial.location).returning({ id: r.locations.id });
       const [node] = await tx.insert(r.nodes).values({ locationId: location.id, name: initial.nodeName }).returning({ id: r.nodes.id });
       const [standard] = await tx.insert(r.invoiceSeries).values({ nodeId: node.id, code: initial.seriesCode }).returning({ id: r.invoiceSeries.id });
       const [full] = await tx.insert(r.invoiceSeries).values({ nodeId: node.id, code: initial.fullSeriesCode, purpose: 'full' }).returning({ id: r.invoiceSeries.id });
       await r.registerSif(tx, { nodeId: node.id, nif: initial.taxpayer.taxId, idSistemaInformatico: initial.idSistemaInformatico });
-      return { nodeId: node.id, standard: standard.id, full: full.id };
+      return { nodeId: node.id, locationId: location.id, standard: standard.id, full: full.id };
     });
+    writeFileSync(join(stateRoot, 'trading.env'),
+      `WAITRON_TILL_NODE_ID=${nodeId}\nWAITRON_TILL_LOCATION_ID=${locationId}\n`, { mode: 0o600, flag: 'wx' });
     const backend = new r.VerifactuBackend({ db, clock: { now: runtimeFail }, environment: 'preproduction',
       deploymentEnvironment: 'preproduction', resolveClient: async () => runtimeFail() });
+    const stateIdentity = lstatSync(stateRoot);
+    const validateState = () => {
+      const s = lstatSync(stateRoot);
+      requireThat(realpathSync(stateRoot) === stateRoot && s.ino === stateIdentity.ino
+        && s.dev === stateIdentity.dev && (s.mode & 0o777) === 0o700);
+      const scan = path => {
+        for (const entry of readdirSync(path)) {
+          const child = join(path, entry), info = lstatSync(child);
+          requireThat(!info.isSymbolicLink() && (info.isDirectory() || (info.isFile() && info.nlink === 1)));
+          if (info.isDirectory()) scan(child);
+        }
+      };
+      scan(stateRoot);
+    };
     let attempted = 0, successful = 0, failed = 0, closing = false, closePromise;
     let pending = Promise.resolve();
     const admit = action => {
@@ -116,6 +132,11 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
       pending = result.catch(() => {});
       return result;
     };
+    const archiveModules = () => r.ALL_MODULES.map(m => {
+      const index = sets.findIndex(s => s.name === m.name && s.table === m.migrations.table);
+      requireThat(index >= 0);
+      return { ...m, migrations: { ...m.migrations, from: migrations[index].migrationsFolder } };
+    });
     return {
       recordSale(sale) {
         return admit(async () => {
@@ -133,6 +154,47 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
         return admit(async () => {
           const result = await r.withTransaction(db, tx => backend.checkIntegrity(tx, nodeId));
           return { ok: result.ok, issues: result.issues.length };
+        });
+      },
+      capture(options) {
+        return admit(() => {
+          exact(options, ['recoveryKey', 'at', 'signal']);
+          const { recoveryKey, at, signal } = options;
+          requireThat(typeof recoveryKey === 'string' && recoveryKey.length > 0);
+          validateState();
+          return r.createCloudSnapshotArchive({ db, modules: archiveModules(),
+            environment: 'preproduction', stateDir: stateRoot }, recoveryKey, at, signal);
+        });
+      },
+      restore(options) {
+        return admit(async () => {
+          exact(options, ['artifact', 'recoveryKey']);
+          const { artifact, recoveryKey } = options;
+          requireThat(typeof recoveryKey === 'string' && recoveryKey.length > 0);
+          validateState();
+          const restoredRoot = join(stateRoot, 'restored');
+          requireThat(!directoryEntryExists(restoredRoot));
+          mkdirSync(restoredRoot, { mode: 0o700 });
+          const restoredIdentity = lstatSync(restoredRoot);
+          try {
+            await r.restoreFromArtifact({ artifact, recoveryKey, stateDir: restoredRoot,
+              stagingDir: join(restoredRoot, 'staging'), venueDir: join(restoredRoot, 'venue'),
+              modules: archiveModules(), migrationsRoot: null, environment: 'preproduction', log: () => {} });
+            const restored = await r.openVenueDatabase(join(restoredRoot, 'venue'));
+            try {
+              const restoredBackend = new r.VerifactuBackend({ db: restored.venue, clock: { now: runtimeFail },
+                environment: 'preproduction', deploymentEnvironment: 'preproduction', resolveClient: async () => runtimeFail() });
+              const integrity = await r.withTransaction(restored.venue, tx => restoredBackend.checkIntegrity(tx, nodeId));
+              const sales = await restored.venue.execute(r.sql`select count(*) as n from sales`);
+              return { ok: integrity.ok, issues: integrity.issues.length, sales: Number(sales.rows[0].n) };
+            } finally { await restored.close(); }
+          } catch (error) {
+            validateState();
+            const s = lstatSync(restoredRoot);
+            requireThat(s.ino === restoredIdentity.ino && s.dev === restoredIdentity.dev);
+            rmSync(restoredRoot, { recursive: true });
+            throw error;
+          }
         });
       },
       counts: () => ({ attempted, successful, failed }),

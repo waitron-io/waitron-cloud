@@ -1098,7 +1098,12 @@ notifications separately.
   numbering, linked fiscal hashes, immutable records, rollback after a refused
   payment and completion of admitted sales before the database closes. The copied
   public migration files prepare a fresh venue; private credentials and recorded data stay
-  excluded. The complete isolated service stack,
+  excluded. The private selection copy now runs in an owned child with a deadline and
+  leaves no temporary configuration or SQLite sidecar files after cleanup. Synthetic
+  archives also pass through Waitron's archive creation and restore, including its
+  fiscal restore hook, recovered identity and private state. Refused restores remove
+  their own partial destination and preserve a replacement directory. The archive and
+  restore checks also run inside the isolated Node container. The complete isolated service stack,
   offline calculator, private local sales replay, measured storage and remote traffic,
   and synthetic-only AWS comparison
   remain open. Keep raw venue data on the Mac, distinguish measured
