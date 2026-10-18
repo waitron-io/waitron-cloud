@@ -1061,7 +1061,12 @@ notifications separately.
   isolated lock importer with every receipt and compiler check retained. Mixed,
   unknown and changed-reader controls retain full work. The explicit generator
   never stages its output or follows a live policy link. Wider path selection,
-  remaining receipt-audit renewal and job-duration work stay open.
+  remaining receipt-audit renewal and job-duration work stay open. The planner
+  still has unused API/fetch wrappers from historical merge reuse; remove those
+  CLI-only wrappers while preserving its public function signature. Generation
+  is a repository-root command; subfolder invocation refuses without writing.
+  Its final generated-policy recheck remains defensive validation without an
+  independent failure control; input-schema and admission guards are covered.
   Mixed changes also retain the existing fallback. The script job verifies the
   exact checkout and changed paths, and the summary requires its successful result.
   The identity audit covers that helper's only executable consumer, its own spawned test;

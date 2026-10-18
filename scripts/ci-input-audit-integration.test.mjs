@@ -20,7 +20,7 @@ function completeFixture(run) {
   const write = (path, value) => writeFileSync(join(root, path), typeof value === 'string' ? value : JSON.stringify(value, null, 2) + '\n');
   const node = (path, args = [], env = {}) => spawnSync(process.execPath, [path, ...args],
     {cwd: root, env: {...process.env, ...env}, encoding: 'utf8', timeout: 60_000});
-  const commit = () => {git('add', '-A'); git('commit', '-s', '-qm', 'Save complete audit control'); return git('rev-parse', 'HEAD').trim();};
+  const commit = () => {git('add', '-A'); git('commit', '--allow-empty', '-s', '-qm', 'Save complete audit control'); return git('rev-parse', 'HEAD').trim();};
   const renew = () => {
     git('add', '-A');
     const result = node('scripts/ci-input-audit.mjs', ['--write-staged']);
@@ -47,6 +47,10 @@ test('complete candidate audits independently pin all ten current manifests and 
   const historical = read('scripts/fixtures/ci-historical-manifests.json');
   const saved = ['dependency', 'execution', 'schema', 'deployment'].map(name => [`scripts/fixtures/ci-${name}-inputs.json`, read(`scripts/fixtures/ci-${name}-inputs.json`)]);
   const base = renew();
+  let alreadyCurrent;
+  assert.doesNotThrow(() => {alreadyCurrent = renew();}, 'An already current clean audit must still qualify a real committed control');
+  assert.notEqual(alreadyCurrent, base);
+  assert.equal(git('rev-parse', `${base}^{tree}`), git('rev-parse', `${alreadyCurrent}^{tree}`));
   const policy = JSON.parse(read(policyPath));
   assert.deepEqual(Object.keys(policy.manifests).sort(), [...manifestPaths].sort());
   const expected = {};

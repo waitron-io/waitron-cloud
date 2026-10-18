@@ -30,7 +30,7 @@ imports, file reads, installation and lifecycle hooks. If a new reader consumes
 exempt content, update the selection rule and its behavioural tests before renewal.
 Never renew merely to pass CI.
 
-Stage the complete reviewed candidate, including a schema-valid policy placeholder
+From the repository root, stage the complete reviewed candidate, including a schema-valid policy placeholder
 when creating the file. Generate all four inventories from the index, which holds
 your staged files, then inspect and stage only the policy output:
 
