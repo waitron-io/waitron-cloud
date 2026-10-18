@@ -488,7 +488,8 @@ rate, multi-gateway coordination, browser/device mix, or acceptable customer lat
 Keep `CLOUD_TEST_SERVICE_PLANS=0` for ordinary deployments. The isolated test
 Cloud will use `1` after its remaining storage, LAN and client proofs pass. Both
 remote operator commands and the reconciler validate this flag and pass the same
-mode to their stores. The account API receives the validated mode too.
+mode to their stores. The account server CLI also rejects malformed values and
+passes its validated mode through lifecycle and remote certificate handlers.
 
 With test enforcement enabled, a free organisation cannot provision remote
 access, move cells, change hostnames, request DNS instructions or submit/read a

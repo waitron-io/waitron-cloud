@@ -881,6 +881,13 @@ notifications separately.
   signing/DNS results recheck policy; publication holds policy through the file
   replacement. Upgrading alone restores no route; explicit existing-placement
   provision restores cleared setup once. Public setup metadata remains readable.
+  The account server CLI now validates and forwards the same mode; real listener
+  tests cover free lifecycle masking and staff refusal, ordinary defaults and
+  malformed-flag startup refusal. Fresh-health and direct-store forged-proof
+  checks cover the account/status and authentication boundaries too.
+  Remote eligibility currently scans the placed organisations and rebuilds target
+  lists for current-work checks. Its array lookup and broad policy locking have no
+  production-scale measurement; narrow that work before claiming larger capacity.
   A real two-peer Docker gateway proof withdrew the downgraded route/peer in
   4,053 ms while its paid neighbour still served its own body; wall-clock short-lease
   expiry and an expired-cache restart restored no access. This is local synthetic

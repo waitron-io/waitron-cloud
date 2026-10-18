@@ -12,6 +12,7 @@ import {database} from '../../account-http/test/fixtures.ts';
 import {createAccountApp} from '../../account-http/src/app.ts';
 import {RemoteAccessStore} from '../src/placement.ts';
 import {RemoteConfigurationReconciler} from '../src/reconciler.ts';
+import {StaffCertificateExchange} from '../src/staff-exchange.ts';
 import {GatewayAuthority} from '../src/authority.ts';
 import {signManifest,verifyManifest} from '../src/manifest.ts';
 
@@ -113,10 +114,12 @@ test('signed submit and status refuse a free plan even when old setup remains st
 
 test('account hostname refusal maps to forbidden and retains read-only setup status',async()=>{
  const v=await venue('free'),server=app();const response=await server.request(origin+'/api/account/login',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({email:v.email,password})},bindings);assert.equal(response.status,200);
+ await db.pool.query("UPDATE installations SET lease_expires_at=clock_timestamp()+interval '2 minutes' WHERE id=$1",[v.installationId]);
+ await db.pool.query("INSERT INTO installation_observations(installation_id,service,revision,health,observed_at,received_at) VALUES($1,'remote_access',1,'healthy',clock_timestamp(),clock_timestamp())",[v.installationId]);
  const cookie=response.headers.getSetCookie().map(c=>c.split(';')[0]).join('; '),csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;
  for(const action of ['dns','apply','status']){
   const reply=await server.request(origin+'/api/account/remote-access/'+action,{method:'POST',headers:{origin,cookie,'x-csrf-token':csrf,'content-type':'application/json'},body:JSON.stringify({installationId:v.installationId,...(action==='status'?{}:{kind:'staff',hostname:'staff.cafe.example',...(action==='apply'?{expectedRevision:'1'}:{})})})},bindings);
-  assert.equal(reply.status,action==='status'?200:403);if(action==='status'){const view=await reply.json();assert.equal(view.service.state,'unconfigured');assert.equal(view.service.health,'unknown');}
+  assert.equal(reply.status,action==='status'?200:403);if(action==='status'){const view=await reply.json();assert.equal(view.service.state,'unconfigured');assert.equal(view.service.health,'unknown');assert.equal(view.service.validUntil,null);}
  }
 });
 
@@ -201,6 +204,7 @@ test('a free plan cannot export retained active setup through either operator ru
   run('src/operator-cli.ts',['export',configFile]);assert.deepEqual(verifyManifest(JSON.parse(await readFile(output,'utf8')),key.publicKey,v.cellId).routes,[]);
   await due(new RemoteConfigurationReconciler(db.pool,{planMode:mode}),'route',v.cellId);
   await writeFile(configFile,JSON.stringify({routes:[{cellId:v.cellId,output,signingKeyFile}],certificates:[],acme:{directoryUrl:'https://acme.example.test/directory',email:'operator@example.test',accountKeyFile,dnsModule}}));
+  await rm(output);
   run('src/reconciler-cli.ts',[configFile,'--once']);assert.deepEqual(verifyManifest(JSON.parse(await readFile(output,'utf8')),key.publicKey,v.cellId).routes,[]);
  }finally{await rm(root,{recursive:true,force:true});}
 });
@@ -217,4 +221,9 @@ test('an export defers a new placement whose policy was not in its locked set',a
  const pending=new RemoteAccessStore(exporting,mode).manifest(v.cellId);void pending.catch(()=>{});
  try{await b.started;await store.provision(newcomer.installationId,v.cellId,newcomer.peerPublicKey);}finally{b.release();}
  assert.deepEqual((await pending).routes.map(r=>r.installationId),[v.installationId]);assert.equal((await store.manifest(v.cellId)).routes.length,2);
+});
+
+test('direct staff exchange authenticates a forged request before checking the free plan',async()=>{
+ const v=await venue('free'),proof=v.proof('staff-certificate-status',{version:1,requestId:randomUUID()},randomUUID(),(await new InstallationStore(db.pool,issuer,origin).execute('renew',v.proof('renew'))).lease!),exchange=new StaffCertificateExchange(db.pool,issuer,origin,undefined,mode);
+ await assert.rejects(exchange.execute('staff-certificate-status',{...proof,signature:randomBytes(64).toString('base64url')}),{code:'invalid_proof'});
 });

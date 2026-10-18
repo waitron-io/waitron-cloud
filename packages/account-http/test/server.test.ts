@@ -9,7 +9,9 @@ import {encryptFactorSecret,hashSecret} from '@waitron-cloud/identity';
 import {recoveryCodeHash} from '../../registration/src/password-login.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startAccountServer } from '../src/server.ts';
-import {migrationNames} from '@waitron-cloud/registration';
+import {migrationNames,createLeaseIssuer} from '@waitron-cloud/registration';
+import {connectedVenue} from '../../translation/test/fixtures.ts';
+import {RemoteAccessStore} from '../../remote-access/src/placement.ts';
 import { database } from './fixtures.ts';
 let db: Awaited<ReturnType<typeof database>>;
 before(async () => {db = await database();});
@@ -312,5 +314,26 @@ test('translation CLI defaults off, enables only with an issuer, and refuses oth
    assert.equal(response.status,flag==='1'?401:503);assert.deepEqual(JSON.parse(response.body),{error:flag==='1'?'invalid_proof':'temporarily_unavailable'});
    const outcome=await running.stop();assert.equal(outcome.code,0);assert.equal(outcome.stderr,'');
   }finally{if(running.child.exitCode===null)await running.stop();}
+ }
+});
+
+test('CLI refuses malformed test plan flags before opening a listener',async()=>{
+ for(const value of ['private-plan-sentinel','2','']){
+  const running=cli({CLOUD_TEST_SERVICE_PLANS:value});
+  try{const outcome=await Promise.race([running.exited,delay(1000).then(()=>{throw Error('invalid test plan mode started a server');})]);assert.equal(outcome.code,1);assert.equal(outcome.stdout,'');assert.equal(outcome.stderr,'Account server failed; check database, migrations and configuration\n');}
+  finally{if(running.child.exitCode===null)await running.stop();}
+ }
+});
+
+test('CLI forwards test plan mode to lifecycle and staff certificate boundaries',async()=>{
+ const issuerKey=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'),issuer=createLeaseIssuer(issuerKey),v=await connectedVenue(db,issuer,'http://localhost'),remote=new RemoteAccessStore(db.pool),cellId=randomUUID();
+ await remote.createCell({id:cellId,country:'ES',provider:'aws',environment:'test',suffix:'cli-plan.example.test',subnet:91,publicKey:randomBytes(32).toString('base64'),endpoint:'gateway.example.test:51820'});await remote.provision(v.installationId,cellId,randomBytes(32).toString('base64'));
+ for(const flag of ['1',undefined,'0']){
+  const running=cli({CLOUD_TEST_SERVICE_PLANS:flag,CLOUD_STAFF_CERTIFICATES:'1',CLOUD_INSTALLATION_ISSUER_KEY:issuerKey});
+  try{
+   const port=await running.ready(),post=(action:string,envelope:unknown)=>new Promise<{status:number;body:string}>((resolve,reject)=>{const req=request({host:'127.0.0.1',port,path:'/api/installations/'+action,method:'POST',headers:{host:'localhost','content-type':'application/json'}},res=>{let body='';res.on('data',value=>body+=value);res.on('error',reject);res.on('end',()=>resolve({status:res.statusCode!,body}));});req.on('error',reject);req.end(JSON.stringify(envelope));});
+   const renewed=await post('renew',v.proof('renew'));assert.equal(renewed.status,200);const service=JSON.parse(renewed.body).services.find((s:{service:string})=>s.service==='remote_access');assert.equal(service.state,flag==='1'?'unconfigured':'provisioning');if(flag==='1')assert.deepEqual(service.configuration,{});
+   const status=await post('staff-certificate-status',v.proof('staff-certificate-status',{version:1,requestId:randomUUID()},randomUUID(),v.lease));assert.equal(status.status,flag==='1'?403:409);assert.deepEqual(JSON.parse(status.body),{error:flag==='1'?'permission_denied':'conflict'});
+  }finally{assert.equal((await running.stop()).code,0);}
  }
 });
