@@ -1508,7 +1508,7 @@ notifications separately.
   unfinished work cannot establish success. Controlled workflow execution covers
   a future matching file, both additional selectors and failing checks.
   Each work job retains its eight-minute cap. Whole-run timing and the owner's
-  five-minute work-job/about-ten-minute total goal remain acceptance checks;
+  five-minute work-job/about-ten-minute total goal remain D69 acceptance checks;
   a passing local run does not establish hosted-runner duration.
   It does not resolve template substitutions, division
   versus regular expressions, array membership or receiver identities. Unrelated

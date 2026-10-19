@@ -15,6 +15,7 @@ test('every discovered workspace test package runs through the planned database 
   const full=workPlan(scopeForPaths(['pnpm-lock.yaml'],members),members);
   assert.deepEqual([...new Set(full.packages.flatMap(row=>row.members ?? [row.package]))].sort(),members.map(pkg=>pkg.name).sort());
   assert.match(job('packages'),/fail-fast: false/);
+  assert.match(job('root'),/fail-fast: false/);
   assert.match(job('packages'),/matrix: \$\{\{ fromJSON\(needs.changes.outputs.package_matrix\) \}\}/);
   assert.match(job('packages'),/node scripts\/test-postgres.mjs --filter \$\{\{ matrix.package \}\} test/);
   assert.match(job('typecheck'),/run: pnpm typecheck/);

@@ -43,6 +43,12 @@ test('workflow root partitions execute every discovered check once and propagate
 });
 
 test('summary requires all four root partitions even when the compiler and package jobs pass', () => {
+  const title = rootJob.match(/^    name: (.+)$/m)?.[1];
+  assert.ok(title, 'Every root partition needs an explicit job name');
+  const namedJobs = jobs.map(job => job.name.startsWith('root (')
+    ? {...job, name: title.replaceAll('${{ matrix.shard }}', job.name.match(/\d/)[0])}
+    : job);
+  assert.doesNotThrow(() => assertSummary(plan, results, namedJobs));
   assert.doesNotThrow(() => assertSummary(plan, results, jobs));
   for (const name of ['root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)']) {
     const other = jobs.filter(job => job.name !== name);
