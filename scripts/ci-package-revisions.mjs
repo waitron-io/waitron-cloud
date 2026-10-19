@@ -99,6 +99,7 @@ function workspaceAt(sha, workspace, git) {
       // unresolved references must retain their possible consumers.
       // Array elements can preserve the reader until a later indexed call;
       // simple comma-separated and closing-bracket references stay unresolved.
+      // A semicolon can end an assignment that stores the reader for a later call.
       // Escapes can spell a directory API without a literal name. Keep every
       // consumer rather than interpreting unresolved string or template keys.
       // Require a receiver so escaped array values after `of` or `return`
@@ -113,7 +114,7 @@ function workspaceAt(sha, workspace, git) {
       // comments, optional access and non-null assertions leave that value intact.
       assert.doesNotMatch(source.source, directoryPattern(/\[\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
         `Unresolved indirect directory call at ${source.path}`);
-      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|(?:,\s*)?\]|\)|<|satisfies\b)|(?:!\s*)+\()/),
+      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|(?:,\s*)?\]|\)|;|<|satisfies\b)|(?:!\s*)+\()/),
         `Unresolved indirect directory call at ${source.path}`);
       // A comma can store the reader between other elements. Require an array
       // opener so ordinary named imports do not force full package work. A simple

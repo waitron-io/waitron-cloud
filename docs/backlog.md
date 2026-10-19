@@ -1679,8 +1679,17 @@ notifications separately.
   other expression forms still need separate qualification.
   Adversarial repeated delimiter/comment
   text can increase scan time; comprehensive parser performance remains unqualified.
-  Precise resolution,
-  assignment/destructuring aliases and other unresolved reader forms remain open.
+  Semicolon-terminated stored references now retain full package work, including
+  `const scan = fs.readdirSync;` followed by a later call. Executed Node controls
+  cover all four directory APIs, bare and namespace references, comments, optional
+  access and erased non-null assertions. Saved base, head and unchanged helpers
+  retain transitive consumers despite dirty local files. Audited lock changes keep
+  full work with these readers and narrow work without them. Unused helpers,
+  ordinary named imports and ordinary stored values stay narrow in the controls.
+  This lexical check does not resolve bindings or general assignment expressions;
+  inert text spelling an API followed by a semicolon can select extra work.
+  Precise resolution, general assignment/destructuring aliases and other
+  unresolved reader forms remain open.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.
