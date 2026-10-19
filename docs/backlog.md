@@ -1009,6 +1009,14 @@ notifications separately.
   and fewer than 23 rounded registration minutes on the exact candidate head.
   The wider target of 55 rounded minutes for a full run remains open.
 
+  The relay-capacity test keeps its four SMTP deliveries open until all four
+  competing worker attempts return without work. Its unchanged sending, queued
+  and total-delivery assertions then describe one concurrent batch. A delayed-start
+  control reproduces extra later deliveries when that synchronization is removed;
+  the production worker limit and original deadline are unchanged. The original
+  CI log did not record the worker schedule, so the exact host delay remains
+  unmeasured.
+
   A shard is one partition of a package's tests. Removing a partition
   from both the plan and the job list cannot turn incomplete work green.
   Unknown packages, altered counts, invalid partition numbers and extra row
@@ -1453,7 +1461,11 @@ notifications separately.
   helpers stay narrow. The guard does not resolve receiver identities, so unrelated
   objects with these member names and inert text can also select extra work.
   Deeper member chains such as `(fs).promises.readdir` now also retain full
-  package work when intermediate names use ASCII letters, digits, `_` or `$`.
+  package work when intermediate names use identifier characters, Unicode escapes
+  or private names (the `#` prefix used inside a class). Executed Node controls
+  include accented characters, `𐐀`, an invisible character allowed inside a name,
+  both Unicode escape forms (including extra leading zeros inside braces) and
+  private members, across all four directory APIs.
   This includes optional access, comments, non-null assertions,
   erased receiver assertions and stored reader references. Executed Node controls
   cover all four directory APIs and actual loaded consumers. Saved-reader checks
@@ -1461,8 +1473,8 @@ notifications separately.
   files; audited lock changes retain full work with these readers and narrow work
   without them. Unused helpers stay narrow. Receiver and member identities remain
   unresolved, so unrelated objects and inert text with the same member spelling
-  can also select extra work. Escaped, non-ASCII and private member names,
-  computed intermediate members and other expression positions remain unresolved;
+  can also select extra work. Computed intermediate members and other expression
+  positions remain unresolved;
   this is not a general
   expression parser.
   Other nested predecessors such as `[[], 0, readdirSync, null][2]` also remain
