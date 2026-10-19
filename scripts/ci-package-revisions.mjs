@@ -116,9 +116,9 @@ function workspaceAt(sha, workspace, git) {
         `Unresolved indirect directory call at ${source.path}`);
       assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|(?:,\s*)?\]|\)|;|<|satisfies\b)|(?:!\s*)+\()/),
         `Unresolved indirect directory call at ${source.path}`);
-      // Assignment values survive a line ending, a comma or EOF; exported readers
-      // can be called by another module. Require assignment to keep named imports narrow.
-      assert.doesNotMatch(source.source, directoryPattern(/=\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b\s*(?:!\s*)*(?:,|[\r\n\u2028\u2029]|\/\/|$)/u),
+      // Assignments and default exports preserve readers across line endings or EOF.
+      // Require a value expression so ordinary named imports keep their scope.
+      assert.doesNotMatch(source.source, directoryPattern(/(?:=|\bexport\s+default)\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b\s*(?:!\s*)*(?:,|[\r\n\u2028\u2029]|\/\/|$)/u),
         `Unresolved indirect directory call at ${source.path}`);
       // A comma can store the reader between other elements. Require an array
       // opener so ordinary named imports do not force full package work. A simple
