@@ -1436,7 +1436,7 @@ notifications separately.
   not resolve member identities and may select extra work for unrelated names
   or inert text, including multi-segment function arguments after a closing
   array or object delimiter. Private (`#fs`) and literal Unicode member names
-  outside the qualified parenthesized forms remain unresolved.
+  outside the qualified parenthesized and first-array forms remain unresolved.
   Dot-member namespace readers stored as the first array element now retain
   every package suite, including `[fs.readdirSync, null][0]` and
   `[fs.promises.readdir, null].at(0)`. Executed Node controls cover all four
