@@ -1704,10 +1704,18 @@ notifications separately.
   head and unchanged helpers retain transitive consumers despite dirty local
   files; audited lock changes retain full work with readers and narrow work
   without them. The assignment check leaves ordinary named imports narrow.
+  An exported reader also retains full work when the assignment ends at the end
+  of its file, without a semicolon or final newline. Executed Node controls cover
+  all four APIs, bare and namespace references, comments, optional access and
+  erased non-null assertions. Saved base, head and unchanged helpers retain
+  transitive consumers despite dirty local files; audited lock changes keep all
+  package work with these readers and narrow work without them. Unused helpers
+  and ordinary exports stay narrow.
   Inert assignment text can still select extra work; these lexical controls do
   not establish complete JavaScript or TypeScript parsing.
-  Precise resolution, general assignment/destructuring aliases and other
-  unresolved reader forms remain open.
+  Precise resolution, general assignment/destructuring aliases, default-exported
+  reader references and other unresolved reader forms remain open. The default
+  export gap was reproduced against both the earlier tree and the EOF fix.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.
