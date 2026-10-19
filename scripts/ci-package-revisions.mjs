@@ -75,8 +75,9 @@ function workspaceAt(sha, workspace, git) {
       assert.doesNotMatch(source.source, /\b(?:globSync|glob)\b/, `Unresolved glob scan at ${source.path}`);
       // Parenthesized receivers and their member chains can expose directory
       // readers with unresolved paths. Unicode escapes and private names preserve
-      // intermediate members too; keep consumers without resolving identities.
-      assert.doesNotMatch(source.source, directoryPattern(/\)\s*(?:!\s*)*(?:(?:\?\.|\.)\s*#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*)*(?:\?\.|\.)\s*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
+      // intermediate members too. Bracket members without nested brackets can
+      // preserve the receiver; keep consumers without evaluating their keys.
+      assert.doesNotMatch(source.source, directoryPattern(/\)\s*(?:!\s*)*(?:(?:(?:\?\.|\.)\s*#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*|(?:\?\.\s*)?\[[^\[\]]*\])\s*(?:!\s*)*)*(?:\?\.|\.)\s*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
         `Unresolved parenthesized directory member at ${source.path}`);
       // Optional calls and function members can enumerate a directory without
       // matching a direct call; unresolved arguments retain every consumer.

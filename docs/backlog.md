@@ -1473,10 +1473,19 @@ notifications separately.
   files; audited lock changes retain full work with these readers and narrow work
   without them. Unused helpers stay narrow. Receiver and member identities remain
   unresolved, so unrelated objects and inert text with the same member spelling
-  can also select extra work. Computed intermediate members and other expression
-  positions remain unresolved;
-  this is not a general
-  expression parser.
+  can also select extra work. Parenthesized chains now also retain full package
+  work through bracket members such as `(ns)['nested'].fs.readdirSync`,
+  `(ns)[key].fs.readdirSync` and ``(ns).nested[`fs`].readdirSync``.
+  Executed Node controls cover all four directory APIs, optional access,
+  comments, non-null and erased assertions, concatenated keys and adjacent
+  bracket members. Saved-helper controls cover base, head and unchanged
+  transitive consumers despite dirty local files; audited lock changes retain
+  full work with these readers and narrow work without them. Unused helpers
+  stay narrow. Keys are not evaluated, so unrelated objects and inert text
+  can also select extra work. This bounded match requires each bracket segment
+  to contain no additional `[` or `]` characters. Nested brackets, bracket
+  characters inside keys, unparenthesized receivers and other expression
+  positions remain unqualified; this is not a general expression parser.
   Other nested predecessors such as `[[], 0, readdirSync, null][2]` also remain
   unresolved on both scanners.
   Adversarial repeated delimiter/comment
