@@ -118,10 +118,10 @@ function workspaceAt(sha, workspace, git) {
       // intervening brackets, braces and semicolons still bound this scan.
       assert.doesNotMatch(source.source, directoryPattern(/[\]}][^\[\]{};]*,\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/u),
         `Unresolved indirect directory call at ${source.path}`);
-      // Logical and conditional operands can preserve the reader for a later
-      // call. Namespace chains, including Unicode and private names, preserve
-      // that function through optional access and erased non-null assertions.
-      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*(?:&&|\|\||\?\?|\?(?!\.)|:)|(?:&&|\|\||\?\?|\?|:)\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
+      // Logical assignments and awaited logical or conditional operands can keep
+      // the reader for a later call. Namespace chains, optional access and erased
+      // non-null assertions also preserve that function without resolving it.
+      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*(?:&&|\|\||\?\?|\?(?!\.)|:)|(?:(?:&&|\|\||\?\?)=?|\?|:)\s*(?:await\s+)*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
         `Unresolved indirect directory call at ${source.path}`);
       // An imported alias can enumerate helpers without naming a directory API
       // at its call site. Quoted names and escaped alias tokens stay unresolved;

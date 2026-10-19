@@ -704,3 +704,29 @@ for await (const item of await scan(directory)) {
     assertSelected(plan(base, head), reader ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
   }));
 });
+
+test('audited lock changes retain assigned and awaited directory readers', async t => {
+  for (const operation of ['scan ||= ñs.readdirSync;', 'scan ??= ñs.readdir;', 'scan &&= ñs.opendirSync;', 'scan ||= ñs.opendir;', 'scan = null || await ñs.readdirSync;', 'scan ??= await ñs.readdir;']) {
+    for (const reader of [false, true]) await t.test(`${operation} reader ${reader}`, () => fixture(({git, write, lock, save, audit, commit, plan}) => {
+      if (reader) {
+        write('packages/catalogue/src/adapter.mjs', 'export const price = 1;\n');
+        write('catalogue-adapter.mjs', "import './packages/catalogue/src/adapter.mjs';\nconsole.log('operator lock helper loaded');\n");
+        write('packages/page/test/scan.mjs', `import * as ñs from '${/Sync/.test(operation) ? 'node:fs' : 'node:fs/promises'}';
+const directory = new URL(['..', '..', '..', ''].join('/'), import.meta.url);
+let scan = ${operation.includes('&&=') ? 'true' : 'null'};
+${operation}
+for await (const item of await scan(directory)) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`);
+      }
+      audit(); const base = commit();
+      lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+      const head = commit();
+      if (reader) assert.equal(execFileSync(process.execPath, ['packages/page/test/scan.mjs'],
+        {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8'}), 'operator lock helper loaded\n');
+      assertSelected(plan(base, head), reader ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
+    }));
+  }
+});
