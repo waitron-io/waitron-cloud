@@ -1447,7 +1447,11 @@ notifications separately.
   them. Unused helpers, ordinary namespace values and named imports stay
   narrow in the controls. The scan does not resolve member identities or
   parse arbitrary expressions; inert text and unrelated members with these
-  names can select extra work. Other expression positions remain unqualified.
+  names can select extra work, including a reader used as a computed key.
+  Supported namespace segments use ASCII identifiers. Non-ASCII, escaped
+  or private receiver names can still hide a first-element reader, as in
+  `[ñs.readdirSync, null][0]`; executed base/head probes reproduce these
+  misses. Other expression positions remain unqualified.
   Quoted computed members such as `fs['readdirSync']` now retain full package
   work for all four directory APIs, including double-quoted and plain template
   keys, comments, optional access, assertions on the object, key or result,
