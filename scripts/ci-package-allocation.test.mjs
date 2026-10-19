@@ -8,7 +8,7 @@ import * as summary from './ci-summary.mjs';
 import {loadWorkspace, workPlan} from './ci-scope.mjs';
 
 const {assertSummary} = summary;
-const results = {changes: 'success', typecheck: 'success', packages: 'success', receipts: 'skipped'};
+const results = {changes: 'success', typecheck: 'success', root: 'success', packages: 'success', receipts: 'skipped'};
 const partitions = [['registration', 5], ['account-http', 3], ['backups', 2], ['portal', 3]];
 const rowsFor = (name, count) => Array.from({length: count}, (_, i) => ({package: `@waitron-cloud/${name}`, shard: i + 1, shards: count}));
 
@@ -17,7 +17,7 @@ test('summary policy contains exactly the real workspace packages, including no 
 });
 
 function summarize(packages) {
-  const jobs = ['changes', 'typecheck', ...packages.map(row => `package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`)]
+  const jobs = ['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)', ...packages.map(row => `package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`)]
     .map(name => ({name, status: 'completed', conclusion: 'success'}));
   return assertSummary({packages, receipts: [], typecheck: true}, results, jobs);
 }

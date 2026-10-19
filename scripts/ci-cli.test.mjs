@@ -40,12 +40,12 @@ test('real squash merges run full on main for equal trees and advanced main with
       ];
       assert.deepEqual([...plan.packages].sort((a,b)=>a.package.localeCompare(b.package)||a.shard-b.shard),
         [...expectedPackages].sort((a,b)=>a.package.localeCompare(b.package)||a.shard-b.shard));
-      const expectedJobs = ['changes','typecheck','receipts', ...expectedPackages.map(row=>`package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`)];
+      const expectedJobs = ['changes','typecheck','root (1/4)','root (2/4)','root (3/4)','root (4/4)','receipts', ...expectedPackages.map(row=>`package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`)];
       const jobs = expectedJobs.map(name=>({name,status:'completed',conclusion:'success'}));
-      const results = {changes:'success',typecheck:'success',receipts:'success',packages:'success',documentation:'skipped',scripts:'skipped'};
+      const results = {changes:'success',typecheck:'success',root:'success',receipts:'success',packages:'success',documentation:'skipped',scripts:'skipped'};
       assert.doesNotThrow(()=>assertSummary(plan,results,jobs));
       for (const name of expectedJobs.slice(1)) assert.throws(()=>assertSummary(plan,results,jobs.filter(job=>job.name!==name)));
-      for (const group of ['typecheck','receipts','packages']) assert.throws(()=>assertSummary(plan,{...results,[group]:'skipped'},jobs));
+      for (const group of ['root','typecheck','receipts','packages']) assert.throws(()=>assertSummary(plan,{...results,[group]:'skipped'},jobs));
       assert.equal(plan.typecheck,true);
       assert.deepEqual(plan.receipts,['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt']);
       assert.equal(plan.reuse,null);
@@ -83,14 +83,14 @@ test('executed summary consumes needs objects and the current job API, refusing 
     const gh=join(root,'gh');
     writeFileSync(gh,'#!/bin/sh\n[ "$1" = api ] || exit 2\ncat "$CI_FIXTURE"\n',{mode:0o700});
     const plan={packages:[{package:'@waitron-cloud/operations',shard:1}],receipts:['test:local-stack'],typecheck:true,reuse:null};
-    const results={changes:{result:'success'},typecheck:{result:'success'},packages:{result:'success'},receipts:{result:'success'}};
-    const jobs=['changes','typecheck','package (@waitron-cloud/operations)','receipts'].map(name=>({name,status:'completed',conclusion:'success'}));
+    const results={changes:{result:'success'},typecheck:{result:'success'},root:{result:'success'},packages:{result:'success'},receipts:{result:'success'}};
+    const jobs=['changes','typecheck','root (1/4)','root (2/4)','root (3/4)','root (4/4)','package (@waitron-cloud/operations)','receipts'].map(name=>({name,status:'completed',conclusion:'success'}));
     const env={...process.env,PATH:`${root}:${process.env.PATH}`,CI_FIXTURE:fixture,CI_PLAN:JSON.stringify(plan),CI_RESULTS:JSON.stringify(results),GITHUB_REPOSITORY:repository,GITHUB_RUN_ID:'42'};
     const run=()=>spawnSync(process.execPath,['scripts/ci-summary.mjs'],{env,encoding:'utf8'});
     writeFileSync(fixture,JSON.stringify([{jobs}]));assert.equal(run().status,0);
     writeFileSync(fixture,JSON.stringify([{jobs:jobs.slice(0,-1)}]));const missing=run();assert.equal(missing.status,1);assert.match(missing.stderr,/Missing or duplicate job/);
     writeFileSync(fixture,JSON.stringify([{jobs}]));
-    for (const group of ['changes','typecheck','packages','receipts']) {
+    for (const group of ['changes','typecheck','root','packages','receipts']) {
       for (const result of ['failure','cancelled','skipped','','queued','in_progress']) {
         env.CI_RESULTS=JSON.stringify({...results,[group]:{result}});
         assert.equal(run().status,1,`${group}=${result} must refuse success`);

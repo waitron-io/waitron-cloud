@@ -10,7 +10,7 @@ import test from 'node:test';
 test('every pnpm bootstrap refuses an unresponsive registry within its network budget', {timeout: 50_000}, async () => {
   const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
   const steps = [...workflow.matchAll(/      - uses: pnpm\/action-setup@v6\n([\s\S]*?)(?=      - |^  [a-z]|$(?![\s\S]))/gm)];
-  assert.equal(steps.length, 4, 'Every pnpm bootstrap must be exercised');
+  assert.equal(steps.length, 5, 'Every pnpm bootstrap must be exercised');
   const configurations = steps.map(([, source]) => Object.fromEntries([...source.matchAll(/          (npm_config_[a-z_]+): ['"]?([0-9]+)['"]?\s*$/gm)].map(([, key, value]) => [key, value])));
   // Each actual action receives the same policy; one npm child exercises that policy.
   for (const configuration of configurations) assert.deepEqual(configuration, configurations[0]);

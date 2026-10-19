@@ -78,6 +78,35 @@ jobs:
       - run: node scripts/ci-scripts.mjs
         env:
           CI_PLAN: ${{ needs.changes.outputs.plan }}
+  root:
+    needs: changes
+    if: needs.changes.outputs.typecheck == 'true'
+    name: root (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: pnpm/action-setup@v6
+        env:
+          npm_config_fetch_timeout: '15000'
+          npm_config_fetch_retries: '1'
+          npm_config_fetch_retry_mintimeout: '1000'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: node --test --test-reporter=tap --test-concurrency=2 --test-shard=${{ matrix.shard }}/4 scripts/ci-*.test.mjs scripts/identity-upstream.test.mjs scripts/verify-gateway-reconnection-receipt.test.mjs
   typecheck:
     needs: changes
     if: needs.changes.outputs.typecheck == 'true'
@@ -101,7 +130,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: node --test scripts/ci-*.test.mjs scripts/identity-upstream.test.mjs scripts/verify-gateway-reconnection-receipt.test.mjs
       - run: pnpm typecheck
   receipts:
     needs: changes
@@ -180,7 +208,7 @@ jobs:
         run: node scripts/test-postgres.mjs exec pnpm --filter ${{ matrix.package }} exec node --test --test-timeout=${{ matrix.package == '@waitron-cloud/portal' && '120000' || '30000' }} --test-shard=${{ matrix.shard }}/${{ matrix.shards }} "test/*.test.ts"
   summary:
     if: ${{ always() }}
-    needs: [changes, typecheck, receipts, packages, documentation, scripts]
+    needs: [changes, root, typecheck, receipts, packages, documentation, scripts]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {assertSummary} from './ci-summary.mjs';
 const plan = {packages:[{package:'@waitron-cloud/portal',shard:1,shards:3},{package:'@waitron-cloud/portal',shard:2,shards:3},{package:'@waitron-cloud/portal',shard:3,shards:3}],receipts:[],typecheck:true,reuse:null};
-const results = {changes:'success',typecheck:'success',receipts:'skipped',packages:'success'};
-const jobs = ['changes','typecheck', ...[1,2,3].map(i=>`package (@waitron-cloud/portal, shard ${i}/3)`)].map(name=>({name,status:'completed',conclusion:'success'}));
+const results = {changes:'success',typecheck:'success',root:'success',receipts:'skipped',packages:'success'};
+const jobs = ['changes','typecheck','root (1/4)','root (2/4)','root (3/4)','root (4/4)', ...[1,2,3].map(i=>`package (@waitron-cloud/portal, shard ${i}/3)`)].map(name=>({name,status:'completed',conclusion:'success'}));
 test('summary accepts precisely the planned work and skips only unnecessary receipts', () => {
   assert.doesNotThrow(()=>assertSummary(plan,results,jobs));
 });

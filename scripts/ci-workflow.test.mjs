@@ -23,7 +23,7 @@ test('all existing receipt suites and workflow guards remain available in CI',()
   assert.deepEqual(receiptSuites,['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt']);
   assert.match(job('receipts'),/run: node scripts\/ci-run-receipts.mjs/);
   assert.match(job('receipts'),/CI_PLAN: \$\{\{ needs.changes.outputs.plan \}\}/);
-  assert.match(job('typecheck'),/run: node --test scripts\/ci-\*\.test.mjs scripts\/identity-upstream.test.mjs scripts\/verify-gateway-reconnection-receipt.test.mjs/);
+  assert.match(job('root'),/run: node --test --test-reporter=tap --test-concurrency=2 --test-shard=\$\{\{ matrix.shard \}\}\/4 scripts\/ci-\*\.test.mjs scripts\/identity-upstream.test.mjs scripts\/verify-gateway-reconnection-receipt.test.mjs/);
 });
 test('slow packages run every file shard with their original test deadlines',()=>{
   const members=loadWorkspace();
@@ -39,7 +39,7 @@ test('slow packages run every file shard with their original test deadlines',()=
   assert.match(packages,/if: matrix.shards\n\s+run: node scripts\/test-postgres.mjs exec pnpm --filter \$\{\{ matrix.package \}\} exec node --test --test-timeout=\$\{\{ matrix.package == '@waitron-cloud\/portal' && '120000' \|\| '30000' \}\} --test-shard=\$\{\{ matrix.shard \}\}\/\$\{\{ matrix.shards \}\} "test\/\*\.test\.ts"/);
 });
 test('work jobs stop within eight minutes and planner/summary within two',()=>{
-  for (const name of ['typecheck','receipts','packages']) assert.match(job(name),/^    timeout-minutes: 8$/m);
+  for (const name of ['root','typecheck','receipts','packages']) assert.match(job(name),/^    timeout-minutes: 8$/m);
   for (const name of ['changes','summary','documentation']) assert.match(job(name),/^    timeout-minutes: 2$/m);
 });
 test('browser setup is limited to browser packages and bounded across two attempts',()=>{
@@ -51,17 +51,17 @@ test('browser setup is limited to browser packages and bounded across two attemp
 });
 test('strict summary always runs and receives the plan and every dependency result',()=>{
   assert.match(job('summary'),/if: \$\{\{ always\(\) \}\}/);
-  assert.match(job('summary'),/needs: \[changes, typecheck, receipts, packages, documentation, scripts\]/);
+  assert.match(job('summary'),/needs: \[changes, root, typecheck, receipts, packages, documentation, scripts\]/);
   assert.match(job('summary'),/CI_PLAN: \$\{\{ needs.changes.outputs.plan \}\}/);
   assert.match(job('summary'),/CI_RESULTS: \$\{\{ toJSON\(needs\) \}\}/);
   assert.match(job('summary'),/run: node scripts\/ci-summary.mjs/);
 });
 test('all work gates follow the planner and every checkout tests the exact PR head',()=>{
-  for (const name of ['typecheck','receipts','packages','documentation']) {
-    assert.match(job(name),new RegExp(`if: needs.changes.outputs.${name} == 'true'`));
+  for (const name of ['root','typecheck','receipts','packages','documentation']) {
+    assert.match(job(name),new RegExp(`if: needs.changes.outputs.${name === 'root' ? 'typecheck' : name} == 'true'`));
     assert.match(job(name),/needs: changes/);
   }
-  for (const name of ['changes','typecheck','receipts','packages','summary','documentation']) {
+  for (const name of ['changes','root','typecheck','receipts','packages','summary','documentation']) {
     assert.match(job(name),/ref: \$\{\{ github.event.pull_request.head.sha \|\| github.sha \}\}/);
   }
   assert.match(job('changes'),/fetch-depth: 0/);
