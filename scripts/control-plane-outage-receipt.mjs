@@ -84,7 +84,8 @@ try{
   while(Date.now()<=routeExpiresAt)await delay(Math.min(250,routeExpiresAt+1-Date.now()));assert.equal(await routeStatus(),503);const refusedAtSignedExpiry=true;await gateway.tick();
   while(Date.now()<=oldLeaseExpiresAt)await delay(Math.min(250,oldLeaseExpiresAt+1-Date.now()));const oldLeaseExpiredBeforeRemoval=true;
   // This fresh old-key lease is a negative control. A 401 proves key removal rather than expiry.
-  const liveOldLease=oldIssuer.issue({origin,leaseId:randomUUID(),installationId:connected.installationId,venueId:connected.venueId,environment:'test',publicKey:binding.installationKey,issuedAt:Date.now(),expiresAt:Date.now()+3600000});
+  const liveOldLeaseIssuedAt=Date.now();
+  const liveOldLease=oldIssuer.issue({origin,leaseId:randomUUID(),installationId:connected.installationId,venueId:connected.venueId,environment:'test',publicKey:binding.installationKey,issuedAt:liveOldLeaseIssuedAt,expiresAt:liveOldLeaseIssuedAt+3600000});
   await account.stop();account=startAccount(newIssuer);await account.ready();
   response=await machine('configuration',proof('configuration',oldLease));assert.equal(response.status,401);const expiredOldLeaseRefusedAfterRemoval=true;
   response=await machine('configuration',proof('configuration',liveOldLease));assert.equal(response.status,401);const liveOldIssuerNegativeControlRefusedAfterRemoval=true;

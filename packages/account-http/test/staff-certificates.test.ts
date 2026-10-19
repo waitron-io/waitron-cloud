@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {after,before,test} from 'node:test';
+import {verifyLease,type SignedEnvelope} from '@waitron-cloud/registration';
 import {staffExchangeFixture} from '../../remote-access/test/staff-exchange-fixture.ts';
 let f:Awaited<ReturnType<typeof staffExchangeFixture>>;
 before(async()=>{f=await staffExchangeFixture();});after(async()=>f?.close());
@@ -58,8 +59,13 @@ test('exchange is disabled unless the account service explicitly enables it',asy
  const disabled=await staffExchangeFixture(false);
  try{const a=await disabled.venue();assert.equal((await disabled.request(submit,a.proof(submit,a.body,randomUUID(),a.lease))).status,503);assert.equal((await disabled.db.pool.query('SELECT count(*)::integer AS n FROM staff_certificate_exchange')).rows[0].n,0);}finally{await disabled.close();}
 });
-test('local exchange refuses a production installation even with its matching live lease',async()=>{
+test('local exchange refuses a production installation even with its matching live lease',async(t)=>{
  const a=await f.venue();await f.db.pool.query("UPDATE venues SET environment='production' WHERE id=$1",[a.venueId]);const c=JSON.parse(Buffer.from(a.lease.payload,'base64url').toString());
- const lease=f.issuer.issue({origin:f.origin,leaseId:c[3],installationId:a.installationId,venueId:a.venueId,environment:'production',publicKey:c[7],issuedAt:Date.now(),expiresAt:Date.now()+3600000});
+ // Advance only lease construction; HTTP authentication must use the real clock.
+ const now=Date.now();let tick=now;
+ const clock=t.mock.method(Date,'now',()=>tick++);let lease:SignedEnvelope;
+ try{const issuedAt=Date.now();lease=f.issuer.issue({origin:f.origin,leaseId:c[3],installationId:a.installationId,venueId:a.venueId,environment:'production',publicKey:c[7],issuedAt,expiresAt:issuedAt+3600000});}finally{clock.mock.restore();}
+ const claims=verifyLease(lease,new Map([[f.issuer.keyId,f.issuer.publicKey]]),f.origin,now);
+ assert.equal(claims.expiresAt-claims.issuedAt,3600000);
  assert.equal((await f.request(submit,a.proof(submit,a.body,randomUUID(),lease))).status,403);
 });
