@@ -56,7 +56,7 @@ for await (const item of await scan(directory)) {
 // Omitting the default-export boundary must lose consumers this program loads.
 test('default-exported readers retain consumers Node actually loads', async t => {
   for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
-    for (const expression of [api, `ñs.${api}`, `ñs! /* receiver */ ?. ${api}!`, `ñs.${api} /* stored */`]) {
+    for (const expression of [api, `ñs.${api}`, `ñs! /* receiver */ ?. ${api}!`, `ñs.${api} /* stored */`, `await ${api}`, `await ñs.${api}`, `await /* value */ await ñs! ?. ${api}!`]) {
       for (const ending of ['', '\nconst marker = 1;']) {
         await t.test(`${expression} ${JSON.stringify(ending)}`, () => fixture(({root, write, commit, plan}) => {
           write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('default reader helper loaded');\n");
@@ -96,6 +96,27 @@ test('default-exported readers retain saved base head and unchanged transitive c
   }));
 });
 
+test('awaited default-exported readers retain saved base head and unchanged transitive consumers', async t => {
+  for (const revision of ['base', 'head', 'unchanged']) await t.test(revision, () => fixture(({root, git, write, commit, plan, workspace}) => {
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('default reader helper loaded');\n");
+    const reader = defaultReader('readdirSync', 'await ñs.readdirSync');
+    const inert = 'export default () => []';
+    write('tools/reader.mts', revision === 'head' ? inert : reader);
+    write('packages/portal/src/index.mjs', consumer);
+    write('packages/gateway/src/index.mjs', "import '../../portal/src/index.mjs';\n");
+    const base = commit();
+    if (revision !== 'head') assert.equal(execFileSync(process.execPath, ['packages/gateway/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'default reader helper loaded\n');
+    if (revision !== 'unchanged') write('tools/reader.mts', revision === 'head' ? reader : inert);
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    if (revision !== 'base') assert.equal(execFileSync(process.execPath, ['packages/gateway/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'default reader helper loaded\n');
+    write('tools/reader.mts', inert);
+    write('catalogue-adapter.mjs', 'export const dirty = true;\n');
+    assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git), /Unresolved indirect directory call at tools\/reader\.mts/);
+    assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
+  }));
+});
+
 test('unused default-exported readers keep isolated package selection', () => fixture(({write, commit, plan}) => {
   write('tools/unused.mts', defaultReader('readdirSync', 'ñs.readdirSync'));
   const base = commit();
@@ -108,6 +129,8 @@ test('ordinary default exports and named imports keep isolated package selection
     "import {readdirSync} from 'node:fs';\nexport default 1",
     "const readdirSyncCount = 1;\nexport default readdirSyncCount",
     "const values = {read: 1};\nexport default values.read",
+    "const readdirSyncCount = 1;\nexport default await readdirSyncCount",
+    "const values = {read: 1};\nexport default await values.read",
   ]) await t.test(source, () => fixture(({root, write, commit, plan}) => {
     write('packages/portal/src/index.mjs', source);
     const base = commit();
@@ -126,3 +149,20 @@ test('a resolved directory call in a default export keeps isolated package selec
   assert.equal(execFileSync(process.execPath, ['--input-type=module', '-e', "import entries from './packages/portal/src/index.mjs'; console.log(entries.includes('index.mjs'));"], {cwd: root, encoding: 'utf8'}), 'true\n');
   assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
 }));
+
+
+test('awaited assignments retain directory readers exported later', async t => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) await t.test(api, () => fixture(({root, write, commit, plan}) => {
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('awaited assignment helper loaded');\n");
+    write('tools/reader.mts', `import * as ñs from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+const scan = await ñs.${api}
+export default scan`);
+    write('packages/portal/src/reader.mts', consumer);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'awaited assignment helper loaded\n');
+    assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
+    assert.match(plan(base, head).reason, /Unresolved indirect directory call at tools\/reader\.mts/);
+  }));
+});

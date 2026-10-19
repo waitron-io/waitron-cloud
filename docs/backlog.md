@@ -1731,9 +1731,10 @@ notifications separately.
   and ordinary exports stay narrow.
   Inert assignment text can still select extra work; these lexical controls do
   not establish complete JavaScript or TypeScript parsing.
-  Default-exported reader references now retain full package work at the end
-  of a file or across a line ending. Executed Node controls cover all four
-  directory APIs, bare and namespace references, comments, optional access and
+  Default-exported reader references, including awaited values, now retain full
+  package work at the end of a file or across a line ending. Awaited assignments
+  that export the stored reader later also retain full work in the controls.
+  Executed Node controls cover all four directory APIs, bare and namespace references, comments, optional access and
   erased non-null assertions. Saved base, head and unchanged helpers retain
   transitive consumers despite dirty local files; audited lock changes keep full
   work with these readers and narrow work without them. Unused helpers, ordinary
@@ -1741,6 +1742,8 @@ notifications separately.
   controls. These lexical checks do not resolve bindings; an unrelated namesake
   or inert text can select extra work. Precise resolution, general assignment
   and destructuring aliases, and other unresolved reader forms remain open.
+  Reproduced remaining default-export gaps include a class field storing a reader
+  before `}` and an arrow function returning a reader without a semicolon.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.

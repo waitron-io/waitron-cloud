@@ -833,12 +833,12 @@ for await (const item of await scan(directory)) {
 
 
 test('audited lock changes retain default-exported directory readers', async t => {
-  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir', null]) {
-    await t.test(api ?? 'without a reader', () => fixture(({git, write, lock, save, audit, commit, plan}) => {
+  for (const [api, prefix] of ['readdirSync', 'readdir', 'opendirSync', 'opendir'].flatMap(api => [[api, ''], [api, 'await ']]).concat([[null, '']])) {
+    await t.test(api ? prefix + api : 'without a reader', () => fixture(({git, write, lock, save, audit, commit, plan}) => {
       if (api) {
         write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.ts';\nconsole.log('default lock helper loaded');\n");
         write('tools/reader.mts', `import * as ñs from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
-export default ñs.${api}`);
+export default ${prefix}ñs.${api}`);
       } else {
         write('tools/reader.mts', 'export default () => []');
       }
