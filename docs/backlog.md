@@ -1480,11 +1480,20 @@ notifications separately.
   parsing and precise directory resolution remain open. Earlier Node and
   planner probes reproduced a semicolon-bearing predecessor omission, such as
   `[';', ñs.readdirSync, null][1]`; resolving it remains open.
-  Independent Node and saved-planner probes also reproduce missed consumers
-  for logical assignments (`||=`, `??=` and `&&=`) and an awaited operand such
-  as `null || await ñs.readdirSync`, on both the earlier and current scanner.
-  These forms need separate qualification. Other expression positions and
-  delimiter-bearing predecessors remain unqualified.
+  Logical assignments (`||=`, `??=` and `&&=`) and awaited logical or
+  conditional operands now retain every package suite. These operators can
+  preserve a directory function until its later call, including
+  `scan ||= ñs.readdirSync` and `null || await ñs.readdirSync`. Executed Node
+  controls cover all four directory APIs, bare and private readers, comments,
+  optional access, escaped namespace names, repeated `await` and erased assertions.
+  Saved base/head and unchanged transitive helpers retain consumers despite
+  dirty local files. Audited lock changes retain full package work with these
+  readers and narrow work without them; unused readers and ordinary values
+  preserve narrow selection in the controls. The scan remains conservative:
+  it does not evaluate assignment conditions, resolve bindings or interpret
+  arbitrary expressions, so inert text and unrelated API-named members can
+  select extra work. Other expression positions and delimiter-bearing
+  predecessors remain unqualified.
   Dot-member namespace readers stored as the first array element now retain
   every package suite, including `[fs.readdirSync, null][0]` and
   `[fs.promises.readdir, null].at(0)`. Executed Node controls cover all four
