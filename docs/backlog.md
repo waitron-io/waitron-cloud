@@ -1488,7 +1488,12 @@ notifications separately.
   The additional scan masks punctuation inside complete literal-like tokens and
   preserves the original text as a separate scan. Repeated-regex and long quoted
   array checks bound the planner child; an isolation control prevents fragments
-  crossing between the two copies. It does not resolve template substitutions, division
+  crossing between the two copies. The first CI run passed all 1,336 root
+  checks but hit the eight-minute job limit. The new reader fixtures now use
+  their explicit four-package metadata and batched saved Git reads, avoiding
+  repeated pnpm discovery without dropping cases or changing deadlines.
+  Whole-run timing remains part of D69's acceptance checks.
+  It does not resolve template substitutions, division
   versus regular expressions, array membership or receiver identities. Unrelated
   expressions and inert text can select extra work; unsupported expressions can
   still hide real readers. Executed base/head planner probes cover division

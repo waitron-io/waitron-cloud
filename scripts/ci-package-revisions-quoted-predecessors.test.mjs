@@ -5,7 +5,6 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
 import {createPlan} from './ci-plan.mjs';
-import {loadWorkspace} from './ci-scope.mjs';
 import {scopeForRevisions, readGitBlobs} from './ci-package-revisions.mjs';
 
 function fixture(run) {
@@ -21,15 +20,19 @@ function fixture(run) {
     write('package.json', JSON.stringify({name: 'revision-fixture', private: true}));
     write('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n  - 'apps/*'\n");
     write('zz-inventory-tail.txt', 'Unrelated inventory tail.\n');
-    for (const name of ['catalogue', 'gateway', 'portal', 'unrelated']) {
-      write(`packages/${name}/package.json`, JSON.stringify({name, private: true, scripts: {test: 'node --test'}}));
-      write(`packages/${name}/src/index.mjs`, 'export const value = 1;\n');
+    const workspace = ['catalogue', 'gateway', 'portal', 'unrelated'].map(name => ({
+      name, private: true, directory: `packages/${name}`, scripts: {test: 'node --test'},
+    }));
+    for (const pkg of workspace) {
+      write(`${pkg.directory}/package.json`, JSON.stringify({name: pkg.name, private: true, scripts: pkg.scripts}));
+      write(`${pkg.directory}/src/index.mjs`, 'export const value = 1;\n');
     }
+    git.readBlobs = ids => readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input}));
     const plan = (base, head, call = git) => createPlan(
       {pull_request: {base: {sha: base}, head: {sha: head}}},
-      {sha: head, repository: 'waitron-io/waitron-cloud'}, loadWorkspace(root), call,
+      {sha: head, repository: 'waitron-io/waitron-cloud'}, workspace, call,
       () => {throw Error('No API expected');});
-    run({root, git, write, commit, plan});
+    run({root, git, write, commit, plan, workspace});
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 
@@ -66,7 +69,7 @@ for await (const item of await scan(directory)) {
 
 test('saved quoted predecessors retain base head and unchanged transitive consumers', async t => {
   for (const nested of [false, true]) for (const revision of ['base', 'head', 'unchanged']) {
-    await t.test(`${nested ? 'nested ' : ''}${revision}`, () => fixture(({root, git, write, commit, plan}) => {
+    await t.test(`${nested ? 'nested ' : ''}${revision}`, () => fixture(({root, git, write, commit, plan, workspace}) => {
       write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('saved quoted predecessor loaded');\n");
       const reader = `import * as ñs from 'node:fs';
 const directory = new URL(['..', ''].join('/'), import.meta.url);
@@ -86,7 +89,7 @@ for (const name of scan(directory)) if (name.endsWith('.mjs')) await import(new 
       write('catalogue-adapter.mjs', 'export const dirty = true;\n');
       const read = (...args) => git(...args);
       read.readBlobs = ids => readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input}));
-      assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, read), /Unresolved indirect directory call at tools\/scan\.mjs/);
+      assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, read), /Unresolved indirect directory call at tools\/scan\.mjs/);
       assert.deepEqual(plan(base, head, read).packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
     }));
   }
