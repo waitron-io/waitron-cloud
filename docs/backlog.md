@@ -1713,8 +1713,9 @@ notifications separately.
   and ordinary exports stay narrow.
   Inert assignment text can still select extra work; these lexical controls do
   not establish complete JavaScript or TypeScript parsing.
-  Precise resolution, general assignment/destructuring aliases and other
-  unresolved reader forms remain open.
+  Precise resolution, general assignment/destructuring aliases, default-exported
+  reader references and other unresolved reader forms remain open. The default
+  export gap was reproduced against both the earlier tree and the EOF fix.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.

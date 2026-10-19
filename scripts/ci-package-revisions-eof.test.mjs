@@ -115,3 +115,12 @@ test('ordinary EOF exports and named imports keep isolated package selection', a
     assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
   }));
 });
+
+test('a resolved directory call at EOF keeps isolated package selection', () => fixture(({root, write, commit, plan}) => {
+  write('packages/portal/src/index.mjs', "import {readdirSync} from 'node:fs';\nexport const entries = readdirSync(new URL('./', import.meta.url))");
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['--input-type=module', '-e', "import {entries} from './packages/portal/src/index.mjs'; console.log(entries.includes('index.mjs'));"], {cwd: root, encoding: 'utf8'}), 'true\n');
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
+}));

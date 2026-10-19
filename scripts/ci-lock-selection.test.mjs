@@ -812,18 +812,20 @@ test('audited lock changes retain exported directory readers at EOF', async t =>
         write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.ts';\nconsole.log('EOF lock helper loaded');\n");
         write('tools/reader.mts', `import * as ñs from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
 export const scan = ñs.${api}`);
-        write('packages/page/test/scan.mts', `import {scan} from '../../../tools/reader.mts';
+      } else {
+        write('tools/reader.mts', 'export const scan = () => []');
+      }
+      write('packages/page/test/scan.mts', `import {scan} from '../../../tools/reader.mts';
 const directory = new URL(['..', '..', '..', ''].join('/'), import.meta.url);
 for await (const item of await scan(directory)) {
   const name = typeof item === 'string' ? item : item.name;
   if (name.endsWith('.mjs')) await import(new URL(name, directory));
 }
 `);
-      }
       audit(); const base = commit();
       lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
       const head = commit();
-      if (api) assert.equal(execFileSync(process.execPath, ['packages/page/test/scan.mts'], {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8'}), 'EOF lock helper loaded\n');
+      assert.equal(execFileSync(process.execPath, ['packages/page/test/scan.mts'], {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8'}), api ? 'EOF lock helper loaded\n' : '');
       assertSelected(plan(base, head), api ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
     }));
   }
