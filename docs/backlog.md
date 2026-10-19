@@ -1688,6 +1688,10 @@ notifications separately.
   ordinary named imports and ordinary stored values stay narrow in the controls.
   This lexical check does not resolve bindings or general assignment expressions;
   inert text spelling an API followed by a semicolon can select extra work.
+  Stored references without a semicolon and comma-separated declarations still
+  miss consumers: `const scan = fs.readdirSync` followed by a newline, and
+  `const scan = fs.readdirSync, unused = 1;`, both execute the reader while the
+  planner selects only the changed package in base and candidate controls.
   Precise resolution, general assignment/destructuring aliases and other
   unresolved reader forms remain open.
   A final element's trailing comma also keeps full work, including multiline and
