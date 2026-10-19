@@ -12,6 +12,14 @@ function directoryPattern(expression) {
     .replaceAll(String.raw`\s+`, space + '+'), expression.flags);
 }
 
+function arrayDirectoryPattern(expression) {
+  // Complete literals and comments can contain punctuation without ending the
+  // preceding array element. Keep the original scan too: this is a conservative
+  // reader check, not a parser for array membership or regular-expression context.
+  const elements = String.raw`(?:[^\[\]{};'"\x60/]|'(?:\\[\s\S]|[^'\\])*'|"(?:\\[\s\S]|[^"\\])*"|\x60(?:\\[\s\S]|[^\x60\\])*\x60|/\*(?:[^*]|\*(?!/))*\*/|//[^\r\n\u2028\u2029]*(?:[\r\n\u2028\u2029]|$)|/(?![*/])(?:\\[^\r\n]|\[(?:\\[^\r\n]|[^\]\\\r\n])*\]|[^/\\[\r\n])+/[a-z]*)*`;
+  return directoryPattern(new RegExp(`(?:${expression.source}|${expression.source.replace(String.raw`[^\[\]{};]*`, elements)})`, expression.flags));
+}
+
 function workspaceAt(sha, workspace, git) {
   assert.match(sha, /^[a-f0-9]{40}$/);
   const entries = git('ls-tree', '-rz', '--full-tree', sha).split('\0');
@@ -111,12 +119,12 @@ function workspaceAt(sha, workspace, git) {
       // opener so ordinary named imports do not force full package work. A simple
       // namespace chain, including Unicode and private names, preserves the stored
       // function through non-null assertions too.
-      assert.doesNotMatch(source.source, directoryPattern(/\[[^\[\]{};]*,\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/u),
+      assert.doesNotMatch(source.source, arrayDirectoryPattern(/\[[^\[\]{};]*,\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/u),
         `Unresolved indirect directory call at ${source.path}`);
       // A nested value can precede ordinary elements and a stored reader.
       // Resume at its closing delimiter without interpreting the earlier value;
-      // intervening brackets, braces and semicolons still bound this scan.
-      assert.doesNotMatch(source.source, directoryPattern(/[\]}][^\[\]{};]*,\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/u),
+      // unquoted brackets, braces and semicolons still bound this scan.
+      assert.doesNotMatch(source.source, arrayDirectoryPattern(/[\]}][^\[\]{};]*,\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/u),
         `Unresolved indirect directory call at ${source.path}`);
       // Logical assignments and awaited logical or conditional operands can keep
       // the reader for a later call. Namespace chains, optional access and erased

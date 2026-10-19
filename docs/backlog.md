@@ -1477,9 +1477,18 @@ notifications separately.
   keep narrow package work in the controls. This conservative scan does not
   evaluate conditions or resolve member identities, so inert text and unrelated
   members with directory API names can select extra work. General expression
-  parsing and precise directory resolution remain open. Earlier Node and
-  planner probes reproduced a semicolon-bearing predecessor omission, such as
-  `[';', ñs.readdirSync, null][1]`; resolving it remains open.
+  parsing and precise directory resolution remain open. Quoted and commented
+  predecessors now retain stored readers too, including
+  `[';', ñs.readdirSync, null][1]` and `[[], 'a;b', ñs.readdirSync, null][2]`.
+  Executed Node controls cover all four directory APIs, single/double/template
+  strings, escaped quotes, comments and regular-expression character classes.
+  Saved base/head and unchanged transitive helper checks retain consumers despite
+  dirty files; audited lock controls retain full package work with these readers
+  and narrow work without them. Unused helpers and ordinary values stay narrow.
+  This additional scan preserves the earlier conservative matches. It recognises
+  complete literal-like tokens without resolving template substitutions, division
+  versus regular expressions, array membership or receiver identities; unrelated
+  expressions and inert text can therefore select extra work.
   Logical assignments (`||=`, `??=` and `&&=`) and awaited logical or
   conditional operands now retain every package suite. These operators can
   preserve a directory function until its later call, including
@@ -1495,7 +1504,7 @@ notifications separately.
   select extra work. Direct async calls after a logical operator, an object
   property colon or a switch-case colon can also select full package work;
   executed base/head planner controls confirm that additional work. Other
-  expression positions and delimiter-bearing predecessors remain unqualified.
+  expression positions and arbitrary predecessor expressions remain unqualified.
   Dot-member namespace readers stored as the first array element now retain
   every package suite, including `[fs.readdirSync, null][0]` and
   `[fs.promises.readdir, null].at(0)`. Executed Node controls cover all four
@@ -1607,11 +1616,11 @@ notifications separately.
   checks preserve transitive consumers despite dirty local files; audited
   lock changes retain full work with readers and narrow work without them.
   Unused helpers, ordinary arrays and named imports stay narrow in the
-  controls. This scan stops at intervening brackets, braces or semicolons;
-  it does not resolve array membership or receiver identities. A semicolon
-  or an unmatched opening bracket or brace inside an intervening string,
-  comment or regular expression can therefore leave a real reader undetected,
-  as in `[[], 'a;b', readdirSync, null][2]`. Inert text and unrelated
+  controls. The additional literal/comment scan now crosses punctuation inside
+  complete quoted strings, comments and regular-expression-like tokens. Unquoted
+  brackets, braces and semicolons still bound it. It does not resolve array
+  membership, template substitutions or receiver identities. Arbitrary expression
+  parsing remains open. Inert text and unrelated
   expressions can select extra work, including text after a function body
   without a semicolon. An ordinary object expression and a semicolon
   before that inert text have separate package-isolation controls. The
