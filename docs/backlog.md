@@ -1456,7 +1456,9 @@ notifications separately.
   fallback. Saved base/head helpers and audited lock changes retain consumers;
   unused helpers and ordinary Unicode member values stay narrow in the controls.
   This lexical scan still does not resolve identities or arbitrary expressions;
-  inert text can select extra work. Other expression positions remain unqualified.
+  inert text and longer lookalike names such as `readdirSyncñ` can select extra
+  work because its word boundary does not follow Unicode identifier rules.
+  Other expression positions remain unqualified.
   Quoted computed members such as `fs['readdirSync']` now retain full package
   work for all four directory APIs, including double-quoted and plain template
   keys, comments, optional access, assertions on the object, key or result,
