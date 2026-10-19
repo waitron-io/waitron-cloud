@@ -1480,7 +1480,11 @@ notifications separately.
   parsing and precise directory resolution remain open. Earlier Node and
   planner probes reproduced a semicolon-bearing predecessor omission, such as
   `[';', ñs.readdirSync, null][1]`; resolving it remains open.
-  Other expression positions and delimiter-bearing predecessors remain unqualified.
+  Independent Node and saved-planner probes also reproduce missed consumers
+  for logical assignments (`||=`, `??=` and `&&=`) and an awaited operand such
+  as `null || await ñs.readdirSync`, on both the earlier and current scanner.
+  These forms need separate qualification. Other expression positions and
+  delimiter-bearing predecessors remain unqualified.
   Dot-member namespace readers stored as the first array element now retain
   every package suite, including `[fs.readdirSync, null][0]` and
   `[fs.promises.readdir, null].at(0)`. Executed Node controls cover all four
