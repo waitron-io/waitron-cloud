@@ -1517,8 +1517,9 @@ notifications separately.
   checks cover base, head and unchanged transitive readers despite dirty local
   files. Audited lock changes retain full work with these readers and narrow
   work without them; unused helpers and plain escaped string values stay narrow.
-  The guard does not decode names or resolve bindings, so unrelated escaped
-  identifiers and inert text can also select extra work. It excludes an opening
+  The guard decodes names without resolving their bindings, so unrelated namesakes
+  and inert text spelling a directory API can also select extra work. Other escaped
+  identifiers and Unicode text stay narrow. It excludes an opening
   quote immediately before the name; strings with more complex contents and
   other expression forms still need separate qualification.
   Adversarial repeated delimiter/comment

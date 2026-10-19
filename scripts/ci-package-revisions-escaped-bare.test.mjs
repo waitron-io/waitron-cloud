@@ -36,7 +36,9 @@ function fixture(run) {
 test('escaped bare directory APIs retain consumers Node actually loads', async t => {
   for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
     for (const escaped of [api.slice(0, -1) + String.raw`\u` + api.charCodeAt(api.length - 1).toString(16).padStart(4, '0'),
-      String.raw`\u{00000` + api.charCodeAt(0).toString(16) + '}' + api.slice(1)]) {
+      String.raw`\u{00000` + api.charCodeAt(0).toString(16) + '}' + api.slice(1),
+      String.raw`\u` + api.charCodeAt(0).toString(16).padStart(4, '0') + api.slice(1, -1) +
+        String.raw`\u{00000` + api.charCodeAt(api.length - 1).toString(16) + '}']) {
       await t.test(escaped, () => fixture(({root, write, commit, plan}) => {
         write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('bare API helper loaded');\n");
         write('packages/portal/src/reader.mts', `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
@@ -116,5 +118,16 @@ test('unused bare readers and plain escaped string values preserve isolation', (
   const base = commit();
   write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
   const head = commit();
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
+}));
+
+test('unrelated escaped names and Unicode text do not widen package work', () => fixture(({root, write, commit, plan}) => {
+  write('packages/portal/src/index.mjs', String.raw`const n\u0061me = 'menu';
+const re\u0061ddirSyncSuffix = 'suffix';
+export const label = ` + '`price: \\u2022 ${n\\u0061me} ${re\\u0061ddirSyncSuffix}`' + ';\nconsole.log(label);\n');
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'price: • menu suffix\n');
   assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
 }));
