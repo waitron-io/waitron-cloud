@@ -110,9 +110,10 @@ function workspaceAt(sha, workspace, git) {
       // namespace chain and non-null assertions preserve the stored function too.
       assert.doesNotMatch(source.source, directoryPattern(/\[[^\[\]{};]*,\s*(?:[A-Za-z_$][\w$]*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/),
         `Unresolved indirect directory call at ${source.path}`);
-      // A nested value can precede a stored reader. Its closing delimiter
-      // breaks the simple array-prefix match but leaves the callable unchanged.
-      assert.doesNotMatch(source.source, directoryPattern(/[\]}]\s*,\s*(?:[A-Za-z_$][\w$]*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/),
+      // A nested value can precede ordinary elements and a stored reader.
+      // Resume at its closing delimiter without interpreting the earlier value;
+      // intervening brackets, braces and semicolons still bound this scan.
+      assert.doesNotMatch(source.source, directoryPattern(/[\]}][^\[\]{};]*,\s*(?:[A-Za-z_$][\w$]*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/),
         `Unresolved indirect directory call at ${source.path}`);
       // Logical and conditional operands can preserve the reader for a later
       // call. Bare and simple namespace references stay unresolved on either

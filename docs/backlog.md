@@ -1519,8 +1519,25 @@ notifications separately.
   Template contents and receiver identities remain unresolved, so inert text
   and unrelated objects can select extra work. General template parsing and
   other expression positions remain unqualified.
-  Other nested predecessors such as `[[], 0, readdirSync, null][2]` also remain
-  unresolved on both scanners.
+  Nested array or object predecessors separated from a stored reader by
+  ordinary elements now retain full package work too, including
+  `[[], 0, readdirSync, null][2]`. Executed Node controls cover all four
+  directory APIs, multiple intervening elements, namespace access, comments
+  and erased non-null assertions. Saved base, head and unchanged helper
+  checks preserve transitive consumers despite dirty local files; audited
+  lock changes retain full work with readers and narrow work without them.
+  Unused helpers, ordinary arrays and named imports stay narrow in the
+  controls. This scan stops at intervening brackets, braces or semicolons;
+  it does not resolve array membership or receiver identities. A semicolon
+  or an unmatched opening bracket or brace inside an intervening string,
+  comment or regular expression can therefore leave a real reader undetected,
+  as in `[[], 'a;b', readdirSync, null][2]`. Inert text and unrelated
+  expressions can select extra work, including text after a function body
+  without a semicolon. An ordinary object expression and a semicolon
+  before that inert text have separate package-isolation controls. The
+  bracket exclusion still lacks an independent omission control; the earlier
+  array guard also retains inert text inside arrays. General
+  expression parsing and the wider reader inventory remain unqualified.
   Unicode escapes in dot-member names, such as `fs.re\u0061ddirSync`,
   now retain full package work. Node execution controls cover all four directory
   APIs, escapes at the start and end of a name, zero-padded brace escapes,
@@ -1561,8 +1578,8 @@ notifications separately.
   Type checking stays whole-workspace. The root command compiles the shared
   backend configuration once, then runs the portal and UI-smoke configurations.
   The seven backend package commands use the same root configuration, so repeating
-  them does not check additional sources. The package-revision checks are split
-  across four files discovered by the existing CI command, preserving every test
+  them does not check additional sources. The package-revision checks run in separate
+  files discovered by the existing CI command, preserving every test
   body, assertion and fixture while allowing Node to run the files in parallel.
   This follows an eight-minute job cancellation after all 671 root checks and
   compiler checks completed; the test step alone took 457.9 seconds. The roughly
@@ -1701,7 +1718,17 @@ notifications separately.
   also killed the unchanged npm-bootstrap probe at its 35-second deadline without
   retaining npm output. An isolated run passed in 31.36 seconds; that does not
   explain the earlier deadline. Capture process startup and request timestamps on
-  recurrence, and preserve the original budget. A failed fiscal HTTP
+  recurrence, and preserve the original budget. A later D69 focused CI-script
+  run passed 970 of 971 checks and reached that same unchanged 35-second
+  bootstrap limit with no child output. The test and workflow match its base.
+  An isolated instrumented copy passes in 31.4 seconds, with tarball requests at
+  0.4 and 16.4 seconds. A controlled five-second npm startup delay reproduces
+  the unchanged timeout assertion. This demonstrates that startup time can
+  consume the remaining budget; the original run recorded no request stages,
+  so its precise cause remains unproved. No bootstrap assertion or limit changes.
+  Retain startup and request timestamps on recurrence. Local receipts are under
+  `~/waitron-campaign-d/receipts/d69/nested-predecessor-readers/`.
+  A failed fiscal HTTP
   fixture setup also left its local continuity-authority child open after the
   last test; the run printed its final failures after that recorded child was
   stopped. Make fixture construction close acquired resources on setup failure
