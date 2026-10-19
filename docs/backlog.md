@@ -1445,8 +1445,12 @@ notifications separately.
   full package work for simple and nested predecessors; unused helpers and
   ordinary Unicode namespace values stay narrow in the controls. These scans
   still do not resolve bindings or arbitrary expressions; inert text and
-  unrelated members with directory API names can select extra work. Other
-  expression positions and delimiter-bearing predecessors remain unqualified.
+  unrelated members with directory API names can select extra work. Unicode
+  namespace readers in other positions, including `null || ñs.readdirSync`,
+  remain unresolved. A semicolon-bearing predecessor such as
+  `[';', ñs.readdirSync, null][1]` still hides a real reader. Independent Node
+  and planner probes reproduce both omissions on the prior and current scanner.
+  Other expression positions and delimiter-bearing predecessors remain unqualified.
   Dot-member namespace readers stored as the first array element now retain
   every package suite, including `[fs.readdirSync, null][0]` and
   `[fs.promises.readdir, null].at(0)`. Executed Node controls cover all four

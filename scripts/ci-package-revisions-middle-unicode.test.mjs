@@ -60,13 +60,13 @@ for await (const item of await scan(directory)) {
 });
 
 test('middle Unicode namespace readers retain comments optional access and erased assertions', async t => {
-  for (const expression of ['ñs! /* receiver */ ?. /* reader */ readdirSync!', 'ns.𐐀!.fs!?.readdirSync', 'a\u200cb // receiver\n ?. readdirSync']) {
-    await t.test(expression, () => fixture(({root, write, commit, plan}) => {
+  for (const prefix of ['[], 0', '0']) for (const expression of ['ñs! /* receiver */ ?. /* reader */ readdirSync!', 'ns.𐐀!.fs!?.readdirSync', 'a\u200cb // receiver\n ?. readdirSync']) {
+    await t.test(`${prefix}: ${expression}`, () => fixture(({root, write, commit, plan}) => {
       write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('wrapped unicode middle helper loaded');\n");
       write('packages/portal/src/reader.mts', `import * as fs from 'node:fs';
 const ñs = fs, a\u200cb = fs, ns = {𐐀: {fs}};
 const directory = new URL(['..', '..', '..', ''].join('/'), import.meta.url);
-const scan = [[], 0, ${expression}, null].at(2);
+const scan = [${prefix}, ${expression}, null].at(-2);
 for (const name of scan(directory)) if (name.endsWith('.mjs')) await import(new URL(name, directory));
 `);
       const base = commit();
