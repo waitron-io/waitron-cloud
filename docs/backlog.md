@@ -1489,8 +1489,10 @@ notifications separately.
   preserves the original text as a separate scan. Repeated-regex and long quoted
   array checks bound the planner child; an isolation control prevents fragments
   crossing between the two copies. It does not resolve template substitutions, division
-  versus regular expressions, array membership or receiver identities; unrelated
-  expressions and inert text can therefore select extra work.
+  versus regular expressions, array membership or receiver identities. Unrelated
+  expressions and inert text can select extra work; unsupported expressions can
+  still hide real readers. Executed base/head planner probes cover division
+  between the quoted value and stored reader, but do not establish completeness.
   Logical assignments (`||=`, `??=` and `&&=`) and awaited logical or
   conditional operands now retain every package suite. These operators can
   preserve a directory function until its later call, including
@@ -1620,7 +1622,9 @@ notifications separately.
   Unused helpers, ordinary arrays and named imports stay narrow in the
   controls. The additional literal/comment scan now crosses punctuation inside
   complete quoted strings, comments and regular-expression-like tokens. Brackets,
-  braces and semicolons outside those matched tokens still bound it. It does not resolve array
+  braces and semicolons outside those matched tokens still bound it. A division
+  pair can be mistaken for a regex token and carry the scan across actual
+  statement or array boundaries. It does not resolve array
   membership, template substitutions or receiver identities. Arbitrary expression
   parsing remains open. Inert text and unrelated
   expressions can select extra work, including text after a function body
