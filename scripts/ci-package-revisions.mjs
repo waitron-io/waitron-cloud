@@ -79,6 +79,10 @@ function workspaceAt(sha, workspace, git) {
       // characters can preserve the receiver without evaluating their keys.
       assert.doesNotMatch(source.source, directoryPattern(/\)\s*(?:!\s*)*(?:(?:(?:\?\.|\.)\s*#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*|(?:\?\.\s*)?\[[^\[\]]*\])\s*(?:!\s*)*)*(?:\?\.|\.)\s*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
         `Unresolved parenthesized directory member at ${source.path}`);
+      // A Unicode escape can hide a directory API in a dot-member name.
+      // Without resolving member identities, keep every possible consumer.
+      assert.doesNotMatch(source.source, directoryPattern(/\.\s*[$_\p{ID_Continue}]*\\u/u),
+        `Unresolved escaped member at ${source.path}`);
       // Optional calls and function members can enumerate a directory without
       // matching a direct call; unresolved arguments retain every consumer.
       // TypeScript non-null assertions leave the runtime function unchanged,

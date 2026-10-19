@@ -1499,10 +1499,21 @@ notifications separately.
   positions remain unqualified; this is not a general expression parser.
   Other nested predecessors such as `[[], 0, readdirSync, null][2]` also remain
   unresolved on both scanners.
+  Unicode escapes in dot-member names, such as `fs.re\u0061ddirSync`,
+  now retain full package work. Node execution controls cover all four directory
+  APIs, escapes at the start and end of a name, zero-padded brace escapes,
+  comments, optional access and erased TypeScript assertions. Saved helper
+  controls cover base, head and unchanged transitive consumers despite dirty
+  local files; audited lock changes retain full work with these readers and
+  narrow work without them. Unused helpers and plain escaped array strings
+  stay narrow. The guard does not decode names or resolve receiver identities:
+  any dot-member name with a Unicode escape, including unrelated names and
+  inert text, can select extra work. Escaped bare API identifiers and other
+  unresolved expression forms still need separate qualification.
   Adversarial repeated delimiter/comment
   text can increase scan time; comprehensive parser performance remains unqualified.
   Precise resolution,
-  assignment/destructuring aliases and escaped API identifiers remain open.
+  assignment/destructuring aliases and escaped bare API identifiers remain open.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.
