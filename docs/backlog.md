@@ -1506,7 +1506,10 @@ notifications separately.
   unresolved, so unrelated objects and inert text can also select extra work.
   Intermediate bracket segments still exclude embedded brackets, but a later
   closing bracket can independently retain the reader. Other expression positions
-  remain unqualified; this is not a general expression parser.
+  remain unqualified; this is not a general expression parser. A tagged template,
+  which calls a function with a template string, can still hide a reader:
+  ``ns[key]``.readdirSync(directory)`` loads the helper but selects only its changed
+  package in executed base and final probes. Qualify that receiver form separately.
   Other nested predecessors such as `[[], 0, readdirSync, null][2]` also remain
   unresolved on both scanners.
   Unicode escapes in dot-member names, such as `fs.re\u0061ddirSync`,
