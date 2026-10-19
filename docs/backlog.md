@@ -615,15 +615,12 @@ Remaining work:
   fixture budgets and cancellation. The production page limit stays at 16 MiB;
   invalid internal limits are refused. Removing the guards and reply controls in
   a disposable checkout makes their tests fail. The baseline script now has tested
-  trace and child-cleanup checks. Its actual paired execution stops before Waitron
-  writes its readiness file: clean Waitron `d2680855e5aa9898d5bca25e3e4d76d8b9a42aa4`
-  refuses the fixture's synthetic provisioning with `sif.allocation_invalid`, reason
-  `reauthentication_required`. The fixture calls `provisionVenue` without the module
-  operation required by `packages/fiscal-verifactu/src/allocated-lifecycle.ts:15–16`.
-  Waitron's owning lane must repair that test setup before Cloud can qualify the
-  healthy walk or any interruption. Keep the fiscal guard unchanged. The baseline
-  after launch remains unverified; implement and run all four independent interruption
-  cases, including both graceful and forced restarts. Pin both candidates and prove stable page
+  trace and child-cleanup checks. Its paired healthy walk passes against clean
+  Waitron `a3be14ba4e59bc8104087624171ddabec4978de2` (fixture repair #1903): three
+  one-item pages, three unique durable suggestions before release, and no retained
+  Cloud body. An injected setup failure also cleans up its process, Cloud and root.
+  Implement and run all four independent interruption cases, including both graceful
+  and forced restarts. Pin both candidates and prove stable page
   retries, resumed durable cursors, suggestion deduplication, release only after
   durable completion, repeat release, and retained partial results with the real
   notification after expiry. Keep bounded decoded reads and the joint release gate
