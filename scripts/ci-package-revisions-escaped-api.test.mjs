@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import test from 'node:test';
 import {createPlan} from './ci-plan.mjs';
 import {loadWorkspace} from './ci-scope.mjs';
+import {scopeForRevisions, readGitBlobs} from './ci-package-revisions.mjs';
 
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-package-revisions-'));
@@ -32,7 +33,6 @@ function fixture(run) {
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 
-// Removing the escaped-member refusal must omit the portal consumer and fail these checks.
 test('escaped final directory APIs retain consumers Node actually loads', async t => {
   for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
     for (const escaped of [api.slice(0, -1) + String.raw`\u` + api.charCodeAt(api.length - 1).toString(16).padStart(4, '0'),
@@ -62,7 +62,7 @@ for await (const item of await readDirectory(directory)) {
 test('escaped API members retain optional access comments and erased assertions', async t => {
   for (const expression of [String.raw`fs.re\u0061ddirSync`, String.raw`(fs)!?.re\u0061ddirSync!`,
     String.raw`(fs as typeof fs) /* receiver */ ?. /* member */ \u0072eaddirSync`,
-    String.raw`(fs satisfies typeof fs) // receiver` + '\n . // member\n ' + String.raw`readdir\u0053ync`]) {
+    String.raw`(fs satisfies typeof fs) // receiver` + '\n . // member\n ' + String.raw`re\u0061ddirSync`]) {
     await t.test(expression, () => fixture(({root, write, commit, plan}) => {
       write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('wrapped API helper loaded');\n");
       write('packages/portal/src/reader.mts', `import * as fs from 'node:fs';
@@ -76,7 +76,9 @@ for (const name of readDirectory(directory)) {
       write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
       const head = commit();
       assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'wrapped API helper loaded\n');
-      assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+      const result = plan(base, head);
+      assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+      assert.match(result.reason, /Unresolved escaped member at packages\/portal\/src\/reader\.mts/);
     }));
   }
 });
@@ -100,7 +102,12 @@ for (const name of fs.re\u0061ddirSync(directory)) {
     const head = commit();
     if (revision !== 'base') assert.equal(execFileSync(process.execPath, ['packages/gateway/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'saved escaped helper loaded\n');
     write('tools/scan.mjs', 'export const dirty = true;\n');
-    assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+    write('catalogue-adapter.mjs', 'export const dirty = true;\n');
+    const read = (...args) => git(...args);
+    read.readBlobs = ids => readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input}));
+    assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, read),
+      /Unresolved escaped member at tools\/scan\.mjs/);
+    assert.deepEqual(plan(base, head, read).packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
   }));
 });
 
