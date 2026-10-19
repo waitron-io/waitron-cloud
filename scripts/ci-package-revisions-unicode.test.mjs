@@ -35,7 +35,7 @@ function fixture(run) {
 }
 
 test('Unicode parenthesized directory chains retain consumers Node actually loads', async t => {
-  for (const member of [String.raw`\u006eested`, String.raw`n\u{65}sted`, 'café', '𐐀', 'a\u200cb', '#nested']) {
+  for (const member of [String.raw`\u006eested`, String.raw`n\u{65}sted`, String.raw`\u{10400}`, String.raw`\u{000006e}ested`, String.raw`n\u{0000065}sted`, 'café', '𐐀', 'a\u200cb', '#nested']) {
     for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
       await t.test(`${member} ${api}`, () => fixture(({root, write, commit, plan}) => {
         write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('unicode helper loaded');\n");

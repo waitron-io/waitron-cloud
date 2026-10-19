@@ -457,7 +457,7 @@ test('audited lock changes retain consumers behind Unicode parenthesized namespa
       write('packages/page/test/scan.mjs', String.raw`import * as fs from '${reader === 'readdir' ? 'node:fs/promises' : 'node:fs'}';
 const ns = {nested: {fs}};
 const directory = new URL(['..', '..', '..', ''].join('/'), import.meta.url);
-for (const name of await (ns).\u006eested.fs.${reader}(directory)) {
+for (const name of await (ns).\u{000006e}ested.fs.${reader}(directory)) {
   if (name.endsWith('.mjs')) await import(new URL(name, directory));
 }
 `);

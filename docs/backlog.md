@@ -1455,8 +1455,9 @@ notifications separately.
   Deeper member chains such as `(fs).promises.readdir` now also retain full
   package work when intermediate names use identifier characters, Unicode escapes
   or private names (the `#` prefix used inside a class). Executed Node controls
-  include accented and astral characters, an invisible identifier joiner, both
-  Unicode escape forms and private members, across all four directory APIs.
+  include accented characters, `𐐀`, an invisible character allowed inside a name,
+  both Unicode escape forms (including extra leading zeros inside braces) and
+  private members, across all four directory APIs.
   This includes optional access, comments, non-null assertions,
   erased receiver assertions and stored reader references. Executed Node controls
   cover all four directory APIs and actual loaded consumers. Saved-reader checks
