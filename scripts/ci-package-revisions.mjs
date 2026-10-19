@@ -73,10 +73,10 @@ function workspaceAt(sha, workspace, git) {
       // Glob patterns, options and the default working directory can reach inputs
       // outside the quoted paths; unresolved scans must keep every package.
       assert.doesNotMatch(source.source, /\b(?:globSync|glob)\b/, `Unresolved glob scan at ${source.path}`);
-      // Closing parentheses and brackets can expose directory readers through
-      // member chains. Starting at the closing delimiter preserves nested keys
-      // without evaluating them; unresolved paths retain every consumer.
-      assert.doesNotMatch(source.source, directoryPattern(/[)\]]\s*(?:!\s*)*(?:(?:(?:\?\.|\.)\s*#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*|(?:\?\.\s*)?\[[^\[\]]*\])\s*(?:!\s*)*)*(?:\?\.|\.)\s*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
+      // Backticks and closing parentheses/brackets can precede directory readers
+      // through member chains. This scan preserves tagged calls and nested keys
+      // without evaluation; opening backticks and inert text can also match.
+      assert.doesNotMatch(source.source, directoryPattern(/[)`\]]\s*(?:!\s*)*(?:(?:(?:\?\.|\.)\s*#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*|(?:\?\.\s*)?\[[^\[\]]*\])\s*(?:!\s*)*)*(?:\?\.|\.)\s*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
         `Unresolved parenthesized directory member at ${source.path}`);
       // A Unicode escape can hide a directory API in a dot-member name.
       // Without resolving member identities, keep every possible consumer.
