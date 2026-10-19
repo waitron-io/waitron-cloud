@@ -1435,8 +1435,18 @@ notifications separately.
   narrow work without them; unreachable helpers stay narrow. These guards do
   not resolve member identities and may select extra work for unrelated names
   or inert text, including multi-segment function arguments after a closing
-  array or object delimiter. Private (`#fs`) and literal Unicode member names
-  outside the qualified parenthesized and first-array forms remain unresolved.
+  array or object delimiter. Middle-array namespace segments now also retain
+  package work for Unicode, escaped and private names, such as
+  `[0, ñs.readdirSync, null][1]` and `[{}, 0, this.#fs.readdirSync, null][2]`.
+  Executed Node controls cover all four APIs, astral letters, join-control
+  characters, fixed and braced escapes, optional access, comments and erased
+  non-null assertions. Saved helper controls retain base, head and unchanged
+  transitive consumers despite dirty local files. Audited lock changes retain
+  full package work for simple and nested predecessors; unused helpers and
+  ordinary Unicode namespace values stay narrow in the controls. These scans
+  still do not resolve bindings or arbitrary expressions; inert text and
+  unrelated members with directory API names can select extra work. Other
+  expression positions and delimiter-bearing predecessors remain unqualified.
   Dot-member namespace readers stored as the first array element now retain
   every package suite, including `[fs.readdirSync, null][0]` and
   `[fs.promises.readdir, null].at(0)`. Executed Node controls cover all four
