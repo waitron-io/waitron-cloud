@@ -128,10 +128,21 @@ test('migrations upgrade a seven-migration schema without changing its existing 
 });
 
 test('session expiry while Cloud approval waits on permission leaves no approval',async()=>{
-  const a=machine();await store.start(a);await db.pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '100 milliseconds'");
+  const a=machine();await store.start(a);
+  await db.pool.query('SELECT pg_sleep(0.2)');
   const block=await db.secondPool.connect();await block.query('BEGIN');await block.query('SELECT 1 FROM organisation_memberships FOR UPDATE');
+  // Approval locks the session row, so let its deadline pass instead of updating it from another connection.
+  const expiresAt=(await db.pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '5 seconds' RETURNING absolute_expires_at")).rows[0].absolute_expires_at;
+  const blockerPid=(await block.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
   const pending=assert.rejects(approve(a),/session_expired/);let blocked=false;
-  try{for(let i=0;i<100;i++){if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[db.schema])).rowCount){blocked=true;break;}await new Promise(r=>setTimeout(r,10));}await new Promise(r=>setTimeout(r,150));}
+  try{
+    for(let i=0;i<100;i++){
+      if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND $2::int=ANY(pg_blocking_pids(pid))",[db.schema,blockerPid])).rowCount){blocked=true;break;}
+      await new Promise(r=>setTimeout(r,10));
+    }
+    assert.equal((await db.secondPool.query('SELECT absolute_expires_at>clock_timestamp() AS valid FROM cloud_sessions')).rows[0].valid,true);
+    await db.secondPool.query("SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM ($1::timestamptz-clock_timestamp())))+0.05)",[expiresAt]);
+  }
   finally{await block.query('COMMIT');block.release();}
   await pending;assert.equal(blocked,true);assert.equal((await db.pool.query('SELECT cloud_account_id FROM pairing_requests')).rows[0].cloud_account_id,null);
 });
