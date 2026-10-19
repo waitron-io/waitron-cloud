@@ -1369,7 +1369,7 @@ notifications separately.
   files; the lockfile control retains full work while its reader-free control
   still narrows selection. Unreachable helpers keep narrow package work.
   Precise alias resolution, assignment/destructuring aliases, escaped
-  API identifiers and other unsupported calls remain open. Directory reader names
+  bare API identifiers and other unsupported calls remain open. Directory reader names
   wrapped directly in parentheses now retain every package suite because wrapping
   the function leaves its runtime readers unchanged. Executed Node controls cover all four APIs,
   nested parentheses, TypeScript assertions, optional invocation and comments.
@@ -1435,8 +1435,9 @@ notifications separately.
   narrow work without them; unreachable helpers stay narrow. These guards do
   not resolve member identities and may select extra work for unrelated names
   or inert text, including multi-segment function arguments after a closing
-  array or object delimiter. Private (`#fs`), Unicode and escaped member names,
-  and dot-member namespace readers as the first array element remain unresolved.
+  array or object delimiter. Private (`#fs`) and literal Unicode member names
+  outside the qualified parenthesized forms, and dot-member namespace readers
+  as the first array element remain unresolved.
   Quoted computed members such as `fs['readdirSync']` now retain full package
   work for all four directory APIs, including double-quoted and plain template
   keys, comments, optional access, assertions on the object, key or result,
