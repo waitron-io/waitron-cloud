@@ -132,6 +132,14 @@ function workspaceAt(sha, workspace, git) {
         aliasSuffix.lastIndex = token.index + token[0].length;
         assert.ok(!aliasSuffix.test(source.source), `Unresolved directory import alias at ${source.path}`);
       }
+      // Bare names can hide directory readers behind Unicode escapes. Decode
+      // the whole name so unrelated escaped identifiers keep their own scope.
+      for (const token of source.source.matchAll(/(?<![$\p{ID_Continue}\\.'"`])[$_\p{ID_Continue}]*\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\})(?:[$\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*/gu)) {
+        const name = token[0].replace(/\\u(?:([\da-fA-F]{4})|\{(0*[\da-fA-F]{1,6})\})/g,
+          (_, fixed, braced) => String.fromCodePoint(parseInt(fixed ?? braced, 16)));
+        assert.doesNotMatch(name, /^(?:readdirSync|readdir|opendirSync|opendir)$/,
+          `Unresolved escaped identifier at ${source.path}`);
+      }
       const rootReads = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*,?\s*\)\s*,?\s*\)/g))].map(match => match[2]));
       // Options may enable recursion or supply a computed policy; an unresolved
       // root scan cannot justify omitting any package consumer.
