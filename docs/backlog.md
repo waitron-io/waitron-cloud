@@ -509,6 +509,17 @@ not proof that every intermittent disconnect failure is resolved. On recurrence,
 complete assertion output, selected backend ids and termination results before changing
 the original check. Active-job failure ordering at direct pool queries remains separately
 unqualified; the reviewed idle scenario leases no job.
+A later CI disconnect failure retains the reverse output: a pass-retry line before
+that fatal line. A local real PostgreSQL lease-query termination reproduces this
+ordering when the client error event arrives later. The query reports `57P01`,
+PostgreSQL's code for an administrator stopping a connection. The worker now treats
+that query rejection as fatal before the event in both the cleanup loop and the
+lease pass, so it prints the existing single fixed failure line without promising
+a retry. The original disconnect and ordinary retry assertions remain unchanged.
+Two new process tests retain the real error code and force query rejection before
+the client event at each stage. The exact query stage and
+backend identifiers from that CI failure remain unavailable; the local ordering
+proof does not establish them or classify every other connection error.
 Keep translation off until the remaining runtime and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
@@ -1473,10 +1484,19 @@ notifications separately.
   files; audited lock changes retain full work with these readers and narrow work
   without them. Unused helpers stay narrow. Receiver and member identities remain
   unresolved, so unrelated objects and inert text with the same member spelling
-  can also select extra work. Computed intermediate members and other expression
-  positions remain unresolved;
-  this is not a general
-  expression parser.
+  can also select extra work. Parenthesized chains now also retain full package
+  work through bracket members such as `(ns)['nested'].fs.readdirSync`,
+  `(ns)[key].fs.readdirSync` and ``(ns).nested[`fs`].readdirSync``.
+  Executed Node controls cover all four directory APIs, optional access,
+  comments, non-null and erased assertions, concatenated keys and adjacent
+  bracket members. Saved-helper controls cover base, head and unchanged
+  transitive consumers despite dirty local files; audited lock changes retain
+  full work with these readers and narrow work without them. Unused helpers
+  stay narrow. Keys are not evaluated, so unrelated objects and inert text
+  can also select extra work. This bounded match requires each bracket segment
+  to contain no additional `[` or `]` characters. Nested brackets, bracket
+  characters inside keys, unparenthesized receivers and other expression
+  positions remain unqualified; this is not a general expression parser.
   Other nested predecessors such as `[[], 0, readdirSync, null][2]` also remain
   unresolved on both scanners.
   Adversarial repeated delimiter/comment
