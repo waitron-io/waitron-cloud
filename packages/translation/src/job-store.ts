@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
 import {TranslationError} from './errors.ts';
-import {collectPage,type BatchResults} from './collect-page.ts';
+import {collectPage,maxCollectBytes,validateCollectLimit,type BatchResults} from './collect-page.ts';
 import type {SubmitFingerprint} from './submit-proof.ts';
 import {translationModel,translationPromptVersion,translationProvider} from './service.ts';
 function fail(code:ConstructorParameters<typeof TranslationError>[0],fits?:number):never{throw new TranslationError(code,fits);}
@@ -40,7 +40,8 @@ export async function readJob(client:PoolClient,installationId:string,jobId:stri
  const row=(await client.query<JobRow>('SELECT * FROM translation_jobs WHERE id=$1 AND installation_id=$2 FOR UPDATE',[jobId,installationId])).rows[0];
  return row??fail('job_not_found');
 }
-export async function collectJob(client:PoolClient,row:JobRow,cursor:unknown=0){
+export async function collectJob(client:PoolClient,row:JobRow,cursor:unknown=0,byteLimit:number=maxCollectBytes){
+ validateCollectLimit(byteLimit);
  if(!Number.isSafeInteger(cursor)||Number(cursor)<0||Number(cursor)>=row.total)fail('invalid_request');
  if(row.state==='collected'||row.state==='expired')fail('expired');
  if(row.state!=='done'&&row.state!=='partly_done')fail('not_ready');
@@ -48,7 +49,7 @@ export async function collectJob(client:PoolClient,row:JobRow,cursor:unknown=0){
  if(!stored)fail('expired');
  const items=JSON.parse(stored.body).items as {ref:string;missing:string[]}[];
  if(items.filter(item=>item.missing.length>0).length!==row.total)throw new Error('translation_outcomes_invalid');
- return collectPage(row.id,row.state,items,stored.batch_results as BatchResults,cursor);
+ return collectPage(row.id,row.state,items,stored.batch_results as BatchResults,cursor,byteLimit);
 }
 export async function releaseJob(client:PoolClient,row:JobRow){
  if(row.state==='expired')fail('expired');

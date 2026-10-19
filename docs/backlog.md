@@ -609,9 +609,14 @@ Remaining work:
   [interruption-proof design](superpowers/specs/2026-10-19-translation-interruption-proof.md)
   and [three-task plan](superpowers/plans/2026-10-19-translation-interruption-proof.md)
   define a local Cloud script against the real Waitron server and a fake provider.
-  Implement the small-page fixture, healthy walk and four independent interruption
-  cases, including both graceful and forced restarts. The script and joint runtime
-  proof remain unimplemented and unrun. Pin both candidates and prove stable page
+  The opt-in Cloud fixture now pages at 512 bytes, pauses collection outside
+  transactions, drops a chosen real HTTP reply and awaits release checks before
+  deletion. Its six real-listener tests pass, including streamed writes, independent
+  fixture budgets and cancellation. The production page limit stays at 16 MiB;
+  invalid internal limits are refused. Removing the guards and reply controls in
+  a disposable checkout makes their tests fail. Implement the healthy walk and
+  four independent interruption cases, including both graceful and forced restarts.
+  The script and joint runtime proof remain unimplemented and unrun. Pin both candidates and prove stable page
   retries, resumed durable cursors, suggestion deduplication, release only after
   durable completion, repeat release, and retained partial results with the real
   notification after expiry. Keep bounded decoded reads and the joint release gate

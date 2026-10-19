@@ -76,7 +76,7 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;fiscalAllocation?:RegistryOptions;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;planMode?:PlanMode;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
+export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;fiscalAllocation?:RegistryOptions;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;planMode?:PlanMode;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
   const config = validateConfig(options.config);
   if(options.relay&&!options.leaseIssuer)throw Error('relay.installation_issuer_required');
   if(options.translation&&!options.leaseIssuer)throw Error('translation.installation_issuer_required');
@@ -90,7 +90,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
   const pairingCodeKeys=options.pairingCodeKeys===undefined?(pairingCodeKeysFromEnv(process.env)??null):options.pairingCodeKeys;
   const origin = new URL(config.portalOrigin); const secure = origin.protocol === 'https:';
   const captures=options.captures&&options.leaseIssuer?new BackupCaptures(pool,options.leaseIssuer,config.portalOrigin,{...options.captures,planMode:options.planMode},options.leaseTrust):undefined;
-  const translation=options.translation&&options.leaseIssuer?new TranslationMachine(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust):undefined;
+  const translation=options.translation&&options.leaseIssuer?(options.translationMachine??new TranslationMachine(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust)):undefined;
   const staffExchange=options.staffCertificates&&options.leaseIssuer?new StaffCertificateExchange(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust,options.planMode):undefined;
   const streams=options.captures?.managedStreams&&options.leaseIssuer?new ManagedStreamMachines(pool,options.leaseIssuer,config.portalOrigin,options.captures.vault,options.captures.managedStreams,options.leaseTrust,options.planMode):undefined;
   const relay=options.relay&&options.leaseIssuer?new RelayMessages(pool,options.leaseIssuer,config.portalOrigin,options.relay,options.leaseTrust):undefined;

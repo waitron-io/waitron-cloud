@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {after,before,test} from 'node:test';
-import {createLeaseIssuer,InstallationError,type SignedEnvelope} from '@waitron-cloud/registration';
-import {jobFingerprint,maxCollectBytes,TranslationError,TranslationMachine,type TranslationAction,type ItemResult} from '../src/index.ts';
+import {createLeaseIssuer,InstallationError,transaction,type SignedEnvelope} from '@waitron-cloud/registration';
+import {collectJob,readJob,jobFingerprint,maxCollectBytes,TranslationError,TranslationMachine,type TranslationAction,type ItemResult} from '../src/index.ts';
 import {connectedVenue,database,giveConsent,readyForTranslation} from './fixtures.ts';
 let db:Awaited<ReturnType<typeof database>>;
 const origin='https://cloud.example.test';
@@ -30,6 +30,28 @@ async function finish(jobId:string,state='done',reason:string|null=null){
 }
 async function outcomes(jobId:string,batches:unknown){await db.pool.query('UPDATE translation_job_bodies SET batch_results=$2 WHERE job_id=$1',[jobId,JSON.stringify(batches)]);}
 const result=(ref:string)=>({ref,names:{ca:'Cafè',es:'Café'},placeholder:false,corrections:[{field:'internal',wrong:'CAFE',right:'CAFÉ'}]});
+
+test('small machine still enforces proof lease ownership and feature-off gates',async()=>{
+ const small=new TranslationMachine(db.pool,issuer,origin,undefined,512),v=await venue(),other=await venue();
+ const {jobId}=await submit(v,jobText(['a','b','c']));
+ const results=['a','b','c'].map(ref=>({...result(ref),names:{en:'x'.repeat(180)},corrections:[]}));
+ await outcomes(jobId,{0:{results,failed:[]}});await finish(jobId);
+ const body={version:1,jobId,cursor:1},signed=v.proof('translation-collect',body,randomUUID(),v.lease);
+ assert.deepEqual(await small.execute('translation-collect',signed),{version:1,jobId,state:'done',results:[results[1]],failed:[],nextCursor:2});
+ assert.equal((await act(v,'translation-collect',body) as {results:unknown[]}).results.length,2);
+ await assert.rejects(small.execute('translation-collect',{...signed,signature:'invalid'}),code('invalid_proof'));
+ await assert.rejects(small.execute('translation-collect',v.proof('translation-collect',body)),code('invalid_proof'));
+ await assert.rejects(small.execute('translation-collect',other.proof('translation-collect',body,randomUUID(),other.lease)),code('job_not_found'));
+ await setService(v,'unconfigured');
+ const text=jobText(['new']);await assert.rejects(small.execute('translation-submit',envelopeOf(v.submit(text)),text),code('permission_denied'));
+});
+test('machine construction and direct job collection reject invalid internal limits',async()=>{
+ const v=await venue(),{jobId}=await submit(v);await outcomes(jobId,{0:{results:[result('product:1')],failed:[]}});await finish(jobId);
+ for(const limit of [0,-1,0.5,Number.MAX_SAFE_INTEGER+1,NaN,Infinity,16777217]){
+  assert.throws(()=>new TranslationMachine(db.pool,issuer,origin,undefined,limit),/^Error: translation_collect_limit_invalid$/);
+  await assert.rejects(transaction(db.pool,async c=>collectJob(c,await readJob(c,v.installationId,jobId),0,limit)),/^Error: translation_collect_limit_invalid$/);
+ }
+});
 
 // These checks catch parsing an unsigned body or applying submit gates before a retry lookup.
 test('fingerprint precedes job parsing, while a valid fingerprint still requires a valid job',async()=>{

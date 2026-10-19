@@ -27,6 +27,35 @@ async function finish(jobId:string,results:ItemResult[],failed:string[]=[]){
  await db.pool.query("UPDATE translation_jobs SET state=$2,done=$3,failed=$4,reason=$5,finished_at=clock_timestamp() WHERE id=$1",[jobId,failed.length?'partly_done':'done',results.length,failed.length,failed.length?'provider_failed':null]);
 }
 const error=async(r:Response)=>[r.status,(await r.json() as {error:string}).error];
+test('injected small machine works in app and real listener without bypassing feature or issuer gates',async()=>{
+ let calls=0;
+ class Observed extends TranslationMachine {
+  override async authenticate(...args:Parameters<TranslationMachine['authenticate']>){calls++;return super.authenticate(...args);}
+  override async execute(...args:Parameters<TranslationMachine['execute']>){calls++;return super.execute(...args);}
+ }
+ const replacement=new Observed(db.pool,issuer,origin,undefined,512),v=await venue(),{jobId}=await submit(v,['a','b','c'].map(ref=>item(ref,['en'])),['es','en']);
+ const results=['a','b','c'].map(ref=>({ref,names:{en:'x'.repeat(180)},placeholder:false,corrections:[]}));await finish(jobId,results);
+ const options={pool:db.pool,outbox:db.outbox,config:config(),leaseIssuer:issuer,translationMachine:replacement};
+ assert.throws(()=>createAccountApp({...options,translation:true,leaseIssuer:undefined}),/translation.installation_issuer_required/);
+ await assert.rejects(startAccountServer({...options,translation:true,leaseIssuer:undefined,port:0}),/translation.installation_issuer_required/);
+ for(const flag of [undefined,false,true]){
+  const scoped=createAccountApp({...options,translation:flag}),running=await startAccountServer({...options,translation:flag,port:0});
+  try{
+   const address=running.server.address();assert(address&&typeof address!=='string');
+   const before=calls;
+   for(const action of flag?['translation-collect']:['translation-submit','translation-status','translation-collect','translation-release']){
+    const envelope=proof(v,action,{version:1,jobId,cursor:0}),body=JSON.stringify(envelope);
+    const local=await scoped.request(`${origin}/api/installations/${action}`,{method:'POST',headers:{'content-type':'application/json'},body},{incoming:{socket:{remoteAddress:v.ip}}} as HttpBindings);
+    const received=await wire(address.port,envelope,action),real=new Response(received.body.toString('utf8'),{status:received.status});
+    for(const response of [local,real]){
+     assert.equal(response.status,flag?200:503);
+     assert.deepEqual(await response.json(),flag?{version:1,jobId,state:'done',results:[results[0]],failed:[],nextCursor:1}:{error:'temporarily_unavailable'});
+    }
+   }
+   assert.equal(calls-before,flag?4:0);
+  }finally{await running.close();}
+ }
+});
 // These checks catch dropping cursors, validating them before ownership, and formatting after sizing.
 test('HTTP collect preserves filtered order, arbitrary cursors, repeated pages, and ownership-first refusals',async()=>{
  const v=await venue(),w=await venue(),items=[{...item('head',[]),existing:{ca:'Cap',es:'Cabeza'}},{...item('a'),kind:'variant',family:'head'},item('b'),item('c')];
@@ -44,8 +73,8 @@ test('HTTP collect preserves filtered order, arbitrary cursors, repeated pages, 
  for(const action of ['translation-status','translation-release'])assert.deepEqual(await error(await post(v,action,{version:1,jobId,cursor:0})),[400,'invalid_request']);
  assert.equal((await db.pool.query('SELECT count(*)::integer AS n FROM translation_job_bodies WHERE job_id=$1',[jobId])).rows[0].n,1);
 });
-function wire(port:number,envelope:unknown){return new Promise<{status:number;body:Buffer;headers:import('node:http').IncomingHttpHeaders}>((resolve,reject)=>{
- const req=request({hostname:'127.0.0.1',port,path:'/api/installations/translation-collect',method:'POST',headers:{host:'localhost','content-type':'application/json'}},res=>{
+function wire(port:number,envelope:unknown,action='translation-collect'){return new Promise<{status:number;body:Buffer;headers:import('node:http').IncomingHttpHeaders}>((resolve,reject)=>{
+ const req=request({hostname:'127.0.0.1',port,path:`/api/installations/${action}`,method:'POST',headers:{host:'localhost','content-type':'application/json'}},res=>{
   const chunks:Buffer[]=[];res.on('data',chunk=>chunks.push(chunk));res.on('error',reject);res.on('end',()=>resolve({status:res.statusCode!,body:Buffer.concat(chunks),headers:res.headers}));
  });req.on('error',reject);req.end(JSON.stringify(envelope));
 });}

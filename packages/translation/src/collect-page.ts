@@ -2,9 +2,13 @@ import {TranslationError} from './errors.ts';
 export type {ItemResult} from './job-store.ts';
 import type {ItemResult} from './job-store.ts';
 export const maxCollectBytes=16777216;
+export function validateCollectLimit(byteLimit:number){
+ if(!Number.isSafeInteger(byteLimit)||byteLimit<1||byteLimit>maxCollectBytes)throw new Error('translation_collect_limit_invalid');
+}
 export type BatchResults=Record<string,{results:ItemResult[];failed:string[];stoppedByCap?:true}>;
 export interface CollectPage {version:1;jobId:string;state:'done'|'partly_done';results:ItemResult[];failed:string[];nextCursor:number|null}
-export function collectPage(jobId:string,state:CollectPage['state'],items:readonly {ref:string;missing:readonly string[]}[],batches:BatchResults,cursor:unknown=0):CollectPage{
+export function collectPage(jobId:string,state:CollectPage['state'],items:readonly {ref:string;missing:readonly string[]}[],batches:BatchResults,cursor:unknown=0,byteLimit:number=maxCollectBytes):CollectPage{
+ validateCollectLimit(byteLimit);
  const refs=items.filter(item=>item.missing.length>0).map(item=>item.ref);
  if(!Number.isSafeInteger(cursor)||Number(cursor)<0||Number(cursor)>=refs.length)throw new TranslationError('invalid_request');
  const outcomes=new Map<string,ItemResult|null>(),expected=new Set(refs);
@@ -24,7 +28,7 @@ export function collectPage(jobId:string,state:CollectPage['state'],items:readon
   if(value===null){failedBytes+=Buffer.byteLength(JSON.stringify(ref))+(failedCount++?1:0);}
   else {resultBytes+=Buffer.byteLength(JSON.stringify(value))+(resultsCount++?1:0);}
   const envelope:CollectPage={version:1,jobId,state,results:[],failed:[],nextCursor:i+1===refs.length?null:i+1};
-  if(Buffer.byteLength(JSON.stringify(envelope))+resultBytes+failedBytes<=maxCollectBytes)end=i+1;
+  if(Buffer.byteLength(JSON.stringify(envelope))+resultBytes+failedBytes<=byteLimit)end=i+1;
  }
  if(end===cursor)throw new Error('translation_outcome_too_large');
  const results:ItemResult[]=[],failed:string[]=[];
