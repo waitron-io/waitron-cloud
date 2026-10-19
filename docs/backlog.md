@@ -609,13 +609,31 @@ Remaining work:
   [interruption-proof design](superpowers/specs/2026-10-19-translation-interruption-proof.md)
   and [three-task plan](superpowers/plans/2026-10-19-translation-interruption-proof.md)
   define a local Cloud script against the real Waitron server and a fake provider.
-  Implement the small-page fixture, healthy walk and four independent interruption
-  cases, including both graceful and forced restarts. The script and joint runtime
-  proof remain unimplemented and unrun. Pin both candidates and prove stable page
-  retries, resumed durable cursors, suggestion deduplication, release only after
-  durable completion, repeat release, and retained partial results with the real
-  notification after expiry. Keep bounded decoded reads and the joint release gate
-  open; a reviewed plan does not qualify runtime behavior or enable translation.
+  The opt-in Cloud fixture now pages at 512 bytes, pauses collection outside
+  transactions, drops a chosen real HTTP reply and awaits release checks before
+  deletion. Its six real-listener tests pass, including streamed writes, independent
+  fixture budgets and cancellation. The production page limit stays at 16 MiB;
+  invalid internal limits are refused. Removing the guards and reply controls in
+  a disposable checkout makes their tests fail. The baseline script now has tested
+  trace and child-cleanup checks. Its paired healthy walk passes against clean
+  Waitron `a3be14ba4e59bc8104087624171ddabec4978de2` (fixture repair #1903): three
+  one-item pages, three unique durable suggestions before release, and no retained
+  Cloud body. An injected setup failure also cleans up its process, Cloud and root.
+  The [interruption command](local-pairing.md#prove-translation-survives-interruptions)
+  now passes all five independent fault executions: lost page reply retries the same
+  cursor with identical content; graceful and forced restarts resume saved cursor 1;
+  lost release retries once after body deletion without moving the collection time;
+  expiry retains page one's suggestion, reports one success and two failures, and
+  shows the real partial-result bell notice before suggestions are opened. Every
+  release checks durable completion first. A deliberate early suggestions read
+  clears the notice and fails qualification. The combined five-case command passes;
+  fourteen independent guard removals are caught by behavioral checks. Keep bounded
+  decoded reads and the wider release gate open; these synthetic cases do not qualify
+  production. Keep generation tags limited to the controlled single-runner restart.
+  Before adding long-running release checks, give those callbacks cancellation:
+  closing currently stops waiting and subsequent machine execution, while callbacks
+  must stop their own work. Bundle-marker preflight checks required UI strings;
+  the actual bell check remains mandatory.
 - **Owner quality trials:** Tasks 22–24 remain owner-only after **2026-11-02**, using their
   preserved commands. Templated-prompt non-regression on both graded sets, house-style effects
   and the other kinds of name still need measurement and owner grading. Run no real-key trials

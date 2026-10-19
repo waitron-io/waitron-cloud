@@ -1,3 +1,4 @@
+import {TranslationFixture} from './translation-fixture.ts';
 import type {RegistryOptions} from '../../../packages/fiscal-allocation/src/policy.ts';
 import type {FactorConfig} from '../../../packages/account-http/src/config.ts';
 import type {CaptureOptions} from '../../../packages/backups/src/captures.ts';
@@ -24,7 +25,7 @@ export async function addVirtualAuthenticator(context: BrowserContext, page: Pag
     await session.detach().catch(() => undefined);
   }};
 }
-export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?:(name:string)=>Promise<string[]>,factor?:FactorConfig,fiscalAllocation?:RegistryOptions) {
+export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?:(name:string)=>Promise<string[]>,factor?:FactorConfig,fiscalAllocation?:RegistryOptions,translation?:{pageBytes?:number}) {
   const db = await database();
   const reserved = createServer();
   await new Promise<void>(resolve => reserved.listen(0, '127.0.0.1', resolve));
@@ -34,16 +35,19 @@ export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?
   const origin = `http://localhost:${address.port}`;
   let running: Awaited<ReturnType<typeof startAccountServer>> | undefined;
   let browser: Browser | undefined;
+  let translations:TranslationFixture|undefined;
   try {
     const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
-    running = await startAccountServer({captures,remoteResolve,factor,fiscalAllocation,leaseIssuer:issuer,pool: db.pool, outbox: db.outbox, port: address.port,
+    translations=translation?new TranslationFixture(db.pool,issuer,origin,translation.pageBytes):undefined;
+    running = await startAccountServer({translation:!!translation,translationMachine:translations?.machine,captures,remoteResolve,factor,fiscalAllocation,leaseIssuer:issuer,pool: db.pool, outbox: db.outbox, port: address.port,
       config: {portalOrigin: origin, production: false, rateKey: db.rateKey, trustedProxyIps: []},
       portalAssets: await loadPortalAssets(new URL('../dist', import.meta.url).pathname)});
+    translations?.attach(running.server);
     browser = await chromium.launch({headless: true});
     const worker = new EmailWorker(db.pool, db.outbox, createLocalAccountMailer({
       port: Number(process.env.MAILPIT_TEST_SMTP_PORT), portalOrigin: origin,
     }));
-    return {origin, browser, db, issuer,
+    return {origin, browser, db, issuer,translation:translations,
       loseRecoveryReply(action: 'approve' | 'replace') {
         // Drop the socket after the handler commits, so reconciliation uses ordinary browser networking.
         return new Promise<{status: number; body: string}>(resolve => {
@@ -84,9 +88,9 @@ export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?
         server.prependListener('request',hook);
       },
       async drainMail() { while (await worker.runOnce()) {} },
-      async close() { await browser?.close(); await running?.close(); await db.close(); },
+      async close() { translations?.close(); await browser?.close(); await running?.close(); await db.close(); },
     };
-  } catch (error) { await browser?.close(); await running?.close(); await db.close(); throw error; }
+  } catch (error) { translations?.close(); await browser?.close(); await running?.close(); await db.close(); throw error; }
 }
 export async function mailFor(email: string, subject: string): Promise<string> {
   const inbox = process.env.MAILPIT_TEST_URL!;

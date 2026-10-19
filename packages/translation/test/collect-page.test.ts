@@ -6,6 +6,25 @@ const result=(ref:string,text='Cafè'):ItemResult=>({ref,names:{ca:text},placeho
 const item=(ref:string,missing=['ca'])=>({ref,missing});
 const page=(items:{ref:string;missing:string[]}[],batches:Record<string,{results:ItemResult[];failed:string[]}>,cursor?:unknown)=>collectPage(jobId,'partly_done',items,batches,cursor);
 const code=(error:unknown)=>{assert.equal((error as {code?:string}).code,'invalid_request');return true;};
+test('explicit small limit pages unchanged items and defaults still use 16MiB',()=>{
+ const items=['a','b','c'].map(ref=>item(ref,['en'])),results=items.map(({ref})=>({...result(ref),names:{en:'x'.repeat(180)}}));
+ const batches={0:{results,failed:[]}};
+ const whole={version:1,jobId,state:'done' as const,results,failed:[],nextCursor:null};
+ assert.deepEqual(collectPage(jobId,'done',items,batches),whole);
+ assert.deepEqual(collectPage(jobId,'done',items,batches,0,16777216),whole);
+ for(const cursor of [0,1,2]){
+  const actual=collectPage(jobId,'done',items,batches,cursor,512);
+  assert.deepEqual(actual,{...whole,results:[results[cursor]],nextCursor:cursor===2?null:cursor+1});
+  assert(Buffer.byteLength(JSON.stringify(actual))<=512);
+  if(cursor<2)assert(Buffer.byteLength(JSON.stringify({...actual,results:results.slice(cursor,cursor+2),nextCursor:cursor===1?null:2}))>512);
+ }
+ assert.throws(()=>collectPage(jobId,'done',items,batches,0,100),/translation_outcome_too_large/);
+});
+test('invalid internal limits cannot enlarge or disable the bound',()=>{
+ for(const limit of [0,-1,0.5,Number.MAX_SAFE_INTEGER+1,NaN,Infinity,16777217]){
+  assert.throws(()=>collectPage(jobId,'done',[item('a')],{0:{results:[result('a')],failed:[]}},0,limit),/^Error: translation_collect_limit_invalid$/);
+ }
+});
 test('collect restores filtered submit order across reverse batches and keeps all outcome text',()=>{
  const first={...result('p1','😀"\\\u0000\ud800'),placeholder:true,corrections:[{field:'internal',wrong:'Cafe',right:'Café'}]};
  const items=[item('context',[]),item('p1'),item('p2'),item('p3')];

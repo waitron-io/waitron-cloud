@@ -5,6 +5,7 @@ import {TranslationError} from './errors.ts';
 import {parseJob,writtenItems} from './job-body.ts';
 import {collectJob,createJob,findSubmitted,lockVenue,readJob,releaseJob,statusView,submitView} from './job-store.ts';
 import {checkSubmitBody} from './submit-proof.ts';
+import {maxCollectBytes,validateCollectLimit} from './collect-page.ts';
 export type TranslationAction='translation-submit'|'translation-status'|'translation-collect'|'translation-release';
 function fail(code:'invalid_request'):never{throw new TranslationError(code);}
 const actions:readonly string[]=['translation-submit','translation-status','translation-collect','translation-release'];
@@ -37,8 +38,11 @@ function jobReference(body:string,collect:boolean):{jobId:string;cursor:unknown}
 }
 function checkAction(action:TranslationAction){if(!actions.includes(action))throw new InstallationError('invalid_proof');}
 export class TranslationMachine {
- readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;
- constructor(pool:Pool,issuer:LeaseIssuer,origin:string,trusted=createLeaseTrust(issuer)){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;}
+ readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;readonly #collectPageBytes:number;
+ constructor(pool:Pool,issuer:LeaseIssuer,origin:string,trusted=createLeaseTrust(issuer),collectPageBytes:number=maxCollectBytes){
+  validateCollectLimit(collectPageBytes);this.#collectPageBytes=collectPageBytes;
+  this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;
+ }
  async authenticate(action:TranslationAction,envelope:unknown){
   checkAction(action);return new InstallationStore(this.#pool,this.#issuer,this.#origin,this.#trusted).authenticate(action,envelope);
  }
@@ -69,7 +73,7 @@ export class TranslationMachine {
    const reference=jobReference(claims.body,action==='translation-collect');
    const job=await readJob(client,row.id,reference.jobId);
    if(action==='translation-status')return statusView(job);
-   if(action==='translation-collect')return {...await collectJob(client,job,reference.cursor)};
+   if(action==='translation-collect')return {...await collectJob(client,job,reference.cursor,this.#collectPageBytes)};
    return releaseJob(client,job);
   });
  }
