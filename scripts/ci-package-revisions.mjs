@@ -101,9 +101,9 @@ function workspaceAt(sha, workspace, git) {
       // and parentheses. Without resolving the remaining expression, keep consumers.
       assert.doesNotMatch(source.source, directoryPattern(/\[\s*(?:\(\s*)*(['"`])(?:readdirSync|readdir|opendirSync|opendir)\1/),
         `Unresolved indirect directory call at ${source.path}`);
-      // The first array element can preserve a reader through an ASCII namespace chain;
+      // The first array element can preserve a reader through a namespace chain;
       // comments, optional access and non-null assertions leave that value intact.
-      assert.doesNotMatch(source.source, directoryPattern(/\[\s*(?:[A-Za-z_$][\w$]*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b/),
+      assert.doesNotMatch(source.source, directoryPattern(/\[\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
         `Unresolved indirect directory call at ${source.path}`);
       assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|(?:,\s*)?\]|\)|<|satisfies\b)|(?:!\s*)+\()/),
         `Unresolved indirect directory call at ${source.path}`);

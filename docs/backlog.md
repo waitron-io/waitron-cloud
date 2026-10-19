@@ -1436,7 +1436,7 @@ notifications separately.
   not resolve member identities and may select extra work for unrelated names
   or inert text, including multi-segment function arguments after a closing
   array or object delimiter. Private (`#fs`) and literal Unicode member names
-  outside the qualified parenthesized forms remain unresolved.
+  outside the qualified parenthesized and first-array forms remain unresolved.
   Dot-member namespace readers stored as the first array element now retain
   every package suite, including `[fs.readdirSync, null][0]` and
   `[fs.promises.readdir, null].at(0)`. Executed Node controls cover all four
@@ -1448,10 +1448,17 @@ notifications separately.
   narrow in the controls. The scan does not resolve member identities or
   parse arbitrary expressions; inert text and unrelated members with these
   names can select extra work, including a reader used as a computed key.
-  Supported namespace segments use ASCII identifiers. Non-ASCII, escaped
-  or private receiver names can still hide a first-element reader, as in
-  `[ñs.readdirSync, null][0]`; executed base/head probes reproduce these
-  misses. Other expression positions remain unqualified.
+  First-element namespace segments also cover Unicode identifiers, fixed and
+  braced Unicode escapes, and private members such as `this.#fs`. Executed Node
+  controls load real helper consumers through all four directory APIs, including
+  `[ñs.readdirSync, null][0]`, astral letters and join-control characters.
+  Comment-separated members, optional access and erased assertions retain that
+  fallback. Saved base/head helpers and audited lock changes retain consumers;
+  unused helpers and ordinary Unicode member values stay narrow in the controls.
+  This lexical scan still does not resolve identities or arbitrary expressions;
+  inert text and longer lookalike names such as `readdirSyncñ` can select extra
+  work because its word boundary does not follow Unicode identifier rules.
+  Other expression positions remain unqualified.
   Quoted computed members such as `fs['readdirSync']` now retain full package
   work for all four directory APIs, including double-quoted and plain template
   keys, comments, optional access, assertions on the object, key or result,
@@ -1843,6 +1850,27 @@ notifications separately.
   failed that assertion. CI did not record the two code periods, so its exact cause
   remains unproved. Production authentication code and accepted code periods stay
   unchanged.
+
+  **Registration authenticator replay fixture.** The registration-store enrolment
+  test now retains its exact accepted activation code for the replay refusal,
+  matching the HTTP fixture and the approved authenticator spec. A previous-step
+  enrolment variant reproduces `Missing expected rejection` with the old fresh-code
+  expression. The refusal code, every original assertion and the 30-second test
+  deadline remain. No production authentication or accepted-window rule changes.
+  PR run `39237311621` failed at `authenticator-factor.test.ts:86`; it did not
+  record both code periods, so this reproduces a mechanism rather than proving
+  that historical run's precise cause. Keep the explicit replay variant and
+  investigate any recurrence with the consumed time-step evidence.
+
+  **Local registration suite lock capacity.** Running the complete registration
+  suite with this Mac's default 18 test-file workers exhausted PostgreSQL's shared
+  lock table (`out of shared memory`, with `max_locks_per_transaction` hints).
+  That run reported 486 passes and 198 failures across 684 reported cases; two
+  stalled test processes and their recorded descendant required termination.
+  The wrapper then cleaned up its owned database and mail containers. Qualify
+  high-core local harness defaults separately; do not raise test deadlines or
+  database limits to conceal this run. A bounded four-file full-suite run uses
+  the same files, assertions, database settings and individual test deadlines.
 
   **One-second relay budget fixture.** The key-retirement and rollover tests now
   retry setup admissions at most ten times when the budget window ends before
