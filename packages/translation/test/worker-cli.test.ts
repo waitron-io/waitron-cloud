@@ -237,3 +237,35 @@ test('a fatal client error during cleanup prints only the fatal line',async()=>{
  const out=await command([],{},['--import','data:text/javascript;base64,'+Buffer.from(preload).toString('base64')]).exited;
  assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);
 });
+
+test('a terminated lease query exits with one fixed fatal line before its client event',async()=>{
+ const {mkdtemp,readFile,rm}=await import('node:fs/promises');
+ const {tmpdir}=await import('node:os');
+ const {join}=await import('node:path');
+ const directory=await mkdtemp(join(tmpdir(),'cloud-translation-disconnect-'));
+ const receipt=join(directory,'query-errors.jsonl');
+ const pgUrl=new URL('../node_modules/pg/lib/index.js',import.meta.url).href;
+ const preload=`import pg from ${JSON.stringify(pgUrl)};
+  import {appendFileSync} from 'node:fs';
+  const query=pg.Client.prototype.query,emit=pg.Client.prototype.emit;
+  pg.Client.prototype.emit=function(event,...args){
+   if(event==='error'){setTimeout(()=>emit.call(this,event,...args),20);return true;}
+   return emit.call(this,event,...args);
+  };
+  pg.Client.prototype.query=function(...args){
+   if(typeof args[0]==='string'&&args[0].startsWith("SELECT id FROM translation_jobs WHERE state='queued'")){
+    return query.call(this,'SELECT pg_terminate_backend(pg_backend_pid())').catch(error=>{
+     appendFileSync(${JSON.stringify(receipt)},JSON.stringify({code:error.code,severity:error.severity})+'\\n');
+     throw error;
+    });
+   }
+   return query.apply(this,args);
+  };`;
+ try{
+  const out=await command([],{},['--import','data:text/javascript;base64,'+Buffer.from(preload).toString('base64')]).exited;
+  const errors=(await readFile(receipt,'utf8')).trim().split('\n').map(line=>JSON.parse(line));
+  assert.ok(errors.length>0);
+  for(const error of errors)assert.deepEqual(error,{code:'57P01',severity:'FATAL'});
+  assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);
+ }finally{await rm(directory,{recursive:true,force:true});}
+});

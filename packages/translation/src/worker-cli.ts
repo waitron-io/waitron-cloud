@@ -38,7 +38,10 @@ try{
  const worker=new TranslationWorker(pool,client);
  if(args[0]==='--once'){await sweepTranslationJobs(pool);await worker.runOnce(stop.signal);}
  else await runWorkerLoop({signal:stop.signal,concurrency:jobConcurrency,scheduleIntervalMs:60000,pollIntervalMs:1000,
-  schedule:sweepUntilReady,runOnce:signal=>worker.runOnce(signal),onError(error){if(stop.signal.aborted)throw error;console.error('Translation worker pass failed; retrying');}});
+  schedule:sweepUntilReady,runOnce:signal=>worker.runOnce(signal),onError(error){
+   // A terminated query can reject before its client emits the fatal error event.
+   if(stop.signal.aborted||(error as {code?:unknown}|null)?.code==='57P01')throw error;
+   console.error('Translation worker pass failed; retrying');}});
 }catch{
  // Provider and database errors can carry request text; operational output stays fixed.
  fail();

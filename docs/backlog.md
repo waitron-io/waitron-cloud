@@ -509,6 +509,16 @@ not proof that every intermittent disconnect failure is resolved. On recurrence,
 complete assertion output, selected backend ids and termination results before changing
 the original check. Active-job failure ordering at direct pool queries remains separately
 unqualified; the reviewed idle scenario leases no job.
+A later CI disconnect failure retains the reverse output: a pass-retry line before
+that fatal line. A local real PostgreSQL lease-query termination reproduces this
+ordering when the client error event arrives later. The query reports `57P01`,
+PostgreSQL's code for an administrator stopping a connection. The worker now treats
+that query rejection as fatal before the event, so it prints the existing single
+fixed failure line without promising a retry. The original disconnect and ordinary
+pass-retry assertions remain unchanged. A new process test retains the real error
+code and forces query rejection before the client event. The exact query stage and
+backend identifiers from that CI failure remain unavailable; the local ordering
+proof does not establish them or classify every other connection error.
 Keep translation off until the remaining runtime and joint qualification are complete.
 
 The owner requires [bounded collect before go-live](superpowers/plans/2026-10-16-translation-collect-pages.md).
