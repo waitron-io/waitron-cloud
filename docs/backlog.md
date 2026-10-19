@@ -603,13 +603,19 @@ Remaining work:
   Keep Task 12's whole-request bound ahead of the fingerprint helper: a small declared
   size with a large actual body still hashes that body before refusing the mismatch.
   A cheap byte-length refusal can be considered there; Task 1 exposes no HTTP route.
-- **Waitron and joint qualification:** lane B A689-21 needs a real pagination loop, bounded
-  decoded page reads and integration with existing durable suggestion reconciliation and ref
-  deduplication. The current one-collect caller ignores `nextCursor` (`collectTranslation` in
-  Waitron `apps/server/src/cloud-translation.ts` at `8eb93dbf3a0583f479d96b5bf0bc214d974ba080`);
-  lowering its byte reader alone risks releasing unseen pages. Pin both candidates and jointly prove a
-  multi-page walk, lost replies, crash retries, durable completion before release, and partial
-  handling after release/expiry between pages. These remain go-live gates.
+- **Waitron and joint qualification:** Waitron's paging caller landed in
+  [PR #1901](https://github.com/clintongormley/waitron/pull/1901) at
+  `93de9902c53734dc89b1bd9b440669bc25f4c020`. The
+  [interruption-proof design](superpowers/specs/2026-10-19-translation-interruption-proof.md)
+  and [three-task plan](superpowers/plans/2026-10-19-translation-interruption-proof.md)
+  define a local Cloud script against the real Waitron server and a fake provider.
+  Implement the small-page fixture, healthy walk and four independent interruption
+  cases, including both graceful and forced restarts. The script and joint runtime
+  proof remain unimplemented and unrun. Pin both candidates and prove stable page
+  retries, resumed durable cursors, suggestion deduplication, release only after
+  durable completion, repeat release, and retained partial results with the real
+  notification after expiry. Keep bounded decoded reads and the joint release gate
+  open; a reviewed plan does not qualify runtime behavior or enable translation.
 - **Owner quality trials:** Tasks 22–24 remain owner-only after **2026-11-02**, using their
   preserved commands. Templated-prompt non-regression on both graded sets, house-style effects
   and the other kinds of name still need measurement and owner grading. Run no real-key trials
