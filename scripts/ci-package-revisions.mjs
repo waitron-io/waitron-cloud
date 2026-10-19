@@ -12,12 +12,12 @@ function directoryPattern(expression) {
     .replaceAll(String.raw`\s+`, space + '+'), expression.flags);
 }
 
-function arrayDirectoryPattern(expression) {
-  // Complete literals and comments can contain punctuation without ending the
-  // preceding array element. Keep the original scan too: this is a conservative
-  // reader check, not a parser for array membership or regular-expression context.
-  const elements = String.raw`(?:[^\[\]{};'"\x60/]|'(?:\\[\s\S]|[^'\\])*'|"(?:\\[\s\S]|[^"\\])*"|\x60(?:\\[\s\S]|[^\x60\\])*\x60|/\*(?:[^*]|\*(?!/))*\*/|//[^\r\n\u2028\u2029]*(?:[\r\n\u2028\u2029]|$)|/(?![*/])(?:\\[^\r\n]|\[(?:\\[^\r\n]|[^\]\\\r\n])*\]|[^/\\[\r\n])+/[a-z]*)*`;
-  return directoryPattern(new RegExp(`(?:${expression.source}|${expression.source.replace(String.raw`[^\[\]{};]*`, elements)})`, expression.flags));
+function arrayDirectorySource(source) {
+  // Mask punctuation inside complete literal-like tokens before scanning array
+  // predecessors. Matching the original text too preserves earlier conservative
+  // matches; the separator prevents a match spanning the two source copies.
+  const tokens = /'(?:\\[\s\S]|[^'\\])*'|"(?:\\[\s\S]|[^"\\])*"|\x60(?:\\[\s\S]|[^\x60\\])*\x60|\/\*(?:[^*]|\*(?!\/))*\*\/|\/\/[^\r\n\u2028\u2029]*(?:[\r\n\u2028\u2029]|$)|\/(?![*/])(?:\\[^\r\n]|\[(?:\\[^\r\n]|[^\]\\\r\n])*\]|[^/\\[\r\n])+\//g;
+  return source + '\n;\n' + source.replace(tokens, token => token.replace(/[\[\]{};]/g, ' '));
 }
 
 function workspaceAt(sha, workspace, git) {
@@ -119,12 +119,13 @@ function workspaceAt(sha, workspace, git) {
       // opener so ordinary named imports do not force full package work. A simple
       // namespace chain, including Unicode and private names, preserves the stored
       // function through non-null assertions too.
-      assert.doesNotMatch(source.source, arrayDirectoryPattern(/\[[^\[\]{};]*,\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/u),
+      const arraySource = arrayDirectorySource(source.source);
+      assert.doesNotMatch(arraySource, directoryPattern(/\[[^\[\]{};]*,\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/u),
         `Unresolved indirect directory call at ${source.path}`);
       // A nested value can precede ordinary elements and a stored reader.
       // Resume at its closing delimiter without interpreting the earlier value;
-      // unquoted brackets, braces and semicolons still bound this scan.
-      assert.doesNotMatch(source.source, arrayDirectoryPattern(/[\]}][^\[\]{};]*,\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/u),
+      // brackets, braces and semicolons outside matched tokens bound this scan.
+      assert.doesNotMatch(arraySource, directoryPattern(/[\]}][^\[\]{};]*,\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/u),
         `Unresolved indirect directory call at ${source.path}`);
       // Logical assignments and awaited logical or conditional operands can keep
       // the reader for a later call. Namespace chains, optional access and erased

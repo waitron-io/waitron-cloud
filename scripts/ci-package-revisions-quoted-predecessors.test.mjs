@@ -107,3 +107,42 @@ test('ordinary quoted predecessors preserve package isolation', () => fixture(({
   assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'ordinary value\n');
   assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
 }));
+
+test('ordinary repeated regular expressions cannot stall saved package selection', () => fixture(({root, write, commit}) => {
+  write('packages/portal/src/index.mjs', `console.log([${Array(40).fill('/a/g').join(', ')}].length);\n`);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), '40\n');
+  const program = `import {scopeForRevisions} from ${JSON.stringify(new URL('./ci-package-revisions.mjs', import.meta.url).href)};
+import {loadWorkspace} from ${JSON.stringify(new URL('./ci-scope.mjs', import.meta.url).href)};
+import {execFileSync} from 'node:child_process';
+const git = (...args) => execFileSync('git', args, {encoding: 'utf8'});
+console.log(JSON.stringify(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(), '${base}', '${head}', git).packages));
+`;
+  assert.equal(execFileSync(process.execPath, ['--input-type=module', '-e', program], {cwd: root, encoding: 'utf8', timeout: 10000}), '["catalogue"]\n');
+}));
+
+test('long quoted arrays cannot multiply saved package scan time', () => fixture(({root, write, commit}) => {
+  write('packages/portal/src/index.mjs', `console.log([${Array(60000).fill(String.raw`'[\''`).join(', ')}].length);\n`);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), '60000\n');
+  const program = `import {scopeForRevisions} from ${JSON.stringify(new URL('./ci-package-revisions.mjs', import.meta.url).href)};
+import {loadWorkspace} from ${JSON.stringify(new URL('./ci-scope.mjs', import.meta.url).href)};
+import {execFileSync} from 'node:child_process';
+const git = (...args) => execFileSync('git', args, {encoding: 'utf8'});
+console.log(JSON.stringify(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(), '${base}', '${head}', git).packages));
+`;
+  assert.equal(execFileSync(process.execPath, ['--input-type=module', '-e', program], {cwd: root, encoding: 'utf8', timeout: 10000}), '["catalogue"]\n');
+}));
+
+test('copied source text cannot join separate inert fragments into a reader', () => fixture(({root, write, commit, plan}) => {
+  write('packages/portal/src/index.mjs', "console.log('a, readdirSync, b');\n// [\n");
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'a, readdirSync, b\n');
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
+}));
