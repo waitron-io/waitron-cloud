@@ -1492,8 +1492,10 @@ notifications separately.
   preserve narrow selection in the controls. The scan remains conservative:
   it does not evaluate assignment conditions, resolve bindings or interpret
   arbitrary expressions, so inert text and unrelated API-named members can
-  select extra work. Other expression positions and delimiter-bearing
-  predecessors remain unqualified.
+  select extra work. Direct async calls after a logical operator, an object
+  property colon or a switch-case colon can also select full package work;
+  executed base/head planner controls confirm that additional work. Other
+  expression positions and delimiter-bearing predecessors remain unqualified.
   Dot-member namespace readers stored as the first array element now retain
   every package suite, including `[fs.readdirSync, null][0]` and
   `[fs.promises.readdir, null].at(0)`. Executed Node controls cover all four
