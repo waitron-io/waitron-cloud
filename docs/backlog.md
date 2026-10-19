@@ -1494,10 +1494,22 @@ notifications separately.
   transitive consumers despite dirty local files; audited lock changes retain
   full work with these readers and narrow work without them. Unused helpers
   stay narrow. Keys are not evaluated, so unrelated objects and inert text
-  can also select extra work. This bounded match requires each bracket segment
-  to contain no additional `[` or `]` characters. Nested brackets, bracket
-  characters inside keys, unparenthesized receivers and other expression
-  positions remain unqualified; this is not a general expression parser.
+  can also select extra work. Closing brackets now also retain full package
+  work through member chains, including `(ns)[keys[0]].fs.readdirSync`,
+  `(ns)['nest[ed]'].fs.readdirSync` and unparenthesized indexed receivers.
+  Starting at the closing bracket avoids interpreting nested keys. Executed Node
+  controls cover all four directory APIs, optional access, comments, erased
+  assertions and stored readers. Saved-helper checks retain base, head and
+  unchanged transitive consumers despite dirty files; audited lock changes
+  retain full work with readers and narrow work without them. Unused helpers
+  and ordinary indexed access stay narrow. Receiver identities and keys remain
+  unresolved, so unrelated objects and inert text can also select extra work.
+  Intermediate bracket segments still exclude embedded brackets, but a later
+  closing bracket can independently retain the reader. Other expression positions
+  remain unqualified; this is not a general expression parser. A tagged template,
+  which calls a function with a template string, can still hide a reader:
+  ```ns[key]``.readdirSync(directory)``` loads the helper but selects only its changed
+  package in executed base and final probes. Qualify that receiver form separately.
   Other nested predecessors such as `[[], 0, readdirSync, null][2]` also remain
   unresolved on both scanners.
   Unicode escapes in dot-member names, such as `fs.re\u0061ddirSync`,
