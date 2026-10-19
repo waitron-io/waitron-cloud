@@ -47,7 +47,10 @@ export function assertSummary(plan, results, jobs) {
   if (plan.documentation || results.documentation !== undefined) {
     assert.equal(results.documentation, plan.documentation ? 'success' : 'skipped', 'documentation did not match its plan');
   }
-  if (plan.typecheck) expected.push('typecheck');
+  if (plan.typecheck) expected.push('typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)');
+  if (plan.typecheck || results.root !== undefined) {
+    assert.equal(results.root, plan.typecheck ? 'success' : 'skipped', 'root did not match its plan');
+  }
   const logicalPackages = plan.packages.flatMap(row => packageMembers(row).map(name => `${name}:${row.shard}`));
   assert.equal(new Set(logicalPackages).size, logicalPackages.length, 'Duplicate package execution');
   const groupedPackages = plan.packages.filter(row => Object.hasOwn(row, 'members')).flatMap(packageMembers);

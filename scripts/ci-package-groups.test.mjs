@@ -90,8 +90,8 @@ test('missing and signalled package executables fail the job', () => {
 test('summary validates grouped members and requires the successful exact group job', () => {
   const group = row(members);
   const plan = {packages: [group], receipts: [], typecheck: true};
-  const results = {changes: 'success', typecheck: 'success', packages: 'success', receipts: 'skipped'};
-  const jobs = ['changes', 'typecheck', `package (${group.package})`].map(name => ({name, status: 'completed', conclusion: 'success'}));
+  const results = {changes: 'success', typecheck: 'success', root: 'success', packages: 'success', receipts: 'skipped'};
+  const jobs = ['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)', `package (${group.package})`].map(name => ({name, status: 'completed', conclusion: 'success'}));
   assert.doesNotThrow(() => assertSummary(plan, results, jobs));
   for (const forged of invalid.filter(value => value !== null && value.package !== members[0])) {
     const altered = jobs.map(item => item.name.startsWith('package (') ? {...item, name: `package (${forged.package})`} : item);
@@ -107,7 +107,7 @@ test('summary validates grouped members and requires the successful exact group 
 
 test('summary rejects a package scheduled both whole and in a shard', () => {
   const plan = {packages: [{package: '@waitron-cloud/portal', shard: 1}, {package: '@waitron-cloud/portal', shard: 1, shards: 3}], receipts: [], typecheck: true};
-  const results = {changes: 'success', typecheck: 'success', packages: 'success', receipts: 'skipped'};
-  const jobs = ['changes', 'typecheck', 'package (@waitron-cloud/portal)', 'package (@waitron-cloud/portal, shard 1/3)'].map(name => ({name, status: 'completed', conclusion: 'success'}));
+  const results = {changes: 'success', typecheck: 'success', root: 'success', packages: 'success', receipts: 'skipped'};
+  const jobs = ['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)', 'package (@waitron-cloud/portal)', 'package (@waitron-cloud/portal, shard 1/3)'].map(name => ({name, status: 'completed', conclusion: 'success'}));
   assert.throws(() => assertSummary(plan, results, jobs), /Duplicate package execution/);
 });

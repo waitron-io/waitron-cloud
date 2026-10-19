@@ -1492,7 +1492,24 @@ notifications separately.
   checks but hit the eight-minute job limit. The new reader fixtures now use
   their explicit four-package metadata and batched saved Git reads, avoiding
   repeated pnpm discovery without dropping cases or changing deadlines.
-  Whole-run timing remains part of D69's acceptance checks.
+  That fixture optimization did not leave enough margin: the independent full
+  merge run [39291389992](https://github.com/waitron-io/waitron-cloud/actions/runs/39291389992)
+  passed all 1,336 root checks in 445.258 seconds, then cancelled the compiler
+  five seconds after it started at the unchanged eight-minute job limit.
+  The preceding green head took a similar amount of time. No assertion failure
+  or platform cause was established. The unchanged local baseline passed all
+  1,336 checks in 392.259 seconds with two file workers.
+  Root checks now run in four separate jobs, using Node's round-robin file
+  partitions and two file workers per job. They retain the original selectors,
+  every case and every individual deadline; the compiler runs independently.
+  The existing planner decision selects both the compiler and all four root
+  jobs. The summary requires each root job exactly once, completed and successful,
+  plus the successful matrix result. Missing, repeated, cancelled, skipped or
+  unfinished work cannot establish success. Controlled workflow execution covers
+  a future matching file, both additional selectors and failing checks.
+  Each work job retains its eight-minute cap. Whole-run timing and the owner's
+  five-minute work-job/about-ten-minute total goal remain D69 acceptance checks;
+  a passing local run does not establish hosted-runner duration.
   It does not resolve template substitutions, division
   versus regular expressions, array membership or receiver identities. Unrelated
   expressions and inert text can select extra work; unsupported expressions can
