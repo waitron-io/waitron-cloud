@@ -1692,7 +1692,9 @@ notifications separately.
   comma-separated declarations, including `const scan = fs.readdirSync` followed
   by a newline and `const scan = fs.readdirSync, unused = 1;`. Executed Node
   controls cover all four APIs, bare and namespace references, comments, optional
-  access and erased assertions, plus CRLF and Unicode line endings. Saved base,
+  access and erased non-null assertions (`!`), plus CRLF, lone carriage returns
+  and Unicode line endings. These controls exercise both the assignment check
+  and existing reader checks. Saved base,
   head and unchanged helpers retain transitive consumers despite dirty local
   files; audited lock changes retain full work with readers and narrow work
   without them. The assignment check leaves ordinary named imports narrow.

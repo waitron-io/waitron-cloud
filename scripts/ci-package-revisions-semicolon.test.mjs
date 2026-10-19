@@ -169,3 +169,14 @@ test('reader declarations retain consumers across line comments and Unicode line
     assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
   }));
 });
+
+
+test('a lone carriage return retains a stored reader consumer', () => fixture(({root, write, commit, plan}) => {
+  write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('carriage return helper loaded');\n");
+  write('packages/portal/src/reader.mts', readerSource('readdirSync', 'ñs.readdirSync', "['..', '..', '..', ''].join('/')").replace('ñs.readdirSync;\n', 'ñs.readdirSync\r'));
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'carriage return helper loaded\n');
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
+}));
