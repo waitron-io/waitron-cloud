@@ -513,10 +513,11 @@ A later CI disconnect failure retains the reverse output: a pass-retry line befo
 that fatal line. A local real PostgreSQL lease-query termination reproduces this
 ordering when the client error event arrives later. The query reports `57P01`,
 PostgreSQL's code for an administrator stopping a connection. The worker now treats
-that query rejection as fatal before the event, so it prints the existing single
-fixed failure line without promising a retry. The original disconnect and ordinary
-pass-retry assertions remain unchanged. A new process test retains the real error
-code and forces query rejection before the client event. The exact query stage and
+that query rejection as fatal before the event in both the cleanup loop and the
+lease pass, so it prints the existing single fixed failure line without promising
+a retry. The original disconnect and ordinary retry assertions remain unchanged.
+Two new process tests retain the real error code and force query rejection before
+the client event at each stage. The exact query stage and
 backend identifiers from that CI failure remain unavailable; the local ordering
 proof does not establish them or classify every other connection error.
 Keep translation off until the remaining runtime and joint qualification are complete.

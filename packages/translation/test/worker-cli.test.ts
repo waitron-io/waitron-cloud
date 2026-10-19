@@ -238,13 +238,15 @@ test('a fatal client error during cleanup prints only the fatal line',async()=>{
  assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);
 });
 
-test('a terminated lease query exits with one fixed fatal line before its client event',async()=>{
+for(const stage of ['lease','cleanup']as const)
+test(`a terminated ${stage} query exits with one fixed fatal line before its client event`,async()=>{
  const {mkdtemp,readFile,rm}=await import('node:fs/promises');
  const {tmpdir}=await import('node:os');
  const {join}=await import('node:path');
  const directory=await mkdtemp(join(tmpdir(),'cloud-translation-disconnect-'));
  const receipt=join(directory,'query-errors.jsonl');
  const pgUrl=new URL('../node_modules/pg/lib/index.js',import.meta.url).href;
+ const queryPrefix=stage==='lease'?"SELECT id FROM translation_jobs WHERE state='queued'":'SELECT id FROM translation_jobs\n';
  const preload=`import pg from ${JSON.stringify(pgUrl)};
   import {appendFileSync} from 'node:fs';
   const query=pg.Client.prototype.query,emit=pg.Client.prototype.emit;
@@ -253,7 +255,7 @@ test('a terminated lease query exits with one fixed fatal line before its client
    return emit.call(this,event,...args);
   };
   pg.Client.prototype.query=function(...args){
-   if(typeof args[0]==='string'&&args[0].startsWith("SELECT id FROM translation_jobs WHERE state='queued'")){
+   if(typeof args[0]==='string'&&args[0].startsWith(${JSON.stringify(queryPrefix)})){
     return query.call(this,'SELECT pg_terminate_backend(pg_backend_pid())').catch(error=>{
      appendFileSync(${JSON.stringify(receipt)},JSON.stringify({code:error.code,severity:error.severity})+'\\n');
      throw error;

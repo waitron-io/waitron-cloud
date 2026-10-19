@@ -8,12 +8,14 @@ import {sweepTranslationJobs} from './retention.ts';
 let pool:Pool|undefined;
 let failed=false;
 const stop=new AbortController(),shutdown=()=>stop.abort(),jobConcurrency=2;
+function isTerminatedQuery(error:unknown){return (error as {code?:unknown}|null)?.code==='57P01';}
 async function sweepUntilReady(){
  while(!stop.signal.aborted){
   try{await sweepTranslationJobs(pool!);return;}
-  catch{
-   // A fatal client failure has already stopped retries and reported the outcome.
+  catch(error){
+   // Neither a fatal event nor a terminated query permits another cleanup retry.
    if(failed)return;
+   if(isTerminatedQuery(error))throw error;
    console.error('Translation worker cleanup failed; retrying');
    try{await delay(60000,undefined,{signal:stop.signal});}catch(error){if(!stop.signal.aborted)throw error;}
   }
@@ -40,7 +42,7 @@ try{
  else await runWorkerLoop({signal:stop.signal,concurrency:jobConcurrency,scheduleIntervalMs:60000,pollIntervalMs:1000,
   schedule:sweepUntilReady,runOnce:signal=>worker.runOnce(signal),onError(error){
    // A terminated query can reject before its client emits the fatal error event.
-   if(stop.signal.aborted||(error as {code?:unknown}|null)?.code==='57P01')throw error;
+   if(stop.signal.aborted||isTerminatedQuery(error))throw error;
    console.error('Translation worker pass failed; retrying');}});
 }catch{
  // Provider and database errors can carry request text; operational output stays fixed.
