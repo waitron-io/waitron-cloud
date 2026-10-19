@@ -1519,8 +1519,18 @@ notifications separately.
   Template contents and receiver identities remain unresolved, so inert text
   and unrelated objects can select extra work. General template parsing and
   other expression positions remain unqualified.
-  Other nested predecessors such as `[[], 0, readdirSync, null][2]` also remain
-  unresolved on both scanners.
+  Nested array or object predecessors separated from a stored reader by
+  ordinary elements now retain full package work too, including
+  `[[], 0, readdirSync, null][2]`. Executed Node controls cover all four
+  directory APIs, multiple intervening elements, namespace access, comments
+  and erased non-null assertions. Saved base, head and unchanged helper
+  checks preserve transitive consumers despite dirty local files; audited
+  lock changes retain full work with readers and narrow work without them.
+  Unused helpers, ordinary arrays and named imports stay narrow in the
+  controls. This scan stops at intervening brackets, braces or semicolons;
+  it does not resolve array membership or receiver identities. Inert text
+  and unrelated expressions can select extra work. General expression
+  parsing and the wider reader inventory remain unqualified.
   Unicode escapes in dot-member names, such as `fs.re\u0061ddirSync`,
   now retain full package work. Node execution controls cover all four directory
   APIs, escapes at the start and end of a name, zero-padded brace escapes,
