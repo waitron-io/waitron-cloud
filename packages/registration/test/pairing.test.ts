@@ -129,6 +129,7 @@ test('migrations upgrade a seven-migration schema without changing its existing 
 
 test('session expiry while Cloud approval waits on permission leaves no approval',async()=>{
   const a=machine();await store.start(a);
+  // Slow setup must not consume the session's lock-wait expiry budget.
   await db.pool.query('SELECT pg_sleep(0.2)');
   const block=await db.secondPool.connect();await block.query('BEGIN');await block.query('SELECT 1 FROM organisation_memberships FOR UPDATE');
   // Approval locks the session row, so let its deadline pass instead of updating it from another connection.

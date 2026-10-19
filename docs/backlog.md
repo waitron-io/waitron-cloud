@@ -1739,7 +1739,8 @@ notifications separately.
   checks that the session is still valid, then waits on the database clock before
   releasing the lock. An outside expiry update would wait on the session row
   already held by approval. A controlled 200 ms setup delay reproduces the old
-  observed-lock assertion failure and passes with the corrected fixture. All
+  observed-lock assertion failure; the corrected fixture retains that slow setup
+  and passes. All
   original session-refusal, observed-lock and absent-approval assertions and the
   30-second execution deadline remain. Main run `39209023087` did not capture
   these timing boundaries, so its exact scheduling remains unproved.
