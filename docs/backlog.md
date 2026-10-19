@@ -1465,9 +1465,18 @@ notifications separately.
   full package work for simple and nested predecessors; unused helpers and
   ordinary Unicode namespace values stay narrow in the controls. These scans
   still do not resolve bindings or arbitrary expressions; inert text and
-  unrelated members with directory API names can select extra work. Unicode
-  namespace readers in other positions, including `null || ñs.readdirSync`,
-  remain unresolved. A semicolon-bearing predecessor such as
+  unrelated members with directory API names can select extra work. Logical and conditional operands now retain full package work through Unicode,
+  escaped and private namespace chains, including `null || ñs.readdirSync` and
+  `false ? null : this.#fs.readdirSync`. Executed Node controls cover all four
+  directory APIs, astral letters, join-control characters, fixed and braced
+  escapes, comments, optional access and erased assertions. Saved readers from
+  either revision and unchanged transitive helpers retain consumers despite
+  dirty local files. Audited lock changes retain full work with these readers
+  and narrow work without them; unused helpers and ordinary Unicode operands
+  keep narrow package work in the controls. This conservative scan does not
+  evaluate conditions or resolve member identities, so inert text and unrelated
+  members with directory API names can select extra work. General expression
+  parsing and precise directory resolution remain open. A semicolon-bearing predecessor such as
   `[';', ñs.readdirSync, null][1]` still hides a real reader. Independent Node
   and planner probes reproduce both omissions on the prior and current scanner.
   Other expression positions and delimiter-bearing predecessors remain unqualified.
