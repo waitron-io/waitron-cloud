@@ -1506,10 +1506,18 @@ notifications separately.
   unresolved, so unrelated objects and inert text can also select extra work.
   Intermediate bracket segments still exclude embedded brackets, but a later
   closing bracket can independently retain the reader. Other expression positions
-  remain unqualified; this is not a general expression parser. A tagged template,
-  which calls a function with a template string, can still hide a reader:
-  ```ns[key]``.readdirSync(directory)``` loads the helper but selects only its changed
-  package in executed base and final probes. Qualify that receiver form separately.
+  remain unqualified; this is not a general expression parser. Closing template
+  backticks now also retain full package work through member chains: a tagged
+  template calls a function with a template string and can return a directory
+  reader, as in ```ns[key]``.fs.readdirSync(directory)```. Executed Node controls
+  cover all four directory APIs, bare and indexed tags, parenthesized tags,
+  comments, optional access, non-null assertions, substitutions, escaped backticks
+  and chained tags. Saved-helper checks retain base, head and unchanged transitive
+  consumers despite dirty files; audited lock changes retain full work with readers
+  and narrow work without them. Unused helpers and ordinary tagged values stay
+  narrow. Template contents and receiver identities remain unresolved, so inert
+  text and unrelated objects can select extra work. General template parsing and
+  other expression positions remain unqualified.
   Other nested predecessors such as `[[], 0, readdirSync, null][2]` also remain
   unresolved on both scanners.
   Unicode escapes in dot-member names, such as `fs.re\u0061ddirSync`,
