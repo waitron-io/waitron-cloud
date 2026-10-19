@@ -1448,10 +1448,15 @@ notifications separately.
   narrow in the controls. The scan does not resolve member identities or
   parse arbitrary expressions; inert text and unrelated members with these
   names can select extra work, including a reader used as a computed key.
-  Supported namespace segments use ASCII identifiers. Non-ASCII, escaped
-  or private receiver names can still hide a first-element reader, as in
-  `[ñs.readdirSync, null][0]`; executed base/head probes reproduce these
-  misses. Other expression positions remain unqualified.
+  First-element namespace segments also cover Unicode identifiers, fixed and
+  braced Unicode escapes, and private members such as `this.#fs`. Executed Node
+  controls load real helper consumers through all four directory APIs, including
+  `[ñs.readdirSync, null][0]`, astral letters and join-control characters.
+  Comment-separated members, optional access and erased assertions retain that
+  fallback. Saved base/head helpers and audited lock changes retain consumers;
+  unused helpers and ordinary Unicode member values stay narrow in the controls.
+  This lexical scan still does not resolve identities or arbitrary expressions;
+  inert text can select extra work. Other expression positions remain unqualified.
   Quoted computed members such as `fs['readdirSync']` now retain full package
   work for all four directory APIs, including double-quoted and plain template
   keys, comments, optional access, assertions on the object, key or result,
