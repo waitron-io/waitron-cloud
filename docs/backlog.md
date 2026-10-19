@@ -1369,7 +1369,7 @@ notifications separately.
   files; the lockfile control retains full work while its reader-free control
   still narrows selection. Unreachable helpers keep narrow package work.
   Precise alias resolution, assignment/destructuring aliases, escaped
-  API identifiers and other unsupported calls remain open. Directory reader names
+  bare API identifiers and other unsupported calls remain open. Directory reader names
   wrapped directly in parentheses now retain every package suite because wrapping
   the function leaves its runtime readers unchanged. Executed Node controls cover all four APIs,
   nested parentheses, TypeScript assertions, optional invocation and comments.
@@ -1435,8 +1435,9 @@ notifications separately.
   narrow work without them; unreachable helpers stay narrow. These guards do
   not resolve member identities and may select extra work for unrelated names
   or inert text, including multi-segment function arguments after a closing
-  array or object delimiter. Private (`#fs`), Unicode and escaped member names,
-  and dot-member namespace readers as the first array element remain unresolved.
+  array or object delimiter. Private (`#fs`) and literal Unicode member names
+  outside the qualified parenthesized forms, and dot-member namespace readers
+  as the first array element remain unresolved.
   Quoted computed members such as `fs['readdirSync']` now retain full package
   work for all four directory APIs, including double-quoted and plain template
   keys, comments, optional access, assertions on the object, key or result,
@@ -1499,10 +1500,21 @@ notifications separately.
   positions remain unqualified; this is not a general expression parser.
   Other nested predecessors such as `[[], 0, readdirSync, null][2]` also remain
   unresolved on both scanners.
+  Unicode escapes in dot-member names, such as `fs.re\u0061ddirSync`,
+  now retain full package work. Node execution controls cover all four directory
+  APIs, escapes at the start and end of a name, zero-padded brace escapes,
+  comments, optional access and erased TypeScript assertions. Saved helper
+  controls cover base, head and unchanged transitive consumers despite dirty
+  local files; audited lock changes retain full work with these readers and
+  narrow work without them. Unused helpers and plain escaped array strings
+  stay narrow. The guard does not decode names or resolve receiver identities:
+  any dot-member name with a Unicode escape, including unrelated names and
+  inert text, can select extra work. Escaped bare API identifiers and other
+  unresolved expression forms still need separate qualification.
   Adversarial repeated delimiter/comment
   text can increase scan time; comprehensive parser performance remains unqualified.
   Precise resolution,
-  assignment/destructuring aliases and escaped API identifiers remain open.
+  assignment/destructuring aliases and escaped bare API identifiers remain open.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.
