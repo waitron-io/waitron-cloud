@@ -45,6 +45,44 @@ It prints both source revisions and
 whether the Waitron tree contains uncommitted changes. Set `PAIRING_RECEIPT` to save
 that output as JSON. Each repository's CI remains independent of a sibling checkout.
 
+## Prove translation survives interruptions
+
+Use Node 26 or later, local Docker and installed Playwright Chromium. Build the
+Cloud portal and a clean, separately prepared Waitron checkout containing paging
+[#1901](https://github.com/clintongormley/waitron/pull/1901) and the fixture repair
+[#1903](https://github.com/clintongormley/waitron/pull/1903). The proof has passed
+against Waitron `a3be14ba4e59bc8104087624171ddabec4978de2`. Build only a checkout you
+own; the proof refuses uncommitted Waitron changes and an outdated dashboard bundle.
+
+```sh
+pnpm portal:build
+pnpm --dir "$WAITRON_CHECKOUT" --filter @waitron/dashboard build
+WAITRON_CHECKOUT="$WAITRON_CHECKOUT" node scripts/test-postgres.mjs exec node scripts/test-waitron-translation.mjs
+```
+
+This runs five independent cases with fresh synthetic venues: a lost page reply,
+restart with SIGTERM, restart with SIGKILL, a lost release reply and expiry between
+pages. Cloud uses its real worker with a local fake provider. No provider key or
+customer menu is needed. A 512-byte fixture budget forces three one-item pages;
+the production page budget remains 16 MiB and Waitron's page timeout remains 120 seconds.
+
+Each release waits for a read-only SQLite check of the complete stored result.
+Restart checks inspect the saved first-page cursor and the next process's actual
+request. Expiry checks keep that first suggestion and read the real dashboard bell
+before opening suggestions, because opening the finished run clears its notice.
+
+The command prints JSON with both revisions, ordered request cursors, process
+generations, counts, deletion and cleanup evidence. Set `TRANSLATION_RECEIPT` to
+save it to a JSON file; response bodies are represented by hashes. To investigate
+one case, add `--case lost-page`, `restart-term`, `restart-kill`, `lost-release` or
+`expiry`. `--case baseline` runs the healthy three-page walk. A failed case exits
+nonzero. Every case stops its recorded children, closes Cloud and removes its own
+temporary venue. The surrounding runner removes its PostgreSQL and Mailpit containers.
+
+This proves the named interruptions with synthetic input. Provider quality,
+bounded decoded reads, commercial decisions and production deployment remain
+separate [release gates](waitron-integration-contract.md#translate-all-version-1).
+
 ## Configure a development server
 
 Set `WAITRON_CLOUD_ORIGIN` on Waitron to the Cloud portal's exact origin, without a

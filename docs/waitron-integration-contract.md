@@ -655,13 +655,16 @@ does not infer durable client storage from a collect call. The release state rul
 `{"version":1,"jobId":"...","state":"collected"}`; `collected` returns the same reply again;
 `queued` or `running` is 409 `translation_not_ready`; `expired` is 410 `translation_expired`.
 
-**Joint release gate:** Waitron lane B **A689-21** needs a real pagination loop and durable
-completion check. At Waitron commit `8eb93dbf3a0583f479d96b5bf0bc214d974ba080`,
-`apps/server/src/cloud-translation.ts`, `collectTranslation`, makes one request and ignores
-`nextCursor`. Lowering its byte reader
-alone could accept page one and silently release the remaining pages. Do not go live until pinned
-Cloud and Waitron candidates jointly prove multi-page collection, crash/reply-loss retry,
-deduplication, bounded decoded reads and release only after durable completion.
+**Joint release gate:** Waitron's pagination loop and durable completion check landed in
+[A689-21 #1901](https://github.com/clintongormley/waitron/pull/1901). The
+[local interruption proof](local-pairing.md#prove-translation-survives-interruptions)
+uses the real Waitron runner pinned to `a3be14ba4e59bc8104087624171ddabec4978de2`
+and Cloud's real HTTP service with a fake provider. It exercises multi-page storage,
+lost page and release replies, both restart signals, deduplication, release only after
+durable completion, and expiry with retained suggestions and the real notification.
+Record both source identities when you repeat it. Bounded decoded reads and the
+remaining quality, commercial and deployment gates still need their own evidence;
+these local cases do not authorise going live.
 
 ### Consent
 

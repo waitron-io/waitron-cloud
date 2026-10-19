@@ -32,7 +32,9 @@ async function until(read,label,timeout=60000){
  throw new Error(`translation_proof_timeout_${label}`);
 }
 
-export async function runTranslationProof(caseName,{failAfterLaunch=false}={}){
+export async function runTranslationProof(caseName,{failAfterLaunch=false,readFinishedBeforeAlert=false}={}){
+ const expiry=caseName==='expiry',suggestionCount=expiry?1:3,releaseAttempts=expiry?0:caseName==='lost-release'?2:1;
+ const restartSignal=caseName==='restart-term'?'SIGTERM':caseName==='restart-kill'?'SIGKILL':undefined;
  const checkout=process.env.WAITRON_CHECKOUT;
  assert.ok(checkout,'translation_proof_waitron_checkout_required');
  const waitron=resolve(checkout),cloud=resolve(import.meta.dirname,'..');
@@ -44,17 +46,19 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false}={}){
  const bundles=await Promise.all(bundleFiles.map(name=>readFile(join(waitron,'apps/dashboard/dist/assets',name),'utf8')));
  assert.ok(bundles.some(text=>text.includes('content.suggestions_ready_partly')&&text.includes("couldn't be done this time")),'translation_proof_current_dashboard_required');
  const require=createRequire(join(waitron,'apps/server/package.json')),tsx=require.resolve('tsx');
- const [{startPortalFixture},{SignupStore},{TranslationWorker,createOpenAiClient},{startFakeOpenAi,echoFirstPass,isReview,emptyReview,responsesBody},{DatabaseSync}]=await Promise.all([
+ const [{startPortalFixture},{SignupStore},{TranslationWorker,createOpenAiClient,sweepTranslationJobs},{startFakeOpenAi,echoFirstPass,isReview,emptyReview,responsesBody},{DatabaseSync}]=await Promise.all([
   import('../apps/portal/test/fixtures.ts'),import('../packages/registration/src/index.ts'),import('../packages/translation/src/index.ts'),import('../packages/translation/test/fake-openai.ts'),import('node:sqlite'),
  ]);
- let f,context,provider,root,stage='setup',generation=0,workerWork;
+ let f,context,provider,root,stage='setup',generation=0,workerWork,loss,gate,firstSuggestion;
  const children=[],releaseChecks=[],abort=new AbortController();
  const receipt={case:caseName,sources,passed:false,cleanup:{}};
+ const safeEvents=()=>f?.translation.events.map(event=>({kind:event.kind,action:event.action,jobId:event.jobId,installationId:event.installationId,cursor:event.cursor,generation:event.generation,...(event.kind==='request'?{}:{status:event.status,nextCursor:event.body?.nextCursor,bodyHash:digest(event.body)})}));
  const snapshot=()=>{
   const db=new DatabaseSync(join(root,'venue/venue.db'),{readOnly:true});
   try{return {jobs:db.prepare('SELECT * FROM content_suggestion_jobs ORDER BY position').all(),suggestions:db.prepare('SELECT * FROM content_suggestions ORDER BY id').all()};}finally{db.close();}
  };
- const checked=async(task)=>Promise.race([task,f.translation.failure]);
+ const checked=task=>awaitTranslationWork(task,f.translation.failure);
+ const cloudState=async jobId=>(await f.db.pool.query('SELECT state,collected_at,(SELECT count(*)::int FROM translation_job_bodies b WHERE b.job_id=j.id) AS bodies FROM translation_jobs j WHERE id=$1',[jobId])).rows[0];
  const launch=async()=>{
   await rm(join(root,'ready.json'),{force:true});generation++;
   const child=spawn(process.execPath,['--import',tsx,fixturePath],{cwd:join(waitron,'apps/server'),env:{...process.env,CLOUD_TEST_ROOT:root,CLOUD_TEST_ORIGIN:f.origin},stdio:['ignore','ignore','pipe','ipc']});
@@ -71,6 +75,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false}={}){
  };
  try{
   f=await startPortalFixture(undefined,undefined,undefined,undefined,{pageBytes:512});
+  f.translation.events.push=(...events)=>Array.prototype.push.apply(f.translation.events,events.map(event=>({...event,generation})));
   root=await mkdtemp(join(tmpdir(),'cloud-integration-translation-'));receipt.root=root;
   stage='launch';const server=await launch();
   if(failAfterLaunch)throw new Error('translation_proof_injected_setup_failure');
@@ -124,19 +129,14 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false}={}){
   assert.deepEqual(gaps.map(row=>row.language),['es','en']);
   assert.deepEqual(gaps.find(row=>row.language==='es').gaps,[]);
   assert.deepEqual(gaps.find(row=>row.language==='en').gaps.map(row=>`${row.kind}:${row.id}`).sort(),expectedRefs);
-  const assertStored=(state,count,refs)=>{
-   const {jobs,suggestions}=state;assert.equal(jobs.length,1);const job=jobs[0];
-   assert.equal(job.dropped,0,'translation dropped');assert.equal(job.released,0,'release precedes durable check');
-   assert.equal(job.done,count);assert.equal(job.failed,0);assert.deepEqual(JSON.parse(job.failed_refs),[]);
-   assert.deepEqual([...JSON.parse(job.collected_refs)].sort(),[...refs].sort());
-   assert.equal(new Set(JSON.parse(job.collected_refs)).size,count);
-   assert.equal(suggestions.length,count);assert.equal(new Set(suggestions.map(row=>row.id)).size,count);
-   for(const row of suggestions){assert.equal(row.kind,'product');assert.equal(row.language,'en');assert.equal(row.text,expectedProducts.get(row.item_id));assert.equal(row.placeholder,0);assert.equal(row.fix_field,null);}
-   return job;
+  const assertStored=(state,count,refs,cursor=null,jobState='done')=>{
+   assert.equal(refs.length,count);
+   return verifyTranslationStorage(state,{refs,translations:[...expectedProducts],cursor,state:jobState});
   };
   f.translation.beforeRelease(async jobId=>{
    const state=snapshot(),job=assertStored(state,3,expectedRefs);
    assert.equal(job.cloud_job_id,jobId);assert.equal(job.state,'done');assert.equal(job.collect_cursor,null);
+   if(releaseChecks.length)verifyTranslationDeletion(await cloudState(jobId),receipt.releaseCommitted?.collected_at);
    releaseChecks.push({generation,durable:true,count:state.suggestions.length,dropped:job.dropped});
   });
   provider=await startFakeOpenAi(r=>{
@@ -145,6 +145,9 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false}={}){
    for(const product of body.products)product.en=translated(product.en.replace(/ \[en\]$/,''));
    return {json:responsesBody(JSON.stringify(body))};
   });
+  if(caseName==='lost-page')loss=f.translation.loseReply('translation-collect',1);
+  if(caseName==='lost-release')loss=f.translation.loseReply('translation-release');
+  if(restartSignal||expiry)gate=f.translation.pauseCollect(1);
   stage='start';const started=await request('POST','content-suggestions/jobs',{});assert.equal(started.run.state,'sending');assert.equal(started.run.total,3);
   const cloudJob=await checked(until(async()=>{
    const rows=(await f.db.pool.query('SELECT * FROM translation_jobs WHERE installation_id=$1',[receipt.installationId])).rows;
@@ -158,34 +161,74 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false}={}){
   stage='worker';const worker=new TranslationWorker(f.db.pool,createOpenAiClient({apiKey:'synthetic-local-proof-key',baseUrl:provider.baseUrl}));
   workerWork=worker.runOnce(abort.signal);assert.equal(await checked(workerWork),true);
   assert.equal((await f.db.pool.query('SELECT state FROM translation_jobs WHERE id=$1',[cloudJob.id])).rows[0].state,'done');
+  if(gate){
+   stage=expiry?'expiry':'restart';assert.deepEqual(await checked(gate.entered),{jobId:cloudJob.id,cursor:1});
+   const state=snapshot(),first=filtered[0].ref;
+   receipt.boundary={state:state.jobs[0].state,cursor:state.jobs[0].collect_cursor,done:state.jobs[0].done,failed:state.jobs[0].failed,dropped:state.jobs[0].dropped,released:state.jobs[0].released,refs:JSON.parse(state.jobs[0].collected_refs),count:state.suggestions.length};
+   assertStored(state,1,[first],1,'running');
+   firstSuggestion=state.suggestions[0];
+   if(expiry){
+    const updated=await f.db.pool.query("UPDATE translation_jobs SET finished_at=clock_timestamp()-interval '25 hours' WHERE id=$1 AND state='done'",[cloudJob.id]);assert.equal(updated.rowCount,1);
+    assert.deepEqual(await sweepTranslationJobs(f.db.pool),{expired:1});
+    const expired=await cloudState(cloudJob.id);assert.equal(expired.state,'expired');assert.equal(expired.bodies,0);assert.equal(expired.collected_at,null);
+    receipt.expiry={cloud:expired,firstSuggestion:{id:firstSuggestion.id,itemId:firstSuggestion.item_id,textHash:digest(firstSuggestion.text)}};
+    gate.resume();
+   }else{
+   const exit=await server.running.stop(restartSignal);
+   const expectedExit=restartSignal==='SIGKILL'?{code:null,signal:'SIGKILL'}:{code:0,signal:null};
+   assert.deepEqual(exit,expectedExit);server.running.expectedExit=expectedExit;
+   gate.cancel();
+   await checked(until(()=>f.translation.events.find(event=>event.kind==='reply'&&event.cursor===1&&event.status===503&&event.generation===1),'cancelled_collect'));
+   receipt.restart={signal:restartSignal,exit,boundary:{cursor:state.jobs[0].collect_cursor,refs:JSON.parse(state.jobs[0].collected_refs),count:state.suggestions.length,dropped:state.jobs[0].dropped}};
+   const resumed=await launch();assert.equal(resumed.origin,server.origin);assert.equal(resumed.localVenueId,server.localVenueId);
+   await checked(until(()=>f.translation.events.find(event=>event.kind==='request'&&event.action==='translation-collect'&&event.generation===2),'resumed_collect'));
+   receipt.restart.firstCursor=verifyTranslationResume(f.translation.events);
+   }
+  }
+  if(loss){
+   const lost=await checked(loss);assert.equal(lost.status,200);receipt.lostReply={status:lost.status,bodyHash:digest(JSON.parse(lost.body))};
+   if(caseName==='lost-release'){receipt.releaseCommitted=await cloudState(cloudJob.id);verifyTranslationDeletion(receipt.releaseCommitted);}
+  }
   stage='collect';await checked(until(()=>{const job=snapshot().jobs[0];return job?.released===1&&job;},'released'));
+  if(expiry){
+   stage='notification';const ended=snapshot();verifyTranslationExpiry(ended,firstSuggestion,receipt.filteredRefs);
+   if(readFinishedBeforeAlert)await request('GET','content-suggestions?language=en');
+   const alerts=await request('GET','alerts');
+   receipt.expiry.alert=verifyTranslationNotification(alerts,ended.jobs[0].finished_at);
+   const bell=page.locator('dashboard-alerts-bell');await bell.getByRole('button').first().click();
+   await bell.getByText("Translations ready: 1 suggestions are waiting for review. 2 couldn't be done this time.",{exact:true}).waitFor();
+   receipt.expiry.bellChecked=true;
+  }
   stage='suggestions';const suggestions=[];let after;
   do{
    const read=await request('GET','content-suggestions?language=en'+(after?'&after='+encodeURIComponent(after):''));
-   assert.equal(read.run.state,'done');assert.equal(read.run.total,3);assert.equal(read.run.done,3);assert.equal(read.run.failed,0);assert.equal(read.run.progress,3);assert.equal(read.run.waiting,3);
+   assert.equal(read.run.state,expiry?'expired':'done');assert.equal(read.run.total,3);assert.equal(read.run.done,suggestionCount);assert.equal(read.run.failed,expiry?2:0);assert.equal(read.run.progress,3);assert.equal(read.run.waiting,suggestionCount);
+   if(expiry)assert.equal(read.run.code,'content.suggestion_expired');
    suggestions.push(...read.suggestions);after=read.next;
   }while(after);
-  assert.equal(suggestions.length,3);assert.equal(new Set(suggestions.map(row=>row.id)).size,3);
-  assert.equal(new Set(suggestions.map(row=>`${row.kind}:${row.itemId}:${row.language}`)).size,3);
+  assert.equal(suggestions.length,suggestionCount);assert.equal(new Set(suggestions.map(row=>row.id)).size,suggestionCount);
+  assert.equal(new Set(suggestions.map(row=>`${row.kind}:${row.itemId}:${row.language}`)).size,suggestionCount);
+  if(expiry){assert.equal(suggestions[0].id,firstSuggestion.id);assert.equal(suggestions[0].text,firstSuggestion.text);}
   for(const row of suggestions){assert.equal(row.kind,'product');assert.equal(row.language,'en');assert.equal(row.text,expectedProducts.get(row.itemId));assert.equal(row.placeholder,false);assert.equal(row.fix,null);assert.equal(row.stale,false);}
-  const cloudFinal=(await f.db.pool.query('SELECT state,collected_at,(SELECT count(*)::int FROM translation_job_bodies b WHERE b.job_id=j.id) AS bodies FROM translation_jobs j WHERE id=$1',[cloudJob.id])).rows[0];
-  assert.equal(cloudFinal.state,'collected');assert.equal(cloudFinal.bodies,0);assert.ok(cloudFinal.collected_at);
-  receipt.cloudFinal=cloudFinal;receipt.durableRelease=releaseChecks;receipt.suggestions={count:suggestions.length,unique:3,dropped:snapshot().jobs[0].dropped};
+  const cloudFinal=await cloudState(cloudJob.id);
+  if(expiry){assert.equal(cloudFinal.state,'expired');assert.equal(cloudFinal.bodies,0);assert.equal(cloudFinal.collected_at,null);}else verifyTranslationDeletion(cloudFinal,receipt.releaseCommitted?.collected_at);
+  receipt.cloudFinal=cloudFinal;receipt.durableRelease=releaseChecks;receipt.suggestions={count:suggestions.length,unique:suggestionCount,dropped:snapshot().jobs[0].dropped};
   await context.close();context=undefined;
-  for(const running of children)assert.deepEqual(await running.stop(),{code:0,signal:null});
-  verifyTranslationTrace(f.translation.events,{cursors:[0,1,2],releaseAttempts:1});
-  const pages=f.translation.events.filter(e=>e.action==='translation-collect'&&e.kind==='reply');
-  assert.equal(pages.length,3);assert.deepEqual(pages.map(e=>e.body.nextCursor),[1,2,null]);
+  for(const running of children)assert.deepEqual(await running.stop(),running.expectedExit??{code:0,signal:null});
+  verifyTranslationTrace(f.translation.events,{cursors:expiry?[0,1]:(caseName==='lost-page'||restartSignal)?[0,1,1,2]:[0,1,2],releaseAttempts,...(restartSignal?{cancelled:{generation:1,cursor:1}}:{})});
+  assert.equal(releaseChecks.length,releaseAttempts,'durable check at every release');
+  const pages=f.translation.events.filter(e=>e.action==='translation-collect'&&e.kind==='reply'&&e.status===200);
+  assert.equal(pages.length,suggestionCount);assert.deepEqual(pages.map(e=>e.body.nextCursor),expiry?[1]:[1,2,null]);
   for(const [index,event] of pages.entries()){
    assert.equal(event.body.results.length,1);assert.deepEqual(event.body.failed,[]);assert.equal(event.body.results[0].ref,filtered[index].ref);
    assert.ok(Buffer.byteLength(JSON.stringify(event.body))<=512);
-   if(index<2)assert.ok(Buffer.byteLength(JSON.stringify({...event.body,results:[...event.body.results,...pages[index+1].body.results],nextCursor:pages[index+1].body.nextCursor}))>512);
+   if(index+1<pages.length)assert.ok(Buffer.byteLength(JSON.stringify({...event.body,results:[...event.body.results,...pages[index+1].body.results],nextCursor:pages[index+1].body.nextCursor}))>512);
   }
-  receipt.events=f.translation.events.map(event=>({kind:event.kind,action:event.action,jobId:event.jobId,installationId:event.installationId,cursor:event.cursor,generation:1,...(event.kind==='request'?{}:{status:event.status,nextCursor:event.body.nextCursor,bodyHash:digest(event.body)})}));
+  receipt.events=safeEvents();
   receipt.passed=true;
- }catch(error){receipt.failure={stage,code:error.code==='ERR_ASSERTION'?error.message.split('\n')[0]:'translation_proof_'+stage+'_failed'};throw Object.assign(new Error(`translation_proof_failed_${stage}`),{receipt});}
+ }catch(error){receipt.events=safeEvents();receipt.failure={stage,code:error.code==='ERR_ASSERTION'?error.message.split('\n')[0]:'translation_proof_'+stage+'_failed'};throw Object.assign(new Error(`translation_proof_failed_${stage}`),{receipt});}
  finally{
-  abort.abort();if(workerWork)await Promise.allSettled([workerWork]);
+  gate?.cancel();abort.abort();if(workerWork)await Promise.allSettled([workerWork]);
   for(const running of children)await running.stop();
   await context?.close();await provider?.close();await f?.close();
   if(root)await rm(root,{recursive:true,force:true});
@@ -194,10 +237,56 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false}={}){
  return receipt;
 }
 
+export function verifyTranslationStorage(stored,expected){
+ const {jobs,suggestions}=stored,count=expected.refs.length,translations=new Map(expected.translations);
+ assert.equal(jobs.length,1);const job=jobs[0];
+ assert.equal(job.dropped,0,'translation dropped');assert.equal(job.released,0,'release precedes durable check');
+ if(expected.state==='done')assert.equal(job.done,count);
+ assert.equal(job.failed,0);assert.deepEqual(JSON.parse(job.failed_refs),[]);
+ assert.deepEqual([...JSON.parse(job.collected_refs)].sort(),[...expected.refs].sort());
+ assert.equal(new Set(JSON.parse(job.collected_refs)).size,count);
+ assert.equal(suggestions.length,count);assert.equal(new Set(suggestions.map(row=>row.id)).size,count);
+ assert.deepEqual(suggestions.map(row=>`${row.kind}:${row.item_id}`).sort(),[...expected.refs].sort(),'durable products');
+ for(const row of suggestions){assert.equal(row.kind,'product');assert.equal(row.language,'en');assert.equal(row.text,translations.get(row.item_id));assert.equal(row.placeholder,0);assert.equal(row.fix_field,null);}
+ assert.equal(job.collect_cursor,expected.cursor,'durable continuation');assert.equal(job.state,expected.state,'durable state');
+ return job;
+}
+
+export function verifyTranslationDeletion(row,previousCollectedAt){
+ assert.equal(row.state,'collected');assert.equal(row.bodies,0,'Cloud body deletion');assert.ok(row.collected_at);
+ if(previousCollectedAt!==undefined)assert.equal(new Date(row.collected_at).toISOString(),new Date(previousCollectedAt).toISOString(),'repeat release preserves collection time');
+}
+
+export function verifyTranslationExpiry(stored,first,refs){
+ assert.equal(stored.jobs.length,1);const job=stored.jobs[0];
+ assert.equal(job.state,'expired');assert.equal(job.done,1);assert.equal(job.failed,2);assert.equal(job.dropped,0);assert.equal(job.released,1);assert.equal(job.collect_cursor,1);
+ assert.deepEqual(JSON.parse(job.collected_refs),[refs[0]]);
+ assert.deepEqual(JSON.parse(job.failed_refs).sort(),refs.slice(1).sort());
+ assert.equal(stored.suggestions.length,1);assert.equal(stored.suggestions[0].id,first.id,'retained suggestion identity');assert.equal(stored.suggestions[0].text,first.text,'retained suggestion text');assert.equal(stored.suggestions[0].item_id,first.item_id);
+}
+
+export function verifyTranslationNotification(response,finishedAt){
+ assert.equal(response.visible,true);const alert=response.alerts.find(row=>row.key==='content.suggestions_ready');
+ assert.ok(alert,'partial translation notification');
+ for(const [key,value] of Object.entries({kind:'ongoing',area:'content',severity:'notice',code:'content.suggestions_ready_partly',screen:'content-languages'}))assert.equal(alert[key],value);
+ assert.deepEqual(alert.params,{count:1,failed:2});assert.ok(alert.since);assert.equal(alert.since,finishedAt);return alert;
+}
+
+export function verifyTranslationResume(events){
+ const first=events.find(event=>event.kind==='request'&&event.action==='translation-collect'&&event.generation===2);
+ assert.ok(first,'new generation collect missing');assert.equal(first.cursor,1,'new generation resumes durable cursor');return first.cursor;
+}
+
+export async function awaitTranslationWork(task,failure,timeout=150000){
+ let timer;
+ try{return await Promise.race([task,failure,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('translation_proof_timeout_work')),timeout);})]);}
+ finally{clearTimeout(timer);}
+}
+
 export function verifyTranslationTrace(events,expected){
  assert.ok(events.length,'translation trace missing');
  const binding=events[0],cursors=[];
- let continuation=0,pending,final=false,releases=0,releaseLost=false,expired=false;
+ let continuation=0,pending,final=false,releases=0,releaseLost=false,expired=false,cancellations=0;
  const lostPages=new Map();
  for(const event of events){
   assert.equal(event.jobId,binding.jobId,'translation binding');
@@ -222,7 +311,11 @@ export function verifyTranslationTrace(events,expected){
   assert.ok(event.kind==='reply'||event.kind==='lost','translation reply kind');
   if(event.action==='translation-collect'){
    assert.equal(event.cursor,pending.cursor,'reply cursor');
-   if(event.status===410){assert.deepEqual(event.body,{error:'translation_expired'});expired=true;}
+   if(event.status===503){
+    assert.ok(expected.cancelled,'unexpected cancelled collect');
+    assert.equal(cancellations,0,'duplicate cancellation');assert.equal(event.generation,expected.cancelled.generation,'cancelled generation');assert.equal(pending.generation,event.generation,'cancelled request generation');assert.equal(event.cursor,expected.cancelled.cursor,'cancelled cursor');
+    assert.deepEqual(event.body,{error:'temporarily_unavailable'});cancellations++;
+   }else if(event.status===410){assert.deepEqual(event.body,{error:'translation_expired'});expired=true;}
    else{
     assert.equal(event.status,200,'collect reply status');
     assert.equal(event.body.jobId,binding.jobId,'translation binding');
@@ -241,13 +334,22 @@ export function verifyTranslationTrace(events,expected){
  assert.equal(pending,undefined,'request has no reply');
  assert.deepEqual(cursors,expected.cursors,'translation cursor attempts');
  assert.equal(releases,expected.releaseAttempts,'translation release attempts');
+ assert.equal(cancellations,expected.cancelled?1:0,'translation cancellation missing');
  assert.ok(releases>0?!releaseLost:expired,'translation final reply missing');
 }
 
+const faultCases=['lost-page','restart-term','restart-kill','lost-release','expiry'];
+export function verifyTranslationCases(cases){
+ assert.deepEqual(cases.map(row=>row.case),faultCases,'translation independent cases');
+ assert.ok(cases.every(row=>row.passed===true),'translation fault case failed');
+}
 async function main(args){
- if(args.length!==2||args[0]!=='--case'||args[1]!=='baseline')throw new Error('translation_proof_arguments_invalid');
+ if(args.length!==0&&(args.length!==2||args[0]!=='--case'||!['baseline',...faultCases].includes(args[1])))throw new Error('translation_proof_arguments_invalid');
  let receipt;
- try{receipt=await runTranslationProof(args[1]);}
+ try{
+  if(args.length)receipt=await runTranslationProof(args[1]);
+  else{const cases=[];for(const name of faultCases){console.error(`translation proof: ${name}`);cases.push(await runTranslationProof(name));}verifyTranslationCases(cases);receipt={cases,passed:true};}
+ }
  catch(error){if(error.receipt&&process.env.TRANSLATION_RECEIPT)await writeFile(process.env.TRANSLATION_RECEIPT,JSON.stringify(error.receipt,null,2)+'\n');throw error;}
  if(process.env.TRANSLATION_RECEIPT)await writeFile(process.env.TRANSLATION_RECEIPT,JSON.stringify(receipt,null,2)+'\n');
  console.log(JSON.stringify(receipt,null,2));
