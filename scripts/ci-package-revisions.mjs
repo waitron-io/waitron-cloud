@@ -83,6 +83,10 @@ function workspaceAt(sha, workspace, git) {
       // Without resolving member identities, keep every possible consumer.
       assert.doesNotMatch(source.source, directoryPattern(/\.\s*[$_\p{ID_Continue}]*\\u/u),
         `Unresolved escaped member at ${source.path}`);
+      // Escaped bindings can call or store readers without a member access.
+      // Keep unresolved names; a quoted value alone does not expose a binding.
+      assert.doesNotMatch(source.source, /(?<![$\p{ID_Continue}\\.'"`])[$_\p{ID_Continue}]*\\u/u,
+        `Unresolved escaped identifier at ${source.path}`);
       // Optional calls and function members can enumerate a directory without
       // matching a direct call; unresolved arguments retain every consumer.
       // TypeScript non-null assertions leave the runtime function unchanged,

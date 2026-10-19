@@ -1509,12 +1509,22 @@ notifications separately.
   narrow work without them. Unused helpers and plain escaped array strings
   stay narrow. The guard does not decode names or resolve receiver identities:
   any dot-member name with a Unicode escape, including unrelated names and
-  inert text, can select extra work. Escaped bare API identifiers and other
-  unresolved expression forms still need separate qualification.
+  inert text, can select extra work.
+  Escaped bare names such as `re\u0061ddirSync(directory)` now retain full
+  package work too. Executed Node controls cover all four directory APIs,
+  fixed-width and zero-padded brace escapes at the first or last character,
+  stored references, comments and erased TypeScript assertions. Saved-helper
+  checks cover base, head and unchanged transitive readers despite dirty local
+  files. Audited lock changes retain full work with these readers and narrow
+  work without them; unused helpers and plain escaped string values stay narrow.
+  The guard does not decode names or resolve bindings, so unrelated escaped
+  identifiers and inert text can also select extra work. It excludes an opening
+  quote immediately before the name; strings with more complex contents and
+  other expression forms still need separate qualification.
   Adversarial repeated delimiter/comment
   text can increase scan time; comprehensive parser performance remains unqualified.
   Precise resolution,
-  assignment/destructuring aliases and escaped bare API identifiers remain open.
+  assignment/destructuring aliases and other unresolved reader forms remain open.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.
