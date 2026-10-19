@@ -1009,6 +1009,14 @@ notifications separately.
   and fewer than 23 rounded registration minutes on the exact candidate head.
   The wider target of 55 rounded minutes for a full run remains open.
 
+  The relay-capacity test keeps its four SMTP deliveries open until all four
+  competing worker attempts return without work. Its unchanged sending, queued
+  and total-delivery assertions then describe one concurrent batch. A delayed-start
+  control reproduces extra later deliveries when that synchronization is removed;
+  the production worker limit and original deadline are unchanged. The original
+  CI log did not record the worker schedule, so the exact host delay remains
+  unmeasured.
+
   A shard is one partition of a package's tests. Removing a partition
   from both the plan and the job list cannot turn incomplete work green.
   Unknown packages, altered counts, invalid partition numbers and extra row

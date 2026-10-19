@@ -144,10 +144,11 @@ test('refused TCP connection can retry while a worker timeout is uncertain and c
 });
 test('global claim capacity limits parallel workers to four SMTP handoffs',async t=>{
  const f=await setup(t),v=await f.venue();for(let i=0;i<6;i++)await v.submit();
- let reached!:()=>void;const four=new Promise<void>(r=>reached=r),finishes:(()=>void)[]=[];
+ let reached!:()=>void,exhausted!:()=>void,idle=0;const four=new Promise<void>(r=>reached=r),competitors=new Promise<void>(r=>exhausted=r),finishes:(()=>void)[]=[];
  const s=await smtp(t,{onData(stream,_session,done){stream.resume();stream.on('end',()=>{finishes.push(()=>done());if(finishes.length===4)reached();});}});
- const pending=Promise.all(Array.from({length:8},()=>new Worker(f.pool,{...f.config,smtpPort:s.port}).runOnce()));void pending.catch(()=>{});
- await four;const counts=await new Worker(f.pool).status();assert.equal(counts.counts.sending,4);assert.equal(counts.counts.queued,2);for(const finish of finishes)finish();await pending;
+ const pending=Promise.all(Array.from({length:8},()=>new Worker(f.pool,{...f.config,smtpPort:s.port}).runOnce().then((worked:boolean)=>{if(!worked&&++idle===4)exhausted();return worked;})));void pending.catch(()=>{});
+ // Keep the four SMTP calls open until every competing claim has decided; a later claim may use a slot freed by a completed delivery.
+ await four;const counts=await new Worker(f.pool).status();assert.equal(counts.counts.sending,4);assert.equal(counts.counts.queued,2);await competitors;for(const finish of finishes)finish();await pending;
  assert.equal(finishes.length,4);
 });
 test('process death after DATA cannot cause resend on restart',async t=>{
