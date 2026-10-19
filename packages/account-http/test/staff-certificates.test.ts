@@ -61,7 +61,7 @@ test('exchange is disabled unless the account service explicitly enables it',asy
 });
 test('local exchange refuses a production installation even with its matching live lease',async(t)=>{
  const a=await f.venue();await f.db.pool.query("UPDATE venues SET environment='production' WHERE id=$1",[a.venueId]);const c=JSON.parse(Buffer.from(a.lease.payload,'base64url').toString());
- // Advance only lease construction; HTTP authentication must use the real clock.
+ // Advance only lease construction; restore before using the lease.
  const now=Date.now();let tick=now;
  const clock=t.mock.method(Date,'now',()=>tick++);let lease:SignedEnvelope;
  try{const issuedAt=Date.now();lease=f.issuer.issue({origin:f.origin,leaseId:c[3],installationId:a.installationId,venueId:a.venueId,environment:'production',publicKey:c[7],issuedAt,expiresAt:issuedAt+3600000});}finally{clock.mock.restore();}
