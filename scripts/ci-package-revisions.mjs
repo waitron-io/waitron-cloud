@@ -119,9 +119,9 @@ function workspaceAt(sha, workspace, git) {
       assert.doesNotMatch(source.source, directoryPattern(/[\]}][^\[\]{};]*,\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/u),
         `Unresolved indirect directory call at ${source.path}`);
       // Logical and conditional operands can preserve the reader for a later
-      // call. Bare and simple namespace references stay unresolved on either
-      // side without evaluating the expression.
-      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*(?:&&|\|\||\?\?|\?(?!\.)|:)|(?:&&|\|\||\?\?|\?|:)\s*(?:[A-Za-z_$][\w$]*\s*\.\s*)?(?:readdirSync|readdir|opendirSync|opendir)\b/),
+      // call. Namespace chains, including Unicode and private names, preserve
+      // that function through optional access and erased non-null assertions.
+      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*(?:&&|\|\||\?\?|\?(?!\.)|:)|(?:&&|\|\||\?\?|\?|:)\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
         `Unresolved indirect directory call at ${source.path}`);
       // An imported alias can enumerate helpers without naming a directory API
       // at its call site. Quoted names and escaped alias tokens stay unresolved;
