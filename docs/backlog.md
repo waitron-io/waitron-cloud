@@ -1744,6 +1744,9 @@ notifications separately.
   original session-refusal, observed-lock and absent-approval assertions and the
   30-second execution deadline remain. Main run `39209023087` did not capture
   these timing boundaries, so its exact scheduling remains unproved.
+  Other pairing expiry fixtures still observe any lock wait in their schema;
+  identify their actual blockers before claiming that observation proves a
+  membership-lock wait.
   This budget is separate from intermittent fixture failures; more time is not
   a diagnosis of a failing assertion.
   **Two fixture failures reproduced after the authenticator merge.**
