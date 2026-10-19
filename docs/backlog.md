@@ -274,6 +274,26 @@ patch are `fiscal-diagnostic.log` and `fiscal-diagnostic.patch`, and the later
 133-case passing run is `fiscal-final.log`. Use those stages to investigate the
 next failure; a passing repeat does not resolve this defect.
 
+**Maximum-hour lease fixture timing.** Full main CI `39247738663` failed
+`staff-certificates.test.ts` before its production-installation HTTP 403 check:
+the issuer refused a fixture built from two clock reads. Advancing only lease
+construction by one millisecond reproduces `invalid_proof` through real PostgreSQL.
+The fixture now derives expiry from one issuance timestamp; its permanent advancing-clock
+case verifies the signed lease lasts exactly 3,600,000 ms and retains the HTTP 403.
+The outage proof's live retired-key control had the same two-clock construction.
+Its complete PostgreSQL/SeaweedFS/HTTP journey also reproduces the refusal under
+that clock control and passes after the same correction, retaining key-removal,
+expiry and revocation checks. Both corrections leave production code, existing
+assertions and individual deadlines unchanged. CI did not record its clock values,
+so the exact historical timing remains unproved.
+Separately qualify expired-lease fixtures that subtract an hour from one clock
+read and one millisecond from a later read. A two-millisecond advancing-clock
+experiment reproduces the same issuer refusal in the staff test's revision/revocation
+case. The same construction appears in `relay-messages.test.ts`,
+`relay-operator-stop.test.ts` and `captures.test.ts`; those sites remain untested
+under that clock control. Preserve their expiry, permission and HTTP checks when
+correcting them.
+
 ## Translate all: approved design, implementation still open
 
 The [Cloud design](superpowers/specs/2026-10-14-translate-all-design.md) and
