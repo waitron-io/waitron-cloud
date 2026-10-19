@@ -109,3 +109,18 @@ console.log([[], 0, 'ordinary value', null][2]);
   assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'ordinary value\n');
   assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
 }));
+
+
+test('delimiters before inert reader text preserve package isolation', async t => {
+  for (const [name, expression] of [
+    ['object', "function unrelated() {}\nconsole.log({value: 'a, readdirSync, b'}.value);\n"],
+    ['statement', "function unrelated() {};\nconsole.log('a, readdirSync, b');\n"],
+  ]) await t.test(name, () => fixture(({root, write, commit, plan}) => {
+    write('packages/portal/src/index.mjs', expression);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'a, readdirSync, b\n');
+    assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
+  }));
+});

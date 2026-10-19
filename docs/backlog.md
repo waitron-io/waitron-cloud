@@ -1528,9 +1528,16 @@ notifications separately.
   lock changes retain full work with readers and narrow work without them.
   Unused helpers, ordinary arrays and named imports stay narrow in the
   controls. This scan stops at intervening brackets, braces or semicolons;
-  it does not resolve array membership or receiver identities. Inert text
-  and unrelated expressions can select extra work. General expression
-  parsing and the wider reader inventory remain unqualified.
+  it does not resolve array membership or receiver identities. A semicolon
+  or an unmatched opening bracket or brace inside an intervening string,
+  comment or regular expression can therefore leave a real reader undetected,
+  as in `[[], 'a;b', readdirSync, null][2]`. Inert text and unrelated
+  expressions can select extra work, including text after a function body
+  without a semicolon. An ordinary object expression and a semicolon
+  before that inert text have separate package-isolation controls. The
+  bracket exclusion still lacks an independent omission control; the earlier
+  array guard also retains inert text inside arrays. General
+  expression parsing and the wider reader inventory remain unqualified.
   Unicode escapes in dot-member names, such as `fs.re\u0061ddirSync`,
   now retain full package work. Node execution controls cover all four directory
   APIs, escapes at the start and end of a name, zero-padded brace escapes,
