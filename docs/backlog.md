@@ -1436,8 +1436,22 @@ notifications separately.
   not resolve member identities and may select extra work for unrelated names
   or inert text, including multi-segment function arguments after a closing
   array or object delimiter. Private (`#fs`) and literal Unicode member names
-  outside the qualified parenthesized forms, and dot-member namespace readers
-  as the first array element remain unresolved.
+  outside the qualified parenthesized forms remain unresolved.
+  Dot-member namespace readers stored as the first array element now retain
+  every package suite, including `[fs.readdirSync, null][0]` and
+  `[fs.promises.readdir, null].at(0)`. Executed Node controls cover all four
+  directory APIs, one to three namespace segments, comments, optional access
+  and erased non-null assertions. Saved-helper checks retain base, head and
+  unchanged transitive consumers despite dirty local files; audited lockfile
+  changes keep full package work with these readers and narrow work without
+  them. Unused helpers, ordinary namespace values and named imports stay
+  narrow in the controls. The scan does not resolve member identities or
+  parse arbitrary expressions; inert text and unrelated members with these
+  names can select extra work, including a reader used as a computed key.
+  Supported namespace segments use ASCII identifiers. Non-ASCII, escaped
+  or private receiver names can still hide a first-element reader, as in
+  `[ñs.readdirSync, null][0]`; executed base/head probes reproduce these
+  misses. Other expression positions remain unqualified.
   Quoted computed members such as `fs['readdirSync']` now retain full package
   work for all four directory APIs, including double-quoted and plain template
   keys, comments, optional access, assertions on the object, key or result,
