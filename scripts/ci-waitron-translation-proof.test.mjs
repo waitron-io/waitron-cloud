@@ -93,6 +93,18 @@ test('failed spawn still permits the rest of setup cleanup',async()=>{
  assert.equal(running.exited,true);
  assert.deepEqual(await running.stop(),{code:null,signal:null,error:'spawn_failed'});
 });
+test('an IPC error on a live child does not skip stopping that process',async()=>{
+ const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:['ignore','ignore','ignore','ipc']});
+ const running=module.trackTranslationChild(child);
+ try{
+  await new Promise(resolve=>child.once('spawn',resolve));
+  await new Promise(resolve=>{child.once('disconnect',resolve);child.disconnect();});
+  const error=new Promise(resolve=>child.once('error',resolve));child.send({probe:true});
+  assert.equal((await error).code,'ERR_IPC_CHANNEL_CLOSED');
+  assert.equal(running.exited,false,'IPC failure does not establish child exit');
+  const stopped=await running.stop('SIGKILL');assert.deepEqual(stopped,{code:null,signal:'SIGKILL'});assert.equal(running.exited,true);
+ }finally{if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await new Promise(resolve=>child.once('exit',resolve));}}
+});
 
 test('durable storage checks refuse lost progress duplicates and dropped items',()=>{
  const expected={refs:['product:one'],translations:[['one','Translated coffee']],cursor:null,state:'done'};
@@ -118,6 +130,13 @@ test('repeat release requires body deletion and an unchanged collection time',()
  module.verifyTranslationDeletion(row);
  module.verifyTranslationDeletion(row,'2026-10-20T00:00:00.000Z');
  for(const patch of [{state:'done'},{bodies:1},{collected_at:null},{collected_at:'2026-10-20T00:00:01.000Z'}])assert.throws(()=>module.verifyTranslationDeletion({...row,...patch},'2026-10-20T00:00:00.000Z'));
+});
+test('repeat-release observation waits for the first committed snapshot before reading the retry',async()=>{
+ assert.equal(typeof module.verifyTranslationRepeat,'function','ordered repeat observation is implemented');
+ const first={state:'collected',bodies:0,collected_at:'2026-10-20T00:00:00.000Z'};
+ let current=first;
+ const committed=new Promise(resolve=>setTimeout(()=>{current={...first,collected_at:'2026-10-20T00:00:01.000Z'};resolve(first);},10));
+ await assert.rejects(module.verifyTranslationRepeat(committed,async()=>current),/repeat release preserves collection time/);
 });
 test('expiry preserves the first page and accounts for the two missing products',()=>{
  const first={id:'stored-first',item_id:'one',text:'Translated coffee'},state={jobs:[{state:'expired',done:1,failed:2,dropped:0,released:1,collect_cursor:1,collected_refs:'["product:one"]',failed_refs:'["product:two","product:three"]'}],suggestions:[first]};

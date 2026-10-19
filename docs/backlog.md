@@ -627,8 +627,13 @@ Remaining work:
   shows the real partial-result bell notice before suggestions are opened. Every
   release checks durable completion first. A deliberate early suggestions read
   clears the notice and fails qualification. The combined five-case command passes;
-  twelve independent guard removals are caught by behavioral checks. Keep bounded decoded reads and
-  the wider release gate open; these synthetic cases do not qualify production.
+  fourteen independent guard removals are caught by behavioral checks. Keep bounded
+  decoded reads and the wider release gate open; these synthetic cases do not qualify
+  production. Keep generation tags limited to the controlled single-runner restart.
+  Before adding long-running release checks, give those callbacks cancellation:
+  closing currently stops waiting and subsequent machine execution, while callbacks
+  must stop their own work. Bundle-marker preflight checks required UI strings;
+  the actual bell check remains mandatory.
 - **Owner quality trials:** Tasks 22–24 remain owner-only after **2026-11-02**, using their
   preserved commands. Templated-prompt non-regression on both graded sets, house-style effects
   and the other kinds of name still need measurement and owner grading. Run no real-key trials

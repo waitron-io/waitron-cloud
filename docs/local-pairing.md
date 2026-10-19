@@ -52,7 +52,8 @@ Cloud portal and a clean, separately prepared Waitron checkout containing paging
 [#1901](https://github.com/clintongormley/waitron/pull/1901) and the fixture repair
 [#1903](https://github.com/clintongormley/waitron/pull/1903). The proof has passed
 against Waitron `a3be14ba4e59bc8104087624171ddabec4978de2`. Build only a checkout you
-own; the proof refuses uncommitted Waitron changes and an outdated dashboard bundle.
+own; the proof refuses uncommitted Waitron changes and a dashboard bundle missing
+the translation-notice markers.
 
 ```sh
 pnpm portal:build

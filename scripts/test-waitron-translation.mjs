@@ -12,7 +12,7 @@ export function trackTranslationChild(child){
  let exited=false;
  const done=new Promise(yes=>{
   child.once('exit',(code,signal)=>{exited=true;yes({code,signal});});
-  child.once('error',()=>{exited=true;yes({code:null,signal:null,error:'spawn_failed'});});
+  child.on('error',()=>{if(child.pid!==undefined)return;exited=true;yes({code:null,signal:null,error:'spawn_failed'});});
  });
  void done.catch(()=>{});
  return {child,done,get exited(){return exited;},async stop(signal='SIGTERM'){
@@ -49,7 +49,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
  const [{startPortalFixture},{SignupStore},{TranslationWorker,createOpenAiClient,sweepTranslationJobs},{startFakeOpenAi,echoFirstPass,isReview,emptyReview,responsesBody},{DatabaseSync}]=await Promise.all([
   import('../apps/portal/test/fixtures.ts'),import('../packages/registration/src/index.ts'),import('../packages/translation/src/index.ts'),import('../packages/translation/test/fake-openai.ts'),import('node:sqlite'),
  ]);
- let f,context,provider,root,stage='setup',generation=0,workerWork,loss,gate,firstSuggestion;
+ let f,context,provider,root,stage='setup',generation=0,workerWork,loss,gate,firstSuggestion,releaseSnapshot;
  const children=[],releaseChecks=[],abort=new AbortController();
  const receipt={case:caseName,sources,passed:false,cleanup:{}};
  const safeEvents=()=>f?.translation.events.map(event=>({kind:event.kind,action:event.action,jobId:event.jobId,installationId:event.installationId,cursor:event.cursor,generation:event.generation,...(event.kind==='request'?{}:{status:event.status,nextCursor:event.body?.nextCursor,bodyHash:digest(event.body)})}));
@@ -136,7 +136,11 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   f.translation.beforeRelease(async jobId=>{
    const state=snapshot(),job=assertStored(state,3,expectedRefs);
    assert.equal(job.cloud_job_id,jobId);assert.equal(job.state,'done');assert.equal(job.collect_cursor,null);
-   if(releaseChecks.length)verifyTranslationDeletion(await cloudState(jobId),receipt.releaseCommitted?.collected_at);
+   if(releaseChecks.length){
+    assert.ok(releaseSnapshot,'first release snapshot missing');
+    await verifyTranslationRepeat(releaseSnapshot,()=>cloudState(jobId));
+    receipt.firstSnapshotBeforeRetry=true;
+   }
    releaseChecks.push({generation,durable:true,count:state.suggestions.length,dropped:job.dropped});
   });
   provider=await startFakeOpenAi(r=>{
@@ -146,7 +150,11 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
    return {json:responsesBody(JSON.stringify(body))};
   });
   if(caseName==='lost-page')loss=f.translation.loseReply('translation-collect',1);
-  if(caseName==='lost-release')loss=f.translation.loseReply('translation-release');
+  if(caseName==='lost-release'){
+   loss=f.translation.loseReply('translation-release');
+   releaseSnapshot=loss.then(async()=>{const row=await cloudState(receipt.jobId);verifyTranslationDeletion(row);receipt.releaseCommitted=row;return row;});
+   void releaseSnapshot.catch(()=>{});
+  }
   if(restartSignal||expiry)gate=f.translation.pauseCollect(1);
   stage='start';const started=await request('POST','content-suggestions/jobs',{});assert.equal(started.run.state,'sending');assert.equal(started.run.total,3);
   const cloudJob=await checked(until(async()=>{
@@ -187,7 +195,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   }
   if(loss){
    const lost=await checked(loss);assert.equal(lost.status,200);receipt.lostReply={status:lost.status,bodyHash:digest(JSON.parse(lost.body))};
-   if(caseName==='lost-release'){receipt.releaseCommitted=await cloudState(cloudJob.id);verifyTranslationDeletion(receipt.releaseCommitted);}
+   if(caseName==='lost-release')await checked(releaseSnapshot);
   }
   stage='collect';await checked(until(()=>{const job=snapshot().jobs[0];return job?.released===1&&job;},'released'));
   if(expiry){
@@ -255,6 +263,11 @@ export function verifyTranslationStorage(stored,expected){
 export function verifyTranslationDeletion(row,previousCollectedAt){
  assert.equal(row.state,'collected');assert.equal(row.bodies,0,'Cloud body deletion');assert.ok(row.collected_at);
  if(previousCollectedAt!==undefined)assert.equal(new Date(row.collected_at).toISOString(),new Date(previousCollectedAt).toISOString(),'repeat release preserves collection time');
+}
+
+export async function verifyTranslationRepeat(committed,readCurrent){
+ const first=await committed;verifyTranslationDeletion(first);
+ verifyTranslationDeletion(await readCurrent(),first.collected_at);
 }
 
 export function verifyTranslationExpiry(stored,first,refs){
