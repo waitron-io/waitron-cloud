@@ -730,3 +730,27 @@ for await (const item of await scan(directory)) {
     }));
   }
 });
+
+test('audited lock changes retain readers after quoted or commented predecessors', async t => {
+  for (const prefix of ["'a;b'", '"a;b"', '`a;b`', '0 /* ; */', '0 // ;\n', '/[;{]/']) {
+    for (const nested of [false, true]) await t.test(`${nested ? 'nested ' : ''}${prefix}`, () => fixture(({git, write, lock, save, audit, commit, plan}) => {
+      write('packages/catalogue/src/adapter.mjs', 'export const price = 1;\n');
+      write('catalogue-adapter.mjs', "import './packages/catalogue/src/adapter.mjs';\nconsole.log('quoted lock helper loaded');\n");
+      write('packages/page/test/scan.mts', `import * as ñs from 'node:fs';
+const directory = new URL('../../../', import.meta.url);
+const scan = [${nested ? '[], ' : ''}${prefix}, ñs.readdirSync, null].at(-2);
+for (const name of scan(directory)) if (name.endsWith('.mjs')) await import(new URL(name, directory));
+`);
+      audit(); const base = commit();
+      lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+      const head = commit();
+      assert.equal(execFileSync(process.execPath, ['packages/page/test/scan.mts'], {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8'}), 'quoted lock helper loaded\n');
+      assertSelected(plan(base, head), ['catalogue', 'page', 'unrelated']);
+    }));
+  }
+  await t.test('without a directory reader', () => fixture(({lock, save, commit, plan}) => {
+    const base = commit();
+    lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+    assertSelected(plan(base, commit()));
+  }));
+});
