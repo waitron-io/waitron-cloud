@@ -1851,6 +1851,27 @@ notifications separately.
   remains unproved. Production authentication code and accepted code periods stay
   unchanged.
 
+  **Registration authenticator replay fixture.** The registration-store enrolment
+  test now retains its exact accepted activation code for the replay refusal,
+  matching the HTTP fixture and the approved authenticator spec. A previous-step
+  enrolment variant reproduces `Missing expected rejection` with the old fresh-code
+  expression. The refusal code, every original assertion and the 30-second test
+  deadline remain. No production authentication or accepted-window rule changes.
+  PR run `39237311621` failed at `authenticator-factor.test.ts:86`; it did not
+  record both code periods, so this reproduces a mechanism rather than proving
+  that historical run's precise cause. Keep the explicit replay variant and
+  investigate any recurrence with the consumed time-step evidence.
+
+  **Local registration suite lock capacity.** Running the complete registration
+  suite with this Mac's default 18 test-file workers exhausted PostgreSQL's shared
+  lock table (`out of shared memory`, with `max_locks_per_transaction` hints).
+  That run reported 486 passes and 198 failures across 684 reported cases; two
+  stalled test processes and their recorded descendant required termination.
+  The wrapper then cleaned up its owned database and mail containers. Qualify
+  high-core local harness defaults separately; do not raise test deadlines or
+  database limits to conceal this run. A bounded four-file full-suite run uses
+  the same files, assertions, database settings and individual test deadlines.
+
   **One-second relay budget fixture.** The key-retirement and rollover tests now
   retry setup admissions at most ten times when the budget window ends before
   admission commits. They keep the one-second window and every existing assertion.

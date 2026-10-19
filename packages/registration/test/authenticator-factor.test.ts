@@ -2,6 +2,7 @@ import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {createHash, createHmac, randomUUID} from 'node:crypto';
 import {after, before, beforeEach, test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import {Pool} from 'pg';
 import {createSession, decryptFactorSecret, encryptFactorSecret, endSession, hashSecret, resolveSession, revokeAccountSession} from '@waitron-cloud/identity';
 import * as registration from '../src/index.ts';
@@ -63,7 +64,7 @@ beforeEach(async () => {
     VALUES($1,$2,$3,clock_timestamp())`,[accountId,email,await hashSecret(password)]);
 });
 
-test('enrolment leaves password login unchanged until confirmation, then ends every session and returns hashed recovery codes once', async () => {
+for (const activationOffset of [0, -1]) test('enrolment leaves password login unchanged until confirmation, then ends every session and returns hashed recovery codes once' + (activationOffset ? ' with previous-step enrolment' : ''), async () => {
   const a=await authority();await authority();const s=store();
   assert.deepEqual(await s.status(a.token),{active:false,version:0,recoveryCodesRemaining:0,available:true});
   const pending=await s.begin(a);
@@ -76,14 +77,20 @@ test('enrolment leaves password login unchanged until confirmation, then ends ev
   assert.equal(row.session_id,(await pool.query('SELECT id FROM cloud_sessions WHERE token_hash=$1',[digest(a.token)])).rows[0].id);
   assert.equal(row.expires_at-row.created_at,300_000);assert.equal(row.attempt_limit,3);
   assert.equal(JSON.stringify(row).includes(pending.secret),false);assert.equal(JSON.stringify(row).includes(pending.pendingToken),false);
-  const changed=await s.activate(a,pending.pendingToken,totp(pending.secret));
+  // A previous-step code needs time to activate before its accepted window ends.
+  if (activationOffset) {
+    const now=(await pool.query('SELECT clock_timestamp() AS now')).rows[0].now.getTime();
+    if (now%30_000>25_000) await delay(30_000-now%30_000);
+  }
+  const activationCode=totp(pending.secret,Date.now()+activationOffset*30_000);
+  const changed=await s.activate(a,pending.pendingToken,activationCode);
   assert.equal(changed.status,'changed');assert.equal(changed.active,true);assert.equal(changed.recoveryCodes.length,10);
   assert.equal(new Set(changed.recoveryCodes).size,10);assert.ok(changed.recoveryCodes.every(c=>/^[0-9A-F]{32}$/.test(c)));
   await assertEnded();assert.equal((await factor()).version,1);
   const codes=(await pool.query('SELECT * FROM cloud_factor_recovery_codes')).rows;
   assert.equal(codes.length,10);assert.ok(codes.every(r=>!changed.recoveryCodes.includes(r.code_hash)));
   const challenge=await loginChallenge();
-  await refused(new registration.PasswordLoginStore(pool,keys,loginPolicy).complete(challenge,proof(totp(pending.secret))),'credentials_invalid');
+  await refused(new registration.PasswordLoginStore(pool,keys,loginPolicy).complete(challenge,proof(activationCode)),'credentials_invalid');
   const credentials=await new registration.PasswordLoginStore(pool,keys,loginPolicy).complete(challenge,recovery(changed.recoveryCodes[0]!));
   assert.deepEqual(await s.status(credentials.token),{active:true,version:1,recoveryCodesRemaining:9,available:true});
   assert.equal('recoveryCodes' in await s.status(credentials.token),false);
