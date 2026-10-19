@@ -1515,8 +1515,9 @@ notifications separately.
   and chained tags. Saved-helper checks retain base, head and unchanged transitive
   consumers despite dirty files; audited lock changes retain full work with readers
   and narrow work without them. Unused helpers and ordinary tagged values stay
-  narrow. Template contents and receiver identities remain unresolved, so inert
-  text and unrelated objects can select extra work. General template parsing and
+  narrow. The scan also matches opening backticks and backticks in comments.
+  Template contents and receiver identities remain unresolved, so inert text
+  and unrelated objects can select extra work. General template parsing and
   other expression positions remain unqualified.
   Other nested predecessors such as `[[], 0, readdirSync, null][2]` also remain
   unresolved on both scanners.
