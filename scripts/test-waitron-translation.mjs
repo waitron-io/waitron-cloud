@@ -99,13 +99,19 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false}={}){
   stage='consent';await portal.goto(f.origin+'/account');await portal.getByRole('button',{name:'Allow menu translation',exact:true}).click();
   await portal.getByText('Menu translation is allowed for this venue.',{exact:true}).waitFor();
   const consents=await (await context.request.get(f.origin+'/api/account/translation-consent')).json();
-  assert.ok(consents.consents.some(row=>row.venueId===connected.registration.venueId&&row.consented===true));
+  receipt.consent={venueId:connected.registration.venueId,consents:consents.consents};
+  assert.ok(consents.consents.some(row=>row.venueId===connected.registration.venueId&&row.consented===true),'translation_proof_consent_saved');
   await request('POST','cloud/refresh',{});
-  const configured=await request('GET','cloud/status');assert.ok(configured.installation.services.some(row=>row.service==='content_translation'&&row.state==='ready'));
+  // A fresh connection renews its lease before it can request version-2 configuration.
+  await request('POST','cloud/refresh',{});
+  const configured=await request('GET','cloud/status');receipt.services=configured.installation.services;assert.ok(configured.installation.services.some(row=>row.service==='content_translation'&&row.state==='ready'),'translation_proof_service_ready');
   const available=await request('GET','content-suggestions?language=en');assert.equal(available.service,'on');assert.equal(available.cloudOrigin,f.origin);
   stage='content';await request('PUT','content-languages',{defaultLanguage:'es',languages:['es','en']},204);
-  const languages=await request('GET','content-languages');assert.equal(languages.defaultLanguage,'es');assert.deepEqual(languages.languages,['es','en']);
+  const languages=await request('GET','content-languages');receipt.languages=languages;assert.equal(languages.defaultLanguage,'es');assert.deepEqual(languages.languages,['es','en']);
   await request('GET','content-language-rules');
+  const existingMenus=await request('GET','catalogues');
+  assert.equal(existingMenus.length,1,'translation_proof_initial_menu');
+  await request('PATCH',`catalogues/${existingMenus[0].id}`,{names:{es:'Menú inicial',en:'Initial menu'}},204);
   const catalogue=await request('POST','catalogues',{name:'Interruption menu',names:{es:'Menú de prueba',en:'Test menu'}},201);
   const expectedProducts=new Map();
   for(let index=1;index<=3;index++){
@@ -114,6 +120,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false}={}){
   }
   const gaps=await request('GET','content-translation-gaps');
   const expectedRefs=[...expectedProducts.keys()].map(id=>'product:'+id).sort();
+  receipt.gaps=gaps.map(row=>({language:row.language,refs:row.gaps.map(gap=>`${gap.kind}:${gap.id}`)}));
   assert.deepEqual(gaps.map(row=>row.language),['es','en']);
   assert.deepEqual(gaps.find(row=>row.language==='es').gaps,[]);
   assert.deepEqual(gaps.find(row=>row.language==='en').gaps.map(row=>`${row.kind}:${row.id}`).sort(),expectedRefs);
