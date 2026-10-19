@@ -779,3 +779,27 @@ for await (const item of await scan(directory)) {
     }));
   }
 });
+
+
+test('audited lock changes retain newline and comma reader declarations', async t => {
+  for (const ending of ['\n', ', unused = 1;']) for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir', null]) {
+    await t.test(`${JSON.stringify(ending)} ${api ?? 'without a reader'}`, () => fixture(({git, write, lock, save, audit, commit, plan}) => {
+      if (api) {
+        write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.ts';\nconsole.log('declaration lock helper loaded');\n");
+        write('packages/page/test/scan.mts', `import * as ñs from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+const directory = new URL(['..', '..', '..', ''].join('/'), import.meta.url);
+const scan = ñs.${api}${ending}
+for await (const item of await scan(directory)) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`);
+      }
+      audit(); const base = commit();
+      lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+      const head = commit();
+      if (api) assert.equal(execFileSync(process.execPath, ['packages/page/test/scan.mts'], {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8'}), 'declaration lock helper loaded\n');
+      assertSelected(plan(base, head), api ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
+    }));
+  }
+});

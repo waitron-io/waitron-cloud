@@ -117,3 +117,66 @@ test('inert API text followed by a semicolon retains conservative extra work', (
   assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'readdirSync;\n');
   assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
 }));
+
+
+test('newline and comma declarations retain readers Node actually loads', async t => {
+  for (const ending of ['\n', '\r\n', ', unused = 1;']) {
+    for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
+      for (const expression of [api, `ñs.${api}`, `ñs! /* receiver */ ?. ${api}! /* stored */`]) {
+        await t.test(`${JSON.stringify(ending)} ${expression}`, () => fixture(({root, write, commit, plan}) => {
+          write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('declaration reader helper loaded');\n");
+          write('packages/portal/src/reader.mts', readerSource(api, expression, "['..', '..', '..', ''].join('/')").replace(`${expression};\n`, `${expression}${ending}${ending.endsWith(';') ? '\n' : ''}`));
+          const base = commit();
+          write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+          const head = commit();
+          assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'declaration reader helper loaded\n');
+          assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
+        }));
+      }
+    }
+  }
+});
+
+test('saved declaration readers retain either revision and transitive consumers', async t => {
+  for (const ending of ['\n', ', unused = 1;']) for (const revision of ['base', 'head', 'unchanged']) {
+    await t.test(`${JSON.stringify(ending)} ${revision}`, () => fixture(({root, write, commit, plan}) => {
+      write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('declaration reader helper loaded');\n");
+      const reader = readerSource('readdirSync', 'ñs.readdirSync', "['..', ''].join('/')").replace('ñs.readdirSync;\n', `ñs.readdirSync${ending}${ending.endsWith(';') ? '\n' : ''}`);
+      write('tools/scan.mts', revision === 'head' ? 'export const value = 1;\n' : reader);
+      write('packages/portal/src/index.mjs', "import '../../../tools/scan.mts';\n");
+      write('packages/gateway/src/index.mjs', "import '../../portal/src/index.mjs';\n");
+      const base = commit();
+      if (revision !== 'head') assert.equal(execFileSync(process.execPath, ['packages/gateway/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'declaration reader helper loaded\n');
+      if (revision !== 'unchanged') write('tools/scan.mts', revision === 'head' ? reader : 'export const value = 2;\n');
+      write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+      const head = commit();
+      if (revision !== 'base') assert.equal(execFileSync(process.execPath, ['packages/gateway/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'declaration reader helper loaded\n');
+      write('tools/scan.mts', 'export const dirty = true;\n');
+      assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
+    }));
+  }
+});
+
+
+test('reader declarations retain consumers across line comments and Unicode line endings', async t => {
+  for (const ending of [' // stored\n', '\u2028', '\u2029']) await t.test(JSON.stringify(ending), () => fixture(({root, write, commit, plan}) => {
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('line ending helper loaded');\n");
+    write('packages/portal/src/reader.mts', readerSource('readdirSync', 'ñs.readdirSync', "['..', '..', '..', ''].join('/')").replace('ñs.readdirSync;\n', `ñs.readdirSync${ending}${ending.endsWith(';') ? '\n' : ''}`));
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'line ending helper loaded\n');
+    assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
+  }));
+});
+
+
+test('a lone carriage return retains a stored reader consumer', () => fixture(({root, write, commit, plan}) => {
+  write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('carriage return helper loaded');\n");
+  write('packages/portal/src/reader.mts', readerSource('readdirSync', 'ñs.readdirSync', "['..', '..', '..', ''].join('/')").replace('ñs.readdirSync;\n', 'ñs.readdirSync\r'));
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'carriage return helper loaded\n');
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
+}));

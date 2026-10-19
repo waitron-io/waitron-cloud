@@ -1688,10 +1688,18 @@ notifications separately.
   ordinary named imports and ordinary stored values stay narrow in the controls.
   This lexical check does not resolve bindings or general assignment expressions;
   inert text spelling an API followed by a semicolon can select extra work.
-  Stored references without a semicolon and comma-separated declarations still
-  miss consumers: `const scan = fs.readdirSync` followed by a newline, and
-  `const scan = fs.readdirSync, unused = 1;`, both execute the reader while the
-  planner selects only the changed package in base and candidate controls.
+  Stored assignment references now retain full work across line endings and
+  comma-separated declarations, including `const scan = fs.readdirSync` followed
+  by a newline and `const scan = fs.readdirSync, unused = 1;`. Executed Node
+  controls cover all four APIs, bare and namespace references, comments, optional
+  access and erased non-null assertions (`!`), plus CRLF, lone carriage returns
+  and Unicode line endings. These controls exercise both the assignment check
+  and existing reader checks. Saved base,
+  head and unchanged helpers retain transitive consumers despite dirty local
+  files; audited lock changes retain full work with readers and narrow work
+  without them. The assignment check leaves ordinary named imports narrow.
+  Inert assignment text can still select extra work; these lexical controls do
+  not establish complete JavaScript or TypeScript parsing.
   Precise resolution, general assignment/destructuring aliases and other
   unresolved reader forms remain open.
   A final element's trailing comma also keeps full work, including multiline and
