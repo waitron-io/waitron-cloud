@@ -1389,14 +1389,16 @@ notifications separately.
   inputs, local reads and identifier suffixes stay narrow in the controls.
   Parentheses around a URL constructor or alias value now preserve immediate
   root-helper consumers, including nested parentheses, declaration and later
-  assignment chains, comments, escaped names and the supported URL type label.
+  assignment chains, used function/arrow default parameters, comments, escaped
+  names and the supported URL type label.
   Executed checks cover all four directory APIs, both saved revisions, transitive
   consumers, dirty local files and audited lock changes. Root options retain
   every package; unused inputs, local reads and alias property suffixes keep
   narrow selection in the controls. The scan combines names across scopes and
   can select extra work from overwritten values or inert text; it does not parse
   general expressions. TypeScript `as URL` and non-null `!` assertions,
-  destructuring and logical assignment still need resolution. Executed probes
+  destructuring, logical assignment and parentheses around the reader argument
+  still need resolution. Executed probes
   in the preceding task loaded a helper through `as URL` and `!`, while both
   its captured base and candidate scanner omitted that consumer. Those forms
   remain explicit D69 gaps. Property assignments, inert comments or strings and

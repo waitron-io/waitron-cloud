@@ -58,6 +58,8 @@ const assignments = [
   ['commented alias chain', "const original = (new URL('../../../', import.meta.url)); let middle; middle = ( /* source */ original /* end */ ); const directory = ( /* transfer */ middle );"],
   ['escaped constructor and alias', String.raw`const \u006friginal = (new \u0055RL('../../../', import.meta.url)); const directory: \u0055RL = ((orig\u0069nal));`],
   ['typed comma declaration', "const original = ((new URL('../../../', import.meta.url))), directory: URL = ((original));"],
+  ['used default parameter alias', "const original = new URL('../../../', import.meta.url); function target(directory = (original)) { return directory; } const directory = target();"],
+  ['used default arrow alias', "const original = new URL('../../../', import.meta.url); const target = (directory = ((original))) => directory; const directory = target();"],
 ];
 
 test('parenthesized URL values retain helpers actually loaded by each directory API', async t => {

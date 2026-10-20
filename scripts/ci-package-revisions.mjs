@@ -249,7 +249,8 @@ function workspaceAt(sha, workspace, git) {
       const assignmentAlias = directoryPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*=\s*(?=(${identifier})(?=\s*(?:=(?!=|>)|[,;)}\]\r\n\u2028\u2029]|//|/\*|$)))`, 'gu'));
       // Consume a closing parenthesis before the value boundary. Otherwise a
       // property suffix such as (original).pathname could become a URL transfer.
-      const parenthesizedAlias = directoryURLPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*(?::\s*URL\s*)?=\s*\(\s*(?:\(\s*)*(?=(${identifier})\s*(?:=(?!=|>)|\)\s*(?:\)\s*)*(?:[,;}\]\r\n\u2028\u2029]|//|/\*|$)))`, 'gu'));
+      // A parameter list can end before a function body or an arrow.
+      const parenthesizedAlias = directoryURLPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*(?::\s*URL\s*)?=\s*\(\s*(?:\(\s*)*(?=(${identifier})\s*(?:=(?!=|>)|\)\s*(?:\)\s*)*(?:=>|\{|[,;}\]\r\n\u2028\u2029]|//|/\*|$)))`, 'gu'));
       for (const pattern of [declarationAlias, assignmentAlias, parenthesizedAlias]) for (const match of source.source.matchAll(pattern)) {
         const name = directoryIdentifier(match[2]);
         if (!aliases.has(name)) aliases.set(name, new Set());
