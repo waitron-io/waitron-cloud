@@ -1215,8 +1215,15 @@ notifications separately.
   part and version inventories check storage before publication. Generated HTTP
   and real local storage checks cover discarded/replaced parts, abort, promotion
   after deleting a completed version and storage retained before final deletion.
-  Ambiguous multipart replies invalidate the run because a failed reply can hide
-  retained data. Resolving those replies and a complete measured stream remain open.
+  A separate opt-in mode resolves full-body failed multipart replies through
+  independent upload, part and object inventories. It blocks further requests
+  until one possible mutation is resolved, bounds uncertain storage times and
+  retains earlier parts and versions. The default mode still refuses failed
+  replies. Interrupted transfers, short bodies, malformed successful replies
+  and ambiguous inventories remain refused. Real local checks replace committed
+  success replies with HTTP failures across creation, separately numbered parts,
+  completion and abort. Replaced-part duplicates from the local backend remain
+  an explicit refusal, as described below. A complete measured stream remains open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled

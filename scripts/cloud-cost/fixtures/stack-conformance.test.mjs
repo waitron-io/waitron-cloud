@@ -583,3 +583,46 @@ test('genuineVersionedNativeMultipartRetainsVersionsPartsAndPromotion', async t 
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
+
+// Backend commits whose success replies become HTTP 503 must remain in both independent counters.
+for (const versioned of [false, true]) test(`genuineAmbiguousMultipartRepliesReconcileEveryCommittedStage_${versioned}`, async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  for (const name of ['litestream.mjs', 'stream-versions.mjs']) cpSync(new URL('../' + name, import.meta.url), join(f.codeRoot, name));
+  cpSync(new URL('./ambiguous-multipart-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-ambiguous-multipart-smoke.mjs'));
+  let stack; f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(execFileSync('docker', ['exec', '-e', 'COST_MULTIPART_DIAGNOSTIC=1', '-e', 'COST_VERSIONED=' + Number(versioned), s3, 'node', '/code/cost-ambiguous-multipart-smoke.mjs'],
+    { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  assert.equal(result.leaked, false); assert.equal(result.lostReplies, 6);
+  assert.deepEqual(result.completed.objects, { class: 'stream', bytes: versioned ? 8 : 6, currentVersions: 1,
+    noncurrentVersions: versioned ? 1 : 0, deleteMarkers: 0, unfinishedMultipart: 0 });
+  assert.deepEqual(result.completed.byteSeconds, versioned ? { low: 52, high: 104 } : { low: 46, high: 102 });
+  assert.deepEqual(result.aborted.byteSeconds, versioned ? { low: 122, high: 180 } : { low: 100, high: 162 });
+  assert.deepEqual(result.final.objects, { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
+  assert.deepEqual(result.final.byteSeconds, versioned ? { low: 134, high: 192 } : { low: 106, high: 168 });
+  assert.equal(result.workload.reconciled, true); assert.equal(result.administration.reconciled, true);
+  assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
+  assert.equal(result.workload.accounting.producer.attempts, versioned ? 10 : 9);
+  assert.equal(result.workload.accounting.requests.filter(r => r.outcome === 'server-error').reduce((n, r) => n + r.attempts, 0), 6);
+  assert.ok(result.workload.accounting.producer.bytesOut > 15);
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});
+
+// Duplicate part numbers prevent the inventory from identifying the retained data.
+test('genuineAmbiguousMultipartReplacementKeepsDuplicateInventoryRefused', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  for (const name of ['litestream.mjs', 'stream-versions.mjs']) cpSync(new URL('../' + name, import.meta.url), join(f.codeRoot, name));
+  cpSync(new URL('./ambiguous-multipart-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-ambiguous-multipart-smoke.mjs'));
+  let stack; f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(execFileSync('docker', ['exec', '-e', 'COST_MULTIPART_REPLACEMENT=1', s3, 'node', '/code/cost-ambiguous-multipart-smoke.mjs'],
+    { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  assert.deepEqual(result, { refused: true, invalid: true, parts: 2, duplicateNumbers: 1, listedBytes: 10, lostReplies: 3 });
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});

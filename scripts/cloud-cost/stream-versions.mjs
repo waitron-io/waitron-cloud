@@ -10,7 +10,7 @@ const identity = (key, version) => JSON.stringify([key, version]);
 
 // Versioning retains a failed write's possible extra version until an independent inventory resolves it.
 // Payloads and provider identities stay private; only counts and conservative storage bounds are returned.
-export async function openLitestreamVersionHistories({ client, sdk, meter, bucket, clock, allowBulkDeletes = false, allowMultipart = false }) {
+export async function openLitestreamVersionHistories({ client, sdk, meter, bucket, clock, allowBulkDeletes = false, allowMultipart = false, resolveMultipartReplies = false }) {
   const rows = new Map(), unresolved = [], pending = new Set(), activeKeys = new Set();
   let invalid = false, verifying = false, verified = false, last = -Infinity, sequence = 0, endpoint, start;
   let retiredLow = 0, retiredHigh = 0;
@@ -21,7 +21,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
   };
   try {
     need(typeof clock === 'function' && /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket) && typeof meter?.invalidate === 'function'
-      && typeof allowMultipart === 'boolean');
+      && typeof allowMultipart === 'boolean' && typeof resolveMultipartReplies === 'boolean' && (!resolveMultipartReplies || allowMultipart));
     endpoint = assertStorageClientBinding(client, meter, 'observer');
     need(['GetBucketVersioningCommand', 'ListObjectVersionsCommand', 'ListMultipartUploadsCommand'].every(name => typeof sdk[name] === 'function'));
     need(!allowMultipart || typeof sdk.ListPartsCommand === 'function');
@@ -38,7 +38,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     retiredHigh += row.bytes * (by - row.from);
     row.deleted = true; row.removing = null;
   };
-  const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, complete: (key, bytes, from, by, headers) => {
+  const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, resolveReplies: resolveMultipartReplies, complete: (key, bytes, from, by, headers) => {
     const version = headers?.['x-amz-version-id'], marker = headers?.['x-amz-delete-marker'];
     need(text(version) && version !== 'null' && !rows.has(identity(key, version))
       && (marker === undefined || marker === 'false') && rows.size < 100000 && sequence < 100000);
@@ -184,7 +184,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
         markers = { KeyMarker: page.NextKeyMarker, VersionIdMarker: page.NextVersionIdMarker };
         const id = JSON.stringify(markers); need(!tokens.has(id)); tokens.add(id);
       }
-      if (multipart) await multipart.verify();
+      if (multipart) await multipart.verify([...found].filter(([id]) => !rows.has(id)).map(([, row]) => row));
       else {
         const uploads = await inspect('ListMultipartUploadsCommand');
         need(uploads.IsTruncated === false && (uploads.Uploads === undefined || Array.isArray(uploads.Uploads) && uploads.Uploads.length === 0));
