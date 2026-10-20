@@ -1789,10 +1789,29 @@ notifications separately.
   reader exports, quoted text such as `'{readdirSync}'` and generated import text
   with escaped quotes can still select extra work. Executed base/final probes
   record these conservative cases; precise binding and generated-code resolution
-  remain D69 work. Passing a reader as a middle call argument is a separately
-  executed remaining omission: Node loads the helper, but both base and final
-  planners select catalogue alone when the consumer does not name the API.
-  Resolve that argument transfer before claiming complete reader discovery.
+  remain D69 work. Call arguments ending in a comma now retain full package
+  work when they transfer a directory reader. Executed Node controls cover all
+  four APIs, first/middle/trailing-comma arguments, nested preceding values,
+  namespace members, comments, optional access, erased non-null assertions and
+  awaited values. Saved base, head and unchanged helpers retain transitive
+  consumers despite dirty local files; audited lock changes retain full work
+  with these readers. Generated programs, a transfer inside division tokens
+  and division in neighboring arguments retain their executed consumers.
+  The same context rule retains object shorthand between division-valued
+  properties. Executed controls cover all four APIs there and a division followed
+  by a path-string argument. Unused helpers, ordinary arguments, static
+  named imports and resolved directory calls keep narrow work in the controls;
+  separate inert quoted fragments cannot combine into a transfer. This lexical
+  scan does not resolve bindings or distinguish parameter declarations and
+  inert program text from executed calls, so those can select extra work.
+  General alias, binding and generated-input resolution remain open; these
+  controls do not establish complete JavaScript reader discovery.
+  A broad review run reported one child-status assertion with `null` instead
+  of zero, but its output filter lost the test name and child diagnostics.
+  A later 1,600-check run passed; that does not establish the first failure's
+  cause. Preserve complete TAP, the named test, child error/signal and output
+  before changing any assertion or deadline on recurrence. The complete
+  reader/object controls pass separately; no broad-load reliability claim is made.
   The object check requires a brace
   context, so array readers keep their existing diagnostics and comma-only text
   stays narrow. Each quoted program has its own delimiter context; separate inert

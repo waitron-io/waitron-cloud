@@ -20,7 +20,7 @@ function arrayDirectorySource(source) {
   return source + '\n;\n' + source.replace(tokens, token => token.replace(/[\[\]{};]/g, ' '));
 }
 
-function hasObjectDirectoryReference(source, quoted = false) {
+function hasDirectoryReference(source, context, quoted = false, delimiters = []) {
   // Ordinary quoted values need no token scan when they contain no reader name.
   if (!/(?:readdirSync|readdir|opendirSync|opendir)/.test(source)) return false;
   // Import lists bind names without storing runtime objects. Skip only complete
@@ -40,22 +40,28 @@ function hasObjectDirectoryReference(source, quoted = false) {
     ranges.push([start, tokens[cursor].index + 1]);
     index = cursor + 2;
   }
-  // Match property positions inside braces, not commas in arrays or arguments.
-  // Generated programs have their own delimiter stack, so separate fragments
-  // cannot combine into an object reference.
+  // Delimiters distinguish stored properties and arguments from import lists
+  // and array entries. Generated programs have their own stack, so separate
+  // fragments cannot combine into a reference.
   let importIndex = 0;
-  const delimiters = [];
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
     while (ranges[importIndex]?.[1] <= token.index) importIndex++;
     if (ranges[importIndex]?.[0] <= token.index) continue;
     const value = token[0];
-    // A slash token may be division around live code; inspect its contents too.
-    if (!quoted && /^['"`/]/.test(value) && hasObjectDirectoryReference(value.slice(1, -1), true)) return true;
+    // A slash token may be division inside an argument list. Preserve that
+    // surrounding context; quoted programs start with their own delimiter stack.
+    if (!quoted && /^['"`/]/.test(value) && hasDirectoryReference(value.slice(1, -1), context, true,
+      value.startsWith('/') ? [...delimiters] : [])) return true;
     if (['{', '[', '('].includes(value)) delimiters.push(value);
     else if (['}', ']', ')'].includes(value)) delimiters.pop();
     else if (/^(?:readdirSync|readdir|opendirSync|opendir)$/.test(value) &&
-      delimiters.at(-1) === '{' && ['{', ','].includes(tokens[index - 1]?.[0]) && [',', '}'].includes(tokens[index + 1]?.[0])) return true;
+      delimiters.at(-1) === context) {
+      if (context === '{' && ['{', ','].includes(tokens[index - 1]?.[0]) && [',', '}'].includes(tokens[index + 1]?.[0])) return true;
+      let next = index + 1;
+      while (tokens[next]?.[0] === '!') next++;
+      if (context === '(' && tokens[next]?.[0] === ',') return true;
+    }
   }
   return false;
 }
@@ -161,7 +167,7 @@ function workspaceAt(sha, workspace, git) {
       // quoted code retains the conservative check.
       const objectReference = directoryPattern(/(?:\{|,)\s*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:,|\})/);
       if (objectReference.test(source.source)) {
-        assert.equal(hasObjectDirectoryReference(source.source), false,
+        assert.equal(hasDirectoryReference(source.source, '{'), false,
           `Unresolved object directory reference at ${source.path}`);
       }
       // Assignments, arrow results, block returns, yields and default exports can
@@ -181,6 +187,12 @@ function workspaceAt(sha, workspace, git) {
       // brackets, braces and semicolons outside matched tokens bound this scan.
       assert.doesNotMatch(arraySource, directoryPattern(/[\]}][^\[\]{};]*,\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/u),
         `Unresolved indirect directory call at ${source.path}`);
+      // A callee can keep a reader passed between commas, including a namespace
+      // member. Without resolving that transfer, retain every possible consumer.
+      if (directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/).test(source.source)) {
+        assert.equal(hasDirectoryReference(source.source, '('), false,
+          `Unresolved call argument directory reference at ${source.path}`);
+      }
       // Logical assignments and awaited logical or conditional operands can keep
       // the reader for a later call. Namespace chains, optional access and erased
       // non-null assertions also preserve that function without resolving it.
