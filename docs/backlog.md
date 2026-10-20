@@ -1185,9 +1185,15 @@ notifications separately.
   only for the selected, known marker and rejects conflicting identities.
   Generated HTTP and real local storage checks cover plain and versioned buckets.
   SDK mutations now reject keys containing path escapes before forwarding them
-  to a local storage backend. Default listeners and native stream histories still
-  refuse batches. Native bulk deletion, multipart histories and a complete measured
-  stream remain open. The fiscal timeout fixture now advances its 50 ms deadline
+  to a local storage backend. A separate native version-history listener now keeps
+  noncurrent versions and UTF-8 delete-marker storage, including promotion after
+  marker removal and extra versions left by lost write replies. It uses independent
+  version inventories to bound uncertain commit times, and requires a distinct
+  possible request for each discovered version. Parallel reads and writes to
+  different objects are admitted; overlapping writes to one object are refused.
+  Default listeners and native stream histories still refuse batches. Native bulk
+  deletion, multipart histories and a complete measured stream remain open.
+  The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled
   100 ms pause reproduces the earlier hang and passes with the controlled clock.

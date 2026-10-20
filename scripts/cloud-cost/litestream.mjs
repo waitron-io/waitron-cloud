@@ -146,12 +146,12 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       invocations.set(id.invocation, { ordinal: id.ordinal, name, path: source.url });
       pending.add(id.key);
     } catch { poison(); source.resume(); destination.writeHead(400); destination.end(); return; }
-    let bytesOut = 0, bytesIn = 0, expectedIn = 0, statusCode = null, sent = false, received = false, settled = false;
+    let bytesOut = 0, bytesIn = 0, expectedIn = 0, statusCode = null, responseHeaders, sent = false, received = false, settled = false;
     const finish = interrupted => {
       if (settled || !interrupted && (!sent || !received)) return;
       settled = true; pending.delete(id.key); completed++;
       try {
-        completeLifetime?.({ statusCode, bytesOut, interrupted });
+        completeLifetime?.({ statusCode, bytesOut, interrupted, responseHeaders });
         const outcome = interrupted ? 'transport-error' : statusCode >= 500 ? 'server-error' : statusCode >= 300 ? 'client-error' : 'success';
         meter.observeAttempt({ token: id.key, phase, operation: name, retryOrdinal: id.ordinal, channel: 'producer', outcome,
           statusCode, errorCode: null, sameAccount: null, bytesIn, bytesOut,
@@ -160,7 +160,8 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       if (interrupted) poison();
     };
     const upstream = request(endpoint, { method: source.method, path: source.url, headers: source.headers }, response => {
-      try { statusCode = response.statusCode; expectedIn = source.method === 'HEAD' ? 0 : size(response.headers['content-length']); }
+      try { statusCode = response.statusCode; responseHeaders = response.headers;
+        expectedIn = source.method === 'HEAD' ? 0 : size(response.headers['content-length']); }
       catch { finish(true); response.destroy(); destination.destroy(); return; }
       destination.writeHead(statusCode, response.headers);
       const counter = new Transform({ transform(chunk, encoding, next) { bytesIn += chunk.length; next(null, chunk); } });

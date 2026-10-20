@@ -427,3 +427,53 @@ test('genuineSdkBulkDeletionRetainsVersionsMarkersAndHistoricalStorage', async t
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
+
+// Lost replies can leave a stored version; final empty inventories must retain its earlier storage.
+test('genuineNativeVersionHistoriesRetainLostWritesMarkersAndPromotedVersions', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  for (const name of ['litestream.mjs', 'stream-versions.mjs']) cpSync(new URL('../' + name, import.meta.url), join(f.codeRoot, name));
+  cpSync(new URL('./stream-versions-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-stream-versions-smoke.mjs'));
+  let stack;
+  f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-stream-versions-smoke.mjs'],
+    { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  assert.deepEqual(result.retained.objects, { class: 'stream', bytes: 12, currentVersions: 0, noncurrentVersions: 2, deleteMarkers: 1, unfinishedMultipart: 0 });
+  assert.deepEqual(result.promoted.objects, { class: 'stream', bytes: 10, currentVersions: 1, noncurrentVersions: 1, deleteMarkers: 0, unfinishedMultipart: 0 });
+  assert.deepEqual(result.promoted.byteSeconds, { low: 60, high: 84 });
+  assert.deepEqual(result.final.objects, { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
+  assert.deepEqual(result.final.byteSeconds, { low: 82, high: 106 });
+  assert.equal(result.lostReplies, 1); assert.equal(result.leaked, false);
+  for (const evidence of [result.workload, result.administration]) {
+    assert.equal(evidence.reconciled, true); assert.deepEqual(evidence.accounting.producer, evidence.accounting.observer);
+  }
+  assert.equal(result.workload.accounting.producer.attempts, 6); assert.equal(result.workload.accounting.producer.bytesOut, 10);
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});
+
+test('genuinePinnedLitestreamRetainsVersionedStorageWithNativeRetryAndRestore', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  cpSync(prepared.litestreamBinary, join(f.codeRoot, 'litestream'));
+  for (const name of ['litestream.mjs', 'stream-versions.mjs']) cpSync(new URL('../' + name, import.meta.url), join(f.codeRoot, name));
+  cpSync(new URL('./litestream-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-litestream-smoke.mjs'));
+  let stack;
+  f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(execFileSync('docker', ['exec', '-e', 'COST_LITESTREAM_TRANSPORT=1', '-e', 'COST_LITESTREAM_VERSIONS=1',
+    s3, 'node', '/code/cost-litestream-smoke.mjs'], { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 110000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  assert.equal(result.injectedFailures, 1); assert.equal(result.restoredSales, 2); assert.equal(result.integrity, 'ok');
+  assert.deepEqual(result.fiscal, { ok: true, issues: 0 });
+  assert.equal(result.replication.requestsReconciled, true); assert.equal(result.restore.requestsReconciled, true);
+  assert.equal(result.transport.replication.reconciled, true); assert.equal(result.transport.restore.reconciled, true);
+  assert.equal(result.lifetimes.scope, 'versioned-object-history'); assert.equal(result.lifetimes.status, 'measured');
+  assert.ok(result.lifetimes.objects.bytes >= result.inventoryBytes); assert.ok(result.lifetimes.objects.currentVersions === result.inventoryObjects);
+  assert.ok(result.lifetimes.byteSeconds.low > 0); assert.ok(result.lifetimes.byteSeconds.high >= result.lifetimes.byteSeconds.low);
+  assert.equal(result.cleanedObjects, true); assert.equal(result.leaked, false); assert.equal(result.administration.reconciled, true);
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});

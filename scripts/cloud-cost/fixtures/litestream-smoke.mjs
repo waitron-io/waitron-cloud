@@ -90,9 +90,12 @@ async function smoke() {
   };
   try {
     stage = 'bucket'; await clients[0].send(new CreateBucketCommand({ Bucket }));
-    if (process.env.COST_LITESTREAM_LIFETIMES === '1' || process.env.COST_LITESTREAM_HISTORIES === '1') {
-      const storage = await import('/code/storage-lifetimes.mjs');
-      const open = process.env.COST_LITESTREAM_HISTORIES === '1' ? storage.openLitestreamHistories : storage.openLitestreamLifetimes;
+    const versioned = process.env.COST_LITESTREAM_VERSIONS === '1';
+    if (versioned) await clients[0].send(new sdk.PutBucketVersioningCommand({ Bucket, VersioningConfiguration: { Status: 'Enabled' } }));
+    if (versioned || process.env.COST_LITESTREAM_LIFETIMES === '1' || process.env.COST_LITESTREAM_HISTORIES === '1') {
+      const storage = await import(versioned ? '/code/stream-versions.mjs' : '/code/storage-lifetimes.mjs');
+      const open = versioned ? storage.openLitestreamVersionHistories
+        : process.env.COST_LITESTREAM_HISTORIES === '1' ? storage.openLitestreamHistories : storage.openLitestreamLifetimes;
       lifetimes = await open({ client: clients[1], sdk, meter: adminMeter, bucket: Bucket, clock: () => performance.now() / 1000 });
     }
     replication = await phase('workload'); restore = await phase('restore'); await sale(1);
@@ -133,7 +136,13 @@ async function smoke() {
       result.lifetimes = lifetimes.snapshot();
       result.inventoryBytes = inventory.reduce((sum, row) => sum + row.Size, 0); result.inventoryObjects = inventory.length;
     }
-    stage = 'delete'; for (const row of await list()) await clients[2].send(new DeleteObjectCommand({ Bucket, Key: row.Key }));
+    stage = 'delete';
+    if (versioned) {
+      const history = await clients[1].send(new sdk.ListObjectVersionsCommand({ Bucket }));
+      if (history.IsTruncated) fail();
+      for (const row of [...(history.Versions ?? []), ...(history.DeleteMarkers ?? [])])
+        await clients[2].send(new DeleteObjectCommand({ Bucket, Key: row.Key, VersionId: row.VersionId }));
+    } else for (const row of await list()) await clients[2].send(new DeleteObjectCommand({ Bucket, Key: row.Key }));
     result.cleanedObjects = (await list()).length === 0;
     await clients[2].send(new DeleteBucketCommand({ Bucket }));
     result.administration = adminMeter.snapshot();
