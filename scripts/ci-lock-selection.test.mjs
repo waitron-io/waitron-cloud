@@ -964,3 +964,29 @@ for await (const item of await scan(directory)) {
     }));
   }
 });
+
+
+test('audited lock changes retain call-argument directory readers', async t => {
+  for (const args of ['0, API, 2', '0, ns /* member */ ! ?. API!, 2']) for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir', null]) {
+    await t.test(`${args}: ${api ?? 'without a reader'}`, () => fixture(({git, write, lock, save, audit, commit, plan}) => {
+      write('tools/reader.mts', `import {readFileSync, readdirSync, opendirSync} from 'node:fs';
+${api ? `import * as ns from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';` : ''}
+${api && !api.endsWith('Sync') ? `import {${api}} from 'node:fs/promises';` : ''}
+const pass = (...values) => values.find(value => typeof value === 'function');
+export default pass(${api ? args.replaceAll('API', api) : '0, () => [], 2'});`);
+      if (api) write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.ts';\nconsole.log('argument lock helper loaded');\n");
+      write('packages/page/test/scan.mts', `import scan from '../../../tools/reader.mts';
+const directory = new URL(['..', '..', '..', ''].join('/'), import.meta.url);
+for await (const item of await scan(directory)) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`);
+      audit(); const base = commit();
+      lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+      const head = commit();
+      assert.equal(execFileSync(process.execPath, ['packages/page/test/scan.mts'], {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8'}), api ? 'argument lock helper loaded\n' : '');
+      assertSelected(plan(base, head), api ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
+    }));
+  }
+});

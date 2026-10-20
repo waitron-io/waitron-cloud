@@ -1789,10 +1789,20 @@ notifications separately.
   reader exports, quoted text such as `'{readdirSync}'` and generated import text
   with escaped quotes can still select extra work. Executed base/final probes
   record these conservative cases; precise binding and generated-code resolution
-  remain D69 work. Passing a reader as a middle call argument is a separately
-  executed remaining omission: Node loads the helper, but both base and final
-  planners select catalogue alone when the consumer does not name the API.
-  Resolve that argument transfer before claiming complete reader discovery.
+  remain D69 work. Call arguments ending in a comma now retain full package
+  work when they transfer a directory reader. Executed Node controls cover all
+  four APIs, first/middle/trailing-comma arguments, nested preceding values,
+  namespace members, comments, optional access, erased non-null assertions and
+  awaited values. Saved base, head and unchanged helpers retain transitive
+  consumers despite dirty local files; audited lock changes retain full work
+  with these readers. Generated programs and a transfer inside division tokens
+  retain their executed consumers. Unused helpers, ordinary arguments, static
+  named imports and resolved directory calls keep narrow work in the controls;
+  separate inert quoted fragments cannot combine into a transfer. This lexical
+  scan does not resolve bindings or distinguish parameter declarations and
+  inert program text from executed calls, so those can select extra work.
+  General alias, binding and generated-input resolution remain open; these
+  controls do not establish complete JavaScript reader discovery.
   The object check requires a brace
   context, so array readers keep their existing diagnostics and comma-only text
   stays narrow. Each quoted program has its own delimiter context; separate inert
