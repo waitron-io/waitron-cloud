@@ -399,3 +399,31 @@ test('genuineNativeStreamHistoriesPairBinaryRetriesWithIndependentStorageBounds'
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
+
+// Final empty buckets must retain earlier storage and every batch's independent wire accounting.
+test('genuineSdkBulkDeletionRetainsVersionsMarkersAndHistoricalStorage', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  cpSync(new URL('../storage-lifetimes.mjs', import.meta.url), join(f.codeRoot, 'storage-lifetimes.mjs'));
+  cpSync(new URL('./bulk-lifetime-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-bulk-lifetime-smoke.mjs'));
+  let stack;
+  f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-bulk-lifetime-smoke.mjs'],
+    { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  for (const [name, seconds, batches] of [['plain', 16, 1], ['versioned', 58, 3]]) {
+    const proof = result[name];
+    assert.deepEqual(proof.final.accounting.objects, [{ class: 'stream', bytes: 0, byteSeconds: seconds,
+      currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 }]);
+    assert.equal(proof.final.reconciled, true); assert.equal(proof.complete.reconciled, true);
+    assert.deepEqual(proof.complete.accounting.producer, proof.complete.accounting.observer);
+    const requests = proof.complete.accounting.requests.filter(r => r.operation === 'delete-many');
+    assert.equal(requests.reduce((n, r) => n + r.attempts, 0), batches);
+    assert.ok(requests.every(r => r.bytesIn > 0 && r.bytesOut > 0));
+    assert.equal(proof.leaked, false);
+  }
+  assert.deepEqual(result.versioned.afterDelete.map(r => [r.bytes, r.currentVersions, r.noncurrentVersions, r.deleteMarkers]), [[10, 0, 2, 1]]);
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});

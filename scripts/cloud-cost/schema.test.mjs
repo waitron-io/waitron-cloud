@@ -265,3 +265,16 @@ test('arrayAccessorCannotLeakPrivateError', () => {
   const r = receipt(); Object.defineProperty(r.inputs, '0', { get() { throw new Error('PRIVATE_SYNTHETIC_CANARY'); }, enumerable: true });
   refused(() => validateReceipt(r)); refused(() => exportAggregate(r));
 });
+
+// Dropping the distinct batch operation would prevent publishing its counted HTTP attempt.
+test('anonymousBulkDeletionReceiptPreservesOneRequestAndItsWireBytes', () => {
+  const r = receipt();
+  r.accounting.requests.push({ phase: 'cleanup', operation: 'delete-many', requestClass: 's3-delete',
+    outcome: 'success', retryOrdinal: 0, attempts: 1, successful: 1, failed: 0, retried: 0,
+    bytesIn: 45, bytesOut: 120, attemptedBytesIn: 45, attemptedBytesOut: 120 });
+  r.accounting.producer = { attempts: 1, bytesIn: 45, bytesOut: 120 };
+  r.accounting.observer = { attempts: 1, bytesIn: 45, bytesOut: 120 };
+  assert.deepEqual(exportAggregate(r), r);
+  r.accounting.requests[0].Key = 'PRIVATE_CANARY';
+  refused(() => exportAggregate(r));
+});

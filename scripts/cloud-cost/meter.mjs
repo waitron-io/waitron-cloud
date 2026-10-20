@@ -9,7 +9,7 @@ const requireThat = condition => { if (!condition) fail(); };
 const count = n => Number.isSafeInteger(n) && n >= 0;
 const phases = ['setup', 'startup', 'workload', 'idle', 'verification', 'restore', 'observer', 'cleanup'];
 const classes = ['stream', 'snapshot', 'daily-archive', 'monthly-archive', 'protected', 'scratch'];
-const requestClasses = { put: 's3-write', get: 's3-read', head: 's3-read', list: 's3-list', delete: 's3-delete',
+const requestClasses = { put: 's3-write', get: 's3-read', head: 's3-read', list: 's3-list', delete: 's3-delete', 'delete-many': 's3-delete',
   'bucket-create': 's3-control', 'bucket-delete': 's3-control', 'bucket-inspect': 's3-control', 'bucket-configure': 's3-control',
   'multipart-create': 's3-multipart', 'multipart-upload': 's3-multipart', 'multipart-complete': 's3-multipart',
   'multipart-abort': 's3-delete', remote: 'network', email: 'smtp', fiscal: 'fiscal', kms: 'kms-symmetric' };
@@ -143,8 +143,9 @@ export function createMeter({ phase, clock }) {
 }
 
 // Query names affect the S3 operation; values and object names never leave this classifier.
-export function classifyStorageOperation({ method, path, copySource = false }) {
+export function classifyStorageOperation({ method, path, copySource = false, allowBulkDeletes = false }) {
   try {
+    requireThat(typeof allowBulkDeletes === 'boolean');
     requireThat(copySource === false && typeof path === 'string' && path.startsWith('/') && !path.startsWith('//') && !/[\r\n#\\]/.test(path));
     const separator = path.indexOf('?');
     const pathname = separator === -1 ? path : path.slice(0, separator);
@@ -153,17 +154,21 @@ export function classifyStorageOperation({ method, path, copySource = false }) {
     requireThat(new Set(keys).size === keys.length);
     if (query.has('x-id')) {
       const hint = query.get('x-id'); query.delete('x-id');
-      const operation = classifyStorageOperation({ method, path: pathname + (query.size ? '?' + query.toString() : '') });
+      const operation = classifyStorageOperation({ method, path: pathname + (query.size ? '?' + query.toString() : ''), allowBulkDeletes });
       const hints = { CreateBucket: 'bucket-create', DeleteBucket: 'bucket-delete', HeadBucket: 'bucket-inspect',
         GetBucketLocation: 'bucket-inspect', GetBucketVersioning: 'bucket-inspect', PutBucketVersioning: 'bucket-configure',
         ListBuckets: 'list', ListObjects: 'list', ListObjectsV2: 'list', ListObjectVersions: 'list', ListMultipartUploads: 'list', ListParts: 'list',
-        PutObject: 'put', GetObject: 'get', HeadObject: 'head', DeleteObject: 'delete', CreateMultipartUpload: 'multipart-create',
+        PutObject: 'put', GetObject: 'get', HeadObject: 'head', DeleteObject: 'delete', DeleteObjects: 'delete-many', CreateMultipartUpload: 'multipart-create',
         UploadPart: 'multipart-upload', CompleteMultipartUpload: 'multipart-complete', AbortMultipartUpload: 'multipart-abort' };
       requireThat(hints[hint] === operation); return operation;
     }
     const parts = pathname.slice(1).split('/');
     const bucket = parts[0] !== '', object = bucket && parts.slice(1).join('/') !== '';
     const has = key => query.has(key);
+    if (has('delete')) {
+      requireThat(allowBulkDeletes && bucket && !object && method === 'POST' && keys.length === 1 && query.get('delete') === '');
+      return 'delete-many';
+    }
     if (!bucket) { requireThat(method === 'GET' && keys.length === 0); return 'list'; }
     if (!object) {
       requireThat(!has('uploadId') && !has('partNumber') && !has('versionId'));
@@ -210,13 +215,13 @@ export function assertStorageClientBinding(client, meter, phase) {
 }
 
 const correlationHeaders = ['x-cloud-cost-attempt', 'x-cloud-cost-retry', 'x-cloud-cost-phase'];
-export function correlatedStorageAttempt(input) {
+export function correlatedStorageAttempt(input, { allowBulkDeletes = false } = {}) {
   const headers = input.headers;
   requireThat(headers && /^[a-f0-9-]{36}$/.test(headers[correlationHeaders[0]])
     && /^(0|[1-9]\d*)$/.test(headers[correlationHeaders[1]])
     && count(Number(headers[correlationHeaders[1]])) && phases.includes(headers[correlationHeaders[2]]));
   return { token: headers[correlationHeaders[0]], retryOrdinal: Number(headers[correlationHeaders[1]]),
-    phase: headers[correlationHeaders[2]], operation: classifyStorageOperation(input), errorCode: null, sameAccount: null };
+    phase: headers[correlationHeaders[2]], operation: classifyStorageOperation({ ...input, allowBulkDeletes }), errorCode: null, sameAccount: null };
 }
 
 // The SDK command names are independent of the proxy's HTTP operation classifier.
@@ -228,9 +233,10 @@ const producerOperations = { PutObjectCommand: 'put', GetObjectCommand: 'get', H
   CreateMultipartUploadCommand: 'multipart-create', UploadPartCommand: 'multipart-upload',
   CompleteMultipartUploadCommand: 'multipart-complete', AbortMultipartUploadCommand: 'multipart-abort' };
 
-export function instrumentStorageClient({ client, meter, phase, endpoint }) {
+export function instrumentStorageClient({ client, meter, phase, endpoint, allowBulkDeletes = false }) {
   let target;
   try {
+    requireThat(typeof allowBulkDeletes === 'boolean');
     target = new URL(endpoint);
     requireThat(target.protocol === 'http:' && ['127.0.0.1', 's3'].includes(target.hostname) && target.port !== ''
       && target.pathname === '/' && target.search === '' && target.hash === '' && target.username === '' && target.password === '');
@@ -239,7 +245,7 @@ export function instrumentStorageClient({ client, meter, phase, endpoint }) {
   } catch { fail(); }
   const scope = new AsyncLocalStorage(), handler = client.config.requestHandler;
   client.middlewareStack.add((next, context) => async args => {
-    const operation = producerOperations[context.commandName];
+    const operation = context.commandName === 'DeleteObjectsCommand' && allowBulkDeletes ? 'delete-many' : producerOperations[context.commandName];
     if (typeof operation !== 'string') { meter.invalidate(); fail(); }
     return scope.run({ operation, ordinal: 0 }, () => next(args));
   }, { name: 'cloudCostProducer', step: 'initialize' });

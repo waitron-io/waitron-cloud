@@ -1177,8 +1177,19 @@ notifications separately.
   recreation and retries. It bounds when a write could have committed and checks
   failed replies against an independent object inventory. Generated HTTP and real
   local storage checks cover these histories without exporting object names; the
-  earlier upload-only mode keeps its existing contract. Bulk deletion, multipart
-  histories and a complete measured stream remain open. The complete storage measurement,
+  earlier upload-only mode keeps its existing contract. A separately enabled SDK
+  path now counts a deletion batch as one HTTP request while preserving each
+  object's outcome and earlier retained storage. Independent inventories check
+  surviving versions, failed deletions and promotion after a marker is removed.
+  It accepts S3's [dedicated marker identity field](https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeletedObject.html)
+  only for the selected, known marker and rejects conflicting identities.
+  Generated HTTP and real local storage checks cover plain and versioned buckets.
+  SDK mutations now reject keys containing path escapes before forwarding them
+  to a local storage backend. Default listeners and native stream histories still
+  refuse batches. Native bulk deletion, multipart histories and a complete measured
+  stream remain open. A delayed-start control also exposes an indefinite provider
+  readiness wait in the fiscal timeout test; its timeout and cancellation assertions
+  remain intact, and the fixture repair remains open. The complete storage measurement,
   idle period, measurement controller and CLI,
   public/staff journeys and full cost export remain open.
   The pure calculations now cover aggregate request

@@ -135,7 +135,7 @@ function receiptUnchecked(receipt) {
   closed(a, ['requests', 'objects', 'producer', 'observer', 'discrepancy']);
   boundedArray(a.requests, r => {
     closed(r, requestKeys); oneOf(r.phase, phases);
-    oneOf(r.operation, ['put', 'get', 'head', 'list', 'delete', 'multipart-create', 'multipart-upload',
+    oneOf(r.operation, ['put', 'get', 'head', 'list', 'delete', 'delete-many', 'multipart-create', 'multipart-upload',
       'multipart-complete', 'multipart-abort', 'bucket-create', 'bucket-delete', 'bucket-inspect', 'bucket-configure', 'remote', 'email', 'fiscal', 'kms']);
     oneOf(r.requestClass, ['s3-write', 's3-read', 's3-list', 's3-delete', 's3-multipart', 's3-control', 'kms-symmetric', 'network', 'smtp', 'fiscal']);
     oneOf(r.outcome, ['success', 'client-error', 'server-error', 'transport-error']);
