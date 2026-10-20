@@ -1145,6 +1145,16 @@ notifications separately.
   callbacks. The private journal records creation and removal before each change.
   A read-only replay container needs writable temporary space for SQLite;
   a generated spill-to-disk check catches a missing temporary directory.
+  An owned-container supervisor now accepts an explicit worker budget of up to two
+  hours, checks the recorded ownership and effective isolation, suppresses worker
+  output, and collects the container after success, failure, cancellation or timeout.
+  Stopping the attached Docker client alone leaves its worker running; generated
+  heartbeat checks demonstrate why container cleanup is required. The supervisor
+  preserves shared networks and refuses unrecorded or foreign containers. Lost
+  ownership refuses cleanup and leaves the recorded container for recovery.
+  [Generated workers](../scripts/cloud-cost/fixtures/foreground-conformance.test.mjs)
+  and the pinned writer's private replay checks exercise this
+  stage. Accepting a two-hour budget does not establish a two-hour measurement.
   The complete storage measurement, idle period, foreground controller and CLI,
   public/staff journeys and full cost export remain open.
   The pure calculations now cover aggregate request

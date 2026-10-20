@@ -254,7 +254,11 @@ export async function prepareCodeCopy({ source, codeRoot, root, journal }) {
   } catch { await close?.(); fail(); }
 }
 
-export async function runPrivate(command, argv, { signal, cwd, ownership, timeoutMs = 120000 } = {}) {
+export async function runPrivate(command, argv, options = {}) {
+  return runPrivateProcess(command, argv, options, 120000);
+}
+
+async function runPrivateProcess(command, argv, { signal, cwd, ownership, timeoutMs = 120000 }, maximumMs) {
   let child, closed, timer, deadline, aborted = false;
   const abort = () => {
     if (aborted) return;
@@ -266,7 +270,7 @@ export async function runPrivate(command, argv, { signal, cwd, ownership, timeou
   };
   try {
     requireThat(isAbsolute(command) && Array.isArray(argv) && argv.every(v => typeof v === 'string'));
-    requireThat(Number.isInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 120000);
+    requireThat(Number.isInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= maximumMs);
     requireThat(!signal?.aborted);
     if (ownership) record(ownership, { kind: 'process', state: 'intent' });
     child = spawn(command, argv, { env: environment(), cwd, stdio: ['ignore', 'ignore', 'ignore'] });
@@ -654,4 +658,54 @@ export async function startIsolatedStack(args) {
     if (signal?.aborted) { await close(); fail(); }
     return { ready, isolation, networkId, containerIds, close };
   } catch { await close?.(); fail(); }
+}
+
+// This stage consumes one recorded worker; shared stack resources remain with their creator.
+// Killing an attached Docker client does not terminate its exec process inside the container.
+export async function runForegroundContainer(args) {
+  let selected, result;
+  try {
+    const { containerId, networkId, argv, windowSeconds, signal } = args;
+    const value = owned(args);
+    requireThat(Number.isFinite(windowSeconds) && windowSeconds > 0 && windowSeconds <= 7200);
+    requireThat(signal === undefined || signal instanceof AbortSignal);
+    requireThat(/^[a-f0-9]{64}$/.test(containerId) && /^[a-f0-9]{64}$/.test(networkId));
+    requireThat(Array.isArray(argv) && argv.length > 0 && argv.length <= 64
+      && argv.every(v => typeof v === 'string' && v.length <= 16384 && !v.includes('\0')));
+    const command = [...argv];
+    const active = (kind, id) => {
+      const events = value.localResources?.filter(e => e.kind === kind && e.id === id);
+      return events?.length && ['started', 'ready'].includes(events.at(-1).state);
+    };
+    requireThat(active('container', containerId) && active('network', networkId));
+    const container = dockerRead(['inspect', containerId])[0];
+    requireThat(container.Id === containerId && container.Config.Labels?.['io.waitron.cloud-cost.owner'] === args.journal.token);
+    selected = containerId;
+    requireThat(/^sha256:[a-f0-9]{64}$/.test(container.Config.Image)
+      && container.Config.User === `${process.getuid()}:${process.getgid()}`
+      && JSON.stringify(container.HostConfig.Tmpfs) === JSON.stringify({ '/tmp': 'rw,noexec,nosuid,size=64m' }));
+    requireThat(container.State.Running === true && container.HostConfig.ReadonlyRootfs === true
+      && container.HostConfig.CapDrop?.includes('ALL') && container.HostConfig.LogConfig.Type === 'none'
+      && container.HostConfig.SecurityOpt?.includes('no-new-privileges:true'));
+    requireThat(!signal?.aborted);
+    await proveDockerIsolation({ ...args, containerIds: [containerId] });
+    const executable = spawnSync('/usr/bin/which', ['docker'], { env: environment(), encoding: 'utf8' });
+    requireThat(executable.status === 0 && isAbsolute(executable.stdout.trim()));
+    result = await runPrivateProcess(executable.stdout.trim(), ['exec', containerId, ...command],
+      { signal, ownership: args, timeoutMs: Math.ceil(windowSeconds * 1000) }, 7200000);
+  } catch { fail(); }
+  finally {
+    if (selected) {
+      try {
+        owned(args);
+        const current = dockerRead(['inspect', selected])[0];
+        requireThat(current.Id === selected && current.Config.Labels?.['io.waitron.cloud-cost.owner'] === args.journal.token);
+        record(args, { kind: 'container', state: 'cleanup-intent', id: selected });
+        dockerCommand(['rm', '-f', '-v', selected]);
+        requireThat(dockerCommand(['ps', '-aq', '--no-trunc', '--filter', 'id=' + selected]) === '');
+        record(args, { kind: 'container', state: 'removed', id: selected });
+      } catch { fail(); }
+    }
+  }
+  return { ...result, cleanup: { workerContainers: 0 } };
 }
