@@ -990,3 +990,50 @@ for await (const item of await scan(directory)) {
     }));
   }
 });
+
+
+// Losing the URL base drops a real root-helper consumer from audited lock work.
+test('audited lock changes retain commented URL directory consumers', async t => {
+  for (const binding of ['direct', 'stored']) for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir', null]) {
+    await t.test(`${binding}: ${api ?? 'without a reader'}`, () => fixture(({git, write, lock, save, audit, commit, plan}) => {
+      write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.ts';\nconsole.log('commented URL lock helper loaded');\n");
+      const directory = "new URL('../../../', import /* base */ . meta // base\n . url)";
+      write('packages/unrelated/test/scan.mjs', api ? `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+${binding === 'stored' ? `const directory = ${directory};` : ''}
+for await (const item of await ${api}(${binding === 'stored' ? 'directory' : directory})) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL('../../../' + name, import.meta.url));
+}` : `const directory = ${directory};`);
+      audit(); const base = commit();
+      lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+      const head = commit();
+      assert.equal(execFileSync(process.execPath, ['packages/unrelated/test/scan.mjs'], {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8', timeout: 5000}), api ? 'commented URL lock helper loaded\n' : '');
+      write('packages/unrelated/test/scan.mjs', 'export const dirty = true;');
+      assertSelected(plan(base, head), api ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
+    }));
+  }
+});
+
+
+// Missing recursive-option discovery must not make an audited lock change skip a reader.
+test('audited lock changes retain commented URL recursive scans', async t => {
+  for (const binding of ['direct', 'stored']) for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
+    await t.test(`${binding}: ${api}`, () => fixture(({git, write, lock, save, audit, commit, plan}) => {
+      write('adapters/catalogue-adapter.mjs', "import '../packages/catalogue/src/index.ts';\nconsole.log('recursive URL lock helper loaded');\n");
+      const directory = "new URL('../../../', import /* base */ . meta // base\n . url)";
+      write('packages/unrelated/test/scan.mjs', `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+import {pathToFileURL} from 'node:url';
+${binding === 'stored' ? `const directory = ${directory};` : ''}
+for await (const item of await ${api}(${binding === 'stored' ? 'directory' : directory}, {recursive: true})) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('-adapter.mjs')) await import(typeof item === 'string' ? new URL(item, new URL('../../../', import.meta.url)) : pathToFileURL(item.parentPath + '/' + item.name));
+}`);
+      audit(); const base = commit();
+      lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+      const head = commit();
+      assert.equal(execFileSync(process.execPath, ['packages/unrelated/test/scan.mjs'], {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8', timeout: 5000}), 'recursive URL lock helper loaded\n');
+      write('packages/unrelated/test/scan.mjs', 'export const dirty = true;');
+      assertSelected(plan(base, head), ['catalogue', 'page', 'unrelated']);
+    }));
+  }
+});

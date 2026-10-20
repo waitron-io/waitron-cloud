@@ -1357,9 +1357,15 @@ notifications separately.
   loaded helper, its package consumer and transitive consumers from either
   revision despite dirty local helpers. Nonrecursive scans still exclude nested
   helpers, and comments cannot hide the full fallback for explicit root options.
-  Line comments end at each JavaScript line terminator. This remains a bounded
-  source scan; comments between the tokens of `import.meta.url` and
-  other unsupported expressions still need qualification. The immediate-entry rule also covers `readdir` from
+  Line comments end at each JavaScript line terminator. Whitespace and comments
+  between the tokens of `import.meta.url` now retain immediate root-helper
+  consumers for all four directory APIs, directly or through a supported URL
+  declaration. Executed Node scans cover block comments and every line-comment
+  terminator; saved base/head and unchanged readers retain transitive consumers
+  despite dirty local files. Audited lock changes retain those consumers too.
+  Recursive root options keep full package work; non-root options and root
+  command directories stay narrow in the controls. This remains a bounded source
+  scan; other unsupported URL expressions still need qualification. The immediate-entry rule also covers `readdir` from
   `node:fs/promises`, `opendir` and `opendirSync`, directly or through a supported
   URL declaration. Executed scans retain the loaded helper consumer without
   traversing nested directories; saved shared-helper readers from either revision
