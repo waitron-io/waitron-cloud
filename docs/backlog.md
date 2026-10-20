@@ -1764,7 +1764,7 @@ notifications separately.
   expressions; inert text, unrelated namesakes or a call continued on the next
   line can select extra work. General assignment, destructuring aliases and other
   unresolved reader forms remain open. Generator yields now retain full package
-  work when they preserve a directory reader, including `yield ns.readdirSync }`.
+  work when they yield the reader directly, including `yield ns.readdirSync }`.
   Executed Node controls cover all four APIs, bare and namespace references,
   comments, optional access, erased non-null assertions, generator methods and
   awaited async-generator values. Saved base, head and unchanged helpers retain
@@ -1772,7 +1772,11 @@ notifications separately.
   work with readers and narrow work without them. Unused helpers, ordinary yielded
   values and resolved directory calls stay narrow in these controls. The scan does
   not resolve bindings or parse general expressions; inert text and unrelated
-  namesakes can still select extra work.
+  namesakes can still select extra work. Executed remaining gaps are
+  `yield {readdirSync}`, `yield {readdirSync, n: 1}` and `return {readdirSync}`:
+  Node loads the helper through the object, but both the earlier and current
+  planner omit its consumer when that consumer does not name the API. Broader
+  D69 work still needs to resolve reader bindings inside objects.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.
