@@ -526,3 +526,30 @@ test('genuineUnversionedNativeBatchesRetainLostDeletesRetriesAndRecreation', asy
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
+
+// Dropping incomplete/unused parts or double-counting completion breaks this literal integral.
+test('genuineNativeMultipartHistoriesKeepUnfinishedCompletedAndAbortedStorage', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  for (const name of ['litestream.mjs', 'storage-lifetimes.mjs']) cpSync(new URL('../' + name, import.meta.url), join(f.codeRoot, name));
+  cpSync(new URL('./native-multipart-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-native-multipart-smoke.mjs'));
+  let stack; f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-native-multipart-smoke.mjs'],
+    { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  assert.equal(result.leaked, false);
+  assert.deepEqual(result.retained.objects, { class: 'stream', bytes: 4, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 1 });
+  assert.deepEqual(result.retained.byteSeconds, { low: 8, high: 8 });
+  assert.deepEqual(result.completed.objects, { class: 'stream', bytes: 4, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
+  assert.deepEqual(result.completed.byteSeconds, { low: 40, high: 40 });
+  assert.deepEqual(result.unfinished.objects, { class: 'stream', bytes: 7, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 1 });
+  assert.deepEqual(result.unfinished.byteSeconds, { low: 62, high: 62 });
+  assert.deepEqual(result.final.objects, { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
+  assert.deepEqual(result.final.byteSeconds, { low: 84, high: 84 });
+  assert.equal(result.workload.reconciled, true); assert.equal(result.administration.reconciled, true);
+  assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
+  assert.equal(result.workload.accounting.producer.attempts, 8); assert.ok(result.workload.accounting.producer.bytesOut > 13);
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});

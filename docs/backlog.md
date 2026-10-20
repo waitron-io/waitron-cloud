@@ -1203,7 +1203,15 @@ notifications separately.
   deletion time, and recreation starts a new storage interval. Signed SDK requests
   and generated local storage cover the control bytes and lost committed replies.
   Both native modes require a fresh inventory after each batch and keep their
-  default refusal. Multipart histories and a complete measured stream remain open.
+  default refusal. An opt-in unversioned multipart mode now retains unfinished
+  parts, replaced parts and parts discarded by completion or abort. It checks the
+  requested part identities and each control reply, then independently lists uploads
+  and parts before reporting storage. Generated HTTP and real local storage checks
+  cover completion of a selected subset, simultaneous object and unfinished-part
+  storage, abort and deletion. Both request counters include the control bodies.
+  Ambiguous multipart replies invalidate the run because a failed reply can hide
+  retained data. Resolving those replies, native versioned multipart histories and
+  a complete measured stream remain open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled

@@ -1,0 +1,49 @@
+// Generated payloads only. Upload identities and control XML remain inside the isolated worker.
+import { createRequire } from 'node:module';
+import { createMeter, createMeteringProxy, correlatedStorageAttempt, instrumentStorageClient, classifyStorageOperation } from '/code/meter.mjs';
+import { createLitestreamTransport } from '/code/litestream.mjs';
+import { openLitestreamHistories } from '/code/storage-lifetimes.mjs';
+const require = createRequire('/app/packages/backups/package.json'), sdk = require('@aws-sdk/client-s3');
+
+async function smoke() {
+  let time = 0;
+  const Bucket = 'synthetic-native-multipart', Key = 'PRIVATE_CANARY';
+  const meter = createMeter({ phase: 'observer', clock: () => time });
+  const admin = await createMeteringProxy({ target: 'http://127.0.0.1:8333', meter, classify: correlatedStorageAttempt });
+  const client = endpoint => new sdk.S3Client({ endpoint, region: 'eu-north-1', forcePathStyle: true, maxAttempts: 1,
+    credentials: { accessKeyId: 'SYNTHETIC', secretAccessKey: 'SYNTHETIC' } });
+  const clients = Object.fromEntries(['setup', 'observer', 'cleanup'].map(phase => {
+    const c = client(admin.url); instrumentStorageClient({ client: c, meter, phase, endpoint: admin.url }); return [phase, c];
+  }));
+  const workload = createMeter({ phase: 'workload', clock: () => time });
+  const observer = await createMeteringProxy({ target: 'http://127.0.0.1:8333', meter: workload, classify: input => ({
+    token: input.headers['amz-sdk-invocation-id'] + ':1', phase: 'workload', operation: classifyStorageOperation(input),
+    retryOrdinal: 0, errorCode: null, sameAccount: null,
+  }) });
+  let front, writer;
+  try {
+    await clients.setup.send(new sdk.CreateBucketCommand({ Bucket }));
+    const history = await openLitestreamHistories({ client: clients.observer, sdk, meter, bucket: Bucket, clock: () => time, allowMultipart: true });
+    front = await createLitestreamTransport({ target: observer.url, meter: workload, phase: 'workload', lifetimes: history }); writer = client(front.url);
+    time = 1; const made = await writer.send(new sdk.CreateMultipartUploadCommand({ Bucket, Key }));
+    time = 3; const first = await writer.send(new sdk.UploadPartCommand({ Bucket, Key, UploadId: made.UploadId, PartNumber: 1, Body: Buffer.from('four') }));
+    time = 5; await history.verify(); const retained = history.snapshot();
+    time = 6; await writer.send(new sdk.UploadPartCommand({ Bucket, Key, UploadId: made.UploadId, PartNumber: 2, Body: Buffer.from('sixsix') }));
+    time = 8; await writer.send(new sdk.CompleteMultipartUploadCommand({ Bucket, Key, UploadId: made.UploadId,
+      MultipartUpload: { Parts: [{ PartNumber: 1, ETag: first.ETag }] } }));
+    time = 10; await history.verify(); const completed = history.snapshot();
+    time = 11; const abandoned = await writer.send(new sdk.CreateMultipartUploadCommand({ Bucket, Key }));
+    time = 12; await writer.send(new sdk.UploadPartCommand({ Bucket, Key, UploadId: abandoned.UploadId, PartNumber: 1, Body: Buffer.from('abc') }));
+    time = 14; await history.verify(); const unfinished = history.snapshot();
+    time = 16; await writer.send(new sdk.AbortMultipartUploadCommand({ Bucket, Key, UploadId: abandoned.UploadId }));
+    time = 18; await writer.send(new sdk.DeleteObjectCommand({ Bucket, Key }));
+    await front.close(); time = 20; await history.verify();
+    const result = { retained, completed, unfinished, final: history.snapshot(), workload: workload.snapshot() };
+    await clients.cleanup.send(new sdk.DeleteBucketCommand({ Bucket })); result.administration = meter.snapshot();
+    result.leaked = /PRIVATE|CANARY|synthetic-native|VersionId|UploadId|Invocation|127\.0\.0\.1|<Complete/.test(JSON.stringify(result)); return result;
+  } finally {
+    writer?.destroy(); for (const c of Object.values(clients)) c.destroy();
+    await front?.close(); await observer.close(); await admin.close();
+  }
+}
+smoke().then(result => process.stdout.write(JSON.stringify(result)), () => { process.exitCode = 1; });

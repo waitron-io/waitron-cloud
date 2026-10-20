@@ -144,9 +144,9 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       expectedOut = size(source.headers['content-length']);
       invocations.set(id.invocation, { ordinal: id.ordinal, name, path: source.url });
       pending.add(id.key);
-      if (name === 'delete-many') {
+      if (name === 'delete-many' || name === 'multipart-complete' && lifetimes) {
         requireThat(expectedOut > 0 && expectedOut <= 1048576);
-        // Validate the complete bounded control selection before the backend can delete anything.
+        // Validate bounded mutation controls before forwarding them to the backend.
         const chunks = []; let length = 0;
         for await (const chunk of source) { length += chunk.length; requireThat(length <= expectedOut); chunks.push(chunk); }
         requireThat(!closing && !invalid && length === expectedOut); body = Buffer.concat(chunks);
@@ -157,7 +157,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       }
     } catch { poison(); if (id) pending.delete(id.key); source.resume(); destination.writeHead(400); destination.end(); return; }
     let bytesOut = 0, bytesIn = 0, expectedIn = 0, statusCode = null, responseHeaders, sent = false, received = false, settled = false;
-    const responseChunks = name === 'delete-many' && lifetimes ? [] : null;
+    const responseChunks = lifetimes && ['delete-many', 'multipart-create', 'multipart-complete'].includes(name) ? [] : null;
     const finish = interrupted => {
       if (settled || !interrupted && (!sent || !received)) return;
       settled = true; pending.delete(id.key); completed++;

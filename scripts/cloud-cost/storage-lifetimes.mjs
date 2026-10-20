@@ -347,7 +347,7 @@ export async function openLitestreamLifetimes({ client, sdk, meter, bucket, cloc
 
 // Owned, initially empty unversioned buckets only. Commit times are bounded by request and reply;
 // an ambiguous reply stays unresolved until inventory or an identical successful retry bounds it.
-export async function openLitestreamHistories({ client, sdk, meter, bucket, clock, allowBulkDeletes = false }) {
+export async function openLitestreamHistories({ client, sdk, meter, bucket, clock, allowBulkDeletes = false, allowMultipart = false }) {
   const rows = new Map(), pending = new Set();
   let invalid = false, verifying = false, verified = false, last = -Infinity, endpoint, start;
   let retiredLow = 0, retiredHigh = 0;
@@ -361,10 +361,11 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
   };
   try {
     requireThat(typeof clock === 'function' && /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)
-      && typeof meter?.invalidate === 'function');
+      && typeof meter?.invalidate === 'function' && typeof allowMultipart === 'boolean');
     endpoint = assertStorageClientBinding(client, meter, 'observer');
     requireThat(['GetBucketVersioningCommand', 'ListObjectsV2Command', 'ListMultipartUploadsCommand']
       .every(name => typeof sdk[name] === 'function'));
+    requireThat(!allowMultipart || typeof sdk.ListPartsCommand === 'function');
     start = now();
   } catch { poison(); }
   const inspect = async (name, input = {}) => {
@@ -382,6 +383,12 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     if (mutation.method === 'PUT' && !row.current) row.current = { bytes: mutation.bytes, from: mutation.from, by };
     row.uncertain = null;
   };
+  const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, complete: (key, bytes, from, by) => {
+    let row = rows.get(key);
+    requireThat(!row?.active && !row?.uncertain);
+    if (!row) { requireThat(rows.size < 100000); row = { current: null, uncertain: null, active: false }; rows.set(key, row); }
+    transition(row, { method: 'PUT', bytes, from }, by);
+  } }) : null;
   const beginBatch = ({ headers, body }) => {
     requireThat(allowBulkDeletes === true && headers && !Object.hasOwn(headers, 'content-encoding')
       && !Object.hasOwn(headers, 'x-amz-copy-source') && Buffer.isBuffer(body)
@@ -426,13 +433,13 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     });
   };
   const begin = guarded(({ method, path, headers, body }) => {
-    requireThat(!verifying && pending.size < 100000);
+    requireThat(!verifying && pending.size < 100000 && !multipart?.active());
     const operation = classifyStorageOperation({ method, path, allowBulkDeletes });
     if (operation === 'delete-many') {
       requireThat(path.split('?')[0].replace(/\/$/, '') === '/' + bucket);
       return beginBatch({ headers, body });
     }
-    requireThat(['put', 'delete', 'get', 'head', 'list'].includes(operation));
+    requireThat(['put', 'delete', 'get', 'head', 'list'].includes(operation) || multipart && operation.startsWith('multipart-'));
     const rawPath = path.split('?')[0], segments = rawPath.slice(1).split('/');
     requireThat(segments[0] === bucket && !/%2f|%5c/i.test(rawPath));
     const key = decodeURIComponent(segments.slice(1).join('/'));
@@ -440,6 +447,12 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     const url = new URL(path, 'http://local');
     requireThat(!url.searchParams.has('versionId'));
     const time = now();
+    if (operation.startsWith('multipart-')) {
+      requireThat(pending.size === 0 && !rows.get(key)?.uncertain);
+      const finish = multipart.begin({ operation, key, query: url.searchParams, headers, body, time });
+      verified = false; const token = {}; pending.add(token);
+      return guarded(event => { requireThat(pending.has(token)); finish(event); pending.delete(token); });
+    }
     let row, mutation;
     if (operation === 'put' || operation === 'delete') {
       // The classifier validates SDK operation hints; version-specific mutations are refused above.
@@ -485,8 +498,11 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
         continuation = page.NextContinuationToken;
         requireThat(text(continuation) && !tokens.has(continuation)); tokens.add(continuation);
       }
-      const uploads = await inspect('ListMultipartUploadsCommand');
-      requireThat(uploads.IsTruncated === false && (uploads.Uploads === undefined || Array.isArray(uploads.Uploads) && uploads.Uploads.length === 0));
+      if (multipart) await multipart.verify();
+      else {
+        const uploads = await inspect('ListMultipartUploadsCommand');
+        requireThat(uploads.IsTruncated === false && (uploads.Uploads === undefined || Array.isArray(uploads.Uploads) && uploads.Uploads.length === 0));
+      }
       const time = now();
       for (const [key, row] of rows) {
         const bytes = found.get(key), uncertain = row.uncertain;
@@ -512,12 +528,107 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
         bytes += row.current.bytes; objects++;
         low += row.current.bytes * (time - row.current.by); high += row.current.bytes * (time - row.current.from);
       }
+      const parts = multipart?.snapshot(time) ?? { bytes: 0, uploads: 0, low: 0, high: 0 };
+      bytes += parts.bytes; low += parts.low; high += parts.high;
       requireThat(count(bytes) && Number.isFinite(low) && Number.isFinite(high) && low >= 0 && high >= low);
       return { status: 'measured', scope: 'unversioned-object-history', windowSeconds: time - start,
-        objects: { class: 'stream', bytes, currentVersions: objects, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 },
+        objects: { class: 'stream', bytes, currentVersions: objects, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: parts.uploads },
         byteSeconds: { low, high } };
     })();
   };
   await verify();
   return { begin, verify, snapshot };
+}
+
+// Failed replies cannot establish an upload identity or part contents. An ambiguous reply
+// invalidates this run; assuming no commit could omit retained storage.
+function nativeMultipartHistory({ bucket, now, inspect, complete }) {
+  const uploads = new Map(); let busy = false, retiredLow = 0, retiredHigh = 0;
+  const retire = (part, from, by) => {
+    retiredLow += part.bytes * Math.max(0, from - part.by);
+    retiredHigh += part.bytes * (by - part.from);
+  };
+  const fields = (body, root, allowed) => deletionFields({ value: '', children: deletionXml(body, root) }, allowed);
+  const cleanText = value => text(value) && value.length <= 2048 && !/[\x00-\x1f\x7f]/.test(value);
+  const begin = ({ operation, key, query, headers, body, time }) => {
+    requireThat(!busy && safeKey(key) && !/[\x00-\x1f\x7f]/.test(key) && headers
+      && !Object.hasOwn(headers, 'content-encoding') && !Object.hasOwn(headers, 'x-amz-copy-source'));
+    const length = headers['content-length'] ?? '0';
+    requireThat(/^(0|[1-9]\d*)$/.test(length) && count(Number(length)));
+    const bytes = Number(length), uploadId = query.get('uploadId'), id = identity(key, uploadId);
+    const upload = uploads.get(id); let selected;
+    if (operation === 'multipart-create') requireThat(bytes === 0 && uploads.size < 100000);
+    else requireThat(upload);
+    if (operation === 'multipart-upload') requireThat(bytes >= 0 && upload.parts.size < 10000);
+    if (operation === 'multipart-abort') requireThat(bytes === 0);
+    if (operation === 'multipart-complete') {
+      requireThat(Buffer.isBuffer(body) && bytes === body.length);
+      selected = []; let previous = 0;
+      for (const entry of deletionXml(body, 'CompleteMultipartUpload')) {
+        requireThat(entry.name === 'Part'); const f = deletionFields(entry, ['PartNumber', 'ETag']);
+        requireThat(/^[1-9]\d*$/.test(f.PartNumber)); const n = Number(f.PartNumber), part = upload.parts.get(n);
+        requireThat(n > previous && part && f.ETag === part.etag); previous = n; selected.push(part);
+      }
+      requireThat(selected.length > 0);
+    }
+    busy = true;
+    return ({ statusCode, bytesOut, interrupted = false, responseBody, responseHeaders }) => {
+      requireThat(busy && !interrupted && bytesOut === bytes && statusCode === (operation === 'multipart-abort' ? 204 : 200));
+      const by = now();
+      if (operation === 'multipart-create') {
+        const f = fields(responseBody, 'InitiateMultipartUploadResult', ['Bucket', 'Key', 'UploadId']);
+        requireThat(f.Bucket === bucket && f.Key === key && cleanText(f.UploadId) && !uploads.has(identity(key, f.UploadId)));
+        uploads.set(identity(key, f.UploadId), { key, uploadId: f.UploadId, parts: new Map() });
+      } else if (operation === 'multipart-upload') {
+        requireThat(cleanText(responseHeaders?.etag));
+        const n = Number(query.get('partNumber')), previous = upload.parts.get(n);
+        if (previous) retire(previous, time, by);
+        upload.parts.set(n, { bytes, etag: responseHeaders.etag, from: time, by });
+      } else {
+        if (operation === 'multipart-complete') {
+          const f = fields(responseBody, 'CompleteMultipartUploadResult', ['Location', 'Bucket', 'Key', 'ETag']);
+          requireThat(f.Bucket === bucket && f.Key === key && cleanText(f.ETag));
+          const size = selected.reduce((n, part) => n + part.bytes, 0); requireThat(count(size));
+          complete(key, size, time, by);
+        }
+        for (const part of upload.parts.values()) retire(part, time, by);
+        uploads.delete(id);
+      }
+      busy = false;
+    };
+  };
+  const pages = async (name, field, markerPairs, input = {}) => {
+    const rows = [], seen = new Set(); let markers = {};
+    for (let n = 0; n < 1000; n++) {
+      const result = await inspect(name, { ...input, ...markers });
+      requireThat(typeof result.IsTruncated === 'boolean' && (result[field] === undefined || Array.isArray(result[field])));
+      rows.push(...(result[field] ?? [])); requireThat(rows.length <= 100000);
+      if (!result.IsTruncated) return rows;
+      markers = Object.fromEntries(markerPairs.map(([request, response]) => [request, result[response]]));
+      requireThat(Object.values(markers).every(v => cleanText(v) || Number.isSafeInteger(v) && v > 0));
+      const token = JSON.stringify(markers); requireThat(!seen.has(token)); seen.add(token);
+    }
+    fail();
+  };
+  return { begin, active: () => busy, verify: async () => {
+    requireThat(!busy);
+    const found = new Set();
+    for (const entry of await pages('ListMultipartUploadsCommand', 'Uploads', [['KeyMarker', 'NextKeyMarker'], ['UploadIdMarker', 'NextUploadIdMarker']])) {
+      const id = identity(entry.Key, entry.UploadId), upload = uploads.get(id);
+      requireThat(upload && !found.has(id)); found.add(id);
+      const parts = new Set();
+      for (const entry of await pages('ListPartsCommand', 'Parts', [['PartNumberMarker', 'NextPartNumberMarker']], { Key: upload.key, UploadId: upload.uploadId })) {
+        const part = upload.parts.get(entry.PartNumber);
+        requireThat(part && !parts.has(entry.PartNumber) && entry.Size === part.bytes && entry.ETag === part.etag); parts.add(entry.PartNumber);
+      }
+      requireThat(parts.size === upload.parts.size);
+    }
+    requireThat(found.size === uploads.size);
+  }, snapshot: time => {
+    requireThat(!busy); let bytes = 0, low = retiredLow, high = retiredHigh;
+    for (const upload of uploads.values()) for (const part of upload.parts.values()) {
+      bytes += part.bytes; low += part.bytes * (time - part.by); high += part.bytes * (time - part.from);
+    }
+    return { bytes, uploads: uploads.size, low, high };
+  } };
 }
