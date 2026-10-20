@@ -1791,7 +1791,7 @@ notifications separately.
   fragments cannot combine into a reader. A division-like token can contain live
   code, so its body is also checked for a stored object reader. A valid
   12,000-import control executes in Node and keeps five repeated saved-revision
-  plans within one five-second child budget. The initial source-masking scan
+  plans, using the production batched Git reader, within one five-second child budget. The initial source-masking scan
   reproduced a timeout; ordered import ranges, token contexts and skipping
   ordinary quoted values without reader names pass that same bound. This does
   not qualify arbitrary parser inputs, nested generated programs or host load.

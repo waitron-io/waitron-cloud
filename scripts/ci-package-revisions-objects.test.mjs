@@ -40,6 +40,7 @@ const allPackages = ['catalogue', 'gateway', 'portal', 'unrelated'];
 
 const objects = [
   '{API}',
+  '{ /* before */ API /* after */ }',
   '{API, n: 1}',
   '{n: 1, API}',
   '{n: 1, API, tail: 2}',
@@ -187,13 +188,19 @@ test('large valid named-import programs keep bounded isolated planning', {timeou
   write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
   const head = commit();
   assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8', timeout: 5000}), '1\n');
-  const child = `import {scopeForRevisions} from ${JSON.stringify(new URL('./ci-package-revisions.mjs', import.meta.url).href)};
+  const child = `import {scopeForRevisions, readGitBlobs} from ${JSON.stringify(new URL('./ci-package-revisions.mjs', import.meta.url).href)};
 import {execFileSync} from 'node:child_process';
-const git = (...args) => execFileSync('git', args, {encoding: 'utf8'});
-for (let attempt = 0; attempt < 5; attempt++) console.log(JSON.stringify(scopeForRevisions(['packages/catalogue/src/index.mjs'], ${JSON.stringify(workspace)}, '${base}', '${head}', git)));
+let gitCalls = 0;
+const git = (...args) => {gitCalls++; return execFileSync('git', args, {encoding: 'utf8'});};
+git.readBlobs = ids => readGitBlobs(ids, input => {gitCalls++; return execFileSync('git', ['cat-file', '--batch'], {input});});
+const started = performance.now();
+for (let attempt = 0; attempt < 5; attempt++) {
+  console.log(JSON.stringify(scopeForRevisions(['packages/catalogue/src/index.mjs'], ${JSON.stringify(workspace)}, '${base}', '${head}', git)));
+  console.error(JSON.stringify({attempt, gitCalls, elapsedMs: Math.round(performance.now() - started)}));
+}
 `;
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', child], {cwd: root, encoding: 'utf8', timeout: 5000});
-  assert.equal(result.status, 0, result.error?.code ?? result.stderr);
+  assert.equal(result.status, 0, [result.error?.code, result.stderr].filter(Boolean).join('\n'));
   const plans = result.stdout.trim().split('\n').map(line => JSON.parse(line));
   assert.deepEqual(plans, Array.from({length: 5}, () => ({full: false, packages: ['catalogue']})));
 }));
