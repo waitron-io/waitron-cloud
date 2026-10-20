@@ -241,7 +241,9 @@ function workspaceAt(sha, workspace, git) {
       // scopes; only a name passed to a reader contributes a directory input.
       const identifier = String.raw`(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*`;
       const aliases = new Map();
-      const declarationAlias = directoryURLPattern(new RegExp(String.raw`(?:\b(?:const|let|var)\s+|,\s*)(${identifier})\s*(?::\s*URL\s*)?=\s*(${identifier})(?=\s*(?:[,;}\r\n\u2028\u2029]|$))`, 'gu'));
+      // A comment can contain the line break that ends an alias declaration;
+      // retaining its boundary also conservatively covers expression continuations.
+      const declarationAlias = directoryURLPattern(new RegExp(String.raw`(?:\b(?:const|let|var)\s+|,\s*)(${identifier})\s*(?::\s*URL\s*)?=\s*(${identifier})(?=\s*(?:[,;}\r\n\u2028\u2029]|//|/\*|$))`, 'gu'));
       for (const match of source.source.matchAll(declarationAlias)) {
         const name = directoryIdentifier(match[2]);
         if (!aliases.has(name)) aliases.set(name, new Set());

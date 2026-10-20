@@ -1220,3 +1220,23 @@ test('audited lock changes keep unused URL aliases narrow', () => fixture(({writ
   lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
   assertSelected(plan(base, commit()), ['catalogue']);
 }));
+
+
+test('audited lock changes retain URL aliases ending in a line comment without a semicolon', async t => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) await t.test(api, () => fixture(({git, write, lock, save, audit, commit, plan}) => {
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.ts';\nconsole.log('commented alias lock helper loaded');\n");
+    write('scripts/page-fixture.mjs', 'export const inert = true;\n');
+    write('packages/page/test/scan.mts', `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+const original = new URL('../../../', import.meta.url), intermediate = original, directory = intermediate // URL alias
+for await (const item of await ${api}(directory)) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('-adapter.mjs')) await import(new URL('../../../' + name, import.meta.url));
+}`);
+    audit(); const base = commit();
+    lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/page/test/scan.mts'], {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8', timeout: 5000}), 'commented alias lock helper loaded\n');
+    write('catalogue-adapter.mjs', 'export const dirty = true;\n');
+    assertSelected(plan(base, head), ['catalogue', 'page']);
+  }));
+});

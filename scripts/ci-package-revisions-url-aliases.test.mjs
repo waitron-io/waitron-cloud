@@ -54,15 +54,19 @@ const aliases = [
   ['chain', "let original = new URL('../../../', import.meta.url), intermediate = original, directory = intermediate;"],
   ['escaped and typed', String.raw`const \u006friginal = new U\u0052L('../../../', import.meta.url); var diréctory: URL = original; const directory: U\u{52}L = dir\u00e9ctory;`],
   ['cycle and reverse declaration order', "var directory = intermediate, intermediate = original, original = new URL('../../../', import.meta.url); directory = intermediate = original; var original = directory;"],
+  ['trailing line comment', "const original = new URL('../../../', import.meta.url); const directory = original // keep this URL"],
+  ['comma chain with trailing line comment', "const original = new URL('../../../', import.meta.url), intermediate = original, directory = intermediate // keep this URL"],
+  ['line break inside trailing block comment', "const original = new URL('../../../', import.meta.url); const directory = original /* next\nstatement */"],
+  ['escaped alias left-hand name', String.raw`const original = new URL('../../../', import.meta.url); const \u0064irectory = original;`],
 ];
 
 test('URL declaration aliases retain executed immediate helper consumers', async t => {
   for (const [index, [name, declarations]] of aliases.entries()) {
-    const api = apis[index];
+    const api = apis[index % apis.length];
     await t.test(`${api} ${name}`, () => fixture(({root, git, write, commit, workspace}) => {
       write('catalogue-adapter.mjs', helper);
       write('nested/unrelated-adapter.mjs', "import '../packages/unrelated/src/index.mjs';\n");
-      write('packages/portal/src/scan.mts', reader(api, declarations));
+      write('packages/portal/src/scan.mts', reader(api, declarations).replace('statement */\nfor', 'statement */for'));
       const base = commit();
       write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
       const head = commit();
@@ -118,7 +122,7 @@ test('unused aliases, unrelated names and local alias reads keep narrow selectio
     ['unused', aliases[1][1]],
     ['different scanned name', aliases[0][1] + " const other = new URL('./', import.meta.url); readdirSync(other);"],
     ['local alias', "const original = new URL('./', import.meta.url); const directory = original; readdirSync(directory);"],
-    ['prefix of an expression', "const original = new URL('../../../', import.meta.url); const directory = original.href;"],
+    ['prefix of an expression', "const original = new URL('../../../', import.meta.url); const directory = original.pathname + 'packages/portal/src/'; readdirSync(directory);"],
     ['working directory', "const original = new URL('../../../', import.meta.url); const directory = original; const command = {cwd: directory};"],
   ]) await t.test(name, () => fixture(({root, git, write, commit, workspace}) => {
     write('catalogue-adapter.mjs', helper);

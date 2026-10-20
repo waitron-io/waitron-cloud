@@ -1361,6 +1361,10 @@ notifications separately.
   The scanner follows alias chains in either declaration order, decodes escaped
   names and bounds cycles with a visited set. Executed controls cover all four
   directory APIs, comma-separated declarations and the supported URL type label.
+  A trailing line or block comment can carry the line break that ends the
+  declaration without a semicolon; those aliases retain consumers too. Both sides
+  of an alias decode identifier escapes in the controls. Comments followed by an
+  expression continuation can conservatively select extra work.
   Saved-tree controls retain old and new helpers, additions, deletions and
   transitive consumers despite dirty local files. Root alias reads with options
   retain full package work, including audited lock changes. Unused aliases,
