@@ -1111,16 +1111,27 @@ notifications separately.
   Scratch configuration can supply the issuer address required for full invoices.
   Synthetic copied bills pass through the normal writer with fresh invoice numbers
   and fiscal records; a refused payment rolls back and stops the remaining replay.
-  These private sale inputs cannot be published as aggregates. Actual source-count
-  reconciliation, isolated full replay, idle measurement and a complete cost export
-  still need separate evidence.
+  These private sale inputs cannot be published as aggregates. Trading-day discovery
+  now uses the copied clock and Waitron's own calendar functions. It reconciles sale,
+  paid-sale, day and busiest-day counts before releasing a selection; a discrepancy
+  leaves the selection unavailable. Equal busy-day counts select the earliest day.
+  Synthetic databases cover daylight-saving changes, historical cutovers and a
+  fractional timezone offset, then replay the discovered day through the normal writer.
+  The earlier 4,098 saved orders and 4,008 database sales are different inventories;
+  the earlier 28 dates used calendar midnight rather than the trading-day clock.
+  Actual source-count reconciliation still needs separate evidence. A synthetic
+  copy rehearsal also found that SQLite can create transaction-log sidecars beside
+  a dormant source despite a read-only connection. Enforce read-only source mounts
+  before opening real data; the copy helper alone does not establish that boundary.
+  Isolated full replay, idle measurement and a complete cost export remain open.
   The pure calculations now cover aggregate request
   tiers, explicit resource capacities, dated growth and calendar retention, including
   protected recovery copies. Synthetic local HTTP checks reconcile retries, denied
   calls and interrupted transfers with a streaming meter; unknown billing dimensions
   and unreconciled attempts leave gaps. Replay preparation now uses online SQLite
-  copies that include committed writes still in the transaction log, preserves the
-  source, excludes credentials and recorded fixtures from the pinned code copy, and
+  copies that include committed writes still in the transaction log. Synthetic checks
+  preserve the active source's database and transaction-log contents. Preparation
+  excludes credentials and recorded fixtures from the pinned code copy and
   stops only its own child on cancellation. A real Docker check proves that the
   Node sandbox allows connections inside the container while refusing Internet, metadata-service and
   external DNS traffic. Configuration checks reject extra networks, host access,

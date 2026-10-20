@@ -8,6 +8,7 @@ import { constants, openSync, closeSync, readSync, fstatSync, lstatSync, realpat
 import { join, relative, isAbsolute, posix } from 'node:path';
 import { assertOwnedRoot } from './schema.mjs';
 import { readReplayBills } from './source-bills.mjs';
+import { discoverReplayDay } from './source-days.mjs';
 export { openFiscalMeasurement } from './fiscal.mjs';
 export { openMailMeasurement } from './mail.mjs';
 export { replayScheduledSales } from './cadence.mjs';
@@ -118,33 +119,46 @@ function openPrivateSelection({ source, root, journal, database, locationId }) {
   finally { if (fd !== undefined) closeSync(fd); }
 }
 
+function readReplayClock(db, locationId) {
+  const location = db.prepare('SELECT time_zone, day_cutover FROM locations WHERE id=?').get(locationId);
+  requireThat(location && typeof location.time_zone === 'string' && location.time_zone.length <= 128);
+  const zone = new Intl.DateTimeFormat('en-US', { timeZone: location.time_zone }).resolvedOptions().timeZone;
+  requireThat(!/^[+-]/.test(zone));
+  const cutover = value => {
+    requireThat(typeof value === 'string' && /^(?:[01][0-9]|2[0-3]):[0-5][0-9]:00$/.test(value));
+    return value.slice(0, 5);
+  };
+  const dayCutover = cutover(location.day_cutover);
+  const rows = db.prepare(`SELECT effective_business_day, day_cutover FROM location_day_cutover_changes
+    WHERE location_id=? ORDER BY effective_business_day LIMIT 10001`).all(locationId);
+  requireThat(rows.length <= 10000);
+  let previous = '';
+  const cutoverChanges = rows.map(row => {
+    const day = row.effective_business_day;
+    requireThat(typeof day === 'string' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(day)
+      && Number.isFinite(Date.parse(day)) && new Date(day).toISOString().slice(0, 10) === day && day > previous);
+    previous = day;
+    return { effectiveBusinessDay: day, dayCutover: cutover(row.day_cutover) };
+  });
+  return { timeZone: location.time_zone, dayCutover, cutoverChanges };
+}
+
 // This clock is private input to Waitron's businessDayBounds, never a public cost receipt.
 export function readPrivateReplayClock(args) {
   let db;
   try {
-    const { locationId } = args;
     db = openPrivateSelection(args);
-    const location = db.prepare('SELECT time_zone, day_cutover FROM locations WHERE id=?').get(locationId);
-    requireThat(location && typeof location.time_zone === 'string' && location.time_zone.length <= 128);
-    const zone = new Intl.DateTimeFormat('en-US', { timeZone: location.time_zone }).resolvedOptions().timeZone;
-    requireThat(!/^[+-]/.test(zone));
-    const cutover = value => {
-      requireThat(typeof value === 'string' && /^(?:[01][0-9]|2[0-3]):[0-5][0-9]:00$/.test(value));
-      return value.slice(0, 5);
-    };
-    const dayCutover = cutover(location.day_cutover);
-    const rows = db.prepare(`SELECT effective_business_day, day_cutover FROM location_day_cutover_changes
-      WHERE location_id=? ORDER BY effective_business_day LIMIT 10001`).all(locationId);
-    requireThat(rows.length <= 10000);
-    let previous = '';
-    const cutoverChanges = rows.map(row => {
-      const day = row.effective_business_day;
-      requireThat(typeof day === 'string' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(day)
-        && Number.isFinite(Date.parse(day)) && new Date(day).toISOString().slice(0, 10) === day && day > previous);
-      previous = day;
-      return { effectiveBusinessDay: day, dayCutover: cutover(row.day_cutover) };
-    });
-    return { timeZone: location.time_zone, dayCutover, cutoverChanges };
+    return readReplayClock(db, args.locationId);
+  } catch { fail(); }
+  finally { db?.close(); }
+}
+
+// Reconcile counts before releasing a private trading-day selection to the replay controller.
+export function discoverPrivateReplayDay(args) {
+  let db;
+  try {
+    db = openPrivateSelection(args);
+    return discoverReplayDay(db, { ...args, clock: readReplayClock(db, args.locationId) });
   } catch { fail(); }
   finally { db?.close(); }
 }
