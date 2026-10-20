@@ -156,8 +156,9 @@ function workspaceAt(sha, workspace, git) {
         `Unresolved indirect directory call at ${source.path}`);
       assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|(?:,\s*)?\]|\)|;|<|satisfies\b)|(?:!\s*)+\()/),
         `Unresolved indirect directory call at ${source.path}`);
-      // Shorthand properties retain a reader for a later call. Static import
-      // specifiers alone do not put the binding in a runtime object.
+      // Brace groups can hold or transfer a reader, including unresolved
+      // destructuring and exports. Static imports alone establish no consumer;
+      // quoted code retains the conservative check.
       const objectReference = directoryPattern(/(?:\{|,)\s*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:,|\})/);
       if (objectReference.test(source.source)) {
         assert.equal(hasObjectDirectoryReference(source.source), false,

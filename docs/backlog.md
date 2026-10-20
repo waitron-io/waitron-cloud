@@ -1785,7 +1785,15 @@ notifications separately.
   and resolved directory calls stay narrow in these controls. This lexical scan
   does not resolve bindings or parse general expressions; inert text and unrelated
   namesakes can still select extra work. General aliases, destructuring and precise
-  object/binding resolution remain open. The object check requires a brace
+  object/binding resolution remain open. Destructured reader bindings, named
+  reader exports, quoted text such as `'{readdirSync}'` and generated import text
+  with escaped quotes can still select extra work. Executed base/final probes
+  record these conservative cases; precise binding and generated-code resolution
+  remain D69 work. Passing a reader as a middle call argument is a separately
+  executed remaining omission: Node loads the helper, but both base and final
+  planners select catalogue alone when the consumer does not name the API.
+  Resolve that argument transfer before claiming complete reader discovery.
+  The object check requires a brace
   context, so array readers keep their existing diagnostics and comma-only text
   stays narrow. Each quoted program has its own delimiter context; separate inert
   fragments cannot combine into a reader. A division-like token can contain live
