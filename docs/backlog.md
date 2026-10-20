@@ -1356,9 +1356,17 @@ notifications separately.
   transitive consumers and dirty-checkout independence. Recursive root options
   keep every package, including for audited lock changes. Unused bindings,
   local reads, different variable names, unrelated constructors and a command
-  working directory alone remain narrow in the controls. A URL-variable alias
-  can still hide a real helper consumer; the earlier executed probe reproduces
-  that omission on both saved scanners.
+  working directory alone remain narrow in the controls. Simple declaration
+  aliases of these URL bindings now retain immediate helper consumers too.
+  The scanner follows alias chains in either declaration order, decodes escaped
+  names and bounds cycles with a visited set. Executed controls cover all four
+  directory APIs, comma-separated declarations and the supported URL type label.
+  Saved-tree controls retain old and new helpers, additions, deletions and
+  transitive consumers despite dirty local files. Root alias reads with options
+  retain full package work, including audited lock changes. Unused aliases,
+  different scanned names, local reads and working-directory values stay narrow
+  in the controls. Names are combined conservatively across scopes; this does
+  not resolve binding identity, reassignment, destructuring or other type labels.
   Binding identity remains unverified, and reused names or inert text can retain
   extra work. An out-of-range escape inside an inert comment, such as
   `// readdirSync(\u{110000})`, also makes both scanners throw while Node accepts
