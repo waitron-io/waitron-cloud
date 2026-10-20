@@ -281,3 +281,133 @@ export async function openLitestreamLifetimes({ client, sdk, meter, bucket, cloc
   await verify();
   return { begin, verify, snapshot };
 }
+
+// Owned, initially empty unversioned buckets only. Commit times are bounded by request and reply;
+// an ambiguous reply stays unresolved until inventory or an identical successful retry bounds it.
+export async function openLitestreamHistories({ client, sdk, meter, bucket, clock }) {
+  const rows = new Map(), pending = new Set();
+  let invalid = false, verifying = false, verified = false, last = -Infinity, endpoint, start;
+  let retiredLow = 0, retiredHigh = 0;
+  const poison = () => { invalid = true; meter?.invalidate(); fail(); };
+  const guarded = fn => (...args) => {
+    try { requireThat(!invalid); return fn(...args); } catch { poison(); }
+  };
+  const now = () => {
+    const time = clock(); requireThat(Number.isFinite(time) && time >= 0 && time >= last);
+    last = time; return time;
+  };
+  try {
+    requireThat(typeof clock === 'function' && /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)
+      && typeof meter?.invalidate === 'function');
+    endpoint = assertStorageClientBinding(client, meter, 'observer');
+    requireThat(['GetBucketVersioningCommand', 'ListObjectsV2Command', 'ListMultipartUploadsCommand']
+      .every(name => typeof sdk[name] === 'function'));
+    start = now();
+  } catch { poison(); }
+  const inspect = async (name, input = {}) => {
+    requireThat(assertStorageClientBinding(client, meter, 'observer') === endpoint);
+    const result = await client.send(new sdk[name]({ Bucket: bucket, ...input }));
+    requireThat(result.$metadata?.httpStatusCode === 200 && result.$metadata.attempts === 1);
+    return result;
+  };
+  const transition = (row, mutation, by) => {
+    if (row.current && !(mutation.method === 'PUT' && row.current.bytes === mutation.bytes)) {
+      retiredLow += row.current.bytes * Math.max(0, mutation.from - row.current.by);
+      retiredHigh += row.current.bytes * (by - row.current.from);
+      row.current = null;
+    }
+    if (mutation.method === 'PUT' && !row.current) row.current = { bytes: mutation.bytes, from: mutation.from, by };
+    row.uncertain = null;
+  };
+  const begin = guarded(({ method, path, headers }) => {
+    requireThat(!verifying && pending.size < 100000);
+    const operation = classifyStorageOperation({ method, path });
+    requireThat(['put', 'delete', 'get', 'head', 'list'].includes(operation));
+    const rawPath = path.split('?')[0], segments = rawPath.slice(1).split('/');
+    requireThat(segments[0] === bucket && !/%2f|%5c/i.test(rawPath));
+    const key = decodeURIComponent(segments.slice(1).join('/'));
+    requireThat(!key.includes('\0') && !key.split('/').some(s => s === '.' || s === '..'));
+    const url = new URL(path, 'http://local');
+    requireThat(!url.searchParams.has('versionId'));
+    const time = now();
+    let row, mutation;
+    if (operation === 'put' || operation === 'delete') {
+      // The classifier validates SDK operation hints; version-specific mutations are refused above.
+      requireThat(key.length > 0 && Buffer.byteLength(key) <= 1024
+        && headers && !Object.hasOwn(headers, 'x-amz-copy-source') && !Object.hasOwn(headers, 'content-encoding'));
+      requireThat(operation === 'put' ? /^(0|[1-9]\d*)$/.test(headers['content-length'])
+        : headers['content-length'] === undefined || headers['content-length'] === '0');
+      const bytes = operation === 'put' ? Number(headers['content-length']) : 0;
+      requireThat(count(bytes));
+      row = rows.get(key);
+      if (!row) { requireThat(rows.size < 100000); row = { current: null, uncertain: null, active: false }; rows.set(key, row); }
+      requireThat(!row.active && (!row.uncertain || row.uncertain.method === method && row.uncertain.bytes === bytes));
+      mutation = { method, bytes, from: row.uncertain?.from ?? time };
+      row.active = true; verified = false;
+    }
+    const token = {}; pending.add(token);
+    return guarded(({ statusCode, bytesOut, interrupted = false }) => {
+      requireThat(pending.has(token) && !interrupted && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
+      const time = now();
+      if (mutation) {
+        requireThat(bytesOut === mutation.bytes);
+        if (statusCode < 300) transition(row, mutation, time);
+        else if (mutation.method === 'PUT' ? row.current?.bytes !== mutation.bytes : row.current !== null) row.uncertain = mutation;
+        row.active = false;
+      }
+      pending.delete(token);
+    });
+  });
+  const verify = async () => {
+    try {
+      requireThat(!invalid && !verifying && pending.size === 0); verifying = true; verified = false; now();
+      requireThat((await inspect('GetBucketVersioningCommand')).Status === undefined);
+      const found = new Map(), tokens = new Set(); let continuation;
+      for (let n = 0; ; n++) {
+        requireThat(n < 1000);
+        const page = await inspect('ListObjectsV2Command', continuation ? { ContinuationToken: continuation } : {});
+        requireThat(typeof page.IsTruncated === 'boolean' && (page.Contents === undefined || Array.isArray(page.Contents)));
+        for (const entry of page.Contents ?? []) {
+          requireThat(rows.has(entry.Key) && !found.has(entry.Key) && count(entry.Size));
+          found.set(entry.Key, entry.Size);
+        }
+        if (!page.IsTruncated) break;
+        continuation = page.NextContinuationToken;
+        requireThat(text(continuation) && !tokens.has(continuation)); tokens.add(continuation);
+      }
+      const uploads = await inspect('ListMultipartUploadsCommand');
+      requireThat(uploads.IsTruncated === false && (uploads.Uploads === undefined || Array.isArray(uploads.Uploads) && uploads.Uploads.length === 0));
+      const time = now();
+      for (const [key, row] of rows) {
+        const bytes = found.get(key), uncertain = row.uncertain;
+        if (uncertain) {
+          if (uncertain.method === 'PUT' ? bytes === uncertain.bytes : bytes === undefined) transition(row, uncertain, time);
+          else {
+            requireThat(row.current ? bytes === row.current.bytes : bytes === undefined);
+            row.uncertain = null;
+          }
+        }
+        requireThat(row.current ? bytes === row.current.bytes : bytes === undefined);
+      }
+      verified = true;
+    } catch { poison(); }
+    finally { verifying = false; }
+  };
+  const snapshot = () => {
+    requireThat(!invalid && !verifying && verified && pending.size === 0);
+    return guarded(() => {
+      const time = now(); let bytes = 0, objects = 0, low = retiredLow, high = retiredHigh;
+      for (const row of rows.values()) if (row.current) {
+        requireThat(!row.uncertain && !row.active);
+        bytes += row.current.bytes; objects++;
+        low += row.current.bytes * (time - row.current.by); high += row.current.bytes * (time - row.current.from);
+      }
+      requireThat(count(bytes) && Number.isFinite(low) && Number.isFinite(high) && low >= 0 && high >= low);
+      return { status: 'measured', scope: 'unversioned-object-history', windowSeconds: time - start,
+        objects: { class: 'stream', bytes, currentVersions: objects, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 },
+        byteSeconds: { low, high } };
+    })();
+  };
+  await verify();
+  return { begin, verify, snapshot };
+}

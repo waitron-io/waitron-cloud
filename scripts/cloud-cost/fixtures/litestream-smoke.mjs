@@ -90,9 +90,10 @@ async function smoke() {
   };
   try {
     stage = 'bucket'; await clients[0].send(new CreateBucketCommand({ Bucket }));
-    if (process.env.COST_LITESTREAM_LIFETIMES === '1') {
-      const { openLitestreamLifetimes } = await import('/code/storage-lifetimes.mjs');
-      lifetimes = await openLitestreamLifetimes({ client: clients[1], sdk, meter: adminMeter, bucket: Bucket, clock: () => performance.now() / 1000 });
+    if (process.env.COST_LITESTREAM_LIFETIMES === '1' || process.env.COST_LITESTREAM_HISTORIES === '1') {
+      const storage = await import('/code/storage-lifetimes.mjs');
+      const open = process.env.COST_LITESTREAM_HISTORIES === '1' ? storage.openLitestreamHistories : storage.openLitestreamLifetimes;
+      lifetimes = await open({ client: clients[1], sdk, meter: adminMeter, bucket: Bucket, clock: () => performance.now() / 1000 });
     }
     replication = await phase('workload'); restore = await phase('restore'); await sale(1);
     stage = 'replicate'; replicator = launch(['replicate', '-config', configFile('replicate', replication.endpoint)], replication.audit);

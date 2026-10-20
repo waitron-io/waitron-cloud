@@ -1165,7 +1165,13 @@ notifications separately.
   output. The controller removes its own copy, worker, network and added files while
   preserving caller state. Replaced directories or lost ownership refuse cleanup
   and retain recorded resources for explicit recovery. This proves writer admission;
-  it does not measure stream traffic or cost. The complete storage measurement,
+  it does not measure stream traffic or cost. A separate unversioned stream-history
+  mode now preserves the storage used before replacement or deletion, including
+  recreation and retries. It bounds when a write could have committed and checks
+  failed replies against an independent object inventory. Generated HTTP and real
+  local storage checks cover these histories without exporting object names; the
+  earlier upload-only mode keeps its existing contract. Bulk deletion, multipart
+  histories and a complete measured stream remain open. The complete storage measurement,
   idle period, measurement controller and CLI,
   public/staff journeys and full cost export remain open.
   The pure calculations now cover aggregate request
