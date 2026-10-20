@@ -1155,7 +1155,18 @@ notifications separately.
   [Generated workers](../scripts/cloud-cost/fixtures/foreground-conformance.test.mjs)
   and the pinned writer's private replay checks exercise this
   stage. Accepting a two-hour budget does not establish a two-hour measurement.
-  The complete storage measurement, idle period, foreground controller and CLI,
+  An [isolated replay controller](../scripts/cloud-cost/isolated-replay.mjs) now joins
+  those stages around a prepared, pinned runtime. It proves outside connections
+  are blocked before copying source data, then runs the complete selected day
+  with a read-only code mount and private writable state. It checks every returned
+  count, size and duration before releasing the anonymous admission result.
+  [Generated-source checks](../scripts/cloud-cost/fixtures/isolated-replay-conformance.test.mjs)
+  cover refused copies, mismatched counts, cancellation, deadlines and actual worker
+  output. The controller removes its own copy, worker, network and added files while
+  preserving caller state. Replaced directories or lost ownership refuse cleanup
+  and retain recorded resources for explicit recovery. This proves writer admission;
+  it does not measure stream traffic or cost. The complete storage measurement,
+  idle period, measurement controller and CLI,
   public/staff journeys and full cost export remain open.
   The pure calculations now cover aggregate request
   tiers, explicit resource capacities, dated growth and calendar retention, including
