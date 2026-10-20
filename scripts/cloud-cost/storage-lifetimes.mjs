@@ -542,7 +542,7 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
 
 // Failed replies cannot establish an upload identity or part contents. An ambiguous reply
 // invalidates this run; assuming no commit could omit retained storage.
-function nativeMultipartHistory({ bucket, now, inspect, complete }) {
+export function nativeMultipartHistory({ bucket, now, inspect, complete }) {
   const uploads = new Map(); let busy = false, retiredLow = 0, retiredHigh = 0;
   const retire = (part, from, by) => {
     retiredLow += part.bytes * Math.max(0, from - part.by);
@@ -589,7 +589,7 @@ function nativeMultipartHistory({ bucket, now, inspect, complete }) {
           const f = fields(responseBody, 'CompleteMultipartUploadResult', ['Location', 'Bucket', 'Key', 'ETag']);
           requireThat(f.Bucket === bucket && f.Key === key && cleanText(f.ETag));
           const size = selected.reduce((n, part) => n + part.bytes, 0); requireThat(count(size));
-          complete(key, size, time, by);
+          complete(key, size, time, by, responseHeaders);
         }
         for (const part of upload.parts.values()) retire(part, time, by);
         uploads.delete(id);

@@ -1209,9 +1209,14 @@ notifications separately.
   and parts before reporting storage. Generated HTTP and real local storage checks
   cover completion of a selected subset, simultaneous object and unfinished-part
   storage, abort and deletion. Both request counters include the control bodies.
+  The versioned native listener now offers the same explicit multipart mode.
+  Completion requires a fresh, non-marker version identity and retains older
+  versions, including repeated completions of the same size. Separate upload,
+  part and version inventories check storage before publication. Generated HTTP
+  and real local storage checks cover discarded/replaced parts, abort, promotion
+  after deleting a completed version and storage retained before final deletion.
   Ambiguous multipart replies invalidate the run because a failed reply can hide
-  retained data. Resolving those replies, native versioned multipart histories and
-  a complete measured stream remain open.
+  retained data. Resolving those replies and a complete measured stream remain open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled

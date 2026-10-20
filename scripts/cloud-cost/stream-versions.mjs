@@ -1,4 +1,5 @@
 import { deletionXml, deletionFields } from './s3-deletion.mjs';
+import { nativeMultipartHistory } from './storage-lifetimes.mjs';
 import { assertStorageClientBinding, classifyStorageOperation } from './meter.mjs';
 
 const fail = () => { throw Error('Invalid cloud cost storage lifetimes'); };
@@ -9,7 +10,7 @@ const identity = (key, version) => JSON.stringify([key, version]);
 
 // Versioning retains a failed write's possible extra version until an independent inventory resolves it.
 // Payloads and provider identities stay private; only counts and conservative storage bounds are returned.
-export async function openLitestreamVersionHistories({ client, sdk, meter, bucket, clock, allowBulkDeletes = false }) {
+export async function openLitestreamVersionHistories({ client, sdk, meter, bucket, clock, allowBulkDeletes = false, allowMultipart = false }) {
   const rows = new Map(), unresolved = [], pending = new Set(), activeKeys = new Set();
   let invalid = false, verifying = false, verified = false, last = -Infinity, sequence = 0, endpoint, start;
   let retiredLow = 0, retiredHigh = 0;
@@ -19,9 +20,11 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     const time = clock(); need(Number.isFinite(time) && time >= 0 && time >= last); last = time; return time;
   };
   try {
-    need(typeof clock === 'function' && /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket) && typeof meter?.invalidate === 'function');
+    need(typeof clock === 'function' && /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket) && typeof meter?.invalidate === 'function'
+      && typeof allowMultipart === 'boolean');
     endpoint = assertStorageClientBinding(client, meter, 'observer');
     need(['GetBucketVersioningCommand', 'ListObjectVersionsCommand', 'ListMultipartUploadsCommand'].every(name => typeof sdk[name] === 'function'));
+    need(!allowMultipart || typeof sdk.ListPartsCommand === 'function');
     start = now();
   } catch { poison(); }
   const inspect = async (name, input = {}) => {
@@ -35,6 +38,13 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     retiredHigh += row.bytes * (by - row.from);
     row.deleted = true; row.removing = null;
   };
+  const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, complete: (key, bytes, from, by, headers) => {
+    const version = headers?.['x-amz-version-id'], marker = headers?.['x-amz-delete-marker'];
+    need(text(version) && version !== 'null' && !rows.has(identity(key, version))
+      && (marker === undefined || marker === 'false') && rows.size < 100000 && sequence < 100000);
+    rows.set(identity(key, version), { key, version, bytes, marker: false, from, by,
+      orders: [++sequence], latest: false, deleted: false, removing: null });
+  } }) : null;
   const beginBatch = ({ headers, body }) => {
     need(allowBulkDeletes === true && headers && !Object.hasOwn(headers, 'content-encoding')
       && !Object.hasOwn(headers, 'x-amz-copy-source') && Buffer.isBuffer(body)
@@ -93,19 +103,25 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     });
   };
   const begin = guarded(({ method, path, headers, body }) => {
-    need(!verifying && pending.size < 100000 && sequence < 100000);
+    need(!verifying && pending.size < 100000 && sequence < 100000 && !multipart?.active());
     const operation = classifyStorageOperation({ method, path, allowBulkDeletes });
     if (operation === 'delete-many') {
       need(path.split('?')[0].replace(/\/$/, '') === '/' + bucket);
       return beginBatch({ headers, body });
     }
-    need(['put', 'delete', 'get', 'head', 'list'].includes(operation));
+    need(['put', 'delete', 'get', 'head', 'list'].includes(operation) || multipart && operation.startsWith('multipart-'));
     const raw = path.split('?')[0], segments = raw.slice(1).split('/');
     need(segments[0] === bucket && !/%2f|%5c/i.test(raw));
     const key = decodeURIComponent(segments.slice(1).join('/'));
     need(!/[\\\x00]/.test(key) && !key.split('/').some(s => s === '.' || s === '..'));
     const query = new URL(path, 'http://local').searchParams, version = query.get('versionId');
     const time = now(); let mutation;
+    if (operation.startsWith('multipart-')) {
+      need(pending.size === 0 && version === null);
+      const finish = multipart.begin({ operation, key, query, headers, body, time });
+      verified = false; const token = {}; pending.add(token);
+      return guarded(event => { need(pending.has(token)); finish(event); pending.delete(token); });
+    }
     if (operation === 'put' || operation === 'delete') {
       need(!activeKeys.has(key)); activeKeys.add(key);
       need(key.length > 0 && Buffer.byteLength(key) <= 1024 && headers
@@ -168,8 +184,11 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
         markers = { KeyMarker: page.NextKeyMarker, VersionIdMarker: page.NextVersionIdMarker };
         const id = JSON.stringify(markers); need(!tokens.has(id)); tokens.add(id);
       }
-      const uploads = await inspect('ListMultipartUploadsCommand');
-      need(uploads.IsTruncated === false && (uploads.Uploads === undefined || Array.isArray(uploads.Uploads) && uploads.Uploads.length === 0));
+      if (multipart) await multipart.verify();
+      else {
+        const uploads = await inspect('ListMultipartUploadsCommand');
+        need(uploads.IsTruncated === false && (uploads.Uploads === undefined || Array.isArray(uploads.Uploads) && uploads.Uploads.length === 0));
+      }
       const time = now(), groups = new Map(), used = new Map(), orders = new Map();
       const group = row => JSON.stringify([row.key, row.bytes, row.marker]);
       for (const mutation of unresolved) {
@@ -216,6 +235,8 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
         objects[row.marker ? 'deleteMarkers' : row.latest ? 'currentVersions' : 'noncurrentVersions']++;
         low += row.bytes * (time - row.by); high += row.bytes * (time - row.from);
       }
+      const parts = multipart?.snapshot(time) ?? { bytes: 0, uploads: 0, low: 0, high: 0 };
+      objects.bytes += parts.bytes; objects.unfinishedMultipart = parts.uploads; low += parts.low; high += parts.high;
       need(count(objects.bytes) && Number.isFinite(low) && Number.isFinite(high) && low >= 0 && high >= low);
       return { status: 'measured', scope: 'versioned-object-history', windowSeconds: time - start, objects, byteSeconds: { low, high } };
     })();
