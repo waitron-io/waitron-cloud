@@ -152,3 +152,21 @@ test('parenthesized alias identifier suffixes do not turn local scans into root 
       {full: false, packages: ['catalogue']});
   }));
 });
+
+// A comparison or arrow expression does not transfer the URL value it names.
+test('parenthesized comparisons and arrow functions keep unused URLs narrow', async t => {
+  for (const expression of ['original === original', 'original => original']) {
+    await t.test(expression, () => fixture(({root, git, write, commit, workspace}) => {
+      write('catalogue-adapter.mjs', helper);
+      write('packages/portal/src/scan.mts', reader('readdirSync', `const original = new URL('../../../', import.meta.url);
+let directory; directory = (${expression});
+if (directory instanceof URL)`));
+      const base = commit();
+      write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+      const head = commit();
+      assert.equal(execute(root), '');
+      assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
+        {full: false, packages: ['catalogue']});
+    }));
+  }
+});
