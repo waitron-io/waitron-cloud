@@ -1298,8 +1298,20 @@ notifications separately.
   or printed. Missing diagnostics leave the stage unknown, and malformed diagnostics
   produce a fixed invalid-diagnostic code. Ownership checks still forbid diagnostic
   writes and cleanup when a worker creates a symlink.
-  Complete accounting/export across the remaining drivers, the full venue sample, the required
-  idle observation and the remaining public/staff journeys stay open.
+  A bounded control now compares the same three consecutive copied sales at their
+  original spacing and at 1,000 times that speed. Both restore three sales with
+  valid integrity and reconcile every observed request. Workload and idle send
+  38,529 versus 9,178 request-body bytes to local storage. The original replay
+  takes 78.84 seconds, versus 0.088 seconds when accelerated. These small samples
+  have different durations and background work; their ratio is not a daily
+  correction factor. The control reads the existing consistent scratch copy.
+  The full 207-sale stream attempt remains unqualified: scratch reaches all sales,
+  but the command refuses before a final result is retained and the original-source
+  file comparison reports a change. Cleanup succeeds. Retain the fixed worker refusal
+  stage and separate source-file comparisons before another attempt; neither cause
+  is established. Do not publish the failed sample as measured cost. Complete
+  accounting/export across the remaining drivers, a qualified full venue sample
+  with idle evidence, and public/staff journeys stay open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled
