@@ -1336,7 +1336,7 @@ for await (const item of await ${api}(directory)) {
     const head = commit();
     assert.equal(execFileSync(process.execPath, ['packages/page/test/scan.mts'], {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8', timeout: 5000}), 'assigned URL lock helper loaded\n');
     write('catalogue-adapter.mjs', 'export const dirty = true;\n');
-    assertSelected(plan(base, head), ['catalogue', 'page']);
+    assertSelected(plan(base, head), ['catalogue', 'page', 'unrelated']);
   }));
 });
 
@@ -1420,5 +1420,33 @@ for (const name of readdirSync(${argument})) {
     const result = plan(base, head);
     assertSelected(result, uncertain ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
     assert.match(result.reason, uncertain ? /full suite retained/ : /audited package selection/);
+  }));
+});
+
+// The lock audit cannot turn an uncertain same-name URL into proved package evidence.
+test('audited locks retain all packages for the executed same-name reviewer probes', async t => {
+  const outer = "const directory = new URL('./', import.meta.url);";
+  const target = "new URL('../../../', import.meta.url)";
+  const loop = `for (const name of readdirSync(directory)) {
+    if (name.endsWith('-adapter.mjs')) await import(new URL('../../../' + name, import.meta.url));
+  }`;
+  for (const [name, body] of [
+    ['default parameter', `function scan(directory = new URL('./', import.meta.url)) { return readdirSync(directory); } ${loop.replace('readdirSync(directory)', `scan(${target})`)}`],
+    ['parameter', `${outer} function scan(directory) { return readdirSync(directory); } ${loop.replace('readdirSync(directory)', `scan(${target})`)}`],
+    ['parameter transfer', `${outer} function scan(input) { const directory = input; return readdirSync(directory); } ${loop.replace('readdirSync(directory)', `scan(${target})`)}`],
+    ['loop binding', `${outer} for (const directory of [${target}]) { ${loop} }`],
+    ['destructuring', `${outer} { const [directory] = [${target}]; ${loop} }`],
+    ['catch binding', `${outer} try { throw ${target}; } catch (directory) { ${loop} }`],
+  ]) await t.test(name, () => fixture(({git, write, lock, save, audit, commit, plan}) => {
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.ts';\nconsole.log('reviewer lock helper loaded');\n");
+    write('packages/page/test/scan.mts', "import {readdirSync} from 'node:fs';\n" + body);
+    audit(); const base = commit();
+    lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/page/test/scan.mts'],
+      {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8'}), 'reviewer lock helper loaded\n');
+    const result = plan(base, head);
+    assertSelected(result, ['catalogue', 'page', 'unrelated']);
+    assert.match(result.reason, /full suite retained/);
   }));
 });

@@ -1387,14 +1387,26 @@ notifications separately.
   cover all four directory APIs, saved old and new transitive consumers, dirty
   local files and audited lock changes. Root options keep every package; unused
   inputs, local reads and identifier suffixes stay narrow in the controls.
-  Directory inputs follow the owner's 2026-10-20 decision: run all when unsure.
+  D69 closes under the owner's 2026-10-20 decision: run all when unsure.
+  The historical design and measurements below do not require another syntax
+  extension or a cost target before closure. More precise selection remains
+  optional efficiency work; preserve the conservative fallback.
   Every direct directory read must resolve through an admitted URL constructor
   or its supported bindings and aliases. An unresolved argument, unknown value
-  transfer or unrecognised reassignment prevents package narrowing. The planner
+  transfer, unrecognised reassignment or other use of a URL binding prevents
+  package narrowing. A matching outer declaration cannot qualify a different
+  parameter, and a URL object may change through another reference. Assignments
+  inside parentheses, opaque literal programs and unknown alias sources also
+  prevent proof. Executed controls cover all six same-name review probes and
+  their audited-lock paths. This refuses uncertainty without resolving more forms. The planner
   then keeps every package suite and names the saved source path. Audited lock
   changes also keep full work through their existing fallback. Both saved trees
   are checked, so a removed reader and dirty local files cannot hide a consumer.
   Ordinary resolved reads keep narrow selection in the executed controls.
+  In the current repository, `packages/account-http/test/fixtures/fiscal-waitron-bridge.mjs`
+  computes a journal directory that this scan cannot prove. Package-only changes
+  therefore retain all packages, including portal changes. Do not add another
+  special case to recover that saving; the owner accepts the wider fallback.
   This deliberately trades additional work for retaining tests. Do not extend
   the syntax recogniser one written form at a time; an uncertain form takes the
   fallback. Precise binding resolution and generated-input analysis are optional
@@ -1605,8 +1617,8 @@ notifications separately.
   a passing local run does not establish hosted-runner duration.
   It does not resolve template substitutions, division
   versus regular expressions, array membership or receiver identities. Unrelated
-  expressions and inert text can select extra work; unsupported expressions can
-  still hide real readers. Executed base/head planner probes cover division
+  expressions and inert text can select extra work; unresolved directory-call inputs
+  retain full package work. Executed base/head planner probes cover division
   between the quoted value and stored reader, but do not establish completeness.
   Logical assignments (`||=`, `??=` and `&&=`) and awaited logical or
   conditional operands now retain every package suite. These operators can
@@ -1901,7 +1913,7 @@ notifications separately.
   certificates are unchanged. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain
   conservative. The owner closed D69 with the run-all fallback; more precise dynamic-input selection is optional future work. Identity still selects all nine packages in the current graph;
-  portal alone remains isolated. Unaudited root, unknown and empty changes run everything.
+  portal-only changes now retain full package work when any saved reader is unresolved. Unaudited root, unknown and empty changes run everything.
   Type checking stays whole-workspace. The root command compiles the shared
   backend configuration once, then runs the portal and UI-smoke configurations.
   The seven backend package commands use the same root configuration, so repeating

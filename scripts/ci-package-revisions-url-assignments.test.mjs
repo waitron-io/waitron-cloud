@@ -70,11 +70,17 @@ test('later URL assignments retain helpers actually loaded by each directory API
       write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
       const head = commit();
       assert.equal(execute(root), 'aliased directory helper loaded\n');
-      assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
-        {full: false, packages: ['catalogue', 'portal']});
-      assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'portal']);
-      assert.deepEqual(scopeForRevisions(['packages/unrelated/src/index.mjs'], workspace, base, head, git),
-        {full: false, packages: ['unrelated']});
+      if (['comments and no semicolon', 'parenthesized assignment'].includes(name)) {
+        assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
+        assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+        assert.throws(() => scopeForRevisions(['packages/unrelated/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
+      } else {
+        assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
+          {full: false, packages: ['catalogue', 'portal']});
+        assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'portal']);
+        assert.deepEqual(scopeForRevisions(['packages/unrelated/src/index.mjs'], workspace, base, head, git),
+          {full: false, packages: ['unrelated']});
+      }
     }));
   }
 });
@@ -132,7 +138,7 @@ test('unused assignments, different names and local assigned reads keep narrow s
     write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
     const head = commit();
     assert.equal(execute(root), '');
-    if (name === 'expression prefix') {
+    if (['expression prefix', 'numeric prefix in inert text'].includes(name)) {
       assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
       assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
     } else {

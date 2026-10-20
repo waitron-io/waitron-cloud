@@ -70,7 +70,7 @@ test('later URL constructor assignments retain helpers actually loaded by each d
       write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
       const head = commit();
       assert.equal(execute(root), 'aliased directory helper loaded\n');
-      if (name === 'used default parameter') {
+      if (['used default parameter', 'comments and trailing comma', 'parenthesized constructor assignment'].includes(name)) {
         assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
         assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
         assert.throws(() => scopeForRevisions(['packages/unrelated/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
@@ -138,7 +138,7 @@ test('unused assignments, different names and local assigned reads keep narrow s
     write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
     const head = commit();
     assert.equal(execute(root), '');
-    if (name === 'expression prefix') {
+    if (['expression prefix', 'numeric prefix in inert text', 'different scanned name'].includes(name)) {
       assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
       assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
     } else {

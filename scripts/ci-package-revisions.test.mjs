@@ -660,15 +660,20 @@ test('new and deleted helper files under a root-relative directory retain their 
   });
 });
 
-test('shared directory discovery preserves actual portal isolation and identity consumers', () => {
+test('unresolved live repository readers keep every package consumer', () => {
   const git = (...args) => execFileSync('git', args, {encoding: 'utf8', maxBuffer: 64 * 1024 * 1024});
   git.readBlobs = packageInputs.readGitBlobs;
   const sha = git('rev-parse', 'HEAD').trim(), workspace = loadWorkspace();
-  assert.deepEqual(scopeForRevisions(['apps/portal/src/app.ts'], workspace, sha, sha, git),
-    {full: false, packages: ['@waitron-cloud/portal']});
-  assert.deepEqual(scopeForRevisions(['packages/identity/src/index.ts'], workspace, sha, sha, git).packages,
-    ['@waitron-cloud/account-http', '@waitron-cloud/backups', '@waitron-cloud/fiscal-allocation', '@waitron-cloud/identity',
-      '@waitron-cloud/operations', '@waitron-cloud/portal', '@waitron-cloud/registration', '@waitron-cloud/remote-access', '@waitron-cloud/translation', '@waitron-cloud/ui-smoke']);
+  for (const path of ['apps/portal/src/app.ts', 'packages/identity/src/index.ts']) {
+    assert.throws(() => scopeForRevisions([path], workspace, sha, sha, git), /Unresolved directory input/);
+    const changed = (...args) => args[0] === 'diff' ? path + '\0' : git(...args);
+    changed.readBlobs = git.readBlobs;
+    const result = createPlan({pull_request: {base: {sha}, head: {sha}}}, {sha}, workspace, changed, () => {throw Error('No API expected');});
+    assert.deepEqual([...new Set(result.packages.flatMap(row => row.members ?? [row.package]))].sort(),
+      ['@waitron-cloud/account-http', '@waitron-cloud/backups', '@waitron-cloud/fiscal-allocation', '@waitron-cloud/identity',
+        '@waitron-cloud/operations', '@waitron-cloud/portal', '@waitron-cloud/registration', '@waitron-cloud/remote-access', '@waitron-cloud/translation', '@waitron-cloud/ui-smoke']);
+    if (path.startsWith('apps/portal/')) assert.match(result.reason, /Unresolved directory input/);
+  }
 });
 
 test('equivalent root-relative directory spellings retain the same helper consumers', () => {
@@ -684,7 +689,9 @@ for (const name of readdirSync(directory)) await import(pathToFileURL(resolve(di
     write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
     const head = commit();
     assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'catalogue reader loaded\n');
-    assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'portal'], directory);
+    const result = plan(base, head);
+    assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], directory);
+    assert.match(result.reason, /Unresolved directory input/);
   });
 });
 

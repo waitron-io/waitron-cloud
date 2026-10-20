@@ -72,7 +72,7 @@ test('parenthesized URL values retain helpers actually loaded by each directory 
       write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
       const head = commit();
       assert.equal(execute(root), 'aliased directory helper loaded\n');
-      if (name.startsWith('used default')) {
+      if (name.startsWith('used default') || name === 'mixed assignment chain') {
         assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
         assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
         assert.throws(() => scopeForRevisions(['packages/unrelated/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
@@ -141,7 +141,7 @@ test('unused assignments, different names and local assigned reads keep narrow s
     write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
     const head = commit();
     assert.equal(execute(root), '');
-    if (['property suffix', 'expression prefix'].includes(name)) {
+    if (['property suffix', 'expression prefix', 'numeric prefix in inert text'].includes(name)) {
       assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
       assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
     } else {
@@ -153,7 +153,7 @@ test('unused assignments, different names and local assigned reads keep narrow s
 
 // Digit suffixes catch removal of the left boundary; longer valid names stay distinct.
 test('parenthesized alias identifier suffixes do not turn local scans into root scans', async t => {
-  for (const prefix of ['1', '$', 'é', String.raw`\u0061`]) await t.test(prefix, () => fixture(({root, git, write, commit, workspace}) => {
+  for (const prefix of ['1', '$', 'é', String.raw`\u0061`]) await t.test(prefix, () => fixture(({root, git, write, commit, plan, workspace}) => {
     write('catalogue-adapter.mjs', helper);
     write('packages/portal/src/scan.mts', reader('readdirSync', `const original = new URL('../../../', import.meta.url); let directory = new URL('./', import.meta.url);
 // ${prefix}directory = (original);`));
@@ -161,8 +161,13 @@ test('parenthesized alias identifier suffixes do not turn local scans into root 
     write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
     const head = commit();
     assert.equal(execute(root), '');
-    assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
-      {full: false, packages: ['catalogue']});
+    if (prefix === '1') {
+      assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
+      assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+    } else {
+      assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
+        {full: false, packages: ['catalogue']});
+    }
   }));
 });
 

@@ -49,9 +49,14 @@ const unresolved = [
   ['direct computed argument', original + ' const choose = () => original;', 'choose()'],
   ['overwritten known URL', original + " let directory = new URL('./', import.meta.url); directory = (() => original)();", 'directory'],
   ['URL property expression', original + ' const directory = original.pathname;', 'directory'],
+  ['URL alias mutation', "const directory = new URL('./', import.meta.url); const alias = directory; alias.pathname = new URL('../../../', import.meta.url).pathname;", 'directory'],
+  ['URL object mutation', "const directory = new URL('./', import.meta.url); directory.pathname = new URL('../../../', import.meta.url).pathname;", 'directory'],
   ['uncertain alias chain', "let original = new URL('./', import.meta.url); original = (() => new URL('../../../', import.meta.url))(); const middle = original; const directory = middle;", 'directory'],
   ['query URL variable', "const directory = new URL('../../../?scan=1', import.meta.url);", 'directory'],
   ['query URL direct', '', "new URL('../../../?scan=1', import.meta.url)"],
+  ['constructor continuation', "const directory = new URL('./', import.meta.url)\n && new URL('../../../', import.meta.url);", 'directory'],
+  ['continued constructor value', "const local = new URL('./', import.meta.url); const directory = local\n && new URL('../../../', import.meta.url);", 'directory'],
+  ['continued alias value', "const local = new URL('./', import.meta.url); let middle; middle = local\n && new URL('../../../', import.meta.url); const directory = middle;", 'directory'],
   ['line continuation transfer', original + " const local = new URL('./', import.meta.url); const directory = local\n && original;", 'directory'],
   ['constructor assertion', "const directory = new URL('../../../', import.meta.url) as URL;", 'directory'],
 ];
@@ -120,4 +125,55 @@ test('ordinary resolved URL reads keep package selection narrow', async t => {
         {full: false, packages: ['unrelated']});
     }));
   }
+});
+
+// A same-named outer URL must not qualify a function's different input binding.
+test('shadowed reader parameters retain the consumer of the actual argument', () => fixture(({root, write, commit, plan}) => {
+  write('catalogue-adapter.mjs', helper);
+  const source = reader('readdirSync', "const directory = new URL('./', import.meta.url); function scan(directory) { return readdirSync(directory); }", 'directory')
+    .replace('await readdirSync(directory)', "await scan(new URL('../../../', import.meta.url))");
+  write('packages/portal/src/scan.mts', source);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execute(root), 'unresolved helper loaded\n');
+  const result = plan(base, head);
+  assert.deepEqual(result.packages.map(row => row.package), all);
+  assert.match(result.reason, /Unresolved directory input/);
+}));
+
+// An explicit argument can replace a default URL even when that default is known.
+test('an escaped URL cannot qualify a default parameter reader', () => fixture(({root, write, commit, plan}) => {
+  write('catalogue-adapter.mjs', helper);
+  const source = reader('readdirSync', "function scan(directory = new URL('./', import.meta.url)) { return readdirSync(directory); } const root = new URL('../../../', import.meta.url);", 'root')
+    .replace('await readdirSync(root)', 'await scan(root)');
+  write('packages/portal/src/scan.mts', source);
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execute(root), 'unresolved helper loaded\n');
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), all);
+}));
+
+// These executed same-name probes must keep the actual reader rather than an outer name's URL.
+test('unproved binding contexts keep the consumers from the reviewer probes', async t => {
+  const outer = "const directory = new URL('./', import.meta.url);";
+  const target = "new URL('../../../', import.meta.url)";
+  const loop = reader('readdirSync', '', 'directory').split('for await')[1];
+  for (const [name, body] of [
+    ['default parameter', `function scan(directory = new URL('./', import.meta.url)) { return readdirSync(directory); } for await${loop.replace('await readdirSync(directory)', `await scan(${target})`)}`],
+    ['parameter', `${outer} function scan(directory) { return readdirSync(directory); } for await${loop.replace('await readdirSync(directory)', `await scan(${target})`)}`],
+    ['parameter transfer', `${outer} function scan(input) { const directory = input; return readdirSync(directory); } for await${loop.replace('await readdirSync(directory)', `await scan(${target})`)}`],
+    ['loop binding', `${outer} for (const directory of [${target}]) { for await${loop} }`],
+    ['destructuring', `${outer} { const [directory] = [${target}]; for await${loop} }`],
+    ['catch binding', `${outer} try { throw ${target}; } catch (directory) { for await${loop} }`],
+  ]) await t.test(name, () => fixture(({root, write, commit, plan}) => {
+    write('catalogue-adapter.mjs', helper);
+    write('packages/portal/src/scan.mts', "import {readdirSync} from 'node:fs';\n" + body);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execute(root), 'unresolved helper loaded\n');
+    assert.deepEqual(plan(base, head).packages.map(row => row.package), all);
+  }));
 });
