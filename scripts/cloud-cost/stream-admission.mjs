@@ -96,3 +96,29 @@ export function validateStreamSettings(value, budget) {
     return structuredClone(value);
   } catch { fail(); }
 }
+
+// Setup, cleanup and verification requests must survive consolidation with the native traffic.
+// Keep uncertain storage lifetimes as bounds rather than inventing an exact byte-second value.
+export function summarizeStreamAccounting(value, options) {
+  const admitted = validateStreamAdmission(value, options);
+  const meters = [admitted.requests.accounting, admitted.administration.accounting];
+  const requests = new Map();
+  for (const meter of meters) for (const row of meter.requests) {
+    const key = identity(row), existing = requests.get(key);
+    if (!existing) requests.set(key, { ...row });
+    else for (const k of numbers.slice(1)) {
+      existing[k] += row[k]; need(count(existing[k]));
+    }
+  }
+  const total = channel => Object.fromEntries(totals.map(k => {
+    const n = meters[0][channel][k] + meters[1][channel][k]; need(count(n)); return [k, n];
+  }));
+  const producer = total('producer'), observer = total('observer');
+  const { storage, retainedStorage: tail } = admitted;
+  return { requests: [...requests.values()], producer, observer,
+    discrepancy: Object.fromEntries(totals.map(k => [k, observer[k] - producer[k]])),
+    storage: { status: 'measured', scope: 'unversioned-stream-and-cleanup',
+      windowSeconds: storage.windowSeconds + tail.windowSeconds,
+      remainingBytes: tail.remainingBytes, remainingObjects: tail.remainingObjects,
+      byteSeconds: { low: storage.byteSeconds.low + tail.byteSeconds.low, high: storage.byteSeconds.high + tail.byteSeconds.high } } };
+}

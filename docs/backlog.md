@@ -1272,8 +1272,13 @@ notifications separately.
   commit falls between request admission and the completed reply. The host requires
   those anonymous bounds, matching inventories and no remaining objects; private
   clock values stay inside the worker. Generated real-storage checks cover missing
-  bytes or objects, unfinished uploads and malformed handoffs. Complete
-  accounting/export, the full venue sample, the required
+  bytes or objects, unfinished uploads and malformed handoffs. The local stream
+  command also returns combined request accounting for native, observer, setup
+  and cleanup traffic. It keeps failures and retries, combines matching request
+  groups, refuses totals too large to represent exactly, and preserves both storage
+  bounds through verified deletion. The original counters remain available for
+  comparison. This covers the stream experiment; it does not qualify the full venue
+  cost. Complete accounting/export across the remaining drivers, the full venue sample, the required
   idle observation and the remaining public/staff journeys stay open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip

@@ -461,3 +461,29 @@ test('isolatedHostRefusesChangedRetainedStorageFromTheActualWorker', async t => 
   finally { fs.readFileSync = read; syncBuiltinESMExports(); }
   assert.equal(changed, true, 'read the changed storage total at the actual host boundary'); clean(f, before);
 });
+
+// Returning either meter alone undercounts the real local command, including its cleanup.
+test('localStreamCommandExportsCombinedRequestTotalsAndBothLifetimeBounds', async t => {
+  const f = await streamedFixture(t), before = fingerprint(f.database), command = localCommand(f);
+  const value = JSON.parse(readFileSync(command[3], 'utf8'));
+  value.stage = 'stream-replay'; value.stream = f.stream; writeFileSync(command[3], JSON.stringify(value));
+  const child = spawnSync(process.execPath, command, { env: { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' },
+    timeout: 150000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  assert.equal(child.status, 0); assert.equal(child.stderr, '');
+  const output = JSON.parse(child.stdout), combined = output.streamAccounting, stream = output.admission.stream;
+  assert.equal(output.costMeasured, false);
+  assert.ok(combined, 'publish native, observer, setup and cleanup accounting together');
+  for (const k of ['attempts', 'bytesIn', 'bytesOut']) {
+    assert.equal(combined.producer[k], stream.requests.accounting.producer[k] + stream.administration.accounting.producer[k]);
+    assert.equal(combined.observer[k], combined.producer[k]);
+    assert.equal(combined.discrepancy[k], 0);
+    assert.equal(combined.requests.reduce((n, row) => n + row[k], 0), combined.producer[k]);
+  }
+  for (const phase of ['startup', 'restore', 'observer', 'setup', 'cleanup'])
+    assert.ok(combined.requests.some(row => row.phase === phase && row.attempts > 0), 'retain phase ' + phase);
+  assert.equal(combined.storage.byteSeconds.low, stream.storage.byteSeconds.low + stream.retainedStorage.byteSeconds.low);
+  assert.equal(combined.storage.byteSeconds.high, stream.storage.byteSeconds.high + stream.retainedStorage.byteSeconds.high);
+  assert.equal(combined.storage.remainingBytes, 0); assert.equal(combined.storage.remainingObjects, 0);
+  assert.equal(/PRIVATE_|2026-|\/state|taxId|locationId|sha256:|ownership|journal/.test(child.stdout), false);
+  clean(f, before);
+});

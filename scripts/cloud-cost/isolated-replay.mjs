@@ -3,7 +3,7 @@ import { join, relative, isAbsolute } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { assertOwnedRoot } from './schema.mjs';
-import { validateStreamSettings, validateStreamAdmission } from './stream-admission.mjs';
+import { validateStreamSettings, validateStreamAdmission, summarizeStreamAccounting } from './stream-admission.mjs';
 import { validateReplayConfig } from './waitron-adapter.mjs';
 import { prepareIsolatedPrivateCopy, proveDockerIsolation, runForegroundContainer } from './local.mjs';
 
@@ -205,6 +205,9 @@ export async function runIsolatedReplay(input) {
       if (attempts.length) fail();
     }
   }
-  return { costMeasured: false, admission, isolation: { blockedConnections: isolation.blockedConnections,
+  return { costMeasured: false, admission,
+    ...(args.stream ? { streamAccounting: summarizeStreamAccounting(admission.stream,
+      { ...args.stream, expectedSales: args.expected.busiest }) } : {}),
+    isolation: { blockedConnections: isolation.blockedConnections,
     blockedDns: isolation.blockedDns, localControl: isolation.localControl }, cleanup: { workerContainers: 0, networks: 0, privateCopies: 0 } };
 }
