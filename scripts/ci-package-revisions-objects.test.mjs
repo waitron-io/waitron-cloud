@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
+import {execFileSync, spawnSync} from 'node:child_process';
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -178,3 +178,21 @@ export default (await import('data:text/javascript,' + encodeURIComponent(progra
     assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
   }));
 });
+
+test('large valid named-import programs keep bounded isolated planning', {timeout: 30000}, () => fixture(({root, write, commit, plan, workspace}) => {
+  const imports = Array.from({length: 12000}, (_, index) => `import {constants as value${index}} from 'node:fs';\n`).join('');
+  write('tools/reader.mts', imports + "import {readdirSync} from 'node:fs';\nexport default {n: 1};\n");
+  write('packages/portal/src/index.mjs', "import value from '../../../tools/reader.mts';\nconsole.log(value.n);\n");
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8', timeout: 5000}), '1\n');
+  const child = `import {scopeForRevisions} from ${JSON.stringify(new URL('./ci-package-revisions.mjs', import.meta.url).href)};
+import {execFileSync} from 'node:child_process';
+const git = (...args) => execFileSync('git', args, {encoding: 'utf8'});
+console.log(JSON.stringify(scopeForRevisions(['packages/catalogue/src/index.mjs'], ${JSON.stringify(workspace)}, '${base}', '${head}', git)));
+`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', child], {cwd: root, encoding: 'utf8', timeout: 5000});
+  assert.equal(result.status, 0, result.error?.code ?? result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {full: false, packages: ['catalogue']});
+}));

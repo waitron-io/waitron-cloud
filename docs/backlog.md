@@ -1785,7 +1785,11 @@ notifications separately.
   and resolved directory calls stay narrow in these controls. This lexical scan
   does not resolve bindings or parse general expressions; inert text and unrelated
   namesakes can still select extra work. General aliases, destructuring and precise
-  object/binding resolution remain open.
+  object/binding resolution remain open. A valid 12,000-import control executes
+  in Node and keeps saved-revision planning within a five-second child budget.
+  It reproduces a timeout when the new scan repeatedly checks import ranges and
+  copies the source; advancing through ranges and joining the result once passes
+  that same bound. This does not qualify arbitrary parser inputs or host load.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.

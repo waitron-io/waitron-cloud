@@ -40,13 +40,25 @@ function objectDirectorySource(source, quoted = false) {
   }
   // The source graph also follows quoted generated programs. Their static
   // import lists are not object values either; keep the rest of each token.
+  // Tokens and import ranges are ordered, so each import can be passed once.
+  const importRanges = [...ranges];
+  let importIndex = 0;
   if (!quoted) for (const token of tokens) {
-    if (!/^['"`]/.test(token[0]) || ranges.some(([start, end]) => token.index >= start && token.index < end)) continue;
+    if (!/^['"`]/.test(token[0])) continue;
+    while (importRanges[importIndex]?.[1] <= token.index) importIndex++;
+    if (importRanges[importIndex]?.[0] <= token.index) continue;
     const content = objectDirectorySource(token[0].slice(1, -1), true);
     if (content !== token[0].slice(1, -1)) ranges.push([token.index, token.index + token[0].length, token[0][0] + content + token[0].at(-1)]);
   }
-  for (const [start, end, replacement] of ranges.sort((a, b) => b[0] - a[0])) source = source.slice(0, start) + replacement + source.slice(end);
-  return source;
+  // Join disjoint pieces once instead of copying the source for every list.
+  const parts = [];
+  let cursor = 0;
+  for (const [start, end, replacement] of ranges.sort((a, b) => a[0] - b[0])) {
+    parts.push(source.slice(cursor, start), replacement);
+    cursor = end;
+  }
+  parts.push(source.slice(cursor));
+  return parts.join('');
 }
 
 function workspaceAt(sha, workspace, git) {
