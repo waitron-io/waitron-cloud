@@ -1256,7 +1256,17 @@ notifications separately.
   altered worker evidence. The local command accepts an explicit `stream-replay`
   configuration stage alongside `replay-admission`; both still return
   `costMeasured: false`. Generated local checks cover success, cancellation, deadlines
-  and changed output. Complete accounting/export, the full venue sample, the required
+  and changed output. Worker storage cleanup now distinguishes a refused creation
+  from a committed bucket whose result was lost. It checks the owned bucket directly
+  before cleanup and after deletion because a bucket listing can omit a just-created
+  bucket. Incomplete inventories, permission failures and false deletion successes
+  refuse evidence and retain the private storage directory after collecting the backend.
+  [Generated local storage checks](../scripts/cloud-cost/fixtures/worker-storage-conformance.test.mjs)
+  exercise real objects and unfinished uploads, cancellation and malformed cleanup
+  replies while keeping setup and cleanup request counters reconciled. Cancellation
+  stops new setup requests and prevents a ready result after the final response;
+  cleanup uses its own bounded signal. Complete
+  accounting/export, including retained storage through cleanup, the full venue sample, the required
   idle observation and the remaining public/staff journeys stay open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip

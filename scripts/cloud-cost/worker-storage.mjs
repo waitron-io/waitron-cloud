@@ -22,7 +22,10 @@ export async function openWorkerStorage(args) {
   };
   const healthy = () => need(!signal?.aborted && !exited && !bad);
   let cleanupSignal;
-  const send = command => { assertOwnedRoot(args); return client.send(command, { abortSignal: cleanupSignal ?? signal }); };
+  const send = command => {
+    assertOwnedRoot(args); if (!cleanupSignal) healthy();
+    return client.send(command, { abortSignal: cleanupSignal ?? signal });
+  };
   const makeClient = phase => {
     const value = new sdk.S3Client({ endpoint: proxy.url, region: 'eu-north-1', forcePathStyle: true, maxAttempts: 1,
       requestHandler: { connectionTimeout: 1000, requestTimeout: 2000 }, credentials: { accessKeyId: 'SYNTHETIC', secretAccessKey: 'SYNTHETIC' } });
@@ -48,20 +51,36 @@ export async function openWorkerStorage(args) {
     const result = await send(new sdk.ListMultipartUploadsCommand({ Bucket: bucket, MaxUploads: 1000 }));
     need(result.IsTruncated === false && Array.isArray(result.Uploads ?? [])); return result.Uploads ?? [];
   };
+  const bucketPresent = async () => {
+    let result;
+    try { result = await send(new sdk.HeadBucketCommand({ Bucket: bucket })); }
+    catch (error) { if (error.$metadata?.httpStatusCode === 404) return false; throw error; }
+    need(result.$metadata?.httpStatusCode === 200); return true;
+  };
+  const bucketInventory = async () => {
+    const result = await send(new sdk.ListBucketsCommand({}));
+    need(result.ContinuationToken === undefined && Array.isArray(result.Buckets ?? [])
+      && (result.Buckets ?? []).every(b => typeof b?.Name === 'string' && b.Name.length > 0));
+    return result.Buckets ?? [];
+  };
   const dispose = () => disposal ??= (async () => {
     cleanupSignal = AbortSignal.timeout(10000);
     if (proxy) { client?.destroy(); client = makeClient('cleanup'); }
     const failures = []; const attempt = async fn => { try { await fn(); } catch { failures.push(true); } };
     if (created) await attempt(async () => {
       assertOwnedRoot(args); record({ kind: 'storage-bucket', state: 'cleanup-intent', bucket });
-      for (const row of await uploads()) {
-        need(typeof row.Key === 'string' && row.Key.startsWith('stream/') && typeof row.UploadId === 'string' && row.UploadId.length > 0);
-        await send(new sdk.AbortMultipartUploadCommand({ Bucket: bucket, Key: row.Key, UploadId: row.UploadId }));
+      // Bucket lists can omit a created bucket; only the owned bucket's direct 404 proves absence.
+      await bucketInventory();
+      if (await bucketPresent()) {
+        for (const row of await uploads()) {
+          need(typeof row.Key === 'string' && row.Key.startsWith('stream/') && typeof row.UploadId === 'string' && row.UploadId.length > 0);
+          await send(new sdk.AbortMultipartUploadCommand({ Bucket: bucket, Key: row.Key, UploadId: row.UploadId }));
+        }
+        for (const row of await listObjects()) await send(new sdk.DeleteObjectCommand({ Bucket: bucket, Key: row.Key }));
+        need((await listObjects()).length === 0 && (await uploads()).length === 0);
+        await send(new sdk.DeleteBucketCommand({ Bucket: bucket }));
       }
-      for (const row of await listObjects()) await send(new sdk.DeleteObjectCommand({ Bucket: bucket, Key: row.Key }));
-      need((await listObjects()).length === 0 && (await uploads()).length === 0);
-      await send(new sdk.DeleteBucketCommand({ Bucket: bucket }));
-      const found = await send(new sdk.ListBucketsCommand({})); need(!(found.Buckets ?? []).some(b => b.Name === bucket));
+      need(!await bucketPresent() && !(await bucketInventory()).some(b => b.Name === bucket));
       record({ kind: 'storage-bucket', state: 'removed', bucket }); created = false;
     });
     let counters;
@@ -112,6 +131,7 @@ export async function openWorkerStorage(args) {
     record({ kind: 'storage-bucket', state: 'intent', bucket }); created = true;
     await send(new sdk.CreateBucketCommand({ Bucket: bucket }));
     need((await listObjects()).length === 0 && (await uploads()).length === 0);
+    healthy();
     record({ kind: 'storage-bucket', state: 'ready', bucket });
     return { target, bucket, finish: async () => {
       if (evidence) return structuredClone(evidence);
