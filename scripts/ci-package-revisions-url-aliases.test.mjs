@@ -63,7 +63,7 @@ const aliases = [
 test('URL declaration aliases retain executed immediate helper consumers', async t => {
   for (const [index, [name, declarations]] of aliases.entries()) {
     const api = apis[index % apis.length];
-    await t.test(`${api} ${name}`, () => fixture(({root, git, write, commit, workspace}) => {
+    await t.test(`${api} ${name}`, () => fixture(({root, git, write, commit, plan, workspace}) => {
       write('catalogue-adapter.mjs', helper);
       write('nested/unrelated-adapter.mjs', "import '../packages/unrelated/src/index.mjs';\n");
       write('packages/portal/src/scan.mts', reader(api, declarations).replace('statement */\nfor', 'statement */for'));
@@ -71,10 +71,16 @@ test('URL declaration aliases retain executed immediate helper consumers', async
       write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
       const head = commit();
       assert.equal(execute(root), 'aliased directory helper loaded\n');
-      assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
-        {full: false, packages: ['catalogue', 'portal']});
-      assert.deepEqual(scopeForRevisions(['packages/unrelated/src/index.mjs'], workspace, base, head, git),
-        {full: false, packages: ['unrelated']});
+      if (name === 'escaped and typed') {
+        assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
+        assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+        assert.throws(() => scopeForRevisions(['packages/unrelated/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
+      } else {
+        assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
+          {full: false, packages: ['catalogue', 'portal']});
+        assert.deepEqual(scopeForRevisions(['packages/unrelated/src/index.mjs'], workspace, base, head, git),
+          {full: false, packages: ['unrelated']});
+      }
     }));
   }
 });
@@ -124,14 +130,19 @@ test('unused aliases, unrelated names and local alias reads keep narrow selectio
     ['local alias', "const original = new URL('./', import.meta.url); const directory = original; readdirSync(directory);"],
     ['prefix of an expression', "const original = new URL('../../../', import.meta.url); const directory = original.pathname + 'packages/portal/src/'; readdirSync(directory);"],
     ['working directory', "const original = new URL('../../../', import.meta.url); const directory = original; const command = {cwd: directory};"],
-  ]) await t.test(name, () => fixture(({root, git, write, commit, workspace}) => {
+  ]) await t.test(name, () => fixture(({root, git, write, commit, plan, workspace}) => {
     write('catalogue-adapter.mjs', helper);
     write('packages/portal/src/scan.mts', "import {readdirSync} from 'node:fs';\n" + source);
     const base = commit();
     write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
     const head = commit();
     assert.equal(execute(root), '');
-    assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
-      {full: false, packages: ['catalogue']});
+    if (name === 'prefix of an expression') {
+      assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
+      assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+    } else {
+      assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
+        {full: false, packages: ['catalogue']});
+    }
   }));
 });

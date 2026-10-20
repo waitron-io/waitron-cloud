@@ -70,18 +70,24 @@ test('later URL constructor assignments retain helpers actually loaded by each d
       write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
       const head = commit();
       assert.equal(execute(root), 'aliased directory helper loaded\n');
-      assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
-        {full: false, packages: ['catalogue', 'portal']});
-      assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'portal']);
-      assert.deepEqual(scopeForRevisions(['packages/unrelated/src/index.mjs'], workspace, base, head, git),
-        {full: false, packages: ['unrelated']});
+      if (['used default parameter', 'comments and trailing comma', 'parenthesized constructor assignment'].includes(name)) {
+        assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
+        assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+        assert.throws(() => scopeForRevisions(['packages/unrelated/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
+      } else {
+        assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
+          {full: false, packages: ['catalogue', 'portal']});
+        assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'portal']);
+        assert.deepEqual(scopeForRevisions(['packages/unrelated/src/index.mjs'], workspace, base, head, git),
+          {full: false, packages: ['unrelated']});
+      }
     }));
   }
 });
 
 test('assigned URL constructors retain saved old and new transitive consumers', async t => {
   for (const [revision, change] of [['base', 'edit'], ['base', 'delete'], ['head', 'add'], ['head', 'edit']]) {
-    await t.test(`${revision} ${change}`, () => fixture(({root, git, write, commit, workspace}) => {
+    await t.test(`${revision} ${change}`, () => fixture(({root, git, write, commit, plan, workspace}) => {
       if (change !== 'add') write('catalogue-adapter.mjs', helper);
       const active = reader('readdirSync', assignments[2][1]).replaceAll('../../../', '../');
       write('tools/scan.mts', revision === 'base' ? active : 'export const inert = true;\n');
@@ -97,8 +103,8 @@ test('assigned URL constructors retain saved old and new transitive consumers', 
       if (revision === 'head') assert.equal(execute(root), 'aliased directory helper loaded\n');
       write('tools/scan.mts', 'export const dirty = true;\n');
       write('catalogue-adapter.mjs', 'export const dirty = true;\n');
-      assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
-        {full: false, packages: ['catalogue', 'gateway', 'portal']});
+      assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git), /Unresolved directory input at tools\/scan\.mts/);
+      assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
     }));
   }
 });
@@ -125,15 +131,20 @@ test('unused assignments, different names and local assigned reads keep narrow s
     ['expression prefix', "const original = new URL('../../../', import.meta.url); let directory; directory = original.pathname + 'packages/portal/src/'; readdirSync(directory);"],
     ['working directory', assignments[2][1] + ' const command = {cwd: directory};'],
     ['numeric prefix in inert text', "const original = new URL('../../../', import.meta.url); const directory = new URL('./', import.meta.url); // 1directory = original;\nreaddirSync(directory);"],
-  ]) await t.test(name, () => fixture(({root, git, write, commit, workspace}) => {
+  ]) await t.test(name, () => fixture(({root, git, write, commit, plan, workspace}) => {
     write('catalogue-adapter.mjs', helper);
     write('packages/portal/src/scan.mts', "import {readdirSync} from 'node:fs';\n" + source);
     const base = commit();
     write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
     const head = commit();
     assert.equal(execute(root), '');
-    assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
-      {full: false, packages: ['catalogue']});
+    if (['expression prefix', 'numeric prefix in inert text', 'different scanned name'].includes(name)) {
+      assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
+      assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+    } else {
+      assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
+        {full: false, packages: ['catalogue']});
+    }
   }));
 });
 

@@ -37,7 +37,7 @@ function fixture(run) {
 test('comments in directory calls retain consumers of helpers Node actually loads', () => {
   for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
     for (const binding of ['direct', 'stored']) for (const gap of ['/* scan */', '// scan\n']) {
-      fixture(({root, git, write, commit}) => {
+      fixture(({root, git, write, commit, plan}) => {
         write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('commented helper loaded');\n");
         write('nested/unrelated-adapter.mjs', "import '../packages/unrelated/src/index.mjs';\n");
         const directory = `new${gap} URL${gap}(${gap}'../../../'${gap},${gap}import.meta.url${gap},${gap})`;
@@ -52,10 +52,16 @@ for await (const item of await ${api}${gap}(${gap}${binding === 'direct' ? direc
         write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
         const head = commit();
         assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'commented helper loaded\n');
-        assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
-          {full: false, packages: ['catalogue', 'portal']}, `${api} ${binding} ${gap}`);
-        assert.deepEqual(scopeForRevisions(['packages/unrelated/src/index.mjs'], loadWorkspace(root), base, head, git),
-          {full: false, packages: ['unrelated']}, `${api} ${binding} ${gap}`);
+        if (binding === 'stored') {
+          assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git), /Unresolved directory input/);
+          assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+          assert.throws(() => scopeForRevisions(['packages/unrelated/src/index.mjs'], loadWorkspace(root), base, head, git), /Unresolved directory input/);
+        } else {
+          assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+            {full: false, packages: ['catalogue', 'portal']}, `${api} ${binding} ${gap}`);
+          assert.deepEqual(scopeForRevisions(['packages/unrelated/src/index.mjs'], loadWorkspace(root), base, head, git),
+            {full: false, packages: ['unrelated']}, `${api} ${binding} ${gap}`);
+        }
       });
     }
   }
@@ -149,12 +155,15 @@ test('a run of block comments cannot trap package selection in backtracking', ()
   const head = commit();
   const members = loadWorkspace(root);
   const program = `import {execFileSync} from 'node:child_process';
-import {scopeForRevisions} from ${JSON.stringify(new URL('./ci-package-revisions.mjs', import.meta.url).href)};
+import {createPlan} from ${JSON.stringify(new URL('./ci-plan.mjs', import.meta.url).href)};
 const git = (...args) => execFileSync('git', args, {encoding: 'utf8'});
-console.log(JSON.stringify(scopeForRevisions(['packages/catalogue/src/index.mjs'], ${JSON.stringify(members)}, '${base}', '${head}', git)));
+const plan = createPlan({pull_request: {base: {sha: '${base}'}, head: {sha: '${head}'}}}, {sha: '${head}'}, ${JSON.stringify(members)}, git, () => {throw Error('No API expected');});
+console.log(JSON.stringify({packages: plan.packages.map(row => row.package), reason: plan.reason}));
 `;
-  assert.deepEqual(JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', program],
-    {cwd: root, encoding: 'utf8', timeout: 10_000})), {full: false, packages: ['catalogue']});
+  const result = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', program],
+    {cwd: root, encoding: 'utf8', timeout: 10_000}));
+  assert.deepEqual(result.packages, ['catalogue', 'gateway', 'portal', 'unrelated']);
+  assert.match(result.reason, /Unresolved directory input/);
 }));
 
 test('directory import aliases retain consumers of helpers Node actually loads', () => {

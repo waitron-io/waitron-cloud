@@ -141,7 +141,10 @@ test('escaped URL labels without a repository root read keep consumers narrow', 
       const base = commit();
       write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
       assert.equal(execute(root), '');
-      assert.deepEqual(plan(base, commit()).packages.map(row => row.package), ['catalogue']);
+      const result = plan(base, commit());
+      assert.deepEqual(result.packages.map(row => row.package),
+        ['other-constructor', 'other-type-local'].includes(operation) ? ['catalogue', 'gateway', 'portal', 'unrelated'] : ['catalogue']);
+      if (['other-constructor', 'other-type-local'].includes(operation)) assert.match(result.reason, /Unresolved directory input/);
     }));
   }
 });

@@ -1387,31 +1387,31 @@ notifications separately.
   cover all four directory APIs, saved old and new transitive consumers, dirty
   local files and audited lock changes. Root options keep every package; unused
   inputs, local reads and identifier suffixes stay narrow in the controls.
-  Parentheses around a URL constructor or alias value now preserve immediate
-  root-helper consumers, including nested parentheses, declaration and later
-  assignment chains, used function/arrow default parameters, comments, escaped
-  names and the supported URL type label.
-  Executed checks cover all four directory APIs, both saved revisions, transitive
-  consumers, dirty local files and audited lock changes. Root options retain
-  every package; unused inputs, local reads and alias property suffixes keep
-  narrow selection in the controls. The scan combines names across scopes and
-  can select extra work from overwritten values or inert text; it does not parse
-  general expressions. TypeScript `as URL` and non-null `!` assertions,
-  destructuring, logical assignment and parentheses around the reader argument
-  still need resolution. Executed probes
-  in the preceding task loaded a helper through `as URL` and `!`, while both
-  its captured base and candidate scanner omitted that consumer. Those forms
-  remain explicit D69 gaps. Property assignments, inert comments or strings and
-  unused default parameters can add a direct root input or alias edge and select
-  extra work without a runtime directory consumer. Used default parameters and
-  declaration assignment chains retain their consumers in executed controls.
-  Planning cost for malformed comment-heavy sources remains unverified; this task
-  qualifies the existing large valid-source scaling controls.
-  Binding identity remains unverified, and reused names or inert text can retain
-  extra work. An out-of-range escape inside an inert comment, such as
-  `// readdirSync(\u{110000})`, also makes both scanners throw while Node accepts
-  the comment. The package planner catches that error and keeps full package work;
-  the probe does not qualify the audited-lock path for this malformed input.
+  D69 closes under the owner's 2026-10-20 decision: run all when unsure.
+  The historical design and measurements below do not require another syntax
+  extension or a cost target before closure. More precise selection remains
+  optional efficiency work; preserve the conservative fallback.
+  Every direct directory read must resolve through an admitted URL constructor
+  or its supported bindings and aliases. An unresolved argument, unknown value
+  transfer, unrecognised reassignment or other use of a URL binding prevents
+  package narrowing. A matching outer declaration cannot qualify a different
+  parameter, and a URL object may change through another reference. Assignments
+  inside parentheses, opaque literal programs and unknown alias sources also
+  prevent proof. Executed controls cover all six same-name review probes and
+  their audited-lock paths. This refuses uncertainty without resolving more forms. The planner
+  then keeps every package suite and names the saved source path. Audited lock
+  changes also keep full work through their existing fallback. Both saved trees
+  are checked, so a removed reader and dirty local files cannot hide a consumer.
+  Ordinary resolved reads keep narrow selection in the executed controls.
+  In the current repository, `packages/account-http/test/fixtures/fiscal-waitron-bridge.mjs`
+  computes a journal directory that this scan cannot prove. Package-only changes
+  therefore retain all packages, including portal changes. Do not add another
+  special case to recover that saving; the owner accepts the wider fallback.
+  This deliberately trades additional work for retaining tests. Do not extend
+  the syntax recogniser one written form at a time; an uncertain form takes the
+  fallback. Precise binding resolution and generated-input analysis are optional
+  future efficiency work, outside the closed D69 task. This source scan can also
+  select extra work for inert text and reused names.
   Storing a root command working directory alone adds
   no helper inputs. An existence check alone also adds no root helpers, and a
   shared helper scanning its own directory does not scan the repository root.
@@ -1440,7 +1440,7 @@ notifications separately.
   despite dirty local files. Audited lock changes retain those consumers too.
   Recursive root options keep full package work; non-root options and root
   command directories stay narrow in the controls. This remains a bounded source
-  scan; other unsupported URL expressions still need qualification. The immediate-entry rule also covers `readdir` from
+  scan; unresolved URL inputs keep full work. The immediate-entry rule also covers `readdir` from
   `node:fs/promises`, `opendir` and `opendirSync`, directly or through a supported
   URL declaration. Executed scans retain the loaded helper consumer without
   traversing nested directories; saved shared-helper readers from either revision
@@ -1582,7 +1582,7 @@ notifications separately.
   keep narrow package work in the controls. This conservative scan does not
   evaluate conditions or resolve member identities, so inert text and unrelated
   members with directory API names can select extra work. General expression
-  parsing and precise directory resolution remain open. Quoted and commented
+  parsing and precise directory resolution are optional efficiency work. Quoted and commented
   predecessors now retain stored readers too, including
   `[';', ñs.readdirSync, null][1]` and `[[], 'a;b', ñs.readdirSync, null][2]`.
   Executed Node controls cover all four directory APIs, single/double/template
@@ -1613,12 +1613,12 @@ notifications separately.
   unfinished work cannot establish success. Controlled workflow execution covers
   a future matching file, both additional selectors and failing checks.
   Each work job retains its eight-minute cap. Whole-run timing and the owner's
-  five-minute work-job/about-ten-minute total goal remain D69 acceptance checks;
+  five-minute work-job/about-ten-minute total goal needs measured CI evidence;
   a passing local run does not establish hosted-runner duration.
   It does not resolve template substitutions, division
   versus regular expressions, array membership or receiver identities. Unrelated
-  expressions and inert text can select extra work; unsupported expressions can
-  still hide real readers. Executed base/head planner probes cover division
+  expressions and inert text can select extra work; unresolved directory-call inputs
+  retain full package work. Executed base/head planner probes cover division
   between the quoted value and stored reader, but do not establish completeness.
   Logical assignments (`||=`, `??=` and `&&=`) and awaited logical or
   conditional operands now retain every package suite. These operators can
@@ -1870,7 +1870,7 @@ notifications separately.
   reader exports, quoted text such as `'{readdirSync}'` and generated import text
   with escaped quotes can still select extra work. Executed base/final probes
   record these conservative cases; precise binding and generated-code resolution
-  remain D69 work. Call arguments ending in a comma now retain full package
+  are optional efficiency follow-ups outside D69. Call arguments ending in a comma now retain full package
   work when they transfer a directory reader. Executed Node controls cover all
   four APIs, first/middle/trailing-comma arguments, nested preceding values,
   namespace members, comments, optional access, erased non-null assertions and
@@ -1912,8 +1912,8 @@ notifications separately.
   Existing assertions and reader-audit
   certificates are unchanged. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain
-  unresolved. This does not complete the plan's dynamic input and directory rules. Identity still selects all nine packages in the current graph;
-  portal alone remains isolated. Unaudited root, unknown and empty changes run everything.
+  conservative. The owner closed D69 with the run-all fallback; more precise dynamic-input selection is optional future work. Identity still selects all nine packages in the current graph;
+  portal-only changes now retain full package work when any saved reader is unresolved. Unaudited root, unknown and empty changes run everything.
   Type checking stays whole-workspace. The root command compiles the shared
   backend configuration once, then runs the portal and UI-smoke configurations.
   The seven backend package commands use the same root configuration, so repeating
@@ -2042,8 +2042,9 @@ notifications separately.
   9m02s in account HTTP before this split. The package logs counted 1,476 tests;
   compare the sum of every shard's count with each package's original count.
   Whole-package coverage must remain whole-package if a package later enables it.
-  Before you push, run the complete suites of every changed package and its
-  dependents locally; changes to shared configuration need all package suites.
+  Run focused local checks while implementing; CI owns mandatory package suites
+  under the owner's 2026-10-18 decision. Check every job on the exact PR head
+  and the independent main run.
   On an 18-core local runner, the unsplit registration suite exhausts PostgreSQL's
   shared lock table while resetting disposable schemas (`53200: out of shared
   memory`). For a full local package run, put `--test-concurrency=2` before the

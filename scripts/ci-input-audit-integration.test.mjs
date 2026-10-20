@@ -86,7 +86,7 @@ test('complete candidate audits independently pin all ten current manifests and 
   for (const [path, content] of saved) assert.equal(read(path), content);
 }));
 
-test('one audited committed baseline admits isolated docs scripts and locks while mixed and new readers stay full', () => completeFixture(({root, git, read, write, node, commit, renew}) => {
+test('one audited committed baseline admits isolated docs and scripts while unresolved lock readers stay full', () => completeFixture(({root, git, read, write, node, commit, renew}) => {
   rmSync(join(root, 'docs/ci-lockfile-audit.md'), {force: true});
   write('docs/audit-control-prose.md', 'Independent fixture prose.\n');
   write('docs/audit-control-deleted-prose.md', 'Independent deletion fixture.\n');
@@ -140,8 +140,10 @@ test('one audited committed baseline admits isolated docs scripts and locks whil
       write(path, {...manifest, devDependencies: {...manifest.devDependencies, 'audit-control': '^1.0.0'}});
     }
     const {selected} = plan(commit());
-    assert.match(selected.reason, /audited package selection/);
-    assert.deepEqual(selected.packages, [{package: '@waitron-cloud/ui-smoke', shard: 1}]);
+    assert.match(selected.reason, /full suite retained until root readers are covered/);
+    assert.deepEqual([...new Set(selected.packages.flatMap(row => row.members ?? [row.package]))].sort(),
+      ['@waitron-cloud/account-http', '@waitron-cloud/backups', '@waitron-cloud/fiscal-allocation', '@waitron-cloud/identity',
+        '@waitron-cloud/operations', '@waitron-cloud/portal', '@waitron-cloud/registration', '@waitron-cloud/remote-access', '@waitron-cloud/translation', '@waitron-cloud/ui-smoke']);
     assert.equal(selected.typecheck, true); assert.deepEqual(selected.receipts, receipts);
   }
   for (const paths of [
