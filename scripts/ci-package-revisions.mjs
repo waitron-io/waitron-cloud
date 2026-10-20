@@ -373,8 +373,14 @@ function workspaceAt(sha, workspace, git) {
 }
 
 export function scopeForRevisions(paths, workspace, base, head, git) {
-  const before = workspaceAt(base, workspace, git);
-  const after = workspaceAt(head, workspace, git);
+  // Each saved revision has independent evidence. Keep both batch reads even
+  // when one refuses narrowing, then preserve the first refusal for the caller.
+  const snapshots = [base, head].map(sha => {
+    try { return {packages: workspaceAt(sha, workspace, git)}; }
+    catch (error) { return {error}; }
+  });
+  for (const snapshot of snapshots) if (Object.hasOwn(snapshot, 'error')) throw snapshot.error;
+  const [before, after] = snapshots.map(snapshot => snapshot.packages);
   const combined = after.map(pkg => {
     const previous = before.find(other => other.name === pkg.name);
     const dependencies = Object.assign({}, ...[previous, pkg].flatMap(member =>

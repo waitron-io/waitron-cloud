@@ -37,7 +37,7 @@ function fixture(run) {
 test('comments in directory calls retain consumers of helpers Node actually loads', () => {
   for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
     for (const binding of ['direct', 'stored']) for (const gap of ['/* scan */', '// scan\n']) {
-      fixture(({root, git, write, commit}) => {
+      fixture(({root, git, write, commit, plan}) => {
         write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('commented helper loaded');\n");
         write('nested/unrelated-adapter.mjs', "import '../packages/unrelated/src/index.mjs';\n");
         const directory = `new${gap} URL${gap}(${gap}'../../../'${gap},${gap}import.meta.url${gap},${gap})`;
@@ -52,10 +52,16 @@ for await (const item of await ${api}${gap}(${gap}${binding === 'direct' ? direc
         write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
         const head = commit();
         assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'commented helper loaded\n');
-        assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
-          {full: false, packages: ['catalogue', 'portal']}, `${api} ${binding} ${gap}`);
-        assert.deepEqual(scopeForRevisions(['packages/unrelated/src/index.mjs'], loadWorkspace(root), base, head, git),
-          {full: false, packages: ['unrelated']}, `${api} ${binding} ${gap}`);
+        if (binding === 'stored') {
+          assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git), /Unresolved directory input/);
+          assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+          assert.throws(() => scopeForRevisions(['packages/unrelated/src/index.mjs'], loadWorkspace(root), base, head, git), /Unresolved directory input/);
+        } else {
+          assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+            {full: false, packages: ['catalogue', 'portal']}, `${api} ${binding} ${gap}`);
+          assert.deepEqual(scopeForRevisions(['packages/unrelated/src/index.mjs'], loadWorkspace(root), base, head, git),
+            {full: false, packages: ['unrelated']}, `${api} ${binding} ${gap}`);
+        }
       });
     }
   }
