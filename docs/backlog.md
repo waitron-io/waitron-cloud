@@ -1133,7 +1133,20 @@ notifications separately.
   counts, not measured stream volumes. One repeat detected a source-file fingerprint
   change; later passive samples, an instrumented repeat and the final selection
   were unchanged, leaving that transient unexplained.
-  Isolated full replay, idle measurement and a complete cost export remain open.
+  A [foreground replay stage](../scripts/cloud-cost/private-replay.mjs) now joins both count checks, saved-clock selection,
+  translation and the normal sale writer. It verifies the completed fiscal chain,
+  compares logical database pages before and after replay, and removes its owned
+  replay state before returning. The copied database baseline remains separate
+  from fresh-database growth. All 207 selected sales complete through the normal
+  writer in an isolated accelerated proof, with final integrity and unchanged-source
+  checks. This does not measure stream traffic or a continuously observed day.
+  [Generated-source checks](../scripts/cloud-cost/fixtures/private-replay-conformance.test.mjs) cover interruption, failed
+  writes and verification, replaced destinations and rejected asynchronous progress
+  callbacks. The private journal records creation and removal before each change.
+  A read-only replay container needs writable temporary space for SQLite;
+  a generated spill-to-disk check catches a missing temporary directory.
+  The complete storage measurement, idle period, foreground controller and CLI,
+  public/staff journeys and full cost export remain open.
   The pure calculations now cover aggregate request
   tiers, explicit resource capacities, dated growth and calendar retention, including
   protected recovery copies. Synthetic local HTTP checks reconcile retries, denied

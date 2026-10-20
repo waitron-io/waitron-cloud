@@ -13,6 +13,7 @@ export { openFiscalMeasurement } from './fiscal.mjs';
 export { openMailMeasurement } from './mail.mjs';
 export { replayScheduledSales } from './cadence.mjs';
 export { prepareReplayDay } from './replay-day.mjs';
+export { replayPrivateDay } from './private-replay.mjs';
 
 const fail = () => { throw new Error('Invalid cloud cost local run'); };
 const requireThat = value => { if (!value) fail(); };
