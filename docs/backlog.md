@@ -1795,8 +1795,8 @@ notifications separately.
   namespace members, comments, optional access, erased non-null assertions and
   awaited values. Saved base, head and unchanged helpers retain transitive
   consumers despite dirty local files; audited lock changes retain full work
-  with these readers. Generated programs and a transfer inside division tokens
-  retain their executed consumers. Unused helpers, ordinary arguments, static
+  with these readers. Generated programs, a transfer inside division tokens
+  and division in neighboring arguments retain their executed consumers. Unused helpers, ordinary arguments, static
   named imports and resolved directory calls keep narrow work in the controls;
   separate inert quoted fragments cannot combine into a transfer. This lexical
   scan does not resolve bindings or distinguish parameter declarations and

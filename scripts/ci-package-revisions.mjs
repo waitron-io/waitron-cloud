@@ -20,7 +20,7 @@ function arrayDirectorySource(source) {
   return source + '\n;\n' + source.replace(tokens, token => token.replace(/[\[\]{};]/g, ' '));
 }
 
-function hasDirectoryReference(source, context, quoted = false) {
+function hasDirectoryReference(source, context, quoted = false, delimiters = []) {
   // Ordinary quoted values need no token scan when they contain no reader name.
   if (!/(?:readdirSync|readdir|opendirSync|opendir)/.test(source)) return false;
   // Import lists bind names without storing runtime objects. Skip only complete
@@ -44,14 +44,15 @@ function hasDirectoryReference(source, context, quoted = false) {
   // and array entries. Generated programs have their own stack, so separate
   // fragments cannot combine into a reference.
   let importIndex = 0;
-  const delimiters = [];
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
     while (ranges[importIndex]?.[1] <= token.index) importIndex++;
     if (ranges[importIndex]?.[0] <= token.index) continue;
     const value = token[0];
-    // A slash token may be division around live code; inspect its contents too.
-    if (!quoted && /^['"`/]/.test(value) && hasDirectoryReference(value.slice(1, -1), context, true)) return true;
+    // A slash token may be division inside an argument list. Preserve that
+    // surrounding context; quoted programs start with their own delimiter stack.
+    if (!quoted && /^['"`/]/.test(value) && hasDirectoryReference(value.slice(1, -1), context, true,
+      value.startsWith('/') ? [...delimiters] : [])) return true;
     if (['{', '[', '('].includes(value)) delimiters.push(value);
     else if (['}', ']', ')'].includes(value)) delimiters.pop();
     else if (/^(?:readdirSync|readdir|opendirSync|opendir)$/.test(value) &&

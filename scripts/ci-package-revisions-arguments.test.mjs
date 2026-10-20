@@ -161,3 +161,16 @@ export const value = 1;`);
   write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
   assert.deepEqual(plan(base, commit()).packages.map(row => row.package), ['catalogue']);
 }));
+
+test('division in neighboring arguments cannot hide a transferred reader', async t => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) await t.test(api, () => fixture(({root, write, commit, plan}) => {
+    write('catalogue-adapter.mjs', helper);
+    write('tools/reader.mts', reader(api, '0 / 1, API, 2 / 1'));
+    write('packages/portal/src/reader.mts', consumer);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'argument helper loaded\n');
+    assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
+  }));
+});
