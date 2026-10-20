@@ -252,7 +252,7 @@ function workspaceAt(sha, workspace, git) {
         if (!aliases.has(name)) aliases.set(name, new Set());
         aliases.get(name).add(directoryIdentifier(match[1]));
       }
-      for (const match of source.source.matchAll(directoryURLPattern(/(?:\b(?:const|let|var)\s+|,\s*)((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*(?::\s*URL\s*)?=\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)/gu))) {
+      for (const match of source.source.matchAll(directoryURLPattern(/(?<![$\p{ID_Continue}\\])((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*(?::\s*URL\s*)?=\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)/gu))) {
         const names = new Set([directoryIdentifier(match[1])]);
         // The visited set bounds cycles and follows transfers in either order.
         for (const name of names) {
