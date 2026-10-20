@@ -1761,9 +1761,11 @@ notifications separately.
   local files; audited lock changes retain full work with these readers. Unused
   helpers, ordinary return values and resolved directory calls keep narrow selection
   in the controls. These lexical checks do not resolve bindings or parse general
-  expressions; inert text or an unrelated namesake can select extra work.
-  General assignment, destructuring aliases and other unresolved reader forms
-  remain open.
+  expressions; inert text, unrelated namesakes or a call continued on the next
+  line can select extra work. General assignment, destructuring aliases and other
+  unresolved reader forms remain open. An executed remaining gap is a generator
+  with `yield ns.readdirSync }`: Node loads the directory's helper through the
+  yielded reader, but both the earlier and current planner omit its consumer.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.

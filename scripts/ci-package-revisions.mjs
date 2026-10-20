@@ -116,8 +116,8 @@ function workspaceAt(sha, workspace, git) {
         `Unresolved indirect directory call at ${source.path}`);
       assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|(?:,\s*)?\]|\)|;|<|satisfies\b)|(?:!\s*)+\()/),
         `Unresolved indirect directory call at ${source.path}`);
-      // Assignments, returns and default exports can preserve a reader for
-      // a later call. A closing brace can end a class field; requiring a value
+      // Assignments, arrow results, block returns and default exports can preserve
+      // a reader for a later call. A brace can end a field or block; requiring a value
       // expression keeps ordinary named imports narrow without resolving bindings.
       assert.doesNotMatch(source.source, directoryPattern(/(?:=>|=|\breturn\b|\bexport\s+default)\s*(?:await\s+)*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b\s*(?:!\s*)*(?:,|\}|[\r\n\u2028\u2029]|\/\/|$)/u),
         `Unresolved indirect directory call at ${source.path}`);
