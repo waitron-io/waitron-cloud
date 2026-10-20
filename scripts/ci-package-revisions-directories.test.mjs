@@ -149,12 +149,15 @@ test('a run of block comments cannot trap package selection in backtracking', ()
   const head = commit();
   const members = loadWorkspace(root);
   const program = `import {execFileSync} from 'node:child_process';
-import {scopeForRevisions} from ${JSON.stringify(new URL('./ci-package-revisions.mjs', import.meta.url).href)};
+import {createPlan} from ${JSON.stringify(new URL('./ci-plan.mjs', import.meta.url).href)};
 const git = (...args) => execFileSync('git', args, {encoding: 'utf8'});
-console.log(JSON.stringify(scopeForRevisions(['packages/catalogue/src/index.mjs'], ${JSON.stringify(members)}, '${base}', '${head}', git)));
+const plan = createPlan({pull_request: {base: {sha: '${base}'}, head: {sha: '${head}'}}}, {sha: '${head}'}, ${JSON.stringify(members)}, git, () => {throw Error('No API expected');});
+console.log(JSON.stringify({packages: plan.packages.map(row => row.package), reason: plan.reason}));
 `;
-  assert.deepEqual(JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', program],
-    {cwd: root, encoding: 'utf8', timeout: 10_000})), {full: false, packages: ['catalogue']});
+  const result = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', program],
+    {cwd: root, encoding: 'utf8', timeout: 10_000}));
+  assert.deepEqual(result.packages, ['catalogue', 'gateway', 'portal', 'unrelated']);
+  assert.match(result.reason, /Unresolved directory input/);
 }));
 
 test('directory import aliases retain consumers of helpers Node actually loads', () => {

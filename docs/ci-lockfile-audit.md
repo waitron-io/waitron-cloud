@@ -10,6 +10,9 @@ The reader compares complete resolved dependency graphs in both saved revisions.
 It follows indirect, optional and workspace-linked dependencies and retains peer
 variants and package metadata. A root dependency change, changed workspace
 membership, a formatting-only lock edit or unproved evidence keeps full work.
+An unresolved directory input in a reachable saved source also keeps full work;
+the package planner names that source, while lockfile planning uses its existing
+full-work diagnostic. Ordinary resolved reads can still select their consumers.
 Other mixed changes also keep full work. A changed manifest runs its own package
 and consumers even if it does not alter the resolved graph.
 

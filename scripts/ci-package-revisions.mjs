@@ -18,6 +18,20 @@ function directoryURLPattern(expression) {
   return directoryPattern(new RegExp(expression.source.replaceAll('URL', url), expression.flags));
 }
 
+function directoryValueContinues(source, end) {
+  // A line break or comment does not end a value when the next token continues
+  // the expression. Those values cannot establish a known URL binding.
+  const trivia = directoryPattern(/\s*/y);
+  let cursor = end;
+  while (true) {
+    trivia.lastIndex = cursor;
+    cursor += trivia.exec(source)[0].length;
+    if (source[cursor] !== ')') break;
+    cursor++;
+  }
+  return /^(?:[.!?+*\/%&|^<>\[(`-]|as\b|satisfies\b|==)/.test(source.slice(cursor));
+}
+
 function directoryIdentifier(name) {
   // Different escape spellings can name the same binding at declaration and use.
   return name.replace(/\\u(?:([\da-fA-F]{4})|\{(0*[\da-fA-F]{1,6})\})/g,
@@ -241,25 +255,33 @@ function workspaceAt(sha, workspace, git) {
       // scopes; only a name passed to a reader contributes a directory input.
       const identifier = String.raw`(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*`;
       const aliases = new Map();
+      const knownAssignments = new Set();
+      const resolvedVariables = new Set();
       // A comment can contain the line break that ends an alias declaration;
-      // retaining its boundary also conservatively covers expression continuations.
-      const declarationAlias = directoryURLPattern(new RegExp(String.raw`(?:\b(?:const|let|var)\s+|,\s*)(${identifier})\s*(?::\s*URL\s*)?=\s*(${identifier})(?=\s*(?:[,;}\r\n\u2028\u2029]|//|/\*|$))`, 'gu'));
+      // alias edges retain consumers, but continued values cannot qualify narrowing.
+      const declarationAlias = directoryURLPattern(new RegExp(String.raw`(?:\b(?:const|let|var)\s+|,\s*)(${identifier})\s*(?::\s*URL\s*)?=\s*(${identifier})(?=\s*(?:[,;}\r\n\u2028\u2029]|//|/\*|$))`, 'dgu'));
       // Keep the right-hand name unconsumed so chained assignments expose every
       // transfer. A property or expression suffix does not establish a bare alias.
-      const assignmentAlias = directoryPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*=\s*(?=(${identifier})(?=\s*(?:=(?!=|>)|[,;)}\]\r\n\u2028\u2029]|//|/\*|$)))`, 'gu'));
+      const assignmentAlias = directoryPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*=\s*(?=(${identifier})(?=\s*(?:=(?!=|>)|[,;)}\]\r\n\u2028\u2029]|//|/\*|$)))`, 'dgu'));
       // Consume a closing parenthesis before the value boundary. Otherwise a
       // property suffix such as (original).pathname could become a URL transfer.
       // A parameter list can end before a function body or an arrow.
-      const parenthesizedAlias = directoryURLPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*(?::\s*URL\s*)?=\s*\(\s*(?:\(\s*)*(?=(${identifier})\s*(?:=(?!=|>)|\)\s*(?:\)\s*)*(?:=>|\{|[,;}\]\r\n\u2028\u2029]|//|/\*|$)))`, 'gu'));
+      const parenthesizedAlias = directoryURLPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*(?::\s*URL\s*)?=\s*\(\s*(?:\(\s*)*(?=(${identifier})\s*(?:=(?!=|>)|\)\s*(?:\)\s*)*(?:=>|\{|[,;}\]\r\n\u2028\u2029]|//|/\*|$)))`, 'dgu'));
       for (const pattern of [declarationAlias, assignmentAlias, parenthesizedAlias]) for (const match of source.source.matchAll(pattern)) {
+        if (!directoryValueContinues(source.source, match.indices[2][1])) knownAssignments.add(match.indices[1][0]);
         const name = directoryIdentifier(match[2]);
         if (!aliases.has(name)) aliases.set(name, new Set());
         aliases.get(name).add(directoryIdentifier(match[1]));
       }
-      for (const match of source.source.matchAll(directoryURLPattern(/(?<![$\p{ID_Continue}\\])((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*(?::\s*URL\s*)?=\s*(?:\(\s*)*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)/gu))) {
+      for (const match of source.source.matchAll(directoryURLPattern(/(?<![$\p{ID_Continue}\\])((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*(?::\s*URL\s*)?=\s*(?:\(\s*)*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*(?:\)\s*)*(?==>|\{|[,;}\]\r\n\u2028\u2029]|\/\/|\/\*|$)/dgu))) {
+        const target = posix.normalize(posix.join(posix.dirname(source.path), match[3]));
+        const resolved = !/[?#%]/.test(match[3]) && target !== '..' && !target.startsWith('../') &&
+          !directoryValueContinues(source.source, match.index + match[0].length);
+        if (resolved) knownAssignments.add(match.indices[1][0]);
         const names = new Set([directoryIdentifier(match[1])]);
         // The visited set bounds cycles and follows transfers in either order.
         for (const name of names) {
+          if (resolved) resolvedVariables.add(name);
           if (scannedVariables.has(name)) rootReads.add(match[3]);
           if (optionVariables.has(name)) optionReads.add(match[3]);
           for (const alias of aliases.get(name) ?? []) names.add(alias);
@@ -270,6 +292,28 @@ function workspaceAt(sha, workspace, git) {
         const target = posix.normalize(posix.join(posix.dirname(source.path), value)).replace(/\/$/, '');
         assert.notEqual(target, '.', `Unverified repository-root directory scan options at ${source.path}`);
         assert.ok(target !== '..' && !target.startsWith('../'), `Unverified repository-root directory scan options at ${source.path}`);
+      }
+      // Narrowing needs a resolved input for every direct reader call. A known
+      // URL elsewhere in the source cannot qualify a computed or overwritten input.
+      const uncertainVariables = new Set();
+      const writes = directoryURLPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*(?::\s*URL\s*)?(?:[+*/%&|?^-]|&&|\|\||\?\?)?=(?!=|>)`, 'dgu'));
+      for (const match of source.source.matchAll(writes)) {
+        if (!knownAssignments.has(match.indices[1][0])) uncertainVariables.add(directoryIdentifier(match[1]));
+      }
+      for (const name of uncertainVariables) for (const alias of aliases.get(name) ?? []) uncertainVariables.add(alias);
+      const admittedCalls = new Set();
+      const directInput = directoryURLPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*(?=[,)])/g);
+      for (const match of source.source.matchAll(directInput)) {
+        const target = posix.normalize(posix.join(posix.dirname(source.path), match[2]));
+        if (!/[?#%]/.test(match[2]) && target !== '..' && !target.startsWith('../')) admittedCalls.add(match.index);
+      }
+      const variableInput = directoryPattern(new RegExp(String.raw`\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*(${identifier})\s*(?=[,)])`, 'gu'));
+      for (const match of source.source.matchAll(variableInput)) {
+        const name = directoryIdentifier(match[1]);
+        if (resolvedVariables.has(name) && !uncertainVariables.has(name)) admittedCalls.add(match.index);
+      }
+      for (const match of source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(/g))) {
+        assert.ok(admittedCalls.has(match.index), `Unresolved directory input at ${source.path}`);
       }
       for (const value of quotedReferences(source.source)) {
         const target = value.startsWith('.') ? posix.normalize(posix.join(posix.dirname(source.path), value)) : posix.normalize(value);

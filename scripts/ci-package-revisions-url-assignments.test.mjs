@@ -125,24 +125,29 @@ test('unused assignments, different names and local assigned reads keep narrow s
     ['expression prefix', "const original = new URL('../../../', import.meta.url); let directory; directory = original.pathname + 'packages/portal/src/'; readdirSync(directory);"],
     ['working directory', assignments[0][1] + ' const command = {cwd: directory};'],
     ['numeric prefix in inert text', "const original = new URL('../../../', import.meta.url); const directory = new URL('./', import.meta.url); // 1directory = original;\nreaddirSync(directory);"],
-  ]) await t.test(name, () => fixture(({root, git, write, commit, workspace}) => {
+  ]) await t.test(name, () => fixture(({root, git, write, commit, plan, workspace}) => {
     write('catalogue-adapter.mjs', helper);
     write('packages/portal/src/scan.mts', "import {readdirSync} from 'node:fs';\n" + source);
     const base = commit();
     write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
     const head = commit();
     assert.equal(execute(root), '');
-    assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
-      {full: false, packages: ['catalogue']});
+    if (name === 'expression prefix') {
+      assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
+      assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
+    } else {
+      assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
+        {full: false, packages: ['catalogue']});
+    }
   }));
 });
 
-// Equality and arrow expressions must not turn an unused URL into a directory input.
-test('URL comparisons and arrow functions do not become directory aliases', async t => {
+// An unresolved expression retains full work even behind an unexecuted branch.
+test('URL comparisons and arrow functions keep unresolved directory inputs full', async t => {
   for (const [name, expression] of [
     ['comparison', 'original === original'],
     ['arrow function', 'original => original'],
-  ]) await t.test(name, () => fixture(({root, git, write, commit, workspace}) => {
+  ]) await t.test(name, () => fixture(({root, git, write, commit, plan, workspace}) => {
     write('catalogue-adapter.mjs', helper);
     write('packages/portal/src/scan.mts', reader('readdirSync', `const original = new URL('../../../', import.meta.url);
 let directory; directory = ${expression};
@@ -151,7 +156,7 @@ if (directory instanceof URL)`));
     write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
     const head = commit();
     assert.equal(execute(root), '');
-    assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
-      {full: false, packages: ['catalogue']});
+    assert.throws(() => scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git), /Unresolved directory input/);
+    assert.deepEqual(plan(base, head).packages.map(pkg => pkg.package), ['catalogue', 'gateway', 'portal', 'unrelated']);
   }));
 });
