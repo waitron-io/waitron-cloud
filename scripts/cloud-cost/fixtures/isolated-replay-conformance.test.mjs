@@ -541,3 +541,79 @@ for (const jump of [-10000, 10000]) test('localReceiptRefusesClockJump_' + jump,
   assert.ok(entries.some(e => e.kind === 'isolated-replay' && e.state === 'removed'), 'finish cleanup before refusing');
   clean(f, before);
 });
+
+// Failure stages survive worker collection; private messages and malformed diagnostics never leave the worker.
+for (const mode of ['replay', 'interrupted', 'extra', 'unknown', 'oversized', 'permissions']) {
+  test('localCommandRetainsOnlyAClosedWorkerFailureStage_' + mode, async t => {
+    const f = await fixture(t), before = fingerprint(f.database);
+    let prefix = 'throw Error("PRIVATE_REFUSAL_CANARY");';
+    if (mode === 'interrupted') prefix = 'process.exit(1);';
+    if (['extra', 'unknown', 'oversized', 'permissions'].includes(mode)) {
+      const value = mode === 'extra' ? JSON.stringify({ schemaVersion: 1, stage: 'replay', error: 'PRIVATE_ERROR_CANARY' })
+        : mode === 'unknown' ? JSON.stringify({ schemaVersion: 1, stage: 'PRIVATE_STAGE_CANARY' })
+          : (mode === 'oversized' ? ' '.repeat(1024) : '') + JSON.stringify({ schemaVersion: 1, stage: 'replay' });
+      prefix = `import * as generatedFailureFs from 'node:fs';
+        generatedFailureFs.writeFileSync('/state/worker-failure.json',${JSON.stringify(value)},{mode:0o600,flag:'wx'});
+        ${mode === 'permissions' ? "generatedFailureFs.chmodSync('/state/worker-failure.json',0o644);" : ''}
+        throw Error('PRIVATE_REFUSAL_CANARY');`;
+    }
+    prefixRuntime(f, prefix);
+    const child = spawnSync(process.execPath, localCommand(f), {
+      env: { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' }, timeout: 40000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    assert.equal(child.status, 1); assert.equal(child.stdout, '');
+    assert.equal(child.stderr, 'Cloud cost local command refused.\n');
+    const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
+    const expected = mode === 'replay' ? 'replay' : mode === 'interrupted' ? 'unknown' : 'worker-diagnostic-invalid';
+    assert.deepEqual(entries.filter(row => row.kind === 'worker-refusal'),
+      [{ kind: 'worker-refusal', state: 'recorded', stage: expected }], 'retain the fixed stage after worker cleanup');
+    const removed = entries.findIndex(row => row.kind === 'isolated-replay' && row.state === 'removed');
+    assert.ok(removed > entries.findIndex(row => row.kind === 'worker-refusal'), 'save the diagnostic before removing its worker state');
+    clean(f, before);
+  });
+}
+
+test('workerFailureDiagnosticNeverBypassesTheExistingNoLinksOwnershipCheck', async t => {
+  const f = await fixture(t), before = fingerprint(f.database);
+  prefixRuntime(f, `import * as generatedFailureLinkFs from 'node:fs';
+    generatedFailureLinkFs.symlinkSync('/state/config.json','/state/worker-failure.json');
+    throw Error('PRIVATE_REFUSAL_CANARY');`);
+  const child = spawnSync(process.execPath, localCommand(f), {
+    env: { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' }, timeout: 40000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.equal(child.status, 1); assert.equal(child.stdout, '');
+  assert.equal(child.stderr, 'Cloud cost local command refused.\n');
+  const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
+  assert.equal(entries.some(row => row.kind === 'worker-refusal'), false, 'ownership refusal also forbids diagnostic writes');
+  assert.equal(entries.some(row => row.kind === 'isolated-replay' && row.state === 'removed'), false);
+  assert.equal(existsSync(join(f.root, 'isolated-replay')), true, 'retain state for explicit owned recovery');
+  assert.notEqual(docker(['ps', '-aq', '--filter', 'label=io.waitron.cloud-cost.owner=' + f.journal.token]), '');
+  assert.deepEqual(fingerprint(f.database), before);
+  // fixture() collects the exact token's resources and generated state after this test.
+});
+
+test('workerFailureDiagnosticRefusesAReplacedScratchDirectoryBeforeReadingIt', async t => {
+  const f = await fixture(t), before = fingerprint(f.database), abort = new AbortController();
+  const path = join(f.root, 'isolated-replay'), retained = join(f.root, 'retained-worker-state');
+  prefixRuntime(f, 'await new Promise(resolve=>setTimeout(resolve,30000));');
+  let replaced = false;
+  const poll = setInterval(() => {
+    const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources ?? [];
+    if (!replaced && entries.some(row => row.kind === 'replay-worker' && row.state === 'started')) {
+      replaced = true; renameSync(path, retained); mkdirSync(path, { mode: 0o700 });
+      writeFileSync(join(path, 'worker-failure.json'), JSON.stringify({ schemaVersion: 1, stage: 'storage-open' }), { mode: 0o600 });
+      writeFileSync(join(path, 'replacement-sentinel'), 'preserve replacement', { mode: 0o600 });
+      abort.abort();
+    }
+  }, 10);
+  try { await assert.rejects(controller.runIsolatedReplay({ ...f, signal: abort.signal }), bad); }
+  finally { clearInterval(poll); }
+  assert.equal(replaced, true);
+  const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
+  assert.deepEqual(entries.filter(row => row.kind === 'worker-refusal'),
+    [{ kind: 'worker-refusal', state: 'recorded', stage: 'worker-diagnostic-invalid' }]);
+  assert.equal(readFileSync(join(path, 'replacement-sentinel'), 'utf8'), 'preserve replacement');
+  assert.equal(existsSync(retained), true);
+  assert.equal(entries.some(row => row.kind === 'isolated-replay' && row.path === path && row.state === 'removed'), false);
+  assert.deepEqual(fingerprint(f.database), before);
+});

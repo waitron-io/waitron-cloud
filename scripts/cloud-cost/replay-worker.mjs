@@ -6,6 +6,13 @@ import { randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { replayPrivateDay } from './private-replay.mjs';
 
+let stage = 'configuration';
+function recordFailure() {
+  // The first refusal remains available after later cleanup; no raw exception is persisted.
+  try { writeFileSync('/state/worker-failure.json', JSON.stringify({ schemaVersion: 1, stage }), { mode: 0o600, flag: 'wx' }); }
+  catch { /* An existing diagnostic must never be overwritten. */ }
+}
+
 async function run() {
   const source = '/state/source', root = '/state/private';
   mkdirSync(source, { mode: 0o700 }); mkdirSync(root, { mode: 0o700 });
@@ -20,14 +27,17 @@ async function run() {
   try {
     let stream;
     if (options.stream) {
+      stage = 'storage-open';
       const sdk = createRequire('/app/packages/backups/package.json')('@aws-sdk/client-s3');
       storage = await openWorkerStorage({ source, root, journal, sdk });
       const { binarySha256, startupSeconds, idleSeconds, windowSeconds } = options.stream;
       stream = { binary: '/code/litestream', binarySha256, startupSeconds, idleSeconds, windowSeconds,
         target: storage.target, bucket: storage.bucket, versioned: false, sdk };
     }
+    stage = 'replay';
     const result = await replayPrivateDay({ ...options, ...(stream ? { stream } : {}), source, root, journal, database, codeRoot: '/code', stateRoot: root + '/replay' });
     if (storage) {
+      stage = 'storage-cleanup';
       const native = result.stream;
       const { retainedStorage, ...administration } = await storage.finish({ retained: {
         since: native.stream.storageEndedAt, bytes: native.stream.storage.objects.bytes,
@@ -37,9 +47,11 @@ async function run() {
         administration, retainedStorage, storage: native.stream.storage, native: native.native, restored: native.restored,
         cleanup: { ...native.cleanup, listeners: 0, clients: 0, buckets: 0, objects: 0, multipartUploads: 0 } };
     }
+    stage = 'result';
     writeFileSync('/state/result.json', JSON.stringify(result), { mode: 0o600, flag: 'wx' });
-  } finally { await storage?.close(); }
+  } catch { recordFailure(); throw Error('Invalid cloud cost replay worker'); }
+  finally { stage = 'storage-cleanup'; await storage?.close(); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  run().catch(() => { process.exitCode = 1; });
+  run().catch(() => { recordFailure(); process.exitCode = 1; });
 }

@@ -1288,7 +1288,15 @@ notifications separately.
   sale dates. This covers the stream experiment; it does not qualify the full venue
   cost. Investigate the initial generated receipt-command refusal before the full
   venue measurement; the later instrumented and ordinary checks pass, but its
-  cause remains unexplained. Complete accounting/export across the remaining drivers, the full venue sample, the required
+  cause remains unexplained. Failed workers now leave a fixed failure stage in the
+  private ownership journal before their scratch state is removed. The host checks
+  the diagnostic's file size, permissions and closed fields; raw errors are never
+  recorded or printed. Missing diagnostics leave the stage unknown. Malformed
+  diagnostics produce a fixed invalid-diagnostic code. The existing ownership check
+  still forbids diagnostic writes and cleanup when a worker creates a symlink.
+  Six instrumented generated receipt runs passed without reproducing the original
+  refusal; these diagnostics do not establish a cause or a fix.
+  Complete accounting/export across the remaining drivers, the full venue sample, the required
   idle observation and the remaining public/staff journeys stay open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip

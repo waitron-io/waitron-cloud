@@ -6,6 +6,7 @@ import { assertOwnedRoot } from './schema.mjs';
 import { validateStreamSettings, validateStreamAdmission, summarizeStreamAccounting } from './stream-admission.mjs';
 import { validateReplayConfig } from './waitron-adapter.mjs';
 import { prepareIsolatedPrivateCopy, proveDockerIsolation, runForegroundContainer } from './local.mjs';
+import { workerFailureStage } from './worker-diagnostic.mjs';
 
 const fail = () => { throw Error('Invalid isolated cloud cost replay'); };
 const need = value => { if (!value) fail(); };
@@ -154,8 +155,24 @@ export async function runIsolatedReplay(input) {
       expected: args.expected, originalInventory: args.originalInventory, cadence: args.cadence,
       windowSeconds: args.replayWindowSeconds, initial: args.initial, config: args.config, ...(args.stream ? { stream: args.stream } : {}) }), { mode: 0o600, flag: 'wx' });
     record(args, { kind: 'replay-worker', state: 'started', id: containerId });
-    await runForegroundContainer({ ...worker, argv: ['node', '/code/cloud-cost-runner/replay-worker.mjs'],
-      windowSeconds: Math.min(7200, remaining() / 1000) });
+    try {
+      await runForegroundContainer({ ...worker, argv: ['node', '/code/cloud-cost-runner/replay-worker.mjs'],
+        windowSeconds: Math.min(7200, remaining() / 1000) });
+    } catch {
+      let stage = 'unknown';
+      try {
+        assertOwnedRoot(args); const identity = lstatSync(stageRoot);
+        need(realpathSync(stageRoot) === stageRoot && identity.ino === stageIdentity.ino && identity.dev === stageIdentity.dev);
+        const diagnostic = join(stageRoot, 'worker-failure.json');
+        if (existsSync(diagnostic)) {
+          const stat = file(diagnostic);
+          need(stat.size <= 256 && (stat.mode & 0o7777) === 0o600);
+          stage = workerFailureStage(JSON.parse(readFileSync(diagnostic, 'utf8')));
+        }
+      } catch { stage = 'worker-diagnostic-invalid'; }
+      record(args, { kind: 'worker-refusal', state: 'recorded', stage });
+      fail();
+    }
     containerId = undefined;
     remaining(); need(!args.signal?.aborted);
     const output = join(stageRoot, 'result.json'); need(file(output).size <= (args.stream ? 1024 * 1024 : 16384) && (lstatSync(output).mode & 0o777) === 0o600);
