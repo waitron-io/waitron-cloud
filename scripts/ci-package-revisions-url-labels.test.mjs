@@ -43,6 +43,8 @@ const labels = [
   [String.raw`U\u{52}L`, ''],
   [String.raw`UR\u004c`, ''],
   [String.raw`\u{00000055}\u0052\u{4C}`, ''],
+  [String.raw`U\u{0052}L`, ''],
+  [String.raw`UR\u004C`, ''],
   ['URL', String.raw`: \u0055RL`],
   [String.raw`U\u{52}L`, String.raw`: UR\u{00004c}`],
 ];
@@ -123,7 +125,7 @@ test('escaped URL labels with root scan options retain every possible package', 
 });
 
 test('escaped URL labels without a repository root read keep consumers narrow', async t => {
-  for (const operation of ['unused', 'local', 'cwd', 'different-name', 'other-constructor', 'other-type']) {
+  for (const operation of ['unused', 'local', 'cwd', 'different-name', 'other-constructor', 'other-type-local']) {
     await t.test(operation, () => fixture(({root, write, commit, plan}) => {
       write('catalogue-adapter.mjs', helper);
       let source = reader('readdirSync', String.raw`\u0055RL`, String.raw`: U\u0052L`);
@@ -133,7 +135,8 @@ test('escaped URL labels without a repository root read keep consumers narrow', 
       if (operation === 'different-name') source = source.replace('readdirSync(directory)', "readdirSync(new URL('./', import.meta.url))");
       // These unrelated names evaluate to the source directory despite the root-looking arguments.
       if (operation === 'other-constructor') source = String.raw`const URLish = class { constructor() { return new URL('./', import.meta.url); } };` + source.replace('new \\u0055RL', 'new URLish');
-      if (operation === 'other-type') source = source.replace(String.raw`U\u0052L`, 'URLish').replace("new \\u0055RL('../../../',", "new \\u0055RL('./',");
+      // An unrelated erased type label leaves this local read local.
+      if (operation === 'other-type-local') source = source.replace(String.raw`U\u0052L`, 'URLish').replace("new \\u0055RL('../../../',", "new \\u0055RL('./',");
       write('packages/portal/src/scan.mts', source);
       const base = commit();
       write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
