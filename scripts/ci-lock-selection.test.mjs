@@ -866,7 +866,7 @@ test('audited lock changes retain class-field and arrow-return directory readers
         write('tools/reader.mts', `import * as ñs from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
 ${form === 'field' ? `export default class { scan = ñs.${api}}` : `export default () => ñs.${api}`}`);
       } else {
-        write('tools/reader.mts', form === 'field' ? 'export default class { scan = () => []}' : 'export default () => () => []');
+        write('tools/reader.mts', "import {readdirSync} from 'node:fs';\n" + (form === 'field' ? 'export default class { scan = () => []}' : 'export default () => () => []'));
       }
       write('packages/page/test/scan.mts', `import makeReader from '../../../tools/reader.mts';
 const scan = ${form === 'field' ? 'new makeReader().scan' : 'makeReader()'};
