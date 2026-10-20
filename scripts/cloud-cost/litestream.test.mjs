@@ -103,3 +103,15 @@ test('litestreamPartialLineOverflowAndImpossibleRetryCeilingsAreRejected', () =>
   assert.throws(() => b.write(Buffer.from(log({ attempt: 2 }).replace('max=10', 'max=1'))), /Invalid cloud cost Litestream audit/);
   const c = audit(); assert.throws(() => c.write(Buffer.from(log({ method: 'POST' }))), /Invalid cloud cost Litestream audit/);
 });
+
+test('nativeDeletionBatchHeaderAuditRequiresIndependentOptInAndMatchingSdkHint', () => {
+  const path = '/synthetic/?delete=&x-id=DeleteObjects';
+  const a = stream.createLitestreamRequestAudit({ phase: 'workload', allowBulkDeletes: true });
+  a.write(Buffer.from(log({ method: 'POST', path }))); a.observe({ headers: headers(), operation: 'delete-many' }); a.end();
+  assert.equal(a.snapshot().requestsReconciled, true);
+  assert.deepEqual(a.snapshot().requests, [{ phase: 'workload', operation: 'delete-many', retryOrdinal: 0, attempts: 1 }]);
+  for (const options of [{}, { allowBulkDeletes: true }]) {
+    const b = stream.createLitestreamRequestAudit({ phase: 'workload', ...options });
+    assert.throws(() => b.write(Buffer.from(log({ method: 'POST', path: options.allowBulkDeletes ? path.replace('DeleteObjects', 'DeleteObject') : path }))), /Invalid cloud cost Litestream audit/);
+  }
+});

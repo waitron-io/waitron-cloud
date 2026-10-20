@@ -1191,8 +1191,14 @@ notifications separately.
   version inventories to bound uncertain commit times, and requires a distinct
   possible request for each discovered version. Parallel reads and writes to
   different objects are admitted; overlapping writes to one object are refused.
-  Default listeners and native stream histories still refuse batches. Native bulk
-  deletion, multipart histories and a complete measured stream remain open.
+  An explicitly enabled native listener for versioned deletion batches now reads
+  a bounded selection before forwarding it. It checks every returned result, keeps failed entries and
+  versions left after lost replies, and reconciles them against an independent
+  inventory. Its separate request and storage counters include the control bodies.
+  Default listeners still refuse batches. The native batch mode also refuses more
+  than one selection for the same key, whose internal ordering is not observed.
+  Unversioned native batches, multipart histories and a complete measured stream
+  remain open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled

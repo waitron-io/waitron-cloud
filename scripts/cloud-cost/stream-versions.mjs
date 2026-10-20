@@ -6,9 +6,53 @@ const count = n => Number.isSafeInteger(n) && n >= 0;
 const text = s => typeof s === 'string' && s.length > 0 && s.length <= 1024 && !/[\x00-\x1f\x7f]/.test(s);
 const identity = (key, version) => JSON.stringify([key, version]);
 
+// Only bounded deletion control XML is retained privately; object bodies are never buffered here.
+function deletionXml(body, rootName) {
+  need(Buffer.isBuffer(body) && body.length > 0 && body.length <= 1048576);
+  const source = new TextDecoder('utf-8', { fatal: true }).decode(body)
+    .replace(/^\s*<\?xml version="1\.0"(?: encoding="UTF-8")?\?>/, '');
+  need(!/[\ufffe\uffff]/.test(source));
+  const stack = [], roots = [];
+  const tokens = /<[^>]*>|[^<]+/gy;
+  let offset = 0, nodes = 0;
+  while (offset < source.length) {
+    const match = tokens.exec(source); need(match && match.index === offset); offset = tokens.lastIndex;
+    const part = match[0];
+    if (!part.startsWith('<')) {
+      if (stack.length) stack.at(-1).value += part;
+      else need(part.trim() === '');
+    } else if (part.startsWith('</')) {
+      need(stack.length > 0 && part === `</${stack.at(-1).name}>`); stack.pop();
+    } else {
+      const tag = /^<([A-Za-z]+)(?: xmlns="http:\/\/s3\.amazonaws\.com\/doc\/2006-03-01\/")?(\/?)>$/.exec(part);
+      need(tag && (stack.length === 0 || !part.includes('xmlns')) && stack.length < 3 && ++nodes <= 10002);
+      const node = { name: tag[1], children: [], value: '' };
+      (stack.length ? stack.at(-1).children : roots).push(node);
+      if (!tag[2]) stack.push(node);
+    }
+  }
+  need(stack.length === 0 && roots.length === 1 && roots[0].name === rootName && roots[0].value.trim() === '');
+  return roots[0].children;
+}
+function deletionFields(node, allowed) {
+  need(node.value.trim() === ''); const result = {};
+  for (const child of node.children) {
+    need(allowed.includes(child.name) && !Object.hasOwn(result, child.name) && child.children.length === 0);
+    result[child.name] = child.value.replace(/&([^;]*);|&/g, (raw, entity) => {
+      const named = { amp: '&', lt: '<', gt: '>', apos: "'", quot: '"' };
+      if (Object.hasOwn(named, entity)) return named[entity];
+      need(typeof entity === 'string' && /^(?:#[0-9]+|#x[0-9a-fA-F]+)$/.test(entity));
+      const n = entity.startsWith('#x') ? parseInt(entity.slice(2), 16) : Number(entity.slice(1));
+      need(n === 9 || n === 10 || n === 13 || n >= 32 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff) && n !== 0xfffe && n !== 0xffff);
+      return String.fromCodePoint(n);
+    });
+  }
+  return result;
+}
+
 // Versioning retains a failed write's possible extra version until an independent inventory resolves it.
 // Payloads and provider identities stay private; only counts and conservative storage bounds are returned.
-export async function openLitestreamVersionHistories({ client, sdk, meter, bucket, clock }) {
+export async function openLitestreamVersionHistories({ client, sdk, meter, bucket, clock, allowBulkDeletes = false }) {
   const rows = new Map(), unresolved = [], pending = new Set(), activeKeys = new Set();
   let invalid = false, verifying = false, verified = false, last = -Infinity, sequence = 0, endpoint, start;
   let retiredLow = 0, retiredHigh = 0;
@@ -34,9 +78,70 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     retiredHigh += row.bytes * (by - row.from);
     row.deleted = true; row.removing = null;
   };
-  const begin = guarded(({ method, path, headers }) => {
+  const beginBatch = ({ headers, body }) => {
+    need(allowBulkDeletes === true && headers && !Object.hasOwn(headers, 'content-encoding')
+      && !Object.hasOwn(headers, 'x-amz-copy-source') && Buffer.isBuffer(body)
+      && String(body.length) === headers['content-length']);
+    const entries = deletionXml(body, 'Delete'), selected = new Map(), time = now();
+    for (const entry of entries) {
+      if (entry.name === 'Quiet') { need(entry.children.length === 0 && entry.value === 'false' && !selected.has(null)); selected.set(null, null); continue; }
+      need(entry.name === 'Object'); const fields = deletionFields(entry, ['Key', 'VersionId']);
+      const key = fields.Key, version = fields.VersionId ?? null;
+      need(text(key) && Buffer.byteLength(key) <= 1024 && !/[\\\x00]/.test(key) && !key.split('/').some(s => s === '.' || s === '..')
+        && !selected.has(key) && !activeKeys.has(key));
+      const row = version === null ? null : rows.get(identity(key, version));
+      need(version === null || text(version) && version !== 'null' && row && !row.deleted);
+      selected.set(key, { key, version, row, marker: true, bytes: version === null ? Buffer.byteLength(key) : 0,
+        from: time, order: ++sequence });
+    }
+    selected.delete(null); need(selected.size > 0 && selected.size <= 1000 && sequence <= 100000);
+    for (const mutation of selected.values()) { activeKeys.add(mutation.key); if (mutation.row) mutation.row.removing ??= time; }
+    verified = false;
+    const token = {}; pending.add(token);
+    return guarded(({ statusCode, bytesOut, interrupted = false, responseBody }) => {
+      need(pending.has(token) && !interrupted && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599 && bytesOut === body.length);
+      const time = now(), results = new Map();
+      if (statusCode < 300) {
+        need(statusCode === 200);
+        for (const entry of deletionXml(responseBody, 'DeleteResult')) {
+          need(entry.name === 'Deleted' || entry.name === 'Error');
+          const fields = deletionFields(entry, entry.name === 'Error' ? ['Key', 'VersionId', 'Code', 'Message']
+            : ['Key', 'VersionId', 'DeleteMarker', 'DeleteMarkerVersionId']);
+          const mutation = selected.get(fields.Key);
+          need(mutation && !results.has(fields.Key));
+          if (entry.name === 'Error') need(text(fields.Code) && (fields.VersionId ?? null) === mutation.version);
+          else if (mutation.row) {
+            need((fields.VersionId === mutation.version || mutation.row.marker && fields.VersionId === undefined && fields.DeleteMarkerVersionId === mutation.version)
+              && (fields.DeleteMarker === undefined || fields.DeleteMarker === String(mutation.row.marker))
+              && (fields.DeleteMarkerVersionId === undefined || mutation.row.marker && fields.DeleteMarkerVersionId === mutation.version));
+          } else need(fields.VersionId === undefined && fields.DeleteMarker === 'true' && text(fields.DeleteMarkerVersionId)
+            && fields.DeleteMarkerVersionId !== 'null' && !rows.has(identity(mutation.key, fields.DeleteMarkerVersionId)));
+          results.set(fields.Key, { fields, failed: entry.name === 'Error' });
+        }
+        need(results.size === selected.size);
+      }
+      for (const mutation of selected.values()) {
+        const result = results.get(mutation.key);
+        if (!result || result.failed) { if (!mutation.row) unresolved.push(mutation); }
+        else if (mutation.row) retire(mutation.row, time);
+        else {
+          need(rows.size < 100000);
+          const version = result.fields.DeleteMarkerVersionId;
+          rows.set(identity(mutation.key, version), { ...mutation, version, by: time, orders: [mutation.order],
+            latest: false, deleted: false, removing: null });
+        }
+        activeKeys.delete(mutation.key);
+      }
+      pending.delete(token);
+    });
+  };
+  const begin = guarded(({ method, path, headers, body }) => {
     need(!verifying && pending.size < 100000 && sequence < 100000);
-    const operation = classifyStorageOperation({ method, path });
+    const operation = classifyStorageOperation({ method, path, allowBulkDeletes });
+    if (operation === 'delete-many') {
+      need(path.split('?')[0].replace(/\/$/, '') === '/' + bucket);
+      return beginBatch({ headers, body });
+    }
     need(['put', 'delete', 'get', 'head', 'list'].includes(operation));
     const raw = path.split('?')[0], segments = raw.slice(1).split('/');
     need(segments[0] === bucket && !/%2f|%5c/i.test(raw));

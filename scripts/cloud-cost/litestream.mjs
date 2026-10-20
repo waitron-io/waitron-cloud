@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { Transform, pipeline } from 'node:stream';
 const fail = () => { throw Error('Invalid cloud cost Litestream audit'); };
 const requireThat = value => { if (!value) fail(); };
-const operations = ['put', 'get', 'head', 'list', 'delete', 'multipart-create', 'multipart-upload', 'multipart-complete', 'multipart-abort'];
+const operations = ['put', 'get', 'head', 'list', 'delete', 'delete-many', 'multipart-create', 'multipart-upload', 'multipart-complete', 'multipart-abort'];
 const phases = ['setup', 'startup', 'workload', 'idle', 'verification', 'restore', 'observer', 'cleanup'];
 function identity(invocation, attempt) {
   requireThat(typeof invocation === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(invocation));
@@ -14,7 +14,7 @@ function identity(invocation, attempt) {
   return { key: invocation + ':' + match[1], invocation, ordinal: Number(match[1]) - 1 };
 }
 // Classify producer log requests independently and require any SDK hint to agree with their shape.
-function operation(line) {
+function operation(line, allowBulkDeletes = false) {
   const match = /^(GET|HEAD|PUT|POST|DELETE) (\/[^ ]*) HTTP\/1\.1$/.exec(line);
   requireThat(match && !/[#\\]/.test(match[2]) && !match[2].startsWith('//'));
   const [method, path] = match.slice(1), url = new URL(path, 'http://local');
@@ -23,13 +23,16 @@ function operation(line) {
   requireThat(new Set(keys).size === keys.length && url.pathname !== '/');
   if (q.has('x-id')) {
     const hint = q.get('x-id'); q.delete('x-id');
-    const name = operation(`${method} ${url.pathname}${q.size ? '?' + q.toString() : ''} HTTP/1.1`);
+    const name = operation(`${method} ${url.pathname}${q.size ? '?' + q.toString() : ''} HTTP/1.1`, allowBulkDeletes);
     const hints = { PutObject: 'put', GetObject: 'get', HeadObject: 'head', DeleteObject: 'delete',
       CreateMultipartUpload: 'multipart-create', UploadPart: 'multipart-upload', CompleteMultipartUpload: 'multipart-complete',
-      AbortMultipartUpload: 'multipart-abort', ListObjectsV2: 'list' };
+      AbortMultipartUpload: 'multipart-abort', ListObjectsV2: 'list', DeleteObjects: 'delete-many' };
     requireThat(hints[hint] === name); return name;
   }
   if (!object) {
+    if (q.has('delete')) {
+      requireThat(allowBulkDeletes === true && method === 'POST' && keys.length === 1 && q.get('delete') === ''); return 'delete-many';
+    }
     requireThat(method === 'GET' && keys.every(k => ['list-type', 'prefix', 'delimiter', 'max-keys', 'continuation-token', 'start-after', 'encoding-type', 'marker'].includes(k)));
     return 'list';
   }
@@ -48,7 +51,7 @@ function operation(line) {
   requireThat(name); return name;
 }
 
-export function createLitestreamRequestAudit({ phase }) {
+export function createLitestreamRequestAudit({ phase, allowBulkDeletes = false }) {
   requireThat(phases.includes(phase));
   const decoder = new StringDecoder('utf8'), producer = new Map(), observer = new Map(), sequences = new Map();
   let buffer = '', current = null, ended = false, invalid = false;
@@ -59,7 +62,7 @@ export function createLitestreamRequestAudit({ phase }) {
     if (/^SDK .* DEBUG Request$/.test(text)) { requireThat(!current); current = { operation: null, invocation: null, attempt: null, size: 0 }; return; }
     if (!current) return;
     current.size += text.length; requireThat(current.size <= 65536);
-    if (current.operation === null) { current.operation = operation(text); return; }
+    if (current.operation === null) { current.operation = operation(text, allowBulkDeletes); return; }
     if (text === '') {
       const id = identity(current.invocation, current.attempt);
       requireThat(!producer.has(id.key) && id.ordinal === (sequences.get(id.invocation) ?? -1) + 1 && producer.size < 100000);
@@ -81,7 +84,7 @@ export function createLitestreamRequestAudit({ phase }) {
     requireThat(buffer.length <= 65536);
   });
   const observe = guarded(({ headers, operation: name }) => {
-    requireThat(!ended && operations.includes(name));
+    requireThat(!ended && operations.includes(name) && (name !== 'delete-many' || allowBulkDeletes === true));
     const id = identity(headers?.['amz-sdk-invocation-id'], headers?.['amz-sdk-request']);
     requireThat(!observer.has(id.key) && observer.size < 100000);
     observer.set(id.key, { operation: name, ordinal: id.ordinal });
@@ -112,7 +115,7 @@ export function createLitestreamRequestAudit({ phase }) {
 
 // This first-hop counter shares no byte events with the downstream storage observer.
 // It measures transferred HTTP bodies, not application consumption or TCP/TLS overhead.
-export async function createLitestreamTransport({ target, meter, phase, lifetimes }) {
+export async function createLitestreamTransport({ target, meter, phase, lifetimes, allowBulkDeletes = false }) {
   let endpoint;
   try {
     endpoint = new URL(target);
@@ -129,29 +132,38 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     requireThat(value === undefined || typeof value === 'string' && /^(0|[1-9]\d*)$/.test(value));
     const n = Number(value ?? 0); requireThat(Number.isSafeInteger(n)); return n;
   };
-  const server = createServer((source, destination) => {
-    let id, name, expectedOut, completeLifetime;
+  const server = createServer(async (source, destination) => {
+    let id, name, expectedOut, completeLifetime, body;
     try {
       requireThat(!invalid && !closing && !Object.hasOwn(source.headers, 'x-amz-copy-source'));
       id = identity(source.headers['amz-sdk-invocation-id'], source.headers['amz-sdk-request']);
-      name = operation(`${source.method} ${source.url} HTTP/1.1`);
+      name = operation(`${source.method} ${source.url} HTTP/1.1`, allowBulkDeletes);
       const previous = invocations.get(id.invocation);
       requireThat(id.ordinal === (previous?.ordinal ?? -1) + 1 && (!previous || previous.name === name && previous.path === source.url)
         && invocations.size < 100000);
       expectedOut = size(source.headers['content-length']);
-      if (lifetimes) {
-        completeLifetime = lifetimes.begin({ method: source.method, path: source.url, headers: source.headers });
-        requireThat(typeof completeLifetime === 'function');
-      }
       invocations.set(id.invocation, { ordinal: id.ordinal, name, path: source.url });
       pending.add(id.key);
-    } catch { poison(); source.resume(); destination.writeHead(400); destination.end(); return; }
+      if (name === 'delete-many') {
+        requireThat(expectedOut > 0 && expectedOut <= 1048576);
+        // Validate the complete bounded control selection before the backend can delete anything.
+        const chunks = []; let length = 0;
+        for await (const chunk of source) { length += chunk.length; requireThat(length <= expectedOut); chunks.push(chunk); }
+        requireThat(!closing && !invalid && length === expectedOut); body = Buffer.concat(chunks);
+      }
+      if (lifetimes) {
+        completeLifetime = lifetimes.begin({ method: source.method, path: source.url, headers: source.headers, body });
+        requireThat(typeof completeLifetime === 'function');
+      }
+    } catch { poison(); if (id) pending.delete(id.key); source.resume(); destination.writeHead(400); destination.end(); return; }
     let bytesOut = 0, bytesIn = 0, expectedIn = 0, statusCode = null, responseHeaders, sent = false, received = false, settled = false;
+    const responseChunks = name === 'delete-many' && lifetimes ? [] : null;
     const finish = interrupted => {
       if (settled || !interrupted && (!sent || !received)) return;
       settled = true; pending.delete(id.key); completed++;
       try {
-        completeLifetime?.({ statusCode, bytesOut, interrupted, responseHeaders });
+        completeLifetime?.({ statusCode, bytesOut, interrupted, responseHeaders,
+          responseBody: responseChunks ? Buffer.concat(responseChunks) : undefined });
         const outcome = interrupted ? 'transport-error' : statusCode >= 500 ? 'server-error' : statusCode >= 300 ? 'client-error' : 'success';
         meter.observeAttempt({ token: id.key, phase, operation: name, retryOrdinal: id.ordinal, channel: 'producer', outcome,
           statusCode, errorCode: null, sameAccount: null, bytesIn, bytesOut,
@@ -164,14 +176,24 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
         expectedIn = source.method === 'HEAD' ? 0 : size(response.headers['content-length']); }
       catch { finish(true); response.destroy(); destination.destroy(); return; }
       destination.writeHead(statusCode, response.headers);
-      const counter = new Transform({ transform(chunk, encoding, next) { bytesIn += chunk.length; next(null, chunk); } });
+      const counter = new Transform({ transform(chunk, encoding, next) {
+        bytesIn += chunk.length;
+        if (responseChunks) {
+          if (bytesIn > 1048576) { next(Error('Invalid cloud cost Litestream audit')); return; }
+          responseChunks.push(chunk);
+        }
+        next(null, chunk);
+      } });
       pipeline(response, counter, destination, error => { received = !error; finish(!!error); });
     });
     connections.add(upstream); upstream.on('close', () => connections.delete(upstream));
     upstream.setTimeout(30000, () => upstream.destroy());
     upstream.on('error', () => { finish(true); destination.destroy(); });
-    const counter = new Transform({ transform(chunk, encoding, next) { bytesOut += chunk.length; next(null, chunk); } });
-    pipeline(source, counter, upstream, error => { sent = !error; finish(!!error); });
+    if (body) { bytesOut = body.length; upstream.end(body, () => { sent = true; finish(false); }); }
+    else {
+      const counter = new Transform({ transform(chunk, encoding, next) { bytesOut += chunk.length; next(null, chunk); } });
+      pipeline(source, counter, upstream, error => { sent = !error; finish(!!error); });
+    }
   });
   server.on('clientError', (error, socket) => { poison(); socket.destroy(); });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');

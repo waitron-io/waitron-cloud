@@ -477,3 +477,26 @@ test('genuinePinnedLitestreamRetainsVersionedStorageWithNativeRetryAndRestore', 
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
+
+test('genuineNativeBatchListenerRetainsCommittedLostRepliesAndEveryVersionLifetime', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  for (const name of ['litestream.mjs', 'stream-versions.mjs']) cpSync(new URL('../' + name, import.meta.url), join(f.codeRoot, name));
+  cpSync(new URL('./native-batch-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-native-batch-smoke.mjs'));
+  let stack; f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(execFileSync('docker', ['exec', '-e', 'COST_NATIVE_BATCH_DIAGNOSTIC=1', s3, 'node', '/code/cost-native-batch-smoke.mjs'],
+    { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  assert.equal(result.lostReplies, 1); assert.equal(result.leaked, false);
+  assert.deepEqual(result.retained.objects, { class: 'stream', bytes: 14, currentVersions: 0, noncurrentVersions: 2, deleteMarkers: 2, unfinishedMultipart: 0 });
+  assert.deepEqual(result.promoted.objects, { class: 'stream', bytes: 10, currentVersions: 1, noncurrentVersions: 1, deleteMarkers: 0, unfinishedMultipart: 0 });
+  assert.deepEqual(result.final.objects, { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
+  assert.deepEqual(result.final.byteSeconds, { low: 150, high: 160 });
+  assert.equal(result.workload.reconciled, true); assert.equal(result.administration.reconciled, true);
+  assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
+  assert.equal(result.workload.accounting.producer.attempts, 8); assert.ok(result.workload.accounting.producer.bytesOut > 10);
+  assert.equal(result.workload.accounting.requests.filter(r => r.operation === 'delete-many').reduce((n, r) => n + r.attempts, 0), 6);
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});
