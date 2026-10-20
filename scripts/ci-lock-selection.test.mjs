@@ -1126,3 +1126,52 @@ test('audited lock changes keep unused escaped URL bindings narrow', () => fixtu
   lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
   assertSelected(plan(base, commit()), ['catalogue']);
 }));
+
+// Literal-only URL labels must not drop a reader of a changed lock importer.
+test('audited lock changes retain escaped URL constructor and type consumers', async t => {
+  for (const [constructor, annotation, binding] of [
+    [String.raw`\u0055RL`, '', 'direct'],
+    [String.raw`UR\u{4C}`, '', 'stored'],
+    ['URL', String.raw`: U\u0052L`, 'stored'],
+    [String.raw`\u{000055}RL`, String.raw`: UR\u004c`, 'stored'],
+  ]) await t.test(`${constructor}${annotation} ${binding}`, () => fixture(({git, write, lock, save, audit, commit, plan}) => {
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.ts';\nconsole.log('URL label lock helper loaded');\n");
+    write('scripts/page-fixture.mjs', 'export const inert = true;\n');
+    const directory = `new ${constructor}('../../../', import.meta.url)`;
+    write('packages/page/test/scan.mts', `import {readdirSync} from 'node:fs';
+${binding === 'stored' ? `const directory${annotation} = ${directory};` : ''}
+for (const name of readdirSync(${binding === 'stored' ? 'directory' : directory})) {
+  if (name.endsWith('-adapter.mjs')) await import(new URL('../../../' + name, import.meta.url));
+}`);
+    audit(); const base = commit();
+    lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/page/test/scan.mts'], {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8', timeout: 5000}), 'URL label lock helper loaded\n');
+    write('catalogue-adapter.mjs', 'export const dirty = true;\n');
+    assertSelected(plan(base, head), ['catalogue', 'page']);
+  }));
+});
+
+test('audited lock changes keep recursive escaped URL-label readers full', async t => {
+  for (const binding of ['direct', 'stored']) await t.test(binding, () => fixture(({write, lock, save, audit, commit, plan}) => {
+    write('scripts/page-fixture.mjs', 'export const inert = true;\n');
+    write('nested/catalogue-adapter.mjs', "import '../packages/catalogue/src/index.ts';\n");
+    const directory = String.raw`new \u0055RL('../../../', import.meta.url)`;
+    write('packages/page/test/scan.mts', `import {readdirSync} from 'node:fs';
+${binding === 'stored' ? String.raw`const directory: U\u{52}L = ` + directory + ';' : ''}
+readdirSync(${binding === 'stored' ? 'directory' : directory}, {recursive: true});
+`);
+    audit(); const base = commit();
+    lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+    assertSelected(plan(base, commit()), ['catalogue', 'page', 'unrelated']);
+  }));
+});
+
+test('audited lock changes keep unused escaped URL-label bindings narrow', () => fixture(({write, lock, save, audit, commit, plan}) => {
+  write('scripts/page-fixture.mjs', 'export const inert = true;\n');
+  write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.ts';\n");
+  write('packages/page/test/scan.mts', String.raw`const directory: U\u0052L = new \u0055RL('../../../', import.meta.url);`);
+  audit(); const base = commit();
+  lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+  assertSelected(plan(base, commit()), ['catalogue']);
+}));

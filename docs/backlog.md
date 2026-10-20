@@ -1349,10 +1349,16 @@ notifications separately.
   APIs, and saved-tree checks cover removed or added helpers, former transitive
   consumers and dirty local files. Recursive root options retain full package work,
   including audited lock changes. Unused bindings, different names, local scans and
-  a command working directory alone stay narrow in the controls. The constructor
-  and optional type label still require literal `URL`: `new \u0055RL(...)` or
-  `: \u0055RL` can hide a real helper consumer, as can a URL-variable alias.
-  Executed Node probes reproduce these omissions on both saved scanners.
+  a command working directory alone stay narrow in the controls. The `URL`
+  constructor and optional type label now also accept fixed-width and braced
+  Unicode escapes, including mixed spellings and leading zeroes. Executed scans
+  cover all four directory APIs; saved-tree checks retain old and new helpers,
+  transitive consumers and dirty-checkout independence. Recursive root options
+  keep every package, including for audited lock changes. Unused bindings,
+  local reads, different variable names, unrelated constructors and a command
+  working directory alone remain narrow in the controls. A URL-variable alias
+  can still hide a real helper consumer; the earlier executed probe reproduces
+  that omission on both saved scanners.
   Binding identity remains unverified, and reused names or inert text can retain
   extra work. An out-of-range escape inside an inert comment, such as
   `// readdirSync(\u{110000})`, also makes both scanners throw while Node accepts

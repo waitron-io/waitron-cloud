@@ -12,6 +12,12 @@ function directoryPattern(expression) {
     .replaceAll(String.raw`\s+`, space + '+'), expression.flags);
 }
 
+function directoryURLPattern(expression) {
+  // A constructor or erased type label can spell URL with identifier escapes.
+  const url = String.raw`(?:U|\\u0055|\\u\{0*55\})(?:R|\\u0052|\\u\{0*52\})(?:L|\\u004[cC]|\\u\{0*4[cC]\})`;
+  return directoryPattern(new RegExp(expression.source.replaceAll('URL', url), expression.flags));
+}
+
 function directoryIdentifier(name) {
   // Different escape spellings can name the same binding at declaration and use.
   return name.replace(/\\u(?:([\da-fA-F]{4})|\{(0*[\da-fA-F]{1,6})\})/g,
@@ -224,14 +230,14 @@ function workspaceAt(sha, workspace, git) {
         assert.doesNotMatch(name, /^(?:readdirSync|readdir|opendirSync|opendir)$/,
           `Unresolved escaped identifier at ${source.path}`);
       }
-      const rootReads = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*,?\s*\)/g))].map(match => match[2]));
+      const rootReads = new Set([...source.source.matchAll(directoryURLPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*,?\s*\)/g))].map(match => match[2]));
       // Options may enable recursion or supply a computed policy; an unresolved
       // root scan cannot justify omitting any package consumer.
-      const optionReads = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*,(?!\s*\))/g))].map(match => match[2]));
+      const optionReads = new Set([...source.source.matchAll(directoryURLPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*,(?!\s*\))/g))].map(match => match[2]));
       const optionVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*,(?!\s*\))/gu))].map(match => directoryIdentifier(match[1])));
       // A root URL variable retains helpers when its identifier is scanned.
       const scannedVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*,?\s*\)/gu))].map(match => directoryIdentifier(match[1])));
-      for (const match of source.source.matchAll(directoryPattern(/(?:\b(?:const|let|var)\s+|,\s*)((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*(?::\s*URL\s*)?=\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)/gu))) {
+      for (const match of source.source.matchAll(directoryURLPattern(/(?:\b(?:const|let|var)\s+|,\s*)((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*(?::\s*URL\s*)?=\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)/gu))) {
         const name = directoryIdentifier(match[1]);
         if (scannedVariables.has(name)) rootReads.add(match[3]);
         if (optionVariables.has(name)) optionReads.add(match[3]);
