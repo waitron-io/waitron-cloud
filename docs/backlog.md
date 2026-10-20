@@ -1097,9 +1097,14 @@ notifications separately.
   the pinned Waitron clock across 23-hour and 25-hour days, a historical cutover
   change and a fractional timezone offset, then feed selected sales through the
   normal writer. The result still contains private sale objects and cannot be
-  published as an aggregate. Reading the copied venue's clock and cutover history,
-  translating its bills, isolated full replay, idle measurement and a complete
-  cost export still need separate evidence.
+  published as an aggregate. A reader loads the saved timezone and ordered cutover
+  history from the recorded private SQLite copy. It refuses missing or malformed
+  settings, an oversized history and an unrecorded or replaced copy. It also refuses
+  a copy that still needs transaction-log sidecars, so reading cannot create them.
+  Synthetic copied databases use Waitron's real migrations and match its own clock
+  reader and trading-day boundaries across daylight-saving and cutover changes.
+  Real-source selection and bill translation, isolated full replay, idle measurement
+  and a complete cost export still need separate evidence.
   The pure calculations now cover aggregate request
   tiers, explicit resource capacities, dated growth and calendar retention, including
   protected recovery copies. Synthetic local HTTP checks reconcile retries, denied

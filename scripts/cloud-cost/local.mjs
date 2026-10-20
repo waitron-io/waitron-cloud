@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { randomUUID, createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
-import { constants, openSync, closeSync, fstatSync, lstatSync, realpathSync, existsSync,
+import { constants, openSync, closeSync, readSync, fstatSync, lstatSync, realpathSync, existsSync,
   mkdirSync, chmodSync, rmSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
 import { join, relative, isAbsolute, posix } from 'node:path';
 import { assertOwnedRoot } from './schema.mjs';
@@ -92,6 +92,50 @@ export async function preparePrivateCopy({ source, database, root, journal, sign
     await close?.();
     fail();
   } finally { await removeConfig?.(); }
+}
+
+// This clock is private input to Waitron's businessDayBounds, never a public cost receipt.
+export function readPrivateReplayClock({ source, root, journal, database, locationId }) {
+  let db, fd;
+  try {
+    const value = owned({ source, root, journal });
+    requireThat(typeof locationId === 'string' && locationId.length > 0 && locationId.length <= 128);
+    requireThat(inside(root, database));
+    const identity = canonicalFile(database);
+    requireThat((identity.mode & 0o777) === 0o600);
+    requireThat(value.localResources?.some(entry => entry.kind === 'database-copy' && entry.state === 'ready'
+      && entry.path === database && entry.ino === identity.ino && entry.dev === identity.dev));
+    fd = openSync(database, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const header = Buffer.alloc(20);
+    requireThat(readSync(fd, header, 0, header.length, 0) === header.length);
+    // A read-only WAL connection can create sidecars; selection copies must be self-contained.
+    requireThat(header.subarray(0, 16).equals(Buffer.from('SQLite format 3\0')) && header[18] === 1 && header[19] === 1);
+    closeSync(fd); fd = undefined;
+    db = new DatabaseSync(database, { readOnly: true });
+    db.exec('PRAGMA query_only=ON; BEGIN');
+    const location = db.prepare('SELECT time_zone, day_cutover FROM locations WHERE id=?').get(locationId);
+    requireThat(location && typeof location.time_zone === 'string' && location.time_zone.length <= 128);
+    const zone = new Intl.DateTimeFormat('en-US', { timeZone: location.time_zone }).resolvedOptions().timeZone;
+    requireThat(!/^[+-]/.test(zone));
+    const cutover = value => {
+      requireThat(typeof value === 'string' && /^(?:[01][0-9]|2[0-3]):[0-5][0-9]:00$/.test(value));
+      return value.slice(0, 5);
+    };
+    const dayCutover = cutover(location.day_cutover);
+    const rows = db.prepare(`SELECT effective_business_day, day_cutover FROM location_day_cutover_changes
+      WHERE location_id=? ORDER BY effective_business_day LIMIT 10001`).all(locationId);
+    requireThat(rows.length <= 10000);
+    let previous = '';
+    const cutoverChanges = rows.map(row => {
+      const day = row.effective_business_day;
+      requireThat(typeof day === 'string' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(day)
+        && Number.isFinite(Date.parse(day)) && new Date(day).toISOString().slice(0, 10) === day && day > previous);
+      previous = day;
+      return { effectiveBusinessDay: day, dayCutover: cutover(row.day_cutover) };
+    });
+    return { timeZone: location.time_zone, dayCutover, cutoverChanges };
+  } catch { fail(); }
+  finally { if (fd !== undefined) closeSync(fd); db?.close(); }
 }
 
 function git(codeRoot, argv, input) {
