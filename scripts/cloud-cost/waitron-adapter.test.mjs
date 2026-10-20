@@ -134,3 +134,20 @@ test('runtimeRefusesDanglingVenueLinkBeforeImport', async t => {
   await assert.rejects(adapter.openReplay(args), /Invalid cloud cost replay runtime/);
   assert.equal(existsSync(args.marker), false, 'a dangling link is an existing destination');
 });
+
+// Full invoices require the issuer's address; configuring it must still use the closed private boundary.
+test('fullInvoiceIssuerDomicileReachesThePinnedRuntimeWithoutOpeningExtraSettings', async t => {
+  const args = runtimeFixture(t);
+  args.initial.taxpayer.taxpayerDomicile = 'Synthetic issuer street';
+  await assert.rejects(adapter.openReplay(args), /Invalid cloud cost replay runtime/);
+  assert.equal(existsSync(args.marker), true, 'a valid issuer domicile reaches the pinned runtime');
+});
+
+test('malformedIssuerDomicileRefusesBeforeRuntimeImport', async t => {
+  const args = runtimeFixture(t);
+  for (const taxpayerDomicile of ['', '   ', null, 1, {}, 'x'.repeat(1024)]) {
+    await assert.rejects(adapter.openReplay({ ...args, initial: { ...args.initial,
+      taxpayer: { ...args.initial.taxpayer, taxpayerDomicile } } }), /Invalid cloud cost replay runtime/);
+    assert.equal(existsSync(args.marker), false);
+  }
+});

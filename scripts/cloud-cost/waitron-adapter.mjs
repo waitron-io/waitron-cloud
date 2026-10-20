@@ -54,7 +54,10 @@ function replayPaths(codeRoot, stateRoot, initial) {
   requireThat((lstatSync(stateRoot).mode & 0o777) === 0o700);
   requireThat(!directoryEntryExists(join(stateRoot, 'venue')));
   exact(initial, ['taxpayer', 'location', 'nodeName', 'seriesCode', 'fullSeriesCode', 'idSistemaInformatico']);
-  exact(initial.taxpayer, ['country', 'taxId', 'legalName']);
+  const hasDomicile = Object.hasOwn(initial.taxpayer, 'taxpayerDomicile');
+  exact(initial.taxpayer, ['country', 'taxId', 'legalName', ...(hasDomicile ? ['taxpayerDomicile'] : [])]);
+  if (hasDomicile) requireThat(typeof initial.taxpayer.taxpayerDomicile === 'string'
+    && initial.taxpayer.taxpayerDomicile.trim().length > 0 && initial.taxpayer.taxpayerDomicile.length < 1024);
   exact(initial.location, ['name', 'invoiceLocales', 'operationDescription', 'timeZone', 'dayCutover']);
   requireThat(initial.taxpayer.country === 'ES');
   requireThat([initial.taxpayer.taxId, initial.taxpayer.legalName, initial.nodeName, initial.location.name,

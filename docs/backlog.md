@@ -1103,8 +1103,17 @@ notifications separately.
   a copy that still needs transaction-log sidecars, so reading cannot create them.
   Synthetic copied databases use Waitron's real migrations and match its own clock
   reader and trading-day boundaries across daylight-saving and cutover changes.
-  Real-source selection and bill translation, isolated full replay, idle measurement
-  and a complete cost export still need separate evidence.
+  A paid-bill reader now selects one location and trading day from that same private
+  copy, checks the selected count and preserves the original order, quantities,
+  filed tax breakdown, line snapshots and split payments. It refuses corrections,
+  voids and substituted invoices rather than replaying them as ordinary sales.
+  The translated inputs contain no original node, invoice-series or order identity.
+  Scratch configuration can supply the issuer address required for full invoices.
+  Synthetic copied bills pass through the normal writer with fresh invoice numbers
+  and fiscal records; a refused payment rolls back and stops the remaining replay.
+  These private sale inputs cannot be published as aggregates. Actual source-count
+  reconciliation, isolated full replay, idle measurement and a complete cost export
+  still need separate evidence.
   The pure calculations now cover aggregate request
   tiers, explicit resource capacities, dated growth and calendar retention, including
   protected recovery copies. Synthetic local HTTP checks reconcile retries, denied

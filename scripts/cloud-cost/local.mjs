@@ -7,6 +7,7 @@ import { constants, openSync, closeSync, readSync, fstatSync, lstatSync, realpat
   mkdirSync, chmodSync, rmSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
 import { join, relative, isAbsolute, posix } from 'node:path';
 import { assertOwnedRoot } from './schema.mjs';
+import { readReplayBills } from './source-bills.mjs';
 export { openFiscalMeasurement } from './fiscal.mjs';
 export { openMailMeasurement } from './mail.mjs';
 export { replayScheduledSales } from './cadence.mjs';
@@ -94,8 +95,7 @@ export async function preparePrivateCopy({ source, database, root, journal, sign
   } finally { await removeConfig?.(); }
 }
 
-// This clock is private input to Waitron's businessDayBounds, never a public cost receipt.
-export function readPrivateReplayClock({ source, root, journal, database, locationId }) {
+function openPrivateSelection({ source, root, journal, database, locationId }) {
   let db, fd;
   try {
     const value = owned({ source, root, journal });
@@ -113,6 +113,17 @@ export function readPrivateReplayClock({ source, root, journal, database, locati
     closeSync(fd); fd = undefined;
     db = new DatabaseSync(database, { readOnly: true });
     db.exec('PRAGMA query_only=ON; BEGIN');
+    return db;
+  } catch { db?.close(); fail(); }
+  finally { if (fd !== undefined) closeSync(fd); }
+}
+
+// This clock is private input to Waitron's businessDayBounds, never a public cost receipt.
+export function readPrivateReplayClock(args) {
+  let db;
+  try {
+    const { locationId } = args;
+    db = openPrivateSelection(args);
     const location = db.prepare('SELECT time_zone, day_cutover FROM locations WHERE id=?').get(locationId);
     requireThat(location && typeof location.time_zone === 'string' && location.time_zone.length <= 128);
     const zone = new Intl.DateTimeFormat('en-US', { timeZone: location.time_zone }).resolvedOptions().timeZone;
@@ -135,7 +146,17 @@ export function readPrivateReplayClock({ source, root, journal, database, locati
     });
     return { timeZone: location.time_zone, dayCutover, cutoverChanges };
   } catch { fail(); }
-  finally { if (fd !== undefined) closeSync(fd); db?.close(); }
+  finally { db?.close(); }
+}
+
+// Sale objects retain private data and can only feed the isolated replay writer.
+export function readPrivateReplayBills(args) {
+  let db;
+  try {
+    db = openPrivateSelection(args);
+    return readReplayBills(db, args);
+  } catch { fail(); }
+  finally { db?.close(); }
 }
 
 function git(codeRoot, argv, input) {
