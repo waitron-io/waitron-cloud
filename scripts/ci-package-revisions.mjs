@@ -20,6 +20,46 @@ function arrayDirectorySource(source) {
   return source + '\n;\n' + source.replace(tokens, token => token.replace(/[\[\]{};]/g, ' '));
 }
 
+function hasObjectDirectoryReference(source, quoted = false) {
+  // Ordinary quoted values need no token scan when they contain no reader name.
+  if (!/(?:readdirSync|readdir|opendirSync|opendir)/.test(source)) return false;
+  // Import lists bind names without storing runtime objects. Skip only complete
+  // static import lists; literal and comment tokens cannot introduce a list.
+  const tokens = [...source.matchAll(/'(?:\\[\s\S]|[^'\\])*'|"(?:\\[\s\S]|[^"\\])*"|\x60(?:\\[\s\S]|[^\x60\\])*\x60|\/\*(?:[^*]|\*(?!\/))*\*\/|\/\/[^\r\n\u2028\u2029]*(?:[\r\n\u2028\u2029]|$)|\/(?![*/])(?:\\[^\r\n]|\[(?:\\[^\r\n]|[^\]\\\r\n])*\]|[^/\\[\r\n])+\/|[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*|[^\s]/gu)]
+    .filter(token => !token[0].startsWith('//') && !token[0].startsWith('/*'));
+  const ranges = [];
+  for (let index = 0; index < tokens.length; index++) {
+    if (tokens[index][0] !== 'import') continue;
+    let cursor = index + 1;
+    if (tokens[cursor]?.[0] === 'type') cursor++;
+    if (/^[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*$/u.test(tokens[cursor]?.[0] ?? '') && tokens[cursor + 1]?.[0] === ',') cursor += 2;
+    if (tokens[cursor]?.[0] !== '{') continue;
+    const start = tokens[cursor].index;
+    while (tokens[++cursor] && !['{', '}'].includes(tokens[cursor][0])) {}
+    if (tokens[cursor]?.[0] !== '}' || tokens[cursor + 1]?.[0] !== 'from' || !/^['"]/.test(tokens[cursor + 2]?.[0] ?? '')) continue;
+    ranges.push([start, tokens[cursor].index + 1]);
+    index = cursor + 2;
+  }
+  // Match property positions inside braces, not commas in arrays or arguments.
+  // Generated programs have their own delimiter stack, so separate fragments
+  // cannot combine into an object reference.
+  let importIndex = 0;
+  const delimiters = [];
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    while (ranges[importIndex]?.[1] <= token.index) importIndex++;
+    if (ranges[importIndex]?.[0] <= token.index) continue;
+    const value = token[0];
+    // A slash token may be division around live code; inspect its contents too.
+    if (!quoted && /^['"`/]/.test(value) && hasObjectDirectoryReference(value.slice(1, -1), true)) return true;
+    if (['{', '[', '('].includes(value)) delimiters.push(value);
+    else if (['}', ']', ')'].includes(value)) delimiters.pop();
+    else if (/^(?:readdirSync|readdir|opendirSync|opendir)$/.test(value) &&
+      delimiters.at(-1) === '{' && ['{', ','].includes(tokens[index - 1]?.[0]) && [',', '}'].includes(tokens[index + 1]?.[0])) return true;
+  }
+  return false;
+}
+
 function workspaceAt(sha, workspace, git) {
   assert.match(sha, /^[a-f0-9]{40}$/);
   const entries = git('ls-tree', '-rz', '--full-tree', sha).split('\0');
@@ -116,6 +156,14 @@ function workspaceAt(sha, workspace, git) {
         `Unresolved indirect directory call at ${source.path}`);
       assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|(?:,\s*)?\]|\)|;|<|satisfies\b)|(?:!\s*)+\()/),
         `Unresolved indirect directory call at ${source.path}`);
+      // Brace groups can hold or transfer a reader, including unresolved
+      // destructuring and exports. Static imports alone establish no consumer;
+      // quoted code retains the conservative check.
+      const objectReference = directoryPattern(/(?:\{|,)\s*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:,|\})/);
+      if (objectReference.test(source.source)) {
+        assert.equal(hasObjectDirectoryReference(source.source), false,
+          `Unresolved object directory reference at ${source.path}`);
+      }
       // Assignments, arrow results, block returns, yields and default exports can
       // preserve a reader for a later call. A brace can end a field or block; requiring a value
       // expression keeps ordinary named imports narrow without resolving bindings.

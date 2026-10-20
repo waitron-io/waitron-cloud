@@ -938,3 +938,29 @@ for await (const item of await scan(directory)) {
     }));
   }
 });
+
+
+test('audited lock changes retain object-shorthand directory readers', async t => {
+  for (const object of ['{API}', '{API, n: 1}', '{n: 1, API}']) for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir', null]) {
+    await t.test(`${object}: ${api ?? 'without a reader'}`, () => fixture(({git, write, lock, save, audit, commit, plan}) => {
+      const value = api ? object.replaceAll('API', api) : '{scan: () => []}';
+      write('tools/reader.mts', `import {readdirSync} from 'node:fs';
+${api && api !== 'readdirSync' ? `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';` : ''}
+export default function* makeReader() { yield ${value} }`);
+      if (api) write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.ts';\nconsole.log('object lock helper loaded');\n");
+      write('packages/page/test/scan.mts', `import makeReader from '../../../tools/reader.mts';
+const scan = Object.values(makeReader().next().value).find(value => typeof value === 'function');
+const directory = new URL(['..', '..', '..', ''].join('/'), import.meta.url);
+for await (const item of await scan(directory)) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`);
+      audit(); const base = commit();
+      lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+      const head = commit();
+      assert.equal(execFileSync(process.execPath, ['packages/page/test/scan.mts'], {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8'}), api ? 'object lock helper loaded\n' : '');
+      assertSelected(plan(base, head), api ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
+    }));
+  }
+});

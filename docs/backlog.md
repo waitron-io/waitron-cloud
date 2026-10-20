@@ -1772,11 +1772,37 @@ notifications separately.
   work with readers and narrow work without them. Unused helpers, ordinary yielded
   values and resolved directory calls stay narrow in these controls. The scan does
   not resolve bindings or parse general expressions; inert text and unrelated
-  namesakes can still select extra work. Executed remaining gaps are
-  `yield {readdirSync}`, `yield {readdirSync, n: 1}` and `return {readdirSync}`:
-  Node loads the helper through the object, but both the earlier and current
-  planner omit its consumer when that consumer does not name the API. Broader
-  D69 work still needs to resolve reader bindings inside objects.
+  namesakes can still select extra work. Object shorthand now retains full
+  package work when it stores a directory reader, including
+  `yield {readdirSync}`, `yield {readdirSync, n: 1}` and `return {readdirSync}`.
+  Executed Node controls cover all four APIs, first/middle/final properties,
+  nested preceding values and comments. Saved base, head and unchanged helpers
+  retain transitive consumers despite dirty local files; audited lock changes
+  keep full work with readers and narrow work without them. Static named imports
+  are excluded from this shorthand check, including default-plus-named and
+  type-only imports, comment-separated forms and the executed quoted-program
+  controls. Generated objects still retain consumers in those controls. Unused helpers, ordinary objects
+  and resolved directory calls stay narrow in these controls. This lexical scan
+  does not resolve bindings or parse general expressions; inert text and unrelated
+  namesakes can still select extra work. General aliases, destructuring and precise
+  object/binding resolution remain open. Destructured reader bindings, named
+  reader exports, quoted text such as `'{readdirSync}'` and generated import text
+  with escaped quotes can still select extra work. Executed base/final probes
+  record these conservative cases; precise binding and generated-code resolution
+  remain D69 work. Passing a reader as a middle call argument is a separately
+  executed remaining omission: Node loads the helper, but both base and final
+  planners select catalogue alone when the consumer does not name the API.
+  Resolve that argument transfer before claiming complete reader discovery.
+  The object check requires a brace
+  context, so array readers keep their existing diagnostics and comma-only text
+  stays narrow. Each quoted program has its own delimiter context; separate inert
+  fragments cannot combine into a reader. A division-like token can contain live
+  code, so its body is also checked for a stored object reader. A valid
+  12,000-import control executes in Node and keeps five repeated saved-revision
+  plans, using the production batched Git reader, within one five-second child budget. The initial source-masking scan
+  reproduced a timeout; ordered import ranges, token contexts and skipping
+  ordinary quoted values without reader names pass that same bound. This does
+  not qualify arbitrary parser inputs, nested generated programs or host load.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.
