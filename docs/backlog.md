@@ -1751,10 +1751,19 @@ notifications separately.
   full work with readers and narrow work without them. Unused helpers, ordinary
   fields and arrow values, and resolved directory calls keep narrow selection in
   the controls. The scan does not resolve bindings or parse arbitrary expressions;
-  inert text and unrelated namesakes can select extra work. General assignment,
-  destructuring aliases and other unresolved reader forms remain open. Reproduced
-  remaining gaps include a block-body arrow or class method with
-  `return ns.readdirSync }` before its closing brace.
+  inert text and unrelated namesakes can select extra work.
+  Block returns also retain full package work when a function or method returns
+  the reader before its closing brace, including `return ns.readdirSync }`.
+  Executed Node controls cover all four directory APIs, block-body arrows,
+  ordinary functions, instance and static methods, awaited values, bare and
+  namespace references, comments, optional access and erased non-null assertions.
+  Saved base, head and unchanged helpers retain transitive consumers despite dirty
+  local files; audited lock changes retain full work with these readers. Unused
+  helpers, ordinary return values and resolved directory calls keep narrow selection
+  in the controls. These lexical checks do not resolve bindings or parse general
+  expressions; inert text or an unrelated namesake can select extra work.
+  General assignment, destructuring aliases and other unresolved reader forms
+  remain open.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.

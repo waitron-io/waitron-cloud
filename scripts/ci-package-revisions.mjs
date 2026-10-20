@@ -116,10 +116,10 @@ function workspaceAt(sha, workspace, git) {
         `Unresolved indirect directory call at ${source.path}`);
       assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|(?:,\s*)?\]|\)|;|<|satisfies\b)|(?:!\s*)+\()/),
         `Unresolved indirect directory call at ${source.path}`);
-      // Assignments, arrow results and default exports can preserve a reader for
+      // Assignments, returns and default exports can preserve a reader for
       // a later call. A closing brace can end a class field; requiring a value
       // expression keeps ordinary named imports narrow without resolving bindings.
-      assert.doesNotMatch(source.source, directoryPattern(/(?:=>|=|\bexport\s+default)\s*(?:await\s+)*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b\s*(?:!\s*)*(?:,|\}|[\r\n\u2028\u2029]|\/\/|$)/u),
+      assert.doesNotMatch(source.source, directoryPattern(/(?:=>|=|\breturn\b|\bexport\s+default)\s*(?:await\s+)*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b\s*(?:!\s*)*(?:,|\}|[\r\n\u2028\u2029]|\/\/|$)/u),
         `Unresolved indirect directory call at ${source.path}`);
       // A comma can store the reader between other elements. Require an array
       // opener so ordinary named imports do not force full package work. A simple
