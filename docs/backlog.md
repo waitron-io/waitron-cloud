@@ -1785,12 +1785,16 @@ notifications separately.
   and resolved directory calls stay narrow in these controls. This lexical scan
   does not resolve bindings or parse general expressions; inert text and unrelated
   namesakes can still select extra work. General aliases, destructuring and precise
-  object/binding resolution remain open. A valid 12,000-import control executes
-  in Node and keeps five repeated saved-revision plans within one five-second
-  child budget.
-  It reproduces a timeout when the new scan repeatedly checks import ranges and
-  copies the source; advancing through ranges and joining the result once passes
-  that same bound. This does not qualify arbitrary parser inputs or host load.
+  object/binding resolution remain open. The object check requires a brace
+  context, so array readers keep their existing diagnostics and comma-only text
+  stays narrow. Each quoted program has its own delimiter context; separate inert
+  fragments cannot combine into a reader. A division-like token can contain live
+  code, so its body is also checked for a stored object reader. A valid
+  12,000-import control executes in Node and keeps five repeated saved-revision
+  plans within one five-second child budget. The initial source-masking scan
+  reproduced a timeout; ordered import ranges, token contexts and skipping
+  ordinary quoted values without reader names pass that same bound. This does
+  not qualify arbitrary parser inputs, nested generated programs or host load.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.

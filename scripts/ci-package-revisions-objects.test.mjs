@@ -197,3 +197,14 @@ for (let attempt = 0; attempt < 5; attempt++) console.log(JSON.stringify(scopeFo
   const plans = result.stdout.trim().split('\n').map(line => JSON.parse(line));
   assert.deepEqual(plans, Array.from({length: 5}, () => ({full: false, packages: ['catalogue']})));
 }));
+
+test('division-like tokens cannot hide a stored object reader', () => fixture(({root, write, commit, plan}) => {
+  write('tools/reader.mts', "import {readdirSync} from 'node:fs';\nconst fraction = 6 / 2; export default {readdirSync}; const ratio = 8 / 2;\n");
+  write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('object reader helper loaded');\n");
+  write('packages/portal/src/reader.mts', consumer(forms[2]));
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'object reader helper loaded\n');
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
+}));

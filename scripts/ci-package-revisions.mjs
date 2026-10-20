@@ -20,7 +20,9 @@ function arrayDirectorySource(source) {
   return source + '\n;\n' + source.replace(tokens, token => token.replace(/[\[\]{};]/g, ' '));
 }
 
-function objectDirectorySource(source, quoted = false) {
+function hasObjectDirectoryReference(source, quoted = false) {
+  // Ordinary quoted values need no token scan when they contain no reader name.
+  if (!/(?:readdirSync|readdir|opendirSync|opendir)/.test(source)) return false;
   // Import lists bind names without storing runtime objects. Skip only complete
   // static import lists; literal and comment tokens cannot introduce a list.
   const tokens = [...source.matchAll(/'(?:\\[\s\S]|[^'\\])*'|"(?:\\[\s\S]|[^"\\])*"|\x60(?:\\[\s\S]|[^\x60\\])*\x60|\/\*(?:[^*]|\*(?!\/))*\*\/|\/\/[^\r\n\u2028\u2029]*(?:[\r\n\u2028\u2029]|$)|\/(?![*/])(?:\\[^\r\n]|\[(?:\\[^\r\n]|[^\]\\\r\n])*\]|[^/\\[\r\n])+\/|[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*|[^\s]/gu)]
@@ -35,30 +37,27 @@ function objectDirectorySource(source, quoted = false) {
     const start = tokens[cursor].index;
     while (tokens[++cursor] && !['{', '}'].includes(tokens[cursor][0])) {}
     if (tokens[cursor]?.[0] !== '}' || tokens[cursor + 1]?.[0] !== 'from' || !/^['"]/.test(tokens[cursor + 2]?.[0] ?? '')) continue;
-    ranges.push([start, tokens[cursor].index + 1, ' ']);
+    ranges.push([start, tokens[cursor].index + 1]);
     index = cursor + 2;
   }
-  // The source graph also follows quoted generated programs. Their static
-  // import lists are not object values either; keep the rest of each token.
-  // Tokens and import ranges are ordered, so each import can be passed once.
-  const importRanges = [...ranges];
+  // Match property positions inside braces, not commas in arrays or arguments.
+  // Generated programs have their own delimiter stack, so separate fragments
+  // cannot combine into an object reference.
   let importIndex = 0;
-  if (!quoted) for (const token of tokens) {
-    if (!/^['"`]/.test(token[0])) continue;
-    while (importRanges[importIndex]?.[1] <= token.index) importIndex++;
-    if (importRanges[importIndex]?.[0] <= token.index) continue;
-    const content = objectDirectorySource(token[0].slice(1, -1), true);
-    if (content !== token[0].slice(1, -1)) ranges.push([token.index, token.index + token[0].length, token[0][0] + content + token[0].at(-1)]);
+  const delimiters = [];
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    while (ranges[importIndex]?.[1] <= token.index) importIndex++;
+    if (ranges[importIndex]?.[0] <= token.index) continue;
+    const value = token[0];
+    // A slash token may be division around live code; inspect its contents too.
+    if (!quoted && /^['"`/]/.test(value) && hasObjectDirectoryReference(value.slice(1, -1), true)) return true;
+    if (['{', '[', '('].includes(value)) delimiters.push(value);
+    else if (['}', ']', ')'].includes(value)) delimiters.pop();
+    else if (/^(?:readdirSync|readdir|opendirSync|opendir)$/.test(value) &&
+      delimiters.at(-1) === '{' && ['{', ','].includes(tokens[index - 1]?.[0]) && [',', '}'].includes(tokens[index + 1]?.[0])) return true;
   }
-  // Join disjoint pieces once instead of copying the source for every list.
-  const parts = [];
-  let cursor = 0;
-  for (const [start, end, replacement] of ranges.sort((a, b) => a[0] - b[0])) {
-    parts.push(source.slice(cursor, start), replacement);
-    cursor = end;
-  }
-  parts.push(source.slice(cursor));
-  return parts.join('');
+  return false;
 }
 
 function workspaceAt(sha, workspace, git) {
@@ -161,7 +160,7 @@ function workspaceAt(sha, workspace, git) {
       // specifiers alone do not put the binding in a runtime object.
       const objectReference = directoryPattern(/(?:\{|,)\s*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:,|\})/);
       if (objectReference.test(source.source)) {
-        assert.doesNotMatch(objectDirectorySource(source.source), objectReference,
+        assert.equal(hasObjectDirectoryReference(source.source), false,
           `Unresolved object directory reference at ${source.path}`);
       }
       // Assignments, arrow results, block returns, yields and default exports can
