@@ -51,6 +51,8 @@ for await (const item of await ${api}(directory${options})) {
 const execute = root => execFileSync(process.execPath, ['packages/portal/src/scan.mts'], {cwd: root, encoding: 'utf8', timeout: 5000});
 const assignments = [
   ['direct constructor', "let directory; directory = new URL('../../../', import.meta.url);"],
+  ['declaration assignment chain', "let middle; const directory = middle = new URL('../../../', import.meta.url);"],
+  ['used default parameter', "function target(directory = new URL('../../../', import.meta.url)) { return directory; } const directory = target();"],
   ['combined constructor chain', "let middle, directory; directory = middle = new URL('../../../', import.meta.url);"],
   ['constructor followed by alias', "let original; original = new URL('../../../', import.meta.url); const directory = original;"],
   ['escaped constructor and name', String.raw`let directory; \u0064irectory = new \u0055RL('../../../', import.meta.url);`],
@@ -135,7 +137,7 @@ test('unused assignments, different names and local assigned reads keep narrow s
   }));
 });
 
-// A missing left-name boundary would treat an inert identifier suffix as a root input.
+// Digit suffixes catch removal of the left boundary; longer valid names stay distinct.
 test('constructor assignment identifier suffixes do not turn local scans into root scans', async t => {
   for (const prefix of ['1', '$', 'é', String.raw`\u0061`]) await t.test(prefix, () => fixture(({root, git, write, commit, workspace}) => {
     write('catalogue-adapter.mjs', helper);
