@@ -1187,9 +1187,12 @@ notifications separately.
   SDK mutations now reject keys containing path escapes before forwarding them
   to a local storage backend. Default listeners and native stream histories still
   refuse batches. Native bulk deletion, multipart histories and a complete measured
-  stream remain open. A delayed-start control also exposes an indefinite provider
-  readiness wait in the fiscal timeout test; its timeout and cancellation assertions
-  remain intact, and the fixture repair remains open. The complete storage measurement,
+  stream remain open. The fiscal timeout fixture now advances its 50 ms deadline
+  only after the provider admits the request, so a delayed event loop cannot skip
+  the response path or wait forever for an already expired request. A controlled
+  100 ms pause reproduces the earlier hang and passes with the controlled clock.
+  Its timeout, cancellation, oversized-response and interruption checks remain intact.
+  The complete storage measurement,
   idle period, measurement controller and CLI,
   public/staff journeys and full cost export remain open.
   The pure calculations now cover aggregate request

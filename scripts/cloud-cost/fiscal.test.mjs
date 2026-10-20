@@ -96,6 +96,8 @@ test('fiscalRetryCeilingCountsEveryFailedPhysicalAttempt', async t => {
 
 // A hanging or interrupted request must not turn into a complete measured transfer.
 test('fiscalTimeoutCancellationAndOversizedResponsesPoisonMeasurement', async t => {
+  // Start the deadline after provider admission so scheduling delay cannot skip the exercised response path.
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   for (const mode of ['timeout', 'signal', 'close', 'oversize', 'interrupted']) {
     let admitted;
     const ready = new Promise(resolve => { admitted = resolve; });
@@ -109,6 +111,7 @@ test('fiscalTimeoutCancellationAndOversizedResponsesPoisonMeasurement', async t 
     const pending = assert.rejects(run.request('reserve', {}), bad);
     await ready;
     assert.throws(() => run.snapshot(), bad);
+    if (mode === 'timeout') t.mock.timers.tick(50);
     if (mode === 'signal') controller.abort();
     if (mode === 'close') await run.close().catch(() => {});
     await pending;
