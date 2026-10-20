@@ -174,3 +174,30 @@ test('division in neighboring arguments cannot hide a transferred reader', async
     assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
   }));
 });
+
+test('review division beside a path-string argument retains consumers', async t => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) await t.test(api, () => fixture(({root, write, commit, plan}) => {
+    write('catalogue-adapter.mjs', helper);
+    write('tools/reader.mts', reader(api, "6 / 2, API, 'a/b'"));
+    write('packages/portal/src/reader.mts', consumer);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'argument helper loaded\n');
+    assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
+  }));
+});
+
+test('review division in neighboring object values retains consumers', async t => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) await t.test(api, () => fixture(({root, write, commit, plan}) => {
+    write('catalogue-adapter.mjs', helper);
+    write('tools/reader.mts', `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+export default Object.values({a: 6 / 2, ${api}, b: 9 / 3}).find(value => typeof value === 'function');`);
+    write('packages/portal/src/reader.mts', consumer);
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'argument helper loaded\n');
+    assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
+  }));
+});
