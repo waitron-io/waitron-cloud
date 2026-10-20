@@ -1772,11 +1772,19 @@ notifications separately.
   work with readers and narrow work without them. Unused helpers, ordinary yielded
   values and resolved directory calls stay narrow in these controls. The scan does
   not resolve bindings or parse general expressions; inert text and unrelated
-  namesakes can still select extra work. Executed remaining gaps are
-  `yield {readdirSync}`, `yield {readdirSync, n: 1}` and `return {readdirSync}`:
-  Node loads the helper through the object, but both the earlier and current
-  planner omit its consumer when that consumer does not name the API. Broader
-  D69 work still needs to resolve reader bindings inside objects.
+  namesakes can still select extra work. Object shorthand now retains full
+  package work when it stores a directory reader, including
+  `yield {readdirSync}`, `yield {readdirSync, n: 1}` and `return {readdirSync}`.
+  Executed Node controls cover all four APIs, first/middle/final properties,
+  nested preceding values and comments. Saved base, head and unchanged helpers
+  retain transitive consumers despite dirty local files; audited lock changes
+  keep full work with readers and narrow work without them. Static named imports
+  are excluded from this shorthand check, including default-plus-named and
+  type-only imports and comment-separated forms. Unused helpers, ordinary objects
+  and resolved directory calls stay narrow in these controls. This lexical scan
+  does not resolve bindings or parse general expressions; inert text and unrelated
+  namesakes can still select extra work. General aliases, destructuring and precise
+  object/binding resolution remain open.
   A final element's trailing comma also keeps full work, including multiline and
   comment-separated forms. Saved-helper and lockfile controls independently exercise
   final elements, so the first-element guard cannot mask a missing final-element guard.

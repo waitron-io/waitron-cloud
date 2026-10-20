@@ -20,6 +20,28 @@ function arrayDirectorySource(source) {
   return source + '\n;\n' + source.replace(tokens, token => token.replace(/[\[\]{};]/g, ' '));
 }
 
+function objectDirectorySource(source) {
+  // Import lists bind names without storing runtime objects. Skip only complete
+  // static import lists; literal and comment tokens cannot introduce a list.
+  const tokens = [...source.matchAll(/'(?:\\[\s\S]|[^'\\])*'|"(?:\\[\s\S]|[^"\\])*"|\x60(?:\\[\s\S]|[^\x60\\])*\x60|\/\*(?:[^*]|\*(?!\/))*\*\/|\/\/[^\r\n\u2028\u2029]*(?:[\r\n\u2028\u2029]|$)|\/(?![*/])(?:\\[^\r\n]|\[(?:\\[^\r\n]|[^\]\\\r\n])*\]|[^/\\[\r\n])+\/|[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*|[^\s]/gu)]
+    .filter(token => !token[0].startsWith('//') && !token[0].startsWith('/*'));
+  const ranges = [];
+  for (let index = 0; index < tokens.length; index++) {
+    if (tokens[index][0] !== 'import') continue;
+    let cursor = index + 1;
+    if (tokens[cursor]?.[0] === 'type') cursor++;
+    if (/^[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*$/u.test(tokens[cursor]?.[0] ?? '') && tokens[cursor + 1]?.[0] === ',') cursor += 2;
+    if (tokens[cursor]?.[0] !== '{') continue;
+    const start = tokens[cursor].index;
+    while (tokens[++cursor] && !['{', '}'].includes(tokens[cursor][0])) {}
+    if (tokens[cursor]?.[0] !== '}' || tokens[cursor + 1]?.[0] !== 'from' || !/^['"]/.test(tokens[cursor + 2]?.[0] ?? '')) continue;
+    ranges.push([start, tokens[cursor].index + 1]);
+    index = cursor + 2;
+  }
+  for (const [start, end] of ranges.reverse()) source = source.slice(0, start) + ' ' + source.slice(end);
+  return source;
+}
+
 function workspaceAt(sha, workspace, git) {
   assert.match(sha, /^[a-f0-9]{40}$/);
   const entries = git('ls-tree', '-rz', '--full-tree', sha).split('\0');
@@ -116,6 +138,13 @@ function workspaceAt(sha, workspace, git) {
         `Unresolved indirect directory call at ${source.path}`);
       assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|(?:,\s*)?\]|\)|;|<|satisfies\b)|(?:!\s*)+\()/),
         `Unresolved indirect directory call at ${source.path}`);
+      // Shorthand properties retain a reader for a later call. Static import
+      // specifiers alone do not put the binding in a runtime object.
+      const objectReference = directoryPattern(/(?:\{|,)\s*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:,|\})/);
+      if (objectReference.test(source.source)) {
+        assert.doesNotMatch(objectDirectorySource(source.source), objectReference,
+          `Unresolved object directory reference at ${source.path}`);
+      }
       // Assignments, arrow results, block returns, yields and default exports can
       // preserve a reader for a later call. A brace can end a field or block; requiring a value
       // expression keeps ordinary named imports narrow without resolving bindings.
