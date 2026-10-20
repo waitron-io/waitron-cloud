@@ -1089,8 +1089,17 @@ notifications separately.
   pass through the pinned Waitron writer with its normal fiscal integrity checks;
   a refused sale preserves rollback and stops the remaining schedule. Cancellation
   and deadlines stop new sales and wait for admitted writes before returning. The
-  scheduler returns counts and durations only. Source-day selection, isolated full
-  replay, idle measurement and a complete cost export still need separate evidence.
+  scheduler returns counts and durations only. A private day-preparation step now
+  selects events from supplied Waitron trading-day boundaries, includes the start
+  and excludes the end, checks the expected count and preserves sale order and
+  elapsed spacing. It starts the replay timeline at the first selected sale;
+  startup and idle traffic remain separate measurements. Synthetic checks use
+  the pinned Waitron clock across 23-hour and 25-hour days, a historical cutover
+  change and a fractional timezone offset, then feed selected sales through the
+  normal writer. The result still contains private sale objects and cannot be
+  published as an aggregate. Reading the copied venue's clock and cutover history,
+  translating its bills, isolated full replay, idle measurement and a complete
+  cost export still need separate evidence.
   The pure calculations now cover aggregate request
   tiers, explicit resource capacities, dated growth and calendar retention, including
   protected recovery copies. Synthetic local HTTP checks reconcile retries, denied
