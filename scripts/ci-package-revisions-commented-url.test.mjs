@@ -51,8 +51,8 @@ for await (const item of await ${api}(${binding === 'stored' ? 'directory' : dir
 
 test('commented URL bases retain immediate helpers Node actually loads', async t => {
   for (const api of apis) for (const binding of ['direct', 'stored']) {
-    for (const gap of [' ', '/* base */', '// base\n', '// base\r', '// base\u2028', '// base\u2029']) {
-      await t.test(`${api} ${binding} ${JSON.stringify(gap)}`, () => fixture(({root, git, write, commit, workspace}) => {
+    for (const [label, gap] of [['space', ' '], ['block', '/* base */'], ['LF', '// base\n'], ['CR', '// base\r'], ['U+2028', '// base\u2028'], ['U+2029', '// base\u2029']]) {
+      await t.test(`${api} ${binding} ${label}`, () => fixture(({root, git, write, commit, workspace}) => {
         write('catalogue-adapter.mjs', helper);
         write('nested/unrelated-adapter.mjs', "import '../packages/unrelated/src/index.mjs';\n");
         write('packages/portal/src/index.mjs', reader(api, binding, `import${gap}.${gap}meta${gap}.${gap}url`));
