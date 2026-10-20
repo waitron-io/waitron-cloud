@@ -190,9 +190,10 @@ test('large valid named-import programs keep bounded isolated planning', {timeou
   const child = `import {scopeForRevisions} from ${JSON.stringify(new URL('./ci-package-revisions.mjs', import.meta.url).href)};
 import {execFileSync} from 'node:child_process';
 const git = (...args) => execFileSync('git', args, {encoding: 'utf8'});
-console.log(JSON.stringify(scopeForRevisions(['packages/catalogue/src/index.mjs'], ${JSON.stringify(workspace)}, '${base}', '${head}', git)));
+for (let attempt = 0; attempt < 5; attempt++) console.log(JSON.stringify(scopeForRevisions(['packages/catalogue/src/index.mjs'], ${JSON.stringify(workspace)}, '${base}', '${head}', git)));
 `;
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', child], {cwd: root, encoding: 'utf8', timeout: 5000});
   assert.equal(result.status, 0, result.error?.code ?? result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), {full: false, packages: ['catalogue']});
+  const plans = result.stdout.trim().split('\n').map(line => JSON.parse(line));
+  assert.deepEqual(plans, Array.from({length: 5}, () => ({full: false, packages: ['catalogue']})));
 }));

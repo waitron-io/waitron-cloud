@@ -1786,7 +1786,8 @@ notifications separately.
   does not resolve bindings or parse general expressions; inert text and unrelated
   namesakes can still select extra work. General aliases, destructuring and precise
   object/binding resolution remain open. A valid 12,000-import control executes
-  in Node and keeps saved-revision planning within a five-second child budget.
+  in Node and keeps five repeated saved-revision plans within one five-second
+  child budget.
   It reproduces a timeout when the new scan repeatedly checks import ranges and
   copies the source; advancing through ranges and joining the result once passes
   that same bound. This does not qualify arbitrary parser inputs or host load.
