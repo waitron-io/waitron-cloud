@@ -1165,7 +1165,14 @@ notifications separately.
   output. The controller removes its own copy, worker, network and added files while
   preserving caller state. Replaced directories or lost ownership refuse cleanup
   and retain recorded resources for explicit recovery. This proves writer admission;
-  it does not measure stream traffic or cost. A separate unversioned stream-history
+  it does not measure stream traffic or cost. The [local command](../scripts/cloud-cost/cli.mjs)
+  now runs that admission stage from an explicitly private, bounded configuration file.
+  It rejects linked, shared, changed or oversized configuration files and requires
+  the command's timing to match the private experiment. Importing the command does
+  not start work. Both interrupt and termination signals wait for owned cleanup;
+  worker output and private failures remain suppressed. The result explicitly says
+  `stage: replay-admission` and `costMeasured: false`. Full measurement dispatch and
+  the final anonymous cost receipt remain unfinished. A separate unversioned stream-history
   mode now preserves the storage used before replacement or deletion, including
   recreation and retries. It bounds when a write could have committed and checks
   failed replies against an independent object inventory. Generated HTTP and real

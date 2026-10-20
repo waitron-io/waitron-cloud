@@ -226,3 +226,80 @@ test('isolatedControllerPreservesAReplacedPrivateDirectory', async t => {
   assert.equal(docker(['ps', '-aq', '--filter', 'label=io.waitron.cloud-cost.owner=' + f.journal.token]), '');
   assert.equal(docker(['network', 'ls', '-q', '--filter', 'label=io.waitron.cloud-cost.owner=' + f.journal.token]), '');
 });
+
+
+// The command must use the real controller and publish only its admitted aggregate fields.
+const commandPath = new URL('../cli.mjs', import.meta.url).pathname;
+function localCommand(f) {
+  const path = join(f.root, 'private-command.json');
+  writeFileSync(path, JSON.stringify({ stage: 'replay-admission', ...f }), { mode: 0o600 });
+  return [commandPath, 'local', '--private-config', path, '--cadence', f.cadence.mode,
+    '--window-seconds', String(f.windowSeconds)];
+}
+test('localCommandRunsTheGenuineWriterAndSuppressesPrivateOutput', async t => {
+  const f = await fixture(t), before = fingerprint(f.database);
+  prefixRuntime(f, 'console.log("PRIVATE_SYNTHETIC_STDOUT");console.error("PRIVATE_SYNTHETIC_STDERR");');
+  const command = localCommand(f), configBefore = readFileSync(command[3]);
+  const result = spawnSync(process.execPath, command, { env: { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' },
+    timeout: 30000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  assert.equal(result.status, 0); assert.equal(result.stderr, '');
+  const output = JSON.parse(result.stdout);
+  assert.deepEqual(Object.keys(output).sort(), ['admission', 'cleanup', 'costMeasured', 'isolation', 'stage']);
+  assert.equal(output.stage, 'replay-admission'); assert.equal(output.costMeasured, false);
+  assert.deepEqual(output.admission.replay.counts, { expected: 3, attempted: 3, successful: 3, failed: 0 });
+  assert.deepEqual(output.admission.integrity, { ok: true, issues: 0 });
+  assert.deepEqual(output.isolation, { blockedConnections: 3, blockedDns: 2, localControl: true });
+  assert.deepEqual(output.cleanup, { workerContainers: 0, networks: 0, privateCopies: 0 });
+  assert.equal(/PRIVATE_|2026-|\/state|taxId|locationId|sha256:|ownership|journal/.test(result.stdout), false);
+  assert.deepEqual(readFileSync(command[3]), configBefore, 'caller owns the config'); clean(f, before);
+});
+
+// Losing either signal handler kills the client before its recorded worker can be collected.
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  test('localCommandWaitsForOwnedCleanupOn_'+signal, async t => {
+    const f = await fixture(t), before = fingerprint(f.database);
+    prefixRuntime(f, 'await new Promise(resolve=>setTimeout(resolve,30000));');
+    const { spawn } = await import('node:child_process');
+    const child = spawn(process.execPath, localCommand(f), { env: { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' },
+      stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '', stderr = '', sent = false, timer;
+    child.stdout.on('data', chunk => { stdout += chunk; }); child.stderr.on('data', chunk => { stderr += chunk; });
+    const closed = new Promise((resolve, reject) => { child.once('error', reject); child.once('close', (status, signal) => resolve({ status, signal })); });
+    const poll = setInterval(() => {
+      const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources ?? [];
+      if (!sent && entries.some(e => e.kind === 'replay-worker' && e.state === 'started')) { sent = true; child.kill(signal); }
+    }, 10);
+    try {
+      timer = setTimeout(() => child.kill('SIGKILL'), 20000);
+      const result = await closed;
+      assert.equal(sent, true, 'reach the admitted worker before signalling');
+      assert.deepEqual(result, { status: 1, signal: null });
+      assert.equal(stdout, ''); assert.equal(stderr, 'Cloud cost local command refused.\n'); clean(f, before);
+    } finally { clearInterval(poll); clearTimeout(timer); }
+  });
+}
+
+// A removed agreement check would run a different experiment and create journaled resources.
+test('localCommandRequiresPrivateAndCommandTimingToAgreeBeforeWork', async t => {
+  const f = await fixture(t), before = fingerprint(f.database), command = localCommand(f);
+  const { runLocal } = await import('../run-local.mjs');
+  for (const options of [{ cadence: 'original', windowSeconds: 120 }, { cadence: 'accelerated', windowSeconds: 119 }]) {
+    await assert.rejects(runLocal({ privateConfig: command[3], ...options }), { message: 'Invalid cloud cost local command' });
+    assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources, undefined);
+    clean(f, before);
+  }
+});
+
+// Argument mistakes must refuse an otherwise runnable config without opening the source.
+test('localCommandRefusesUnexpectedArgumentsBeforeJournalMutations', async t => {
+  const f = await fixture(t), before = fingerprint(f.database), command = localCommand(f);
+  for (const argv of [[...command, '--raw', 'PRIVATE_RAW'], [...command, '--cadence', 'accelerated'],
+    command.map((v, i) => i === 0 ? v : v === '--cadence' ? '--unknown' : v),
+    command.map(v => v === 'local' ? 'live' : v)]) {
+    const result = spawnSync(process.execPath, argv, { env: { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' },
+      timeout: 30000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    assert.equal(result.status, 1); assert.equal(result.stdout, '');
+    assert.equal(result.stderr, 'Cloud cost local command refused.\n');
+    assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources, undefined); clean(f, before);
+  }
+});
