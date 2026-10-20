@@ -1286,16 +1286,18 @@ notifications separately.
   and unobserved schedules stay explicitly unknown, so this stage also returns
   `costMeasured: false`. Receipt times describe the experiment, never the original
   sale dates. This covers the stream experiment; it does not qualify the full venue
-  cost. Investigate the initial generated receipt-command refusal before the full
-  venue measurement; the later instrumented and ordinary checks pass, but its
-  cause remains unexplained. Failed workers now leave a fixed failure stage in the
-  private ownership journal before their scratch state is removed. The host checks
-  the diagnostic's file size, permissions and closed fields; raw errors are never
-  recorded or printed. Missing diagnostics leave the stage unknown. Malformed
-  diagnostics produce a fixed invalid-diagnostic code. The existing ownership check
-  still forbids diagnostic writes and cleanup when a worker creates a symlink.
-  Six instrumented generated receipt runs passed without reproducing the original
-  refusal; these diagnostics do not establish a cause or a fix.
+  cost. An ordinary generated receipt run reproduced the earlier refusal pattern:
+  its idle observation ended at 1.999928834 seconds against a two-second minimum.
+  Replay now checks elapsed monotonic time after timer wakes and continues observing
+  until both startup and idle meet their configured duration. The host still rejects
+  short observations. A generated early-wake check exercises the real isolated writer,
+  native stream, restore and cleanup. The original failure has no detailed trace, so
+  attributing that individual occurrence to the same timing defect remains an inference.
+  Failed workers retain a fixed failure stage in the private ownership journal before
+  scratch removal. Diagnostics stay closed and private; raw errors are never recorded
+  or printed. Missing diagnostics leave the stage unknown, and malformed diagnostics
+  produce a fixed invalid-diagnostic code. Ownership checks still forbid diagnostic
+  writes and cleanup when a worker creates a symlink.
   Complete accounting/export across the remaining drivers, the full venue sample, the required
   idle observation and the remaining public/staff journeys stay open.
   The fiscal timeout fixture now advances its 50 ms deadline

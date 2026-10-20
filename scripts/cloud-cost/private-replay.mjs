@@ -52,6 +52,14 @@ function logicalBytes(database) {
   } finally { db.close(); }
 }
 
+async function observeFor(seconds, signal) {
+  const until = performance.now() + seconds * 1000;
+  let remaining;
+  // Timer wakes do not establish elapsed observation; the monotonic clock does.
+  while ((remaining = until - performance.now()) > 0)
+    await delay(Math.ceil(remaining), undefined, { signal });
+}
+
 // Call only inside the audited isolated worker: this stage neither starts isolation nor qualifies cost accounting.
 // State belongs to this invocation; an admitted sale settles before the adapter closes and cleanup begins.
 export async function replayPrivateDay(args) {
@@ -105,7 +113,7 @@ export async function replayPrivateDay(args) {
     const freshDatabase = join(stateRoot, 'venue/venue.db'), freshBeforeBytes = logicalBytes(freshDatabase);
     if (streamOptions) {
       stream = await openReplayStream({ ...streamOptions, source, root, journal, database: freshDatabase, signal });
-      await delay(streamOptions.startupSeconds * 1000, undefined, { signal });
+      await observeFor(streamOptions.startupSeconds, signal);
       await stream.setPhase('workload');
     }
     let successfulSales = 0;
@@ -119,7 +127,7 @@ export async function replayPrivateDay(args) {
     requireThat(counts.attempted === prepared.expectedSales && counts.successful === prepared.expectedSales && counts.failed === 0);
     if (stream) {
       await stream.setPhase('idle'); await progress('idle');
-      await delay(streamOptions.idleSeconds * 1000, undefined, { signal });
+      await observeFor(streamOptions.idleSeconds, signal);
       await stream.setPhase('verification');
     }
     await progress('verification');

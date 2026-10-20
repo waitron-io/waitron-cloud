@@ -617,3 +617,25 @@ test('workerFailureDiagnosticRefusesAReplacedScratchDirectoryBeforeReadingIt', a
   assert.equal(entries.some(row => row.kind === 'isolated-replay' && row.path === path && row.state === 'removed'), false);
   assert.deepEqual(fingerprint(f.database), before);
 });
+
+// A timer wake is advisory; the measured idle phase must still cover its configured minimum.
+test('isolatedHostCompletesTheIdleObservationAfterAnEarlyTimerWake', async t => {
+  const f = await streamedFixture(t), before = fingerprint(f.database);
+  prefixRuntime(f, `import generatedTimers from 'node:timers/promises';
+    import {syncBuiltinESMExports as generatedSyncExports} from 'node:module';
+    const generatedOriginalDelay=generatedTimers.setTimeout;
+    let generatedEarlyWakes=0;
+    generatedTimers.setTimeout=(ms,...args)=>{
+      if(ms>1800&&ms<=2000){generatedEarlyWakes++;return generatedOriginalDelay(100,...args);}
+      return generatedOriginalDelay(ms,...args);
+    };
+    generatedSyncExports();
+    process.on('exit',()=>{if(generatedEarlyWakes<2)process.exitCode=1;});`);
+  let result;
+  await assert.doesNotReject(async () => { result = await controller.runIsolatedReplay(f); },
+    'an early wake must resume observation until the measured minimum is covered');
+  assert.ok(result.admission.stream.phases.find(row => row.phase === 'startup').elapsedSeconds >= 2);
+  assert.ok(result.admission.stream.phases.find(row => row.phase === 'idle').elapsedSeconds >= 2);
+  assert.deepEqual(result.admission.stream.restored, { sales: 3, integrity: true });
+  clean(f, before);
+});
