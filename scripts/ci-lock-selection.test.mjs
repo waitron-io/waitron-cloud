@@ -1079,3 +1079,50 @@ test('audited lock changes keep unused Unicode URL bindings narrow', () => fixtu
   lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
   assertSelected(plan(base, commit()), ['catalogue']);
 }));
+
+// Losing escaped URL binding discovery or normalization must retain real lock consumers.
+test('audited lock changes retain escaped URL-variable directory consumers', async t => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) {
+    for (const [binding, use] of [[String.raw`\u0064irectory`, 'directory'], ['directory', String.raw`\u{64}irectory`]]) {
+      await t.test(`${api} ${binding} / ${use}`, () => fixture(({git, write, lock, save, audit, commit, plan}) => {
+        write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.ts';\nconsole.log('escaped URL lock helper loaded');\n");
+        write('scripts/page-fixture.mjs', 'export const inert = true;\n');
+        write('packages/page/test/scan.mjs', `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+const ${binding} = new URL('../../../', import.meta.url);
+for await (const item of await ${api}(${use})) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('-adapter.mjs')) await import(new URL('../../../' + name, import.meta.url));
+}`);
+        audit(); const base = commit();
+        lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+        const head = commit();
+        assert.equal(execFileSync(process.execPath, ['packages/page/test/scan.mjs'], {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8', timeout: 5000}), 'escaped URL lock helper loaded\n');
+        write('catalogue-adapter.mjs', 'export const dirty = true;\n');
+        assertSelected(plan(base, head), ['catalogue', 'page']);
+      }));
+    }
+  }
+});
+
+test('audited lock changes keep recursive escaped URL-variable readers full', async t => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) await t.test(api, () => fixture(({write, lock, save, audit, commit, plan}) => {
+    write('scripts/page-fixture.mjs', 'export const inert = true;\n');
+    write('nested/catalogue-adapter.mjs', "import '../packages/catalogue/src/index.ts';\n");
+    write('packages/page/test/scan.mjs', `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+const \\u0064irectory = new URL('../../../', import.meta.url);
+${api}(\\u{64}irectory, {recursive: true});
+`);
+    audit(); const base = commit();
+    lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+    assertSelected(plan(base, commit()), ['catalogue', 'page', 'unrelated']);
+  }));
+});
+
+test('audited lock changes keep unused escaped URL bindings narrow', () => fixture(({write, lock, save, audit, commit, plan}) => {
+  write('scripts/page-fixture.mjs', 'export const inert = true;\n');
+  write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.ts';\n");
+  write('packages/page/test/scan.mjs', "const \\u0064irectory = new URL('../../../', import.meta.url);\n");
+  audit(); const base = commit();
+  lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+  assertSelected(plan(base, commit()), ['catalogue']);
+}));

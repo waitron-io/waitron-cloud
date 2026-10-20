@@ -1343,9 +1343,21 @@ notifications separately.
   dirty local files. Root options still
   retain every package, including for audited lock changes. Unused bindings,
   different identifiers and non-root scans keep narrow selection in the controls.
-  Escaped URL-variable spellings and aliases are not followed and can omit real
-  consumers; executed base/final probes reproduce both omissions. Binding identity
-  remains unverified, and reused names or inert text can retain extra work.
+  URL-variable names also retain those consumers when declarations or uses contain
+  fixed-width or braced Unicode escapes. Different spellings of the same name are
+  compared after decoding the escapes. Executed scans cover all four directory
+  APIs, and saved-tree checks cover removed or added helpers, former transitive
+  consumers and dirty local files. Recursive root options retain full package work,
+  including audited lock changes. Unused bindings, different names, local scans and
+  a command working directory alone stay narrow in the controls. The constructor
+  and optional type label still require literal `URL`: `new \u0055RL(...)` or
+  `: \u0055RL` can hide a real helper consumer, as can a URL-variable alias.
+  Executed Node probes reproduce these omissions on both saved scanners.
+  Binding identity remains unverified, and reused names or inert text can retain
+  extra work. An out-of-range escape inside an inert comment, such as
+  `// readdirSync(\u{110000})`, also makes both scanners throw while Node accepts
+  the comment. The package planner catches that error and keeps full package work;
+  the probe does not qualify the audited-lock path for this malformed input.
   Storing a root command working directory alone adds
   no helper inputs. An existence check alone also adds no root helpers, and a
   shared helper scanning its own directory does not scan the repository root.
