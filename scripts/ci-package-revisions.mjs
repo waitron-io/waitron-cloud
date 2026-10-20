@@ -222,10 +222,10 @@ function workspaceAt(sha, workspace, git) {
       // Options may enable recursion or supply a computed policy; an unresolved
       // root scan cannot justify omitting any package consumer.
       const optionReads = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*,(?!\s*\))/g))].map(match => match[2]));
-      const optionVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*([A-Za-z_$][\w$]*)\s*,(?!\s*\))/g))].map(match => match[1]));
+      const optionVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*([$_\p{ID_Start}][$\u200c\u200d\p{ID_Continue}]*)\s*,(?!\s*\))/gu))].map(match => match[1]));
       // A root URL variable retains helpers when its identifier is scanned.
-      const scannedVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*([A-Za-z_$][\w$]*)\s*,?\s*\)/g))].map(match => match[1]));
-      for (const match of source.source.matchAll(directoryPattern(/(?:\b(?:const|let|var)\s+|,\s*)([A-Za-z_$][\w$]*)\s*(?::\s*URL\s*)?=\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)/g))) {
+      const scannedVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*([$_\p{ID_Start}][$\u200c\u200d\p{ID_Continue}]*)\s*,?\s*\)/gu))].map(match => match[1]));
+      for (const match of source.source.matchAll(directoryPattern(/(?:\b(?:const|let|var)\s+|,\s*)([$_\p{ID_Start}][$\u200c\u200d\p{ID_Continue}]*)\s*(?::\s*URL\s*)?=\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)/gu))) {
         if (scannedVariables.has(match[1])) rootReads.add(match[3]);
         if (optionVariables.has(match[1])) optionReads.add(match[3]);
       }
