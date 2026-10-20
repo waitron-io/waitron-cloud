@@ -1,3 +1,4 @@
+import { deletionXml, deletionFields } from './s3-deletion.mjs';
 import { randomUUID } from 'node:crypto';
 import { assertStorageClientBinding, classifyStorageOperation } from './meter.mjs';
 
@@ -346,7 +347,7 @@ export async function openLitestreamLifetimes({ client, sdk, meter, bucket, cloc
 
 // Owned, initially empty unversioned buckets only. Commit times are bounded by request and reply;
 // an ambiguous reply stays unresolved until inventory or an identical successful retry bounds it.
-export async function openLitestreamHistories({ client, sdk, meter, bucket, clock }) {
+export async function openLitestreamHistories({ client, sdk, meter, bucket, clock, allowBulkDeletes = false }) {
   const rows = new Map(), pending = new Set();
   let invalid = false, verifying = false, verified = false, last = -Infinity, endpoint, start;
   let retiredLow = 0, retiredHigh = 0;
@@ -381,9 +382,56 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     if (mutation.method === 'PUT' && !row.current) row.current = { bytes: mutation.bytes, from: mutation.from, by };
     row.uncertain = null;
   };
-  const begin = guarded(({ method, path, headers }) => {
+  const beginBatch = ({ headers, body }) => {
+    requireThat(allowBulkDeletes === true && headers && !Object.hasOwn(headers, 'content-encoding')
+      && !Object.hasOwn(headers, 'x-amz-copy-source') && Buffer.isBuffer(body)
+      && headers['content-length'] === String(body.length));
+    const selected = new Map(), time = now(); let quiet = false;
+    for (const entry of deletionXml(body, 'Delete')) {
+      if (entry.name === 'Quiet') {
+        requireThat(!quiet && entry.children.length === 0 && entry.value === 'false'); quiet = true; continue;
+      }
+      requireThat(entry.name === 'Object'); const fields = deletionFields(entry, ['Key']), key = fields.Key;
+      requireThat(text(key) && Buffer.byteLength(key) <= 1024 && !/[\\\x00-\x1f\x7f]/.test(key)
+        && !key.split('/').some(s => s === '.' || s === '..') && !selected.has(key));
+      let row = rows.get(key);
+      requireThat(!row?.active && (!row?.uncertain || row.uncertain.method === 'DELETE'));
+      if (!row) { requireThat(rows.size < 100000); row = { current: null, uncertain: null, active: false }; rows.set(key, row); }
+      selected.set(key, { row, mutation: { method: 'DELETE', bytes: 0, from: row.uncertain?.from ?? time } });
+    }
+    requireThat(selected.size > 0 && selected.size <= 1000);
+    for (const { row } of selected.values()) row.active = true;
+    verified = false; const token = {}; pending.add(token);
+    return guarded(({ statusCode, bytesOut, interrupted = false, responseBody }) => {
+      requireThat(pending.has(token) && !interrupted && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599
+        && bytesOut === body.length);
+      const time = now(), results = new Map();
+      if (statusCode < 300) {
+        requireThat(statusCode === 200);
+        for (const entry of deletionXml(responseBody, 'DeleteResult')) {
+          requireThat(entry.name === 'Deleted' || entry.name === 'Error');
+          const fields = deletionFields(entry, entry.name === 'Error' ? ['Key', 'Code', 'Message'] : ['Key']);
+          requireThat(selected.has(fields.Key) && !results.has(fields.Key));
+          if (entry.name === 'Error') requireThat(text(fields.Code));
+          results.set(fields.Key, entry.name === 'Deleted');
+        }
+        requireThat(results.size === selected.size);
+      }
+      for (const [key, { row, mutation }] of selected) {
+        if (results.get(key) === true) transition(row, mutation, time);
+        else if (row.current) row.uncertain = mutation;
+        row.active = false;
+      }
+      pending.delete(token);
+    });
+  };
+  const begin = guarded(({ method, path, headers, body }) => {
     requireThat(!verifying && pending.size < 100000);
-    const operation = classifyStorageOperation({ method, path });
+    const operation = classifyStorageOperation({ method, path, allowBulkDeletes });
+    if (operation === 'delete-many') {
+      requireThat(path.split('?')[0].replace(/\/$/, '') === '/' + bucket);
+      return beginBatch({ headers, body });
+    }
     requireThat(['put', 'delete', 'get', 'head', 'list'].includes(operation));
     const rawPath = path.split('?')[0], segments = rawPath.slice(1).split('/');
     requireThat(segments[0] === bucket && !/%2f|%5c/i.test(rawPath));

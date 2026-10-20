@@ -14,6 +14,7 @@ function fixture(t) {
   mkdirSync(source, { mode: 0o700 }); mkdirSync(root, { mode: 0o700 });
   const codeRoot = join(root, 'code'), stateRoot = join(root, 'state');
   cpSync(prepared.codeCache, codeRoot, { recursive: true });
+  cpSync(new URL('../s3-deletion.mjs', import.meta.url), join(codeRoot, 's3-deletion.mjs'));
   mkdirSync(stateRoot, { mode: 0o700 });
   cpSync(new URL('./stack-smoke.mjs', import.meta.url), join(codeRoot, 'cost-stack-smoke.mjs'));
   writeFileSync(join(stateRoot, 'replay-config.json'), JSON.stringify({
@@ -496,6 +497,31 @@ test('genuineNativeBatchListenerRetainsCommittedLostRepliesAndEveryVersionLifeti
   assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
   assert.equal(result.workload.accounting.producer.attempts, 8); assert.ok(result.workload.accounting.producer.bytesOut > 10);
   assert.equal(result.workload.accounting.requests.filter(r => r.operation === 'delete-many').reduce((n, r) => n + r.attempts, 0), 6);
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});
+
+// A lost batch reply must retain earlier unversioned storage after the final bucket becomes empty.
+test('genuineUnversionedNativeBatchesRetainLostDeletesRetriesAndRecreation', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  for (const name of ['litestream.mjs', 'storage-lifetimes.mjs']) cpSync(new URL('../' + name, import.meta.url), join(f.codeRoot, name));
+  cpSync(new URL('./native-unversioned-batch-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-native-unversioned-batch-smoke.mjs'));
+  let stack; f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-native-unversioned-batch-smoke.mjs'],
+    { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  assert.equal(result.lostReplies, 1); assert.equal(result.leaked, false);
+  assert.deepEqual(result.retained.objects, { class: 'stream', bytes: 6, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
+  assert.deepEqual(result.retained.byteSeconds, { low: 46, high: 58 });
+  assert.deepEqual(result.final.objects, { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
+  assert.deepEqual(result.final.byteSeconds, { low: 68, high: 80 });
+  assert.equal(result.workload.reconciled, true); assert.equal(result.administration.reconciled, true);
+  assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
+  assert.equal(result.workload.accounting.producer.attempts, 7);
+  assert.ok(result.workload.accounting.producer.bytesOut > 12);
+  assert.equal(result.workload.accounting.requests.filter(r => r.operation === 'delete-many').reduce((n, r) => n + r.attempts, 0), 4);
   await stack.close();
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');

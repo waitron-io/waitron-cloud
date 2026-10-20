@@ -1197,8 +1197,13 @@ notifications separately.
   inventory. Its separate request and storage counters include the control bodies.
   Default listeners still refuse batches. The native batch mode also refuses more
   than one selection for the same key, whose internal ordering is not observed.
-  Unversioned native batches, multipart histories and a complete measured stream
-  remain open.
+  An opt-in unversioned native batch listener now shares the bounded control parser.
+  It checks each result, retains storage before deletion and resolves uncertain
+  replies through a separate inventory. A retry preserves the first possible
+  deletion time, and recreation starts a new storage interval. Signed SDK requests
+  and generated local storage cover the control bytes and lost committed replies.
+  Both native modes require a fresh inventory after each batch and keep their
+  default refusal. Multipart histories and a complete measured stream remain open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled
