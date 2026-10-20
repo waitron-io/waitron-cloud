@@ -1333,9 +1333,17 @@ notifications separately.
   removed helpers, transitive consumers and dirty-checkout independence. A root
   command working directory alone adds no helper inputs, and a nonrecursive root
   scan does not traverse nested directories. The same rule now follows a simple
-  `const`, `let` or `var` assignment of that URL to an ASCII identifier passed
+  `const`, `let` or `var` assignment of that URL to a raw JavaScript identifier passed
   directly to `readdirSync` without options, including a `: URL` type annotation
-  or a later comma-separated binding in the declaration. Executed Node scans and saved-tree controls
+  or a later comma-separated binding in the declaration. Raw names now include
+  accented and astral letters and the two join-control characters JavaScript allows
+  within identifiers. Executed Node scans cover all four directory APIs; saved
+  readers retain immediate helpers and transitive consumers from either revision,
+  including added or removed helpers despite dirty local files. Root options still
+  retain every package, including for audited lock changes. Unused bindings,
+  different identifiers and non-root scans keep narrow selection in the controls.
+  Escaped spellings, aliasing and binding identity remain unresolved; reused names
+  and inert text can retain extra work. Executed Node scans and saved-tree controls
   cover added/deleted helpers, readers from either revision, dirty local files
   and transitive consumers. Storing a root command working directory alone adds
   no helper inputs. An existence check alone also adds no root helpers, and a

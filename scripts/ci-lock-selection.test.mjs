@@ -1037,3 +1037,45 @@ for await (const item of await ${api}(${binding === 'stored' ? 'directory' : dir
     }));
   }
 });
+
+// Losing a Unicode URL binding must not hide a reader of a changed importer.
+test('audited lock changes retain Unicode URL-variable directory consumers', async t => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) for (const name of ['ñdirectorio', 'directorioñ']) {
+    await t.test(`${api} ${name}`, () => fixture(({write, lock, save, audit, commit, plan}) => {
+      write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.ts';\n");
+      write('scripts/page-fixture.mjs', 'export const inert = true;\n');
+      write('packages/page/test/scan.mjs', `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';
+const ${name} = new URL('../../../', import.meta.url);
+${api}(${name});
+`);
+      audit(); const base = commit();
+      lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+      const head = commit();
+      write('catalogue-adapter.mjs', 'export const dirty = true;\n');
+      assertSelected(plan(base, head), ['catalogue', 'page']);
+    }));
+  }
+});
+
+test('audited lock changes keep recursive Unicode URL-variable readers full', async t => {
+  for (const name of ['ñdirectorio', 'directorioñ']) await t.test(name, () => fixture(({write, lock, save, audit, commit, plan}) => {
+    write('scripts/page-fixture.mjs', 'export const inert = true;\n');
+    write('nested/catalogue-adapter.mjs', "import '../packages/catalogue/src/index.ts';\n");
+    write('packages/page/test/scan.mjs', `import {readdirSync} from 'node:fs';
+const ${name} = new URL('../../../', import.meta.url);
+readdirSync(${name}, {recursive: true});
+`);
+    audit(); const base = commit();
+    lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+    assertSelected(plan(base, commit()), ['catalogue', 'page', 'unrelated']);
+  }));
+});
+
+test('audited lock changes keep unused Unicode URL bindings narrow', () => fixture(({write, lock, save, audit, commit, plan}) => {
+  write('scripts/page-fixture.mjs', 'export const inert = true;\n');
+  write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.ts';\n");
+  write('packages/page/test/scan.mjs', "const ñdirectorio = new URL('../../../', import.meta.url);\n");
+  audit(); const base = commit();
+  lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+  assertSelected(plan(base, commit()), ['catalogue']);
+}));
