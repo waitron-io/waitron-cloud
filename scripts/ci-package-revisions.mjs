@@ -218,14 +218,15 @@ function workspaceAt(sha, workspace, git) {
         assert.doesNotMatch(name, /^(?:readdirSync|readdir|opendirSync|opendir)$/,
           `Unresolved escaped identifier at ${source.path}`);
       }
-      const rootReads = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*,?\s*\)\s*,?\s*\)/g))].map(match => match[2]));
+      // URL base tokens allow comments and whitespace just like the call tokens.
+      const rootReads = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*,?\s*\)/g))].map(match => match[2]));
       // Options may enable recursion or supply a computed policy; an unresolved
       // root scan cannot justify omitting any package consumer.
-      const optionReads = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\.meta\.url\s*,?\s*\)\s*,(?!\s*\))/g))].map(match => match[2]));
+      const optionReads = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*,(?!\s*\))/g))].map(match => match[2]));
       const optionVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*([A-Za-z_$][\w$]*)\s*,(?!\s*\))/g))].map(match => match[1]));
       // A root URL variable retains helpers when its identifier is scanned.
       const scannedVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*([A-Za-z_$][\w$]*)\s*,?\s*\)/g))].map(match => match[1]));
-      for (const match of source.source.matchAll(directoryPattern(/(?:\b(?:const|let|var)\s+|,\s*)([A-Za-z_$][\w$]*)\s*(?::\s*URL\s*)?=\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\.meta\.url\s*,?\s*\)/g))) {
+      for (const match of source.source.matchAll(directoryPattern(/(?:\b(?:const|let|var)\s+|,\s*)([A-Za-z_$][\w$]*)\s*(?::\s*URL\s*)?=\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)/g))) {
         if (scannedVariables.has(match[1])) rootReads.add(match[3]);
         if (optionVariables.has(match[1])) optionReads.add(match[3]);
       }
