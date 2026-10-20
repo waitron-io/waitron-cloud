@@ -104,11 +104,19 @@ test('onlyOwnedCleanupOnSignal', async t => {
   t.after(async () => { foreign.kill('SIGTERM'); await new Promise(r => foreign.once('close', r)); });
   const pidFile = join(f.root, 'child.pid');
   const running = local.runPrivate(process.execPath, ['-e',
-    'require("node:fs").writeFileSync(process.argv[1],String(process.pid));process.on("SIGTERM",()=>{});setInterval(()=>{},1000)', pidFile],
+    'const fs=require("node:fs");fs.writeFileSync(process.argv[1],"");setTimeout(()=>fs.writeFileSync(process.argv[1],String(process.pid)),500);process.on("SIGTERM",()=>{});setInterval(()=>{},1000)', pidFile],
     { signal: controller.signal, ownership: f });
   const rejected = assert.rejects(running, /Invalid cloud cost local run/);
-  for (let i = 0; !existsSync(pidFile) && i < 200; i++) await delay(10);
-  assert.ok(existsSync(pidFile)); const pid = Number(readFileSync(pidFile, 'utf8'));
+  let pid;
+  // Creation precedes the write; an empty PID file must never become process-group PID zero.
+  for (let i = 0; i < 200; i++) {
+    if (existsSync(pidFile)) {
+      const value = readFileSync(pidFile, 'utf8');
+      if (/^[1-9][0-9]*$/.test(value)) { pid = Number(value); break; }
+    }
+    await delay(10);
+  }
+  assert.ok(existsSync(pidFile)); assert.ok(Number.isSafeInteger(pid) && pid > 0);
   t.after(() => { try { process.kill(pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; } });
   controller.abort();
   const completed = await Promise.race([rejected.then(() => true), delay(2500).then(() => false)]);
