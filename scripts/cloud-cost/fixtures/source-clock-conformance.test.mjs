@@ -47,7 +47,12 @@ async function savedClock(t, timeZone, changes) {
   writeFileSync(join(root, '.cloud-cost-owner'), token, { mode: 0o600 });
   writeFileSync(path, JSON.stringify({ schemaVersion: 1, source, root, ownershipToken: token }), { mode: 0o600 });
   const args = { source, root, journal: { path, token } };
-  copy = await preparePrivateCopy({ ...args, database });
+  // An active synthetic reader supplies sidecars before the copy boundary opens the source.
+  const reader = new DatabaseSync(database, { readOnly: true });
+  try {
+    reader.prepare('SELECT count(*) FROM sqlite_schema').get();
+    copy = await preparePrivateCopy({ ...args, database });
+  } finally { reader.close(); }
   return { clock: readPrivateReplayClock({ ...args, database: copy.database, locationId }), official };
 }
 

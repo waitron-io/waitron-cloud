@@ -62,13 +62,34 @@ try { reader.exec('PRAGMA query_only=ON'); await backup(reader, args.destination
 finally { reader.close(); }
 `;
 
+function sourceCopyFiles(database) {
+  canonicalFile(database);
+  // Closing another descriptor in SQLite's process releases its file locks.
+  const header = spawnSync(process.execPath, ['--input-type=module', '-e', `
+    import {openSync,readSync,closeSync,constants} from 'node:fs';
+    const fd=openSync(process.argv[1],constants.O_RDONLY|constants.O_NOFOLLOW),h=Buffer.alloc(20);
+    try {
+      if(readSync(fd,h,0,20,0)!==20 || !h.subarray(0,16).equals(Buffer.from('SQLite format 3\\0'))
+        || ![1,2].includes(h[18]) || h[18]!==h[19]) process.exitCode=1;
+      else process.stdout.write(String(h[18]));
+    } finally {closeSync(fd);}
+  `, database], { env: environment(), encoding: 'utf8', timeout: 1500,
+    maxBuffer: 1024, stdio: ['ignore', 'pipe', 'ignore'] });
+  requireThat(header.status === 0 && !header.error && ['1', '2'].includes(header.stdout));
+  const files = [database];
+  // A dormant WAL database needs new sidecars; source access must never create them.
+  if (header.stdout === '2') for (const suffix of ['-wal', '-shm']) {
+    canonicalFile(database + suffix); files.push(database + suffix);
+  }
+  return files;
+}
+
 export async function preparePrivateCopy({ source, database, root, journal, signal, timeoutMs = 30000 }) {
   const args = { source, root, journal }; const destination = join(root, 'venue-copy.db');
   let copy, close, removeConfig;
   try {
     requireThat(!signal?.aborted);
-    owned(args); canonicalFile(database);
-    requireThat(inside(source, database));
+    owned(args); requireThat(inside(source, database)); sourceCopyFiles(database);
     requireThat(!existsSync(destination));
     record(args, { kind: 'database-copy', path: destination, state: 'intent' });
     const fd = openSync(destination, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
@@ -398,6 +419,140 @@ function dockerCommand(argv, timeout = 15000) {
     maxBuffer: 2 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
   requireThat(result.status === 0 && !result.error);
   return result.stdout.trim();
+}
+
+const isolatedCopyWorker = `
+import { DatabaseSync, backup } from 'node:sqlite';
+import { openSync, closeSync, writeFileSync, unlinkSync } from 'node:fs';
+const source = '/source/venue.db';
+const files = JSON.parse(process.argv[1]);
+let sourceWritesBlocked = 0;
+for (const suffix of files) {
+  let fd;
+  try { fd = openSync(source + suffix, 'r+'); }
+  catch (error) { if (error.code !== 'EROFS') throw error; sourceWritesBlocked++; }
+  finally { if (fd !== undefined) closeSync(fd); }
+}
+if (sourceWritesBlocked !== files.length) throw Error();
+let sourceDirectoryBlocked = false;
+try { writeFileSync('/source/new-sidecar', '', { flag: 'wx' }); }
+catch (error) { if (error.code !== 'EROFS') throw error; sourceDirectoryBlocked = true; }
+if (!sourceDirectoryBlocked) throw Error();
+writeFileSync('/copy/control', 'control', { flag: 'wx', mode: 0o600 });
+unlinkSync('/copy/control');
+const reader = new DatabaseSync(source, { readOnly: true });
+try { reader.exec('PRAGMA query_only=ON'); await backup(reader, '/copy/venue-copy.db'); }
+finally { reader.close(); }
+const copy = new DatabaseSync('/copy/venue-copy.db');
+try {
+  copy.exec('PRAGMA journal_mode=DELETE');
+  if (copy.prepare('PRAGMA integrity_check').get().integrity_check !== 'ok') throw Error();
+} finally { copy.close(); }
+writeFileSync('/copy/proof.json', JSON.stringify({sourceWritesBlocked,sourceDirectoryBlocked,localControl:true}), {flag:'wx',mode:0o600});
+`;
+
+export function validateSourceCopyInspect({ container: c, id, name, image, command, mounts, ...args }) {
+  try {
+    owned(args);
+    const h = c.HostConfig;
+    requireThat(c.Id === id && c.Name === '/' + name && c.Config.Labels?.['io.waitron.cloud-cost.owner'] === args.journal.token
+      && c.Config.Image === image && c.Config.User === `${process.getuid()}:${process.getgid()}`
+      && JSON.stringify(c.Config.Entrypoint) === '["node"]' && JSON.stringify(c.Config.Cmd) === JSON.stringify(command));
+    requireThat(h.NetworkMode === 'none' && h.ReadonlyRootfs === true && h.Privileged === false
+      && h.CapDrop?.includes('ALL') && !h.CapAdd?.length && h.SecurityOpt?.includes('no-new-privileges:true')
+      && h.LogConfig.Type === 'none' && h.Dns?.length === 1 && h.Dns[0] === '127.0.0.1'
+      && !h.ExtraHosts?.length && !h.Devices?.length && !h.VolumesFrom?.length
+      && h.PidMode === '' && ['', 'private'].includes(h.IpcMode)
+      && !Object.keys(h.PortBindings ?? {}).length && !Object.keys(h.Tmpfs ?? {}).length);
+    requireThat(c.Config.Env.every(v => ['PATH', 'LANG', 'TZ', 'NODE_VERSION', 'YARN_VERSION'].includes(v.split('=')[0])));
+    requireThat(c.Mounts.length === mounts.length && c.Mounts.every(m => m.Type === 'bind'
+      && mounts.some(expected => m.Source === expected.Source && m.Destination === expected.Destination && m.RW === expected.RW)));
+  } catch { fail(); }
+}
+
+// Source access runs with individual read-only mounts, never a mount of its directory.
+export async function prepareIsolatedPrivateCopy({ source, database, root, journal, image, signal, timeoutMs = 30000 }) {
+  const args = { source, root, journal }, destination = join(root, 'venue-copy.db');
+  let close, removeStage;
+  const containers = new Map();
+  const label = 'io.waitron.cloud-cost.owner';
+  const cleanupContainers = () => {
+    if (containers.size === 0) return;
+    owned(args);
+    for (const [name, id] of containers) {
+      const rows = dockerRead(['inspect', id]);
+      requireThat(rows.length === 1 && rows[0].Id === id && rows[0].Name === '/' + name
+        && rows[0].Config.Labels?.[label] === journal.token);
+      record(args, { kind: 'source-copy-container', state: 'cleanup-intent', id });
+      dockerCommand(['rm', '-f', '-v', id]); containers.delete(name);
+      requireThat(dockerCommand(['ps', '-aq', '--no-trunc', '--filter', 'id=' + id]) === '');
+      record(args, { kind: 'source-copy-container', state: 'removed', id });
+    }
+  };
+  const create = (command, mounts) => {
+    requireThat(!signal?.aborted);
+    const name = 'cloud-cost-copy-' + randomUUID();
+    requireThat(dockerCommand(['ps', '-aq', '--filter', 'name=^/' + name + '$']) === '');
+    record(args, { kind: 'source-copy-container', state: 'intent', name });
+    let id;
+    try {
+      id = dockerCommand(['create', '--pull=never', '--name', name, '--label', `${label}=${journal.token}`,
+        '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
+        '--dns', '127.0.0.1', '--log-driver', 'none', '--user', `${process.getuid()}:${process.getgid()}`,
+        '--entrypoint', 'node', ...mounts.flatMap(m => ['--mount', `type=bind,src=${m.Source},dst=${m.Destination}${m.RW ? '' : ',readonly'}`]),
+        image, ...command]);
+    } finally {
+      // The exact fresh name and owner label recover an ambiguous create reply.
+      const found = dockerCommand(['ps', '-aq', '--no-trunc', '--filter', 'name=^/' + name + '$',
+        '--filter', `label=${label}=${journal.token}`]);
+      if (found) { requireThat(/^[a-f0-9]{64}$/.test(found)); containers.set(name, found); }
+    }
+    requireThat(/^[a-f0-9]{64}$/.test(id) && containers.get(name) === id);
+    record(args, { kind: 'source-copy-container', state: 'created', id });
+    validateSourceCopyInspect({ ...args, container: dockerRead(['inspect', id])[0], id, name, image, command, mounts });
+    return id;
+  };
+  try {
+    owned(args);
+    requireThat(!signal?.aborted && /^sha256:[a-f0-9]{64}$/.test(image)
+      && Number.isInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 120000);
+    requireThat(inside(source, database) && !database.includes(',') && !root.includes(','));
+    const files = sourceCopyFiles(database);
+    requireThat(!existsSync(destination));
+    // Prove the same image can run locally but cannot connect out before mounting data.
+    const probe = create(['-e', outboundCanary], []);
+    const result = JSON.parse(dockerCommand(['start', '--attach', probe], 15000));
+    requireThat(result.localControl === true && result.blockedConnections === 3 && result.blockedDns === 2
+      && dockerRead(['inspect', probe])[0].State.ExitCode === 0);
+    cleanupContainers();
+    requireThat(!signal?.aborted);
+    const stage = join(root, 'source-copy-' + randomUUID());
+    record(args, { kind: 'source-copy-stage', state: 'intent', path: stage });
+    mkdirSync(stage, { mode: 0o700 }); removeStage = removal(args, stage, lstatSync(stage), true);
+    record(args, { kind: 'database-copy', path: destination, state: 'intent' });
+    const fd = openSync(destination, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+    const identity = fstatSync(fd); closeSync(fd); close = removal(args, destination, identity);
+    const suffixes = files.map(path => path.slice(database.length));
+    const mounts = files.map((path, i) => ({ Source: path, Destination: '/source/venue.db' + suffixes[i], RW: false }));
+    mounts.push({ Source: stage, Destination: '/copy', RW: true });
+    const worker = create(['--input-type=module', '-e', isolatedCopyWorker, JSON.stringify(suffixes)], mounts);
+    // Use the resolved executable with runPrivate so cancellation reaps the attached client.
+    const executable = spawnSync('/usr/bin/which', ['docker'], { env: environment(), encoding: 'utf8' });
+    requireThat(executable.status === 0 && isAbsolute(executable.stdout.trim()));
+    await runPrivate(executable.stdout.trim(), ['start', '--attach', worker], { signal, timeoutMs, ownership: args });
+    requireThat(dockerRead(['inspect', worker])[0].State.ExitCode === 0);
+    const proof = JSON.parse(readFileSync(join(stage, 'proof.json'), 'utf8'));
+    requireThat(Object.keys(proof).length === 3 && proof.sourceWritesBlocked === files.length
+      && proof.sourceDirectoryBlocked === true && proof.localControl === true);
+    copyFileSync(join(stage, 'venue-copy.db'), destination);
+    chmodSync(destination, 0o600);
+    cleanupContainers(); await removeStage(); removeStage = undefined;
+    record(args, { kind: 'source-copy-isolation', state: 'ready', checks: {
+      networkBlocked: true, sourceWritesBlocked: files.length, sourceDirectoryBlocked: true, localControl: true } });
+    record(args, { kind: 'database-copy', path: destination, state: 'ready', ino: identity.ino, dev: identity.dev });
+    return { database: destination, close };
+  } catch { await close?.(); fail(); }
+  finally { cleanupContainers(); await removeStage?.(); }
 }
 
 export async function startIsolatedStack(args) {

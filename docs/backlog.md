@@ -1119,10 +1119,20 @@ notifications separately.
   fractional timezone offset, then replay the discovered day through the normal writer.
   The earlier 4,098 saved orders and 4,008 database sales are different inventories;
   the earlier 28 dates used calendar midnight rather than the trading-day clock.
-  Actual source-count reconciliation still needs separate evidence. A synthetic
-  copy rehearsal also found that SQLite can create transaction-log sidecars beside
-  a dormant source despite a read-only connection. Enforce read-only source mounts
-  before opening real data; the copy helper alone does not establish that boundary.
+  Copy preparation now refuses dormant transaction-log databases before SQLite
+  can create files beside them. The isolated copy path mounts each source file
+  read only, blocks outside connections, checks the actual container settings and
+  proves that source writes fail while scratch writes work. A separate header-reading
+  process preserves locks held by the caller. Generated active-source and standalone
+  database checks preserve the source files and remove owned containers and partial copies.
+  The approved venue copy contains 4,008 paid sales across 27 trading days, with
+  207 on the busiest day. Independent SQL and the pinned Waitron clock agree.
+  Grouping by midnight in the earlier inventory's Europe/Madrid timezone reproduces
+  its 28 days and busiest count of 203. Both definitions now reconcile, and all 207
+  selected bills translate privately into replay inputs. These are source-selection
+  counts, not measured stream volumes. One repeat detected a source-file fingerprint
+  change; later passive samples, an instrumented repeat and the final selection
+  were unchanged, leaving that transient unexplained.
   Isolated full replay, idle measurement and a complete cost export remain open.
   The pure calculations now cover aggregate request
   tiers, explicit resource capacities, dated growth and calendar retention, including
