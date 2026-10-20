@@ -237,7 +237,7 @@ function workspaceAt(sha, workspace, git) {
       const optionVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*,(?!\s*\))/gu))].map(match => directoryIdentifier(match[1])));
       // A root URL variable retains helpers when its identifier is scanned.
       const scannedVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*,?\s*\)/gu))].map(match => directoryIdentifier(match[1])));
-      // Declarations and bare assignments preserve the same URL. Names are conservative across
+      // Parentheses around a URL or alias value preserve that input. Names are conservative across
       // scopes; only a name passed to a reader contributes a directory input.
       const identifier = String.raw`(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*`;
       const aliases = new Map();
@@ -247,12 +247,16 @@ function workspaceAt(sha, workspace, git) {
       // Keep the right-hand name unconsumed so chained assignments expose every
       // transfer. A property or expression suffix does not establish a bare alias.
       const assignmentAlias = directoryPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*=\s*(?=(${identifier})(?=\s*(?:=(?!=|>)|[,;)}\]\r\n\u2028\u2029]|//|/\*|$)))`, 'gu'));
-      for (const pattern of [declarationAlias, assignmentAlias]) for (const match of source.source.matchAll(pattern)) {
+      // Consume a closing parenthesis before the value boundary. Otherwise a
+      // property suffix such as (original).pathname could become a URL transfer.
+      // A parameter list can end before a function body or an arrow.
+      const parenthesizedAlias = directoryURLPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*(?::\s*URL\s*)?=\s*\(\s*(?:\(\s*)*(?=(${identifier})\s*(?:=(?!=|>)|\)\s*(?:\)\s*)*(?:=>|\{|[,;}\]\r\n\u2028\u2029]|//|/\*|$)))`, 'gu'));
+      for (const pattern of [declarationAlias, assignmentAlias, parenthesizedAlias]) for (const match of source.source.matchAll(pattern)) {
         const name = directoryIdentifier(match[2]);
         if (!aliases.has(name)) aliases.set(name, new Set());
         aliases.get(name).add(directoryIdentifier(match[1]));
       }
-      for (const match of source.source.matchAll(directoryURLPattern(/(?<![$\p{ID_Continue}\\])((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*(?::\s*URL\s*)?=\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)/gu))) {
+      for (const match of source.source.matchAll(directoryURLPattern(/(?<![$\p{ID_Continue}\\])((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*(?::\s*URL\s*)?=\s*(?:\(\s*)*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)/gu))) {
         const names = new Set([directoryIdentifier(match[1])]);
         // The visited set bounds cycles and follows transfers in either order.
         for (const name of names) {
