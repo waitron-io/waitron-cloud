@@ -1,5 +1,5 @@
 // The host controller invokes this only after effective network isolation and source-copy checks.
-import { readFileSync, writeFileSync, mkdirSync, renameSync, lstatSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync, unlinkSync, lstatSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { openWorkerStorage, streamCounters } from './worker-storage.mjs';
 import { randomBytes } from 'node:crypto';
@@ -14,11 +14,13 @@ function recordFailure() {
 }
 
 async function run() {
-  const source = '/state/source', root = '/state/private';
+  // SQLite, its WAL and the native stream share the container's temporary filesystem.
+  // Sustained writes through a host-shared folder can produce an invalid native restore.
+  const source = '/tmp/source', root = '/tmp/private';
   mkdirSync(source, { mode: 0o700 }); mkdirSync(root, { mode: 0o700 });
   const token = randomBytes(32).toString('hex'), journal = { path: root + '/journal.json', token };
   writeFileSync(root + '/.cloud-cost-owner', token, { mode: 0o600, flag: 'wx' });
-  const database = root + '/venue-copy.db'; renameSync('/state/input.db', database);
+  const database = root + '/venue-copy.db'; copyFileSync('/state/input.db', database); unlinkSync('/state/input.db');
   const identity = lstatSync(database);
   writeFileSync(journal.path, JSON.stringify({ schemaVersion: 1, source, root, ownershipToken: token,
     localResources: [{ kind: 'database-copy', state: 'ready', path: database, ino: identity.ino, dev: identity.dev }] }), { mode: 0o600, flag: 'wx' });

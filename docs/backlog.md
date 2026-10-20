@@ -1307,9 +1307,25 @@ notifications separately.
   correction factor. The control reads the existing consistent scratch copy.
   The full 207-sale stream attempt remains unqualified: scratch reaches all sales,
   but the command refuses before a final result is retained and the original-source
-  file comparison reports a change. Cleanup succeeds. Retain the fixed worker refusal
-  stage and separate source-file comparisons before another attempt; neither cause
-  is established. Do not publish the failed sample as measured cost. Complete
+  file comparison reports a change. Cleanup succeeds. A short-idle repeat now
+  identifies the refusal: the restored copy contains all 207 sales but fails SQLite's
+  structural integrity check. Generated sales reproduce that failure during a
+  minute of sustained writes while the fresh replay database stays valid. A separate
+  indexed-database probe also fails on the host-shared folder and passes in the
+  container's temporary filesystem when its writes grow larger. The genuine paced
+  writer passes there too. The worker now copies its input into its existing private
+  temporary filesystem before opening SQLite or the native stream. It keeps the
+  same isolation, native binary, restore checks, accounting and host diagnostics.
+  A new generated 207-sale regression fails before that change and passes after it;
+  every earlier test remains intact. This identifies a shared-folder-sensitive local
+  measurement defect, not a proved defect in the production storage service. The
+  earlier untraced failure's exact cause remains an inference.
+  A file-only watch also observes the live source's transaction log and shared-memory
+  file changing after the read-only copy closes. That does not identify the writer.
+  Prepare and verify a consistent frozen input before the long experiment, then keep
+  its files unchanged throughout replay. Do not stop the source process or confuse
+  later live-source activity with writes by the isolated experiment.
+  Do not publish the failed sample as measured cost. Complete
   accounting/export across the remaining drivers, a qualified full venue sample
   with idle evidence, and public/staff journeys stay open.
   The fiscal timeout fixture now advances its 50 ms deadline
