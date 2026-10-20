@@ -21,15 +21,16 @@ export function readLocalConfig(path) {
       && after.ctimeMs === stat.ctimeMs);
     const value = JSON.parse(buffer.subarray(0, length).toString('utf8'));
     const keys = ['stage', 'source', 'root', 'journal', 'database', 'codeRoot', 'image', 'locationId',
-      'expected', 'originalInventory', 'cadence', 'replayWindowSeconds', 'windowSeconds', 'initial', 'config'];
+      'expected', 'originalInventory', 'cadence', 'replayWindowSeconds', 'windowSeconds', 'initial', 'config',
+      ...(value?.stage === 'stream-replay' ? ['stream'] : [])];
     need(value && Object.getPrototypeOf(value) === Object.prototype && Object.keys(value).length === keys.length
-      && keys.every(k => Object.hasOwn(value, k)) && value.stage === 'replay-admission');
+      && keys.every(k => Object.hasOwn(value, k)) && ['replay-admission', 'stream-replay'].includes(value.stage));
     return value;
   } catch { fail(); }
   finally { if (fd !== undefined) closeSync(fd); }
 }
 
-// Admission is an explicit partial experiment; it cannot stand in for stream or cost measurement.
+// Both named stages are partial experiments; full venue cost still needs the complete receipt.
 export async function runLocal({ privateConfig, cadence, windowSeconds, signal }) {
   try {
     need(signal === undefined || signal instanceof AbortSignal); need(!signal?.aborted);

@@ -1164,14 +1164,14 @@ notifications separately.
   cover refused copies, mismatched counts, cancellation, deadlines and actual worker
   output. The controller removes its own copy, worker, network and added files while
   preserving caller state. Replaced directories or lost ownership refuse cleanup
-  and retain recorded resources for explicit recovery. This proves writer admission;
-  it does not measure stream traffic or cost. The [local command](../scripts/cloud-cost/cli.mjs)
-  now runs that admission stage from an explicitly private, bounded configuration file.
+  and retain recorded resources for explicit recovery. The admission-only stage proves
+  writer admission without stream or cost measurement. The [local command](../scripts/cloud-cost/cli.mjs)
+  runs that named stage from an explicitly private, bounded configuration file.
   It rejects linked, shared, changed or oversized configuration files and requires
   the command's timing to match the private experiment. Importing the command does
   not start work. Both interrupt and termination signals wait for owned cleanup;
-  worker output and private failures remain suppressed. The result explicitly says
-  `stage: replay-admission` and `costMeasured: false`. Full measurement dispatch and
+  worker output and private failures remain suppressed. Its admission-only result says
+  `stage: replay-admission` and `costMeasured: false`. Complete venue-cost dispatch and
   the final anonymous cost receipt remain unfinished. A separate unversioned stream-history
   mode now preserves the storage used before replacement or deletion, including
   recreation and retries. It bounds when a write could have committed and checks
@@ -1245,8 +1245,19 @@ notifications separately.
   restored copies refuse evidence. A late storage reply after cancellation now
   invalidates its measurement without crashing the worker. The native check uses
   the probe's configured 24-hour snapshots and 168-hour retention; it observes no
-  scheduled boundary and runs no application restore hooks. Connecting this path
-  to the host controller, local command and complete public export remains open.
+  scheduled boundary and runs no application restore hooks. The host controller now
+  offers this as an optional isolated experiment, with its own local storage process
+  and fresh bucket. A separately pinned minimal image still performs the source copy;
+  the service image never broadens that copy's environment checks. Before returning,
+  the worker deletes its objects and unfinished uploads, checks that the bucket is
+  absent and collects the storage process. Setup and cleanup requests have separate,
+  independently reconciled counters. The host admits only closed count, size, phase
+  and duration fields, requires all selected sales in the restored copy and refuses
+  altered worker evidence. The local command accepts an explicit `stream-replay`
+  configuration stage alongside `replay-admission`; both still return
+  `costMeasured: false`. Generated local checks cover success, cancellation, deadlines
+  and changed output. Complete accounting/export, the full venue sample, the required
+  idle observation and the remaining public/staff journeys stay open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled

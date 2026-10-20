@@ -303,3 +303,132 @@ test('localCommandRefusesUnexpectedArgumentsBeforeJournalMutations', async t => 
     assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources, undefined); clean(f, before);
   }
 });
+
+// The host must actually join isolated storage and native replication, not ignore stream settings.
+test('isolatedHostStreamsTheCompleteGeneratedDayAndCollectsStorageBeforeReturning', async t => {
+  const f = await fixture(t), before = fingerprint(f.database);
+  const stack = JSON.parse(readFileSync(process.env.COST_STACK_FIXTURE, 'utf8'));
+  const copyImage = f.image; f.image = stack.image;
+  cpSync(stack.litestreamBinary, join(f.codeRoot, 'litestream'));
+  const binarySha256 = createHash('sha256').update(readFileSync(join(f.codeRoot, 'litestream'))).digest('hex');
+  f.stream = { binarySha256, copyImage, startupSeconds: 2, idleSeconds: 2, windowSeconds: 60 };
+  const result = await controller.runIsolatedReplay(f);
+  assert.equal(result.costMeasured, false);
+  assert.deepEqual(result.admission.stream?.restored, { sales: 3, integrity: true });
+  assert.deepEqual(result.admission.stream.native, { version: '0.5.17', writerStarts: 1, phaseRestarts: 0 });
+  assert.ok(result.admission.stream.storage.objects.bytes > 0);
+  for (const field of ['requests', 'administration']) {
+    assert.equal(result.admission.stream[field].reconciled, true);
+    assert.deepEqual(result.admission.stream[field].accounting.producer, result.admission.stream[field].accounting.observer);
+    assert.ok(result.admission.stream[field].accounting.producer.attempts > 0);
+  }
+  const admin = result.admission.stream.administration.accounting.requests;
+  assert.equal(admin.find(r => r.operation === 'bucket-create').successful, 1);
+  assert.equal(admin.find(r => r.operation === 'bucket-delete').successful, 1);
+  assert.ok(admin.filter(r => r.operation === 'delete').reduce((n, r) => n + r.successful, 0) > 0);
+  assert.deepEqual(result.admission.stream.cleanup,
+    { processes: 0, privateRoots: 0, listeners: 0, clients: 0, buckets: 0, objects: 0, multipartUploads: 0 });
+  assert.equal(/PRIVATE_|2026-|\/state|taxId|locationId|synthetic-|127\.0\.0\.1/.test(JSON.stringify(result)), false);
+  clean(f, before);
+});
+
+async function streamedFixture(t) {
+  const f = await fixture(t), stack = JSON.parse(readFileSync(process.env.COST_STACK_FIXTURE, 'utf8'));
+  const copyImage = f.image; f.image = stack.image;
+  cpSync(stack.litestreamBinary, join(f.codeRoot, 'litestream'));
+  f.stream = { binarySha256: createHash('sha256').update(readFileSync(join(f.codeRoot, 'litestream'))).digest('hex'),
+    copyImage, startupSeconds: 2, idleSeconds: 2, windowSeconds: 60 };
+  return f;
+}
+
+test('isolatedHostRefusesUnsafeStreamSettingsBeforeSourceCopyOrResourceCreation', async t => {
+  const original = await streamedFixture(t), before = fingerprint(original.database);
+  for (const change of [f => { f.stream.target = 'https://PRIVATE_CANARY'; },
+    f => { f.stream.binarySha256 = '0'.repeat(64); }, f => { f.stream.copyImage = 'node:26'; },
+    f => { f.stream.startupSeconds = 0; }, f => { f.stream.idleSeconds = 3601; },
+    f => { f.stream.windowSeconds = f.windowSeconds; }]) {
+    const f = structuredClone(original); change(f);
+    await assert.rejects(controller.runIsolatedReplay(f), bad);
+    assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources, undefined); clean(original, before);
+  }
+});
+
+for (const mode of ['cancel', 'deadline']) test('isolatedHostCollectsNativeStorageAndPrivateStateOn_' + mode, async t => {
+  const f = await streamedFixture(t), before = fingerprint(f.database), abort = new AbortController();
+  f.stream.idleSeconds = 30;
+  let reached = false;
+  const poll = setInterval(() => {
+    try {
+      const entries = JSON.parse(readFileSync(join(f.root, 'isolated-replay/private/journal.json'), 'utf8')).localResources ?? [];
+      if (!reached && entries.some(e => e.kind === 'stream-process' && e.state === 'started' && e.operation === 'replicate')) {
+        reached = true; if (mode === 'cancel') abort.abort();
+      }
+    } catch {}
+  }, 10);
+  if (mode === 'deadline') { f.stream.windowSeconds = 43; f.windowSeconds = 44; }
+  try { await assert.rejects(controller.runIsolatedReplay({ ...f, signal: abort.signal }), bad); }
+  finally { clearInterval(poll); }
+  assert.equal(reached, true, 'stop only after native streaming has started'); clean(f, before);
+});
+
+test('localCommandRunsOnlyTheExplicitStreamStageAndPrintsClosedEvidence', async t => {
+  const f = await streamedFixture(t), before = fingerprint(f.database), command = localCommand(f);
+  const value = JSON.parse(readFileSync(command[3], 'utf8'));
+  value.stage = 'stream-replay'; value.stream = f.stream; writeFileSync(command[3], JSON.stringify(value));
+  const result = spawnSync(process.execPath, command, { env: { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' },
+    timeout: 150000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  assert.equal(result.status, 0); assert.equal(result.stderr, '');
+  const output = JSON.parse(result.stdout); assert.equal(output.stage, 'stream-replay'); assert.equal(output.costMeasured, false);
+  assert.deepEqual(output.admission.stream.restored, { sales: 3, integrity: true });
+  assert.ok(output.admission.stream.requests.accounting.producer.bytesOut > 0);
+  assert.ok(output.admission.stream.administration.accounting.requests.some(r => r.phase === 'cleanup'));
+  assert.equal(/PRIVATE_|2026-|\/state|taxId|locationId|sha256:|ownership|journal/.test(result.stdout), false);
+  assert.equal(readFileSync(command[3], 'utf8'), JSON.stringify(value)); clean(f, before);
+});
+
+for (const mode of ['extra', 'missing', 'counts']) test('isolatedHostRefusesAlteredWorkerStreamEvidence_' + mode, async t => {
+  const f = await streamedFixture(t), before = fingerprint(f.database);
+  const change = mode === 'extra' ? 'value.stream.raw="PRIVATE_CANARY";' : mode === 'missing' ? 'delete value.stream;' : 'value.stream.restored.sales=99;';
+  prefixRuntime(f, `import * as cloudCostGeneratedFs from 'node:fs';
+    if(process.argv[1]==='/code/cloud-cost-runner/replay-worker.mjs')process.once('beforeExit',()=>{
+      const path='/state/result.json';if(cloudCostGeneratedFs.existsSync(path)){const value=JSON.parse(cloudCostGeneratedFs.readFileSync(path,'utf8'));${change}cloudCostGeneratedFs.writeFileSync(path,JSON.stringify(value));}
+    });`);
+  const fs = (await import('node:fs')).default, { syncBuiltinESMExports } = await import('node:module');
+  const read = fs.readFileSync; let changed = false;
+  fs.readFileSync = (path, ...args) => {
+    const contents = read(path, ...args);
+    if (path === join(f.root, 'isolated-replay/result.json')) {
+      const value = JSON.parse(contents);
+      changed = mode === 'extra' ? value.stream?.raw === 'PRIVATE_CANARY' : mode === 'missing' ? !Object.hasOwn(value, 'stream') : value.stream?.restored.sales === 99;
+    }
+    return contents;
+  }; syncBuiltinESMExports();
+  try { await assert.rejects(controller.runIsolatedReplay(f), bad); }
+  finally { fs.readFileSync = read; syncBuiltinESMExports(); }
+  assert.equal(changed, true, 'reach the changed result at the actual host boundary'); clean(f, before);
+});
+
+// Refusing a link after hashing it has already read outside the admitted code boundary.
+test('isolatedHostChecksTheNativeBinaryIdentityBeforeReadingItsContents', async t => {
+  const f = await streamedFixture(t), before = fingerprint(f.database), binary = join(f.codeRoot, 'litestream');
+  const fs = (await import('node:fs')).default, { syncBuiltinESMExports } = await import('node:module');
+  renameSync(binary, join(f.root, 'caller-binary')); fs.symlinkSync(join(f.root, 'caller-binary'), binary);
+  const read = fs.readFileSync; let reads = 0;
+  fs.readFileSync = (path, ...args) => { if (path === binary) reads++; return read(path, ...args); }; syncBuiltinESMExports();
+  try { await assert.rejects(controller.runIsolatedReplay(f), bad); }
+  finally { fs.readFileSync = read; syncBuiltinESMExports(); }
+  assert.equal(reads, 0, 'reject the linked artifact before opening it');
+  assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources, undefined); clean(f, before);
+});
+
+test('isolatedHostRefusesAnOversizedNativeBinaryBeforeReadingIt', async t => {
+  const f = await streamedFixture(t), before = fingerprint(f.database), binary = join(f.codeRoot, 'litestream');
+  const fs = (await import('node:fs')).default, { syncBuiltinESMExports } = await import('node:module');
+  fs.truncateSync(binary, 100 * 1024 * 1024 + 1);
+  const read = fs.readFileSync; let reads = 0;
+  fs.readFileSync = (path, ...args) => { if (path === binary) reads++; return read(path, ...args); }; syncBuiltinESMExports();
+  try { await assert.rejects(controller.runIsolatedReplay(f), bad); }
+  finally { fs.readFileSync = read; syncBuiltinESMExports(); }
+  assert.equal(reads, 0, 'check the size bound before allocating or reading the artifact');
+  assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources, undefined); clean(f, before);
+});

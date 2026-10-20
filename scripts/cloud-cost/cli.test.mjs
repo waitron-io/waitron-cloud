@@ -130,3 +130,16 @@ test('cliRefusesMissingAndPrivateMalformedConfigWithoutEchoingIt', t => {
     assert.equal(result.stderr, 'Cloud cost local command refused.\n');
   }
 });
+
+// Streaming is a named partial experiment; it must never be silently accepted as admission-only.
+test('privateLocalConfigAdmitsAnExplicitStreamReplayWithItsRequiredPrivateSettings', t => {
+  const f = fixture(t), value = { ...config(), stage: 'stream-replay',
+    stream: { copyImage: 'sha256:' + 'a'.repeat(64), binarySha256: 'b'.repeat(64), startupSeconds: 2, idleSeconds: 2, windowSeconds: 60 } };
+  writeFileSync(f.path, JSON.stringify(value));
+  assert.deepEqual(local.readLocalConfig(f.path), value);
+});
+for (const stage of ['replay-admission', 'stream-replay']) test('privateLocalConfigRequiresTheStageAndStreamSettingsToAgree_' + stage, t => {
+  const f = fixture(t), value = { ...config(), stage };
+  if (stage === 'replay-admission') value.stream = {};
+  writeFileSync(f.path, JSON.stringify(value)); assert.throws(() => local.readLocalConfig(f.path), bad);
+});

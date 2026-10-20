@@ -3,6 +3,7 @@ import { join, relative, isAbsolute } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { assertOwnedRoot } from './schema.mjs';
+import { validateStreamSettings, validateStreamAdmission } from './stream-admission.mjs';
 import { validateReplayConfig } from './waitron-adapter.mjs';
 import { prepareIsolatedPrivateCopy, proveDockerIsolation, runForegroundContainer } from './local.mjs';
 
@@ -92,13 +93,16 @@ function admit(args) {
   need(['original', 'accelerated'].includes(args.cadence.mode) && finite(args.cadence.factor) && args.cadence.factor >= 1
     && (args.cadence.mode !== 'original' || args.cadence.factor === 1));
   const config = validateReplayConfig(args.config);
+  const stream = args.stream === undefined ? undefined : validateStreamSettings(args.stream, args);
+  if (stream) need(file(join(codeRoot, 'litestream')).size <= 100 * 1024 * 1024
+    && createHash('sha256').update(readFileSync(join(codeRoot, 'litestream'))).digest('hex') === stream.binarySha256);
   const selected = structuredClone({ source, root, database, codeRoot, image, windowSeconds, replayWindowSeconds,
     journal: args.journal, locationId: args.locationId, expected: args.expected, originalInventory: args.originalInventory,
-    cadence: args.cadence, initial: args.initial, config });
+    cadence: args.cadence, initial: args.initial, config, ...(stream ? { stream } : {}) });
   return { ...selected, signal };
 }
 
-// This controller proves complete writer admission, not stream, idle, session or daily cost.
+// This controller proves writer admission and an optional stream experiment; complete venue cost remains unqualified.
 // The caller owns the prepared runtime/root; only this invocation's added resources are removed.
 export async function runIsolatedReplay(input) {
   let args, copy, networkId, containerId, networkName, containerName, stageIdentity, harnessIdentity, timer, abort;
@@ -143,19 +147,24 @@ export async function runIsolatedReplay(input) {
     isolation = await proveDockerIsolation({ ...worker, containerIds: [containerId] });
     remaining(); record(args, { kind: 'replay-isolation', state: 'ready' });
     // No original files are mounted in the replay worker; its input is a separate, validated backup.
-    copy = await prepareIsolatedPrivateCopy({ source, root, journal, database, image, signal: controller.signal,
+    copy = await prepareIsolatedPrivateCopy({ source, root, journal, database, image: args.stream?.copyImage ?? image, signal: controller.signal,
       timeoutMs: Math.min(120000, remaining()) });
     remaining(); copyFileSync(copy.database, join(stageRoot, 'input.db'), constants.COPYFILE_EXCL);
     writeFileSync(join(stageRoot, 'config.json'), JSON.stringify({ locationId: args.locationId,
       expected: args.expected, originalInventory: args.originalInventory, cadence: args.cadence,
-      windowSeconds: args.replayWindowSeconds, initial: args.initial, config: args.config }), { mode: 0o600, flag: 'wx' });
+      windowSeconds: args.replayWindowSeconds, initial: args.initial, config: args.config, ...(args.stream ? { stream: args.stream } : {}) }), { mode: 0o600, flag: 'wx' });
     record(args, { kind: 'replay-worker', state: 'started', id: containerId });
     await runForegroundContainer({ ...worker, argv: ['node', '/code/cloud-cost-runner/replay-worker.mjs'],
       windowSeconds: Math.min(7200, remaining() / 1000) });
     containerId = undefined;
     remaining(); need(!args.signal?.aborted);
-    const output = join(stageRoot, 'result.json'); need(file(output).size <= 16384 && (lstatSync(output).mode & 0o777) === 0o600);
-    admission = validateReplayAdmission(JSON.parse(readFileSync(output, 'utf8')), args);
+    const output = join(stageRoot, 'result.json'); need(file(output).size <= (args.stream ? 1024 * 1024 : 16384) && (lstatSync(output).mode & 0o777) === 0o600);
+    const result = JSON.parse(readFileSync(output, 'utf8'));
+    if (args.stream) {
+      const { stream, ...replay } = result;
+      admission = { ...validateReplayAdmission(replay, args), stream: validateStreamAdmission(stream,
+        { ...args.stream, expectedSales: args.expected.busiest }) };
+    } else admission = validateReplayAdmission(result, args);
   } catch { fail(); }
   finally {
     clearTimeout(timer); args?.signal?.removeEventListener('abort', abort);
