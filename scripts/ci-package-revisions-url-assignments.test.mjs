@@ -135,3 +135,22 @@ test('unused assignments, different names and local assigned reads keep narrow s
       {full: false, packages: ['catalogue']});
   }));
 });
+
+// Equality and arrow expressions must not turn an unused URL into a directory input.
+test('URL comparisons and arrow functions do not become directory aliases', async t => {
+  for (const [name, expression] of [
+    ['comparison', 'original === original'],
+    ['arrow function', 'original => original'],
+  ]) await t.test(name, () => fixture(({root, git, write, commit, workspace}) => {
+    write('catalogue-adapter.mjs', helper);
+    write('packages/portal/src/scan.mts', reader('readdirSync', `const original = new URL('../../../', import.meta.url);
+let directory; directory = ${expression};
+if (directory instanceof URL)`));
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execute(root), '');
+    assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], workspace, base, head, git),
+      {full: false, packages: ['catalogue']});
+  }));
+});
