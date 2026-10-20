@@ -149,3 +149,32 @@ test('named imports keep isolated package selection', async t => {
     assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
   }));
 });
+
+test('named imports inside executed generated programs keep isolated package selection', () => fixture(({root, write, commit, plan}) => {
+  const program = "import{readdirSync,readFileSync}from'node:fs';export default {n: 1};";
+  write('tools/reader.mts', `const program = ${JSON.stringify(program)};
+export default (await import('data:text/javascript,' + encodeURIComponent(program))).default;
+`);
+  write('packages/portal/src/index.mjs', "import value from '../../../tools/reader.mts';\nconsole.log(value.n);\n");
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), '1\n');
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
+}));
+
+test('executed generated objects retain their directory consumers', async t => {
+  for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir']) await t.test(api, () => fixture(({root, write, commit, plan}) => {
+    const program = `import {${api}} from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}'; export default {${api}};`;
+    write('tools/reader.mts', `const program = ${JSON.stringify(program)};
+export default (await import('data:text/javascript,' + encodeURIComponent(program))).default;
+`);
+    write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.mjs';\nconsole.log('object reader helper loaded');\n");
+    write('packages/portal/src/reader.mts', consumer(forms[2]));
+    const base = commit();
+    write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    const head = commit();
+    assert.equal(execFileSync(process.execPath, ['packages/portal/src/reader.mts'], {cwd: root, encoding: 'utf8'}), 'object reader helper loaded\n');
+    assert.deepEqual(plan(base, head).packages.map(row => row.package), allPackages);
+  }));
+});

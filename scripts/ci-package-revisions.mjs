@@ -20,7 +20,7 @@ function arrayDirectorySource(source) {
   return source + '\n;\n' + source.replace(tokens, token => token.replace(/[\[\]{};]/g, ' '));
 }
 
-function objectDirectorySource(source) {
+function objectDirectorySource(source, quoted = false) {
   // Import lists bind names without storing runtime objects. Skip only complete
   // static import lists; literal and comment tokens cannot introduce a list.
   const tokens = [...source.matchAll(/'(?:\\[\s\S]|[^'\\])*'|"(?:\\[\s\S]|[^"\\])*"|\x60(?:\\[\s\S]|[^\x60\\])*\x60|\/\*(?:[^*]|\*(?!\/))*\*\/|\/\/[^\r\n\u2028\u2029]*(?:[\r\n\u2028\u2029]|$)|\/(?![*/])(?:\\[^\r\n]|\[(?:\\[^\r\n]|[^\]\\\r\n])*\]|[^/\\[\r\n])+\/|[$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*|[^\s]/gu)]
@@ -35,10 +35,17 @@ function objectDirectorySource(source) {
     const start = tokens[cursor].index;
     while (tokens[++cursor] && !['{', '}'].includes(tokens[cursor][0])) {}
     if (tokens[cursor]?.[0] !== '}' || tokens[cursor + 1]?.[0] !== 'from' || !/^['"]/.test(tokens[cursor + 2]?.[0] ?? '')) continue;
-    ranges.push([start, tokens[cursor].index + 1]);
+    ranges.push([start, tokens[cursor].index + 1, ' ']);
     index = cursor + 2;
   }
-  for (const [start, end] of ranges.reverse()) source = source.slice(0, start) + ' ' + source.slice(end);
+  // The source graph also follows quoted generated programs. Their static
+  // import lists are not object values either; keep the rest of each token.
+  if (!quoted) for (const token of tokens) {
+    if (!/^['"`]/.test(token[0]) || ranges.some(([start, end]) => token.index >= start && token.index < end)) continue;
+    const content = objectDirectorySource(token[0].slice(1, -1), true);
+    if (content !== token[0].slice(1, -1)) ranges.push([token.index, token.index + token[0].length, token[0][0] + content + token[0].at(-1)]);
+  }
+  for (const [start, end, replacement] of ranges.sort((a, b) => b[0] - a[0])) source = source.slice(0, start) + replacement + source.slice(end);
   return source;
 }
 

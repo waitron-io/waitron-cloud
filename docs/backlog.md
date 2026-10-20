@@ -1780,7 +1780,8 @@ notifications separately.
   retain transitive consumers despite dirty local files; audited lock changes
   keep full work with readers and narrow work without them. Static named imports
   are excluded from this shorthand check, including default-plus-named and
-  type-only imports and comment-separated forms. Unused helpers, ordinary objects
+  type-only imports, comment-separated forms and the executed quoted-program
+  controls. Generated objects still retain consumers in those controls. Unused helpers, ordinary objects
   and resolved directory calls stay narrow in these controls. This lexical scan
   does not resolve bindings or parse general expressions; inert text and unrelated
   namesakes can still select extra work. General aliases, destructuring and precise
