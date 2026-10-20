@@ -1387,12 +1387,18 @@ notifications separately.
   cover all four directory APIs, saved old and new transitive consumers, dirty
   local files and audited lock changes. Root options keep every package; unused
   inputs, local reads and identifier suffixes stay narrow in the controls.
-  A parenthesized right-hand value such as `directory = (original)` or
-  `directory = (new URL(...))`, TypeScript
-  `as URL` and non-null `!` assertions, destructuring, logical assignment and
-  other expressions still need resolution. Executed probes load a helper through
-  the first three unsupported forms, but both the captured base scanner and this
-  scanner omit its consumer. These
+  Parentheses around a URL constructor or alias value now preserve immediate
+  root-helper consumers, including nested parentheses, declaration and later
+  assignment chains, comments, escaped names and the supported URL type label.
+  Executed checks cover all four directory APIs, both saved revisions, transitive
+  consumers, dirty local files and audited lock changes. Root options retain
+  every package; unused inputs, local reads and alias property suffixes keep
+  narrow selection in the controls. The scan combines names across scopes and
+  can select extra work from overwritten values or inert text; it does not parse
+  general expressions. TypeScript `as URL` and non-null `!` assertions,
+  destructuring and logical assignment still need resolution. Executed probes
+  in the preceding task loaded a helper through `as URL` and `!`, while both
+  its captured base and candidate scanner omitted that consumer. Those forms
   remain explicit D69 gaps. Property assignments, inert comments or strings and
   unused default parameters can add a direct root input or alias edge and select
   extra work without a runtime directory consumer. Used default parameters and
