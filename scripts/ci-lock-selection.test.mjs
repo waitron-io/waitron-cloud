@@ -911,3 +911,30 @@ for await (const item of await scan(directory)) {
     }));
   }
 });
+
+
+test('audited lock changes retain generator-yielded directory readers', async t => {
+  for (const form of ['generator', 'async', 'method']) for (const api of ['readdirSync', 'readdir', 'opendirSync', 'opendir', null]) {
+    await t.test(`${form}: ${api ?? 'without a reader'}`, () => fixture(({git, write, lock, save, audit, commit, plan}) => {
+      const value = api ? `ñs.${api}` : '(() => [])';
+      write('tools/reader.mts', `import {readdirSync} from 'node:fs';
+${api ? `import * as ñs from '${api.endsWith('Sync') ? 'node:fs' : 'node:fs/promises'}';` : ''}
+${form === 'method' ? `export default class { *scan() { yield ${value} } }` :
+  form === 'async' ? `export default async function* makeReader() { yield await ${value} }` : `export default function* makeReader() { yield ${value} }`}`);
+      if (api) write('catalogue-adapter.mjs', "import './packages/catalogue/src/index.ts';\nconsole.log('yielded lock helper loaded');\n");
+      write('packages/page/test/scan.mts', `import makeReader from '../../../tools/reader.mts';
+const scan = ${form === 'method' ? 'new makeReader().scan().next().value' : form === 'async' ? '(await makeReader().next()).value' : 'makeReader().next().value'};
+const directory = new URL(['..', '..', '..', ''].join('/'), import.meta.url);
+for await (const item of await scan(directory)) {
+  const name = typeof item === 'string' ? item : item.name;
+  if (name.endsWith('.mjs')) await import(new URL(name, directory));
+}
+`);
+      audit(); const base = commit();
+      lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+      const head = commit();
+      assert.equal(execFileSync(process.execPath, ['packages/page/test/scan.mts'], {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8'}), api ? 'yielded lock helper loaded\n' : '');
+      assertSelected(plan(base, head), api ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
+    }));
+  }
+});
