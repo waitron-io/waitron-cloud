@@ -13,7 +13,8 @@ const measurementIds = ['orders-per-day', 'database-bytes', 'database-growth-byt
   'stream-bytes', 'stream-uploads', 'archive-bytes', 'snapshot-bytes', 'idle-bytes', 'startup-bytes',
   'remote-session-bytes-in', 'remote-session-bytes-out', 'remote-sessions-per-month', 'public-bytes',
   'email-operations', 'fiscal-operations', 'restore-bytes', 'verification-bytes', 'retention-months',
-  'stream-snapshot-seconds', 'stream-retention-seconds', 'bill-count', 'replay-seconds'];
+  'stream-snapshot-seconds', 'stream-retention-seconds', 'bill-count', 'replay-seconds',
+  'stream-byte-seconds-low', 'stream-byte-seconds-high', 'stream-storage-seconds'];
 const phases = ['setup', 'startup', 'workload', 'idle', 'verification', 'restore', 'observer', 'cleanup'];
 const totalsKeys = ['attempts', 'bytesIn', 'bytesOut'];
 const objectKeys = ['class', 'bytes', 'byteSeconds', 'currentVersions', 'noncurrentVersions', 'deleteMarkers', 'unfinishedMultipart'];

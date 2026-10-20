@@ -487,3 +487,57 @@ test('localStreamCommandExportsCombinedRequestTotalsAndBothLifetimeBounds', asyn
   assert.equal(/PRIVATE_|2026-|\/state|taxId|locationId|sha256:|ownership|journal/.test(child.stdout), false);
   clean(f, before);
 });
+
+// The receipt stage must run the writer and cleanup before publishing a closed, explicitly partial export.
+test('localCommandPublishesClosedStreamReceiptAfterOwnedCleanup', async t => {
+  const f = await streamedFixture(t), before = fingerprint(f.database), command = localCommand(f);
+  const value = JSON.parse(readFileSync(command[3], 'utf8'));
+  value.stage = 'stream-receipt'; value.stream = f.stream; writeFileSync(command[3], JSON.stringify(value));
+  const startedBefore = Date.now();
+  const child = spawnSync(process.execPath, command, { env: { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' },
+    timeout: 150000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  assert.equal(child.status, 0, 'admit the explicit receipt stage and complete its experiment');
+  assert.equal(child.stderr, '');
+  const output = JSON.parse(child.stdout);
+  assert.deepEqual(Object.keys(output).sort(), ['costMeasured', 'receipt', 'stage']);
+  assert.equal(output.stage, 'stream-receipt'); assert.equal(output.costMeasured, false);
+  const { exportAggregate } = await import('../schema.mjs');
+  assert.deepEqual(exportAggregate(output.receipt), output.receipt);
+  const r = output.receipt, inputs = Object.fromEntries(r.inputs.map(row => [row.id, row]));
+  assert.equal(r.cloudRevision, execFileSync('git', ['rev-parse', 'HEAD'], { cwd: new URL('../../..', import.meta.url), encoding: 'utf8' }).trim());
+  assert.equal(r.waitronRevision, 'fbadd15785464e59747e697c11048bfbc6e4938f');
+  assert.ok(Date.parse(r.window.startedAt) >= startedBefore);
+  assert.ok(Date.parse(r.window.endedAt) <= Date.now());
+  assert.ok(r.window.elapsedSeconds >= 4);
+  assert.equal(inputs['successful-sales'].value, 3); assert.equal(inputs['database-bytes'].status, 'measured');
+  for (const id of ['archive-bytes', 'remote-session-bytes-out', 'email-operations', 'fiscal-operations']) {
+    assert.equal(inputs[id].value, null); assert.equal(inputs[id].status, 'unknown');
+  }
+  assert.ok(inputs['stream-byte-seconds-low'].value > 0);
+  assert.ok(inputs['stream-byte-seconds-high'].value >= inputs['stream-byte-seconds-low'].value);
+  for (const phase of ['startup', 'restore', 'observer', 'setup', 'cleanup'])
+    assert.ok(r.accounting.requests.some(row => row.phase === phase && row.attempts > 0), phase);
+  assert.deepEqual(r.accounting.discrepancy, { attempts: 0, bytesIn: 0, bytesOut: 0 });
+  assert.equal(/PRIVATE_|2026-01-|\/state|taxId|locationId|sha256:|ownership|journal/.test(child.stdout), false);
+  assert.equal(readFileSync(command[3], 'utf8'), JSON.stringify(value)); clean(f, before);
+});
+
+// A changed wall clock cannot turn one measured storage interval into a different receipt duration.
+for (const jump of [-10000, 10000]) test('localReceiptRefusesClockJump_' + jump, async t => {
+  const f = await streamedFixture(t), before = fingerprint(f.database), command = localCommand(f);
+  const value = JSON.parse(readFileSync(command[3], 'utf8'));
+  value.stage = 'stream-receipt'; value.stream = f.stream; writeFileSync(command[3], JSON.stringify(value));
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e',
+    `import {runLocal} from ${JSON.stringify(new URL('../run-local.mjs', import.meta.url).href)};
+     const clock = Date.now; let calls = 0;
+     Date.now = () => clock() + (calls++ === 0 ? 0 : ${jump});
+     try { await runLocal({privateConfig:process.argv[1],cadence:'accelerated',windowSeconds:120});
+       process.stdout.write('UNEXPECTED_RECEIPT'); }
+     catch { process.stdout.write('REFUSED'); }`, command[3]],
+    { env: { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' }, timeout: 150000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  assert.equal(child.status, 0); assert.equal(child.stderr, ''); assert.equal(child.stdout, 'REFUSED');
+  const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
+  assert.ok(entries.some(e => e.kind === 'replay-worker' && e.state === 'started'), 'exercise the actual experiment');
+  assert.ok(entries.some(e => e.kind === 'isolated-replay' && e.state === 'removed'), 'finish cleanup before refusing');
+  clean(f, before);
+});

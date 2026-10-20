@@ -1277,8 +1277,18 @@ notifications separately.
   and cleanup traffic. It keeps failures and retries, combines matching request
   groups, refuses totals too large to represent exactly, and preserves both storage
   bounds through verified deletion. The original counters remain available for
-  comparison. This covers the stream experiment; it does not qualify the full venue
-  cost. Complete accounting/export across the remaining drivers, the full venue sample, the required
+  comparison. A separate `stream-receipt` configuration stage now exports this
+  experiment through the closed anonymous receipt schema after owned cleanup.
+  The receipt includes the selected sale count, copied database size and fresh
+  database growth. It preserves lower and upper storage byte-seconds as separate
+  measured inputs, with the actual storage observation duration. A byte-second is
+  one byte retained for one second. Unmeasured drivers, daily traffic projections
+  and unobserved schedules stay explicitly unknown, so this stage also returns
+  `costMeasured: false`. Receipt times describe the experiment, never the original
+  sale dates. This covers the stream experiment; it does not qualify the full venue
+  cost. Investigate the initial generated receipt-command refusal before the full
+  venue measurement; the later instrumented and ordinary checks pass, but its
+  cause remains unexplained. Complete accounting/export across the remaining drivers, the full venue sample, the required
   idle observation and the remaining public/staff journeys stay open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
