@@ -223,3 +223,32 @@ test('litestreamTransportPendingSecondRequestCannotHideBehindAnEarlierSuccess', 
   response.end('three'); await pending; await front.close();
   assert.deepEqual(front.snapshot().accounting.producer, { attempts: 2, bytesIn: 7, bytesOut: 6 });
 });
+
+// A late provider response after client cancellation must refuse evidence without crashing its worker.
+test('litestreamTransportLateResponseAfterClientCloseRefusesWithoutAnUncaughtException', async () => {
+  const { spawn } = await import('node:child_process');
+  const code = `
+    import {createServer,request} from 'node:http';import {once} from 'node:events';
+    import {createLitestreamTransport} from ${JSON.stringify(new URL('./litestream.mjs', import.meta.url).href)};
+    import {createMeter} from ${JSON.stringify(new URL('./meter.mjs', import.meta.url).href)};
+    let caller;
+    const provider=createServer((req,res)=>{req.resume();req.on('end',()=>{
+      caller.destroy();setTimeout(()=>res.end('late'),30);
+    });});
+    provider.listen(0,'127.0.0.1');await once(provider,'listening');
+    const meter=createMeter({phase:'workload',clock:()=>0});
+    const front=await createLitestreamTransport({target:'http://127.0.0.1:'+provider.address().port,meter,phase:'workload'});
+    caller=request(front.url+'/bucket/late',{method:'GET',headers:{
+      'amz-sdk-invocation-id':'11111111-2222-4333-8444-555555555555','amz-sdk-request':'attempt=1; max=1'
+    }});caller.on('error',()=>{});caller.end();
+    await new Promise(resolve=>setTimeout(resolve,150));
+    let refused=false;try{await front.close();}catch{refused=true;}
+    provider.closeAllConnections();await new Promise(resolve=>provider.close(resolve));
+    if(!refused)process.exitCode=7;
+  `;
+  const child = spawn(process.execPath, ['--input-type=module', '-e', code], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const output = []; child.stdout.on('data', b => output.push(b)); child.stderr.on('data', b => output.push(b));
+  const timer = setTimeout(() => child.kill('SIGKILL'), 5000);
+  try { const [exit] = await once(child, 'close'); assert.equal(exit, 0, Buffer.concat(output).toString()); }
+  finally { clearTimeout(timer); }
+});

@@ -657,3 +657,45 @@ test('genuineStreamMeasurementJoinsPhasesInventoriesAndIndependentRequestCounter
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
+
+// Ignoring stream options, missing the final sale or early database cleanup fails here.
+test('genuinePrivateDayStreamsEverySelectedSaleAndRestoresBeforeRemovingReplayState', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  const { createHash } = await import('node:crypto');
+  // Expose the pinned clock definitions already in the public bundle; retain every function body.
+  const runtime = readFileSync(join(f.codeRoot, 'runtime.mjs'), 'utf8') + '\nexport { businessDayAt, businessDayBounds };\n';
+  writeFileSync(join(f.codeRoot, 'runtime.mjs'), runtime);
+  const manifest = JSON.parse(readFileSync(join(f.codeRoot, 'runtime-manifest.json'), 'utf8'));
+  manifest.sha256 = createHash('sha256').update(runtime).digest('hex');
+  writeFileSync(join(f.codeRoot, 'runtime-manifest.json'), JSON.stringify(manifest));
+  cpSync(prepared.litestreamBinary, join(f.codeRoot, 'litestream'));
+  const harness = join(f.codeRoot, 'cloud-cost-runner'); mkdirSync(harness, { mode: 0o700 });
+  const { readdirSync } = await import('node:fs');
+  for (const name of readdirSync(new URL('..', import.meta.url))) if (name.endsWith('.mjs') && !name.endsWith('.test.mjs'))
+    cpSync(new URL('../' + name, import.meta.url), join(harness, name));
+
+  cpSync(new URL('./streamed-day-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-streamed-day-smoke.mjs'));
+  let stack; f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const proof = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-streamed-day-smoke.mjs'],
+    { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  assert.deepEqual(proof.result.replay.counts, { expected: 3, attempted: 3, successful: 3, failed: 0 });
+  assert.deepEqual(proof.result.stream?.restored, { sales: 3, integrity: true });
+  assert.deepEqual(proof.result.integrity, { ok: true, issues: 0 });
+  assert.equal(proof.result.stream.stream.requests.reconciled, true);
+  assert.equal(proof.result.stream.stream.storage.objects.bytes, proof.inventoryBytes); assert.ok(proof.inventoryBytes > 0);
+  assert.deepEqual(proof.result.stream.native, { version: '0.5.17', writerStarts: 1, phaseRestarts: 0 });
+  assert.deepEqual(proof.result.stream.stream.phases.map(p => p.phase), ['startup', 'workload', 'idle', 'verification', 'restore']);
+  for (const phase of ['startup', 'idle']) assert.ok(proof.result.stream.stream.phases.find(p => p.phase === phase).elapsedSeconds >= 2);
+  assert.equal(proof.sourceUnchanged, true); assert.equal(proof.collected, true); assert.equal(proof.clean, true); assert.equal(proof.leaked, false);
+  const { exportAggregate } = await import('../schema.mjs');
+  assert.throws(() => exportAggregate(proof.result), /Invalid cloud cost evidence/);
+  for (const mode of ['cancel', 'deadline']) {
+    const refused = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-streamed-day-smoke.mjs', mode],
+      { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] }));
+    assert.equal(refused.result, null); assert.equal(refused.refused, true);
+    assert.equal(refused.sourceUnchanged, true); assert.equal(refused.collected, true); assert.equal(refused.clean, true); assert.equal(refused.leaked, false);
+  }
+
+});

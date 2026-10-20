@@ -13,6 +13,8 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
   allowBulkDeletes = false, allowMultipart = false, resolveMultipartReplies = false, signal }) {
   let admin, observer, front, client, history, meter, disposal, finishing, evidence;
   let invalid = false, state = 'opening', phase = 'startup', phaseStart, last = -Infinity;
+  let nativeCompleted = 0;
+  const activityWaiters = new Set();
   const windows = [];
   const now = () => {
     const value = clock(); need(typeof value === 'number' && Number.isFinite(value) && value >= 0 && value >= last);
@@ -20,6 +22,8 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
   };
   const poison = () => { invalid = true; meter?.invalidate(); fail(); };
   const dispose = () => disposal ??= (async () => {
+    for (const waiter of activityWaiters) waiter.reject(Error('Invalid cloud cost stream measurement'));
+    activityWaiters.clear();
     const failures = [];
     const attempt = async fn => { try { await fn(); } catch { failures.push(true); } };
     await attempt(() => front?.close());
@@ -31,6 +35,14 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
     if (failures.length) { invalid = true; fail(); }
   })();
   const abort = () => { invalid = true; meter?.invalidate(); dispose().catch(() => {}); };
+  const switchPhase = next => {
+    try {
+      need(!invalid && state === 'active' && phases.includes(next));
+      front.setPhase(next);
+      const time = now(); windows.push({ phase, elapsedSeconds: time - phaseStart });
+      phase = next; phaseStart = time;
+    } catch { poison(); }
+  };
   try {
     const endpoint = new URL(target);
     need(endpoint.protocol === 'http:' && endpoint.hostname === '127.0.0.1' && endpoint.port !== ''
@@ -62,7 +74,15 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
         operation: classifyStorageOperation({ ...input, allowBulkDeletes }), errorCode: null, sameAccount: null };
     } });
     front = await createLitestreamTransport({ target: observer.url, meter, phase, allowBulkDeletes,
-      lifetimes: { begin: input => { need(state === 'active'); return history.begin(input); } } });
+      lifetimes: { begin: input => {
+        need(state === 'active'); const complete = history.begin(input);
+        return event => {
+          complete(event); need(!event.interrupted); nativeCompleted++;
+          for (const waiter of activityWaiters) if (nativeCompleted > waiter.after) {
+            activityWaiters.delete(waiter); waiter.resolve(nativeCompleted);
+          }
+        };
+      } } });
     need(!signal?.aborted); state = 'active';
     signal?.addEventListener('abort', abort, { once: true });
   } catch {
@@ -71,6 +91,22 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
   }
   return {
     url: front.url,
+    activity: () => { need(!invalid && state === 'active'); return nativeCompleted; },
+    waitForActivity: async after => {
+      need(!invalid && state === 'active' && !signal?.aborted && Number.isSafeInteger(after) && after >= 0 && after <= nativeCompleted);
+      if (nativeCompleted > after) return nativeCompleted;
+      return new Promise((resolve, reject) => activityWaiters.add({ after, resolve, reject }));
+    },
+    whenIdle: async action => {
+      need(!invalid && state === 'active' && !signal?.aborted);
+      return front.whenIdle(action);
+    },
+    changePhase: async next => {
+      try {
+        need(!invalid && state === 'active' && !signal?.aborted && phases.includes(next));
+        await front.whenIdle(() => switchPhase(next));
+      } catch { invalid = true; await dispose().catch(() => {}); fail(); }
+    },
     checkpoint: async () => {
       try {
         need(!invalid && state === 'active' && !signal?.aborted);
@@ -83,14 +119,7 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
         state = 'active'; return { requests, storage };
       } catch { invalid = true; await dispose().catch(() => {}); fail(); }
     },
-    setPhase: next => {
-      try {
-        need(!invalid && state === 'active' && phases.includes(next));
-        front.setPhase(next);
-        const time = now(); windows.push({ phase, elapsedSeconds: time - phaseStart });
-        phase = next; phaseStart = time;
-      } catch { poison(); }
-    },
+    setPhase: switchPhase,
     finish: async () => {
       if (evidence && !invalid) return structuredClone(evidence);
       if (!finishing) finishing = (async () => {

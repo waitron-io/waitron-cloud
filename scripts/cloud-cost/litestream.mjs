@@ -126,6 +126,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   } catch { fail(); }
   let invalid = false, closing, currentPhase = phase;
   const invocations = new Map(), pending = new Set(), connections = new Set();
+  const idleWaiters = new Set();
   let completed = 0;
   const poison = () => { invalid = true; meter.invalidate(); };
   const size = value => {
@@ -170,6 +171,11 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
           attemptedBytesIn: Math.max(bytesIn, expectedIn), attemptedBytesOut: Math.max(bytesOut, expectedOut) });
       } catch { poison(); }
       if (interrupted) poison();
+      if (pending.size === 0) for (const waiter of idleWaiters) {
+        idleWaiters.delete(waiter);
+        try { requireThat(!invalid && !closing); waiter.resolve(waiter.action()); }
+        catch { waiter.reject(Error('Invalid cloud cost Litestream audit')); }
+      }
     };
     const upstream = request(endpoint, { method: source.method, path: source.url, headers: source.headers }, response => {
       try { statusCode = response.statusCode; responseHeaders = response.headers;
@@ -184,7 +190,8 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
         }
         next(null, chunk);
       } });
-      pipeline(response, counter, destination, error => { received = !error; finish(!!error); });
+      try { pipeline(response, counter, destination, error => { received = !error; finish(!!error); }); }
+      catch { finish(true); response.destroy(); destination.destroy(); }
     });
     connections.add(upstream); upstream.on('close', () => connections.delete(upstream));
     upstream.setTimeout(30000, () => upstream.destroy());
@@ -197,7 +204,11 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   });
   server.on('clientError', (error, socket) => { poison(); socket.destroy(); });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  return { url: `http://127.0.0.1:${server.address().port}`, setPhase: next => {
+  return { url: `http://127.0.0.1:${server.address().port}`, whenIdle: async action => {
+    requireThat(!invalid && !closing && typeof action === 'function');
+    if (pending.size === 0) return action();
+    return new Promise((resolve, reject) => idleWaiters.add({ action, resolve, reject }));
+  }, setPhase: next => {
     try {
       // Both independent counters must see one phase for the entire transfer.
       requireThat(!invalid && !closing && pending.size === 0 && phases.includes(next));
@@ -207,6 +218,8 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     requireThat(!invalid && pending.size === 0 && completed > 0); return meter.snapshot();
   }, close: () => {
     closing ??= (async () => {
+      for (const waiter of idleWaiters) waiter.reject(Error('Invalid cloud cost Litestream audit'));
+      idleWaiters.clear();
       // Invalidate active transfers before asynchronous socket-close events can report an empty checkpoint.
       if (pending.size > 0) poison();
       const ended = [...connections].map(connection => new Promise(resolve => connection.once('close', resolve)));

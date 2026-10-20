@@ -262,3 +262,44 @@ for (const versioned of [false, true]) test(`streamMeasurementRefusesPreexisting
   assert.equal(typeof module.openStreamMeasurement, 'function');
   await assert.rejects(module.openStreamMeasurement(f.args), bad);
 });
+
+// Observer inventories cannot make a newly spawned native writer appear ready.
+test('streamMeasurementActivityWaitsForACompletedNativeTransfer', async t => {
+  const f = await fixture(t), session = await open(t, f);
+  assert.equal(typeof session.waitForActivity, 'function'); assert.equal(session.activity(), 0);
+  let settled = false; const first = session.waitForActivity(0).then(value => { settled = true; return value; });
+  await session.checkpoint(); assert.equal(settled, false); assert.equal(session.activity(), 0);
+  assert.equal(await send(session.url, 'PUT', 4, 1), 200); assert.equal(await first, 1);
+  assert.equal(session.activity(), 1); assert.equal(await session.waitForActivity(0), 1);
+  const second = session.waitForActivity(1);
+  assert.equal(await send(session.url, 'GET', 0, 2), 200); assert.equal(await second, 2);
+});
+
+test('streamMeasurementClosesAndRejectsItsPendingActivityWaiters', async t => {
+  const f = await fixture(t), session = await open(t, f);
+  assert.equal(typeof session.waitForActivity, 'function');
+  const waiting = assert.rejects(session.waitForActivity(0), bad);
+  await session.close(); await waiting;
+});
+
+// A phase change must wait for an entire native transfer without stopping its writer.
+test('streamMeasurementChangesPhaseOnlyAfterTheActiveNativeBodySettles', async t => {
+  const f = await fixture(t), session = await open(t, f), before = f.state.requests;
+  assert.equal(typeof session.whenIdle, 'function'); assert.equal(typeof session.changePhase, 'function');
+  const pending = new Promise((resolve, reject) => {
+    const req = request(session.url + '/' + bucket + '/' + key, { method: 'PUT', agent: false, headers: {
+      'content-length': 4, 'amz-sdk-invocation-id': '11111111-2222-4333-8444-000000000001', 'amz-sdk-request': 'attempt=1; max=2',
+    } }, res => { res.resume(); res.on('end', resolve); });
+    req.on('error', reject); req.write(Buffer.alloc(2)); f.state.finishBody = () => req.end(Buffer.alloc(2));
+  });
+  for (let i = 0; i < 100 && f.state.requests === before; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.ok(f.state.requests > before); let changed = false;
+  const switching = session.changePhase('idle').then(() => { changed = true; });
+  const idle = session.whenIdle(() => 17);
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(changed, false);
+  f.state.finishBody(); await pending; await switching; assert.equal(await idle, 17);
+  assert.equal(await send(session.url, 'GET', 0, 2), 200);
+  const result = await session.finish();
+  assert.ok(result.requests.accounting.requests.some(row => row.phase === 'startup' && row.operation === 'put'));
+  assert.ok(result.requests.accounting.requests.some(row => row.phase === 'idle' && row.operation === 'get'));
+});

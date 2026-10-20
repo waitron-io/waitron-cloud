@@ -230,3 +230,18 @@ test('privateDayAwaitsAsyncProgressAndSuppressesItsRejectedPrivateError', async 
   assert.deepEqual(progress, [{ phase: 'workload', successfulSales: 0 }, { phase: 'workload', successfulSales: 1 }]);
   assert.equal(existsSync(f.stateRoot), false);
 });
+
+// Invalid measurement settings must fail before the private replay creates a fresh venue.
+test('privateDayRefusesInvalidStreamSettingsBeforeOpeningTheReplay', async t => {
+  const f = await setup(t), before = fingerprint(f.database);
+  const base = { binary: '/not-opened', binarySha256: '0'.repeat(64), target: 'http://127.0.0.1:1', sdk: {},
+    bucket: 'synthetic-settings', versioned: false, startupSeconds: 2, idleSeconds: 2, windowSeconds: 60 };
+  for (const change of [s => { s.extra = true; }, s => { delete s.binary; }, s => { s.startupSeconds = 0; },
+    s => { s.startupSeconds = 301; }, s => { s.idleSeconds = 0; }, s => { s.idleSeconds = 3601; },
+    s => { s.windowSeconds = 7201; }, s => { s.windowSeconds = 4; }, s => { s.windowSeconds = NaN; }]) {
+    const stream = { ...base }; change(stream);
+    await assert.rejects(local.replayPrivateDay({ ...f, stream }), invalid);
+    assert.equal(existsSync(f.stateRoot), false); assert.equal(fingerprint(f.database), before);
+    assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources.some(e => e.kind === 'private-replay-state'), false);
+  }
+});

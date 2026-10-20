@@ -1231,8 +1231,22 @@ notifications separately.
   listeners and client before returning anonymous evidence. Generated HTTP and
   real local storage checks cover phase changes, retries, earlier retained storage
   and final deletion; cancellation and cleanup checks refuse incomplete evidence.
-  The session leaves bucket ownership and deletion with its caller. Connecting this
-  session to the complete replay, local command and public export remains open.
+  The session leaves bucket ownership and deletion with its caller. You can now
+  connect it to a private selected-day replay. One pinned native writer stays
+  running across startup, workload and idle periods; phase changes wait for active
+  transfers to finish. Native traffic, rather than observer polling, proves that
+  the writer has started. Before returning evidence, the controller stops its own
+  writer, restores the stream to a separate copy and checks SQLite integrity and
+  the complete sale count. The normal writer's fiscal integrity check remains
+  separate. Generated local checks replay three selected sales, reconcile retained
+  storage against an independent inventory and collect every native process and
+  private replay directory. Short fixture windows do not measure a venue day.
+  Cancellation, deadlines, refused native commands, missing sales and damaged
+  restored copies refuse evidence. A late storage reply after cancellation now
+  invalidates its measurement without crashing the worker. The native check uses
+  the probe's configured 24-hour snapshots and 168-hour retention; it observes no
+  scheduled boundary and runs no application restore hooks. Connecting this path
+  to the host controller, local command and complete public export remains open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled

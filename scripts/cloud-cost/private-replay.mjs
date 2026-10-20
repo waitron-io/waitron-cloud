@@ -7,6 +7,8 @@ import { readPrivateReplayClock, discoverPrivateReplayDay, readPrivateReplayBill
 import { prepareReplayDay } from './replay-day.mjs';
 import { replayScheduledSales } from './cadence.mjs';
 import { openReplay } from './waitron-adapter.mjs';
+import { openReplayStream } from './replay-stream.mjs';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const fail = () => { throw new Error('Invalid cloud cost private replay'); };
 const requireThat = value => { if (!value) fail(); };
@@ -53,12 +55,28 @@ function logicalBytes(database) {
 // Call only inside the audited isolated worker: this stage neither starts isolation nor qualifies cost accounting.
 // State belongs to this invocation; an admitted sale settles before the adapter closes and cleanup begins.
 export async function replayPrivateDay(args) {
-  let replay, identity, result;
+  let replay, identity, result, stream, streamTimer;
   try {
-    const { source, root, journal, database, locationId, codeRoot, stateRoot, signal, onProgress } = args;
+    const { source, root, journal, database, locationId, codeRoot, stateRoot, signal: callerSignal, onProgress } = args;
+    let signal = callerSignal, streamOptions;
     assertOwnedRoot({ source, root, journal });
     requireThat(signal === undefined || signal instanceof AbortSignal);
     requireThat(!signal?.aborted && (onProgress === undefined || typeof onProgress === 'function'));
+    if (args.stream !== undefined) {
+      const keys = ['binary', 'binarySha256', 'target', 'sdk', 'bucket', 'versioned', 'startupSeconds', 'idleSeconds', 'windowSeconds'];
+      requireThat(args.stream && Object.getPrototypeOf(args.stream) === Object.prototype
+        && Reflect.ownKeys(args.stream).length === keys.length && keys.every(k => Object.hasOwn(args.stream, k)
+          && !Object.getOwnPropertyDescriptor(args.stream, k).get));
+      const { sdk, ...settings } = args.stream;
+      streamOptions = { ...structuredClone(settings), sdk };
+      const { startupSeconds, idleSeconds, windowSeconds } = streamOptions;
+      requireThat([startupSeconds, idleSeconds, windowSeconds].every(v => typeof v === 'number' && Number.isFinite(v) && v > 0)
+        && startupSeconds <= 300 && idleSeconds <= 3600 && windowSeconds <= 7200
+        && startupSeconds + idleSeconds < windowSeconds);
+      const controller = new AbortController();
+      signal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
+      streamTimer = setTimeout(() => controller.abort(), windowSeconds * 1000);
+    }
     requireThat(isAbsolute(stateRoot) && resolve(stateRoot) === stateRoot && inside(root, stateRoot) && !inside(codeRoot, stateRoot));
     requireThat(realpathSync(join(stateRoot, '..')) === join(stateRoot, '..'));
     const cadence = structuredClone(args.cadence), windowSeconds = args.windowSeconds;
@@ -85,6 +103,11 @@ export async function replayPrivateDay(args) {
     const prepared = prepareReplayDay({ bounds: discovered.selection.bounds,
       expectedSales: discovered.selection.expectedSales, events: bills.events });
     const freshDatabase = join(stateRoot, 'venue/venue.db'), freshBeforeBytes = logicalBytes(freshDatabase);
+    if (streamOptions) {
+      stream = await openReplayStream({ ...streamOptions, source, root, journal, database: freshDatabase, signal });
+      await delay(streamOptions.startupSeconds * 1000, undefined, { signal });
+      await stream.setPhase('workload');
+    }
     let successfulSales = 0;
     const progress = async phase => {
       requireThat(!signal?.aborted); await onProgress?.({ phase, successfulSales }); requireThat(!signal?.aborted);
@@ -94,6 +117,11 @@ export async function replayPrivateDay(args) {
       recordSale: async sale => { await replay.recordSale(sale); successfulSales++; await progress('workload'); } });
     const counts = replay.counts();
     requireThat(counts.attempted === prepared.expectedSales && counts.successful === prepared.expectedSales && counts.failed === 0);
+    if (stream) {
+      await stream.setPhase('idle'); await progress('idle');
+      await delay(streamOptions.idleSeconds * 1000, undefined, { signal });
+      await stream.setPhase('verification');
+    }
     await progress('verification');
     const integrity = await replay.verify();
     requireThat(!signal?.aborted && integrity.ok === true && integrity.issues === 0);
@@ -102,10 +130,12 @@ export async function replayPrivateDay(args) {
     result = { complete: true, source: { counts: discovered.counts, originalInventory }, replay: scheduled,
       integrity: { ok: true, issues: 0 }, storage: { copiedDatabaseBytes: lstatSync(database).size,
         freshBeforeBytes, freshAfterBytes, freshGrowthBytes: freshAfterBytes - freshBeforeBytes } };
+    if (stream) result.stream = await stream.finish({ expectedSales: prepared.expectedSales });
   } catch { fail(); }
   finally {
+    clearTimeout(streamTimer);
     try {
-      await replay?.close();
+      try { await stream?.close(); } finally { await replay?.close(); }
       if (identity) {
         assertOwnedRoot(args);
         const s = lstatSync(args.stateRoot);
