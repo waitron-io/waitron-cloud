@@ -1372,15 +1372,23 @@ notifications separately.
   in the controls. Names are combined conservatively across scopes; this does
   not resolve binding identity, destructuring or other type labels. Bare later
   assignments now preserve these URL aliases too, including separate and chained
-  transfers, escaped names, comments and parenthesized assignments. Executed
+  transfers, escaped names, comments and parentheses around a bare assignment
+  such as `(directory = original)`. Executed
   controls cover all four directory APIs, old and new saved helper readers,
   transitive consumers and dirty-checkout independence. Recursive root options
   retain full package work, including audited lock changes. Unused transfers,
   different scanned names, local reads, expression prefixes and working-directory
   values remain narrow in the controls. Assignment order and reused names are
   combined conservatively, so overwritten values can select extra work. Direct
-  assignment of a new URL after its declaration, destructuring, logical assignment
-  and other expressions still need resolution.
+  assignment of a new URL after its declaration, a parenthesized right-hand value
+  such as `directory = (original)`, TypeScript `as URL` and non-null `!` assertions,
+  destructuring, logical assignment and other expressions still need resolution.
+  Executed probes load a helper through each of the first four unsupported forms,
+  but both the captured base scanner and this scanner omit its consumer. These
+  remain explicit D69 gaps. A property assignment or inert comment can also add
+  an alias edge and select extra work without a runtime directory consumer.
+  Planning cost for malformed comment-heavy sources remains unverified; this task
+  qualifies the existing large valid-source scaling controls.
   Binding identity remains unverified, and reused names or inert text can retain
   extra work. An out-of-range escape inside an inert comment, such as
   `// readdirSync(\u{110000})`, also makes both scanners throw while Node accepts

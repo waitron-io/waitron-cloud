@@ -124,6 +124,7 @@ test('unused assignments, different names and local assigned reads keep narrow s
     ['local assignment', "const original = new URL('./', import.meta.url); let directory; directory = original; readdirSync(directory);"],
     ['expression prefix', "const original = new URL('../../../', import.meta.url); let directory; directory = original.pathname + 'packages/portal/src/'; readdirSync(directory);"],
     ['working directory', assignments[0][1] + ' const command = {cwd: directory};'],
+    ['numeric prefix in inert text', "const original = new URL('../../../', import.meta.url); const directory = new URL('./', import.meta.url); // 1directory = original;\nreaddirSync(directory);"],
   ]) await t.test(name, () => fixture(({root, git, write, commit, workspace}) => {
     write('catalogue-adapter.mjs', helper);
     write('packages/portal/src/scan.mts', "import {readdirSync} from 'node:fs';\n" + source);
