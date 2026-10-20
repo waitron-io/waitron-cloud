@@ -15,6 +15,12 @@ export const streamCounters = ({ reconciled, accounting, observedRequests }) => 
 export async function openWorkerStorage(args) {
   const { sdk, signal } = args, directory = join(args.root, 'local-storage');
   let identity, child, done, proxy, client, meter, created = false, stopping = false, exited = false, bad = false, disposal, evidence;
+  let retained, retainedInvalid = false, last = -Infinity;
+  const clock = args.clock ?? (() => performance.now() / 1000);
+  const now = () => {
+    const time = clock(); need(typeof time === 'number' && Number.isFinite(time) && time >= 0 && time >= last);
+    last = time; return time;
+  };
   const bucket = 'cost-' + randomUUID(), target = 'http://127.0.0.1:8334';
   const record = entry => {
     assertOwnedRoot(args); const value = JSON.parse(readFileSync(args.journal.path, 'utf8'));
@@ -72,11 +78,25 @@ export async function openWorkerStorage(args) {
       // Bucket lists can omit a created bucket; only the owned bucket's direct 404 proves absence.
       await bucketInventory();
       if (await bucketPresent()) {
-        for (const row of await uploads()) {
+        // The caller has stopped its writer. Match the final native inventory before pricing cleanup.
+        const pending = await uploads(), objects = await listObjects();
+        if (retained && (pending.length !== 0 || objects.length !== retained.objects
+          || objects.some(row => !Number.isSafeInteger(row.Size) || row.Size < 0)
+          || objects.reduce((n, row) => n + row.Size, 0) !== retained.bytes)) retainedInvalid = true;
+        for (const row of pending) {
           need(typeof row.Key === 'string' && row.Key.startsWith('stream/') && typeof row.UploadId === 'string' && row.UploadId.length > 0);
           await send(new sdk.AbortMultipartUploadCommand({ Bucket: bucket, Key: row.Key, UploadId: row.UploadId }));
         }
-        for (const row of await listObjects()) await send(new sdk.DeleteObjectCommand({ Bucket: bucket, Key: row.Key }));
+        for (const row of objects) {
+          const from = now();
+          await send(new sdk.DeleteObjectCommand({ Bucket: bucket, Key: row.Key }));
+          const by = now();
+          if (retained && !retainedInvalid) {
+            // A deletion can commit anywhere between request admission and its completed reply.
+            retained.low += row.Size * (from - retained.since); retained.high += row.Size * (by - retained.since);
+            retained.deleted++;
+          }
+        }
         need((await listObjects()).length === 0 && (await uploads()).length === 0);
         await send(new sdk.DeleteBucketCommand({ Bucket: bucket }));
       }
@@ -84,7 +104,18 @@ export async function openWorkerStorage(args) {
       record({ kind: 'storage-bucket', state: 'removed', bucket }); created = false;
     });
     let counters;
-    await attempt(async () => { if (meter) { const value = meter.snapshot(); need(value.reconciled); counters = streamCounters(value); } });
+    await attempt(async () => { if (meter) {
+      const value = meter.snapshot(); need(value.reconciled); counters = streamCounters(value);
+      if (retained) {
+        need(!retainedInvalid && retained.deleted === retained.objects);
+        const windowSeconds = now() - retained.since;
+        need(Number.isFinite(retained.high) && retained.high >= retained.low && retained.low >= 0
+          && retained.high <= retained.bytes * windowSeconds);
+        counters.retainedStorage = { status: 'measured', scope: 'unversioned-cleanup-tail', windowSeconds,
+          initialBytes: retained.bytes, deletedObjects: retained.deleted, remainingBytes: 0, remainingObjects: 0,
+          byteSeconds: { low: retained.low, high: retained.high } };
+      }
+    } });
     await attempt(async () => { client?.destroy(); });
     await attempt(async () => { await proxy?.close(); });
     if (child) await attempt(async () => {
@@ -101,7 +132,7 @@ export async function openWorkerStorage(args) {
       record({ kind: 'storage-root', state: 'cleanup-intent', path: directory }); rmSync(directory, { recursive: true });
       need(!existsSync(directory)); record({ kind: 'storage-root', state: 'removed', path: directory });
     });
-    if (failures.length) fail(); return counters;
+    if (failures.length || retainedInvalid) fail(); return counters;
   })();
   try {
     assertOwnedRoot(args); healthy();
@@ -117,7 +148,7 @@ export async function openWorkerStorage(args) {
       child.once('close', () => { exited = true; if (!stopping) bad = true; resolve(); });
     });
     if (child.pid) record({ kind: 'storage-process', state: 'started', pid: child.pid }); else fail();
-    meter = createMeter({ phase: 'setup', clock: () => performance.now() / 1000 });
+    meter = createMeter({ phase: 'setup', clock: now });
     proxy = await createMeteringProxy({ target, meter, classify: correlatedStorageAttempt });
     client = makeClient('setup');
     const deadline = performance.now() + 30000; let ready = false;
@@ -133,10 +164,23 @@ export async function openWorkerStorage(args) {
     need((await listObjects()).length === 0 && (await uploads()).length === 0);
     healthy();
     record({ kind: 'storage-bucket', state: 'ready', bucket });
-    return { target, bucket, finish: async () => {
-      if (evidence) return structuredClone(evidence);
-      healthy();
-      evidence = await dispose(); return structuredClone(evidence);
+    return { target, bucket, finish: async (options = {}) => {
+      try {
+        need(options && Object.getPrototypeOf(options) === Object.prototype
+          && Reflect.ownKeys(options).every(k => k === 'retained'));
+        const input = options.retained;
+        if (input !== undefined) {
+          need(input && Object.getPrototypeOf(input) === Object.prototype
+            && Reflect.ownKeys(input).length === 3 && Reflect.ownKeys(input).every(k => ['since', 'bytes', 'objects'].includes(k)
+              && !Object.getOwnPropertyDescriptor(input, k).get));
+          need(typeof input.since === 'number' && Number.isFinite(input.since) && input.since >= 0 && input.since <= now()
+            && ['bytes', 'objects'].every(k => Number.isSafeInteger(input[k]) && input[k] >= 0));
+          if (retained) need(['since', 'bytes', 'objects'].every(k => input[k] === retained[k]));
+          else { need(!disposal); retained = { ...input, low: 0, high: 0, deleted: 0 }; }
+        } else need(!retained);
+        if (evidence) return structuredClone(evidence);
+        healthy(); evidence = await dispose(); return structuredClone(evidence);
+      } catch { await dispose().catch(() => {}); fail(); }
     }, close: async () => { await dispose(); } };
   } catch { await dispose().catch(() => {}); fail(); }
 }

@@ -200,3 +200,56 @@ for (const mode of ['continuation', 'missing-name', 'wrong-type']) {
     assert.equal(f.entries().some(e => e.kind === 'storage-root' && e.state === 'removed'), false);
   });
 }
+
+
+// Omitting the retained interval, using final zero bytes, or treating delete replies as instant
+// loses storage that remains after native measurement. The literal totals include inventory time.
+test('workerStorageCountsRetainedBytesUntilEachRealDeletionCompletes', async t => {
+  let time = 10;
+  const f = fixture(t, { before: command => {
+    if (command instanceof sdk.DeleteObjectCommand) time = 13;
+  }, after: (command, result) => {
+    if (command instanceof sdk.DeleteObjectCommand) time = 15;
+    return result;
+  } });
+  const storage = await open(t, { ...f, clock: () => time });
+  const client = new sdk.S3Client({ endpoint: storage.target, region: 'eu-north-1', forcePathStyle: true, maxAttempts: 1,
+    credentials: { accessKeyId: 'SYNTHETIC', secretAccessKey: 'SYNTHETIC' } });
+  t.after(() => client.destroy());
+  await client.send(new sdk.PutObjectCommand({ Bucket: storage.bucket, Key: 'stream/PRIVATE_TAIL_CANARY', Body: Buffer.from('four') }));
+  time = 12;
+  const retained = { since: 10, bytes: 4, objects: 1 };
+  const result = await storage.finish({ retained });
+  // Delete call starts at12, the provider commits between13 and15: [4*(12-10),4*(15-10)].
+  assert.deepEqual(result.retainedStorage, { status: 'measured', scope: 'unversioned-cleanup-tail',
+    windowSeconds: 5, initialBytes: 4, deletedObjects: 1, remainingBytes: 0, remainingObjects: 0,
+    byteSeconds: { low: 8, high: 20 } });
+  assert.equal(result.accounting.requests.some(r => r.phase === 'cleanup' && r.operation === 'delete'), true);
+  assert.doesNotMatch(JSON.stringify(result), /PRIVATE|CANARY|127\.0\.0\.1|cost-/);
+  retained.bytes = 99;
+  assert.deepEqual((await storage.finish({ retained: { since: 10, bytes: 4, objects: 1 } })).retainedStorage, result.retainedStorage);
+  await assert.rejects(storage.finish({ retained }), bad);
+});
+
+// A final native inventory is not permission to silently price a different cleanup inventory.
+for (const mode of ['bytes', 'objects', 'future', 'extra', 'fractional', 'untracked-multipart']) {
+  test('workerStorageRefusesUnreconciledRetainedStorage_' + mode, async t => {
+    const f = fixture(t), storage = await open(t, { ...f, clock: () => 12 });
+    if (mode === 'untracked-multipart') await writeGeneratedObjects(t, storage);
+    else {
+      const client = new sdk.S3Client({ endpoint: storage.target, region: 'eu-north-1', forcePathStyle: true, maxAttempts: 1,
+        credentials: { accessKeyId: 'SYNTHETIC', secretAccessKey: 'SYNTHETIC' } });
+      try { await client.send(new sdk.PutObjectCommand({ Bucket: storage.bucket, Key: 'stream/PRIVATE_TAIL_CANARY', Body: Buffer.from('four') })); }
+      finally { client.destroy(); }
+    }
+    const retained = { since: 10, bytes: 4, objects: 1 };
+    if (mode === 'bytes') retained.bytes = 5;
+    if (mode === 'objects') retained.objects = 2;
+    if (mode === 'future') retained.since = 13;
+    if (mode === 'extra') retained.path = 'PRIVATE_CANARY';
+    if (mode === 'fractional') retained.bytes = 4.5;
+    // The generated unfinished upload is deliberately absent from the final native inventory.
+    await assert.rejects(storage.finish({ retained }), bad);
+    assert.equal(f.entries().some(e => e.kind === 'storage-process' && e.state === 'collected'), true);
+  });
+}

@@ -29,8 +29,12 @@ async function run() {
     const result = await replayPrivateDay({ ...options, ...(stream ? { stream } : {}), source, root, journal, database, codeRoot: '/code', stateRoot: root + '/replay' });
     if (storage) {
       const native = result.stream;
+      const { retainedStorage, ...administration } = await storage.finish({ retained: {
+        since: native.stream.storageEndedAt, bytes: native.stream.storage.objects.bytes,
+        objects: native.stream.storage.objects.currentVersions,
+      } });
       result.stream = { phases: native.stream.phases, requests: streamCounters(native.stream.requests),
-        administration: await storage.finish(), storage: native.stream.storage, native: native.native, restored: native.restored,
+        administration, retainedStorage, storage: native.stream.storage, native: native.native, restored: native.restored,
         cleanup: { ...native.cleanup, listeners: 0, clients: 0, buckets: 0, objects: 0, multipartUploads: 0 } };
     }
     writeFileSync('/state/result.json', JSON.stringify(result), { mode: 0o600, flag: 'wx' });

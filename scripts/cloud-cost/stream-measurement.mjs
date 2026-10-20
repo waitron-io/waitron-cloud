@@ -129,10 +129,11 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
           // No further mutation may enter while the independent inventory is read.
           await front.close(); await history.verify();
           need(!invalid && !signal?.aborted);
-          const storage = history.snapshot(), requests = meter.snapshot(), time = now();
+          // Cleanup must resume at the history's clock, before later reporting or listener collection.
+          const storage = history.snapshot(), storageEndedAt = last, requests = meter.snapshot(), time = now();
           need(requests.reconciled === true && requests.status === 'measured');
           result = { status: 'measured', scope: 'native-stream-session',
-            phases: [...windows, { phase, elapsedSeconds: time - phaseStart }], requests, storage,
+            phases: [...windows, { phase, elapsedSeconds: time - phaseStart }], requests, storage, storageEndedAt,
             cleanup: { listeners: 0, clients: 0 } };
         } catch { invalid = true; fail(); }
         finally { await dispose(); }

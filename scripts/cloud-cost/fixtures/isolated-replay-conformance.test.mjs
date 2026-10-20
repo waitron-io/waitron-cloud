@@ -317,6 +317,12 @@ test('isolatedHostStreamsTheCompleteGeneratedDayAndCollectsStorageBeforeReturnin
   assert.deepEqual(result.admission.stream?.restored, { sales: 3, integrity: true });
   assert.deepEqual(result.admission.stream.native, { version: '0.5.17', writerStarts: 1, phaseRestarts: 0 });
   assert.ok(result.admission.stream.storage.objects.bytes > 0);
+  const tail = result.admission.stream.retainedStorage;
+  assert.equal(tail.initialBytes, result.admission.stream.storage.objects.bytes);
+  assert.equal(tail.deletedObjects, result.admission.stream.storage.objects.currentVersions);
+  assert.ok(tail.byteSeconds.low > 0 && tail.byteSeconds.high >= tail.byteSeconds.low);
+  assert.ok(tail.byteSeconds.high <= tail.initialBytes * tail.windowSeconds);
+  assert.equal(tail.remainingBytes, 0); assert.equal(tail.remainingObjects, 0);
   for (const field of ['requests', 'administration']) {
     assert.equal(result.admission.stream[field].reconciled, true);
     assert.deepEqual(result.admission.stream[field].accounting.producer, result.admission.stream[field].accounting.observer);
@@ -431,4 +437,27 @@ test('isolatedHostRefusesAnOversizedNativeBinaryBeforeReadingIt', async t => {
   finally { fs.readFileSync = read; syncBuiltinESMExports(); }
   assert.equal(reads, 0, 'check the size bound before allocating or reading the artifact');
   assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources, undefined); clean(f, before);
+});
+
+// A well-formed cleanup total from a different final inventory must fail at the real host boundary.
+test('isolatedHostRefusesChangedRetainedStorageFromTheActualWorker', async t => {
+  const f = await streamedFixture(t), before = fingerprint(f.database);
+  prefixRuntime(f, `import * as generatedTailFs from 'node:fs';
+    if(process.argv[1]==='/code/cloud-cost-runner/replay-worker.mjs')process.once('beforeExit',()=>{
+      const path='/state/result.json';if(generatedTailFs.existsSync(path)){const value=JSON.parse(generatedTailFs.readFileSync(path,'utf8'));
+      value.stream.retainedStorage.initialBytes++;generatedTailFs.writeFileSync(path,JSON.stringify(value));}
+    });`);
+  const fs = (await import('node:fs')).default, { syncBuiltinESMExports } = await import('node:module');
+  const read = fs.readFileSync; let changed = false;
+  fs.readFileSync = (path, ...args) => {
+    const contents = read(path, ...args);
+    if (path === join(f.root, 'isolated-replay/result.json')) {
+      const value = JSON.parse(contents);
+      changed = value.stream.retainedStorage.initialBytes === value.stream.storage.objects.bytes + 1;
+    }
+    return contents;
+  }; syncBuiltinESMExports();
+  try { await assert.rejects(controller.runIsolatedReplay(f), bad); }
+  finally { fs.readFileSync = read; syncBuiltinESMExports(); }
+  assert.equal(changed, true, 'read the changed storage total at the actual host boundary'); clean(f, before);
 });

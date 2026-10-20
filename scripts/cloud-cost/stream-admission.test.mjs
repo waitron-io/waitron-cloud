@@ -18,6 +18,8 @@ const counters = (kind = 'administration') => {
 };
 const evidence = () => ({ phases: ['startup', 'workload', 'idle', 'verification', 'restore'].map(phase => ({ phase, elapsedSeconds: 2 })),
   requests: counters('requests'), administration: counters(),
+  retainedStorage: { status: 'measured', scope: 'unversioned-cleanup-tail', windowSeconds: 2,
+    initialBytes: 4096, deletedObjects: 1, remainingBytes: 0, remainingObjects: 0, byteSeconds: { low: 4096, high: 8192 } },
   storage: { status: 'measured', scope: 'unversioned-object-history', windowSeconds: 10,
     objects: { class: 'stream', bytes: 4096, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 },
     byteSeconds: { low: 5000, high: 6000 } },
@@ -116,4 +118,25 @@ for (const [name, change] of [
 ]) test('streamAdmissionRequiresCompletedWork_' + name, () => {
   const input=evidence();change(input);
   assert.throws(()=>module.validateStreamAdmission(input,options), {message:'Invalid cloud cost stream admission'});
+});
+
+
+for (const [name, change] of [
+  ['missing', r => { delete r.retainedStorage; }],
+  ['private', r => { r.retainedStorage.path = 'PRIVATE_CANARY'; }],
+  ['scope', r => { r.retainedStorage.scope = 'versioned'; }],
+  ['unknown', r => { r.retainedStorage.status = 'unknown'; }],
+  ['bytes', r => { r.retainedStorage.initialBytes++; }],
+  ['count', r => { r.retainedStorage.deletedObjects++; }],
+  ['residue', r => { r.retainedStorage.remainingBytes = 1; }],
+  ['objects', r => { r.retainedStorage.remainingObjects = 1; }],
+  ['reversed', r => { r.retainedStorage.byteSeconds.low = 9000; }],
+  ['negative', r => { r.retainedStorage.byteSeconds.low = -1; }],
+  ['impossible', r => { r.retainedStorage.byteSeconds.high = 10000; }],
+  ['nonfinite', r => { r.retainedStorage.windowSeconds = NaN; }],
+  ['budget', r => { r.retainedStorage.windowSeconds = 51; }],
+  ['bounds-private', r => { r.retainedStorage.byteSeconds.key = 'PRIVATE_CANARY'; }],
+]) test('streamAdmissionRequiresReconciledRetainedStorage_' + name, () => {
+  const value = evidence(); change(value);
+  assert.throws(() => module.validateStreamAdmission(value, options), { message: 'Invalid cloud cost stream admission' });
 });

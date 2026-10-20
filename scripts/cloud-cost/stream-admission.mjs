@@ -45,7 +45,7 @@ function counters(value) {
 // This checks a partial stream experiment, not a complete venue cost receipt.
 export function validateStreamAdmission(value, options) {
   try {
-    exact(value, ['phases', 'requests', 'administration', 'storage', 'native', 'restored', 'cleanup']);
+    exact(value, ['phases', 'requests', 'administration', 'storage', 'retainedStorage', 'native', 'restored', 'cleanup']);
     const order = ['startup', 'workload', 'idle', 'verification', 'restore'];
     array(value.phases); need(value.phases.length === order.length);
     value.phases.forEach((p, i) => { exact(p, ['phase', 'elapsedSeconds']); need(p.phase === order[i] && finite(p.elapsedSeconds)); });
@@ -68,6 +68,16 @@ export function validateStreamAdmission(value, options) {
       && s.objects.bytes > 0 && s.objects.currentVersions > 0 && s.objects.noncurrentVersions === 0
       && s.objects.deleteMarkers === 0 && s.objects.unfinishedMultipart === 0);
     exact(s.byteSeconds, ['low', 'high']); need(finite(s.byteSeconds.low) && finite(s.byteSeconds.high) && s.byteSeconds.high >= s.byteSeconds.low);
+    const tail = value.retainedStorage;
+    exact(tail, ['status', 'scope', 'windowSeconds', 'initialBytes', 'deletedObjects', 'remainingBytes', 'remainingObjects', 'byteSeconds']);
+    need(tail.status === 'measured' && tail.scope === 'unversioned-cleanup-tail'
+      && finite(tail.windowSeconds) && tail.windowSeconds > 0
+      && value.phases.reduce((n, p) => n + p.elapsedSeconds, 0) + tail.windowSeconds < options.windowSeconds
+      && tail.initialBytes === s.objects.bytes && tail.deletedObjects === s.objects.currentVersions
+      && tail.remainingBytes === 0 && tail.remainingObjects === 0);
+    exact(tail.byteSeconds, ['low', 'high']);
+    need(finite(tail.byteSeconds.low) && finite(tail.byteSeconds.high)
+      && tail.byteSeconds.high >= tail.byteSeconds.low && tail.byteSeconds.high <= tail.initialBytes * tail.windowSeconds);
     const cleanup = ['processes', 'privateRoots', 'listeners', 'clients', 'buckets', 'objects', 'multipartUploads'];
     exact(value.cleanup, cleanup); need(cleanup.every(k => value.cleanup[k] === 0));
     return structuredClone(value);

@@ -303,3 +303,17 @@ test('streamMeasurementChangesPhaseOnlyAfterTheActiveNativeBodySettles', async t
   assert.ok(result.requests.accounting.requests.some(row => row.phase === 'startup' && row.operation === 'put'));
   assert.ok(result.requests.accounting.requests.some(row => row.phase === 'idle' && row.operation === 'get'));
 });
+
+
+// A cleanup handoff must use the storage snapshot clock, not the later phase/report clock.
+test('streamMeasurementHandsOffTheExactStorageSnapshotTime', async t => {
+  const f = await fixture(t), original = f.args.clock; let tick = 0;
+  f.args.clock = () => { original(); return tick++; };
+  const session = await open(t, f);
+  await send(session.url, 'PUT', 4, 1);
+  const result = await session.finish();
+  assert.equal(typeof result.storageEndedAt, 'number');
+  // The phase clock and request-meter initialization precede the history's start at tick2.
+  assert.equal(result.storageEndedAt, result.storage.windowSeconds + 2);
+  assert.ok(result.storageEndedAt < result.phases.reduce((n, p) => n + p.elapsedSeconds, 0));
+});
