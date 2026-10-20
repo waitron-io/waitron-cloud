@@ -124,7 +124,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     requireThat(phases.includes(phase) && typeof meter?.observeAttempt === 'function' && typeof meter?.invalidate === 'function');
     requireThat(lifetimes === undefined || typeof lifetimes?.begin === 'function');
   } catch { fail(); }
-  let invalid = false, closing;
+  let invalid = false, closing, currentPhase = phase;
   const invocations = new Map(), pending = new Set(), connections = new Set();
   let completed = 0;
   const poison = () => { invalid = true; meter.invalidate(); };
@@ -165,7 +165,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
         completeLifetime?.({ statusCode, bytesOut, interrupted, responseHeaders,
           responseBody: responseChunks ? Buffer.concat(responseChunks) : undefined });
         const outcome = interrupted ? 'transport-error' : statusCode >= 500 ? 'server-error' : statusCode >= 300 ? 'client-error' : 'success';
-        meter.observeAttempt({ token: id.key, phase, operation: name, retryOrdinal: id.ordinal, channel: 'producer', outcome,
+        meter.observeAttempt({ token: id.key, phase: currentPhase, operation: name, retryOrdinal: id.ordinal, channel: 'producer', outcome,
           statusCode, errorCode: null, sameAccount: null, bytesIn, bytesOut,
           attemptedBytesIn: Math.max(bytesIn, expectedIn), attemptedBytesOut: Math.max(bytesOut, expectedOut) });
       } catch { poison(); }
@@ -197,7 +197,13 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   });
   server.on('clientError', (error, socket) => { poison(); socket.destroy(); });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  return { url: `http://127.0.0.1:${server.address().port}`, snapshot: () => {
+  return { url: `http://127.0.0.1:${server.address().port}`, setPhase: next => {
+    try {
+      // Both independent counters must see one phase for the entire transfer.
+      requireThat(!invalid && !closing && pending.size === 0 && phases.includes(next));
+      currentPhase = next;
+    } catch { poison(); fail(); }
+  }, snapshot: () => {
     requireThat(!invalid && pending.size === 0 && completed > 0); return meter.snapshot();
   }, close: () => {
     closing ??= (async () => {

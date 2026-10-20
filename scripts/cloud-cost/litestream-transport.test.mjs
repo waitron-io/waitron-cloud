@@ -28,6 +28,49 @@ async function transport(t, target, meter, phase = 'workload') {
   t.after(() => front.close().catch(() => {})); return front;
 }
 
+// Freezing the initial phase would silently price idle or restore traffic as sales traffic.
+test('litestreamTransportChangesPhaseWithoutResettingInvocationRetryOrdinals', async t => {
+  const target = await server(t, (req, res) => { req.resume(); req.on('end', () => res.end('ok')); });
+  const meter = createMeter({ phase: 'startup', clock: () => 0 });
+  const front = await transport(t, target, meter, 'startup');
+  assert.equal(typeof front.setPhase, 'function', 'label every admitted attempt with the active measurement phase');
+  await send(front.url, { headers: headers() });
+  front.setPhase('idle');
+  await send(front.url, { headers: headers(id, 2) });
+  front.setPhase('restore');
+  await send(front.url, { method: 'GET', headers: headers('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee') });
+  await front.close();
+  assert.deepEqual(meter.snapshot().accounting.requests.map(r => [r.phase, r.operation, r.retryOrdinal, r.attempts]),
+    [['startup', 'put', 0, 1], ['idle', 'put', 1, 1], ['restore', 'get', 0, 1]]);
+  assert.throws(() => front.setPhase('cleanup'), /Invalid cloud cost Litestream audit/);
+});
+
+// Relabelling a live request would make the independently observed phase disagree.
+test('litestreamTransportRefusesPhaseChangesUntilEveryTransferSettles', async t => {
+  let arrived, release;
+  const pending = new Promise(resolve => { arrived = resolve; });
+  const target = await server(t, (req, res) => {
+    req.resume(); req.on('end', () => { release = () => res.end('ok'); arrived(); });
+  });
+  const meter = createMeter({ phase: 'startup', clock: () => 0 });
+  const front = await transport(t, target, meter, 'startup');
+  assert.equal(typeof front.setPhase, 'function');
+  const sent = send(front.url, { headers: headers() });
+  await pending;
+  assert.throws(() => front.setPhase('idle'), /Invalid cloud cost Litestream audit/);
+  release(); await sent;
+  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+});
+
+test('litestreamTransportRefusesUnknownMeasurementPhases', async t => {
+  const target = await server(t, (req, res) => { req.resume(); res.end(); });
+  const meter = createMeter({ phase: 'startup', clock: () => 0 });
+  const front = await transport(t, target, meter, 'startup');
+  assert.equal(typeof front.setPhase, 'function');
+  assert.throws(() => front.setPhase('PRIVATE_CANARY'), /Invalid cloud cost Litestream audit/);
+  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+});
+
 // Skipping failed/retried bodies or reading HEAD's object size as body bytes changes these literal totals.
 test('litestreamTransportIndependentlyReconcilesBodiesRetriesHeadAndRangeReads', async t => {
   const target = await server(t, (req, res) => {

@@ -626,3 +626,34 @@ test('genuineAmbiguousMultipartReplacementKeepsDuplicateInventoryRefused', async
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
+
+// The composed session must agree with a real backend, not just a generated HTTP inventory.
+test('genuineStreamMeasurementJoinsPhasesInventoriesAndIndependentRequestCounters', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  for (const name of ['litestream.mjs', 'storage-lifetimes.mjs', 'stream-versions.mjs', 's3-deletion.mjs', 'stream-measurement.mjs'])
+    cpSync(new URL('../' + name, import.meta.url), join(f.codeRoot, name));
+  cpSync(new URL('./stream-measurement-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-stream-measurement-smoke.mjs'));
+  let stack; f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const results = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-stream-measurement-smoke.mjs'],
+    { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  assert.equal(results.length, 2);
+  for (const [i, { versioned, intermediate, result, administration, leaked }] of results.entries()) {
+    assert.equal(versioned, i === 1); assert.equal(leaked, false);
+    assert.equal(intermediate.requests.reconciled, true); assert.equal(result.requests.reconciled, true);
+    assert.equal(administration.reconciled, true);
+    assert.deepEqual(result.requests.accounting.producer, result.requests.accounting.observer);
+    assert.equal(result.requests.accounting.producer.attempts, 13);
+    assert.deepEqual(result.requests.accounting.requests.filter(r => r.phase !== 'observer').map(r => [r.phase, r.operation, r.bytesOut, r.bytesIn]),
+      [['startup', 'put', 4, 0], ['workload', 'put', 6, 0], ['idle', 'get', 0, 6], ['restore', 'delete', 0, 0]]);
+    assert.deepEqual(intermediate.storage.byteSeconds, versioned ? { low: 32, high: 32 } : { low: 24, high: 24 });
+    assert.deepEqual(result.storage.byteSeconds, versioned ? { low: 126, high: 126 } : { low: 42, high: 42 });
+    assert.deepEqual(result.storage.objects, { class: 'stream', bytes: versioned ? 32 : 0, currentVersions: 0,
+      noncurrentVersions: versioned ? 2 : 0, deleteMarkers: versioned ? 1 : 0, unfinishedMultipart: 0 });
+    assert.deepEqual(result.cleanup, { listeners: 0, clients: 0 });
+  }
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});

@@ -1223,7 +1223,16 @@ notifications separately.
   and ambiguous inventories remain refused. Real local checks replace committed
   success replies with HTTP failures across creation, separately numbered parts,
   completion and abort. Replaced-part duplicates from the local backend remain
-  an explicit refusal, as described below. A complete measured stream remains open.
+  an explicit refusal, as described below. A native measurement session now joins
+  both independent request counters with plain or versioned storage histories.
+  You can change phases between settled requests and take an intermediate inventory
+  before continuing. A request racing that inventory invalidates the session.
+  Finishing stops admission, checks the final inventory and collects the session's
+  listeners and client before returning anonymous evidence. Generated HTTP and
+  real local storage checks cover phase changes, retries, earlier retained storage
+  and final deletion; cancellation and cleanup checks refuse incomplete evidence.
+  The session leaves bucket ownership and deletion with its caller. Connecting this
+  session to the complete replay, local command and public export remains open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled
