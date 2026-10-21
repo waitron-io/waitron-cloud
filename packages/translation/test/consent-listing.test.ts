@@ -62,3 +62,17 @@ test(`listing for a different active owner checks consent from ${name}`,async()=
 test('listing an account with no owned venues returns no consent',async()=>{
  assert.deepEqual(await transaction(db.pool,c=>listConsents(c,randomUUID())),[]);
 });
+
+test('one batch keeps consent tied to each organisation and its own current owner',async()=>{
+ const first=await connectedVenue(db,issuer,origin),second=await connectedVenue(db,issuer,origin);
+ await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true),($3,$4,true)',
+  [first.accountId,second.organisationId,second.accountId,first.organisationId]);
+ await consent(first);await consent(second);
+ const expected=[{venueId:first.venueId,consented:true,consentedAt},{venueId:second.venueId,consented:true,consentedAt}]
+  .sort((a,b)=>a.venueId.localeCompare(b.venueId));
+ let result=await measuredListing(first.accountId);assert.deepEqual(result.rows,expected);
+ assert.ok(result.queries<=2,`two organisations need at most two reads, observed ${result.queries}`);
+ await db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[second.accountId,second.organisationId]);
+ result=await measuredListing(first.accountId);
+ assert.deepEqual(result.rows,expected.map(row=>row.venueId===second.venueId?{venueId:second.venueId,consented:false,consentedAt:null}:row));
+});
