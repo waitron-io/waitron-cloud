@@ -12,6 +12,7 @@ import { readReplayBills } from './source-bills.mjs';
 import { discoverReplayDay } from './source-days.mjs';
 export { openFiscalMeasurement } from './fiscal.mjs';
 export { openMailMeasurement } from './mail.mjs';
+export { openRemoteMeasurement } from './remote.mjs';
 export { replayScheduledSales } from './cadence.mjs';
 export { prepareReplayDay } from './replay-day.mjs';
 export { replayPrivateDay } from './private-replay.mjs';

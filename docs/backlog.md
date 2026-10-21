@@ -1345,16 +1345,25 @@ notifications separately.
   observer from reading an incomplete write. Interrupted writes preserve the previous
   record, and failed publications remove only the temporary file they created.
   Generated checks retain every signal, rejection, ownership and cleanup assertion.
-  Accounting and export for the remaining
-  drivers, plus public and staff journeys, remain open.
+  A loopback relay now counts encrypted remote traffic in both directions,
+  including TLS records and reconnects, without reading application content.
+  It keeps staff and public samples separate and checks independent socket totals
+  after every owned connection closes. Limits, cancellation, incomplete transfers
+  and mismatched counters prevent a measured result. A generated local check runs
+  through Cloud's actual HAProxy, public challenge and WireGuard paths on an internal
+  network with no published ports. Both tunnel endpoints report matching counters.
+  These are transport checks against a synthetic upstream. You still need genuine
+  Waitron sign-in, read, dashboard and reconnect measurements before estimating an
+  owner session. IP and TCP overhead, the interpretation of WireGuard counters for
+  billing, public-traffic frequency and monthly owner activity remain unmeasured.
+  Remaining driver accounting, combined export and daily projections stay open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled
   100 ms pause reproduces the earlier hang and passes with the controlled clock.
   Its timeout, cancellation, oversized-response and interruption checks remain intact.
-  The complete storage measurement,
-  idle period, measurement controller and CLI,
-  public/staff journeys and full cost export remain open.
+  The complete venue-cost model, genuine public/staff journeys and full cost export
+  remain open; the successful stream experiment above supplies only its own sample.
   The pure calculations now cover aggregate request
   tiers, explicit resource capacities, dated growth and calendar retention, including
   protected recovery copies. Synthetic local HTTP checks reconcile retries, denied
