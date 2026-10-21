@@ -1356,7 +1356,18 @@ notifications separately.
   Waitron sign-in, read, dashboard and reconnect measurements before estimating an
   owner session. IP and TCP overhead, the interpretation of WireGuard counters for
   billing, public-traffic frequency and monthly owner activity remain unmeasured.
-  Remaining driver accounting, combined export and daily projections stay open.
+  You can now export captured-mail and fiscal API scenarios together through the
+  [service receipt boundary](../scripts/cloud-cost/service-receipt.mjs). It checks
+  independent counters and every grouped retry and refusal before returning an
+  anonymous result. Generated local journeys exercise the real mail queue,
+  bilingual delivery, signup and password recovery, plus fiscal reservation,
+  replay, consumption, inspection and signed reporting. Injected temporary
+  refusals test both retries; an unauthenticated request leaves registry history
+  empty. Export waits for owned listeners, clients and database-schema cleanup.
+  Counts describe each local scenario. Email bytes, monthly scenario frequencies
+  and billable quantities stay unknown; fiscal bytes cover HTTP bodies only.
+  The separate stream receipt stays unchanged. Joining all driver evidence into
+  the venue-cost export and deriving labelled daily projections remain open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled
