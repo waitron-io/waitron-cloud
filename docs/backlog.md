@@ -990,9 +990,20 @@ notifications separately.
   for active and incoming routes. Real PostgreSQL checks through both returned
   and published manifests observe four and sixteen ID reads for four and sixteen
   routes, replacing ten and 136. Empty eligibility still excludes both kinds of
-  route; ordinary mode retains them. Eligibility still scans placed organisations
-  and rebuilds target lists for current-work checks. Global policy locks, per-route
-  database reads and total target processing need production-scale measurement
+  route; ordinary mode retains them. Those exports now fetch active routes and
+  incoming routes in two cell-scoped batches. Real PostgreSQL checks with four
+  and sixteen mixed routes observe five database calls in ordinary mode
+  (transaction, cell sequence and two route batches), plus two policy calls in
+  test-plan mode, through both returned and published manifests. A missing hostname
+  on an eligible route refuses the export before publication and rolls back its
+  sequence. Route names, target addresses, ports and keys,
+  move lifecycle, revocation and cell isolation remain covered. A controlled
+  PostgreSQL move completion between the two route reads omits that route for one
+  export on both the original and batched versions; the next export includes it.
+  Qualify a consistent route view across those reads before promising uninterrupted
+  cell movement. Eligibility still
+  scans placed organisations and rebuilds target lists for current-work checks.
+  Global policy locks and total target processing need production-scale measurement
   before larger capacity claims.
   A real two-peer Docker gateway proof withdrew the downgraded route/peer in
   4,053 ms while its paid neighbour still served its own body; wall-clock short-lease
@@ -3005,6 +3016,17 @@ notifications separately.
   bounds the text scanned, while separate cases retain the line-start anchor,
   split phrases, case handling and carriage-return/newline boundaries. The original
   process checks, combined 64 KiB output limit and failure ordering remain.
+  **Open: process-verifier CPU refusal timing.** A local 205-case backup run on
+  21 October passed 204 cases but the one-second CPU-limit case returned
+  `backup.verifier_timeout` at its unchanged five-second wall deadline instead of
+  `backup.verifier_resource`. The isolated original case passed in 1,015 ms.
+  Neither the process adapter nor its test differs from the current main revision
+  in this gateway batching branch. The full-run failure remains unexplained;
+  an isolated pass does not establish a correction. Capture child CPU usage,
+  resource-signal delivery and process-close timing on recurrence before changing
+  the resource refusal, permissions, assertions or deadlines. Local evidence is
+  `~/waitron-campaign-d/receipts/d98/resume-approved/backups.log` and
+  `cpu-isolated.log` in the same directory.
   Production host/kernel isolation, hostile native exploits, fleet sizing and large archives remain
   unverified; the process-only development adapter still lacks these total-resource bounds.
   The verifier distinguishes bounded infrastructure failures from archive verdicts:
