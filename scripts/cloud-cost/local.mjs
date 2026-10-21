@@ -7,6 +7,7 @@ import { constants, openSync, closeSync, readSync, fstatSync, lstatSync, realpat
   mkdirSync, chmodSync, rmSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
 import { join, relative, isAbsolute, posix } from 'node:path';
 import { assertOwnedRoot } from './schema.mjs';
+import { recordOwnedResource as record } from './owned-journal.mjs';
 import { readReplayBills } from './source-bills.mjs';
 import { discoverReplayDay } from './source-days.mjs';
 export { openFiscalMeasurement } from './fiscal.mjs';
@@ -23,12 +24,6 @@ const environment = () => ({ PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' });
 function owned(args) {
   assertOwnedRoot(args);
   return JSON.parse(readFileSync(args.journal.path, 'utf8'));
-}
-function record(args, entry) {
-  const value = owned(args);
-  value.localResources ??= [];
-  value.localResources.push(entry);
-  writeFileSync(args.journal.path, JSON.stringify(value), { mode: 0o600 });
 }
 function canonicalFile(path) {
   requireThat(isAbsolute(path) && realpathSync(path) === path);

@@ -365,8 +365,16 @@ for (const mode of ['cancel', 'deadline']) test('isolatedHostCollectsNativeStora
   let reached = false;
   const poll = setInterval(() => {
     try {
-      const entries = JSON.parse(readFileSync(join(f.root, 'isolated-replay/private/journal.json'), 'utf8')).localResources ?? [];
-      if (!reached && entries.some(e => e.kind === 'stream-process' && e.state === 'started' && e.operation === 'replicate')) {
+      const recorded = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources ?? [];
+      const id = recorded.find(e => e.kind === 'replay-worker' && e.state === 'started')?.id;
+      if (!id) return;
+      const found = docker(['exec', id, 'node', '-e', `
+        try {
+          const entries=JSON.parse(require('node:fs').readFileSync('/tmp/private/journal.json','utf8')).localResources??[];
+          process.stdout.write(entries.some(e=>e.kind==='stream-process'&&e.state==='started'&&e.operation==='replicate')?'true':'false');
+        } catch { process.stdout.write('false'); }
+      `]);
+      if (!reached && found === 'true') {
         reached = true; if (mode === 'cancel') abort.abort();
       }
     } catch {}

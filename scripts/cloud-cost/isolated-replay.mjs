@@ -3,6 +3,7 @@ import { join, relative, isAbsolute } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { assertOwnedRoot } from './schema.mjs';
+import { recordOwnedResource as record } from './owned-journal.mjs';
 import { validateStreamSettings, validateStreamAdmission, summarizeStreamAccounting } from './stream-admission.mjs';
 import { validateReplayConfig } from './waitron-adapter.mjs';
 import { prepareIsolatedPrivateCopy, proveDockerIsolation, runForegroundContainer } from './local.mjs';
@@ -55,12 +56,6 @@ function docker(argv, timeout = 15000) {
   const result = spawnSync('docker', argv, { env: { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' }, encoding: 'utf8',
     timeout, maxBuffer: 2 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
   need(result.status === 0 && !result.error); return result.stdout.trim();
-}
-function record(args, entry) {
-  assertOwnedRoot(args);
-  const journal = JSON.parse(readFileSync(args.journal.path, 'utf8'));
-  (journal.localResources ??= []).push(entry);
-  writeFileSync(args.journal.path, JSON.stringify(journal), { mode: 0o600 });
 }
 function file(path) {
   const stat = lstatSync(path);

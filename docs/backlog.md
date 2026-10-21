@@ -1337,12 +1337,15 @@ notifications separately.
   rejected. This measures an accelerated fresh-venue experiment, not continuous
   daily traffic or complete venue cost. Keep daily projections and other unmeasured
   drivers unknown; the command still returns `costMeasured: false`.
-  Two existing tests for cancellation and time limits still watch the former journal
-  location. Their checks remain unchanged pending approval to read the actual worker journal. A proposed
-  observer passes both checks and detects disabled stop guards. Its full suite also
-  exposes an incomplete-journal read in the Ctrl+C signal test (SIGINT), reproduced on the unchanged
-  starting code. Make journal observation reliable while keeping every signal,
-  rejection, ownership and cleanup assertion. Accounting and export for the remaining
+  The cancellation and time-limit tests now read the journal inside the worker
+  recorded by that run, as approved by the owner. They retain every startup, refusal,
+  source-preservation and cleanup assertion, and detect disabled stop guards.
+  The host controller and its local process supervisor publish each journal update
+  by renaming a complete private file into place. This prevents the Ctrl+C signal
+  observer from reading an incomplete write. Interrupted writes preserve the previous
+  record, and failed publications remove only the temporary file they created.
+  Generated checks retain every signal, rejection, ownership and cleanup assertion.
+  Accounting and export for the remaining
   drivers, plus public and staff journeys, remain open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
