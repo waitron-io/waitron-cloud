@@ -21,7 +21,7 @@ test('every discovered workspace test package runs through the planned database 
   assert.match(job('typecheck'),/run: pnpm typecheck/);
 });
 test('all existing receipt suites and workflow guards remain available in CI',()=>{
-  assert.deepEqual(receiptSuites,['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt']);
+  assert.deepEqual(receiptSuites,['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt','test:cloud-cost']);
   assert.match(job('receipts'),/run: node scripts\/ci-run-receipts.mjs/);
   assert.match(job('receipts'),/CI_PLAN: \$\{\{ needs.changes.outputs.plan \}\}/);
   assert.match(job('root'),/run: node --test --test-reporter=tap --test-concurrency=2 --test-shard=\$\{\{ matrix.shard \}\}\/4 scripts\/ci-\*\.test.mjs scripts\/identity-upstream.test.mjs scripts\/verify-gateway-reconnection-receipt.test.mjs/);

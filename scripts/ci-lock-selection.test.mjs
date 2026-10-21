@@ -58,7 +58,7 @@ function fixture(run, unrelatedDirectory = 'packages/unrelated') {
 
 function assertSelected(plan, names = ['catalogue', 'page']) {
   assert.deepEqual(plan.packages, names.map(packageName => ({package: packageName, shard: 1})));
-  assert.equal(plan.receipts.length, 5, 'Lock narrowing retains every receipt');
+  assert.equal(plan.receipts.length, 6, 'Lock narrowing retains every receipt');
   assert.equal(plan.typecheck, true);
   assert.equal(plan.reuse, null);
 }
@@ -116,7 +116,7 @@ test('stale, missing or malformed reader audit in either tree retains the full s
   assertSelected(plan(base, refreshed), ['catalogue', 'page', 'unrelated']);
 }));
 
-test('an isolated application lock change retains all five receipts as well as the compiler', () => fixture(({lock, save, commit, plan}) => {
+test('an isolated application lock change retains all six receipts as well as the compiler', () => fixture(({lock, save, commit, plan}) => {
   lock.importers['apps/desk'] = {dependencies: {view: {specifier: '^1.0.0', version: '1.0.0'}}};
   lock.packages['view@1.0.0'] = {resolution: {integrity: 'sha512-dmlldw=='}};
   lock.snapshots['view@1.0.0'] = {}; save();

@@ -1,0 +1,248 @@
+{
+  "schemaVersion": 1,
+  "kind": "local-service-aggregate",
+  "dataBoundary": {
+    "classification": "anonymous-aggregate",
+    "rawIncluded": false,
+    "exportSchema": 1
+  },
+  "scope": "local-scenario",
+  "costMeasured": false,
+  "metadata": {
+    "runId": "f559fb09-d163-45cd-834e-195640ab5aa6",
+    "cloudRevision": "1b2fec92849d8a9a479e5a43d8887d6ba43e3123",
+    "window": {
+      "startedAt": "2026-10-21T02:11:51.108Z",
+      "endedAt": "2026-10-21T02:11:51.919Z",
+      "elapsedSeconds": 0.811
+    }
+  },
+  "mail": {
+    "scope": "captured-mail-operations",
+    "status": "measured",
+    "reconciled": true,
+    "producer": {
+      "attempts": 4,
+      "accepted": 3,
+      "refused": 1,
+      "retried": 1
+    },
+    "observer": {
+      "attempts": 4,
+      "accepted": 3,
+      "refused": 1
+    },
+    "discrepancy": {
+      "attempts": 0,
+      "accepted": 0,
+      "refused": 0
+    },
+    "operations": [
+      {
+        "action": "password_changed",
+        "outcome": "refused",
+        "retryOrdinal": 0,
+        "attempts": 1
+      },
+      {
+        "action": "password_changed",
+        "outcome": "accepted",
+        "retryOrdinal": 1,
+        "attempts": 1
+      },
+      {
+        "action": "password_changed",
+        "outcome": "accepted",
+        "retryOrdinal": 0,
+        "attempts": 2
+      }
+    ],
+    "billing": {
+      "quantity": null,
+      "status": "unknown"
+    }
+  },
+  "fiscal": {
+    "status": "measured",
+    "reconciled": true,
+    "gaps": [
+      "request-billing:unknown"
+    ],
+    "billing": [
+      {
+        "phase": "workload",
+        "requestClass": "fiscal",
+        "quantity": null,
+        "status": "unknown"
+      }
+    ],
+    "observedRequests": [
+      {
+        "phase": "workload",
+        "operation": "fiscal",
+        "requestClass": "fiscal",
+        "outcome": "server-error",
+        "retryOrdinal": 0,
+        "attempts": 1,
+        "successful": 0,
+        "failed": 1,
+        "retried": 0,
+        "bytesIn": 27,
+        "bytesOut": 467,
+        "attemptedBytesIn": 27,
+        "attemptedBytesOut": 467
+      },
+      {
+        "phase": "workload",
+        "operation": "fiscal",
+        "requestClass": "fiscal",
+        "outcome": "success",
+        "retryOrdinal": 1,
+        "attempts": 1,
+        "successful": 1,
+        "failed": 0,
+        "retried": 1,
+        "bytesIn": 1721,
+        "bytesOut": 467,
+        "attemptedBytesIn": 1721,
+        "attemptedBytesOut": 467
+      },
+      {
+        "phase": "workload",
+        "operation": "fiscal",
+        "requestClass": "fiscal",
+        "outcome": "success",
+        "retryOrdinal": 0,
+        "attempts": 5,
+        "successful": 5,
+        "failed": 0,
+        "retried": 0,
+        "bytesIn": 7801,
+        "bytesOut": 5119,
+        "attemptedBytesIn": 7801,
+        "attemptedBytesOut": 5119
+      },
+      {
+        "phase": "workload",
+        "operation": "fiscal",
+        "requestClass": "fiscal",
+        "outcome": "client-error",
+        "retryOrdinal": 0,
+        "attempts": 1,
+        "successful": 0,
+        "failed": 1,
+        "retried": 0,
+        "bytesIn": 25,
+        "bytesOut": 19,
+        "attemptedBytesIn": 25,
+        "attemptedBytesOut": 19
+      }
+    ],
+    "accounting": {
+      "requests": [
+        {
+          "phase": "workload",
+          "operation": "fiscal",
+          "requestClass": "fiscal",
+          "outcome": "server-error",
+          "retryOrdinal": 0,
+          "attempts": 1,
+          "successful": 0,
+          "failed": 1,
+          "retried": 0,
+          "bytesIn": 27,
+          "bytesOut": 467,
+          "attemptedBytesIn": 27,
+          "attemptedBytesOut": 467
+        },
+        {
+          "phase": "workload",
+          "operation": "fiscal",
+          "requestClass": "fiscal",
+          "outcome": "success",
+          "retryOrdinal": 1,
+          "attempts": 1,
+          "successful": 1,
+          "failed": 0,
+          "retried": 1,
+          "bytesIn": 1721,
+          "bytesOut": 467,
+          "attemptedBytesIn": 1721,
+          "attemptedBytesOut": 467
+        },
+        {
+          "phase": "workload",
+          "operation": "fiscal",
+          "requestClass": "fiscal",
+          "outcome": "success",
+          "retryOrdinal": 0,
+          "attempts": 5,
+          "successful": 5,
+          "failed": 0,
+          "retried": 0,
+          "bytesIn": 7801,
+          "bytesOut": 5119,
+          "attemptedBytesIn": 7801,
+          "attemptedBytesOut": 5119
+        },
+        {
+          "phase": "workload",
+          "operation": "fiscal",
+          "requestClass": "fiscal",
+          "outcome": "client-error",
+          "retryOrdinal": 0,
+          "attempts": 1,
+          "successful": 0,
+          "failed": 1,
+          "retried": 0,
+          "bytesIn": 25,
+          "bytesOut": 19,
+          "attemptedBytesIn": 25,
+          "attemptedBytesOut": 19
+        }
+      ],
+      "objects": [],
+      "producer": {
+        "attempts": 8,
+        "bytesIn": 9574,
+        "bytesOut": 6072
+      },
+      "observer": {
+        "attempts": 8,
+        "bytesIn": 9574,
+        "bytesOut": 6072
+      },
+      "discrepancy": {
+        "attempts": 0,
+        "bytesIn": 0,
+        "bytesOut": 0
+      }
+    }
+  },
+  "summary": {
+    "mail": {
+      "attempts": 4,
+      "accepted": 3,
+      "refused": 1,
+      "retried": 1,
+      "bytes": null
+    },
+    "fiscal": {
+      "attempts": 8,
+      "successful": 6,
+      "failed": 2,
+      "retried": 1,
+      "bodyBytesIn": 9574,
+      "bodyBytesOut": 6072
+    }
+  },
+  "frequency": {
+    "mailScenariosPerMonth": null,
+    "fiscalScenariosPerMonth": null
+  },
+  "cleanup": {
+    "listeners": 0,
+    "clients": 0,
+    "schemas": 0
+  }
+}

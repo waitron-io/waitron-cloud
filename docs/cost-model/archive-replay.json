@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "kind": "local-archive-aggregate",
+  "dataBoundary": {
+    "classification": "anonymous-aggregate",
+    "rawIncluded": false,
+    "exportSchema": 1
+  },
+  "cloudRevision": "73cd7239fc24d34271bca351e5b23c20aa9295ca",
+  "waitronRevision": "fbadd15785464e59747e697c11048bfbc6e4938f",
+  "runtimeSha256": "2c40aa4dd00463546f552188c2a677fd5645842227131823abfd7510e5c218f3",
+  "image": "sha256:193fe51b64e77981119c98c2002c9e32a70e2f006fb4d25068ce0558998917f0",
+  "startedAt": "2026-10-21T03:32:53.354Z",
+  "endedAt": "2026-10-21T03:33:01.154Z",
+  "experimentSeconds": 7.797041541,
+  "costMeasured": false,
+  "replay": {
+    "complete": true,
+    "source": {
+      "counts": {
+        "sales": 4008,
+        "paid": 4008,
+        "tradingDays": 27,
+        "busiest": 207
+      },
+      "originalInventory": {
+        "days": 28,
+        "busiest": 203
+      }
+    },
+    "replay": {
+      "complete": true,
+      "cadence": {
+        "mode": "accelerated",
+        "factor": 1000000,
+        "coveredSeconds": 54171.636
+      },
+      "counts": {
+        "expected": 207,
+        "attempted": 207,
+        "successful": 207,
+        "failed": 0
+      },
+      "timing": {
+        "elapsedSeconds": 0.18018733299999987,
+        "maxLagSeconds": 0.12536086399999977
+      }
+    },
+    "integrity": {
+      "ok": true,
+      "issues": 0
+    },
+    "storage": {
+      "copiedDatabaseBytes": 19546112,
+      "freshBeforeBytes": 2875392,
+      "freshAfterBytes": 3571712,
+      "freshGrowthBytes": 696320
+    },
+    "archive": {
+      "capturedBytes": 3527677,
+      "captureSeconds": 0.20385604200000035,
+      "restoreSeconds": 0.23615787499999988,
+      "restored": {
+        "ok": true,
+        "issues": 0,
+        "sales": 207
+      }
+    },
+    "cleanup": {
+      "ownedReplayRoots": 0
+    }
+  },
+  "isolation": {
+    "blockedConnections": 3,
+    "blockedDns": 2,
+    "localControl": true
+  },
+  "cleanup": {
+    "workerContainers": 0,
+    "networks": 0,
+    "privateCopies": 0
+  },
+  "scope": "selected-day-sales-replayed-into-fresh-venue",
+  "privateState": "generated-32-byte-stand-ins",
+  "unknown": [
+    "production-private-state-shape",
+    "representative-venue-database",
+    "archive-storage-http-traffic",
+    "monthly-frequency",
+    "aws-capacity",
+    "daily-cost",
+    "monthly-cost"
+  ]
+}

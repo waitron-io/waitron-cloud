@@ -10,7 +10,7 @@ import {parseLock} from './ci-lock.mjs';
 const policyPath = 'scripts/ci-input-audit.json';
 const manifestPaths = ['apps/portal/package.json', ...['account-http', 'backups', 'fiscal-allocation', 'identity',
   'operations', 'registration', 'remote-access', 'translation', 'ui-smoke'].map(name => `packages/${name}/package.json`)];
-const receipts = ['test:two-venue-milestone-receipt', 'test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt'];
+const receipts = ['test:two-venue-milestone-receipt', 'test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost'];
 const hash = value => createHash('sha256').update(value).digest('hex');
 
 function completeFixture(run) {

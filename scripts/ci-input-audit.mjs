@@ -18,7 +18,7 @@ const object = value => value !== null && typeof value === 'object' && !Array.is
 const manifestPath = path => typeof path === 'string' && /^(apps|packages)\/[^/\\]+\/package\.json$/.test(path) &&
   !path.includes('\0') && !['.', '..'].includes(path.split('/')[1]);
 const digest = value => createHash('sha256').update(value).digest('hex');
-export const unreadMarkdown = path => typeof path === 'string' &&
+export const unreadMarkdown = path => typeof path === 'string' && path !== 'docs/cloud-cost-model.md' &&
   /^(?:docs\/(?!receipts\/)(?:[^/]+\/)*[^/]+\.md|[^/]+\.md)$/.test(path) &&
   !path.split('/').some(part => part === '.' || part === '..' || part.includes('\\'));
 

@@ -170,7 +170,7 @@ test('package-scoped installation hooks in either revision retain database recov
 
 test('combined audits retain earlier omissions and ignore unrelated top-level prose', () => {
   fixture(({select}) => {
-    assert.deepEqual(select().receipts, ['test:public-gateway-limits', 'test:local-stack']);
+    assert.deepEqual(select().receipts, ['test:public-gateway-limits', 'test:local-stack', 'test:cloud-cost']);
   }, root => {
     writeFileSync(join(root, 'README.md'), '# Receipt fixture\n');
     for (const path of [

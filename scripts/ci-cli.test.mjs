@@ -47,7 +47,7 @@ test('real squash merges run full on main for equal trees and advanced main with
       for (const name of expectedJobs.slice(1)) assert.throws(()=>assertSummary(plan,results,jobs.filter(job=>job.name!==name)));
       for (const group of ['root','typecheck','receipts','packages']) assert.throws(()=>assertSummary(plan,{...results,[group]:'skipped'},jobs));
       assert.equal(plan.typecheck,true);
-      assert.deepEqual(plan.receipts,['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt']);
+      assert.deepEqual(plan.receipts,['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt','test:cloud-cost']);
       assert.equal(plan.reuse,null);
       const apiCalls = [];
       const unavailable = createPlan({before:parent,commits:[{}]}, {sha,repository,branch:'main'}, workspace, git,

@@ -1075,15 +1075,164 @@ notifications separately.
   the corrected PR2 branch. PR3 passes 679/384 and runs full packages sequentially. Capture the full output of both default-concurrency commands,
   without piping it through `head`, and diagnose failure cleanup and resource
   contention. Preserve every assertion and deadline; do not treat a rerun as a fix.
-- **Operating cost.** The [cost-model design](superpowers/specs/2026-10-14-cloud-cost-model-design.md)
-  and [implementation plan](superpowers/plans/2026-10-14-cloud-cost-model.md) define
-  how you can compare the AWS platform cost with no venues and the additional cost
-  at 1, 10, 100 and 1,000 venues. Production resource sizes and availability choices
-  remain assumptions. The priced model, offline calculator, private local sales
-  replay, measured storage and remote traffic, and synthetic-only AWS comparison
-  remain to be implemented. Keep raw venue data on the Mac, distinguish measured
-  usage from extrapolation, and compare list-price usage separately from credits.
-  Storage-only evidence cannot validate the fixed infrastructure or fleet capacity.
+- **Operating cost.** You can compare the running platform and per-venue usage
+  with the [offline calculator](cloud-cost-calculator.html) and
+  [model explanation](cloud-cost-model.md). They show priced subtotals at zero,
+  1, 10, 100 and 1,000 venues, with editable assumptions, English and Spanish,
+  light and dark themes, and layouts for 390 and 1280 pixels. The complete bill
+  remains unknown. Blank inputs and missing billing terms stay named gaps;
+  neither a priced subtotal nor a successful verification command means the
+  service has a complete or provider-validated operating budget.
+  The [approved design](superpowers/specs/2026-10-14-cloud-cost-model-design.md)
+  and [implementation plan](superpowers/plans/2026-10-14-cloud-cost-model.md)
+  define this evidence boundary.
+
+  **Public inputs and arithmetic.** The [resource inventory](cost-model/inventory.json)
+  covers required capabilities, runtime roles, alternatives and excluded future
+  products. The [price snapshot](cost-model/prices.json) records dated Spain,
+  Stockholm and global rates, their exact sources and billing dimensions.
+  Missing regional prices, minimums and rounding rules stay unknown. The
+  calculator uses the same validated model in Node and the browser. It prices
+  whole gateway/database capacity steps and aggregate request tiers, preserves
+  startup and idle work when sales are zero, and simulates calendar archive
+  growth. Month-one and later-retention storage are alternative windows, never
+  added into one month. Resource size, capacity, future growth, traffic mapping
+  and low/base/high sensitivity remain assumptions. Daily and monthly archives,
+  continuous-stream retention and noncurrent versions remain distinct.
+
+  **Accepted local samples.** The [joined evidence](cost-model/local-driver-evidence.json)
+  preserves each experiment's source revision, clock, scope and limitations:
+
+  - The [stream receipt](cost-model/measurements.json) replays all 207 selected
+    sales through the pinned Waitron sale writer, preserving its normal fiscal
+    integrity checks. It observes startup, accelerated workload, 1,200.009
+    seconds of idle traffic and a successful native restore. Copied source size
+    is 19,546,112 bytes; fresh-venue database growth is 700,416 bytes. All 342
+    physical requests reconcile between independent counters, including setup,
+    observer, restore, cleanup and eight failed attempts. Retained byte-seconds
+    have explicit lower/upper bounds. This short unversioned experiment observes
+    neither a full trading day nor a scheduled snapshot/compaction boundary.
+    A separate three-sale original-cadence control exposes batching sensitivity;
+    its different duration/background work cannot supply a daily correction.
+  - The [selected-sale archive](cost-model/archive-replay.json) captures a
+    3,527,677-byte archive and restores all 207 sales through the application
+    with valid integrity and owned cleanup. The
+    [one-sale storage sample](cost-model/archive-storage.json) separately measures
+    a 2,835,270-byte generated archive, eleven storage attempts, a complete and
+    range read, HEAD, listing, an abandoned multipart part and cleanup. Its
+    transfer counts cannot substitute for the selected-sale archive's transfers.
+  - The [generated owner browser journey](cost-model/remote-owner-browser.json)
+    measures 2,836,968 encrypted response bytes through the real isolated gateway,
+    including cold/cached loads, sign-in, dashboard, reconnect and sign-out.
+    Interrupted stream bodies and IP/TCP/WireGuard overhead remain outside its
+    body counters. The separate [owner/public API sample](cost-model/remote-owner-public-api.json)
+    covers generated API actions. Choose one owner scenario; summing API and
+    browser scenarios would overlap. Neither sample measures typical venue
+    activity, public browser use or provider-billed transfer.
+  - The [mail retry and fiscal lifecycle](cost-model/service-mail-retry-fiscal-lifecycle.json)
+    and [signup, recovery and refusal](cost-model/service-signup-recovery-fiscal-refusal.json)
+    samples preserve captured-mail attempts, refusals, retries and fiscal HTTP
+    body counts. They issue no additional fiscal authority through replay or
+    inspection. SMTP bytes, production alert eligibility and monthly service
+    frequencies remain unknown.
+
+  **Private measurement controls.** Online SQLite copies include committed
+  transaction-log writes without migrating, checkpointing or reseeding the source.
+  Private replay uses only owned scratch and an internal Docker network, checks
+  effective isolation before opening data, excludes live credentials/senders and
+  runs the genuine pinned writer/archive/restore paths. Every storage HTTP attempt
+  is metered independently, including retries, failed replies, versions, deletion
+  batches and unfinished multipart work. Unknown or ambiguous histories refuse
+  complete evidence. Cancellation collects admitted writers before closing their
+  measurement transports; replaced paths, lost ownership or unverifiable cleanup
+  refuse deletion and retain the recorded resources for explicit recovery.
+  The [generated conformance fixtures](../scripts/cloud-cost/fixtures/) exercise
+  these boundaries. No fiscal allocation, hash-chain or golden rule is changed.
+  Raw data, names, row identities, object keys, credentials and payloads stay on
+  the Mac. Closed anonymous export rejects extra/hidden fields and raw canaries.
+
+  **Forecast and live-check limits.** The [component projection](cost-model/usage-projection.json)
+  applies explicit [assumptions](cost-model/projection-settings.json), preserving
+  separate phases, failures, retry identities and source windows. Default future
+  sales are an assumed 207/day after saved-clock reconciliation, rather than the
+  earlier midnight-based source-selection count of 203. Owner/public/service/
+  recovery frequencies start unset. This projection is not a complete daily
+  object-size/lifetime, version, multipart, schedule or retry vector.
+  The [trial assessment](cost-model/live-check.json) therefore stops before any
+  AWS creation. Its illustrative high-cadence workload component alone projects
+  130,000 requests above the 10,000 cap before cleanup. That sensitivity is
+  assumed, not a proved upper bound. An under-cap base estimate cannot bound
+  missing work, and no measured operation may be truncated to make the trial fit.
+  No resources or synthetic payloads were created for this trial, and no billing
+  read is due for it. The earlier storage rehearsal and its follow-ups stay separate.
+
+  Local preflight helpers reserve cleanup requests/time, versions, multipart,
+  active key hours and delayed/cancelled-deletion contingencies; unavailable
+  applicable credits or missing price bounds refuse a plan. Consumption guards
+  charge attempts before dispatch and refuse reused/altered budgets. These checks
+  establish no generated-byte provenance or provisioning authority. Billing helpers
+  compare gross usage and credits separately, retain prior-key/other/ambiguous
+  lines, flag cost or quantity differences above 20%, and plan at most three
+  physical reads including continuation/retry. They perform no provider I/O;
+  independent synthetic generation, an owned-resource runner and durable billing
+  execution remain future prerequisites if the stopped trial is ever revisited.
+
+  **Rebuild and verify.** Run `node scripts/cloud-cost/cli.mjs build` and
+  `node scripts/cloud-cost/cli.mjs verify`. They read only public inputs and
+  compare the generated HTML, explanation and stop assessment without starting
+  private replay or contacting AWS. `pnpm test:cloud-cost` runs synthetic checks
+  and artifact verification; CI includes it alongside all five prior receipt suites.
+  Compiler, real-browser, deliberate-fault and generated local-storage checks cover
+  the model and its boundaries. Storage-only evidence validates neither fixed
+  infrastructure, AWS capacity nor a full provider bill.
+
+  Run `pnpm test:cloud-cost:conformance` for the deeper generated-data checks.
+  Its setup fetches the pinned public Waitron source, compiles the required
+  runtime exports and prepares local images without a venue source path. CI
+  discovers all eighteen files, with the longer stack file split into three
+  disjoint groups. Publication verification remains separate and offline.
+  The model command verifies public inputs and artifacts. The owner-approved native deadline
+  fixture holds its generated idle observation until shutdown is requested,
+  preserving both original 43/44-second limits and every source, startup and
+  cleanup assertion. It also requires deadline and cleanup to finish within
+  56 seconds. The real generated cancellation and deadline checks both pass;
+  neither check changes a production timeout.
+  Linux conformance exposed a PostgreSQL initialization race: temporary database
+  files now live on container-native scratch, outside the scanned ownership tree.
+  One later Linux run refused startup in
+  `genuineStreamMeasurementJoinsPhasesInventoriesAndIndependentRequestCounters`
+  before the measurement began (`39616174409`, group 3). The saved exception
+  contains only the generic startup refusal. An unchanged Mac run, twenty
+  instrumented Mac repetitions and sixteen instrumented Linux repetitions pass;
+  these results do not explain that failure or establish a correction. On
+  recurrence, capture the failing startup stage and underlying ownership or
+  Docker error using generated data only. Keep the ownership, isolation,
+  accounting and cleanup assertions and deadlines unchanged.
+  Ownership validation remains strict. Generated gateway fixtures explicitly
+  retain the file-access capability needed for their host-owned private mounts;
+  production gateways and private-data replay permissions are unchanged.
+
+  Cancellation first drains admitted storage traffic before signalling the native
+  writer, with a bounded fallback. Invalid transfer accounting still refuses
+  measurement publication. Separately proved collection of native processes and
+  their owned scratch lets the replay remove its own verified database copy;
+  replaced roots and lost ownership continue to refuse cleanup. The generated
+  native cancellation/deadline journey passes three consecutive runs, alongside
+  37 stream and 33 private-replay checks. Setup interruption collects its recorded
+  child process group and generated directory for both supported signals.
+
+  **Remaining work and observations.** To complete the operating total, establish
+  the missing inventory quantities and regional billing terms, representative
+  venue/public activity, complete retained-object forecasts, recovery/alert/email
+  frequencies and provider capacity/transfer mappings. Keep external mail, fiscal
+  API fees, GitHub charges, account allowances, credits and tax separate from
+  gross AWS usage. Earlier untraced refusals and transient source-file fingerprint
+  changes remain unattributed; later accepted samples do not explain those exact
+  occurrences. A generated restore-integrity failure reproduces on the host-shared
+  Docker folder and passes with active SQLite/native stream state on container-native
+  storage. Its production relevance is unproved. Prepare a consistent frozen copy
+  before long replay; later live-source activity does not identify a writer and
+  must not be treated as proof that the isolated experiment wrote the source.
 
 - **Future remote DNS lost-reply browser failures.** The reproduced reconciliation
   stall is resolved by [PR #102](https://github.com/waitron-io/waitron-cloud/pull/102).

@@ -1,0 +1,203 @@
+{
+  "services": {
+    "postgres": {
+      "image": "prepared",
+      "pull_policy": "never",
+      "entrypoint": [],
+      "command": [
+        "node",
+        "/code/cost-stack-runtime.mjs",
+        "postgres"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "dns": [
+        "127.0.0.1"
+      ],
+      "networks": [
+        "isolated"
+      ],
+      "logging": {
+        "driver": "none"
+      },
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=64m"
+      ],
+      "restart": "no",
+      "stop_grace_period": "5s"
+    },
+    "s3": {
+      "image": "prepared",
+      "pull_policy": "never",
+      "entrypoint": [],
+      "command": [
+        "node",
+        "/code/cost-stack-runtime.mjs",
+        "s3"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "dns": [
+        "127.0.0.1"
+      ],
+      "networks": [
+        "isolated"
+      ],
+      "logging": {
+        "driver": "none"
+      },
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=64m"
+      ],
+      "restart": "no",
+      "stop_grace_period": "5s"
+    },
+    "mailpit": {
+      "image": "prepared",
+      "pull_policy": "never",
+      "entrypoint": [],
+      "command": [
+        "node",
+        "/code/cost-stack-runtime.mjs",
+        "mailpit"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "dns": [
+        "127.0.0.1"
+      ],
+      "networks": [
+        "isolated"
+      ],
+      "logging": {
+        "driver": "none"
+      },
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=64m"
+      ],
+      "restart": "no",
+      "stop_grace_period": "5s"
+    },
+    "waitron": {
+      "image": "prepared",
+      "pull_policy": "never",
+      "entrypoint": [],
+      "command": [
+        "node",
+        "/code/cost-stack-runtime.mjs",
+        "waitron"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "dns": [
+        "127.0.0.1"
+      ],
+      "networks": [
+        "isolated"
+      ],
+      "logging": {
+        "driver": "none"
+      },
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=64m"
+      ],
+      "restart": "no",
+      "stop_grace_period": "5s"
+    },
+    "gateway": {
+      "image": "prepared",
+      "pull_policy": "never",
+      "entrypoint": [],
+      "command": [
+        "node",
+        "/code/cost-stack-runtime.mjs",
+        "gateway"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "dns": [
+        "127.0.0.1"
+      ],
+      "networks": [
+        "isolated"
+      ],
+      "logging": {
+        "driver": "none"
+      },
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=64m"
+      ],
+      "restart": "no",
+      "stop_grace_period": "5s",
+      "ports": [
+        {
+          "target": 8443,
+          "published": "0",
+          "host_ip": "127.0.0.1",
+          "protocol": "tcp"
+        }
+      ]
+    },
+    "fiscal": {
+      "image": "prepared",
+      "pull_policy": "never",
+      "entrypoint": [],
+      "command": [
+        "node",
+        "/code/cost-stack-runtime.mjs",
+        "fiscal"
+      ],
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "dns": [
+        "127.0.0.1"
+      ],
+      "networks": [
+        "isolated"
+      ],
+      "logging": {
+        "driver": "none"
+      },
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=64m"
+      ],
+      "restart": "no",
+      "stop_grace_period": "5s"
+    }
+  },
+  "networks": {
+    "isolated": {
+      "internal": true
+    }
+  }
+}

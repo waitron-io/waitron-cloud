@@ -1,0 +1,4985 @@
+{
+  "schemaVersion": 1,
+  "regions": [
+    "eu-south-2",
+    "eu-north-1"
+  ],
+  "records": [
+    {
+      "id": "ec2-t3-small",
+      "value": 0.0228,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-south-2/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:17.931Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "Compute Instance",
+      "sku": "UMDZEJ7KAZPTX53X",
+      "rateCode": "UMDZEJ7KAZPTX53X.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-BoxUsage:t3.small",
+        "operation": "RunInstances",
+        "Instance Type": "t3.small",
+        "Operating System": "Linux",
+        "Memory": "2 GiB",
+        "vCPU": "2"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 0.016666666666666666,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": 0.0002777777777777778,
+        "mode": "ceil"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.931Z",
+      "quote": "$0.0228"
+    },
+    {
+      "id": "ebs-gp3-storage",
+      "value": 0.088,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-south-2/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:17.931Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "Storage",
+      "sku": "4STH5FTTSDG422F5",
+      "rateCode": "4STH5FTTSDG422F5.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-EBS:VolumeUsage.gp3"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.931Z",
+      "quote": "$0.088"
+    },
+    {
+      "id": "ebs-gp3-iops",
+      "value": 0.0055,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-south-2/index.csv",
+      "unit": "IOPS-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:17.931Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "System Operation",
+      "sku": "BTGDVC8Y22Q99H89",
+      "rateCode": "BTGDVC8Y22Q99H89.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-EBS:VolumeP-IOPS.gp3"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "IOPS-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.931Z",
+      "quote": "$0.0055"
+    },
+    {
+      "id": "ebs-gp3-throughput",
+      "value": 45.056,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-south-2/index.csv",
+      "unit": "GiBps-mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:17.931Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "Provisioned Throughput",
+      "sku": "8PJX6TYWPQTW3NG8",
+      "rateCode": "8PJX6TYWPQTW3NG8.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-EBS:VolumeP-Throughput.gp3"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GiBps-mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.931Z",
+      "quote": "$0.044"
+    },
+    {
+      "id": "ebs-snapshot",
+      "value": 0.05,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-south-2/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:17.931Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "Storage Snapshot",
+      "sku": "66XEWM6NE3U5MQ25",
+      "rateCode": "66XEWM6NE3U5MQ25.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-EBS:SnapshotUsage"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.931Z",
+      "quote": "$0.05"
+    },
+    {
+      "id": "nat-hours",
+      "value": 0.048,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-south-2/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:17.931Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "NAT Gateway",
+      "sku": "J68CACDFX6JYYNVN",
+      "rateCode": "J68CACDFX6JYYNVN.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-NatGateway-Hours",
+        "operation": "NatGateway"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 1,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": 1,
+        "mode": "ceil"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.931Z",
+      "quote": "$0.048"
+    },
+    {
+      "id": "nat-data",
+      "value": 0.048,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-south-2/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:17.931Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "NAT Gateway",
+      "sku": "5MACN4CM6WEUTZU5",
+      "rateCode": "5MACN4CM6WEUTZU5.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-NatGateway-Bytes",
+        "operation": "NatGateway"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.931Z",
+      "quote": "$0.048"
+    },
+    {
+      "id": "ec2-t3-cpu-credits",
+      "value": 0.05,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-south-2/index.csv",
+      "unit": "vCPU-Hours",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:17.931Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "CPU Credits",
+      "sku": "X22DTJ2VSGX3A3PY",
+      "rateCode": "X22DTJ2VSGX3A3PY.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-CPUCredits:t3",
+        "operation": "T3CPUCredits",
+        "Operating System": "Linux"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "vCPU-Hours"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.931Z",
+      "quote": "$0.05"
+    },
+    {
+      "id": "rds-t4g-micro-single",
+      "value": 0.018,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-south-2/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:18.603Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRDS",
+      "product": "Database Instance",
+      "sku": "Q5AKGC7KNZTEFQZG",
+      "rateCode": "Q5AKGC7KNZTEFQZG.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-InstanceUsage:db.t4g.micro",
+        "operation": "CreateDBInstance:0014",
+        "Instance Type": "db.t4g.micro",
+        "Database Engine": "PostgreSQL",
+        "Deployment Option": "Single-AZ",
+        "Memory": "1 GiB",
+        "vCPU": "2"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 0.16666666666666666,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": 0.0002777777777777778,
+        "mode": "ceil"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.603Z",
+      "quote": "$"
+    },
+    {
+      "id": "rds-t4g-micro-multi",
+      "value": 0.035,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-south-2/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:18.603Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRDS",
+      "product": "Database Instance",
+      "sku": "BV996TF7FBPHH7EC",
+      "rateCode": "BV996TF7FBPHH7EC.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-Multi-AZUsage:db.t4g.micro",
+        "operation": "CreateDBInstance:0014",
+        "Instance Type": "db.t4g.micro",
+        "Database Engine": "PostgreSQL",
+        "Deployment Option": "Multi-AZ",
+        "Memory": "1 GiB",
+        "vCPU": "2"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 0.16666666666666666,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": 0.0002777777777777778,
+        "mode": "ceil"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.603Z",
+      "quote": "$"
+    },
+    {
+      "id": "rds-gp3-single",
+      "value": 0.127,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-south-2/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:18.603Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRDS",
+      "product": "Database Storage",
+      "sku": "N5JQVEUQRQ7NCE9Q",
+      "rateCode": "N5JQVEUQRQ7NCE9Q.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-RDS:GP3-Storage",
+        "operation": "CreateDBInstance:0014",
+        "Database Engine": "PostgreSQL",
+        "Deployment Option": "Single-AZ"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.603Z",
+      "quote": "$0.127"
+    },
+    {
+      "id": "rds-gp3-multi",
+      "value": 0.254,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-south-2/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:18.603Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRDS",
+      "product": "Database Storage",
+      "sku": "EKKGGFVXA5SF5GYF",
+      "rateCode": "EKKGGFVXA5SF5GYF.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-RDS:Multi-AZ-GP3-Storage",
+        "operation": "CreateDBInstance:0014",
+        "Database Engine": "PostgreSQL",
+        "Deployment Option": "Multi-AZ"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.603Z",
+      "quote": "$0.254"
+    },
+    {
+      "id": "rds-backup",
+      "value": 0.095,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-south-2/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:18.603Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRDS",
+      "product": "Storage Snapshot",
+      "sku": "CQFS9DFZEQ8E22R6",
+      "rateCode": "CQFS9DFZEQ8E22R6.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-RDS:ChargedBackupUsage",
+        "operation": "CreateDBInstance:0014",
+        "Database Engine": "PostgreSQL",
+        "Deployment Option": "Single-AZ"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.603Z",
+      "quote": "$0.095"
+    },
+    {
+      "id": "rds-gp3-iops",
+      "value": 0.022,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-south-2/index.csv",
+      "unit": "IOPS-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:18.603Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRDS",
+      "product": "Provisioned IOPS",
+      "sku": "G2TWGBGWE9VNX8YY",
+      "rateCode": "G2TWGBGWE9VNX8YY.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-RDS:GP3-PIOPS",
+        "operation": "CreateDBInstance:0014",
+        "Database Engine": "PostgreSQL",
+        "Deployment Option": "Single-AZ"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "IOPS-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.603Z",
+      "quote": "$0.022"
+    },
+    {
+      "id": "rds-gp3-throughput",
+      "value": 0.088,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-south-2/index.csv",
+      "unit": "MBPS-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:18.603Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRDS",
+      "product": "Provisioned Throughput",
+      "sku": "E7B6C5JSBV8QWZGR",
+      "rateCode": "E7B6C5JSBV8QWZGR.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-RDS:GP3-Throughput",
+        "operation": "CreateDBInstance:0014",
+        "Database Engine": "PostgreSQL",
+        "Deployment Option": "Single-AZ"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "MBPS-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.603Z",
+      "quote": "$0.088"
+    },
+    {
+      "id": "s3-standard-storage",
+      "value": 0.023,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-south-2/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:16.035Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "Storage",
+      "sku": "J4G6TDWKTHGQ4EUR",
+      "rateCode": "J4G6TDWKTHGQ4EUR.JRTCKXETXF.PGHJ3S3EYE",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-TimedStorage-ByteHrs",
+        "Storage Class": "General Purpose",
+        "billingBytesPerUnit": "1073741824"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": 51200.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:16.035Z",
+      "quote": "$0.023"
+    },
+    {
+      "id": "s3-standard-storage",
+      "value": 0.022,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-south-2/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:16.035Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "Storage",
+      "sku": "J4G6TDWKTHGQ4EUR",
+      "rateCode": "J4G6TDWKTHGQ4EUR.JRTCKXETXF.D42MF2PVJS",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-TimedStorage-ByteHrs",
+        "Storage Class": "General Purpose",
+        "billingBytesPerUnit": "1073741824"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 51200.0,
+        "end": 512000.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:16.035Z",
+      "quote": "$0.022"
+    },
+    {
+      "id": "s3-standard-storage",
+      "value": 0.021,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-south-2/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:16.035Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "Storage",
+      "sku": "J4G6TDWKTHGQ4EUR",
+      "rateCode": "J4G6TDWKTHGQ4EUR.JRTCKXETXF.PXJDJ3YRG3",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-TimedStorage-ByteHrs",
+        "Storage Class": "General Purpose",
+        "billingBytesPerUnit": "1073741824"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 512000.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:16.035Z",
+      "quote": "$0.021"
+    },
+    {
+      "id": "s3-write",
+      "value": 5.3e-06,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-south-2/index.csv",
+      "unit": "Requests",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:16.035Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "API Request",
+      "sku": "MJ7ZMNPX5NN9Q6PV",
+      "rateCode": "MJ7ZMNPX5NN9Q6PV.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-Requests-Tier1",
+        "quantityDimension": "physical-request"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 0,
+        "unit": "Requests"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "none"
+      },
+      "retrievedAt": "2026-10-14T11:38:16.035Z",
+      "quote": "$0.0053"
+    },
+    {
+      "id": "s3-read",
+      "value": 4e-07,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-south-2/index.csv",
+      "unit": "Requests",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:16.035Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "API Request",
+      "sku": "WZ38K7WCHNBSJUXZ",
+      "rateCode": "WZ38K7WCHNBSJUXZ.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-Requests-Tier2",
+        "quantityDimension": "physical-request"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 0,
+        "unit": "Requests"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "none"
+      },
+      "retrievedAt": "2026-10-14T11:38:16.035Z",
+      "quote": "$0.004"
+    },
+    {
+      "id": "s3-ia-storage",
+      "value": 0.0125,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-south-2/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:16.035Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "Storage",
+      "sku": "2NYZ5553SJU7CCG3",
+      "rateCode": "2NYZ5553SJU7CCG3.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-TimedStorage-SIA-ByteHrs",
+        "Storage Class": "Infrequent Access",
+        "billingBytesPerUnit": "1073741824",
+        "minimumObjectBytes": "131072",
+        "minimumDurationDays": "30"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:16.035Z",
+      "quote": "$0.0125"
+    },
+    {
+      "id": "s3-glacier-instant-storage",
+      "value": 0.005,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-south-2/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:16.035Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "Storage",
+      "sku": "CDPNM5D99KCX836C",
+      "rateCode": "CDPNM5D99KCX836C.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-TimedStorage-GIR-ByteHrs",
+        "Storage Class": "Archive Instant Retrieval",
+        "billingBytesPerUnit": "1073741824",
+        "minimumObjectBytes": "131072",
+        "minimumDurationDays": "90"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:16.035Z",
+      "quote": "$0.005"
+    },
+    {
+      "id": "s3-glacier-flexible-storage",
+      "value": 0.00405,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-south-2/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:16.035Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "Storage",
+      "sku": "HM4XX7A5FTEARYMU",
+      "rateCode": "HM4XX7A5FTEARYMU.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-TimedStorage-GlacierByteHrs",
+        "Storage Class": "Archive",
+        "billingBytesPerUnit": "1073741824",
+        "standardMetadataBytes": "8192",
+        "archiveMetadataBytes": "32768",
+        "minimumDurationDays": "90"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:16.035Z",
+      "quote": "$0.00405"
+    },
+    {
+      "id": "alb-hours",
+      "value": 0.0252,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-south-2/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:19.460Z",
+      "effectiveAt": "2026-07-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSELB",
+      "product": "Load Balancer-Application",
+      "sku": "X8MXE2X46RMCT7M6",
+      "rateCode": "X8MXE2X46RMCT7M6.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-LoadBalancerUsage",
+        "operation": "LoadBalancing:Application"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 1,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": 1,
+        "mode": "ceil"
+      },
+      "retrievedAt": "2026-10-14T11:38:19.460Z",
+      "quote": "USD0.0252"
+    },
+    {
+      "id": "alb-capacity",
+      "value": 0.008,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-south-2/index.csv",
+      "unit": "LCU-Hrs",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:19.460Z",
+      "effectiveAt": "2026-07-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSELB",
+      "product": "Load Balancer-Application",
+      "sku": "WGNWCMFBZX9VQX86",
+      "rateCode": "WGNWCMFBZX9VQX86.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-LCUUsage",
+        "operation": "LoadBalancing:Application"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "LCU-Hrs"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:19.460Z",
+      "quote": "USD0.008"
+    },
+    {
+      "id": "nlb-hours",
+      "value": 0.0252,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-south-2/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:19.460Z",
+      "effectiveAt": "2026-07-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSELB",
+      "product": "Load Balancer-Network",
+      "sku": "64S93CCDM5UJG6RT",
+      "rateCode": "64S93CCDM5UJG6RT.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-LoadBalancerUsage",
+        "operation": "LoadBalancing:Network"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 1,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": 1,
+        "mode": "ceil"
+      },
+      "retrievedAt": "2026-10-14T11:38:19.460Z",
+      "quote": "USD0.0252"
+    },
+    {
+      "id": "nlb-capacity",
+      "value": 0.006,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-south-2/index.csv",
+      "unit": "LCU-Hrs",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:19.460Z",
+      "effectiveAt": "2026-07-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSELB",
+      "product": "Load Balancer-Network",
+      "sku": "D3E9NSDX9XFEU5VX",
+      "rateCode": "D3E9NSDX9XFEU5VX.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-LCUUsage",
+        "operation": "LoadBalancing:Network"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "LCU-Hrs"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:19.460Z",
+      "quote": "USD0.006"
+    },
+    {
+      "id": "ipv4-active",
+      "value": 0.005,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260917190528/eu-south-2/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:17.376Z",
+      "effectiveAt": "2026-08-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonVPC",
+      "product": "VPCPublicIPv4Address",
+      "sku": "VJK6DQ2VJH2J2884",
+      "rateCode": "VJK6DQ2VJH2J2884.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-PublicIPv4:InUseAddress"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.376Z",
+      "quote": "$0.005"
+    },
+    {
+      "id": "ipv4-idle",
+      "value": 0.005,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260917190528/eu-south-2/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:17.376Z",
+      "effectiveAt": "2026-08-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonVPC",
+      "product": "VPCPublicIPv4Address",
+      "sku": "7ZHXXZ83FMPFSPWD",
+      "rateCode": "7ZHXXZ83FMPFSPWD.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-PublicIPv4:IdleAddress"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.376Z",
+      "quote": "$0.005"
+    },
+    {
+      "id": "endpoint-hours",
+      "value": 0.011,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260917190528/eu-south-2/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:17.376Z",
+      "effectiveAt": "2026-08-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonVPC",
+      "product": "VpcEndpoint",
+      "sku": "3NMF7YF6PPAG9EMU",
+      "rateCode": "3NMF7YF6PPAG9EMU.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-VpcEndpoint-Hours",
+        "operation": "VpcEndpoint"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.376Z",
+      "quote": "USD0.011"
+    },
+    {
+      "id": "endpoint-data",
+      "value": 0.01,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260917190528/eu-south-2/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:17.376Z",
+      "effectiveAt": "2026-08-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonVPC",
+      "product": "VpcEndpoint",
+      "sku": "J6PCHJC7DUCC5Z4S",
+      "rateCode": "J6PCHJC7DUCC5Z4S.JRTCKXETXF.D7RZ6WCPVW",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-VpcEndpoint-Bytes",
+        "operation": "VpcEndpoint"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": 1048576.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.376Z",
+      "quote": "USD0.01"
+    },
+    {
+      "id": "endpoint-data",
+      "value": 0.006,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260917190528/eu-south-2/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:17.376Z",
+      "effectiveAt": "2026-08-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonVPC",
+      "product": "VpcEndpoint",
+      "sku": "J6PCHJC7DUCC5Z4S",
+      "rateCode": "J6PCHJC7DUCC5Z4S.JRTCKXETXF.RBMR72YW69",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-VpcEndpoint-Bytes",
+        "operation": "VpcEndpoint"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 1048576.0,
+        "end": 5242880.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.376Z",
+      "quote": "USD0.006"
+    },
+    {
+      "id": "endpoint-data",
+      "value": 0.004,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260917190528/eu-south-2/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:17.376Z",
+      "effectiveAt": "2026-08-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonVPC",
+      "product": "VpcEndpoint",
+      "sku": "J6PCHJC7DUCC5Z4S",
+      "rateCode": "J6PCHJC7DUCC5Z4S.JRTCKXETXF.SW9U2ZKBYX",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-VpcEndpoint-Bytes",
+        "operation": "VpcEndpoint"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 5242880.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.376Z",
+      "quote": "USD0.004"
+    },
+    {
+      "id": "kms-key",
+      "value": 1.0,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awskms/20260911124601/eu-south-2/index.csv",
+      "unit": "Keys",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:18.352Z",
+      "effectiveAt": "2025-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "awskms",
+      "product": "Encryption Key",
+      "sku": "ZPG7NY487K7SFHVY",
+      "rateCode": "ZPG7NY487K7SFHVY.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "eu-south-2-KMS-Keys",
+        "proration": "hourly-active-key-storage"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 0,
+        "unit": "Keys"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "none"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.352Z",
+      "quote": "$1"
+    },
+    {
+      "id": "kms-symmetric",
+      "value": 3e-06,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awskms/20260911124601/eu-south-2/index.csv",
+      "unit": "Requests",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:18.352Z",
+      "effectiveAt": "2025-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "awskms",
+      "product": "API Request",
+      "sku": "MG69RRR3V9FG2YMF",
+      "rateCode": "MG69RRR3V9FG2YMF.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "eu-south-2-KMS-Requests",
+        "quantityDimension": "physical-request"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 0,
+        "unit": "Requests"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "none"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.352Z",
+      "quote": "$0.03"
+    },
+    {
+      "id": "logs-ingest",
+      "value": 0.57,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-south-2/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:15.149Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Data Payload",
+      "sku": "RB6JKDQ5NE5HFZP4",
+      "rateCode": "RB6JKDQ5NE5HFZP4.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-DataProcessing-Bytes",
+        "operation": "PutLogEvents"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.149Z",
+      "quote": "$0.57"
+    },
+    {
+      "id": "logs-storage",
+      "value": 0.03,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-south-2/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:15.149Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Storage Snapshot",
+      "sku": "HQTF3SN9EXAENXWB",
+      "rateCode": "HQTF3SN9EXAENXWB.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-TimedStorage-ByteHrs"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.149Z",
+      "quote": "$0.03"
+    },
+    {
+      "id": "logs-query",
+      "value": 0.0057,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-south-2/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:15.149Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Data Payload",
+      "sku": "6DPF896JB9M4KA6Q",
+      "rateCode": "6DPF896JB9M4KA6Q.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-DataScanned-Bytes",
+        "operation": "StartQuery"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.149Z",
+      "quote": "$0.0057"
+    },
+    {
+      "id": "metrics",
+      "value": 0.3,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-south-2/index.csv",
+      "unit": "Metrics",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:15.149Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Metric",
+      "sku": "7EGPKS3JK9S6Q5CN",
+      "rateCode": "7EGPKS3JK9S6Q5CN.JRTCKXETXF.A6VD9GXV7W",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-CW:MetricMonitorUsage"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": 10000.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Metrics"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.149Z",
+      "quote": "$0.30"
+    },
+    {
+      "id": "metrics",
+      "value": 0.1,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-south-2/index.csv",
+      "unit": "Metrics",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:15.149Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Metric",
+      "sku": "7EGPKS3JK9S6Q5CN",
+      "rateCode": "7EGPKS3JK9S6Q5CN.JRTCKXETXF.FG3KHZ79QN",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-CW:MetricMonitorUsage"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 10000.0,
+        "end": 250000.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Metrics"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.149Z",
+      "quote": "$0.10"
+    },
+    {
+      "id": "metrics",
+      "value": 0.05,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-south-2/index.csv",
+      "unit": "Metrics",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:15.149Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Metric",
+      "sku": "7EGPKS3JK9S6Q5CN",
+      "rateCode": "7EGPKS3JK9S6Q5CN.JRTCKXETXF.95SDKRWVHH",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-CW:MetricMonitorUsage"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 250000.0,
+        "end": 1000000.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Metrics"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.149Z",
+      "quote": "$0.05"
+    },
+    {
+      "id": "metrics",
+      "value": 0.02,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-south-2/index.csv",
+      "unit": "Metrics",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:15.149Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Metric",
+      "sku": "7EGPKS3JK9S6Q5CN",
+      "rateCode": "7EGPKS3JK9S6Q5CN.JRTCKXETXF.VNJQCFJPS4",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-CW:MetricMonitorUsage"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 1000000.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Metrics"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.149Z",
+      "quote": "$0.02"
+    },
+    {
+      "id": "alarms",
+      "value": 0.1,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-south-2/index.csv",
+      "unit": "Alarms",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:15.149Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Alarm",
+      "sku": "Y6CMMZRHD9WZV9UY",
+      "rateCode": "Y6CMMZRHD9WZV9UY.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-CW:AlarmMonitorUsage"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Alarms"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.149Z",
+      "quote": "$0.10"
+    },
+    {
+      "id": "synthetic-checks",
+      "value": 0.0014,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-south-2/index.csv",
+      "unit": "Runs",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:15.149Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Canaries",
+      "sku": "BJUNX52MT82XF932",
+      "rateCode": "BJUNX52MT82XF932.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-CW:Canary-runs"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Runs"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.149Z",
+      "quote": "$0.0014"
+    },
+    {
+      "id": "eks-standard",
+      "value": 0.1,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEKS/20260928194255/eu-south-2/index.csv",
+      "unit": "Hours",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:17.461Z",
+      "effectiveAt": "2026-08-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEKS",
+      "product": "Compute",
+      "sku": "C9KXANWPZBNBYGUT",
+      "rateCode": "C9KXANWPZBNBYGUT.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-AmazonEKS-Hours:perCluster",
+        "operation": "CreateOperation"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Hours"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.461Z",
+      "quote": "USD0.1"
+    },
+    {
+      "id": "fargate-x86-cpu",
+      "value": 0.046552,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/eu-south-2/index.csv",
+      "unit": "hours",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:20.229Z",
+      "effectiveAt": "2026-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonECS",
+      "product": "Compute",
+      "sku": "UMRZEYF8C2H5Z9XQ",
+      "rateCode": "UMRZEYF8C2H5Z9XQ.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-Fargate-vCPU-Hours:perCPU",
+        "quantityDimension": "vCPU-hour",
+        "minimumDurationSeconds": "60",
+        "billingDurationRoundSeconds": "1"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "hours"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:20.229Z",
+      "quote": "AWS"
+    },
+    {
+      "id": "fargate-x86-memory",
+      "value": 0.005112,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/eu-south-2/index.csv",
+      "unit": "hours",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:20.229Z",
+      "effectiveAt": "2026-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonECS",
+      "product": "Compute",
+      "sku": "369RDUVMT5DP6PJT",
+      "rateCode": "369RDUVMT5DP6PJT.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-Fargate-GB-Hours",
+        "quantityDimension": "GB-hour",
+        "minimumDurationSeconds": "60",
+        "billingDurationRoundSeconds": "1"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "hours"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:20.229Z",
+      "quote": "AWS"
+    },
+    {
+      "id": "fargate-arm-cpu",
+      "value": 0.037242,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/eu-south-2/index.csv",
+      "unit": "hours",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:20.229Z",
+      "effectiveAt": "2026-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonECS",
+      "product": "Compute",
+      "sku": "FEY9TDTGY5GY6UXA",
+      "rateCode": "FEY9TDTGY5GY6UXA.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-Fargate-ARM-vCPU-Hours:perCPU",
+        "quantityDimension": "vCPU-hour",
+        "minimumDurationSeconds": "60",
+        "billingDurationRoundSeconds": "1"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "hours"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:20.229Z",
+      "quote": "AWS"
+    },
+    {
+      "id": "fargate-arm-memory",
+      "value": 0.004089,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/eu-south-2/index.csv",
+      "unit": "hours",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:20.229Z",
+      "effectiveAt": "2026-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonECS",
+      "product": "Compute",
+      "sku": "MHVYR45QP7ZT4CTP",
+      "rateCode": "MHVYR45QP7ZT4CTP.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-Fargate-ARM-GB-Hours",
+        "quantityDimension": "GB-hour",
+        "minimumDurationSeconds": "60",
+        "billingDurationRoundSeconds": "1"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "hours"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:20.229Z",
+      "quote": "AWS"
+    },
+    {
+      "id": "fargate-scratch",
+      "value": 0.000122,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/eu-south-2/index.csv",
+      "unit": "GB-Hours",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:20.229Z",
+      "effectiveAt": "2026-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonECS",
+      "product": "Compute",
+      "sku": "GF9TTN92WMCW78ZE",
+      "rateCode": "GF9TTN92WMCW78ZE.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-Fargate-EphemeralStorage-GB-Hours",
+        "quantityDimension": "GB-hour",
+        "minimumDurationSeconds": "60",
+        "billingDurationRoundSeconds": "1"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Hours"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:20.229Z",
+      "quote": "AWS"
+    },
+    {
+      "id": "secrets-storage",
+      "value": 0.4,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/20260911124610/eu-south-2/index.csv",
+      "unit": "Secrets",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:14.966Z",
+      "effectiveAt": "2025-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSSecretsManager",
+      "product": "Secret",
+      "sku": "XUMB6X2XZZXRSFJS",
+      "rateCode": "XUMB6X2XZZXRSFJS.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-AWSSecretsManager-Secrets"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Secrets"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:14.966Z",
+      "quote": "$0.40"
+    },
+    {
+      "id": "secrets-api",
+      "value": 5e-06,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/20260911124610/eu-south-2/index.csv",
+      "unit": "API Requests",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:14.966Z",
+      "effectiveAt": "2025-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSSecretsManager",
+      "product": "API Request",
+      "sku": "MKT75EMY2CHH4ZDK",
+      "rateCode": "MKT75EMY2CHH4ZDK.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-AWSSecretsManagerAPIRequest"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "API Requests"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:14.966Z",
+      "quote": "$0.05"
+    },
+    {
+      "id": "ecr-storage",
+      "value": 0.1,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECR/20260911124425/eu-south-2/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:38:19.262Z",
+      "effectiveAt": "2025-10-31T23:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonECR",
+      "product": "EC2 Container Registry",
+      "sku": "29AGJ4R54J9EFSMR",
+      "rateCode": "29AGJ4R54J9EFSMR.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-TimedStorage-ByteHrs"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:19.262Z",
+      "quote": "USD0.1"
+    },
+    {
+      "id": "ec2-t3-small",
+      "value": 0.0216,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-north-1/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:18.459Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "Compute Instance",
+      "sku": "RZ2CPJT3JCVWXCQM",
+      "rateCode": "RZ2CPJT3JCVWXCQM.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-BoxUsage:t3.small",
+        "operation": "RunInstances",
+        "Instance Type": "t3.small",
+        "Operating System": "Linux",
+        "Memory": "2 GiB",
+        "vCPU": "2"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 0.016666666666666666,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": 0.0002777777777777778,
+        "mode": "ceil"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.459Z",
+      "quote": "$0.0216"
+    },
+    {
+      "id": "ebs-gp3-storage",
+      "value": 0.0836,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-north-1/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:18.459Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "Storage",
+      "sku": "H33YTQG3Y9XKNSF3",
+      "rateCode": "H33YTQG3Y9XKNSF3.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-EBS:VolumeUsage.gp3"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.459Z",
+      "quote": "$0.0836"
+    },
+    {
+      "id": "ebs-gp3-iops",
+      "value": 0.0052,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-north-1/index.csv",
+      "unit": "IOPS-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:18.459Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "System Operation",
+      "sku": "XS8EGK3XM47WU7KN",
+      "rateCode": "XS8EGK3XM47WU7KN.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-EBS:VolumeP-IOPS.gp3"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "IOPS-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.459Z",
+      "quote": "$0.0052"
+    },
+    {
+      "id": "ebs-gp3-throughput",
+      "value": 42.8032,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-north-1/index.csv",
+      "unit": "GiBps-mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:18.459Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "Provisioned Throughput",
+      "sku": "5S36SXRUX9DP4FTA",
+      "rateCode": "5S36SXRUX9DP4FTA.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-EBS:VolumeP-Throughput.gp3"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GiBps-mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.459Z",
+      "quote": "$0.0418"
+    },
+    {
+      "id": "ebs-snapshot",
+      "value": 0.0475,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-north-1/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:18.459Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "Storage Snapshot",
+      "sku": "JAFNEA2DZUKPNWGT",
+      "rateCode": "JAFNEA2DZUKPNWGT.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-EBS:SnapshotUsage"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.459Z",
+      "quote": "$0.0475"
+    },
+    {
+      "id": "nat-hours",
+      "value": 0.046,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-north-1/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:18.459Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "NAT Gateway",
+      "sku": "BYQ4CZQVRHZ225T7",
+      "rateCode": "BYQ4CZQVRHZ225T7.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-NatGateway-Hours",
+        "operation": "NatGateway"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 1,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": 1,
+        "mode": "ceil"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.459Z",
+      "quote": "$0.046"
+    },
+    {
+      "id": "nat-data",
+      "value": 0.046,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-north-1/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:18.459Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "NAT Gateway",
+      "sku": "GRRDFYMQ5CUU37H4",
+      "rateCode": "GRRDFYMQ5CUU37H4.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-NatGateway-Bytes",
+        "operation": "NatGateway"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.459Z",
+      "quote": "$0.046"
+    },
+    {
+      "id": "ec2-t3-cpu-credits",
+      "value": 0.05,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-north-1/index.csv",
+      "unit": "vCPU-Hours",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:18.459Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEC2",
+      "product": "CPU Credits",
+      "sku": "5C2EHUGDY6WHFMRW",
+      "rateCode": "5C2EHUGDY6WHFMRW.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-CPUCredits:t3",
+        "operation": "T3CPUCredits",
+        "Operating System": "Linux"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "vCPU-Hours"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.459Z",
+      "quote": "$0.05"
+    },
+    {
+      "id": "rds-t4g-micro-single",
+      "value": 0.016,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-north-1/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:18.737Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRDS",
+      "product": "Database Instance",
+      "sku": "BE43FJYR9D2ZCPA8",
+      "rateCode": "BE43FJYR9D2ZCPA8.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-InstanceUsage:db.t4g.micro",
+        "operation": "CreateDBInstance:0014",
+        "Instance Type": "db.t4g.micro",
+        "Database Engine": "PostgreSQL",
+        "Deployment Option": "Single-AZ",
+        "Memory": "1 GiB",
+        "vCPU": "2"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 0.16666666666666666,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": 0.0002777777777777778,
+        "mode": "ceil"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.737Z",
+      "quote": "$"
+    },
+    {
+      "id": "rds-t4g-micro-multi",
+      "value": 0.033,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-north-1/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:18.737Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRDS",
+      "product": "Database Instance",
+      "sku": "GM6MNBDSKYVDDB94",
+      "rateCode": "GM6MNBDSKYVDDB94.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-Multi-AZUsage:db.t4g.micro",
+        "operation": "CreateDBInstance:0014",
+        "Instance Type": "db.t4g.micro",
+        "Database Engine": "PostgreSQL",
+        "Deployment Option": "Multi-AZ",
+        "Memory": "1 GiB",
+        "vCPU": "2"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 0.16666666666666666,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": 0.0002777777777777778,
+        "mode": "ceil"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.737Z",
+      "quote": "$"
+    },
+    {
+      "id": "rds-gp3-single",
+      "value": 0.12,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-north-1/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:18.737Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRDS",
+      "product": "Database Storage",
+      "sku": "5KMSGBD4HCJXHFZ8",
+      "rateCode": "5KMSGBD4HCJXHFZ8.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-RDS:GP3-Storage",
+        "operation": "CreateDBInstance:0014",
+        "Database Engine": "PostgreSQL",
+        "Deployment Option": "Single-AZ"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.737Z",
+      "quote": "$0.12"
+    },
+    {
+      "id": "rds-gp3-multi",
+      "value": 0.24,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-north-1/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:18.737Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRDS",
+      "product": "Database Storage",
+      "sku": "V6JTQP9RGZ27Q6GG",
+      "rateCode": "V6JTQP9RGZ27Q6GG.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-RDS:Multi-AZ-GP3-Storage",
+        "operation": "CreateDBInstance:0014",
+        "Database Engine": "PostgreSQL",
+        "Deployment Option": "Multi-AZ"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.737Z",
+      "quote": "$0.24"
+    },
+    {
+      "id": "rds-backup",
+      "value": 0.09,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-north-1/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:18.737Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRDS",
+      "product": "Storage Snapshot",
+      "sku": "H3CVP78CY7HBN3X2",
+      "rateCode": "H3CVP78CY7HBN3X2.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-RDS:ChargedBackupUsage",
+        "operation": "CreateDBInstance:0014",
+        "Database Engine": "PostgreSQL",
+        "Deployment Option": "Single-AZ"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.737Z",
+      "quote": "$0.09"
+    },
+    {
+      "id": "rds-gp3-iops",
+      "value": 0.021,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-north-1/index.csv",
+      "unit": "IOPS-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:18.737Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRDS",
+      "product": "Provisioned IOPS",
+      "sku": "8YPXENVHTM2TE3JP",
+      "rateCode": "8YPXENVHTM2TE3JP.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-RDS:GP3-PIOPS",
+        "operation": "CreateDBInstance:0014",
+        "Database Engine": "PostgreSQL",
+        "Deployment Option": "Single-AZ"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "IOPS-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.737Z",
+      "quote": "$0.021"
+    },
+    {
+      "id": "rds-gp3-throughput",
+      "value": 0.083,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-north-1/index.csv",
+      "unit": "MBPS-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:18.737Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRDS",
+      "product": "Provisioned Throughput",
+      "sku": "Y7FUAR8HM6JAEBBC",
+      "rateCode": "Y7FUAR8HM6JAEBBC.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-RDS:GP3-Throughput",
+        "operation": "CreateDBInstance:0014",
+        "Database Engine": "PostgreSQL",
+        "Deployment Option": "Single-AZ"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "MBPS-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:18.737Z",
+      "quote": "$0.083"
+    },
+    {
+      "id": "s3-standard-storage",
+      "value": 0.023,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-north-1/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.757Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "Storage",
+      "sku": "W3FCBWN4J47P9GU4",
+      "rateCode": "W3FCBWN4J47P9GU4.JRTCKXETXF.PGHJ3S3EYE",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-TimedStorage-ByteHrs",
+        "Storage Class": "General Purpose",
+        "billingBytesPerUnit": "1073741824"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": 51200.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.757Z",
+      "quote": "$0.023"
+    },
+    {
+      "id": "s3-standard-storage",
+      "value": 0.022,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-north-1/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.757Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "Storage",
+      "sku": "W3FCBWN4J47P9GU4",
+      "rateCode": "W3FCBWN4J47P9GU4.JRTCKXETXF.D42MF2PVJS",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-TimedStorage-ByteHrs",
+        "Storage Class": "General Purpose",
+        "billingBytesPerUnit": "1073741824"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 51200.0,
+        "end": 512000.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.757Z",
+      "quote": "$0.022"
+    },
+    {
+      "id": "s3-standard-storage",
+      "value": 0.021,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-north-1/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.757Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "Storage",
+      "sku": "W3FCBWN4J47P9GU4",
+      "rateCode": "W3FCBWN4J47P9GU4.JRTCKXETXF.PXJDJ3YRG3",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-TimedStorage-ByteHrs",
+        "Storage Class": "General Purpose",
+        "billingBytesPerUnit": "1073741824"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 512000.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.757Z",
+      "quote": "$0.021"
+    },
+    {
+      "id": "s3-write",
+      "value": 5e-06,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-north-1/index.csv",
+      "unit": "Requests",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.757Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "API Request",
+      "sku": "GRMX7KKGXZWXWYA7",
+      "rateCode": "GRMX7KKGXZWXWYA7.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-Requests-Tier1",
+        "quantityDimension": "physical-request"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 0,
+        "unit": "Requests"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "none"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.757Z",
+      "quote": "$0.005"
+    },
+    {
+      "id": "s3-read",
+      "value": 4e-07,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-north-1/index.csv",
+      "unit": "Requests",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.757Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "API Request",
+      "sku": "78XM3R8BT46YZKTU",
+      "rateCode": "78XM3R8BT46YZKTU.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-Requests-Tier2",
+        "quantityDimension": "physical-request"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 0,
+        "unit": "Requests"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "none"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.757Z",
+      "quote": "$0.004"
+    },
+    {
+      "id": "s3-ia-storage",
+      "value": 0.0125,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-north-1/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.757Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "Storage",
+      "sku": "EHYYY83E32UJWDAQ",
+      "rateCode": "EHYYY83E32UJWDAQ.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-TimedStorage-SIA-ByteHrs",
+        "Storage Class": "Infrequent Access",
+        "billingBytesPerUnit": "1073741824",
+        "minimumObjectBytes": "131072",
+        "minimumDurationDays": "30"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.757Z",
+      "quote": "$0.0125"
+    },
+    {
+      "id": "s3-glacier-instant-storage",
+      "value": 0.004,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-north-1/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.757Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "Storage",
+      "sku": "FWSQCG97MQQZCEHA",
+      "rateCode": "FWSQCG97MQQZCEHA.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-TimedStorage-GIR-ByteHrs",
+        "Storage Class": "Archive Instant Retrieval",
+        "billingBytesPerUnit": "1073741824",
+        "minimumObjectBytes": "131072",
+        "minimumDurationDays": "90"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.757Z",
+      "quote": "$0.004"
+    },
+    {
+      "id": "s3-glacier-flexible-storage",
+      "value": 0.0036,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-north-1/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.757Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonS3",
+      "product": "Storage",
+      "sku": "VKTE3TCC544QQDSG",
+      "rateCode": "VKTE3TCC544QQDSG.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-TimedStorage-GlacierByteHrs",
+        "Storage Class": "Archive",
+        "billingBytesPerUnit": "1073741824",
+        "standardMetadataBytes": "8192",
+        "archiveMetadataBytes": "32768",
+        "minimumDurationDays": "90"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.757Z",
+      "quote": "$0.0036"
+    },
+    {
+      "id": "alb-hours",
+      "value": 0.02394,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-north-1/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:19.547Z",
+      "effectiveAt": "2026-07-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSELB",
+      "product": "Load Balancer-Application",
+      "sku": "FY6N7P3VBQKBHGCC",
+      "rateCode": "FY6N7P3VBQKBHGCC.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-LoadBalancerUsage",
+        "operation": "LoadBalancing:Application"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 1,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": 1,
+        "mode": "ceil"
+      },
+      "retrievedAt": "2026-10-14T11:38:19.547Z",
+      "quote": "$0.02394"
+    },
+    {
+      "id": "alb-capacity",
+      "value": 0.0076,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-north-1/index.csv",
+      "unit": "LCU-Hrs",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:19.547Z",
+      "effectiveAt": "2026-07-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSELB",
+      "product": "Load Balancer-Application",
+      "sku": "3T8FA94JAYX6F8NU",
+      "rateCode": "3T8FA94JAYX6F8NU.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-LCUUsage",
+        "operation": "LoadBalancing:Application"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "LCU-Hrs"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:19.547Z",
+      "quote": "$0.0076"
+    },
+    {
+      "id": "nlb-hours",
+      "value": 0.02394,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-north-1/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:19.547Z",
+      "effectiveAt": "2026-07-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSELB",
+      "product": "Load Balancer-Network",
+      "sku": "TRECDNRTVX6SSW4U",
+      "rateCode": "TRECDNRTVX6SSW4U.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-LoadBalancerUsage",
+        "operation": "LoadBalancing:Network"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 1,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": 1,
+        "mode": "ceil"
+      },
+      "retrievedAt": "2026-10-14T11:38:19.547Z",
+      "quote": "$0.02394"
+    },
+    {
+      "id": "nlb-capacity",
+      "value": 0.0057,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-north-1/index.csv",
+      "unit": "LCU-Hrs",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:19.547Z",
+      "effectiveAt": "2026-07-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSELB",
+      "product": "Load Balancer-Network",
+      "sku": "5PCGKRZDNVWXYNVZ",
+      "rateCode": "5PCGKRZDNVWXYNVZ.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-LCUUsage",
+        "operation": "LoadBalancing:Network"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "LCU-Hrs"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:19.547Z",
+      "quote": "$0.0057"
+    },
+    {
+      "id": "ipv4-active",
+      "value": 0.005,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260917190528/eu-north-1/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:17.987Z",
+      "effectiveAt": "2026-08-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonVPC",
+      "product": "VPCPublicIPv4Address",
+      "sku": "H24SU884XW7MB5WC",
+      "rateCode": "H24SU884XW7MB5WC.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-PublicIPv4:InUseAddress"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.987Z",
+      "quote": "$0.005"
+    },
+    {
+      "id": "ipv4-idle",
+      "value": 0.005,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260917190528/eu-north-1/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:17.987Z",
+      "effectiveAt": "2026-08-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonVPC",
+      "product": "VPCPublicIPv4Address",
+      "sku": "2M69N79CPJC2EXZ3",
+      "rateCode": "2M69N79CPJC2EXZ3.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-PublicIPv4:IdleAddress"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.987Z",
+      "quote": "$0.005"
+    },
+    {
+      "id": "endpoint-hours",
+      "value": 0.0105,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260917190528/eu-north-1/index.csv",
+      "unit": "Hrs",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:17.987Z",
+      "effectiveAt": "2026-08-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonVPC",
+      "product": "VpcEndpoint",
+      "sku": "RQDW4F29PDT7RYTA",
+      "rateCode": "RQDW4F29PDT7RYTA.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-VpcEndpoint-Hours",
+        "operation": "VpcEndpoint"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Hrs"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.987Z",
+      "quote": "$0.01"
+    },
+    {
+      "id": "endpoint-data",
+      "value": 0.01,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260917190528/eu-north-1/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:17.987Z",
+      "effectiveAt": "2026-08-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonVPC",
+      "product": "VpcEndpoint",
+      "sku": "PUGDDHYKX88JEKYR",
+      "rateCode": "PUGDDHYKX88JEKYR.JRTCKXETXF.D7RZ6WCPVW",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-VpcEndpoint-Bytes",
+        "operation": "VpcEndpoint"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": 1048576.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.987Z",
+      "quote": "$0.01"
+    },
+    {
+      "id": "endpoint-data",
+      "value": 0.006,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260917190528/eu-north-1/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:17.987Z",
+      "effectiveAt": "2026-08-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonVPC",
+      "product": "VpcEndpoint",
+      "sku": "PUGDDHYKX88JEKYR",
+      "rateCode": "PUGDDHYKX88JEKYR.JRTCKXETXF.RBMR72YW69",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-VpcEndpoint-Bytes",
+        "operation": "VpcEndpoint"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 1048576.0,
+        "end": 5242880.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.987Z",
+      "quote": "$0.006"
+    },
+    {
+      "id": "endpoint-data",
+      "value": 0.004,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260917190528/eu-north-1/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:17.987Z",
+      "effectiveAt": "2026-08-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonVPC",
+      "product": "VpcEndpoint",
+      "sku": "PUGDDHYKX88JEKYR",
+      "rateCode": "PUGDDHYKX88JEKYR.JRTCKXETXF.SW9U2ZKBYX",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-VpcEndpoint-Bytes",
+        "operation": "VpcEndpoint"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 5242880.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:17.987Z",
+      "quote": "$0.004"
+    },
+    {
+      "id": "kms-key",
+      "value": 1.0,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awskms/20260911124601/eu-north-1/index.csv",
+      "unit": "Keys",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:19.758Z",
+      "effectiveAt": "2025-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "awskms",
+      "product": "Encryption Key",
+      "sku": "FJZGZWXK3EGTGQXE",
+      "rateCode": "FJZGZWXK3EGTGQXE.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "eu-north-1-KMS-Keys",
+        "proration": "hourly-active-key-storage"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 0,
+        "unit": "Keys"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "none"
+      },
+      "retrievedAt": "2026-10-14T11:38:19.758Z",
+      "quote": "$1"
+    },
+    {
+      "id": "kms-symmetric",
+      "value": 3e-06,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awskms/20260911124601/eu-north-1/index.csv",
+      "unit": "Requests",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:19.758Z",
+      "effectiveAt": "2025-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "awskms",
+      "product": "API Request",
+      "sku": "2S77H5MZU5BVWEXS",
+      "rateCode": "2S77H5MZU5BVWEXS.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "eu-north-1-KMS-Requests",
+        "quantityDimension": "physical-request"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": 0,
+        "unit": "Requests"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "none"
+      },
+      "retrievedAt": "2026-10-14T11:38:19.758Z",
+      "quote": "$0.03"
+    },
+    {
+      "id": "logs-ingest",
+      "value": 0.54,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-north-1/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.156Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Data Payload",
+      "sku": "2WXCZPMH3FF7XAAZ",
+      "rateCode": "2WXCZPMH3FF7XAAZ.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-DataProcessing-Bytes",
+        "operation": "PutLogEvents"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.156Z",
+      "quote": "$0.54"
+    },
+    {
+      "id": "logs-storage",
+      "value": 0.028,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-north-1/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.156Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Storage Snapshot",
+      "sku": "FC3W9RUMP83VDX52",
+      "rateCode": "FC3W9RUMP83VDX52.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-TimedStorage-ByteHrs"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.156Z",
+      "quote": "$0.028"
+    },
+    {
+      "id": "logs-query",
+      "value": 0.0054,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-north-1/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.156Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Data Payload",
+      "sku": "FJF4YG442XPSUXQT",
+      "rateCode": "FJF4YG442XPSUXQT.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-DataScanned-Bytes",
+        "operation": "StartQuery"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.156Z",
+      "quote": "$0.0054"
+    },
+    {
+      "id": "metrics",
+      "value": 0.3,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-north-1/index.csv",
+      "unit": "Metrics",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.156Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Metric",
+      "sku": "D8QWPGZQF8DEFNQD",
+      "rateCode": "D8QWPGZQF8DEFNQD.JRTCKXETXF.A6VD9GXV7W",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-CW:MetricMonitorUsage"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": 10000.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Metrics"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.156Z",
+      "quote": "$0.30"
+    },
+    {
+      "id": "metrics",
+      "value": 0.1,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-north-1/index.csv",
+      "unit": "Metrics",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.156Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Metric",
+      "sku": "D8QWPGZQF8DEFNQD",
+      "rateCode": "D8QWPGZQF8DEFNQD.JRTCKXETXF.FG3KHZ79QN",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-CW:MetricMonitorUsage"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 10000.0,
+        "end": 250000.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Metrics"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.156Z",
+      "quote": "$0.10"
+    },
+    {
+      "id": "metrics",
+      "value": 0.05,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-north-1/index.csv",
+      "unit": "Metrics",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.156Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Metric",
+      "sku": "D8QWPGZQF8DEFNQD",
+      "rateCode": "D8QWPGZQF8DEFNQD.JRTCKXETXF.95SDKRWVHH",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-CW:MetricMonitorUsage"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 250000.0,
+        "end": 1000000.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Metrics"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.156Z",
+      "quote": "$0.05"
+    },
+    {
+      "id": "metrics",
+      "value": 0.02,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-north-1/index.csv",
+      "unit": "Metrics",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.156Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Metric",
+      "sku": "D8QWPGZQF8DEFNQD",
+      "rateCode": "D8QWPGZQF8DEFNQD.JRTCKXETXF.VNJQCFJPS4",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-CW:MetricMonitorUsage"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 1000000.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Metrics"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.156Z",
+      "quote": "$0.02"
+    },
+    {
+      "id": "alarms",
+      "value": 0.1,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-north-1/index.csv",
+      "unit": "Alarms",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.156Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Alarm",
+      "sku": "XWA5C8TQDRYG6RN7",
+      "rateCode": "XWA5C8TQDRYG6RN7.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-CW:AlarmMonitorUsage"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Alarms"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.156Z",
+      "quote": "$0.10"
+    },
+    {
+      "id": "synthetic-checks",
+      "value": 0.0013,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-north-1/index.csv",
+      "unit": "Runs",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:15.156Z",
+      "effectiveAt": "2026-09-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonCloudWatch",
+      "product": "Canaries",
+      "sku": "GFBX78RFZ8TXPJ3N",
+      "rateCode": "GFBX78RFZ8TXPJ3N.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-CW:Canary-runs"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Runs"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:15.156Z",
+      "quote": "$0.0013"
+    },
+    {
+      "id": "eks-standard",
+      "value": 0.1,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEKS/20260928194255/eu-north-1/index.csv",
+      "unit": "Hours",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:16.810Z",
+      "effectiveAt": "2026-08-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonEKS",
+      "product": "Compute",
+      "sku": "WQ9KHG4EAH8T7T5B",
+      "rateCode": "WQ9KHG4EAH8T7T5B.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-AmazonEKS-Hours:perCluster",
+        "operation": "CreateOperation"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Hours"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:16.810Z",
+      "quote": "Amazon"
+    },
+    {
+      "id": "fargate-x86-cpu",
+      "value": 0.0445,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/eu-north-1/index.csv",
+      "unit": "hours",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:20.343Z",
+      "effectiveAt": "2026-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonECS",
+      "product": "Compute",
+      "sku": "WYRS7KX9WP3W2KQ5",
+      "rateCode": "WYRS7KX9WP3W2KQ5.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-Fargate-vCPU-Hours:perCPU",
+        "quantityDimension": "vCPU-hour",
+        "minimumDurationSeconds": "60",
+        "billingDurationRoundSeconds": "1"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "hours"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:20.343Z",
+      "quote": "AWS"
+    },
+    {
+      "id": "fargate-x86-memory",
+      "value": 0.0049,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/eu-north-1/index.csv",
+      "unit": "hours",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:20.343Z",
+      "effectiveAt": "2026-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonECS",
+      "product": "Compute",
+      "sku": "JG8R47GSTBBHHNX3",
+      "rateCode": "JG8R47GSTBBHHNX3.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-Fargate-GB-Hours",
+        "quantityDimension": "GB-hour",
+        "minimumDurationSeconds": "60",
+        "billingDurationRoundSeconds": "1"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "hours"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:20.343Z",
+      "quote": "AWS"
+    },
+    {
+      "id": "fargate-arm-cpu",
+      "value": 0.0356,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/eu-north-1/index.csv",
+      "unit": "hours",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:20.343Z",
+      "effectiveAt": "2026-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonECS",
+      "product": "Compute",
+      "sku": "4937C9K6EA45AVZV",
+      "rateCode": "4937C9K6EA45AVZV.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-Fargate-ARM-vCPU-Hours:perCPU",
+        "quantityDimension": "vCPU-hour",
+        "minimumDurationSeconds": "60",
+        "billingDurationRoundSeconds": "1"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "hours"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:20.343Z",
+      "quote": "AWS"
+    },
+    {
+      "id": "fargate-arm-memory",
+      "value": 0.00392,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/eu-north-1/index.csv",
+      "unit": "hours",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:20.343Z",
+      "effectiveAt": "2026-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonECS",
+      "product": "Compute",
+      "sku": "GAVHMPXDKCWCSGQC",
+      "rateCode": "GAVHMPXDKCWCSGQC.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-Fargate-ARM-GB-Hours",
+        "quantityDimension": "GB-hour",
+        "minimumDurationSeconds": "60",
+        "billingDurationRoundSeconds": "1"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "hours"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:20.343Z",
+      "quote": "AWS"
+    },
+    {
+      "id": "fargate-scratch",
+      "value": 0.000116,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/eu-north-1/index.csv",
+      "unit": "GB-Hours",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:20.343Z",
+      "effectiveAt": "2026-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonECS",
+      "product": "Compute",
+      "sku": "JYJXR3ZYFBC3VYF6",
+      "rateCode": "JYJXR3ZYFBC3VYF6.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-Fargate-EphemeralStorage-GB-Hours",
+        "quantityDimension": "GB-hour",
+        "minimumDurationSeconds": "60",
+        "billingDurationRoundSeconds": "1"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Hours"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:20.343Z",
+      "quote": "AWS"
+    },
+    {
+      "id": "secrets-storage",
+      "value": 0.4,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/20260911124610/eu-north-1/index.csv",
+      "unit": "Secrets",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:14.966Z",
+      "effectiveAt": "2025-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSSecretsManager",
+      "product": "Secret",
+      "sku": "CMSG8A9ZU2DMCFPE",
+      "rateCode": "CMSG8A9ZU2DMCFPE.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-AWSSecretsManager-Secrets"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Secrets"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:14.966Z",
+      "quote": "$0.40"
+    },
+    {
+      "id": "secrets-api",
+      "value": 5e-06,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/20260911124610/eu-north-1/index.csv",
+      "unit": "API Requests",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:14.966Z",
+      "effectiveAt": "2025-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSSecretsManager",
+      "product": "API Request",
+      "sku": "7VFSFM2SK8GV8DGV",
+      "rateCode": "7VFSFM2SK8GV8DGV.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-AWSSecretsManagerAPIRequest"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "API Requests"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:14.966Z",
+      "quote": "$0.05"
+    },
+    {
+      "id": "ecr-storage",
+      "value": 0.1,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECR/20260911124425/eu-north-1/index.csv",
+      "unit": "GB-Mo",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:19.130Z",
+      "effectiveAt": "2025-10-31T23:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonECR",
+      "product": "EC2 Container Registry",
+      "sku": "YZ2F5ZZ8QJ8MVBSF",
+      "rateCode": "YZ2F5ZZ8QJ8MVBSF.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-TimedStorage-ByteHrs"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB-Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:19.130Z",
+      "quote": "USD"
+    },
+    {
+      "id": "dns-zone",
+      "value": 0.5,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRoute53/20260911124504/index.csv",
+      "unit": "HostedZone",
+      "scope": "usage",
+      "region": "global",
+      "observedAt": "2026-10-14T11:42:40.353Z",
+      "effectiveAt": "2026-07-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRoute53",
+      "product": "DNS Zone",
+      "sku": "KVPGEJE88UW8S779",
+      "rateCode": "KVPGEJE88UW8S779.JRTCKXETXF.G2A93NZ7DT",
+      "attributes": {
+        "regionCode": "global",
+        "usageType": "HostedZone"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": 25.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "HostedZone"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:42:40.353Z",
+      "quote": "$0.50"
+    },
+    {
+      "id": "dns-zone",
+      "value": 0.1,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRoute53/20260911124504/index.csv",
+      "unit": "HostedZone",
+      "scope": "usage",
+      "region": "global",
+      "observedAt": "2026-10-14T11:42:40.353Z",
+      "effectiveAt": "2026-07-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRoute53",
+      "product": "DNS Zone",
+      "sku": "KVPGEJE88UW8S779",
+      "rateCode": "KVPGEJE88UW8S779.JRTCKXETXF.VYAP54KATQ",
+      "attributes": {
+        "regionCode": "global",
+        "usageType": "HostedZone"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 25.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "HostedZone"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:42:40.353Z",
+      "quote": "$0.10"
+    },
+    {
+      "id": "dns-query",
+      "value": 4e-07,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRoute53/20260911124504/index.csv",
+      "unit": "Queries",
+      "scope": "usage",
+      "region": "global",
+      "observedAt": "2026-10-14T11:42:40.353Z",
+      "effectiveAt": "2026-07-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRoute53",
+      "product": "DNS Query",
+      "sku": "JHRA6QBEDT9FZVT5",
+      "rateCode": "JHRA6QBEDT9FZVT5.JRTCKXETXF.ZN357FEBCK",
+      "attributes": {
+        "regionCode": "global",
+        "usageType": "DNS-Queries"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": 1000000000.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Queries"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:42:40.353Z",
+      "quote": "$0.40"
+    },
+    {
+      "id": "dns-query",
+      "value": 2e-07,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRoute53/20260911124504/index.csv",
+      "unit": "Queries",
+      "scope": "usage",
+      "region": "global",
+      "observedAt": "2026-10-14T11:42:40.353Z",
+      "effectiveAt": "2026-07-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRoute53",
+      "product": "DNS Query",
+      "sku": "JHRA6QBEDT9FZVT5",
+      "rateCode": "JHRA6QBEDT9FZVT5.JRTCKXETXF.AGD8ADSNTG",
+      "attributes": {
+        "regionCode": "global",
+        "usageType": "DNS-Queries"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 1000000000.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Queries"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:42:40.353Z",
+      "quote": "$0.20"
+    },
+    {
+      "id": "dns-healthcheck-external",
+      "value": 0.75,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRoute53/20260911124504/index.csv",
+      "unit": "Mo",
+      "scope": "usage",
+      "region": "global",
+      "observedAt": "2026-10-14T11:42:40.353Z",
+      "effectiveAt": "2026-07-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonRoute53",
+      "product": "DNS Health Check",
+      "sku": "EYUFFNGJ6B6EEPX3",
+      "rateCode": "EYUFFNGJ6B6EEPX3.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "global",
+        "usageType": "Health-Check-Non-AWS"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Mo"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:42:40.353Z",
+      "quote": "$0.75"
+    },
+    {
+      "id": "internet-egress",
+      "value": 0.09,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/20260916132208/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:42:40.971Z",
+      "effectiveAt": "2026-05-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSDataTransfer",
+      "product": "Data Transfer",
+      "sku": "ECTP3BJUBCHZH4H7",
+      "rateCode": "ECTP3BJUBCHZH4H7.JRTCKXETXF.Q3Z75P77EN",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-DataTransfer-Out-Bytes",
+        "From Region Code": "eu-south-2"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": 10240.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:42:40.971Z",
+      "quote": "$0.090"
+    },
+    {
+      "id": "internet-egress",
+      "value": 0.085,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/20260916132208/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:42:40.971Z",
+      "effectiveAt": "2026-05-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSDataTransfer",
+      "product": "Data Transfer",
+      "sku": "ECTP3BJUBCHZH4H7",
+      "rateCode": "ECTP3BJUBCHZH4H7.JRTCKXETXF.VF6T3GAUKQ",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-DataTransfer-Out-Bytes",
+        "From Region Code": "eu-south-2"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 10240.0,
+        "end": 51200.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:42:40.971Z",
+      "quote": "$0.085"
+    },
+    {
+      "id": "internet-egress",
+      "value": 0.07,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/20260916132208/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:42:40.971Z",
+      "effectiveAt": "2026-05-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSDataTransfer",
+      "product": "Data Transfer",
+      "sku": "ECTP3BJUBCHZH4H7",
+      "rateCode": "ECTP3BJUBCHZH4H7.JRTCKXETXF.N9EW5UVVPA",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-DataTransfer-Out-Bytes",
+        "From Region Code": "eu-south-2"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 51200.0,
+        "end": 153600.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:42:40.971Z",
+      "quote": "$0.070"
+    },
+    {
+      "id": "internet-egress",
+      "value": 0.05,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/20260916132208/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:42:40.971Z",
+      "effectiveAt": "2026-05-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSDataTransfer",
+      "product": "Data Transfer",
+      "sku": "ECTP3BJUBCHZH4H7",
+      "rateCode": "ECTP3BJUBCHZH4H7.JRTCKXETXF.GPHXDESFBB",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-DataTransfer-Out-Bytes",
+        "From Region Code": "eu-south-2"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 153600.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:42:40.971Z",
+      "quote": "$0.050"
+    },
+    {
+      "id": "internet-egress",
+      "value": 0.09,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/20260916132208/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:42:40.971Z",
+      "effectiveAt": "2026-05-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSDataTransfer",
+      "product": "Data Transfer",
+      "sku": "DRTM7T5YA7E492Z3",
+      "rateCode": "DRTM7T5YA7E492Z3.JRTCKXETXF.Q3Z75P77EN",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-DataTransfer-Out-Bytes",
+        "From Region Code": "eu-north-1"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": 10240.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:42:40.971Z",
+      "quote": "USD"
+    },
+    {
+      "id": "internet-egress",
+      "value": 0.085,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/20260916132208/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:42:40.971Z",
+      "effectiveAt": "2026-05-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSDataTransfer",
+      "product": "Data Transfer",
+      "sku": "DRTM7T5YA7E492Z3",
+      "rateCode": "DRTM7T5YA7E492Z3.JRTCKXETXF.VF6T3GAUKQ",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-DataTransfer-Out-Bytes",
+        "From Region Code": "eu-north-1"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 10240.0,
+        "end": 51200.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:42:40.971Z",
+      "quote": "USD"
+    },
+    {
+      "id": "internet-egress",
+      "value": 0.07,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/20260916132208/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:42:40.971Z",
+      "effectiveAt": "2026-05-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSDataTransfer",
+      "product": "Data Transfer",
+      "sku": "DRTM7T5YA7E492Z3",
+      "rateCode": "DRTM7T5YA7E492Z3.JRTCKXETXF.N9EW5UVVPA",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-DataTransfer-Out-Bytes",
+        "From Region Code": "eu-north-1"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 51200.0,
+        "end": 153600.0
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:42:40.971Z",
+      "quote": "USD"
+    },
+    {
+      "id": "internet-egress",
+      "value": 0.05,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/20260916132208/index.csv",
+      "unit": "GB",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:42:40.971Z",
+      "effectiveAt": "2026-05-31T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSDataTransfer",
+      "product": "Data Transfer",
+      "sku": "DRTM7T5YA7E492Z3",
+      "rateCode": "DRTM7T5YA7E492Z3.JRTCKXETXF.GPHXDESFBB",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-DataTransfer-Out-Bytes",
+        "From Region Code": "eu-north-1"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 153600.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "GB"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:42:40.971Z",
+      "quote": "USD"
+    },
+    {
+      "id": "audit-data-events",
+      "value": 1e-06,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSCloudTrail/20260911124531/index.csv",
+      "unit": "Events",
+      "scope": "usage",
+      "region": "eu-south-2",
+      "observedAt": "2026-10-14T11:42:42.294Z",
+      "effectiveAt": "2026-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSCloudTrail",
+      "product": "Management Tools - AWS CloudTrail Data Events Recorded",
+      "sku": "RRF5VWQUSVYYRK78",
+      "rateCode": "RRF5VWQUSVYYRK78.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-south-2",
+        "usageType": "EUS2-DataEventsRecorded"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Events"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:42:42.294Z",
+      "quote": "USD1.0E-6"
+    },
+    {
+      "id": "audit-data-events",
+      "value": 1e-06,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSCloudTrail/20260911124531/index.csv",
+      "unit": "Events",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:42:42.294Z",
+      "effectiveAt": "2026-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AWSCloudTrail",
+      "product": "Management Tools - AWS CloudTrail Data Events Recorded",
+      "sku": "DZJQD2RFD5B93PYJ",
+      "rateCode": "DZJQD2RFD5B93PYJ.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-DataEventsRecorded"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Events"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:42:42.294Z",
+      "quote": "0.000001"
+    },
+    {
+      "id": "ses-messages",
+      "value": 0.0001,
+      "status": "list-priced",
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonSES/20260911124507/eu-north-1/index.csv",
+      "unit": "Count",
+      "scope": "usage",
+      "region": "eu-north-1",
+      "observedAt": "2026-10-14T11:38:19.004Z",
+      "effectiveAt": "2026-06-30T22:00:00.000Z",
+      "bounds": null,
+      "reason": null,
+      "service": "AmazonSES",
+      "product": "Sending Email",
+      "sku": "455CU3DN9W2Z5R7U",
+      "rateCode": "455CU3DN9W2Z5R7U.JRTCKXETXF.6YS6EN2CT7",
+      "attributes": {
+        "regionCode": "eu-north-1",
+        "usageType": "EUN1-Recipients",
+        "operation": "Send"
+      },
+      "currency": "USD",
+      "tier": {
+        "begin": 0.0,
+        "end": null
+      },
+      "minimum": {
+        "quantity": null,
+        "unit": "Count"
+      },
+      "rounding": {
+        "quantum": null,
+        "mode": "unknown"
+      },
+      "retrievedAt": "2026-10-14T11:38:19.004Z",
+      "quote": "USD0.0001"
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-south-2/index.csv",
+      "retrievedAt": "2026-10-14T11:38:17.931342+00:00",
+      "service": "AmazonEC2",
+      "region": "eu-south-2",
+      "sha256": "c2cc3128e734493aec7f718ea67bf7d52a490e132bdb6c15ea845bdc6b0407fe"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-south-2/index.csv",
+      "retrievedAt": "2026-10-14T11:38:18.603990+00:00",
+      "service": "AmazonRDS",
+      "region": "eu-south-2",
+      "sha256": "af42d4ef8c061aab5d89cb3dc1c8dc4c803ec893594c1c58ec3a9185e62c1263"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-south-2/index.csv",
+      "retrievedAt": "2026-10-14T11:38:16.035019+00:00",
+      "service": "AmazonS3",
+      "region": "eu-south-2",
+      "sha256": "4baccc4488c6b4347471beba2eb2add448eb998c1583657869243ca3ad1bfca9"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-south-2/index.csv",
+      "retrievedAt": "2026-10-14T11:38:19.460201+00:00",
+      "service": "AWSELB",
+      "region": "eu-south-2",
+      "sha256": "d3114d0b67d4462779e376f9119f0dd87c6bcb9bfd8dbb4a481e793e4a267252"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260917190528/eu-south-2/index.csv",
+      "retrievedAt": "2026-10-14T11:38:17.376027+00:00",
+      "service": "AmazonVPC",
+      "region": "eu-south-2",
+      "sha256": "1e58a153997bc859752435656841a71d89486a11f28d7bc97a25d14b847f65f2"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awskms/20260911124601/eu-south-2/index.csv",
+      "retrievedAt": "2026-10-14T11:38:18.352224+00:00",
+      "service": "awskms",
+      "region": "eu-south-2",
+      "sha256": "ddf8444dedfcc03c6610ab976223f6d500a026db2925ab606158422969cd550e"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-south-2/index.csv",
+      "retrievedAt": "2026-10-14T11:38:15.149966+00:00",
+      "service": "AmazonCloudWatch",
+      "region": "eu-south-2",
+      "sha256": "665bdbf8578b10c0752eed570504c79bcac52f44402bdb712c3d9488f8f8a2cc"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEKS/20260928194255/eu-south-2/index.csv",
+      "retrievedAt": "2026-10-14T11:38:17.461934+00:00",
+      "service": "AmazonEKS",
+      "region": "eu-south-2",
+      "sha256": "752ddb9bb6e3086758d6c25d12800ef15da024b5dfcf337a6214e974e2969257"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/eu-south-2/index.csv",
+      "retrievedAt": "2026-10-14T11:38:20.229790+00:00",
+      "service": "AmazonECS",
+      "region": "eu-south-2",
+      "sha256": "ad210ce1fa1b3630e90c134fa5cbd385ad87bda21fb25c6416772a3da3c414c2"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/20260911124610/eu-south-2/index.csv",
+      "retrievedAt": "2026-10-14T11:38:14.966813+00:00",
+      "service": "AWSSecretsManager",
+      "region": "eu-south-2",
+      "sha256": "9b061a4443d25a0a1de00d7b727478b87cff5fbcb6e3748b03320ebee69126aa"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECR/20260911124425/eu-south-2/index.csv",
+      "retrievedAt": "2026-10-14T11:38:19.262561+00:00",
+      "service": "AmazonECR",
+      "region": "eu-south-2",
+      "sha256": "ad3e282db1b10236b94a2c16828758e2279962d8bbfe71ca726819e3d8dae149"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261012193925/eu-north-1/index.csv",
+      "retrievedAt": "2026-10-14T11:38:18.459997+00:00",
+      "service": "AmazonEC2",
+      "region": "eu-north-1",
+      "sha256": "15c89db302e7c1d8bb1877746fd9b048dcc6607c0bd89785c345b35f57fac140"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261006224050/eu-north-1/index.csv",
+      "retrievedAt": "2026-10-14T11:38:18.737615+00:00",
+      "service": "AmazonRDS",
+      "region": "eu-north-1",
+      "sha256": "18551f191c53e8767063774eee6bda170ed40efd096e1d3d96d2e3826c378233"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261012231102/eu-north-1/index.csv",
+      "retrievedAt": "2026-10-14T11:38:15.757189+00:00",
+      "service": "AmazonS3",
+      "region": "eu-north-1",
+      "sha256": "131714a9fcc700f5554010c4be83b487bcec8994364461c2160a4108b4eacc8d"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-north-1/index.csv",
+      "retrievedAt": "2026-10-14T11:38:19.547733+00:00",
+      "service": "AWSELB",
+      "region": "eu-north-1",
+      "sha256": "942ec930db2bd46a0565327a20e936a6c95ba2e57c14c3d8705d50be4d2d24c0"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260917190528/eu-north-1/index.csv",
+      "retrievedAt": "2026-10-14T11:38:17.987109+00:00",
+      "service": "AmazonVPC",
+      "region": "eu-north-1",
+      "sha256": "30520f184a6bd71263221d8ff00d87482482e7a67be27dd839bbe150710c8667"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awskms/20260911124601/eu-north-1/index.csv",
+      "retrievedAt": "2026-10-14T11:38:19.758872+00:00",
+      "service": "awskms",
+      "region": "eu-north-1",
+      "sha256": "ce91797aa0dc8365dad7d9f4db4165cf4606b59a350a75f2287da7423eb38d33"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-north-1/index.csv",
+      "retrievedAt": "2026-10-14T11:38:15.156230+00:00",
+      "service": "AmazonCloudWatch",
+      "region": "eu-north-1",
+      "sha256": "54d04d3678639013568dd3aa690a601f90c47958e962dd3984b641a809449424"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEKS/20260928194255/eu-north-1/index.csv",
+      "retrievedAt": "2026-10-14T11:38:16.810033+00:00",
+      "service": "AmazonEKS",
+      "region": "eu-north-1",
+      "sha256": "ff398a32c2df70e63482f3b3efb996747fb3e82ad27fef9e2bd9e4c7b9553e85"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/eu-north-1/index.csv",
+      "retrievedAt": "2026-10-14T11:38:20.343241+00:00",
+      "service": "AmazonECS",
+      "region": "eu-north-1",
+      "sha256": "54861f6fd0c9ec2650098304abac06cd340a1a9c4f6f6d981a1f2d75aa2592f3"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/20260911124610/eu-north-1/index.csv",
+      "retrievedAt": "2026-10-14T11:38:14.966153+00:00",
+      "service": "AWSSecretsManager",
+      "region": "eu-north-1",
+      "sha256": "7d25918930d3101597f1cbbc9b71964d266973a2891757f9d9464b230058c58e"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECR/20260911124425/eu-north-1/index.csv",
+      "retrievedAt": "2026-10-14T11:38:19.130456+00:00",
+      "service": "AmazonECR",
+      "region": "eu-north-1",
+      "sha256": "d8c29fe13de4312d5fbe55f41ceaea1634550b7df61c4bb0d270d92b89faaf2b"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRoute53/20260911124504/index.csv",
+      "retrievedAt": "2026-10-14T11:42:40.353229+00:00",
+      "service": "AmazonRoute53",
+      "region": "global",
+      "sha256": "11331ecaaff9ba9bba35ff0903848e9382e50f16ee66ce25cd0be55da35da6a9"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/20260916132208/index.csv",
+      "retrievedAt": "2026-10-14T11:42:40.971261+00:00",
+      "service": "AWSDataTransfer",
+      "region": "global",
+      "sha256": "d93ff9fe1862d3d3c4e7cb864eadb381b16b6a1f941675299b7f0a9dfd6ef6fe"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSCloudTrail/20260911124531/index.csv",
+      "retrievedAt": "2026-10-14T11:42:42.294665+00:00",
+      "service": "AWSCloudTrail",
+      "region": "global",
+      "sha256": "7b9ccfa72cee8a1d1c94ad8459a51c50d99d3710e1e7db5bc2cc641866d85602"
+    },
+    {
+      "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonSES/20260911124507/eu-north-1/index.csv",
+      "retrievedAt": "2026-10-14T11:38:19.004204+00:00",
+      "service": "AmazonSES",
+      "region": "eu-north-1",
+      "sha256": "10531f7d5f47fd32131c46232f0c8f1596f441bc501c58f602a54ab331fc1573"
+    }
+  ],
+  "terms": [
+    {
+      "source": "https://aws.amazon.com/s3/pricing/",
+      "quote": "Amazon S3 storage usage is calculated in binary gigabytes (GB)",
+      "retrievedAt": "2026-10-14T11:51:20.888Z",
+      "rules": [
+        "S3 billed GB = 1073741824 bytes.",
+        "IA minimum: 128 KiB/object and 30 days. Glacier Instant: 128 KiB and 90 days. Flexible: 40 KiB metadata and 90 days. Deep Archive: 40 KiB metadata and 180 days.",
+        "DELETE/CANCEL have no request fee; list/HEAD/multipart/retrieval need individual mappings.",
+        "Restore staging, noncurrent versions and unfinished parts also occupy storage."
+      ]
+    },
+    {
+      "source": "https://aws.amazon.com/kms/pricing/",
+      "quote": "costs $1/month (prorated hourly)",
+      "retrievedAt": "2026-10-14T11:51:20.888Z",
+      "rules": [
+        "PendingDeletion has no key-storage fee unless deletion is cancelled.",
+        "First two rotations add storage cost; later rotations are capped.",
+        "The request allowance is shared globally and kept separate from gross usage."
+      ]
+    },
+    {
+      "source": "https://aws.amazon.com/ec2/pricing/on-demand/",
+      "quote": "minimum of 60 seconds",
+      "retrievedAt": "2026-10-14T11:51:20.888Z",
+      "rules": [
+        "Selected Linux on-demand instance billed per second. Disks, IPv4 and CPU credits are separate.",
+        "Internet tiers aggregate across named services/regions; an account-wide allowance must not be applied per venue."
+      ]
+    },
+    {
+      "source": "https://aws.amazon.com/rds/postgresql/pricing/",
+      "quote": "one-second increments with a 10-minute minimum charge",
+      "retrievedAt": "2026-10-14T11:51:20.888Z",
+      "rules": [
+        "Selected instance price excludes allocated disk, IOPS/throughput, excess backup storage, transfer and extended support.",
+        "Multi-AZ rate already covers the named deployment; do not multiply it as another standby."
+      ]
+    },
+    {
+      "source": "https://aws.amazon.com/vpc/pricing/",
+      "quote": "Each partial NAT Gateway-hour consumed is billed as a full hour.",
+      "retrievedAt": "2026-10-14T11:51:20.888Z",
+      "rules": [
+        "NAT processing and internet transfer are separate charges for a mapped traffic path.",
+        "Gateway-type S3 endpoints have no hourly or processing fee; interface endpoints are separate."
+      ]
+    },
+    {
+      "source": "https://aws.amazon.com/fargate/pricing/",
+      "quote": "Pricing is calculated per second with a 1-minute minimum.",
+      "retrievedAt": "2026-10-14T11:51:20.888Z",
+      "rules": [
+        "Billable time starts at image download. CPU and memory quantities are requested resources.",
+        "20 GB scratch included; price only excess. No proof that the gateway can run in this packaging."
+      ]
+    },
+    {
+      "source": "https://aws.amazon.com/route53/pricing/",
+      "quote": "not prorated for partial months",
+      "retrievedAt": "2026-10-14T11:51:20.888Z",
+      "rules": [
+        "Hosted zones are global. Monthly creation charges are not hourly.",
+        "No-charge alias queries require an eligible AWS target; do not apply to arbitrary venue records."
+      ]
+    },
+    {
+      "source": "https://aws.amazon.com/ecs/pricing/",
+      "quote": "There is no additional charge for Amazon ECS orchestration.",
+      "retrievedAt": "2026-10-14T11:51:20.888Z",
+      "rules": [
+        "Ordinary ECS EC2/Fargate incur underlying-resource charges. Managed Instances add a management fee."
+      ]
+    },
+    {
+      "source": "https://aws.amazon.com/iam/faqs/",
+      "quote": "no additional charge",
+      "retrievedAt": "2026-10-14T11:54:19.291Z",
+      "rules": [
+        "IAM credentials do not remove the costs of the resources they access."
+      ]
+    },
+    {
+      "source": "https://aws.amazon.com/aws-cost-management/aws-cost-explorer/pricing/",
+      "quote": "$0.01",
+      "retrievedAt": "2026-10-14T11:51:20.888Z",
+      "rules": [
+        "Each primary-billing-view physical request costs USD0.01; custom views charge per source. Count retries/pages."
+      ]
+    },
+    {
+      "source": "https://aws.amazon.com/elasticloadbalancing/pricing/",
+      "retrievedAt": "2026-10-14T11:54:19.291Z",
+      "quote": "Each partial Application Load Balancer hour used is billed as a full hour.",
+      "rules": [
+        "ALB/NLB hourly charge rounds partial hours up. Capacity units use the limiting dimensions, measured per minute.",
+        "IPv4 and directional transfer remain separate."
+      ]
+    }
+  ],
+  "unavailable": [
+    {
+      "service": "AmazonSES",
+      "region": "eu-south-2",
+      "status": "unknown",
+      "reason": "No regional Price List entry; current SES endpoint table also omits Spain.",
+      "source": "https://docs.aws.amazon.com/general/latest/gr/ses.html"
+    }
+  ],
+  "gaps": [
+    "Alternative-class retrieval/transition, cross-zone transfer, WAF, support, domain renewal, Parameter Store, additional orchestration modes and external API fees remain unpriced.",
+    "Non-S3 GB byte definitions need explicit sources before conversion.",
+    "Runtime/version availability and instance capacity are unvalidated.",
+    "SES attachment transfer dimensions remain unpriced; Stockholm SES is a candidate, with no provider choice implied.",
+    "S3 request failure billing and transfer paths need operation-specific mappings before the live preflight.",
+    "No discount, free allowance, credit, VAT, foreign exchange or measured workload is included in these gross rates.",
+    "Fargate one-minute minimum applies to task duration, multiplied by requested CPU/memory; scalar usage minimum/rounding stay unknown until Task 2 maps durations."
+  ],
+  "external": [
+    {
+      "id": "external-mail",
+      "value": null,
+      "status": "unknown",
+      "unit": "USD/month",
+      "source": null,
+      "reason": "Provider not selected."
+    },
+    {
+      "id": "github-linux-minute",
+      "value": 0.006,
+      "status": "list-priced",
+      "unit": "USD/minute",
+      "scope": "external",
+      "region": "global",
+      "source": "https://docs.github.com/en/billing/reference/actions-runner-pricing",
+      "observedAt": "2026-10-14T11:51:20.888Z",
+      "quote": "Linux 2-core (x64)",
+      "reason": "Standard Linux paid minutes before included allowances; monthly quantity unknown."
+    },
+    {
+      "id": "fiscal-external-api",
+      "value": null,
+      "status": "unknown",
+      "unit": "USD/call",
+      "scope": "external",
+      "region": "global",
+      "source": null,
+      "reason": "Cloud registry uses shared compute/database; no external API price has been established."
+    }
+  ],
+  "accounting": {
+    "grossBeforeAllowancesCreditsTax": true,
+    "currency": "USD",
+    "planningHoursPerMonth": {
+      "value": 730,
+      "status": "assumed"
+    },
+    "allowancesApplied": false,
+    "creditsApplied": false,
+    "tax": null,
+    "measurementsAvailable": false
+  },
+  "pricingPages": [
+    {
+      "source": "https://aws.amazon.com/ec2/pricing/on-demand/",
+      "retrievedAt": "2026-10-14T11:54:19.291Z"
+    },
+    {
+      "source": "https://aws.amazon.com/rds/postgresql/pricing/",
+      "retrievedAt": "2026-10-14T11:54:19.291Z"
+    },
+    {
+      "source": "https://aws.amazon.com/s3/pricing/",
+      "retrievedAt": "2026-10-14T11:54:19.291Z"
+    },
+    {
+      "source": "https://aws.amazon.com/elasticloadbalancing/pricing/",
+      "retrievedAt": "2026-10-14T11:54:19.291Z"
+    },
+    {
+      "source": "https://aws.amazon.com/vpc/pricing/",
+      "retrievedAt": "2026-10-14T11:54:19.291Z"
+    },
+    {
+      "source": "https://aws.amazon.com/route53/pricing/",
+      "retrievedAt": "2026-10-14T11:54:19.291Z"
+    },
+    {
+      "source": "https://aws.amazon.com/kms/pricing/",
+      "retrievedAt": "2026-10-14T11:54:19.291Z"
+    },
+    {
+      "source": "https://aws.amazon.com/cloudwatch/pricing/",
+      "retrievedAt": "2026-10-14T11:54:19.291Z"
+    },
+    {
+      "source": "https://aws.amazon.com/eks/pricing/",
+      "retrievedAt": "2026-10-14T11:54:19.291Z"
+    },
+    {
+      "source": "https://aws.amazon.com/ecs/pricing/",
+      "retrievedAt": "2026-10-14T11:54:19.291Z"
+    },
+    {
+      "source": "https://aws.amazon.com/fargate/pricing/",
+      "retrievedAt": "2026-10-14T11:54:19.291Z"
+    },
+    {
+      "source": "https://aws.amazon.com/secrets-manager/pricing/",
+      "retrievedAt": "2026-10-14T11:54:19.291Z"
+    },
+    {
+      "source": "https://aws.amazon.com/ecr/pricing/",
+      "retrievedAt": "2026-10-14T11:54:19.291Z"
+    },
+    {
+      "source": "https://aws.amazon.com/ses/pricing/",
+      "retrievedAt": "2026-10-14T11:54:19.291Z"
+    }
+  ]
+}

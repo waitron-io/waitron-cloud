@@ -51,9 +51,9 @@ function fixture(run) {
 
 test('unrelated package changes omit all audited receipts and retain actual package and type checks', () => {
   fixture(({git, base, head, select}) => {
-    assert.deepEqual(select().receipts, []);
+    assert.deepEqual(select().receipts, ['test:cloud-cost']);
     const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git, () => {throw Error('No reuse');});
-    assert.deepEqual(plan.receipts, []);
+    assert.deepEqual(plan.receipts, ['test:cloud-cost']);
     assert.equal(plan.packages.length, 16);
     assert.equal(plan.typecheck, true);
     assert.match(plan.reason, /omitted local.stack receipt.*both revisions/i);

@@ -1,0 +1,203 @@
+{
+  "streamTiming": {
+    "cloudRevision": "67774bcbe85283c614b1b64a3cdcee585531629d",
+    "phases": [
+      {
+        "phase": "startup",
+        "elapsedSeconds": 5.136279961
+      },
+      {
+        "phase": "workload",
+        "elapsedSeconds": 54.181285149000004
+      },
+      {
+        "phase": "idle",
+        "elapsedSeconds": 1200.008791962
+      },
+      {
+        "phase": "verification",
+        "elapsedSeconds": 0.020755958999870927
+      },
+      {
+        "phase": "restore",
+        "elapsedSeconds": 0.11534016600012365
+      }
+    ],
+    "runId": "48e38340-d882-4709-89ad-b83462b69e4e"
+  },
+  "ownerScenario": "browser",
+  "serviceScenarios": {
+    "mail-retry-fiscal": "f559fb09-d163-45cd-834e-195640ab5aa6",
+    "signup-recovery": "2cbf0b33-e88a-40fb-a5f8-b19477fc8c8c"
+  },
+  "assumptions": {
+    "orders-per-day": {
+      "id": "orders-per-day",
+      "value": 207,
+      "unit": "count",
+      "status": "assumed",
+      "source": "assumption:workload-assumption",
+      "scope": "venue",
+      "region": "local",
+      "observedAt": null,
+      "effectiveAt": null,
+      "bounds": {
+        "low": 100,
+        "base": 207,
+        "high": 414,
+        "assumption": "workload-assumption"
+      },
+      "reason": "workload-assumption"
+    },
+    "days-per-month": {
+      "id": "days-per-month",
+      "value": 30,
+      "unit": "count",
+      "status": "assumed",
+      "source": "assumption:workload-assumption",
+      "scope": "venue",
+      "region": "local",
+      "observedAt": null,
+      "effectiveAt": null,
+      "bounds": {
+        "low": 28,
+        "base": 30,
+        "high": 31,
+        "assumption": "workload-assumption"
+      },
+      "reason": "workload-assumption"
+    },
+    "startups-per-day": {
+      "id": "startups-per-day",
+      "value": 1,
+      "unit": "count",
+      "status": "assumed",
+      "source": "assumption:workload-assumption",
+      "scope": "venue",
+      "region": "local",
+      "observedAt": null,
+      "effectiveAt": null,
+      "bounds": {
+        "low": 0,
+        "base": 1,
+        "high": 2,
+        "assumption": "workload-assumption"
+      },
+      "reason": "workload-assumption"
+    },
+    "idle-seconds-per-day": {
+      "id": "idle-seconds-per-day",
+      "value": 32228.364,
+      "unit": "seconds",
+      "status": "assumed",
+      "source": "assumption:workload-assumption",
+      "scope": "venue",
+      "region": "local",
+      "observedAt": null,
+      "effectiveAt": null,
+      "bounds": {
+        "low": 0,
+        "base": 32228.364,
+        "high": 86400,
+        "assumption": "workload-assumption"
+      },
+      "reason": "workload-assumption"
+    },
+    "workload-cadence-factor": {
+      "id": "workload-cadence-factor",
+      "value": 1,
+      "unit": "count",
+      "status": "assumed",
+      "source": "assumption:workload-assumption",
+      "scope": "venue",
+      "region": "local",
+      "observedAt": null,
+      "effectiveAt": null,
+      "bounds": {
+        "low": 1,
+        "base": 1,
+        "high": 1000,
+        "assumption": "workload-assumption"
+      },
+      "reason": "workload-assumption"
+    },
+    "stream-restores-per-month": {
+      "id": "stream-restores-per-month",
+      "value": null,
+      "unit": "count",
+      "status": "unknown",
+      "source": null,
+      "scope": "venue",
+      "region": "local",
+      "observedAt": null,
+      "effectiveAt": null,
+      "bounds": null,
+      "reason": "not-measured"
+    },
+    "owner-sessions-per-month": {
+      "id": "owner-sessions-per-month",
+      "value": null,
+      "unit": "count",
+      "status": "unknown",
+      "source": null,
+      "scope": "venue",
+      "region": "local",
+      "observedAt": null,
+      "effectiveAt": null,
+      "bounds": null,
+      "reason": "not-measured"
+    },
+    "public-api-runs-per-month": {
+      "id": "public-api-runs-per-month",
+      "value": null,
+      "unit": "count",
+      "status": "unknown",
+      "source": null,
+      "scope": "venue",
+      "region": "local",
+      "observedAt": null,
+      "effectiveAt": null,
+      "bounds": null,
+      "reason": "not-measured"
+    },
+    "mail-retry-fiscal-runs-per-month": {
+      "id": "mail-retry-fiscal-runs-per-month",
+      "value": null,
+      "unit": "count",
+      "status": "unknown",
+      "source": null,
+      "scope": "venue",
+      "region": "local",
+      "observedAt": null,
+      "effectiveAt": null,
+      "bounds": null,
+      "reason": "not-measured"
+    },
+    "signup-recovery-runs-per-month": {
+      "id": "signup-recovery-runs-per-month",
+      "value": null,
+      "unit": "count",
+      "status": "unknown",
+      "source": null,
+      "scope": "venue",
+      "region": "local",
+      "observedAt": null,
+      "effectiveAt": null,
+      "bounds": null,
+      "reason": "not-measured"
+    },
+    "archive-replay-runs-per-month": {
+      "id": "archive-replay-runs-per-month",
+      "value": null,
+      "unit": "count",
+      "status": "unknown",
+      "source": null,
+      "scope": "venue",
+      "region": "local",
+      "observedAt": null,
+      "effectiveAt": null,
+      "bounds": null,
+      "reason": "not-measured"
+    }
+  }
+}

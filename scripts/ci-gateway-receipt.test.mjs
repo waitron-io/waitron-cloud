@@ -193,9 +193,9 @@ test('changed public gate and fallback page select gateway checks in actual pack
   }
 });
 
-test('combined audits preserve three earlier omissions and retain only local-stack', () => {
+test('combined audits preserve three omissions and retain local-stack plus cost', () => {
   fixture(({select}) => {
-    assert.deepEqual(select().receipts, ['test:local-stack']);
+    assert.deepEqual(select().receipts, ['test:local-stack', 'test:cloud-cost']);
   }, root => {
     writeFileSync(join(root, 'README.md'), '# Gateway fixture\n');
     for (const path of [

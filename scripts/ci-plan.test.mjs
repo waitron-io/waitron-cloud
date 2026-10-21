@@ -17,7 +17,7 @@ test('every direct, multi-commit, unknown and failed-evidence push falls back to
   for (const event of [{}, {before,commits:[{},{}]}, {before,commits:[{}],forced:true}, {before,commits:[{}]}]) {
     const plan=createPlan(event,{sha:head,repository,branch:'main'},workspace,()=>before,api);
     assert.equal(plan.packages.length,17);
-    assert.equal(plan.receipts.length,5);
+    assert.equal(plan.receipts.length,6);
     assert.equal(plan.reuse,null);
   }
   const plan=createPlan({pull_request:{head:{sha:head},base:{sha:base}}},{sha:head,repository,branch:'main'},workspace,()=>{throw Error('missing base');},api);
@@ -34,7 +34,7 @@ test('every main push runs full work even when equal-tree PR evidence is green',
     const plan=createPlan(event,{sha:head,repository,branch:'main'},workspace,git,observed);
     assert.equal(plan.reuse,null);assert.equal(plan.packages.length,17);
     assert.equal(plan.typecheck,true);
-    assert.deepEqual(plan.receipts,['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt']);
+    assert.deepEqual(plan.receipts,['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt','test:cloud-cost']);
   }
   assert.equal(apiCalls, 0, 'Main cannot depend on PR API availability');
 });

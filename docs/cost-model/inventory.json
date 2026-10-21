@@ -1,0 +1,1563 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-10-18T04:13:01.408Z",
+  "cloudRevision": "488eba20eacd6138a9d36fd58a6d43ed42e6e6f6",
+  "defaultRegion": "eu-south-2",
+  "comparisonRegion": "eu-north-1",
+  "scope": "Initial remote access and backups; optional product candidates excluded.",
+  "runtimeRoles": [
+    {
+      "role": "bootstrap",
+      "inventoryId": "provision-cleanup",
+      "reason": "one-shot private-config setup"
+    },
+    {
+      "role": "postgres",
+      "inventoryId": "management-postgres",
+      "reason": "durable management database"
+    },
+    {
+      "role": "mailpit",
+      "inventoryId": "mail",
+      "reason": "local capture fixture only; production needs chosen provider"
+    },
+    {
+      "role": "migrate",
+      "inventoryId": "provision-cleanup",
+      "reason": "one-shot migration job"
+    },
+    {
+      "role": "storage",
+      "inventoryId": "continuous-stream",
+      "reason": "local S3-compatible fixture; candidate production S3"
+    },
+    {
+      "role": "account",
+      "inventoryId": "control-runtime",
+      "reason": "account API and static portal"
+    },
+    {
+      "role": "email-worker",
+      "inventoryId": "control-runtime",
+      "reason": "durable account email delivery"
+    },
+    {
+      "role": "monitor-worker",
+      "inventoryId": "control-runtime",
+      "reason": "venue incidents/reminders and captured notices"
+    },
+    {
+      "role": "usage-reconciler",
+      "inventoryId": "control-runtime",
+      "reason": "scheduled durable consumption accounting"
+    },
+    {
+      "role": "operations-collector",
+      "inventoryId": "metrics-alerts",
+      "reason": "optional current-state collector; history/external failure detection absent"
+    },
+    {
+      "role": "remote-probe",
+      "inventoryId": "control-runtime",
+      "reason": "representative gateway checks"
+    },
+    {
+      "role": "gateway-manifest",
+      "inventoryId": "control-runtime",
+      "reason": "signed gateway configuration producer"
+    },
+    {
+      "role": "gateway",
+      "inventoryId": "cell-gateway",
+      "reason": "public HTTPS/staff TLS/WireGuard runtime"
+    },
+    {
+      "role": "backup-worker",
+      "inventoryId": "verification",
+      "reason": "optional archive capture/verifier orchestration"
+    },
+    {
+      "role": "remote-reconciler",
+      "inventoryId": "control-runtime",
+      "reason": "optional DNS/certificate reconciliation"
+    },
+    {
+      "role": "translation-worker",
+      "inventoryId": "translation",
+      "reason": "optional translation profile; disabled in the initial remote-access and backup scenario"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "illustrative-single-zone",
+      "status": "assumed",
+      "reason": "Illustration only; no availability promise, capacity proof or deployment choice.",
+      "controlCompute": "ec2-t3-small",
+      "controlReplicas": 1,
+      "gatewayCompute": "ec2-t3-small",
+      "gatewaysPerCell": 1,
+      "zones": 1,
+      "database": "rds-t4g-micro-single",
+      "warmCells": {
+        "value": 0,
+        "status": "assumed",
+        "bounds": {
+          "low": 0,
+          "base": 0,
+          "high": 1
+        }
+      },
+      "diskGB": {
+        "value": null,
+        "status": "unknown"
+      },
+      "databaseStorageGB": {
+        "value": null,
+        "status": "unknown"
+      },
+      "capacity": {
+        "value": null,
+        "status": "unknown",
+        "reason": "No AWS venue/concurrency capacity measurement."
+      },
+      "databaseCapacitySteps": {
+        "value": null,
+        "status": "unknown"
+      },
+      "privateEgress": {
+        "value": null,
+        "status": "unknown"
+      },
+      "monthlyHours": {
+        "value": 730,
+        "status": "assumed"
+      }
+    },
+    {
+      "id": "illustrative-redundant",
+      "status": "assumed",
+      "reason": "Illustration only; no availability promise, capacity proof or deployment choice.",
+      "controlCompute": "ec2-t3-small",
+      "controlReplicas": 2,
+      "gatewayCompute": "ec2-t3-small",
+      "gatewaysPerCell": 2,
+      "zones": 2,
+      "database": "rds-t4g-micro-multi",
+      "warmCells": {
+        "value": 0,
+        "status": "assumed",
+        "bounds": {
+          "low": 0,
+          "base": 0,
+          "high": 1
+        }
+      },
+      "diskGB": {
+        "value": null,
+        "status": "unknown"
+      },
+      "databaseStorageGB": {
+        "value": null,
+        "status": "unknown"
+      },
+      "capacity": {
+        "value": null,
+        "status": "unknown",
+        "reason": "No AWS venue/concurrency capacity measurement."
+      },
+      "databaseCapacitySteps": {
+        "value": null,
+        "status": "unknown"
+      },
+      "privateEgress": {
+        "value": null,
+        "status": "unknown"
+      },
+      "monthlyHours": {
+        "value": 730,
+        "status": "assumed"
+      }
+    }
+  ],
+  "rows": [
+    {
+      "id": "control-runtime",
+      "capability": "control-plane",
+      "scope": "platform",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "API and worker replica-hours",
+      "dimensions": [
+        "CPU",
+        "RAM",
+        "disk",
+        "architecture",
+        "operating-system",
+        "image-pulls"
+      ],
+      "priceIds": [
+        "ec2-t3-small",
+        "fargate-x86-cpu",
+        "fargate-x86-memory"
+      ],
+      "gap": null,
+      "choiceGroup": "control-compute",
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "ec2-control",
+      "capability": "control-plane",
+      "scope": "platform",
+      "inclusion": "candidate",
+      "reason": "EC2 comparison; t3.small is a priced candidate, not a measured production size.",
+      "driver": "assumed EC2 count and instance-hours",
+      "dimensions": [
+        "instance-hours",
+        "CPU-credits"
+      ],
+      "priceIds": [
+        "ec2-t3-small",
+        "ec2-t3-cpu-credits"
+      ],
+      "gap": null,
+      "choiceGroup": "control-compute",
+      "dependsOn": [
+        "control-runtime"
+      ],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "fargate-control",
+      "capability": "control-plane",
+      "scope": "platform",
+      "inclusion": "candidate",
+      "reason": "Fargate comparison for API/workers; ARM compatibility and scratch capacity are unvalidated.",
+      "driver": "requested vCPU/GB-hours and excess scratch",
+      "dimensions": [
+        "vCPU-hours",
+        "GB-hours",
+        "excess-scratch",
+        "pull-time"
+      ],
+      "priceIds": [
+        "fargate-x86-cpu",
+        "fargate-x86-memory",
+        "fargate-arm-cpu",
+        "fargate-arm-memory",
+        "fargate-scratch"
+      ],
+      "gap": null,
+      "choiceGroup": "control-compute",
+      "dependsOn": [
+        "control-runtime"
+      ],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "runtime-disks",
+      "capability": "control-plane",
+      "scope": "platform",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "allocated GB and excess IOPS/throughput",
+      "dimensions": [
+        "GB-month",
+        "IOPS-month",
+        "throughput-month",
+        "snapshot-storage"
+      ],
+      "priceIds": [
+        "ebs-gp3-storage",
+        "ebs-gp3-iops",
+        "ebs-gp3-throughput",
+        "ebs-snapshot"
+      ],
+      "gap": null,
+      "choiceGroup": null,
+      "dependsOn": [
+        "ec2-control"
+      ],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "runtime-images",
+      "capability": "control-plane",
+      "scope": "platform",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "retained image GB and deployment pulls",
+      "dimensions": [
+        "image-storage",
+        "pull-transfer",
+        "scan"
+      ],
+      "priceIds": [
+        "ecr-storage"
+      ],
+      "gap": "Pull-path byte definition, scan choice and deployment frequency remain unknown.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "provision-cleanup",
+      "capability": "control-plane",
+      "scope": "platform",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "operation frequency and CPU time",
+      "dimensions": [
+        "job-runtime",
+        "retries",
+        "cleanup",
+        "history"
+      ],
+      "priceIds": [
+        "ec2-t3-small",
+        "fargate-x86-cpu"
+      ],
+      "gap": null,
+      "choiceGroup": null,
+      "dependsOn": [
+        "control-runtime"
+      ],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/operations-status.md"
+      ]
+    },
+    {
+      "id": "management-postgres",
+      "capability": "database",
+      "scope": "platform",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "instance count/class, disk, replica layout",
+      "dimensions": [
+        "engine-version",
+        "primary",
+        "standby",
+        "replicas",
+        "PITR",
+        "disk",
+        "IOPS",
+        "throughput",
+        "transfer",
+        "support"
+      ],
+      "priceIds": [
+        "rds-t4g-micro-single",
+        "rds-t4g-micro-multi"
+      ],
+      "gap": "Class, supported PostgreSQL version, capacity and upgrade steps are unknown.",
+      "choiceGroup": "database",
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "rds-postgres",
+      "capability": "database",
+      "scope": "platform",
+      "inclusion": "candidate",
+      "reason": "Single/Multi-AZ comparison, not a deployment decision. Storage minimum and baseline performance need selected configuration evidence.",
+      "driver": "selected deployment hours and allocated GB",
+      "dimensions": [
+        "instance-hours",
+        "disk",
+        "IOPS",
+        "throughput",
+        "backup"
+      ],
+      "priceIds": [
+        "rds-t4g-micro-single",
+        "rds-t4g-micro-multi",
+        "rds-gp3-single",
+        "rds-gp3-multi",
+        "rds-gp3-iops",
+        "rds-gp3-throughput",
+        "rds-backup"
+      ],
+      "gap": null,
+      "choiceGroup": "database",
+      "dependsOn": [
+        "management-postgres"
+      ],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "self-hosted-postgres",
+      "capability": "database",
+      "scope": "platform",
+      "inclusion": "candidate",
+      "reason": "Alternative to RDS; disks, recovery and operations cannot disappear from its estimate.",
+      "driver": "primary/standby EC2, disk and operations",
+      "dimensions": [
+        "compute",
+        "disk",
+        "WAL",
+        "PITR",
+        "failover",
+        "restore",
+        "operator-time"
+      ],
+      "priceIds": [
+        "ec2-t3-small",
+        "ebs-gp3-storage",
+        "ebs-snapshot"
+      ],
+      "gap": "Backup, failover, transfer and labour are not priced by the EC2 instance alone.",
+      "choiceGroup": "database",
+      "dependsOn": [
+        "management-postgres"
+      ],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "database-backup",
+      "capability": "database",
+      "scope": "platform",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "retained physical backups/WAL/snapshots",
+      "dimensions": [
+        "backup-storage",
+        "snapshot",
+        "restore-compute",
+        "download",
+        "key-backup"
+      ],
+      "priceIds": [
+        "rds-backup",
+        "s3-standard-storage",
+        "s3-write",
+        "s3-read"
+      ],
+      "gap": null,
+      "choiceGroup": null,
+      "dependsOn": [
+        "management-postgres"
+      ],
+      "sources": [
+        "docs/local-deployment.md",
+        "docs/managed-key-operations.md",
+        "docs/launch-evidence.md"
+      ]
+    },
+    {
+      "id": "public-ingress",
+      "capability": "ingress",
+      "scope": "platform",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "HTTPS connection/rule/byte load",
+      "dimensions": [
+        "load-balancer-hours",
+        "capacity-units",
+        "public-IPv4",
+        "certificate"
+      ],
+      "priceIds": [
+        "alb-hours",
+        "alb-capacity",
+        "ipv4-active"
+      ],
+      "gap": "ALB optional; existing gateway can terminate public HTTPS. Capacity-unit dimensions are unmeasured.",
+      "choiceGroup": "public-ingress",
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "cell-gateway",
+      "capability": "ingress",
+      "scope": "cell",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "cells, gateways per cell, traffic and concurrency",
+      "dimensions": [
+        "EC2-hours",
+        "disk",
+        "WireGuard-UDP",
+        "staff-TLS-passthrough",
+        "public-HTTPS"
+      ],
+      "priceIds": [
+        "ec2-t3-small",
+        "ebs-gp3-storage",
+        "ipv4-active"
+      ],
+      "gap": "Venues per gateway/cell and concurrency are unmeasured.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md",
+        "compose.yaml"
+      ]
+    },
+    {
+      "id": "network-ingress",
+      "capability": "ingress",
+      "scope": "cell",
+      "inclusion": "candidate",
+      "reason": "NLB is a comparison; ALB does not replace staff TLS passthrough or WireGuard UDP.",
+      "driver": "optional compatible TCP/UDP balancing",
+      "dimensions": [
+        "NLB-hours",
+        "capacity-units",
+        "IPv4",
+        "regional-transfer"
+      ],
+      "priceIds": [
+        "nlb-hours",
+        "nlb-capacity",
+        "ipv4-active"
+      ],
+      "gap": "Listener combinations, zones and load units need a deployment choice.",
+      "choiceGroup": null,
+      "dependsOn": [
+        "cell-gateway"
+      ],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "certificates",
+      "capability": "ingress",
+      "scope": "venue",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "certificate count/renewal jobs and validation DNS",
+      "dimensions": [
+        "ACME-compute",
+        "DNS-requests",
+        "public-ACM",
+        "exportable-certificate-fees"
+      ],
+      "priceIds": [
+        "dns-query"
+      ],
+      "gap": "Provider/ACME packaging undecided. No priced-zero assumption for exportable ACM.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/launch-evidence.md"
+      ]
+    },
+    {
+      "id": "bot-abuse",
+      "capability": "ingress",
+      "scope": "usage",
+      "inclusion": "candidate",
+      "reason": "Required protection capability; paid WAF is one optional implementation.",
+      "driver": "public/blocked/probe request frequency",
+      "dimensions": [
+        "WAF-ACL",
+        "rules",
+        "requests",
+        "challenge",
+        "gateway-CPU"
+      ],
+      "priceIds": [],
+      "gap": "Gateway controls exist locally; selected paid WAF/managed-rule fees remain unknown.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "nat",
+      "capability": "networking",
+      "scope": "platform",
+      "inclusion": "candidate",
+      "reason": "NAT is a topology option; each zone, hour and routed byte needs explicit inclusion.",
+      "driver": "private egress gateways per zone and processed GB",
+      "dimensions": [
+        "gateway-hours",
+        "processing-GB",
+        "internet-transfer"
+      ],
+      "priceIds": [
+        "nat-hours",
+        "nat-data"
+      ],
+      "gap": null,
+      "choiceGroup": "private-egress",
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "public-ipv4",
+      "capability": "networking",
+      "scope": "usage",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "active/idle public addresses across compute/LB/NAT",
+      "dimensions": [
+        "active-address-hours",
+        "idle-address-hours"
+      ],
+      "priceIds": [
+        "ipv4-active",
+        "ipv4-idle"
+      ],
+      "gap": "Count every selected resource address; IPv6 availability is not assumed.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "vpc-endpoints",
+      "capability": "networking",
+      "scope": "platform",
+      "inclusion": "candidate",
+      "reason": "S3 gateway endpoints have documented no hourly/data fee; interface endpoints have separate charges.",
+      "driver": "interface endpoints per zone and routed GB",
+      "dimensions": [
+        "interface-hours",
+        "interface-processing",
+        "gateway-endpoint"
+      ],
+      "priceIds": [
+        "endpoint-hours",
+        "endpoint-data"
+      ],
+      "gap": null,
+      "choiceGroup": "private-egress",
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "internet-paths",
+      "capability": "networking",
+      "scope": "usage",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "bytes in/out for tunnel, portal, uploads/restores",
+      "dimensions": [
+        "internet-in",
+        "internet-out",
+        "protocol-overhead",
+        "reconnect"
+      ],
+      "priceIds": [
+        "internet-egress"
+      ],
+      "gap": "Measure directional bytes and map service/account aggregate tier allocation; no public-traffic default of zero.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "regional-paths",
+      "capability": "networking",
+      "scope": "usage",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "directional cross-zone/VPC/provider traffic",
+      "dimensions": [
+        "cross-zone",
+        "regional",
+        "LB-path",
+        "database-path"
+      ],
+      "priceIds": [],
+      "gap": "Path mapping and regional/zone charge selection remain unknown. Never count the same direction twice.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "internet-gateway",
+      "capability": "networking",
+      "scope": "platform",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "chosen routed public topology",
+      "dimensions": [
+        "gateway-resource",
+        "associated-transfer"
+      ],
+      "priceIds": [],
+      "gap": "Documented no-charge resource term must be sourced separately from charged transfer.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "dns",
+      "capability": "dns-identity",
+      "scope": "platform",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "hosted zones, records and query classes",
+      "dimensions": [
+        "zones",
+        "queries",
+        "extra-records",
+        "healthchecks"
+      ],
+      "priceIds": [
+        "dns-zone",
+        "dns-query",
+        "dns-healthcheck-external"
+      ],
+      "gap": null,
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/launch-evidence.md"
+      ]
+    },
+    {
+      "id": "domain",
+      "capability": "dns-identity",
+      "scope": "platform",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "registered domains and renewal years",
+      "dimensions": [
+        "registration",
+        "renewal",
+        "custom-domain-validation"
+      ],
+      "priceIds": [],
+      "gap": "TLD and registrar not selected; existing ownership does not establish renewal cost.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "iam-sts",
+      "capability": "dns-identity",
+      "scope": "usage",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "credentials/session rotation",
+      "dimensions": [
+        "IAM-resource",
+        "STS-calls",
+        "credential-delivery-compute"
+      ],
+      "priceIds": [],
+      "gap": "IAM service has documented no additional charge; credential-delivery runtime remains charged.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/aws-storage-rehearsal.md",
+        "docs/managed-key-operations.md"
+      ]
+    },
+    {
+      "id": "venue-key",
+      "capability": "keys",
+      "scope": "venue",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "active per-venue key/versions and mapped requests",
+      "dimensions": [
+        "active-key-hours",
+        "rotated-versions",
+        "symmetric-requests"
+      ],
+      "priceIds": [
+        "kms-key",
+        "kms-symmetric"
+      ],
+      "gap": "Do not count a KMS request per SSE-C stream upload; archive SSE-KMS/bucket-key mappings differ.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/aws-storage-rehearsal.md"
+      ]
+    },
+    {
+      "id": "platform-secrets",
+      "capability": "keys",
+      "scope": "platform",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "master/email/application keys, versions, secrets/API calls",
+      "dimensions": [
+        "key-storage",
+        "requests",
+        "secret-storage",
+        "secret-API",
+        "parameter-store"
+      ],
+      "priceIds": [
+        "kms-key",
+        "kms-symmetric",
+        "secrets-storage",
+        "secrets-api"
+      ],
+      "gap": "Secrets Manager versus Parameter Store and key count are assumptions; Parameter Store rate unknown.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/managed-key-operations.md"
+      ]
+    },
+    {
+      "id": "retained-keys",
+      "capability": "keys",
+      "scope": "venue",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "keys required by protected/recoverable copies",
+      "dimensions": [
+        "retained-key-versions",
+        "key-backup",
+        "custody",
+        "rotation"
+      ],
+      "priceIds": [
+        "kms-key",
+        "secrets-storage"
+      ],
+      "gap": "Cannot retire key dependencies before all retained backups release them.",
+      "choiceGroup": null,
+      "dependsOn": [
+        "venue-key"
+      ],
+      "sources": [
+        "docs/managed-key-operations.md",
+        "docs/product-and-platform.md"
+      ]
+    },
+    {
+      "id": "continuous-stream",
+      "capability": "storage",
+      "scope": "venue",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "measured stream, snapshot, compaction and idle events",
+      "dimensions": [
+        "storage-byte-seconds",
+        "PUT",
+        "HEAD",
+        "LIST",
+        "GET",
+        "retries",
+        "multipart"
+      ],
+      "priceIds": [
+        "s3-standard-storage",
+        "s3-write",
+        "s3-read"
+      ],
+      "gap": "No stream traffic or schedule is measured yet; hourly/30d is a proposal, local probe config is 24h/168h.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "retained-archives",
+      "capability": "storage",
+      "scope": "venue",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "daily/30d and monthly/12mo dated object events",
+      "dimensions": [
+        "growing-archive",
+        "storage",
+        "capture",
+        "read",
+        "verification",
+        "cleanup"
+      ],
+      "priceIds": [
+        "s3-standard-storage",
+        "s3-write",
+        "s3-read"
+      ],
+      "gap": "Archive sizes/growth unmeasured; monthly selection and protected-copy events must be modelled.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/managed-key-operations.md"
+      ]
+    },
+    {
+      "id": "versions-multipart",
+      "capability": "storage",
+      "scope": "venue",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "every current/noncurrent/marker/unfinished-part lifetime",
+      "dimensions": [
+        "current",
+        "noncurrent",
+        "delete-marker",
+        "unfinished-multipart"
+      ],
+      "priceIds": [
+        "s3-standard-storage"
+      ],
+      "gap": "Unbounded noncurrent retention has no finite steady-storage estimate.",
+      "choiceGroup": null,
+      "dependsOn": [
+        "continuous-stream",
+        "retained-archives"
+      ],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "storage-alternatives",
+      "capability": "storage",
+      "scope": "venue",
+      "inclusion": "candidate",
+      "reason": "Standard is a comparison baseline only. Alternative storage rates need retrieval/transition dimensions.",
+      "driver": "selected class and object minimums",
+      "dimensions": [
+        "minimum-size",
+        "minimum-days",
+        "metadata",
+        "retrieval",
+        "transition",
+        "restore-staging"
+      ],
+      "priceIds": [
+        "s3-ia-storage",
+        "s3-glacier-instant-storage",
+        "s3-glacier-flexible-storage"
+      ],
+      "gap": "Deep Archive and retrieval/transition complete rates remain unknown.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "verification",
+      "capability": "recovery",
+      "scope": "usage",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "captures, duration, concurrency, RAM/scratch",
+      "dimensions": [
+        "verifier-CPU",
+        "RAM",
+        "scratch",
+        "image-pull",
+        "S3-download",
+        "KMS"
+      ],
+      "priceIds": [
+        "ec2-t3-small",
+        "fargate-x86-cpu",
+        "fargate-x86-memory",
+        "s3-read",
+        "kms-symmetric"
+      ],
+      "gap": "Container resources/time are local controls, not AWS capacity evidence.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/local-deployment.md",
+        "docs/managed-key-operations.md"
+      ]
+    },
+    {
+      "id": "venue-restore",
+      "capability": "recovery",
+      "scope": "usage",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "restore frequency, bytes, CPU and activation flow",
+      "dimensions": [
+        "compute",
+        "scratch",
+        "S3-GET",
+        "egress",
+        "key-access"
+      ],
+      "priceIds": [
+        "s3-read",
+        "internet-egress",
+        "kms-symmetric"
+      ],
+      "gap": "Restore frequency and reserve/on-demand execution choices remain assumptions.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "logs",
+      "capability": "operations",
+      "scope": "usage",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "ingestion, retention, scans and cardinality",
+      "dimensions": [
+        "ingest-GB",
+        "GB-month",
+        "query-GB"
+      ],
+      "priceIds": [
+        "logs-ingest",
+        "logs-storage",
+        "logs-query"
+      ],
+      "gap": "Production retention/volume and GB conversion evidence remain open.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/operations-status.md",
+        "docs/launch-evidence.md"
+      ]
+    },
+    {
+      "id": "metrics-alerts",
+      "capability": "operations",
+      "scope": "platform",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "series count, alarm count, external check frequency",
+      "dimensions": [
+        "metric-months",
+        "alarm-months",
+        "check-runs",
+        "delivery"
+      ],
+      "priceIds": [
+        "metrics",
+        "alarms",
+        "synthetic-checks"
+      ],
+      "gap": "Local collector holds no history and cannot alert on its own disappearance.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/operations-status.md",
+        "docs/launch-evidence.md"
+      ]
+    },
+    {
+      "id": "audit",
+      "capability": "operations",
+      "scope": "usage",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "privileged records and provider event volume",
+      "dimensions": [
+        "CloudTrail-data-events",
+        "management-events",
+        "history-storage"
+      ],
+      "priceIds": [
+        "audit-data-events",
+        "s3-standard-storage"
+      ],
+      "gap": "Audit retention and selected CloudTrail configuration are owner choices.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "spend-controls",
+      "capability": "operations",
+      "scope": "platform",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "budget/report/API frequency",
+      "dimensions": [
+        "budget",
+        "report-delivery",
+        "CostExplorer-API"
+      ],
+      "priceIds": [],
+      "gap": "Cost Explorer API list term is known; monthly calls and optional budget actions/reports are not selected.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "mail",
+      "capability": "email-external",
+      "scope": "external",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "messages, attachments, retries and provider tier",
+      "dimensions": [
+        "monthly-tier",
+        "messages",
+        "bytes",
+        "bounce",
+        "complaint"
+      ],
+      "priceIds": [],
+      "gap": "Spain mail provider not selected; no live mail authorised.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/launch-evidence.md"
+      ]
+    },
+    {
+      "id": "ses-candidate",
+      "capability": "email-external",
+      "scope": "usage",
+      "inclusion": "candidate",
+      "reason": "SES lacks a Spain regional Price List entry; Stockholm candidate does not satisfy Spain processing policy.",
+      "driver": "Stockholm SES recipients/attachments",
+      "dimensions": [
+        "recipients",
+        "attachment-transfer",
+        "extras"
+      ],
+      "priceIds": [
+        "ses-messages"
+      ],
+      "gap": "Attachments/extras unknown; not an adopted relay.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "ci",
+      "capability": "email-external",
+      "scope": "external",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "rounded job minutes, cache/artifact storage",
+      "dimensions": [
+        "paid-Linux-minute",
+        "artifact-GB-month",
+        "cache-GB-month"
+      ],
+      "priceIds": [],
+      "gap": "Standard Linux minute price is separate from AWS; included account allowance and monthly quantity unknown.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "fiscal-api",
+      "capability": "email-external",
+      "scope": "usage",
+      "inclusion": "required",
+      "reason": "Required by the initial remote-access/backup service; exact deployment selection remains open.",
+      "driver": "measured registry calls/retries",
+      "dimensions": [
+        "shared-API-CPU",
+        "PostgreSQL",
+        "traffic",
+        "external-fee"
+      ],
+      "priceIds": [
+        "ec2-t3-small"
+      ],
+      "gap": "Measure registry usage without altering fiscal allocation. No external fee established.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "kubernetes",
+      "capability": "optional-product",
+      "scope": "platform",
+      "inclusion": "candidate",
+      "reason": "Kubernetes direction is deferred until needed; EKS comparison is optional.",
+      "driver": "cluster count, support mode, nodes",
+      "dimensions": [
+        "control-plane-hours",
+        "support",
+        "nodes",
+        "AutoMode",
+        "volumes",
+        "LB"
+      ],
+      "priceIds": [
+        "eks-standard"
+      ],
+      "gap": "Extended support, Auto Mode, node/volume/LB topology remain unknown.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "paid-support",
+      "capability": "optional-product",
+      "scope": "platform",
+      "inclusion": "candidate",
+      "reason": "Support plan not selected.",
+      "driver": "selected provider support plan",
+      "dimensions": [
+        "minimum-monthly",
+        "percentage-spend"
+      ],
+      "priceIds": [],
+      "gap": "Unknown tier and rate.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "hosted-waitron",
+      "capability": "optional-product",
+      "scope": "venue",
+      "inclusion": "excluded",
+      "reason": "Outside the initial remote-access/backup total; separate product scope and owner/provider decisions.",
+      "driver": "dedicated venue CPU/RAM/storage",
+      "dimensions": [
+        "compute",
+        "storage",
+        "transfer",
+        "provider-API"
+      ],
+      "priceIds": [],
+      "gap": "No usage or price selected for this candidate.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "cloud-failover",
+      "capability": "optional-product",
+      "scope": "venue",
+      "inclusion": "excluded",
+      "reason": "Outside the initial remote-access/backup total; separate product scope and owner/provider decisions.",
+      "driver": "reserve/on-demand activation capacity",
+      "dimensions": [
+        "compute",
+        "storage",
+        "transfer",
+        "provider-API"
+      ],
+      "priceIds": [],
+      "gap": "No usage or price selected for this candidate.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "bookings-public-copies",
+      "capability": "optional-product",
+      "scope": "venue",
+      "inclusion": "excluded",
+      "reason": "Outside the initial remote-access/backup total; separate product scope and owner/provider decisions.",
+      "driver": "public request/storage volume",
+      "dimensions": [
+        "compute",
+        "storage",
+        "transfer",
+        "provider-API"
+      ],
+      "priceIds": [],
+      "gap": "No usage or price selected for this candidate.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "fiscal-archive",
+      "capability": "optional-product",
+      "scope": "venue",
+      "inclusion": "excluded",
+      "reason": "Outside the initial remote-access/backup total; separate product scope and owner/provider decisions.",
+      "driver": "invoice storage/retention/downloads",
+      "dimensions": [
+        "compute",
+        "storage",
+        "transfer",
+        "provider-API"
+      ],
+      "priceIds": [],
+      "gap": "No usage or price selected for this candidate.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "analytics-search",
+      "capability": "optional-product",
+      "scope": "venue",
+      "inclusion": "excluded",
+      "reason": "Outside the initial remote-access/backup total; separate product scope and owner/provider decisions.",
+      "driver": "cluster/query/index storage",
+      "dimensions": [
+        "compute",
+        "storage",
+        "transfer",
+        "provider-API"
+      ],
+      "priceIds": [],
+      "gap": "No usage or price selected for this candidate.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "multi-venue-groups",
+      "capability": "optional-product",
+      "scope": "venue",
+      "inclusion": "excluded",
+      "reason": "Outside the initial remote-access/backup total; separate product scope and owner/provider decisions.",
+      "driver": "configuration fan-out and reporting",
+      "dimensions": [
+        "compute",
+        "storage",
+        "transfer",
+        "provider-API"
+      ],
+      "priceIds": [],
+      "gap": "No usage or price selected for this candidate.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "address-lookup",
+      "capability": "optional-product",
+      "scope": "venue",
+      "inclusion": "excluded",
+      "reason": "Outside the initial remote-access/backup total; separate product scope and owner/provider decisions.",
+      "driver": "lookup/provider API allowance",
+      "dimensions": [
+        "compute",
+        "storage",
+        "transfer",
+        "provider-API"
+      ],
+      "priceIds": [],
+      "gap": "No usage or price selected for this candidate.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "mobile-notifications",
+      "capability": "optional-product",
+      "scope": "venue",
+      "inclusion": "excluded",
+      "reason": "Outside the initial remote-access/backup total; separate product scope and owner/provider decisions.",
+      "driver": "push/SMS channel and count",
+      "dimensions": [
+        "compute",
+        "storage",
+        "transfer",
+        "provider-API"
+      ],
+      "priceIds": [],
+      "gap": "No usage or price selected for this candidate.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "managed-devices",
+      "capability": "optional-product",
+      "scope": "venue",
+      "inclusion": "excluded",
+      "reason": "Outside the initial remote-access/backup total; separate product scope and owner/provider decisions.",
+      "driver": "enrolment/control-plane volume",
+      "dimensions": [
+        "compute",
+        "storage",
+        "transfer",
+        "provider-API"
+      ],
+      "priceIds": [],
+      "gap": "No usage or price selected for this candidate.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "automatic-upgrades",
+      "capability": "optional-product",
+      "scope": "venue",
+      "inclusion": "excluded",
+      "reason": "Outside the initial remote-access/backup total; separate product scope and owner/provider decisions.",
+      "driver": "rollout bytes/jobs and fallback",
+      "dimensions": [
+        "compute",
+        "storage",
+        "transfer",
+        "provider-API"
+      ],
+      "priceIds": [],
+      "gap": "No usage or price selected for this candidate.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "email-relay",
+      "capability": "optional-product",
+      "scope": "venue",
+      "inclusion": "excluded",
+      "reason": "Outside the initial remote-access/backup total; separate product scope and owner/provider decisions.",
+      "driver": "admission/delivery and abuse bounds",
+      "dimensions": [
+        "compute",
+        "storage",
+        "transfer",
+        "provider-API"
+      ],
+      "priceIds": [],
+      "gap": "No usage or price selected for this candidate.",
+      "choiceGroup": null,
+      "dependsOn": [],
+      "sources": [
+        "docs/product-and-platform.md",
+        "docs/local-deployment.md"
+      ]
+    },
+    {
+      "id": "translation",
+      "capability": "optional-product",
+      "scope": "usage",
+      "inclusion": "excluded",
+      "reason": "Optional translation profile; excluded from the initial remote-access and backup total.",
+      "driver": "translation worker, source text and images, model input and output tokens",
+      "dimensions": [
+        "compute",
+        "storage",
+        "transfer",
+        "provider-API"
+      ],
+      "priceIds": [],
+      "gap": "Translation workload and provider rates are outside this scenario.",
+      "choiceGroup": null,
+      "dependsOn": [
+        "control-runtime"
+      ],
+      "sources": [
+        "docs/local-deployment.md",
+        "docs/superpowers/specs/2026-10-14-translate-all-design.md"
+      ]
+    }
+  ],
+  "sources": [
+    "docs/documentation-ownership.md",
+    "docs/product-and-platform.md",
+    "docs/local-deployment.md",
+    "docs/operations-status.md",
+    "docs/managed-key-operations.md",
+    "docs/aws-storage-rehearsal.md",
+    "docs/launch-evidence.md",
+    "compose.yaml"
+  ],
+  "completeTotalsAvailable": false
+}

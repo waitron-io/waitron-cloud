@@ -1,0 +1,191 @@
+{
+  "schemaVersion": 1,
+  "scope": "generated-venue-api-scenario",
+  "source": {
+    "cloudRevision": "582d6e7e6ad7184650e3332ef46813bd9f711e42",
+    "waitronRevision": "fbadd15785464e59747e697c11048bfbc6e4938f",
+    "runtimeSha256": "edb78197999062e91b04de8d6461195789a4b8aef93c51a6b96d9b2a06410c18",
+    "nodeVersion": "v24.21.0",
+    "image": "sha256:50bf98160dafd4b0eaf4ecf24269cf95b4bb7b286dbbc461ebb91f2a8b5a4418"
+  },
+  "window": {
+    "startedAt": "2026-10-21T02:31:17.770139+00:00",
+    "endedAt": "2026-10-21T02:31:21.108892+00:00",
+    "elapsedSeconds": 3.338753
+  },
+  "measurement": {
+    "kind": "pinned-waitron-api-gateway",
+    "costMeasured": false,
+    "evidence": [
+      {
+        "audience": "staff",
+        "scenario": "owner-management-api",
+        "requests": 9,
+        "requestBodyBytes": 144,
+        "responseBodyBytes": 737,
+        "actions": [
+          {
+            "action": "anonymous-read-refused",
+            "status": 401,
+            "requestBodyBytes": 0,
+            "responseBodyBytes": 60
+          },
+          {
+            "action": "invalid-sign-in-refused",
+            "status": 401,
+            "requestBodyBytes": 76,
+            "responseBodyBytes": 49
+          },
+          {
+            "action": "sign-in",
+            "status": 200,
+            "requestBodyBytes": 68,
+            "responseBodyBytes": 71
+          },
+          {
+            "action": "staff-read",
+            "status": 200,
+            "requestBodyBytes": 0,
+            "responseBodyBytes": 234
+          },
+          {
+            "action": "dashboard-canvases-read",
+            "status": 200,
+            "requestBodyBytes": 0,
+            "responseBodyBytes": 15
+          },
+          {
+            "action": "dashboard-theme-read",
+            "status": 200,
+            "requestBodyBytes": 0,
+            "responseBodyBytes": 14
+          },
+          {
+            "action": "staff-reconnect-read",
+            "status": 200,
+            "requestBodyBytes": 0,
+            "responseBodyBytes": 234
+          },
+          {
+            "action": "sign-out",
+            "status": 204,
+            "requestBodyBytes": 0,
+            "responseBodyBytes": 0
+          },
+          {
+            "action": "signed-out-read-refused",
+            "status": 401,
+            "requestBodyBytes": 0,
+            "responseBodyBytes": 60
+          }
+        ],
+        "snapshot": {
+          "scope": "gateway-tcp-stream",
+          "audience": "staff",
+          "status": "measured",
+          "reconciled": true,
+          "producer": {
+            "connections": 9,
+            "bytesToGateway": 17530,
+            "bytesFromGateway": 29867
+          },
+          "observer": {
+            "connections": 9,
+            "bytesToGateway": 17530,
+            "bytesFromGateway": 29867
+          },
+          "discrepancy": {
+            "connections": 0,
+            "bytesToGateway": 0,
+            "bytesFromGateway": 0
+          },
+          "excludedOverhead": [
+            "ip",
+            "tcp",
+            "wireguard"
+          ]
+        }
+      },
+      {
+        "audience": "public",
+        "scenario": "public-availability-api",
+        "requests": 6,
+        "requestBodyBytes": 193,
+        "responseBodyBytes": 814,
+        "actions": [
+          {
+            "action": "unchallenged-public-refused",
+            "status": 403,
+            "requestBodyBytes": 0,
+            "responseBodyBytes": 294
+          },
+          {
+            "action": "challenge",
+            "status": 200,
+            "requestBodyBytes": 0,
+            "responseBodyBytes": 195
+          },
+          {
+            "action": "proof-worker-read",
+            "status": 200,
+            "requestBodyBytes": 0,
+            "responseBodyBytes": 307
+          },
+          {
+            "action": "proof-submit",
+            "status": 204,
+            "requestBodyBytes": 193,
+            "responseBodyBytes": 0
+          },
+          {
+            "action": "public-availability-read",
+            "status": 200,
+            "requestBodyBytes": 0,
+            "responseBodyBytes": 18
+          },
+          {
+            "action": "public-management-refused",
+            "status": 404,
+            "requestBodyBytes": 0,
+            "responseBodyBytes": 0
+          }
+        ],
+        "snapshot": {
+          "scope": "gateway-tcp-stream",
+          "audience": "public",
+          "status": "measured",
+          "reconciled": true,
+          "producer": {
+            "connections": 6,
+            "bytesToGateway": 11723,
+            "bytesFromGateway": 21956
+          },
+          "observer": {
+            "connections": 6,
+            "bytesToGateway": 11723,
+            "bytesFromGateway": 21956
+          },
+          "discrepancy": {
+            "connections": 0,
+            "bytesToGateway": 0,
+            "bytesFromGateway": 0
+          },
+          "excludedOverhead": [
+            "ip",
+            "tcp",
+            "wireguard"
+          ]
+        }
+      }
+    ],
+    "tunnelTotals": {
+      "received": 39880,
+      "sent": 27112
+    }
+  },
+  "limitations": [
+    "Generated venue API actions; full browser assets and background updates are unmeasured.",
+    "Socket bytes include TLS records; IP/TCP overhead and the mapping of tunnel counters to AWS billing are unmeasured.",
+    "Monthly owner/public frequencies and complete venue cost remain unknown."
+  ]
+}
