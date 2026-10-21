@@ -24,6 +24,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '26'
+          package-manager-cache: false
       - id: files
         run: echo "files=$(node scripts/cloud-cost/conformance.mjs --matrix)" >> "$GITHUB_OUTPUT"
   conformance:
