@@ -45,8 +45,14 @@ test(`a ${state} job submitted ${age} ago is not leased or sent while awaiting c
   assert.deepEqual(await jobRow(old.id),beforeJob,'skipping preserves the lease, attempts and accounting');
   assert.deepEqual(await bodyRow(old.id),beforeBody,'the existing sweep owns deletion');
 
+  const resubmit=()=>transaction(db.pool,async client=>{
+   await lockVenue(client,old.venue_id);
+   return createJob(client,{installationId:old.installation_id,venueId:old.venue_id,operationId:randomUUID(),
+    fingerprint:jobFingerprint(beforeBody.body),body:beforeBody.body,total:1});
+  });
+  await assert.rejects(resubmit(),/job_running/,'the same venue still waits for cleanup');
   const young=await queue('YOUNG-MENU');
-  await db.pool.query("UPDATE translation_jobs SET created_at=clock_timestamp()-interval '23 hours 59 minutes' WHERE id=$1",[young.id]);
+  await db.pool.query("UPDATE translation_jobs SET created_at=clock_timestamp()-interval '23 hours 59 minutes 50 seconds' WHERE id=$1",[young.id]);
   assert.equal(await worker.runOnce(new AbortController().signal),true);
   assert.equal((await jobRow(young.id)).state,'done','old work must not starve a younger job');
   assert.equal(fake.requests.length,2);
@@ -59,5 +65,6 @@ test(`a ${state} job submitted ${age} ago is not leased or sent while awaiting c
   assert.deepEqual(await jobRow(old.id),{...beforeJob,state:'expired',lease_id:null,lease_until:null});
   assert.equal(await bodyRow(old.id),undefined);
   assert.equal((await jobRow(young.id)).state,'done');
+  assert.equal((await resubmit()).state,'queued','cleanup permits a fresh job for the same venue');
  }finally{await fake.close();}
 });

@@ -502,7 +502,8 @@ qualify an append-only indexing migration if needed. The worker now skips queued
 running jobs submitted at least 24 hours ago when selecting a new lease, even if bounded
 cleanup has not reached them. PostgreSQL and loopback-provider checks cover both states at
 24 and 25 hours, younger work behind them, unchanged attempts/accounting and subsequent
-sweep deletion. A job aging after lease admission still needs dispatch qualification before
+sweep deletion. The same venue cannot submit a replacement until the sweep expires its
+old job; younger work for other venues can proceed. A job aging after lease admission needs dispatch qualification before
 activation. Admission does not replace deletion of an expired body.
 Task 19 adds the optional `translation` Compose profile and runtime role. The default stack
 omits the worker; only it receives provider settings, while account receives the translation

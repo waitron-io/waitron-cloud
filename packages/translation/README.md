@@ -60,8 +60,9 @@ most 100 jobs by default, so a backlog needs further passes. Cleanup failure pau
 worker jobs and retries after a minute. Enabled account startup cleanup failure refuses
 listening; scheduled failure retries while it keeps serving. Review that availability policy
 before activation. While waiting for cleanup, jobs submitted at least 24 hours ago cannot
-receive a new work lease, so old rows do not prevent younger jobs from running. The sweep
-still owns deletion. Retained-history scan growth and jobs aging after lease admission need
+receive a new work lease, so other venues' younger jobs can run. That venue still sees its
+old job as queued or running and cannot submit another until the sweep expires it and
+deletes its body. Retained-history scan growth and jobs aging after lease admission need
 [qualification](../../docs/backlog.md#translate-all-approved-design-implementation-still-open).
 
 Operational errors use fixed messages so menu names, generated text, keys and authorization
