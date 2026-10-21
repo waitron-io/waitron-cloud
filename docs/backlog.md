@@ -1207,7 +1207,9 @@ notifications separately.
   now live on container-native scratch, outside that scan. The ownership guard
   stays unchanged. Separate real-service regressions check that sales, integrity,
   mail and storage still work without placing mutable service data on the host
-  mount. The earlier stream-startup failure (`39616174409`) and merge refusal
+  mount. Each generated service has a 64 MiB private scratch limit. Keep fixture
+  data within it or make a separate bounded capacity change before larger uploads.
+  The earlier stream-startup failure (`39616174409`) and merge refusal
   (`39627846860`) had no underlying trace; attributing those exact historical
   failures to these races remains an inference. Keep their logs and all ownership,
   isolation, accounting and cleanup assertions and deadlines. Temporary diagnostic
