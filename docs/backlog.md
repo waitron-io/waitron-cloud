@@ -1075,569 +1075,129 @@ notifications separately.
   the corrected PR2 branch. PR3 passes 679/384 and runs full packages sequentially. Capture the full output of both default-concurrency commands,
   without piping it through `head`, and diagnose failure cleanup and resource
   contention. Preserve every assertion and deadline; do not treat a rerun as a fix.
-- **Operating cost.** The [cost-model design](superpowers/specs/2026-10-14-cloud-cost-model-design.md)
-  and [implementation plan](superpowers/plans/2026-10-14-cloud-cost-model.md) define
-  how you can compare the AWS platform cost with no venues and the additional cost
-  at 1, 10, 100 and 1,000 venues. Production resource sizes and availability choices
-  remain assumptions. The [resource inventory](cost-model/inventory.json) covers
-  the runtime roles and wider candidates, and the [public price snapshot](cost-model/prices.json)
-  records dated Spain, Stockholm and global rates with explicit gaps. Anonymous
-  export validation rejects unknown fields and source/scratch overlap. These inputs
-  establish no measured venue cost. A private replay scheduler sends each selected
-  sale in order, using original or accelerated target times, and reports any delay.
-  Synthetic SQLite checks verify that writes do not accumulate extra waiting time. Both modes
-  pass through the pinned Waitron writer with its normal fiscal integrity checks;
-  a refused sale preserves rollback and stops the remaining schedule. Cancellation
-  and deadlines stop new sales and wait for admitted writes before returning. The
-  scheduler returns counts and durations only. A private day-preparation step now
-  selects events from supplied Waitron trading-day boundaries, includes the start
-  and excludes the end, checks the expected count and preserves sale order and
-  elapsed spacing. It starts the replay timeline at the first selected sale;
-  startup and idle traffic remain separate measurements. Synthetic checks use
-  the pinned Waitron clock across 23-hour and 25-hour days, a historical cutover
-  change and a fractional timezone offset, then feed selected sales through the
-  normal writer. The result still contains private sale objects and cannot be
-  published as an aggregate. A reader loads the saved timezone and ordered cutover
-  history from the recorded private SQLite copy. It refuses missing or malformed
-  settings, an oversized history and an unrecorded or replaced copy. It also refuses
-  a copy that still needs transaction-log sidecars, so reading cannot create them.
-  Synthetic copied databases use Waitron's real migrations and match its own clock
-  reader and trading-day boundaries across daylight-saving and cutover changes.
-  A paid-bill reader now selects one location and trading day from that same private
-  copy, checks the selected count and preserves the original order, quantities,
-  filed tax breakdown, line snapshots and split payments. It refuses corrections,
-  voids and substituted invoices rather than replaying them as ordinary sales.
-  The translated inputs contain no original node, invoice-series or order identity.
-  Scratch configuration can supply the issuer address required for full invoices.
-  Synthetic copied bills pass through the normal writer with fresh invoice numbers
-  and fiscal records; a refused payment rolls back and stops the remaining replay.
-  These private sale inputs cannot be published as aggregates. Trading-day discovery
-  now uses the copied clock and Waitron's own calendar functions. It reconciles sale,
-  paid-sale, day and busiest-day counts before releasing a selection; a discrepancy
-  leaves the selection unavailable. Equal busy-day counts select the earliest day.
-  Synthetic databases cover daylight-saving changes, historical cutovers and a
-  fractional timezone offset, then replay the discovered day through the normal writer.
-  The earlier 4,098 saved orders and 4,008 database sales are different inventories;
-  the earlier 28 dates used calendar midnight rather than the trading-day clock.
-  Copy preparation now refuses dormant transaction-log databases before SQLite
-  can create files beside them. The isolated copy path mounts each source file
-  read only, blocks outside connections, checks the actual container settings and
-  proves that source writes fail while scratch writes work. A separate header-reading
-  process preserves locks held by the caller. Generated active-source and standalone
-  database checks preserve the source files and remove owned containers and partial copies.
-  The approved venue copy contains 4,008 paid sales across 27 trading days, with
-  207 on the busiest day. Independent SQL and the pinned Waitron clock agree.
-  Grouping by midnight in the earlier inventory's Europe/Madrid timezone reproduces
-  its 28 days and busiest count of 203. Both definitions now reconcile, and all 207
-  selected bills translate privately into replay inputs. These are source-selection
-  counts, not measured stream volumes. One repeat detected a source-file fingerprint
-  change; later passive samples, an instrumented repeat and the final selection
-  were unchanged, leaving that transient unexplained.
-  A [foreground replay stage](../scripts/cloud-cost/private-replay.mjs) now joins both count checks, saved-clock selection,
-  translation and the normal sale writer. It verifies the completed fiscal chain,
-  compares logical database pages before and after replay, and removes its owned
-  replay state before returning. The copied database baseline remains separate
-  from fresh-database growth. All 207 selected sales complete through the normal
-  writer in an isolated accelerated proof, with final integrity and unchanged-source
-  checks. This does not measure stream traffic or a continuously observed day.
-  [Generated-source checks](../scripts/cloud-cost/fixtures/private-replay-conformance.test.mjs) cover interruption, failed
-  writes and verification, replaced destinations and rejected asynchronous progress
-  callbacks. The private journal records creation and removal before each change.
-  A read-only replay container needs writable temporary space for SQLite;
-  a generated spill-to-disk check catches a missing temporary directory.
-  An owned-container supervisor now accepts an explicit worker budget of up to two
-  hours, checks the recorded ownership and effective isolation, suppresses worker
-  output, and collects the container after success, failure, cancellation or timeout.
-  Stopping the attached Docker client alone leaves its worker running; generated
-  heartbeat checks demonstrate why container cleanup is required. The supervisor
-  preserves shared networks and refuses unrecorded or foreign containers. Lost
-  ownership refuses cleanup and leaves the recorded container for recovery.
-  [Generated workers](../scripts/cloud-cost/fixtures/foreground-conformance.test.mjs)
-  and the pinned writer's private replay checks exercise this
-  stage. Accepting a two-hour budget does not establish a two-hour measurement.
-  An [isolated replay controller](../scripts/cloud-cost/isolated-replay.mjs) now joins
-  those stages around a prepared, pinned runtime. It proves outside connections
-  are blocked before copying source data, then runs the complete selected day
-  with a read-only code mount and private writable state. It checks every returned
-  count, size and duration before releasing the anonymous admission result.
-  [Generated-source checks](../scripts/cloud-cost/fixtures/isolated-replay-conformance.test.mjs)
-  cover refused copies, mismatched counts, cancellation, deadlines and actual worker
-  output. The controller removes its own copy, worker, network and added files while
-  preserving caller state. Replaced directories or lost ownership refuse cleanup
-  and retain recorded resources for explicit recovery. The admission-only stage proves
-  writer admission without stream or cost measurement. The [local command](../scripts/cloud-cost/cli.mjs)
-  runs that named stage from an explicitly private, bounded configuration file.
-  It rejects linked, shared, changed or oversized configuration files and requires
-  the command's timing to match the private experiment. Importing the command does
-  not start work. Both interrupt and termination signals wait for owned cleanup;
-  worker output and private failures remain suppressed. Its admission-only result says
-  `stage: replay-admission` and `costMeasured: false`. Complete venue-cost dispatch and
-  the final anonymous cost receipt remain unfinished. A separate unversioned stream-history
-  mode now preserves the storage used before replacement or deletion, including
-  recreation and retries. It bounds when a write could have committed and checks
-  failed replies against an independent object inventory. Generated HTTP and real
-  local storage checks cover these histories without exporting object names; the
-  earlier upload-only mode keeps its existing contract. A separately enabled SDK
-  path now counts a deletion batch as one HTTP request while preserving each
-  object's outcome and earlier retained storage. Independent inventories check
-  surviving versions, failed deletions and promotion after a marker is removed.
-  It accepts S3's [dedicated marker identity field](https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeletedObject.html)
-  only for the selected, known marker and rejects conflicting identities.
-  Generated HTTP and real local storage checks cover plain and versioned buckets.
-  SDK mutations now reject keys containing path escapes before forwarding them
-  to a local storage backend. A separate native version-history listener now keeps
-  noncurrent versions and UTF-8 delete-marker storage, including promotion after
-  marker removal and extra versions left by lost write replies. It uses independent
-  version inventories to bound uncertain commit times, and requires a distinct
-  possible request for each discovered version. Parallel reads and writes to
-  different objects are admitted; overlapping writes to one object are refused.
-  An explicitly enabled native listener for versioned deletion batches now reads
-  a bounded selection before forwarding it. It checks every returned result, keeps failed entries and
-  versions left after lost replies, and reconciles them against an independent
-  inventory. Its separate request and storage counters include the control bodies.
-  Default listeners still refuse batches. The native batch mode also refuses more
-  than one selection for the same key, whose internal ordering is not observed.
-  An opt-in unversioned native batch listener now shares the bounded control parser.
-  It checks each result, retains storage before deletion and resolves uncertain
-  replies through a separate inventory. A retry preserves the first possible
-  deletion time, and recreation starts a new storage interval. Signed SDK requests
-  and generated local storage cover the control bytes and lost committed replies.
-  Both native modes require a fresh inventory after each batch and keep their
-  default refusal. An opt-in unversioned multipart mode now retains unfinished
-  parts, replaced parts and parts discarded by completion or abort. It checks the
-  requested part identities and each control reply, then independently lists uploads
-  and parts before reporting storage. Generated HTTP and real local storage checks
-  cover completion of a selected subset, simultaneous object and unfinished-part
-  storage, abort and deletion. Both request counters include the control bodies.
-  The versioned native listener now offers the same explicit multipart mode.
-  Completion requires a fresh, non-marker version identity and retains older
-  versions, including repeated completions of the same size. Separate upload,
-  part and version inventories check storage before publication. Generated HTTP
-  and real local storage checks cover discarded/replaced parts, abort, promotion
-  after deleting a completed version and storage retained before final deletion.
-  A separate opt-in mode resolves full-body failed multipart replies through
-  independent upload, part and object inventories. It blocks further requests
-  until one possible mutation is resolved, bounds uncertain storage times and
-  retains earlier parts and versions. The default mode still refuses failed
-  replies. Interrupted transfers, short bodies, malformed successful replies
-  and ambiguous inventories remain refused. Real local checks replace committed
-  success replies with HTTP failures across creation, separately numbered parts,
-  completion and abort. Replaced-part duplicates from the local backend remain
-  an explicit refusal, as described below. A native measurement session now joins
-  both independent request counters with plain or versioned storage histories.
-  You can change phases between settled requests and take an intermediate inventory
-  before continuing. A request racing that inventory invalidates the session.
-  Finishing stops admission, checks the final inventory and collects the session's
-  listeners and client before returning anonymous evidence. Generated HTTP and
-  real local storage checks cover phase changes, retries, earlier retained storage
-  and final deletion; cancellation and cleanup checks refuse incomplete evidence.
-  The session leaves bucket ownership and deletion with its caller. You can now
-  connect it to a private selected-day replay. One pinned native writer stays
-  running across startup, workload and idle periods; phase changes wait for active
-  transfers to finish. Native traffic, rather than observer polling, proves that
-  the writer has started. Before returning evidence, the controller stops its own
-  writer, restores the stream to a separate copy and checks SQLite integrity and
-  the complete sale count. The normal writer's fiscal integrity check remains
-  separate. Generated local checks replay three selected sales, reconcile retained
-  storage against an independent inventory and collect every native process and
-  private replay directory. Short fixture windows do not measure a venue day.
-  Cancellation, deadlines, refused native commands, missing sales and damaged
-  restored copies refuse evidence. A late storage reply after cancellation now
-  invalidates its measurement without crashing the worker. The native check uses
-  the probe's configured 24-hour snapshots and 168-hour retention; it observes no
-  scheduled boundary and runs no application restore hooks. The host controller now
-  offers this as an optional isolated experiment, with its own local storage process
-  and fresh bucket. A separately pinned minimal image still performs the source copy;
-  the service image never broadens that copy's environment checks. Before returning,
-  the worker deletes its objects and unfinished uploads, checks that the bucket is
-  absent and collects the storage process. Setup and cleanup requests have separate,
-  independently reconciled counters. The host admits only closed count, size, phase
-  and duration fields, requires all selected sales in the restored copy and refuses
-  altered worker evidence. The local command accepts an explicit `stream-replay`
-  configuration stage alongside `replay-admission`; both still return
-  `costMeasured: false`. Generated local checks cover success, cancellation, deadlines
-  and changed output. Worker storage cleanup now distinguishes a refused creation
-  from a committed bucket whose result was lost. It checks the owned bucket directly
-  before cleanup and after deletion because a bucket listing can omit a just-created
-  bucket. Incomplete inventories, permission failures and false deletion successes
-  refuse evidence and retain the private storage directory after collecting the backend.
-  [Generated local storage checks](../scripts/cloud-cost/fixtures/worker-storage-conformance.test.mjs)
-  exercise real objects and unfinished uploads, cancellation and malformed cleanup
-  replies while keeping setup and cleanup request counters reconciled. Cancellation
-  stops new setup requests and prevents a ready result after the final response;
-  cleanup uses its own bounded signal. The unversioned stream now measures retained
-  storage through cleanup: the final history snapshot hands its exact clock to the
-  cleanup worker, which checks matching byte and object totals before pricing the
-  remaining interval. Each deletion contributes lower and upper bounds because its
-  commit falls between request admission and the completed reply. The host requires
-  those anonymous bounds, matching inventories and no remaining objects; private
-  clock values stay inside the worker. Generated real-storage checks cover missing
-  bytes or objects, unfinished uploads and malformed handoffs. The local stream
-  command also returns combined request accounting for native, observer, setup
-  and cleanup traffic. It keeps failures and retries, combines matching request
-  groups, refuses totals too large to represent exactly, and preserves both storage
-  bounds through verified deletion. The original counters remain available for
-  comparison. A separate `stream-receipt` configuration stage now exports this
-  experiment through the closed anonymous receipt schema after owned cleanup.
-  The receipt includes the selected sale count, copied database size and fresh
-  database growth. It preserves lower and upper storage byte-seconds as separate
-  measured inputs, with the actual storage observation duration. A byte-second is
-  one byte retained for one second. Unmeasured drivers, daily traffic projections
-  and unobserved schedules stay explicitly unknown, so this stage also returns
-  `costMeasured: false`. Receipt times describe the experiment, never the original
-  sale dates. This covers the stream experiment; it does not qualify the full venue
-  cost. An ordinary generated receipt run reproduced the earlier refusal pattern:
-  its idle observation ended at 1.999928834 seconds against a two-second minimum.
-  Replay now checks elapsed monotonic time after timer wakes and continues observing
-  until both startup and idle meet their configured duration. The host still rejects
-  short observations. A generated early-wake check exercises the real isolated writer,
-  native stream, restore and cleanup. The original failure has no detailed trace, so
-  attributing that individual occurrence to the same timing defect remains an inference.
-  Failed workers retain a fixed failure stage in the private ownership journal before
-  scratch removal. Diagnostics stay closed and private; raw errors are never recorded
-  or printed. Missing diagnostics leave the stage unknown, and malformed diagnostics
-  produce a fixed invalid-diagnostic code. Ownership checks still forbid diagnostic
-  writes and cleanup when a worker creates a symlink.
-  A bounded control now compares the same three consecutive copied sales at their
-  original spacing and at 1,000 times that speed. Both restore three sales with
-  valid integrity and reconcile every observed request. Workload and idle send
-  38,529 versus 9,178 request-body bytes to local storage. The original replay
-  takes 78.84 seconds, versus 0.088 seconds when accelerated. These small samples
-  have different durations and background work; their ratio is not a daily
-  correction factor. The control reads the existing consistent scratch copy.
-  The full 207-sale stream attempt remains unqualified: scratch reaches all sales,
-  but the command refuses before a final result is retained and the original-source
-  file comparison reports a change. Cleanup succeeds. A short-idle repeat now
-  identifies the refusal: the restored copy contains all 207 sales but fails SQLite's
-  structural integrity check. Generated sales reproduce that failure during a
-  minute of sustained writes while the fresh replay database stays valid. A separate
-  indexed-database probe also fails on the host-shared folder and passes in the
-  container's temporary filesystem when its writes grow larger. The genuine paced
-  writer passes there too. The worker now copies its input into its existing private
-  temporary filesystem before opening SQLite or the native stream. It keeps the
-  same isolation, native binary, restore checks, accounting and host diagnostics.
-  A new generated 207-sale regression fails before that change and passes after it;
-  every earlier test remains intact. This identifies a local measurement defect
-  that depends on the shared folder; its production relevance is unproved. The
-  earlier untraced failure's exact cause remains an inference.
-  A file-only watch also observes the live source's transaction log and shared-memory
-  file changing after the read-only copy closes. That does not identify the writer.
-  Prepare and verify a consistent frozen input before the long experiment, then keep
-  its files unchanged throughout replay. Do not stop the source process or confuse
-  later live-source activity with writes by the isolated experiment.
-  The [anonymous stream receipt](cost-model/measurements.json) now records a successful
-  repeat with all 207 selected sales, at 1,000 times their original spacing. Startup
-  takes 5.136 seconds, replay takes 54.181 seconds, and idle observation lasts
-  1,200.009 seconds. Native restore recovers all 207 sales with valid SQLite structure.
-  Both request counters reconcile all 342 storage attempts, including setup, observers
-  and cleanup: 6,071,372 request-body bytes sent and 2,243,287 received. These counts
-  exclude network-protocol overhead. The frozen input stays unchanged, the original
-  source passes its read-only copy checks before the experiment, and both private
-  roots and all experiment resources are removed. Five raw-data export probes are
-  rejected. This measures an accelerated fresh-venue experiment, not continuous
-  daily traffic or complete venue cost. Keep daily projections and other unmeasured
-  drivers unknown; the command still returns `costMeasured: false`.
-  The cancellation and time-limit tests now read the journal inside the worker
-  recorded by that run, as approved by the owner. They retain every startup, refusal,
-  source-preservation and cleanup assertion, and detect disabled stop guards.
-  The host controller and its local process supervisor publish each journal update
-  by renaming a complete private file into place. This prevents the Ctrl+C signal
-  observer from reading an incomplete write. Interrupted writes preserve the previous
-  record, and failed publications remove only the temporary file they created.
-  Generated checks retain every signal, rejection, ownership and cleanup assertion.
-  A loopback relay now counts encrypted remote traffic in both directions,
-  including TLS records and reconnects, without reading application content.
-  It keeps staff and public samples separate and checks independent socket totals
-  after every owned connection closes. Limits, cancellation, incomplete transfers
-  and mismatched counters prevent a measured result. A generated local check runs
-  through Cloud's actual HAProxy, public challenge and WireGuard paths on an internal
-  network with no published ports. Both tunnel endpoints report matching counters.
-  A separate generated venue now exercises the pinned Waitron provisioning,
-  identity and management routes through that same gateway. Its nine owner API
-  actions include refused anonymous access and invalid credentials, sign-in,
-  staff, dashboard canvas and theme reads, a fresh-connection read, sign-out and
-  refusal of the ended session. Six public actions cover the challenge, proof,
-  availability and refusal of management access. Both socket meters reconcile;
-  the two WireGuard endpoints also agree. Corrupt status, identity, cookie,
-  canvas and availability evidence prevents publication, as does an unexpected
-  input field. Names, credentials and response contents stay outside the result.
-  The anonymous [owner and public API sample](cost-model/remote-owner-public-api.json)
-  records its exact Cloud source, pinned Waitron revision, runtime and experiment
-  window, with action-level body counts and both encrypted-traffic directions.
-  This measures a generated venue's API scenario, not a complete browser session
-  or Santet's owner activity. You can now measure the built, pinned dashboard in
-  isolated Chromium through the real gateway with the [browser journey](../scripts/cloud-cost/browser.mjs).
-  A generated owner signs in, reads both overview reports, reloads with the session
-  cookie and cached assets, then signs out. Browser requests and both encrypted
-  traffic directions are counted separately. Normal caching stays enabled.
-  Completed-request body counts exclude interrupted live-update streams; their
-  body bytes and any missing final browser event remain explicitly unknown.
-  The socket counters include the encrypted stream traffic and must reconcile
-  after every connection closes. Missing assets, lost cookies, page errors and
-  outside requests refuse publication. The [anonymous browser sample](cost-model/remote-owner-browser.json)
-  names the producing Cloud source, pinned runtime and built-asset digest.
-  It records 40 browser requests and three cache hits, with matching counters
-  across 25 encrypted connections. The scenario uses English at 1280 pixels;
-  it does not establish Santet's owner activity or public browser behaviour.
-  IP and TCP overhead, the interpretation of WireGuard counters for billing,
-  public-traffic frequency and monthly owner activity remain unmeasured.
-  You can now export captured-mail and fiscal API scenarios together through the
-  [service receipt boundary](../scripts/cloud-cost/service-receipt.mjs). It checks
-  independent counters and every grouped retry and refusal before returning an
-  anonymous result. Generated local journeys exercise the real mail queue,
-  bilingual delivery, signup and password recovery, plus fiscal reservation,
-  replay, consumption, inspection and signed reporting. Injected temporary
-  refusals test both retries; an unauthenticated request leaves registry history
-  empty. Export waits for owned listeners, clients and database-schema cleanup.
-  The anonymous [retry and lifecycle sample](cost-model/service-mail-retry-fiscal-lifecycle.json)
-  records four mail attempts (three accepted, one refused, one retry) and eight
-  fiscal HTTP attempts (six successful, two failed, one retry).
-  The separate [signup, recovery and refusal sample](cost-model/service-signup-recovery-fiscal-refusal.json)
-  records three captured emails and one unauthenticated fiscal refusal. Each file
-  names its producing source revision and experiment window. Counts describe each
-  local scenario. Email bytes, monthly scenario frequencies and billable quantities
-  stay unknown; fiscal bytes cover HTTP bodies only.
-  You can now read the accepted stream, two service scenarios, API journey and
-  browser journey together in the [local driver evidence](cost-model/local-driver-evidence.json).
-  The [export boundary](../scripts/cloud-cost/joined-evidence.mjs) checks every
-  sample before joining them. It preserves their separate windows, source revisions,
-  retries, refusals, body-count limits and encrypted-traffic counters because adding
-  these overlapping scenarios would double-count owner actions. Extra fields,
-  mismatched counters, missing source checks and invented monthly frequencies
-  refuse publication. The stream receipt stays byte-identical; its native restore
-  remains distinct from an application archive restore. The explicit `archive-replay`
-  command stage can now capture the replayed venue through Waitron's pinned archive
-  API and restore it through the application, checking integrity and the complete
-  sale count before cleanup. It returns only archive bytes and elapsed capture/restore
-  time. Fresh generated private-state files and an ephemeral recovery key avoid
-  importing live credentials; these file sizes do not represent production TLS or vault
-  state. This stage runs separately from stream observation so its archive work cannot
-  silently alter the accepted stream sample. Host and isolated-container checks use
-  generated sales. A separate local rehearsal at Cloud source `73cd7239fc24d34271bca351e5b23c20aa9295ca`
-  replays all 207 selected source sales into a fresh venue, captures a 3,527,677-byte
-  archive and restores all 207 sales with clean integrity. Capture takes 0.204 seconds
-  and application restore takes 0.236 seconds in that one local experiment. These are
-  elapsed times on this Mac, with generated private-state files. They establish
-  neither the original venue's complete archive size nor AWS processing capacity.
-  The source database and its sidecar files remain unchanged, and owned scratch
-  and containers are removed. The checked [archive sample](cost-model/archive-replay.json)
-  now joins the other driver evidence with its own source revision, clock and
-  fresh-venue scope. Publication rejects extra or hidden fields, incomplete sales,
-  failed integrity, mismatched byte counts and missing isolation or cleanup evidence.
-  The earlier stream, service, API and browser samples remain unchanged.
-  The separate [generated storage sample](cost-model/archive-storage.json), produced
-  by source `3ee545cc3f723a806f7cca9c232685bc70ed5096`, captures and restores a one-sale
-  archive of 2,835,270 bytes. All eleven storage attempts reconcile between independent
-  HTTP body counters after actual application restore and owned cleanup. Outgoing
-  bodies total 2,835,466 bytes: 192 for bucket setup, the complete archive upload and
-  four bytes for an abandoned multipart part. Reads include the full archive and an
-  eleven-byte range. HEAD, listing, multipart abort and deletion stay in the request
-  vector. This generated scenario remains distinct from the 207-sale archive sample;
-  it does not measure that archive's storage transfer or any monthly frequency.
-  Object lifetimes, HTTP headers, TLS overhead and provider billing are outside the
-  storage sample. Control-request prices remain unknown.
-  Cancellation now stops and collects the stream writer before closing its HTTP
-  measurement listeners, so an admitted upload can drain through its existing
-  transport. Cleanup also collects a session that is still opening when the stop
-  arrives. Held-response checks cover both cancellation and deadline expiry,
-  reject any complete-looking result and verify child, scratch and listener cleanup.
-  With a one-second delayed storage reply, the unchanged original deadline check
-  passes with this ordering and fails on the prior implementation. The original
-  deadline, forced-stop limit and measurement checks remain unchanged.
-  The [component projection](cost-model/usage-projection.json) now applies explicit
-  [assumptions](cost-model/projection-settings.json) to those separate samples.
-  Startup uses starts per day, sales use orders and a separate cadence factor,
-  idle traffic uses its own observed duration, and restores use a monthly frequency.
-  Expected request counts can be fractional; retry identities, failures and byte
-  totals stay attached. You choose either owner API or browser activity so their
-  overlapping actions do not add together. Each service frequency names its exact
-  receipt; reordering samples cannot change that association. The selected-sale
-  archive capture and application restore remain distinct from generated storage
-  transfers. Default monthly frequencies stay unset. The assumed idle duration and
-  sales factor do not establish a complete day, scheduled boundaries or retention.
-  Representative archive size, selected-sale archive transfers, remote and public
-  activity, storage forecasts and provider billing remain open. Daily and monthly
-  costs stay unknown.
-  Local sandbox planning now refuses incomplete anonymous storage shapes, missing
-  regional rates, insufficient or inapplicable credits, and cap overruns. Its
-  conservative budget includes version-list and deletion batches, multipart aborts,
-  final checks, cleanup time, active key hours, delayed cleanup, cancelled deletion
-  and three billing calls. Every S3 attempt uses the largest marginal request price,
-  including minimums and rounding, so separate volume discounts cannot understate
-  a mixed workload. Credits stay separate from gross cost. A consumption guard reserves cleanup
-  capacity, counts failed attempts before dispatch, checks elapsed time and refuses
-  reuse or alteration of an approved budget. This checks a planning envelope only;
-  it does not establish generated-byte provenance or authorise provider creation.
-  Billing comparison keeps gross usage and credits separate, requires matching
-  region, operation, unit and time window, and leaves prior-key, other-activity and
-  ambiguous lines unmatched. Cost or quantity differences above 20% require an
-  explanation. Missing or empty billing stays pending. A local request planner
-  keeps continuations and retries within three physical calls; its caller must
-  record the debit before sending. Neither module calls AWS. A complete daily
-  vector, independent synthetic generation, the owned-resource runner and cleanup,
-  durable billing reader and live/billing commands remain open. The accepted
-  component projection cannot substitute for that daily vector.
-  The [offline calculator](cloud-cost-calculator.html) and
-  [model explanation](cloud-cost-model.md) now expose priced subtotals for zero,
-  1, 10, 100 and 1,000 venues, with separate platform and venue quantities.
-  Every total remains incomplete and each required capability stays named as a
-  gap. Editable assumptions cover region, sales, archive retention, owner sessions,
-  resource capacities, disks, keys and traffic. Whole gateway and database steps,
-  separate startup/idle work, aggregate request pricing and calendar archive growth
-  use the same validated arithmetic in Node and the browser. The month-one archive
-  forecast is an alternative to the later retention window, never an extra charge
-  in that window. Missing billing terms remain unknown even when usage is known.
-  The page works offline in English and Spanish, light and dark, at 390 and 1280
-  pixels. Source dates, revisions, line quantities and the complete capability
-  inventory are available beside the incomplete estimate.
-  The [trial assessment](cost-model/live-check.json) explicitly stops before any
-  provider creation. Its incomplete object/lifetime, schedule, retry and billing
-  bounds cannot authorise a run. The illustrative high-cadence workload component
-  alone projects 130,000 requests above the 10,000 cap; that scenario is assumed,
-  not a proved upper bound on actual traffic. All 342 source attempts and their
-  separate phases remain attached. No resources or synthetic payloads were created
-  for this trial and no billing read is due for it. The earlier storage rehearsal
-  and its follow-ups remain separate. Public `build` and `verify` commands compare
-  the generated artifacts without opening private sources or contacting a provider.
-  CI now includes the synthetic cost suite alongside the five prior receipt suites.
-  Provider validation, representative activity, missing regional billing terms,
-  complete storage forecasts and a complete operating total remain open.
-  The fiscal timeout fixture now advances its 50 ms deadline
-  only after the provider admits the request, so a delayed event loop cannot skip
-  the response path or wait forever for an already expired request. A controlled
-  100 ms pause reproduces the earlier hang and passes with the controlled clock.
-  Its timeout, cancellation, oversized-response and interruption checks remain intact.
-  The complete venue-cost model, representative venue and public browser journeys,
-  and complete cost export remain open; each successful experiment supplies only its named sample.
-  The pure calculations now cover aggregate request
-  tiers, explicit resource capacities, dated growth and calendar retention, including
-  protected recovery copies. Synthetic local HTTP checks reconcile retries, denied
-  calls and interrupted transfers with a streaming meter; unknown billing dimensions
-  and unreconciled attempts leave gaps. Replay preparation now uses online SQLite
-  copies that include committed writes still in the transaction log. Synthetic checks
-  preserve the active source's database and transaction-log contents. Preparation
-  excludes credentials and recorded fixtures from the pinned code copy and
-  stops only its own child on cancellation. A real Docker check proves that the
-  Node sandbox allows connections inside the container while refusing Internet, metadata-service and
-  external DNS traffic. Configuration checks reject extra networks, host access,
-  broad mounts and writable copied code. Synthetic sales now pass through the pinned
-  Waitron sale writer inside that isolated container. The checks confirm invoice
-  numbering, linked fiscal hashes, immutable records, rollback after a refused
-  payment and completion of admitted sales before the database closes. The copied
-  public migration files prepare a fresh venue; private credentials and recorded data stay
-  excluded. The private selection copy now runs in an owned child with a deadline and
-  leaves no temporary configuration or SQLite sidecar files after cleanup. Synthetic
-  archives also pass through Waitron's archive creation and restore, including its
-  fiscal restore hook, recovered identity and private state. Refused restores remove
-  their own partial destination and preserve a replacement directory. The archive and
-  restore checks also run inside the isolated Node container. A prepared local image
-  now runs PostgreSQL, SeaweedFS, captured mail, the genuine Waitron sale writer,
-  a capture-only fiscal endpoint and an HTTPS gateway on one internal network.
-  Synthetic checks exercise database access, storage upload/read/delete, captured
-  mail and a sale through HTTPS, then verify fiscal integrity and remove the owned
-  containers and network. Every service passes the outbound connection checks.
-  Startup refuses a changed plan, extra private configuration, mismatched endpoints,
-  an existing private key and resources created before that invocation. The storage
-  fixture now observes object, listing, multipart and bucket-control requests through
-  a streaming proxy. Its backend and accounting socket stay inside the storage
-  container. Synthetic client counts independently check attempts and body bytes,
-  including a HEAD response that reports object size without downloading it.
-  Unclassified or unfinished requests prevent a valid accounting snapshot. Observer
-  counts alone remain unreconciled, and bucket-control pricing stays unknown.
-  The installed storage SDK now records each physical attempt separately from the
-  proxy, with independent command classification, retry counts and streamed body
-  bytes. Synthetic checks cover failed and refused connections, parallel calls,
-  discarded downloads and denied requests. A genuine synthetic Waitron archive
-  passes through signed SeaweedFS upload, size and range checks, download and
-  restore with fiscal integrity checks. Its eleven requests, including multipart
-  cleanup, reconcile across both meters. Setup includes the SDK's bucket-creation
-  body; it is separate from archive workload. This proves that bounded synthetic
-  flow, not complete replay accounting. A private storage-lifetime wrapper now tracks
-  successful writes, versions, delete markers and multipart parts. Metered inventory
-  reads must agree before you can obtain its totals. Synthetic clocks give exact,
-  independently calculated byte-time checks; they are not measured venue traffic.
-  Event times follow completed requests; the provider's commit time during a request
-  remains unmeasured and needs bounds in the future replay evidence.
-  The wrapper requires initially empty buckets, matching metered clients and serial
-  writes. Unknown body sizes, changed clients, ambiguous retries and incomplete or
-  mismatched inventories refuse evidence. Overwriting an unversioned object,
-  promoting an earlier version, completing selected parts and aborting an upload
-  preserve the stored-byte integral. Delete markers use the UTF-8 key length described
-  in the [AWS delete-marker guide](https://docs.aws.amazon.com/AmazonS3/latest/userguide/DeleteMarker.html)
-  (read 18 October 2026); bucket-control pricing stays unknown.
-  The genuine SeaweedFS 4.47 check also exposes a multipart replacement mismatch:
-  after uploading a 4-byte part and replacing it with 2 bytes, its listing contains
-  both entries. `genuineVersionAndMultipartLifetimesMatchMeteredStorageInventories`
-  requires the wrapper to refuse that evidence. Do not deduplicate the listing or
-  weaken the inventory comparison. Replacement parts still need a compatible local
-  backend before a complete replay using them can qualify; the independent signed-SDK
-  HTTP check retains the exact replacement-size assertion. The existing archive and
-  stack assertions remain unchanged.
-  The unmodified pinned Litestream 0.5.17 binary now replicates two synthetic
-  Waitron sale writes into local storage, retries an injected upload failure and
-  restores both sales into an integrity-checked SQLite database. Its header-only SDK
-  request logs independently reconcile physical request identities, operations and
-  retry numbers with the passive proxy. The parser discards paths and signed headers,
-  rejects malformed, duplicate or truncated evidence and keeps workload and restore
-  phases separate. Those logs remain request evidence only. A separate loopback
-  transport endpoint now counts HTTP body bytes from the unmodified binary,
-  independently of the storage observer. The synthetic replication, failed upload,
-  retry and native restore reconcile every attempt's identity, operation, retry
-  number, status and actual/attempted body sizes. Empty, unfinished, interrupted or
-  malformed transfers cannot qualify; the endpoint refuses external destinations,
-  duplicate attempts, conflicting retries and copy requests before forwarding them.
-  You can use this as bounded HTTP body evidence, not application-consumed bytes,
-  TCP/TLS overhead or retained storage. Header-only evidence keeps its existing
-  unknown status. You can now also check the native stream's retained objects against
-  a separate metered inventory in an initially empty, unversioned bucket. The check
-  bounds storage duration between request admission and successful completion;
-  a failed reply may still have stored the object, so its earlier possible write
-  remains in the upper bound. Repeated writes of the same size keep one retained
-  object. An independent inventory confirms its size and presence. Missing, extra,
-  duplicate or changed-size entries refuse evidence, as do unfinished transfers,
-  version history, deletion, multipart and size-changing replacements. Synthetic
-  clocks check the exact bounds; the real binary check also verifies positive
-  bounds against its retained inventory and restores both synthetic sales.
-  This qualifies the short unversioned, upload-only storage history. It observes no
-  scheduled snapshot or compaction boundary and does not establish complete stream
-  retention. The native stream check does not run application restore hooks or grant
-  fiscal activation authority.
-  You can now measure the real Cloud fiscal HTTP routes through a separate local
-  proxy. The generated PostgreSQL fixture reserves a name, repeats that reservation,
-  consumes it, reads its status and list, submits a signed machine report and
-  exercises a refused request. Independent client and proxy counts agree on all
-  seven HTTP bodies. The authority history and allocation counter confirm that
-  replay and inspection issue no additional name. A separate refused-session check
-  leaves the authority unchanged. Machine reports omit browser authentication
-  headers, as the existing route requires. Synthetic transport checks also count
-  failed replies and retries, refuse external destinations and incomplete transfers,
-  and stop their own request on cancellation. Payloads and credentials stay private.
-  These figures cover Cloud API HTTP bodies only. Authority-service traffic,
-  connection overhead, monthly frequency and fiscal service pricing remain unknown;
-  this fixture does not activate a Waitron installation.
-  You can also count captured email operations independently at the mailer and at
-  a loopback SMTP proxy. Generated PostgreSQL/Mailpit checks queue three messages,
-  observe one refusal and its scheduled retry, then confirm three deliveries and
-  removal of the encrypted queued payloads. A separate real signup
-  and password-recovery journey queues and delivers verification, reset and
-  password-change messages. Both journeys reconcile every delivery attempt;
-  English and Spanish subjects are checked privately. All four existing mail
-  renderers, including service alerts, retain their action class in synthetic
-  transport checks. The proxy refuses concurrent or unpaired connections, multiple
-  recipients, oversized messages, incomplete replies and client/server disagreement.
-  Cancellation closes only its own sockets, and a bounded attempt budget stops
-  before the next connection. Exported counters contain no recipient, link, message
-  body or delivery identity. These are local operation counts only: SMTP bytes,
-  provider billing, monthly frequency and real alert eligibility remain unmeasured.
-  This is the base service fixture plus bounded synthetic stream request, body and
-  upload-only lifetime evidence, local fiscal API and captured-email scenarios;
-  wider stream lifetime integration, the real public/staff
-  tunnel journeys, complete accounting,
-  local replay orchestration, the offline calculator, private local sales replay,
-  measured storage and remote traffic, and synthetic-only AWS comparison
-  remain open. Keep raw venue data on the Mac, distinguish measured
-  usage from extrapolation, and compare list-price usage separately from credits.
-  Storage-only evidence cannot validate the fixed infrastructure or fleet capacity.
+- **Operating cost.** You can compare the running platform and per-venue usage
+  with the [offline calculator](cloud-cost-calculator.html) and
+  [model explanation](cloud-cost-model.md). They show priced subtotals at zero,
+  1, 10, 100 and 1,000 venues, with editable assumptions, English and Spanish,
+  light and dark themes, and layouts for 390 and 1280 pixels. The complete bill
+  remains unknown. Blank inputs and missing billing terms stay named gaps;
+  neither a priced subtotal nor a successful verification command means the
+  service has a complete or provider-validated operating budget.
+  The [approved design](superpowers/specs/2026-10-14-cloud-cost-model-design.md)
+  and [implementation plan](superpowers/plans/2026-10-14-cloud-cost-model.md)
+  define this evidence boundary.
+
+  **Public inputs and arithmetic.** The [resource inventory](cost-model/inventory.json)
+  covers required capabilities, runtime roles, alternatives and excluded future
+  products. The [price snapshot](cost-model/prices.json) records dated Spain,
+  Stockholm and global rates, their exact sources and billing dimensions.
+  Missing regional prices, minimums and rounding rules stay unknown. The
+  calculator uses the same validated model in Node and the browser. It prices
+  whole gateway/database capacity steps and aggregate request tiers, preserves
+  startup and idle work when sales are zero, and simulates calendar archive
+  growth. Month-one and later-retention storage are alternative windows, never
+  added into one month. Resource size, capacity, future growth, traffic mapping
+  and low/base/high sensitivity remain assumptions. Daily and monthly archives,
+  continuous-stream retention and noncurrent versions remain distinct.
+
+  **Accepted local samples.** The [joined evidence](cost-model/local-driver-evidence.json)
+  preserves each experiment's source revision, clock, scope and limitations:
+
+  - The [stream receipt](cost-model/measurements.json) replays all 207 selected
+    sales through the pinned Waitron sale writer, preserving its normal fiscal
+    integrity checks. It observes startup, accelerated workload, 1,200.009
+    seconds of idle traffic and a successful native restore. Copied source size
+    is 19,546,112 bytes; fresh-venue database growth is 700,416 bytes. All 342
+    physical requests reconcile between independent counters, including setup,
+    observer, restore, cleanup and eight failed attempts. Retained byte-seconds
+    have explicit lower/upper bounds. This short unversioned experiment observes
+    neither a full trading day nor a scheduled snapshot/compaction boundary.
+    A separate three-sale original-cadence control exposes batching sensitivity;
+    its different duration/background work cannot supply a daily correction.
+  - The [selected-sale archive](cost-model/archive-replay.json) captures a
+    3,527,677-byte archive and restores all 207 sales through the application
+    with valid integrity and owned cleanup. The
+    [one-sale storage sample](cost-model/archive-storage.json) separately measures
+    a 2,835,270-byte generated archive, eleven storage attempts, a complete and
+    range read, HEAD, listing, an abandoned multipart part and cleanup. Its
+    transfer counts cannot substitute for the selected-sale archive's transfers.
+  - The [generated owner browser journey](cost-model/remote-owner-browser.json)
+    measures 2,836,968 encrypted response bytes through the real isolated gateway,
+    including cold/cached loads, sign-in, dashboard, reconnect and sign-out.
+    Interrupted stream bodies and IP/TCP/WireGuard overhead remain outside its
+    body counters. The separate [owner/public API sample](cost-model/remote-owner-public-api.json)
+    covers generated API actions. Choose one owner scenario; summing API and
+    browser scenarios would overlap. Neither sample measures typical venue
+    activity, public browser use or provider-billed transfer.
+  - The [mail retry and fiscal lifecycle](cost-model/service-mail-retry-fiscal-lifecycle.json)
+    and [signup, recovery and refusal](cost-model/service-signup-recovery-fiscal-refusal.json)
+    samples preserve captured-mail attempts, refusals, retries and fiscal HTTP
+    body counts. They issue no additional fiscal authority through replay or
+    inspection. SMTP bytes, production alert eligibility and monthly service
+    frequencies remain unknown.
+
+  **Private measurement controls.** Online SQLite copies include committed
+  transaction-log writes without migrating, checkpointing or reseeding the source.
+  Private replay uses only owned scratch and an internal Docker network, checks
+  effective isolation before opening data, excludes live credentials/senders and
+  runs the genuine pinned writer/archive/restore paths. Every storage HTTP attempt
+  is metered independently, including retries, failed replies, versions, deletion
+  batches and unfinished multipart work. Unknown or ambiguous histories refuse
+  complete evidence. Cancellation collects admitted writers before closing their
+  measurement transports; replaced paths, lost ownership or unverifiable cleanup
+  refuse deletion and retain the recorded resources for explicit recovery.
+  The [generated conformance fixtures](../scripts/cloud-cost/fixtures/) exercise
+  these boundaries. No fiscal allocation, hash-chain or golden rule is changed.
+  Raw data, names, row identities, object keys, credentials and payloads stay on
+  the Mac. Closed anonymous export rejects extra/hidden fields and raw canaries.
+
+  **Forecast and live-check limits.** The [component projection](cost-model/usage-projection.json)
+  applies explicit [assumptions](cost-model/projection-settings.json), preserving
+  separate phases, failures, retry identities and source windows. Default future
+  sales are an assumed 207/day after saved-clock reconciliation, rather than the
+  earlier midnight-based source-selection count of 203. Owner/public/service/
+  recovery frequencies start unset. This projection is not a complete daily
+  object-size/lifetime, version, multipart, schedule or retry vector.
+  The [trial assessment](cost-model/live-check.json) therefore stops before any
+  AWS creation. Its illustrative high-cadence workload component alone projects
+  130,000 requests above the 10,000 cap before cleanup. That sensitivity is
+  assumed, not a proved upper bound. An under-cap base estimate cannot bound
+  missing work, and no measured operation may be truncated to make the trial fit.
+  No resources or synthetic payloads were created for this trial, and no billing
+  read is due for it. The earlier storage rehearsal and its follow-ups stay separate.
+
+  Local preflight helpers reserve cleanup requests/time, versions, multipart,
+  active key hours and delayed/cancelled-deletion contingencies; unavailable
+  applicable credits or missing price bounds refuse a plan. Consumption guards
+  charge attempts before dispatch and refuse reused/altered budgets. These checks
+  establish no generated-byte provenance or provisioning authority. Billing helpers
+  compare gross usage and credits separately, retain prior-key/other/ambiguous
+  lines, flag cost or quantity differences above 20%, and plan at most three
+  physical reads including continuation/retry. They perform no provider I/O;
+  independent synthetic generation, an owned-resource runner and durable billing
+  execution remain future prerequisites if the stopped trial is ever revisited.
+
+  **Rebuild and verify.** Run `node scripts/cloud-cost/cli.mjs build` and
+  `node scripts/cloud-cost/cli.mjs verify`. They read only public inputs and
+  compare the generated HTML, explanation and stop assessment without starting
+  private replay or contacting AWS. `pnpm test:cloud-cost` runs synthetic checks
+  and artifact verification; CI includes it alongside all five prior receipt suites.
+  Compiler, real-browser, deliberate-fault and generated local-storage checks cover
+  the model and its boundaries. Storage-only evidence validates neither fixed
+  infrastructure, AWS capacity nor a full provider bill.
+
+  **Remaining work and observations.** To complete the operating total, establish
+  the missing inventory quantities and regional billing terms, representative
+  venue/public activity, complete retained-object forecasts, recovery/alert/email
+  frequencies and provider capacity/transfer mappings. Keep external mail, fiscal
+  API fees, GitHub charges, account allowances, credits and tax separate from
+  gross AWS usage. Earlier untraced refusals and transient source-file fingerprint
+  changes remain unattributed; later accepted samples do not explain those exact
+  occurrences. A generated restore-integrity failure reproduces on the host-shared
+  Docker folder and passes with active SQLite/native stream state on container-native
+  storage. Its production relevance is unproved. Prepare a consistent frozen copy
+  before long replay; later live-source activity does not identify a writer and
+  must not be treated as proof that the isolated experiment wrote the source.
 
 - **Future remote DNS lost-reply browser failures.** The reproduced reconciliation
   stall is resolved by [PR #102](https://github.com/waitron-io/waitron-cloud/pull/102).
