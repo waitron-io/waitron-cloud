@@ -2178,7 +2178,18 @@ notifications separately.
   installation and the account shard was later cancelled before completing.
   Its log does not identify the slow request, so do not attribute it to a
   particular registry endpoint or to a product test. Preserve bootstrap timing
-  and npm diagnostics if setup overruns recur. Package-only changes omit the two-venue milestone receipt when both immutable
+  and npm diagnostics if setup overruns recur. A separate
+  [merge run 39650584401](https://github.com/waitron-io/waitron-cloud/actions/runs/39650584401/job/119397690795)
+  refused registration partition 3 before tests: the action's locked pnpm 11.19.0
+  bootstrap could not verify `@pnpm/exe@9.15.0` signature metadata, reporting
+  `ERR_PNPM_PNPM_ENGINE_IDENTITY_UNVERIFIABLE` with `terminated`. The pinned
+  verifier classifies that error as unreachable metadata, rather than a completed
+  invalid-signature check. A fresh disposable Linux bootstrap with the exact
+  action lock later completed the switch and printed 9.15.0 with verification
+  intact; it does not explain the original termination. Capture the failing
+  HTTP stage and registry response if it recurs, then evaluate bounded recovery
+  while preserving signature verification. A later successful run is recovery
+  evidence, not a code fix. Package-only changes omit the two-venue milestone receipt when both immutable
   revisions retain its audited regular-file inputs, test command and CI wiring.
   These tests exercise validators and receipt composition; their guarded CLI
   blocks do not launch backend proofs when imported. Changed, missing or linked
