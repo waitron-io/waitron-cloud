@@ -1,10 +1,16 @@
 # Backup verification without fiscal authority
 
-Status: **approved by the owner on 18 October 2026; not implemented or runtime proved**.
+Status: **approved by the owner on 18 October 2026; Waitron interface landed,
+Cloud integration and joint runtime proof pending**.
 This answers D79 PR5's fiscal blocker. The owner approved the shared contract at
-approximately 10:10. Waitron implementation is queued as A850 in lane E after
-A679, which shares the restore files. Cloud integration continues under existing
-campaign authority within this design after A850 lands.
+approximately 10:10. Waitron A850 landed in
+[#1939](https://github.com/clintongormley/waitron/pull/1939) at
+`5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa`. Its
+[release handoff](https://github.com/clintongormley/waitron/blob/9fbbcd2daae08bb0d943186eff9bba8599002e9c/docs/superpowers/plans/2026-10-20-a850-backup-verification.md#task-27-completion-and-implementing-release--21-october-2026)
+identifies the implementing bundle and complete target descriptor. Follow the
+[Cloud implementation plan](../plans/2026-10-21-cloud-backup-verification.md)
+under existing campaign authority. The historical source observations below stay
+pinned to their original revisions; the handoff is not Cloud runtime evidence.
 Keep snapshots unavailable until implementation and the acceptance evidence below.
 The existing activation path and guards stay intact.
 

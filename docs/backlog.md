@@ -1027,8 +1027,16 @@ notifications separately.
   [backup-verification contract](superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md)
   separates data recovery checks from permission to activate a fiscal server.
   Its five worked cases and acceptance checks are a design, not runtime evidence.
-  Waitron's separately owned interface is queued as A850 after A679; Cloud adapter,
-  catalogue and recovery-version integration follows after A850 lands. Snapshots
+  Waitron's separately owned A850 interface landed in
+  [#1939](https://github.com/clintongormley/waitron/pull/1939) at
+  `5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa`. The
+  [Cloud implementation plan](superpowers/plans/2026-10-21-cloud-backup-verification.md)
+  covers strict result admission, stored evidence, current target qualification,
+  historical retention and version-bound recovery across all existing readers.
+  The parked PR5 adapters still need reconciliation, implementation, real isolation
+  and cleanup checks, and a joint capture-to-recovery proof against the implementing
+  runtime with the continuous source absent. A source release does not establish
+  a published verifier image or qualify any snapshot. Snapshots
   remain unavailable on this test deployment, and enforcement stays off until the
   implementation, evidence and release gates pass.
   The thirty-day leaf and one-year CA currently fail closed on expiry; same-CA
