@@ -133,7 +133,7 @@ test('pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_' + fa
     const nodeVersion = docker('exec', peer, 'node', '-p', 'process.version');
     const browserImage = docker('image', 'inspect', 'mcr.microsoft.com/playwright:v1.63.0-noble', '--format', '{{.Id}}');
     const runner = docker('create', '--pull=never', '--label', label, '--network=container:' + gateway,
-      '--cap-drop=ALL', '--read-only', '--security-opt=no-new-privileges:true', '--log-driver=none',
+      '--cap-drop=ALL', '--user', `${process.getuid()}:${process.getgid()}`, '--read-only', '--security-opt=no-new-privileges:true', '--log-driver=none',
       '--tmpfs=/tmp:rw,nosuid,size=512m', '-v', join(root, 'measure') + ':/measure:ro', browserImage, 'sleep', '120');
     containers.push(runner); journal({state:'browser-created'}); docker('start', runner);
     const runnerInfo = JSON.parse(docker('inspect', runner))[0];
