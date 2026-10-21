@@ -169,8 +169,18 @@ The build archives the target manifest's pinned source revision, generates that
 source's runtime stamp and compares the compiled complete target before producing
 the local image. The pinned image refuses synthetic bad bytes and a missing real
 migration journal. These checks do not establish genuine archive success or a
-published release. The test worker still uses the older unqualified adapter until
-transactional admission is implemented.
+published release.
+You can exercise the dormant database admission core with
+`node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test test/verification-admission.test.ts`.
+It prepares an immutable request for a live claim, then checks policy, venue, job,
+point, publication metadata and the child receipt in one transaction. A blocked
+write can outlast its lease or request deadline; a final time check rolls back the
+whole outcome. Inconclusive checks remove current success while keeping historical
+retention evidence, and a completed integrity failure remains failed. These tests
+use synthetic child results to test admission; they do not prove archive recovery.
+The test worker still uses the older unqualified adapter. Connecting this core,
+replacing callback admission and completing the deletion and worker races remain
+part of Task 5.
 Keep snapshots unavailable and deployment
 enforcement off until the implementation, full integration proof and release gates
 pass. Ordinary fiscal restore still requires its existing activation authority.

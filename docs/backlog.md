@@ -1166,8 +1166,15 @@ notifications separately.
   from the pinned source and generated runtime stamp; all 15 owners match the
   complete target. It refuses synthetic bad bytes and a missing actual migration
   journal. These are boundary and invocation checks; genuine archive success is
-  still unproved. Worker admission, recovery v2 and the genuine joint proof remain
-  unfinished; snapshots
+  still unproved. A dormant database admission core now binds each attempt to its
+  live claim, complete policy, publication metadata and terminated, removed child.
+  It atomically records the outcome, point pointers and job transition. A final
+  time check rolls back all changes if a blocked write outlasts the lease or
+  request deadline. PostgreSQL tests cover all five outcome categories, duplicate
+  results, policy changes and explicit lock waits; synthetic results prove this
+  boundary, not archive recovery. The worker still uses the older unqualified
+  callback path. Connecting it to the new core, updating all callers and deletion
+  lock order, recovery v2 and the genuine joint proof remain unfinished; snapshots
   stay unavailable and deployment enforcement stays off.
   The PR5 adapters are reconciled with current main, preserving their earlier
   storage, account, remote and controller behavior and historical test evidence.
