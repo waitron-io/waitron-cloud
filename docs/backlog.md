@@ -1199,6 +1199,15 @@ notifications separately.
   neither check changes a production timeout.
   Linux conformance exposed a PostgreSQL initialization race: temporary database
   files now live on container-native scratch, outside the scanned ownership tree.
+  One later Linux run refused startup in
+  `genuineStreamMeasurementJoinsPhasesInventoriesAndIndependentRequestCounters`
+  before the measurement began (`39616174409`, group 3). The saved exception
+  contains only the generic startup refusal. An unchanged Mac run, twenty
+  instrumented Mac repetitions and sixteen instrumented Linux repetitions pass;
+  these results do not explain that failure or establish a correction. On
+  recurrence, capture the failing startup stage and underlying ownership or
+  Docker error using generated data only. Keep the ownership, isolation,
+  accounting and cleanup assertions and deadlines unchanged.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.

@@ -54,21 +54,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Diagnose generated stream startup
-        if: matrix.file == 'stack-conformance.test.mjs' && matrix.group == '3/3'
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('scripts/cloud-cost/local.mjs')
-          s=p.read_text().replace('  } catch { await close?.(); fail(); }', '  } catch(error) { console.error("GENERATED_STARTUP_DIAGNOSTIC", error.stack); await close?.(); fail(); }')
-          p.write_text(s)
-          p=Path('scripts/cloud-cost/schema.mjs')
-          s=p.read_text().replace('  } catch { fail(); }\n}', '  } catch(error) { console.error("GENERATED_SCHEMA_DIAGNOSTIC", error.stack); fail(); }\n}')
-          p.write_text(s)
-          p=Path('scripts/cloud-cost/fixtures/stack-conformance.test.mjs')
-          s=p.read_text().replace("test('genuineStreamMeasurementJoinsPhasesInventoriesAndIndependentRequestCounters'", "for(let startupProbe=0;startupProbe<16;startupProbe++) test('genuineStreamMeasurementJoinsPhasesInventoriesAndIndependentRequestCounters'")
-          p.write_text(s)
-          PY
       - run: pnpm test:cloud-cost:conformance --only '${{ matrix.file }}' --pattern '${{ matrix.pattern }}' --skip-pattern '${{ matrix.skipPattern }}'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
