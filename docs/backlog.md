@@ -1361,6 +1361,9 @@ notifications separately.
   the two WireGuard endpoints also agree. Corrupt status, identity, cookie,
   canvas and availability evidence prevents publication, as does an unexpected
   input field. Names, credentials and response contents stay outside the result.
+  The anonymous [owner and public API sample](cost-model/remote-owner-public-api.json)
+  records its exact Cloud source, pinned Waitron revision, runtime and experiment
+  window, with action-level body counts and both encrypted-traffic directions.
   This measures a generated venue's API scenario, not a complete browser session
   or Santet's owner activity. Browser assets, background updates, IP and TCP
   overhead, the interpretation of WireGuard counters for billing, public-traffic
