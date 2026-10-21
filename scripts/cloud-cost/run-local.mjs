@@ -25,9 +25,11 @@ export function readLocalConfig(path) {
     const value = JSON.parse(buffer.subarray(0, length).toString('utf8'));
     const keys = ['stage', 'source', 'root', 'journal', 'database', 'codeRoot', 'image', 'locationId',
       'expected', 'originalInventory', 'cadence', 'replayWindowSeconds', 'windowSeconds', 'initial', 'config',
-      ...(['stream-replay', 'stream-receipt'].includes(value?.stage) ? ['stream'] : [])];
+      ...(['stream-replay', 'stream-receipt'].includes(value?.stage) ? ['stream'] : []),
+      ...(value?.stage === 'archive-replay' ? ['archive'] : [])];
     need(value && Object.getPrototypeOf(value) === Object.prototype && Object.keys(value).length === keys.length
-      && keys.every(k => Object.hasOwn(value, k)) && ['replay-admission', 'stream-replay', 'stream-receipt'].includes(value.stage));
+      && keys.every(k => Object.hasOwn(value, k)) && ['replay-admission', 'stream-replay', 'stream-receipt', 'archive-replay'].includes(value.stage)
+      && (value.stage !== 'archive-replay' || value.archive === true));
     return value;
   } catch { fail(); }
   finally { if (fd !== undefined) closeSync(fd); }

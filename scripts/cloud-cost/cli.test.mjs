@@ -143,3 +143,14 @@ for (const stage of ['replay-admission', 'stream-replay']) test('privateLocalCon
   if (stage === 'replay-admission') value.stream = {};
   writeFileSync(f.path, JSON.stringify(value)); assert.throws(() => local.readLocalConfig(f.path), bad);
 });
+
+// The explicit archive stage is the only config form that can request archive work.
+test('privateLocalConfigAdmitsAnExplicitArchiveStage', t => {
+  const f = fixture(t), input = { ...config(), stage: 'archive-replay', archive: true };
+  writeFileSync(f.path, JSON.stringify(input));
+  assert.deepEqual(local.readLocalConfig(f.path), input);
+});
+for (const value of [false, null, {}, 'true']) test('privateLocalConfigRefusesInvalidArchive_'+JSON.stringify(value), t => {
+  const f = fixture(t); writeFileSync(f.path, JSON.stringify({ ...config(), stage: 'archive-replay', archive: value }));
+  assert.throws(() => local.readLocalConfig(f.path), bad);
+});

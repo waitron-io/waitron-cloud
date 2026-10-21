@@ -9,6 +9,7 @@ import { replayScheduledSales } from './cadence.mjs';
 import { openReplay } from './waitron-adapter.mjs';
 import { openReplayStream } from './replay-stream.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
+import { randomBytes } from 'node:crypto';
 
 const fail = () => { throw new Error('Invalid cloud cost private replay'); };
 const requireThat = value => { if (!value) fail(); };
@@ -70,6 +71,7 @@ export async function replayPrivateDay(args) {
     assertOwnedRoot({ source, root, journal });
     requireThat(signal === undefined || signal instanceof AbortSignal);
     requireThat(!signal?.aborted && (onProgress === undefined || typeof onProgress === 'function'));
+    requireThat(args.archive === undefined || (args.archive === true && args.stream === undefined));
     if (args.stream !== undefined) {
       const keys = ['binary', 'binarySha256', 'target', 'sdk', 'bucket', 'versioned', 'startupSeconds', 'idleSeconds', 'windowSeconds'];
       requireThat(args.stream && Object.getPrototypeOf(args.stream) === Object.prototype
@@ -139,6 +141,25 @@ export async function replayPrivateDay(args) {
       integrity: { ok: true, issues: 0 }, storage: { copiedDatabaseBytes: lstatSync(database).size,
         freshBeforeBytes, freshAfterBytes, freshGrowthBytes: freshAfterBytes - freshBeforeBytes } };
     if (stream) result.stream = await stream.finish({ expectedSales: prepared.expectedSales });
+    if (args.archive) {
+      await progress('archive');
+      // This fresh venue has no live TLS or vault credentials. Only generated stand-ins enter its archive.
+      mkdirSync(join(stateRoot, 'tls'), { mode: 0o700 });
+      for (const name of ['secrets.env', 'tls/ca.crt', 'tls/ca.key', 'tls/server.crt', 'tls/server.key'])
+        writeFileSync(join(stateRoot, name), randomBytes(32), { mode: 0o600, flag: 'wx' });
+      const recoveryKey = randomBytes(32).toString('hex'), captureStarted = performance.now();
+      const captured = await replay.capture({ recoveryKey, at: new Date(), signal: signal ?? new AbortController().signal });
+      const captureSeconds = (performance.now() - captureStarted) / 1000;
+      requireThat(captured.bytes instanceof Uint8Array && captured.bytes.length > 0 && !signal?.aborted);
+      await progress('restore');
+      const restoreStarted = performance.now();
+      const restored = await replay.restore({ artifact: captured.bytes, recoveryKey });
+      const restoreSeconds = (performance.now() - restoreStarted) / 1000;
+      requireThat(!signal?.aborted && restored.ok === true && restored.issues === 0
+        && restored.sales === prepared.expectedSales);
+      result.archive = { capturedBytes: captured.bytes.length, captureSeconds, restoreSeconds,
+        restored: { ok: true, issues: 0, sales: restored.sales } };
+    }
   } catch { fail(); }
   finally {
     clearTimeout(streamTimer);

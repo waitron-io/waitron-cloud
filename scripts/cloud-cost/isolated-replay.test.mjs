@@ -62,3 +62,40 @@ for (const [name, change] of [
     assert.throws(() => controller.validateReplayAdmission(result, options), { message: 'Invalid isolated cloud cost replay' });
   });
 }
+
+const archive = () => ({ capturedBytes: 2048, captureSeconds: 0.2, restoreSeconds: 0.3,
+  restored: { ok: true, issues: 0, sales: 3 } });
+// Releasing an unchecked archive can leak private data or qualify a partial restore.
+test('replayAdmissionAdmitsOnlyTheRequestedCompleteArchiveMeasurement', () => {
+  const input = { ...admission(), archive: archive() };
+  assert.deepEqual(controller.validateReplayAdmission(input, { ...options, archive: true }), input);
+  assert.throws(() => controller.validateReplayAdmission(input, options));
+  assert.throws(() => controller.validateReplayAdmission(admission(), { ...options, archive: true }));
+  const result = controller.validateReplayAdmission(input, { ...options, archive: true });
+  input.archive.restored.sales = 2; assert.equal(result.archive.restored.sales, 3);
+});
+for (const [name, change] of [
+  ['artifact', a => { a.artifact = 'PRIVATE_SYNTHETIC'; }],
+  ['key', a => { a.recoveryKey = 'PRIVATE_SYNTHETIC'; }],
+  ['extra-restored-field', a => { a.restored.path = '/PRIVATE_SYNTHETIC'; }],
+  ['zero-bytes', a => { a.capturedBytes = 0; }],
+  ['fractional-bytes', a => { a.capturedBytes = 1.5; }],
+  ['negative-duration', a => { a.captureSeconds = -1; }],
+  ['zero-duration', a => { a.restoreSeconds = 0; }],
+  ['infinite-duration', a => { a.restoreSeconds = Infinity; }],
+  ['failed-integrity', a => { a.restored.ok = false; }],
+  ['issues', a => { a.restored.issues = 1; }],
+  ['lost-sale', a => { a.restored.sales = 2; }],
+]) test('replayAdmissionRefusesArchive_'+name, () => {
+  const input = { ...admission(), archive: archive() }; change(input.archive);
+  assert.throws(() => controller.validateReplayAdmission(input, { ...options, archive: true }),
+    { message: 'Invalid isolated cloud cost replay' });
+});
+
+// Worker evidence outside the caller's overall window cannot qualify a bounded archive experiment.
+test('replayAdmissionRefusesArchiveDurationsOutsideTheOverallWindow', () => {
+  const input = { ...admission(), archive: archive() };
+  input.archive.captureSeconds = 100; input.archive.restoreSeconds = 21;
+  assert.throws(() => controller.validateReplayAdmission(input, { ...options, archive: true, windowSeconds: 120 }),
+    { message: 'Invalid isolated cloud cost replay' });
+});

@@ -647,3 +647,33 @@ test('isolatedHostCompletesTheIdleObservationAfterAnEarlyTimerWake', async t => 
   assert.deepEqual(result.admission.stream.restored, { sales: 3, integrity: true });
   clean(f, before);
 });
+
+// Dropping the archive flag at either controller/worker boundary must not silently produce ordinary replay evidence.
+test('isolatedControllerArchivesAndRestoresTheEntireSelectedReplay', async t => {
+  const f = await fixture(t), before = fingerprint(f.database);
+  const result = await controller.runIsolatedReplay({ ...f, archive: true });
+  assert.ok(result.admission.archive, 'archive must survive private config, worker dispatch and admission');
+  assert.ok(result.admission.archive.capturedBytes > 1000);
+  assert.ok(result.admission.archive.captureSeconds > 0);
+  assert.ok(result.admission.archive.restoreSeconds > 0);
+  assert.deepEqual(result.admission.archive.restored, { ok: true, issues: 0, sales: 3 });
+  assert.equal(result.costMeasured, false);
+  assert.deepEqual(result.isolation, { blockedConnections: 3, blockedDns: 2, localControl: true });
+  assert.deepEqual(result.cleanup, { workerContainers: 0, networks: 0, privateCopies: 0 });
+  assert.equal(/PRIVATE_|recoveryKey|artifact|taxId|locationId|\/tmp|2026-/.test(JSON.stringify(result)), false);
+  clean(f, before);
+});
+
+// The command must carry the explicit stage through the same isolation and validated anonymous result.
+test('localCommandCarriesArchiveStageThroughWorkerAndAdmission', async t => {
+  const f = await fixture(t), before = fingerprint(f.database);
+  const { runLocal } = await import('../run-local.mjs');
+  const privateConfig = join(f.root, 'archive-command.json');
+  writeFileSync(privateConfig, JSON.stringify({ ...f, stage: 'archive-replay', archive: true }), { mode: 0o600 });
+  const result = await runLocal({ privateConfig, cadence: 'accelerated', windowSeconds: 120 });
+  assert.equal(result.stage, 'archive-replay'); assert.equal(result.costMeasured, false);
+  assert.deepEqual(result.admission.archive.restored, { ok: true, issues: 0, sales: 3 });
+  assert.ok(result.admission.archive.capturedBytes > 1000);
+  assert.equal(/PRIVATE_|recoveryKey|artifact|taxId|locationId|\/tmp|2026-/.test(JSON.stringify(result)), false);
+  clean(f, before);
+});

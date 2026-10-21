@@ -1405,9 +1405,17 @@ notifications separately.
   these overlapping scenarios would double-count owner actions. Extra fields,
   mismatched counters, missing source checks and invented monthly frequencies
   refuse publication. The stream receipt stays byte-identical; its native restore
-  remains distinct from an application archive restore. Archive capture, application
-  restore, representative remote activity, public browser activity, provider billing
-  and daily projections remain open. Daily and monthly costs stay unknown.
+  remains distinct from an application archive restore. The explicit `archive-replay`
+  command stage can now capture the replayed venue through Waitron's pinned archive
+  API and restore it through the application, checking integrity and the complete
+  sale count before cleanup. It returns only archive bytes and elapsed capture/restore
+  time. Fresh generated private-state files and an ephemeral recovery key avoid
+  importing live credentials; these file sizes do not represent production TLS or vault
+  state. This stage runs separately from stream observation so its archive work cannot
+  silently alter the accepted stream sample. Host and isolated-container checks use
+  generated sales. Representative archive size, storage upload/download accounting,
+  remote activity, public browser activity, provider billing and daily projections
+  remain open. Daily and monthly costs stay unknown.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled

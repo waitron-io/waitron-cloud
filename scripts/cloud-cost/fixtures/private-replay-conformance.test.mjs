@@ -245,3 +245,77 @@ test('privateDayRefusesInvalidStreamSettingsBeforeOpeningTheReplay', async t => 
     assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources.some(e => e.kind === 'private-replay-state'), false);
   }
 });
+
+// Losing capture/restore, restoring only part of the replay, or returning an artifact breaks this boundary.
+test('privateDayArchivesAndRestoresAllReplayedSalesWithoutReleasingPrivateState', async t => {
+  const f = await setup(t), before = fingerprint(f.database), phases = [];
+  const result = await local.replayPrivateDay({ ...f, archive: true, onProgress: p => phases.push(p.phase) });
+  assert.ok(result.archive, 'requested archive must run before replay state closes');
+  assert.deepEqual(Object.keys(result.archive).sort(), ['captureSeconds', 'capturedBytes', 'restoreSeconds', 'restored']);
+  assert.equal(Number.isSafeInteger(result.archive.capturedBytes) && result.archive.capturedBytes > 1000, true);
+  assert.ok(result.archive.captureSeconds > 0 && result.archive.captureSeconds < 60);
+  assert.ok(result.archive.restoreSeconds > 0 && result.archive.restoreSeconds < 60);
+  assert.deepEqual(result.archive.restored, { ok: true, issues: 0, sales: 3 });
+  assert.deepEqual(phases.slice(-3), ['verification', 'archive', 'restore']);
+  assert.equal(fingerprint(f.database), before); assert.equal(existsSync(f.stateRoot), false);
+  assert.deepEqual(result.cleanup, { ownedReplayRoots: 0 });
+  assert.equal(/PRIVATE_|2026-|venue|recoveryKey|artifact|tls|Synthetic/.test(JSON.stringify(result)), false);
+});
+
+for (const archive of [false, null, {}, 'true']) test('privateDayRefusesInvalidArchiveFlag_'+JSON.stringify(archive), async t => {
+  const f = await setup(t);
+  await assert.rejects(local.replayPrivateDay({ ...f, archive }), invalid);
+  assert.equal(existsSync(f.stateRoot), false);
+  assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources.some(e => e.kind === 'private-replay-state'), false);
+});
+
+for (const stage of ['archive', 'restore']) test('privateDayArchiveCancellation_'+stage, async t => {
+  const f = await setup(t), controller = new AbortController(), before = fingerprint(f.database), phases = [];
+  await assert.rejects(local.replayPrivateDay({ ...f, archive: true, signal: controller.signal, onProgress(p) {
+    phases.push(p.phase); if (p.phase === stage) controller.abort();
+  } }), invalid);
+  assert.equal(phases.at(-1), stage); assert.equal(existsSync(f.stateRoot), false);
+  assert.equal(fingerprint(f.database), before);
+});
+
+for (const fault of ['capture', 'restore', 'integrity', 'sales']) test('privateDayArchiveRefuses_'+fault, async t => {
+  const f = await setup(t), before = fingerprint(f.database), phases = [];
+  const body = fault === 'capture' ? `export async function createCloudSnapshotArchive() { throw Error('PRIVATE_SYNTHETIC_CAPTURE'); }`
+    : fault === 'restore' ? `export async function restoreFromArtifact() { throw Error('PRIVATE_SYNTHETIC_RESTORE'); }`
+    : fault === 'integrity' ? `let restored=false;
+      export async function restoreFromArtifact(...args) { await actual.restoreFromArtifact(...args); restored=true; }
+      export class VerifactuBackend extends actual.VerifactuBackend {
+      async checkIntegrity(...args) { return restored ? {ok:false,issues:[]} : super.checkIntegrity(...args); } }`
+    : `let restoredOpen=false, checked=false;
+      export class VerifactuBackend extends actual.VerifactuBackend {
+        async checkIntegrity(...args) { const result=await super.checkIntegrity(...args);
+          if(restoredOpen) checked=true; return result; } }
+      export async function openVenueDatabase(...args) { const store=await actual.openVenueDatabase(...args);
+      if(args[0].includes('/restored/')) { restoredOpen=true; const execute=store.venue.execute.bind(store.venue);
+        store.venue.execute=(...a)=>{ const result=execute(...a);
+          return checked && result.rows?.[0] && Object.keys(result.rows[0]).join(',')==='n' ? {...result,rows:[{n:2}]} : result; }; }
+      return store; }`;
+  const codeRoot = wrappedRuntime(f, body);
+  await assert.rejects(local.replayPrivateDay({ ...f, codeRoot, archive: true, onProgress: p => phases.push(p.phase) }),
+    e => e.message === invalid.message && !e.stack.includes('PRIVATE_SYNTHETIC') && e.cause === undefined);
+  assert.equal(existsSync(f.stateRoot), false); assert.equal(fingerprint(f.database), before);
+  assert.equal(phases.at(-1), fault === 'capture' ? 'archive' : 'restore');
+});
+
+// A cancellation delivered inside the actual restore cannot escape as a completed archive measurement.
+test('privateDayArchiveRefusesCancellationAfterApplicationRestore', async t => {
+  const f = await setup(t), controller = new AbortController(), name = 'costArchiveAbort_' + randomBytes(8).toString('hex');
+  globalThis[name] = () => controller.abort(); t.after(() => { delete globalThis[name]; });
+  const codeRoot = wrappedRuntime(f, `export async function restoreFromArtifact(...args) {
+    await actual.restoreFromArtifact(...args); globalThis[${JSON.stringify(name)}](); }`);
+  await assert.rejects(local.replayPrivateDay({ ...f, codeRoot, archive: true, signal: controller.signal }), invalid);
+  assert.equal(controller.signal.aborted, true); assert.equal(existsSync(f.stateRoot), false);
+});
+
+// Reject invalid artifacts before invoking restore; a downstream decryption refusal does not prove capture admission.
+for (const bytes of ['new Uint8Array()', "'PRIVATE_SYNTHETIC_BYTES'"]) test('privateDayArchiveRejectsInvalidCapture_'+bytes, async t => {
+  const f = await setup(t), phases = [];
+  const codeRoot = wrappedRuntime(f, `export async function createCloudSnapshotArchive() { return {bytes:${bytes}}; }`);
+  await assert.rejects(local.replayPrivateDay({ ...f, codeRoot, archive: true, onProgress: p => phases.push(p.phase) }), invalid);
+  assert.equal(phases.at(-1), 'archive'); assert.equal(existsSync(f.stateRoot), false);
+});

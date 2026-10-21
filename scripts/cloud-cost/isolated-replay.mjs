@@ -28,7 +28,8 @@ const sameCounts = (found, expected, keys) => {
 // A worker result is private until every field and reconciliation has been checked here.
 export function validateReplayAdmission(value, options) {
   try {
-    exact(value, ['complete', 'source', 'replay', 'integrity', 'storage', 'cleanup']); need(value.complete === true);
+    need(options.archive === undefined || options.archive === true);
+    exact(value, ['complete', 'source', 'replay', 'integrity', 'storage', 'cleanup', ...(options.archive ? ['archive'] : [])]); need(value.complete === true);
     exact(value.source, ['counts', 'originalInventory']);
     sameCounts(value.source.counts, options.expected, ['sales', 'paid', 'tradingDays', 'busiest']);
     sameCounts(value.source.originalInventory, options.originalInventory, ['days', 'busiest']);
@@ -47,6 +48,17 @@ export function validateReplayAdmission(value, options) {
     need(Object.values(s).every(count) && s.copiedDatabaseBytes > 0 && s.freshBeforeBytes > 0
       && s.freshAfterBytes >= s.freshBeforeBytes && s.freshGrowthBytes === s.freshAfterBytes - s.freshBeforeBytes);
     exact(value.cleanup, ['ownedReplayRoots']); need(value.cleanup.ownedReplayRoots === 0);
+    if (options.archive) {
+      const a = value.archive;
+      exact(a, ['capturedBytes', 'captureSeconds', 'restoreSeconds', 'restored']);
+      need(count(a.capturedBytes) && a.capturedBytes > 0
+        && [a.captureSeconds, a.restoreSeconds].every(v => finite(v) && v > 0));
+      const windowSeconds = options.windowSeconds ?? 7200;
+      need(finite(windowSeconds) && windowSeconds > 0 && windowSeconds <= 7200
+        && a.captureSeconds + a.restoreSeconds + value.replay.timing.elapsedSeconds < windowSeconds);
+      exact(a.restored, ['ok', 'issues', 'sales']);
+      need(a.restored.ok === true && a.restored.issues === 0 && a.restored.sales === n);
+    }
     return structuredClone(value);
   } catch { fail(); }
 }
@@ -89,12 +101,13 @@ function admit(args) {
   need(['original', 'accelerated'].includes(args.cadence.mode) && finite(args.cadence.factor) && args.cadence.factor >= 1
     && (args.cadence.mode !== 'original' || args.cadence.factor === 1));
   const config = validateReplayConfig(args.config);
+  need(args.archive === undefined || (args.archive === true && args.stream === undefined));
   const stream = args.stream === undefined ? undefined : validateStreamSettings(args.stream, args);
   if (stream) need(file(join(codeRoot, 'litestream')).size <= 100 * 1024 * 1024
     && createHash('sha256').update(readFileSync(join(codeRoot, 'litestream'))).digest('hex') === stream.binarySha256);
   const selected = structuredClone({ source, root, database, codeRoot, image, windowSeconds, replayWindowSeconds,
     journal: args.journal, locationId: args.locationId, expected: args.expected, originalInventory: args.originalInventory,
-    cadence: args.cadence, initial: args.initial, config, ...(stream ? { stream } : {}) });
+    cadence: args.cadence, initial: args.initial, config, ...(stream ? { stream } : {}), ...(args.archive ? { archive: true } : {}) });
   return { ...selected, signal };
 }
 
@@ -148,7 +161,8 @@ export async function runIsolatedReplay(input) {
     remaining(); copyFileSync(copy.database, join(stageRoot, 'input.db'), constants.COPYFILE_EXCL);
     writeFileSync(join(stageRoot, 'config.json'), JSON.stringify({ locationId: args.locationId,
       expected: args.expected, originalInventory: args.originalInventory, cadence: args.cadence,
-      windowSeconds: args.replayWindowSeconds, initial: args.initial, config: args.config, ...(args.stream ? { stream: args.stream } : {}) }), { mode: 0o600, flag: 'wx' });
+      windowSeconds: args.replayWindowSeconds, initial: args.initial, config: args.config, ...(args.stream ? { stream: args.stream } : {}),
+      ...(args.archive ? { archive: true } : {}) }), { mode: 0o600, flag: 'wx' });
     record(args, { kind: 'replay-worker', state: 'started', id: containerId });
     try {
       await runForegroundContainer({ ...worker, argv: ['node', '/code/cloud-cost-runner/replay-worker.mjs'],
