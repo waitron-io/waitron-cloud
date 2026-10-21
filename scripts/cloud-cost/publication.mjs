@@ -42,6 +42,23 @@ this document and the trial assessment, then compares their complete contents.
 It refuses changed, missing or stale artifacts. A successful check means the files
 agree, while reporting that the cost estimate is incomplete.
 
+## Run the generated-data rehearsals
+
+Run \`pnpm test:cloud-cost\` for the local model checks and publication verification.
+Run \`pnpm test:cloud-cost:conformance\` for the deeper integration tests. The
+second command requires Docker, Git and pnpm. It downloads the pinned public
+Waitron source, installs its locked dependencies, compiles the rehearsal runtime
+and prepares local service images. Tests generate their own venue state; no venue
+source path or provider credentials are accepted by this setup.
+
+Use \`node scripts/cloud-cost/conformance.mjs --list\` to see every integration
+file. Pass \`--only <listed file>\` to the pnpm conformance command for one file.
+The Cloud cost conformance workflow discovers this same list and runs each file
+in bounded jobs, splitting the longer stack file into three groups. New stack
+case names stay in the third group unless a prior group selects them. Generated
+runtime files and owned test containers are
+collected at the end; reusable Docker build layers may remain in the local cache.
+
 ## Read the measurements narrowly
 
 The [joined evidence](cost-model/local-driver-evidence.json) preserves separate
@@ -113,7 +130,8 @@ by the actual calendar-window seconds. Pricing divides byte-seconds by those
 seconds and the S3 billing divisor of 1,073,741,824 bytes per billed GB. Decimal
 GB is 1,000,000,000 bytes; GiB is 1,073,741,824 bytes. Other provider byte definitions
 are not silently borrowed from S3. An assumed transfer-byte divisor is exposed
-separately, and missing transfer minimum/rounding terms still prevent pricing.
+separately. Missing minimum/rounding terms prevent pricing both archive storage
+and transfer in the current snapshot, even when their quantities can be projected.
 
 ## The synthetic AWS trial stopped before creation
 

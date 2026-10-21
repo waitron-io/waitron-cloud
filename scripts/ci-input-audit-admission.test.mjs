@@ -70,7 +70,7 @@ function fixture(run) {
 function assertNarrow(mode, selected) {
   assert.deepEqual(selected.packages, mode === 'lock' ? ['stock', 'view'].map(packageName => ({package: packageName, shard: 1})) : []);
   assert.equal(selected.typecheck, mode === 'lock');
-  assert.equal(selected.receipts.length, mode === 'lock' ? 5 : 0);
+  assert.equal(selected.receipts.length, mode === 'lock' ? 6 : 0);
   if (mode === 'docs') assert.ok(selected.documentation);
   if (mode === 'identity' || mode === 'gateway') assert.ok(selected.scripts);
 }

@@ -50,6 +50,14 @@ test('audited unread Markdown selects only the document check, including spaces 
   assert.match(selected.reason, /Audited unread Markdown/);
 }));
 
+test('the generated cost explanation cannot bypass artifact verification through a docs-only audit', () => fixture(({put, commit, plan}) => {
+  put('docs/cloud-cost-model.md', '# Edited generated output\n');
+  const selected = plan(commit());
+  assert.equal(selected.documentation, undefined);
+  assert.ok(selected.receipts.includes('test:cloud-cost'));
+  assert.equal(selected.typecheck, true);
+}));
+
 test('a new reader invalidates later docs-only exemptions and mixed changes', () => fixture(({put, commit, plan, base}) => {
   put('scripts/new-reader.mjs', 'readFileSync("docs/backlog.md");\n');
   const reader = commit();

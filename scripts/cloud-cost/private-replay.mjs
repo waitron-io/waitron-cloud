@@ -164,7 +164,8 @@ export async function replayPrivateDay(args) {
   finally {
     clearTimeout(streamTimer);
     try {
-      try { await stream?.close(); } finally { await replay?.close(); }
+      let streamCleanup;
+      try { streamCleanup = await stream?.closeResources(); } finally { await replay?.close(); }
       if (identity) {
         assertOwnedRoot(args);
         const s = lstatSync(args.stateRoot);
@@ -173,6 +174,7 @@ export async function replayPrivateDay(args) {
         rmSync(args.stateRoot, { recursive: true });
         record(args, { state: 'removed' });
       }
+      requireThat(streamCleanup === undefined || streamCleanup.measurementValid === true);
     } catch { fail(); }
   }
   return { ...result, cleanup: { ownedReplayRoots: 0 } };

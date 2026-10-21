@@ -28,3 +28,17 @@ test('receiptRunnerExecutesTheCostSuiteAndPropagatesItsFailure', t => {
   assert.equal(result.status, 1); assert.match(result.stderr, /test:cloud-cost failed: 23/);
   assert.equal(readFileSync(log, 'utf8'), 'test:cloud-cost\n');
 });
+
+test('pullRequestPlanningRetainsCostVerificationForEveryPublicArtifactAndCodePath', () => {
+  const workspace = loadWorkspace(), base = 'b'.repeat(40), head = 'a'.repeat(40);
+  for (const path of ['docs/cloud-cost-model.md', 'docs/cloud-cost-calculator.html', 'docs/cost-model/prices.json', 'scripts/cloud-cost/calculator.mjs']) {
+    const git = (...args) => {
+      if (args[0] === 'merge-base') return base;
+      if (args[0] === 'diff') return path + '\0';
+      throw Error('No audited input evidence');
+    };
+    const selected = createPlan({ pull_request: { base: { sha: base }, head: { sha: head } } }, { sha: head }, workspace, git, () => { throw Error('No API'); });
+    assert.ok(selected.receipts.includes('test:cloud-cost'), path);
+    assert.equal(selected.documentation, undefined);
+  }
+});

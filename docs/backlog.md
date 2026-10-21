@@ -1186,6 +1186,26 @@ notifications separately.
   the model and its boundaries. Storage-only evidence validates neither fixed
   infrastructure, AWS capacity nor a full provider bill.
 
+  Run `pnpm test:cloud-cost:conformance` for the deeper generated-data checks.
+  Its setup fetches the pinned public Waitron source, compiles the required
+  runtime exports and prepares local images without a venue source path. CI
+  discovers all eighteen files, with the longer stack file split into three
+  disjoint groups. Publication verification remains separate and offline.
+  The model command passes 1,513 checks. A native deadline fixture currently
+  finishes before its deadline and fails its expected-refusal assertion; a
+  generated idle-hold proposal preserves the existing limits and assertions
+  while adding a bounded cleanup check. Applying that fixture change awaits
+  the owner's decision under the changed-test-check rule.
+
+  Cancellation first drains admitted storage traffic before signalling the native
+  writer, with a bounded fallback. Invalid transfer accounting still refuses
+  measurement publication. Separately proved collection of native processes and
+  their owned scratch lets the replay remove its own verified database copy;
+  replaced roots and lost ownership continue to refuse cleanup. The generated
+  native cancellation/deadline journey passes three consecutive runs, alongside
+  37 stream and 33 private-replay checks. Setup interruption collects its recorded
+  child process group and generated directory for both supported signals.
+
   **Remaining work and observations.** To complete the operating total, establish
   the missing inventory quantities and regional billing terms, representative
   venue/public activity, complete retained-object forecasts, recovery/alert/email

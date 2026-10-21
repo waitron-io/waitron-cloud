@@ -65,7 +65,8 @@
     "proof:operations-collection": "node scripts/operations-collection-proof.mjs",
     "test:backup-capacity": "node --test scripts/backup-capacity-fixture.test.mjs scripts/verify-backup-transfer-receipt.test.mjs scripts/verify-backup-capacity-receipt.test.mjs",
     "proof:backup-capacity": "node scripts/backup-capacity-receipt.mjs",
-    "translation:worker": "node --env-file-if-exists=.env packages/translation/src/worker-cli.ts"
+    "translation:worker": "node --env-file-if-exists=.env packages/translation/src/worker-cli.ts",
+    "test:cloud-cost:conformance": "node scripts/test-postgres.mjs exec node scripts/cloud-cost/conformance.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

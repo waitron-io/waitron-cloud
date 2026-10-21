@@ -37,8 +37,8 @@ async function fixture(t, mode = 'normal') {
     req.on('data', chunk => parts.push(chunk)); req.on('end', () => {
       if (req.method === 'PUT') {
         stored = Buffer.concat(parts); uploaded++;
-        if (mode === 'held-upload' && uploaded === 2) {
-          releaseUpload = () => res.end(); heldResponse();
+        if (['held-upload','held-fast-stop','held-invalid'].includes(mode) && uploaded === 2) {
+          releaseUpload = () => mode === 'held-invalid' ? res.destroy() : res.end(); heldResponse();
         } else res.end();
       }
       else if (url.searchParams.has('versioning')) {
@@ -84,6 +84,7 @@ const upload = () => { if (!stopping) serial = serial.then(()=>send('PUT',readFi
 upload(); const timer=setInterval(upload,50);
 process.once('SIGTERM',()=>{
   if(mode === 'hang') return;
+  if(mode === 'held-fast-stop') process.exit(0);
   stopping=true; clearInterval(timer); serial.then(()=>process.exit(mode === 'stop' ? 23 : 0));
 });
 `;
@@ -274,4 +275,36 @@ for (const reason of ['cancel', 'deadline']) test(`replayStreamCollectsASessionS
   await assert.rejects(fetch(adminUrl), error => error.cause?.code === 'ECONNREFUSED', 'collect the real session listener even when it opens after cancellation');
   clean(f);
   assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources, undefined, 'never admit a native child after cancellation');
+});
+
+
+// A native child may exit immediately on SIGTERM while its admitted HTTP request is still active.
+test('cancellationDrainsAnAdmittedUploadBeforeSignallingAFastExitingWriter',async t=>{
+  const f=await fixture(t,'held-fast-stop'),abort=new AbortController();
+  const run=await open(t,{...f,signal:abort.signal});
+  await f.heldUpload;abort.abort();
+  const closed=run.close().then(()=>true,()=>false);
+  await wait(150);f.releaseUpload();
+  assert.equal(await closed,true,'collect the writer after its admitted request finishes');
+  clean(f);
+});
+
+
+// Bad accounting must refuse publication while still reporting independently completed resource cleanup.
+test('invalidTransferStillReportsCollectedOwnedResourcesWithoutQualifyingEvidence',async t=>{
+  const f=await fixture(t,'held-invalid'),run=await open(t,f);
+  await f.heldUpload;f.releaseUpload();await wait(100);
+  assert.equal(typeof run.closeResources,'function','resource collection must be distinct from valid measurement');
+  assert.deepEqual(await run.closeResources(),{measurementValid:false});
+  await assert.rejects(run.close(),bad);
+  clean(f);
+});
+
+test('resourceCollectionCannotReportSuccessForAReplacedStreamRoot',async t=>{
+  const f=await fixture(t),run=await open(t,f);await upload(f);
+  const scratch=join(f.root,'native-stream');renameSync(scratch,join(f.root,'saved-stream'));
+  mkdirSync(scratch,{mode:0o700});writeFileSync(join(scratch,'sentinel'),'keep',{mode:0o600});
+  assert.equal(typeof run.closeResources,'function');
+  await assert.rejects(run.closeResources(),bad);
+  assert.equal(readFileSync(join(scratch,'sentinel'),'utf8'),'keep');
 });

@@ -133,7 +133,7 @@ test('receipt selector fixtures retain their positive checks after migration inv
       'unrelated package changes omit public gateway while retaining packages, types and other receipts',
       'unrelated package changes omit all audited receipts and retain actual package and type checks',
       'combined audits retain earlier omissions and ignore unrelated top-level prose',
-      'combined audits preserve three earlier omissions and retain only local-stack',
+      'combined audits preserve three omissions and retain local-stack plus cost',
     ].sort(), 'Every positive receipt check must execute with the saved schema inputs');
   } finally {rmSync(root, {recursive: true, force: true});}
 });
@@ -188,7 +188,7 @@ test('receipt selector fixtures retain their positive checks after deployment an
       'unrelated package changes omit public gateway while retaining packages, types and other receipts',
       'unrelated package changes omit all audited receipts and retain actual package and type checks',
       'combined audits retain earlier omissions and ignore unrelated top-level prose',
-      'combined audits preserve three earlier omissions and retain only local-stack',
+      'combined audits preserve three omissions and retain local-stack plus cost',
     ].sort(), 'Every positive receipt check must execute with saved deployment and installation inputs');
   } finally {rmSync(root, {recursive: true, force: true});}
 });

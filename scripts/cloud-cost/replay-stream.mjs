@@ -16,7 +16,7 @@ const file = path => { const s = lstatSync(path); need(s.isFile() && s.nlink ===
 // This lifecycle owns its native children, configuration, restore copy and measurement session.
 export async function openReplayStream(input) {
   let args, identity, session, openingSession, writer, disposal, evidence, finishing, deadlineTimer, busy = false;
-  let invalid = false, closed = false, starts = 0, phase = 'startup';
+  let invalid = false, closed = false, resourcesCollected = false, starts = 0, phase = 'startup';
   const children = new Set();
   const record = entry => {
     assertOwnedRoot(args);
@@ -67,6 +67,17 @@ export async function openReplayStream(input) {
   const dispose = () => disposal ??= (async () => {
     closed = true; clearTimeout(deadlineTimer); args?.signal?.removeEventListener('abort', abort);
     const failures = [];
+    // A fast native exit can interrupt its admitted upload. Drain before signalling,
+    // while bounding this handoff so an unresponsive backend cannot prevent collection.
+    if (writer && children.has(writer) && session) {
+      let drainTimer;
+      try {
+        await Promise.race([session.whenIdle(() => {
+          writer.stopping = true; writer.child.kill('SIGTERM');
+        }), new Promise((_, reject) => { drainTimer = setTimeout(() => reject(Error()), 2000); })]);
+      } catch { /* Collection below still stops the owned child and refuses invalid evidence. */ }
+      finally { clearTimeout(drainTimer); }
+    }
     for (const child of [...children]) { try { await stop(child); } catch { failures.push(true); } }
     // Cancellation can arrive while the listener is being acquired, before session is assigned.
     try { await (session ?? await openingSession)?.close(); } catch { failures.push(true); }
@@ -76,6 +87,7 @@ export async function openReplayStream(input) {
       record({ kind: 'stream-root', state: 'cleanup-intent', path: args.workRoot });
       rmSync(args.workRoot, { recursive: true }); need(!existsSync(args.workRoot));
       record({ kind: 'stream-root', state: 'removed', path: args.workRoot });
+      need(children.size === 0); resourcesCollected = true;
     } catch { failures.push(true); }
     if (failures.length) fail();
   })();
@@ -162,6 +174,14 @@ export async function openReplayStream(input) {
       })();
       try { const result = await finishing; need(result.restored.sales === expectedSales); return structuredClone(result); }
       catch { fail(); }
+    },
+    // Refused accounting and completed resource collection are separate facts.
+    // Callers may collect their own scratch while retaining the measurement refusal.
+    closeResources: async () => {
+      let failed = false;
+      try { await dispose(); } catch { failed = true; }
+      need(resourcesCollected);
+      return { measurementValid: !failed && !invalid };
     },
     close: async () => { await dispose(); },
   };
