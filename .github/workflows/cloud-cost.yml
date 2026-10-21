@@ -54,22 +54,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Diagnose generated paced replay refusal (temporary)
-        if: matrix.file == 'paced-replay-conformance.test.mjs'
-        run: |
-          python3 - <<'PYDIAG'
-          from pathlib import Path
-          for p in Path('scripts/cloud-cost').glob('*.mjs'):
-            if p.name.endswith('.test.mjs') or p.name in ['conformance.mjs','conformance-prepare.mjs','cli.mjs']:
-              continue
-            s=p.read_text()
-            if p.name=='isolated-replay.mjs':
-              s=s.replace("  } catch { fail(); }\n  finally {", "  } catch (error) { console.error('GENERATED_PACED_HOST_CAUSE', error.stack); if(stageRoot && existsSync(join(stageRoot,'generated-only-trace.log'))) console.error('GENERATED_PACED_WORKER_TRACE',readFileSync(join(stageRoot,'generated-only-trace.log'),'utf8')); fail(); }\n  finally {")
-            s=s.replace("const fail = () => {", "const fail = () => { generatedTrace(new Error('GENERATED_GUARD').stack);")
-            s=s.replace("catch {", "catch (generatedError) { generatedTrace(generatedError?.stack ?? String(generatedError));")
-            s="import {appendFileSync as generatedAppend} from 'node:fs';\nfunction generatedTrace(value) { try { generatedAppend('/state/generated-only-trace.log', String(value)+'\\n'); } catch {} }\n"+s
-            p.write_text(s)
-          PYDIAG
       - run: pnpm test:cloud-cost:conformance --only '${{ matrix.file }}' --pattern '${{ matrix.pattern }}' --skip-pattern '${{ matrix.skipPattern }}'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1212,6 +1212,12 @@ notifications separately.
   failures to these races remains an inference. Keep their logs and all ownership,
   isolation, accounting and cleanup assertions and deadlines. Temporary diagnostic
   workflows are removed.
+  A separate paced-replay check refused after 75.8 seconds in `39637622744`.
+  Its saved error is generic and exposes no underlying stage. One generated-only
+  instrumented Linux run passes (`39638725311`); this does not establish a cause
+  or correction. The paced-replay worker does not use the stack service runtime
+  changed above. Capture its worker refusal and native stream trace on recurrence;
+  preserve its 207-sale restore, integrity, source and cleanup checks and limits.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.
