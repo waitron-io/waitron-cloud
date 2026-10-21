@@ -540,6 +540,11 @@ installation, cell and job locks, so an admitted file replacement finishes befor
 a competing downgrade commits. Gateway withdrawal is a later observation, separate
 from the plan command's successful database update.
 
+A single-cell export locks policies for its active placements and incoming staged
+or ready moves, so an unrelated organisation's plan update can proceed independently. An organisation that arrives after those locks were chosen
+waits for the next export. The reconciler's all-cell selection still locks the
+global policy set.
+
 If exports stop, the last signed gateway authority still expires within its
 existing ten-minute maximum. Restarting a gateway does not extend that signed
 expiry. This is a remaining authority window, not an immediate disconnection

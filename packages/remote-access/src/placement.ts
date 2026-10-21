@@ -204,7 +204,7 @@ export class RemoteAccessStore {
   await transaction(this.#pool,async client=>{await publish(await this.#manifest(client,cellId,now));});
  }
  async #manifest(client:PoolClient,cellId:string,now:number):Promise<GatewayManifest>{
-   const eligible=await eligibleRemoteInstallations(client,this.#planMode);
+   const eligible=await eligibleRemoteInstallations(client,this.#planMode,cellId);
    const cell=(await client.query('UPDATE remote_cells SET sequence=sequence+1 WHERE id=$1 RETURNING sequence',[cellId])).rows[0];if(!cell)fail('cell_unavailable');
    const ids=await client.query('SELECT p.installation_id FROM remote_placements p JOIN installations i ON i.id=p.installation_id WHERE p.cell_id=$1 AND i.revoked_at IS NULL ORDER BY p.venue_id',[cellId]);
    const routes:GatewayRoute[]=[];
