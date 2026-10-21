@@ -247,7 +247,7 @@ test('a target-cell publication holds the incoming organisation policy until pub
  const publishing=store.publishManifest(target,async manifest=>{assert.deepEqual(manifest.routes.map(r=>r.installationId),[incoming.installationId]);b.enter();await b.gate;});
  void publishing.catch(()=>{});
  try{
-  await b.started;await blocker.query('BEGIN');
+  await Promise.race([b.started,publishing]);await blocker.query('BEGIN');
   await assert.rejects(blocker.query('SELECT id FROM organisations WHERE id=$1 FOR NO KEY UPDATE NOWAIT',[incoming.organisationId]),{code:'55P03'});
  }finally{await blocker.query('ROLLBACK');blocker.release();b.release();await publishing;}
  await plans.set(incoming.organisationId,'free');assert.deepEqual((await store.manifest(target)).routes,[]);
