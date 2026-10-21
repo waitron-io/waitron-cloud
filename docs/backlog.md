@@ -1199,15 +1199,19 @@ notifications separately.
   neither check changes a production timeout.
   Linux conformance exposed a PostgreSQL initialization race: temporary database
   files now live on container-native scratch, outside the scanned ownership tree.
-  One later Linux run refused startup in
-  `genuineStreamMeasurementJoinsPhasesInventoriesAndIndependentRequestCounters`
-  before the measurement began (`39616174409`, group 3). The saved exception
-  contains only the generic startup refusal. An unchanged Mac run, twenty
-  instrumented Mac repetitions and sixteen instrumented Linux repetitions pass;
-  these results do not explain that failure or establish a correction. On
-  recurrence, capture the failing startup stage and underlying ownership or
-  Docker error using generated data only. Keep the ownership, isolation,
-  accounting and cleanup assertions and deadlines unchanged.
+  The merge's unversioned ambiguous-multipart case also refused stack startup
+  before its storage assertions. Generated Linux timing probes reproduce ownership
+  scans racing deletion of `state/replay/venue/migrations.lock-journal`
+  (`39635884776`), `state/mail.db-journal` and a storage `config.json.tmp`
+  (`39636087276`, stack group 3). The generated venue, mail and storage databases
+  now live on container-native scratch, outside that scan. The ownership guard
+  stays unchanged. Separate real-service regressions check that sales, integrity,
+  mail and storage still work without placing mutable service data on the host
+  mount. The earlier stream-startup failure (`39616174409`) and merge refusal
+  (`39627846860`) had no underlying trace; attributing those exact historical
+  failures to these races remains an inference. Keep their logs and all ownership,
+  isolation, accounting and cleanup assertions and deadlines. Temporary diagnostic
+  workflows are removed.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.

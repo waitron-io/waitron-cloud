@@ -49,6 +49,7 @@ async function check() {
     fiscal: await ready('http://fiscal:8080/health'), waitron: await ready('http://waitron:8080/health'),
     gateway: await ready('https://gateway:8443/health', true) };
 }
+// Mutable service files stay on container scratch so their removal cannot race host ownership scans.
 export async function runStackService(role) {
   if (role === 'check') { process.stdout.write(JSON.stringify(await check())); return; }
   if (role === 'postgres') {
@@ -63,7 +64,7 @@ export async function runStackService(role) {
     binary('postgres', ['-D', '/tmp/postgres', '-h', '0.0.0.0', '-k', '/tmp']); return;
   }
   if (role === 's3') {
-    mkdirSync('/state/storage', { mode: 0o700 });
+    mkdirSync('/tmp/storage', { mode: 0o700 });
     let phase = 'startup';
     const meter = createMeter({ phase, clock: () => performance.now() / 1000 });
     // Per-attempt IDs do not identify client retries; these unpaired observations cannot qualify an export.
@@ -79,11 +80,11 @@ export async function runStackService(role) {
         phase = value.phase; res.end();
       } else { res.writeHead(404); res.end(); }
     }, { port: 8335, host: '127.0.0.1' });
-    binary('weed', ['mini', '-dir=/state/storage', '-ip=127.0.0.1', '-ip.bind=127.0.0.1', '-master.port=9333', '-master.port.grpc=19333',
+    binary('weed', ['mini', '-dir=/tmp/storage', '-ip=127.0.0.1', '-ip.bind=127.0.0.1', '-master.port=9333', '-master.port.grpc=19333',
       '-volume.port=8080', '-volume.port.grpc=18080', '-filer.port=8888', '-filer.port.grpc=18888', '-s3.port=8334',
       '-admin.ui=false', '-webdav=false', '-s3.port.iceberg=0', '-s3.port.lance=0']); return;
   }
-  if (role === 'mailpit') { binary('mailpit', ['--smtp', '0.0.0.0:1025', '--listen', '0.0.0.0:8025', '--database', '/state/mail.db']); return; }
+  if (role === 'mailpit') { binary('mailpit', ['--smtp', '0.0.0.0:1025', '--listen', '0.0.0.0:8025', '--database', '/tmp/mail.db']); return; }
   if (role === 'gateway') {
     writeFileSync('/state/haproxy.cfg', 'global\n  maxconn 100\ndefaults\n  mode http\n  timeout connect 2s\n  timeout client 5s\n  timeout server 5s\nfrontend local\n  bind :8443 ssl crt /state/gateway.pem\n  default_backend venue\nbackend venue\n  server venue waitron:8080 check\n');
     binary('haproxy', ['-W', '-db', '-f', '/state/haproxy.cfg']); return;
@@ -98,8 +99,8 @@ export async function runStackService(role) {
     });
   } else if (role === 'waitron') {
     const { openReplay } = await import('/code/cost-waitron-adapter.mjs');
-    const run = config(); mkdirSync('/state/replay', { mode: 0o700 });
-    replay = await openReplay({ codeRoot: '/code', stateRoot: '/state/replay', config: run.config, initial: run.initial });
+    const run = config(); mkdirSync('/tmp/replay', { mode: 0o700 });
+    replay = await openReplay({ codeRoot: '/code', stateRoot: '/tmp/replay', config: run.config, initial: run.initial });
     s = await server(async (req, res) => {
       let result;
       if (req.method === 'GET' && req.url === '/health') result = { ready: true };
