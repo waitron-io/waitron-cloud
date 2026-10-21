@@ -6,17 +6,17 @@ export const translationConsentVersion='providers-2026-10-14';
 export const translationProviders=['openai','anthropic','google'] as const;
 export interface ConsentView {venueId:string;consented:boolean;consentedAt:string|null}
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
-const current=`SELECT c.consented_at FROM translation_consents c
+const current=`SELECT c.venue_id,c.consented_at FROM translation_consents c
  JOIN venues v ON v.id=c.venue_id AND v.organisation_id=c.organisation_id
  JOIN organisation_memberships m ON m.account_id=c.account_id AND m.organisation_id=v.organisation_id AND m.is_owner
  JOIN cloud_accounts a ON a.id=c.account_id AND a.disabled_at IS NULL
  JOIN cloud_credentials k ON k.account_id=c.account_id AND k.email_verified_at IS NOT NULL
- WHERE c.venue_id=$1 AND c.withdrawn_at IS NULL AND c.consent_version=$2`;
+ WHERE c.venue_id=ANY($1::uuid[]) AND c.withdrawn_at IS NULL AND c.consent_version=$2`;
 export async function hasConsent(client:PoolClient,venueId:string):Promise<boolean>{
- return !!(await client.query(current,[venueId,translationConsentVersion])).rowCount;
+ return !!(await client.query(current,[[venueId],translationConsentVersion])).rowCount;
 }
 async function view(client:PoolClient,venueId:string):Promise<ConsentView>{
- const row=(await client.query<{consented_at:Date}>(current,[venueId,translationConsentVersion])).rows[0];
+ const row=(await client.query<{consented_at:Date}>(current,[[venueId],translationConsentVersion])).rows[0];
  return {venueId,consented:!!row,consentedAt:row?row.consented_at.toISOString():null};
 }
 async function ownedVenue(client:PoolClient,accountId:string,venueId:string):Promise<{organisation_id:string}>{
@@ -35,9 +35,13 @@ export async function listConsents(client:PoolClient,accountId:string):Promise<C
   JOIN cloud_accounts a ON a.id=m.account_id AND a.disabled_at IS NULL
   JOIN cloud_credentials k ON k.account_id=m.account_id AND k.email_verified_at IS NOT NULL
   WHERE m.account_id=$1 AND m.is_owner ORDER BY v.id`,[accountId])).rows;
- const out:ConsentView[]=[];
- for(const venue of venues)out.push(await view(client,venue.id));
- return out;
+ if(!venues.length)return [];
+ const consents=(await client.query<{venue_id:string;consented_at:Date}>(current,[venues.map(venue=>venue.id),translationConsentVersion])).rows;
+ const byVenue=new Map(consents.map(row=>[row.venue_id,row.consented_at]));
+ return venues.map(venue=>{
+  const consentedAt=byVenue.get(venue.id);
+  return {venueId:venue.id,consented:!!consentedAt,consentedAt:consentedAt?.toISOString()??null};
+ });
 }
 export async function agreeConsent(client:PoolClient,accountId:string,input:{venueId:string;consentVersion:string}):Promise<ConsentView>{
  if(input.consentVersion!==translationConsentVersion)fail('invalid_request');
