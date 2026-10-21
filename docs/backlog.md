@@ -1444,9 +1444,20 @@ notifications separately.
   With a one-second delayed storage reply, the unchanged original deadline check
   passes with this ordering and fails on the prior implementation. The original
   deadline, forced-stop limit and measurement checks remain unchanged.
-  Representative archive size, storage transfers for the selected-sale archive,
-  remote activity, public browser activity, provider billing and daily projections
-  remain open. Daily and monthly costs stay unknown.
+  The [component projection](cost-model/usage-projection.json) now applies explicit
+  [assumptions](cost-model/projection-settings.json) to those separate samples.
+  Startup uses starts per day, sales use orders and a separate cadence factor,
+  idle traffic uses its own observed duration, and restores use a monthly frequency.
+  Expected request counts can be fractional; retry identities, failures and byte
+  totals stay attached. You choose either owner API or browser activity so their
+  overlapping actions do not add together. Each service frequency names its exact
+  receipt; reordering samples cannot change that association. The selected-sale
+  archive capture and application restore remain distinct from generated storage
+  transfers. Default monthly frequencies stay unset. The assumed idle duration and
+  sales factor do not establish a complete day, scheduled boundaries or retention.
+  Representative archive size, selected-sale archive transfers, remote and public
+  activity, storage forecasts and provider billing remain open. Daily and monthly
+  costs stay unknown.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled
