@@ -7,6 +7,7 @@ import {join} from 'node:path';
 import {after,before,test} from 'node:test';
 import {crypto as acmeCrypto} from 'acme-client';
 import forge from 'node-forge';
+import {Pool} from 'pg';
 import {SignupStore,RegistrationStore,OrganisationPlanStore,InstallationStore,createLeaseIssuer,encodeMachine,transaction,type MachineAction,type SignedEnvelope} from '@waitron-cloud/registration';
 import {database} from '../../account-http/test/fixtures.ts';
 import {createAccountApp} from '../../account-http/src/app.ts';
@@ -226,4 +227,39 @@ test('an export defers a new placement whose policy was not in its locked set',a
 test('direct staff exchange authenticates a forged request before checking the free plan',async()=>{
  const v=await venue('free'),proof=v.proof('staff-certificate-status',{version:1,requestId:randomUUID()},randomUUID(),(await new InstallationStore(db.pool,issuer,origin).execute('renew',v.proof('renew'))).lease!),exchange=new StaffCertificateExchange(db.pool,issuer,origin,undefined,mode);
  await assert.rejects(exchange.execute('staff-certificate-status',{...proof,signature:randomBytes(64).toString('base64url')}),{code:'invalid_proof'});
+});
+
+
+test('a cell export does not wait on an unrelated cell organisation policy',async()=>{
+ const local=await venue(),unrelated=await venue(),blocker=await db.secondPool.connect();
+ const exporting=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${db.schema} -c lock_timeout=500`});
+ try{
+  await blocker.query('BEGIN');await blocker.query('SELECT id FROM organisations WHERE id=$1 FOR NO KEY UPDATE',[unrelated.organisationId]);
+  const manifest=await new RemoteAccessStore(exporting,mode).manifest(local.cellId);
+  assert.deepEqual(manifest.routes.map(r=>r.installationId),[local.installationId]);
+ }finally{await blocker.query('ROLLBACK');blocker.release();await exporting.end();}
+});
+
+
+test('a target-cell publication holds the incoming organisation policy until publication ends',async()=>{
+ const incoming=await venue(),target=await cell(),b=barrier(),blocker=await db.secondPool.connect();
+ await store.stageMove({operationId:randomUUID(),installationId:incoming.installationId,targetCellId:target,targetPeerPublicKey:peer(),expectedRevision:1});
+ const publishing=store.publishManifest(target,async manifest=>{assert.deepEqual(manifest.routes.map(r=>r.installationId),[incoming.installationId]);b.enter();await b.gate;});
+ void publishing.catch(()=>{});
+ try{
+  await Promise.race([b.started,publishing]);await blocker.query('BEGIN');
+  await assert.rejects(blocker.query('SELECT id FROM organisations WHERE id=$1 FOR NO KEY UPDATE NOWAIT',[incoming.organisationId]),{code:'55P03'});
+ }finally{await blocker.query('ROLLBACK');blocker.release();b.release();await publishing;}
+ await plans.set(incoming.organisationId,'free');assert.deepEqual((await store.manifest(target)).routes,[]);
+});
+
+test('a cell export defers an incoming move whose organisation was absent from its policy locks',async()=>{
+ const local=await venue(),incoming=await venue(),b=barrier();let paused=false;
+ const exporting=new Proxy(db.secondPool,{get(pool,name){if(name==='connect')return async()=>{const client=await pool.connect();return new Proxy(client,{get(c,key){if(key==='query')return async(...args:Parameters<typeof c.query>)=>{const result=await c.query(...args);if(!paused&&String(args[0]).startsWith('SELECT o.id FROM organisations')){paused=true;b.enter();await b.gate;}return result;};const value=Reflect.get(c,key);return typeof value==='function'?value.bind(c):value;}});};const value=Reflect.get(pool,name);return typeof value==='function'?value.bind(pool):value;}});
+ const pending=new RemoteAccessStore(exporting,mode).manifest(local.cellId);void pending.catch(()=>{});
+ try{
+  await b.started;await store.stageMove({operationId:randomUUID(),installationId:incoming.installationId,targetCellId:local.cellId,targetPeerPublicKey:peer(),expectedRevision:1});
+ }finally{b.release();}
+ assert.deepEqual((await pending).routes.map(r=>r.installationId),[local.installationId]);
+ assert.deepEqual(new Set((await store.manifest(local.cellId)).routes.map(r=>r.installationId)),new Set([local.installationId,incoming.installationId]));
 });

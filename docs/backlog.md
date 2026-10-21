@@ -955,9 +955,15 @@ notifications separately.
   tests cover free lifecycle masking and staff refusal, ordinary defaults and
   malformed-flag startup refusal. Fresh-health and direct-store forged-proof
   checks cover the account/status and authentication boundaries too.
-  Remote eligibility currently scans the placed organisations and rebuilds target
-  lists for current-work checks. Its array lookup and broad policy locking have no
-  production-scale measurement; narrow that work before claiming larger capacity.
+  A single-cell gateway export now locks organisation policies only for that cell's
+  active placements and incoming staged/ready moves, in UUID order. Real PostgreSQL
+  tests prove that an unrelated cell's policy update no longer blocks the export,
+  incoming policies stay locked through publication, and a newly staged organisation
+  waits for the next export if its policy was absent from the locked set. The existing
+  paid/test/setup/revocation checks remain. Reconciler-wide eligibility still scans
+  placed organisations and rebuilds target lists for current-work checks. Its array
+  lookups and global policy locks have no production-scale measurement; measure and
+  narrow that work before claiming larger capacity.
   A real two-peer Docker gateway proof withdrew the downgraded route/peer in
   4,053 ms while its paid neighbour still served its own body; wall-clock short-lease
   expiry and an expired-cache restart restored no access. This is local synthetic

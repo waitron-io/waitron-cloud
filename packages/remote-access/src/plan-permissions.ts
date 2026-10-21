@@ -13,10 +13,15 @@ export async function requireRemotePlan(client:PoolClient,id:string,mode:PlanMod
 
 // A route publication spans several organisations. Lock their policies in UUID
 // order before reading setup. Only those locked organisations can enter this export;
-// a concurrently created first placement waits for the next export.
-export async function eligibleRemoteInstallations(client:PoolClient,mode:PlanMode):Promise<string[]|undefined>{
+// a concurrently created first placement waits for the next export. A cell export
+// includes incoming moves, whose active placement still belongs to another cell.
+export async function eligibleRemoteInstallations(client:PoolClient,mode:PlanMode,cellId?:string):Promise<string[]|undefined>{
  if(mode==='existing')return;
- const policies=(await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(SELECT 1 FROM venues v JOIN remote_placements p ON p.venue_id=v.id WHERE v.organisation_id=o.id) ORDER BY o.id FOR SHARE OF o`)).rows.map(row=>row.id);
+ const policies=(await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(
+  SELECT 1 FROM venues v JOIN remote_placements p ON p.venue_id=v.id WHERE v.organisation_id=o.id
+  AND ($1::uuid IS NULL OR p.cell_id=$1 OR EXISTS(SELECT 1 FROM remote_cell_moves m
+   WHERE m.installation_id=p.installation_id AND m.target_cell_id=$1 AND m.state IN ('staged','ready'))))
+  ORDER BY o.id FOR SHARE OF o`,[cellId??null])).rows.map(row=>row.id);
  return (await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisations o ON o.id=v.organisation_id
   JOIN installation_services s ON s.installation_id=i.id AND s.service='remote_access'
   WHERE v.organisation_id=ANY($1::uuid[]) AND o.service_plan='paid' AND v.environment='test' AND s.state<>'unconfigured' AND i.revoked_at IS NULL`,[policies])).rows.map(row=>row.id);
