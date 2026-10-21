@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "kind": "local-browser-aggregate",
+  "dataBoundary": {
+    "classification": "anonymous-aggregate",
+    "rawIncluded": false,
+    "exportSchema": 1
+  },
+  "scope": "generated-owner-dashboard-scenario",
+  "source": {
+    "waitronRevision": "fbadd15785464e59747e697c11048bfbc6e4938f",
+    "runtimeSha256": "c70a2acaaf65170c58a9b670d0cbb0e49bd1712a3e3cc82f45824bc0d47511c4",
+    "nodeVersion": "v24.21.0",
+    "image": "sha256:50bf98160dafd4b0eaf4ecf24269cf95b4bb7b286dbbc461ebb91f2a8b5a4418",
+    "browserImage": "sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27",
+    "browserNodeVersion": "v24.20.0",
+    "chromiumVersion": "153.0.8010.12",
+    "cloudRevision": "4c26e9f052ff880f65b138ba9ac8fe5440b97771",
+    "dashboardSha256": "a207612dd0fa3538daf0b422bff98f4158be6100f0ce62cfc8e7306ce9aaf847"
+  },
+  "window": {
+    "startedAt": "2026-10-21T02:53:36.690007+00:00",
+    "endedAt": "2026-10-21T02:53:41.574785+00:00",
+    "elapsedSeconds": 4.884778,
+    "includesSetupAndCleanup": true
+  },
+  "scenario": {
+    "locale": "en-GB",
+    "width": 1280,
+    "height": 900,
+    "serverComposition": "selected-pinned-handlers",
+    "productionServerAlertSources": false,
+    "coldLoadAndCachedReload": true
+  },
+  "measurement": {
+    "kind": "pinned-waitron-browser-gateway",
+    "costMeasured": false,
+    "actions": [
+      "login-page",
+      "sign-in",
+      "dashboard-read",
+      "browser-reconnect",
+      "sign-out"
+    ],
+    "requests": {
+      "document": 2,
+      "script": 2,
+      "stylesheet": 0,
+      "image": 0,
+      "font": 0,
+      "api": 28,
+      "eventsource": 4,
+      "other": 4
+    },
+    "completedRequestBodyBytes": 68,
+    "completedResponseBodyBytes": 2765205,
+    "completedRequests": 36,
+    "interruptedStreamRequests": 3,
+    "unfinishedStreamRequests": 1,
+    "streamBodyBytes": null,
+    "bodyBytesCoverage": "completed-requests-only",
+    "failedRequests": 0,
+    "unexpectedResponses": 0,
+    "pageErrors": 0,
+    "outsideRequests": 0,
+    "cachedRequests": 3,
+    "snapshot": {
+      "scope": "gateway-tcp-stream",
+      "audience": "staff",
+      "status": "measured",
+      "reconciled": true,
+      "producer": {
+        "connections": 25,
+        "bytesToGateway": 77762,
+        "bytesFromGateway": 2836968
+      },
+      "observer": {
+        "connections": 25,
+        "bytesToGateway": 77762,
+        "bytesFromGateway": 2836968
+      },
+      "discrepancy": {
+        "connections": 0,
+        "bytesToGateway": 0,
+        "bytesFromGateway": 0
+      },
+      "excludedOverhead": [
+        "ip",
+        "tcp",
+        "wireguard"
+      ]
+    }
+  },
+  "tunnelTotals": {
+    "received": 3024604,
+    "sent": 191556
+  },
+  "frequency": {
+    "ownerSessionsPerMonth": null
+  },
+  "unmeasured": [
+    "representative-venue-activity",
+    "public-browser-journey",
+    "stream-response-bodies",
+    "ip-tcp-overhead",
+    "tunnel-to-provider-billing"
+  ]
+}

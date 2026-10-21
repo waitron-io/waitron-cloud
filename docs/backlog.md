@@ -1374,7 +1374,10 @@ notifications separately.
   body bytes and any missing final browser event remain explicitly unknown.
   The socket counters include the encrypted stream traffic and must reconcile
   after every connection closes. Missing assets, lost cookies, page errors and
-  outside requests refuse publication. The scenario uses English at 1280 pixels;
+  outside requests refuse publication. The [anonymous browser sample](cost-model/remote-owner-browser.json)
+  names the producing Cloud source, pinned runtime and built-asset digest.
+  It records 40 browser requests and three cache hits, with matching counters
+  across 25 encrypted connections. The scenario uses English at 1280 pixels;
   it does not establish Santet's owner activity or public browser behaviour.
   IP and TCP overhead, the interpretation of WireGuard counters for billing,
   public-traffic frequency and monthly owner activity remain unmeasured.
