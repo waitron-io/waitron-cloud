@@ -383,9 +383,12 @@ as pending or failed and preserve the previously verified snapshot.
 
 The approved [non-activating verification design](superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md)
 defines a separate Waitron-owned data restore check when ordinary restore hooks
-require fiscal activation authority. Waitron's implementation is A850, queued after
-A679; Cloud result admission, catalogue qualification and version-bound recovery
-follow after A850 lands. The design is not implemented or runtime proved. Keep the
+require fiscal activation authority. Waitron A850 landed in
+[#1939](https://github.com/clintongormley/waitron/pull/1939) at
+`5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa`. Follow the
+[Cloud implementation plan](superpowers/plans/2026-10-21-cloud-backup-verification.md)
+for result admission, catalogue qualification and version-bound recovery.
+Cloud integration and joint runtime proof remain pending. Keep the
 affected snapshots unavailable until the implementation and evidence gates pass;
 fiscal activation authority remains unchanged.
 

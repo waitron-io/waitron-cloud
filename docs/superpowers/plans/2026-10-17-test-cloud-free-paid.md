@@ -102,10 +102,14 @@ Planner validation at the pinned base: `node --test scripts/ci-docs.test.mjs scr
 
 **Backup verification dependency:** the owner approved the
 [separate verification contract](../specs/2026-10-18-backup-verification-without-fiscal-authority.md)
-on 18 October 2026. Waitron implements its interface in A850 after A679; Cloud
-integration follows after A850 lands. The design publication adds no PR5 service
-code. Keep snapshots unavailable and deployment enforcement off until the genuine
-proof and release gates pass. Ordinary fiscal activation authority is unchanged.
+on 18 October 2026. Waitron A850 landed in
+[#1939](https://github.com/clintongormley/waitron/pull/1939) at
+`5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa`. Continue PR5 with the
+[Cloud verification implementation plan](2026-10-21-cloud-backup-verification.md),
+which binds the landed interface to Cloud's result admission, catalogue and recovery
+readers. This plan publication adds no PR5 service code. Keep snapshots unavailable
+and deployment enforcement off until the genuine proof and release gates pass.
+Ordinary fiscal activation authority is unchanged.
 
 **Files:** create `deploy/test-cloud/{storage-authority.mjs,storage-authority.test.mjs,service-runtime.mjs,service-runtime.test.mjs}`; extend its bootstrap/Compose/proxy as needed. Reuse interfaces in `packages/backups/src/{capture-config,managed-streams}.ts`, `packages/remote-access/src/{placement,reconciler,operator-cli}.ts`, and scope patterns in `scripts/backup-storage-fixture.mjs`, `scripts/test-local-{backups,remote}.mjs`. Any package adapter edits carry corresponding package tests. Update `docs/test-cloud.md` and `docs/backlog.md`.
 

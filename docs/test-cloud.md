@@ -74,7 +74,12 @@ capture and signed publication, then ordinary fiscal restore refused with
 `restore.hook_failed / sif.allocation_invalid / reauthentication_required`.
 That candidate code remains unpublished; this design publication adds no verifier.
 
-Waitron must implement the separate interface in A850, queued after A679. Cloud
-integration follows after A850 lands. Keep snapshots unavailable and deployment
+Waitron A850's interface landed in
+[#1939](https://github.com/clintongormley/waitron/pull/1939) at
+`5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa`. The
+[Cloud implementation plan](superpowers/plans/2026-10-21-cloud-backup-verification.md)
+covers the remaining result validation, catalogue and recovery integration.
+The interface's source release does not qualify a Cloud image or snapshot.
+Keep snapshots unavailable and deployment
 enforcement off until the implementation, full integration proof and release gates
 pass. Ordinary fiscal restore still requires its existing activation authority.
