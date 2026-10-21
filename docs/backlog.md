@@ -1191,11 +1191,12 @@ notifications separately.
   runtime exports and prepares local images without a venue source path. CI
   discovers all eighteen files, with the longer stack file split into three
   disjoint groups. Publication verification remains separate and offline.
-  The model command passes 1,513 checks. A native deadline fixture currently
-  finishes before its deadline and fails its expected-refusal assertion; a
-  generated idle-hold proposal preserves the existing limits and assertions
-  while adding a bounded cleanup check. Applying that fixture change awaits
-  the owner's decision under the changed-test-check rule.
+  The model command passes 1,513 checks. The owner-approved native deadline
+  fixture holds its generated idle observation until shutdown is requested,
+  preserving both original 43/44-second limits and every source, startup and
+  cleanup assertion. It also requires deadline and cleanup to finish within
+  56 seconds. The real generated cancellation and deadline checks both pass;
+  neither check changes a production timeout.
 
   Cancellation first drains admitted storage traffic before signalling the native
   writer, with a bounded fallback. Invalid transfer accounting still refuses
