@@ -699,3 +699,31 @@ test('genuinePrivateDayStreamsEverySelectedSaleAndRestoresBeforeRemovingReplaySt
   }
 
 });
+
+// Publishing is allowed only after the real archive journey and owned cleanup agree.
+test('generatedArchiveStoragePublishesACompleteAnonymousReceiptAfterCleanup', async t => {
+  const { buildArchiveStorageReceipt } = await import('../archive-storage-receipt.mjs');
+  const startedAt = new Date().toISOString(), f = fixture(t), plan = local.prepareIsolatedStack(f);
+  cpSync(new URL('./archive-storage-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-archive-storage-smoke.mjs'));
+  let stack;
+  f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(docker('exec', s3, 'node', '/code/cost-archive-storage-smoke.mjs'));
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  const endedAt = new Date().toISOString();
+  const cloudRevision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: new URL('../../..', import.meta.url), encoding: 'utf8' }).trim();
+  const receipt = buildArchiveStorageReceipt({ metadata: { runId: crypto.randomUUID(), cloudRevision,
+    waitronRevision: 'fbadd15785464e59747e697c11048bfbc6e4938f',
+    window: { startedAt, endedAt, elapsedSeconds: (Date.parse(endedAt) - Date.parse(startedAt)) / 1000 } }, result,
+    cleanup: { ownedProcesses: 0, ownedContainers: 0, ownedNetworks: 0, ownedVolumes: 0, ownedObjects: 0, residualKinds: [] } });
+  assert.equal(receipt.accounting.producer.attempts, 11);
+  assert.equal(receipt.inputs.find(row => row.id === 'archive-bytes').value, result.capturedBytes);
+  assert.equal(receipt.inputs.find(row => row.id === 'successful-sales').value, 1);
+  assert.equal(receipt.accounting.requests.find(row => row.operation === 'put').bytesOut, result.capturedBytes);
+  assert.equal(receipt.accounting.requests.find(row => row.operation === 'get').bytesIn, result.capturedBytes + 11);
+  assert.equal(/PRIVATE_SYNTHETIC_CANARY|private-part|UploadId|SYNTHETIC_PRIVATE_STATE/.test(JSON.stringify(receipt)), false);
+  if (process.env.COST_ARCHIVE_STORAGE_OUTPUT) writeFileSync(process.env.COST_ARCHIVE_STORAGE_OUTPUT, JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
+});

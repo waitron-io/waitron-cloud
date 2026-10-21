@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { validateReceipt } from './schema.mjs';
 import { validateServiceReceipt } from './service-receipt.mjs';
+import { validateArchiveEvidence } from './archive-evidence.mjs';
 
 const fail = () => { throw Error('Invalid cloud cost joined evidence'); };
 const need = value => { if (!value) fail(); };
@@ -151,16 +152,21 @@ function browser(value) {
 // double-counts some owner actions, and scaling either does not measure a venue day.
 export function buildLocalEvidence(input) {
   try {
-    plain(input); exact(input, ['stream', 'services', 'api', 'browser']);
+    plain(input);
+    const hasArchive = Object.hasOwn(input, 'archive');
+    exact(input, ['stream', 'services', 'api', 'browser', ...(hasArchive ? ['archive'] : [])]);
     stream(input.stream);
     need(Array.isArray(input.services) && input.services.length > 0 && input.services.length <= 16);
     for (const service of input.services) validateServiceReceipt(service);
     need(new Set(input.services.map(service => service.metadata.runId)).size === input.services.length);
     api(input.api); browser(input.browser);
+    if (hasArchive) validateArchiveEvidence(input.archive);
     return structuredClone({ schemaVersion: 1, kind: 'local-driver-evidence', costMeasured: false, dataBoundary: boundary,
-      experiments: { stream: input.stream, services: input.services, api: input.api, browser: input.browser },
+      experiments: { stream: input.stream, services: input.services, api: input.api, browser: input.browser,
+        ...(hasArchive ? { archive: input.archive } : {}) },
       dailyCost: null, monthlyCost: null,
-      unmeasured: ['archive-capture', 'application-restore', 'representative-remote-activity', 'public-browser-journey',
+      unmeasured: [...(hasArchive ? ['representative-archive-shape', 'archive-storage-http-traffic'] : ['archive-capture', 'application-restore']),
+        'representative-remote-activity', 'public-browser-journey',
         'monthly-frequencies', 'provider-billing', 'daily-projection'] });
   } catch { fail(); }
 }

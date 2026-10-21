@@ -1420,7 +1420,23 @@ notifications separately.
   elapsed times on this Mac, with generated private-state files. They establish
   neither the original venue's complete archive size nor AWS processing capacity.
   The source database and its sidecar files remain unchanged, and owned scratch
-  and containers are removed. Representative archive size, storage upload/download accounting,
+  and containers are removed. The checked [archive sample](cost-model/archive-replay.json)
+  now joins the other driver evidence with its own source revision, clock and
+  fresh-venue scope. Publication rejects extra or hidden fields, incomplete sales,
+  failed integrity, mismatched byte counts and missing isolation or cleanup evidence.
+  The earlier stream, service, API and browser samples remain unchanged.
+  A separate generated one-sale archive journey can publish all eleven storage
+  attempts only after independent HTTP body counters, actual application restore
+  and owned cleanup agree. Its full upload, HEAD, range read, download, unfinished
+  multipart and deletion operations remain distinct from the selected-sale sample.
+  Object lifetimes, HTTP headers and provider billing are outside that transfer sample.
+  A separate stream shutdown issue remains open: the deadline check can report a
+  session-close refusal when an upload crosses its deadline. Delaying the second
+  storage PUT response by one second reproduces this on the prior implementation
+  with the existing deadline test. Both unchanged isolated versions pass without
+  that delay; this does not establish that the intermittent failure is fixed.
+  Resolve the shutdown ordering before calling the complete model ready.
+  Representative archive size, storage upload/download accounting,
   remote activity, public browser activity, provider billing and daily projections
   remain open. Daily and monthly costs stay unknown.
   The fiscal timeout fixture now advances its 50 ms deadline
