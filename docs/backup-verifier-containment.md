@@ -53,6 +53,9 @@ is stopped even if it would otherwise return valid JSON. The marker is not an
 independent measurement of memory use.
 You can exercise delayed exit and split diagnostic chunks with
 `node --test packages/backups/test/verify-process-heap.test.ts`.
+The detector scans new text with a bounded phrase suffix. Run
+`node --test packages/backups/test/verify-process-scanning.test.ts` to exercise
+one-byte delivery, line boundaries and the scan-work limit.
 
 A failed download, Docker connection or start, container cleanup, configuration, input
 transfer or result protocol leaves the snapshot's last verification state unchanged.
