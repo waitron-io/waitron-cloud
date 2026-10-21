@@ -53,6 +53,7 @@ test('one-byte delivery retains fatal-line boundaries and both heap phrases',asy
    ['FATAL ERROR: unrelated\nFATAL ERROR: heap out of memory',true],
    ['x FATAL ERROR: heap limit',false],
    ['FATAL ERROR: heap\nlimit',false],
+   ['FATAL ERROR: heap \nFATAL ERROR: limit',false],
    ['FATAL ERROR: heap\rlimit',false],
    ['FATAL ERROR: unrelated\rheap limit',false],
    ['FATAL ERROR: unrelated\nheap limit',false],
