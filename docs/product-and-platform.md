@@ -72,7 +72,11 @@ simple flow.
 Confirmed remote-access scope includes both owners and staff using Waitron remotely
 and customers reaching public pages such as menus and bookings. The proposed access
 model preserves Waitron's permissions for staff and exposes the intended public pages
-to customers. The exact routes remain to be defined.
+to customers. The owner's 2026-10-21 addition to published #265 includes menus,
+online bookings/orders and table-QR ordering with the Cloud step soon after go-live,
+not go-live itself. The [D88 access proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md#reach-cloud-and-the-devices-in-your-venue)
+and single [public access/A951 contract home](waitron-integration-contract.md#public-access-and-a951-proposed)
+keep exact routes/assets, bilateral acceptance and owner design approval open.
 
 Confirmed initial availability policy: temporary unavailability is acceptable when
 the venue server or its internet connection is down. This applies to staff access
@@ -141,12 +145,27 @@ implementation; registration can proceed independently of the storage engine lan
 
 ## Domains, certificates and local access
 
-Provide an assigned Waitron hostname, such as `venue.waitron.io`, or instructions
-for pointing your own domain to Cloud. The venue server must serve both local and
-internet users over trusted HTTPS, with automated Let's Encrypt certificates.
-The local proof now keeps the public Cloud-terminated hostname separate from the
-staff passthrough hostname. The router-specific local override and bootstrap path
-remain deployment work.
+**Owner requirement, 2026-10-21:** venue devices default to Waitron's `.local`
+address with its existing local CA and client trust setup. This supersedes the
+earlier preference for a registered staff hostname as the everyday LAN address.
+Keep local access direct, without a Cloud redirect, WAN dependency or certificate warning
+bypass. Publicly trusted `.local` certificates are not supported; local
+trust and fresh-device offline operation must be qualified with Waitron.
+
+Provide assigned or customer-owned registered DNS names for Cloud access. The
+certified **staff** hostname is an alternative to reach an actual active on-premises
+or hosted server through TLS passthrough; its private key stays at that endpoint.
+A Cloud-only primary has no local server for `.local` to discover and cannot trade
+offline without a separately approved fenced promotion. Do not start a competing
+local writer to hide loss of the Cloud path.
+
+Customers use a different stable per-venue **public** hostname with live DNS and
+certificates. Cloud terminates public HTTPS, then uses encrypted WireGuard plus
+verified HTTPS to the active on-premises box, or an isolated encrypted private cell
+path to a hosted target. The proposed joint route manifest restricts functions,
+methods, normalized paths, hosts, tenants and sessions; staff and public cookies
+stay separate. No offsite order/booking acceptance or blind mutation retry is added.
+Payment-provider/webhook scope remains separate from excluding physical terminal ports.
 
 The proposed certificate flow keeps staff private keys on the venue server and uses
 DNS validation, with Cloud managing the validation records. Custom domains can
@@ -154,14 +173,13 @@ delegate the certificate-validation records. Let's Encrypt supports
 [DNS validation and delegation](https://letsencrypt.org/docs/challenge-types/)
 without requiring a publicly reachable web server.
 
-Confirmed preference: use local DNS overrides so the registered staff hostname
+Optional certified LAN path: use local DNS overrides so the registered staff hostname
 resolves directly to the venue server on the LAN and to the passthrough gateway
 over the internet. The venue serves a certificate for that hostname in both cases.
 Public customer pages retain their separate hostname and cloud HTTPS termination.
-This makes the registered staff hostname the intended everyday local address; the
-role of `waitron.local` during initial setup and recovery remains to be decided.
+This option does not replace the `.local` default or establish device trust.
 
-Choose a setup path that fits the customer's router and devices. Prefer a hostname
+If you select this option, choose a setup path that fits your router and devices. Use a hostname
 override or domain-specific forwarding where supported. Google Wifi documents custom
 DNS-server selection rather than individual overrides, so it may need a local DNS
 service that answers Waitron names and forwards other queries. That would make other
@@ -172,7 +190,8 @@ and [rebinding protection](https://support.google.com/googlehome/answer/9144137?
 Test local resolution and trusted HTTPS on freshly started devices during an internet
 outage, including router filtering and devices that use their own DNS settings. The
 router/device configuration, address stability and resolver failure behaviour remain
-implementation work; the chosen approach must preserve internet-independent local trading.
+implementation work. For an active local server, test the `.local` default separately
+from this optional registered-name path. No offline trading is promised for a Cloud-only primary.
 
 Agreed evaluation: test the Plex approach as an additional option that may reduce
 customer configuration. A public hostname resolves to the venue's private LAN address,
@@ -180,11 +199,17 @@ and the venue serves a publicly trusted certificate for that name. The client mu
 select the local or remote connection address; public DNS does not automatically
 change its answer based on whether the client is inside the venue.
 
-This is a candidate to test, with local DNS overrides still preferred for dependable
-offline access. Verify router rebinding protection and fresh-device connections after
+This remains an optional candidate, not the everyday default. Verify router rebinding
+protection and fresh-device connections after
 internet loss and DNS-cache expiry before claiming a complete solution. See
 [Plex's secure-connection guidance](https://support.plex.tv/articles/206225077-how-to-use-secure-server-connections/)
 and [Waitron's existing LAN HTTPS investigation](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/specs/2026-09-08-handheld-app-store-and-kiosk-findings.md).
+
+The [shared access proposal](waitron-integration-contract.md#public-access-and-a951-proposed)
+links the `.local` and certificate references and names A951 as the Waitron lasting
+tunnel/certificate client dependency, whose accepted implementation pin is still required.
+Reading these sources supplies no browser, offline or production receipt. No
+implementation or provider work starts before owner design approval.
 
 ## Backups and self-service recovery
 
@@ -678,8 +703,8 @@ subscription state and provider provisioning remain implementation work.
   demonstrated? The agreed split replaces the all-traffic TLS choices in the
   [shared gateway handoff](reference/2026-09-21-cloud-ingress-wireguard-gateway-design.md)
   and [earlier decision](reference/2026-09-05-relay-decision.md); gateways are now agreed
-  to be shared within each cell. How can local DNS overrides be configured and
-  recovered with minimal customer effort across supported routers and devices?
+  to be shared within each cell. Qualify `.local` trust on fresh offline devices;
+  if you select a registered-name LAN override, qualify its router setup and recovery too.
 
 Use the [backlog](backlog.md) to track these decisions and the implementation slices
 for the initial remote access and backup services.

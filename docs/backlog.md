@@ -1,6 +1,6 @@
 # Waitron Cloud backlog
 
-Updated 2026-10-17. The repository has a pnpm workspace and internal PostgreSQL
+Updated 2026-10-21. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
@@ -27,6 +27,15 @@ from the provider, policy and live tests still required before public exposure. 
 candidate list and previous commercial reasoning. Remote access and backups are the
 agreed initial services. The first integration milestone is complete locally; the
 production release scope remains open.
+
+**D88 / published #265 access extension, PROPOSED:** the owner requires `.local`
+for venue devices and public menus, online bookings/orders and table-QR ordering
+with the Cloud step soon after go-live, not go-live itself. The [hosting design](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md),
+[conditional outline](superpowers/plans/2026-10-21-cloud-hosted-venue-design.md) and
+single [public access/A951 contract home](waitron-integration-contract.md#public-access-and-a951-proposed)
+record the proposal. No owner design approval, implementation or provider authority
+is implied. A951 owns the lasting Waitron tunnel/certificate client; its accepted
+implementation and landing pin remain required.
 
 ## Repository licence
 
@@ -671,8 +680,10 @@ approved contract; the partial runtime above does not complete joint proof or re
   30-second retry hint and no caching. Clients requesting JSON receive a generic
   error with the same 503 status. Real HTTP and Chromium tests cover failed venue
   responses, lost connections, language/content preferences and all eight visual
-  states. Wider route permissions, cloud copies and offline booking acceptance
-  remain open.
+  states. The D88 extension proposes concrete customer function/method families;
+  exact Waitron routes/assets and session/retry semantics need joint acceptance
+  before implementation. No offsite booking/order queue is included; a lost reply
+  requires outcome reconciliation, not a blind retry.
 - Complete self-service recovery onto a replacement server without routine staff assistance.
   The local continuous and verified-snapshot paths now share a matching-code owner
   approval flow. Continuous recovery freezes verified pointer evidence and releases a
@@ -701,16 +712,17 @@ approved contract; the partial runtime above does not complete joint proof or re
   existing DNS/ACME adapter contract and publishes signed cell routes. Repeat this with
   live provider DNS, production key storage and deployed workers. The signed Cloud
   CSR/chain transport and database staff reconciler are implemented locally; Waitron
-  still needs the durable client and automatic install/reload path described in the
-  integration contract. The private key remains in Waitron.
-  Prefer local DNS overrides so the registered staff hostname and venue certificate
-  work on both LAN and internet paths. Define router-specific setup, address stability,
-  resolver recovery and initial bootstrap. Test fresh local connections without internet.
-  Google Wifi may require a local custom DNS service, adding a network-wide DNS dependency.
+  still needs A951's durable client, local stale-result checks and atomic install/reload
+  path described in the proposed shared contract. The endpoint retains its private key.
+  Venue devices default to `.local` with Waitron local trust, no Cloud redirect, WAN
+  dependency or warning bypass. Qualify fresh offline clients. The certified staff
+  hostname remains an alternative to an actual active server; a router override for
+  that name is optional and needs router-specific setup/recovery tests. A Cloud-only
+  primary cannot acquire an offline LAN server through DNS or a competing writer.
 - Evaluate Plex-style public DNS names resolving to private LAN addresses as an option
   that can reduce customer configuration. Test certificate trust, local/remote address
   selection and router rebinding protection. Require a verified offline connection
-  path after restart and DNS-cache expiry; local DNS overrides remain the preference.
+  path after restart and DNS-cache expiry if selected; `.local` remains the device default.
 - Place venues independently in cells, with a shared remote-access gateway per cell
   and separate venue tunnels and credentials. Keep customer-facing addresses stable
   when moving venues. A short remote-access interruption during cell replacement is
@@ -2954,12 +2966,12 @@ changing any check. The assertions and deadlines remain unchanged.
 
 | Service | Design work still needed |
 | --- | --- |
-| Remote access (initial) | The local two-venue adapter, operator commands and durable route/certificate reconciler are implemented; see [the executable proof](local-remote-access.md). Customer setup screens expose assigned names, revision-bound custom DNS changes and readiness. The local worker has explicit per-cell/per-certificate mappings, bounded leased retries, atomic publication and stale-work fences; it reuses Waitron's CSR/install interface without taking its staff private key. The signed version 1 Cloud CSR/chain exchange and optional database staff worker now have a two-owner Pebble/HTTP/Waitron CLI proof. Live provider DNS/ACME credentials, production key storage and deployment, plus Waitron's durable exchange client, local stale-result checks and automatic install/TLS reload remain open. Public HTTPS terminates in Cloud for bot inspection; staff uses a separate hostname with TLS passthrough and network controls. Share a gateway within each cell, with separate venue tunnels and credentials. The [2026-09-30 two-venue receipt](receipts/public-gateway-limits-2026-09-30.json) records 16/16 solved calls, 31 challenge responses and 49 connection refusals in an 80-connection burst, plus four successful B calls within 14.1 ms while A timed out. The bounded public gateway profile now measures shared-source request and connection refusals, shared upstream saturation, challenge expiry and failure recovery, with two-venue credential/path isolation and a versioned cleanup receipt. The unchanged per-IP request budget and global upstream slots can refuse a legitimate other-venue caller. Choose per-venue fairness and legitimate automated-client handling; production traffic, carrier false-positive rates and multi-gateway coordination remain untested. See the public traffic profile in the remote-access guide. Implement the preferred local DNS overrides with router-specific setup and offline/recovery tests. Decide the bootstrap role of waitron.local. Temporary unavailability while the venue is offline and short interruptions during cell replacement are accepted; define and test the cell recovery-time target. |
+| Remote access (initial) | The local two-venue gateway, operator/setup flow, signed route/certificate reconciler and opt-in test-only staff CSR exchange are implemented; see [the proof and limits](local-remote-access.md) and [2026-09-30 traffic receipt](receipts/public-gateway-limits-2026-09-30.json). The upstream public allowlist is only `GET /public/availability`; challenge handlers are local. D88's [public access/A951 proposal](waitron-integration-contract.md#public-access-and-a951-proposed) adds a joint exact-route manifest and lasting appliance lifecycle for the later Cloud step. A951 implementation/pin, durable client, stale-result checks, atomic install/reload, live DNS/ACME, production key storage and deployment remain open. Qualify `.local` device trust/offline access and any selected certified staff path; router overrides are optional. Separate public termination from staff passthrough and enforce host/method/path/tenant/session isolation at gateway and application. Run the shared acceptance matrix before enablement. Per-venue fairness, automated-client handling, production traffic/carrier false positives, multi-gateway coordination and cell recovery target remain open; existing shared quotas can refuse legitimate callers. |
 | Backups (initial) | Guided continuous and verified-snapshot recovery are implemented for local test venues. The two-venue proof restores an exact Litestream database head after interruption and restores a verified snapshot after deleting its continuous source. Production still needs provider credential lifecycle, retention and monitoring checks, planned final-write handover and safe Waitron activation. |
 | SQLite snapshots (initial backup service) | Retain daily snapshots for 30 days and monthly snapshots for 12 months, with longer paid retention for selected snapshots. Each must remain restorable if continuous backup data disappears. Protect the last verified snapshot from automatic expiry while subscribed; verify a newer copy before replacing it and show stale backup health. Define schedule details, consistency, extended-retention terms and prices, and independent storage/deletion controls. Explicit verified-snapshot selection and restoration with continuous data absent are proved locally; run the same flow against the selected production provider. |
-| Failover to cloud | The [Cloud hosting proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md) describes cold recovery and an optional running follower, fenced activation, devices and return to the venue. Owner approval, the joint Waitron contract and all runtime/provider proofs remain open. |
-| Hosted Waitron | The [Cloud hosting proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md) describes a dedicated venue runtime from first setup, country/cell placement, persistent storage, upgrades and Cloud-only recovery. The [conditional delivery outline](superpowers/plans/2026-10-21-cloud-hosted-venue-design.md) starts after design approval and joint contract agreement. Isolation strength, hardware connectivity, sizing, costs and the launch decisions remain open; nothing is built. |
-| Bookings and public pages | Initial remote access may be unavailable while the venue is offline. Future independent cloud hosting needs rules for accepting reservations and synchronising them with the venue; include menus, ordering and payment-page candidates. |
+| Failover to cloud | The [Cloud hosting proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md) describes cold recovery and an optional running follower, fenced activation, devices and return to the venue. The access extension never routes to a merely restored standby or enables a competing `.local` writer. The first cold-versus-running question, owner approval, joint contract and runtime/provider gates remain open. |
+| Hosted Waitron | The [Cloud hosting proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md) covers dedicated venue runtimes, country/cell placement, storage, upgrades, Cloud-only recovery and separate public/staff access. The [conditional outline](superpowers/plans/2026-10-21-cloud-hosted-venue-design.md) includes public/A951 qualification for the Cloud step soon after go-live. A Cloud-only primary needs its actual certified active-server path; `.local` cannot provide offline service. Owner design approval, joint acceptance, isolation, hardware, sizing, costs and launch gates remain open; no hosting implementation is supplied. |
+| Bookings and public pages | D88 proposes stable per-venue public names for menus, bookings, online orders and table-QR ordering in the later Cloud step. Pin exact Waitron routes/assets and authorization/session/CSRF/replay checks before implementation. Serialize mutations through authoritative Waitron; when the box is unreachable accept no offsite queue, and reconcile lost replies before retry. Qualify QR expiry/revocation/non-authority and privacy. Customer checkout remains intended; payment-provider/webhook scope is separately agreed and distinct from blocking physical terminal ports. No independent booking store or synchronization product is approved. |
 | Invoice archive | Define the archived objects and access grants, including owner-approved AEAT/advisor access, retention, download and customer exit. Have hosting/archive questions reviewed for the launch country. |
 | Analytics and reports | Choose ingestion, supported source versions, country and cell placement, search/aggregation engine, scheduled reports and group reporting. Elasticsearch is a candidate. |
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |

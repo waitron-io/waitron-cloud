@@ -8,6 +8,9 @@ The [Cloud hosting proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-des
 adds a proposed coordination boundary for hosted primaries and Cloud standbys. Its
 operations are design requirements, not implemented endpoints or activation authority.
 Waitron and Cloud must agree the versioned contract before either builds that boundary.
+The [public access and A951 proposal](#public-access-and-a951-proposed) below is the
+single shared home for the added customer access and lasting appliance client boundary.
+Its proposal status is separate from the completed local milestone.
 
 The first milestone connects two test venues to one cell, proves remote-access
 isolation, restores both backup types and replaces the gateway. Start with venue
@@ -108,6 +111,156 @@ uncertain retries. Agreement approves formats and expected behaviour; executable
 joint receipts qualify the later implementation before enablement. They are
 separate gates. Neither this proposal nor a backup verification result authorises
 trading. The contract remains unagreed and unimplemented.
+
+## Public access and A951 (PROPOSED)
+
+This extends D88 and published #265 for the **Cloud step soon after go-live**, not
+go-live itself. The owner requires `.local` as the default for venue devices and a
+separate public interface for customer menus, bookings, online orders and table-QR
+ordering. The design below is unapproved. No implementation or provider work starts
+before owner design approval and bilateral acceptance of a pinned contract.
+
+**A951 is the named Waitron dependency** for the lasting box tunnel/certificate
+client. No accepted implementation or landing revision is established here. Cloud must obtain that dependency's accepted
+scope and source pin before integration. This document does not change Waitron.
+
+### Keep local, staff and public access distinct
+
+Venue devices default to Waitron's `.local` address with its existing local CA and
+client trust setup. That trust is a prerequisite to verify on supported devices,
+not permission to bypass a certificate warning. Keep local access direct, without a
+redirect to Cloud or a WAN dependency. Publicly trusted `.local` certificates are
+not supported; a public certificate covers the registered DNS name instead.
+
+You may select the certified Cloud **staff** hostname when it reaches an actually
+active server, either on-premises through the tunnel or hosted through the private
+cell path. Its TLS passes through Cloud and ends at Waitron, which holds the private
+key and checks staff permissions. An optional router override can resolve that
+registered name to the active LAN server with the matching certificate. It is not
+the default. A Cloud-only primary has no local server for `.local` to discover;
+neither name resolution nor a tunnel authorises a local competing writer.
+
+Customers use a stable per-venue **public** registered hostname, including in table
+QR links. Cloud owns live DNS, public certificate provisioning/renewal and public
+HTTPS termination. For an active on-premises target, forward through scoped,
+encrypted WireGuard transport with verified upstream HTTPS. A hosted target uses
+the isolated private cell path with verified encrypted onward transport. Neither
+path exposes the box directly to the WAN. Route movement requires confirmed active
+authority and probes; a reachable restored standby is not an active target.
+
+Reference boundaries: [RFC 6762 section 3](https://www.rfc-editor.org/rfc/rfc6762#section-3)
+defines `.local` as link-local; Let's Encrypt describes [local certificate trust](https://letsencrypt.org/docs/certificates-for-localhost/)
+and [DNS validation/delegation](https://letsencrypt.org/docs/challenge-types/).
+These references do not prove Waitron browser trust, router setup or offline behaviour.
+
+### Allow customer functions through a jointly pinned route manifest
+
+The following are proposed **functional surfaces and method families**, not existing
+API paths. Before implementation, Waitron and Cloud must pin a versioned joint
+manifest of exact paths, permitted methods, required assets, request/response bounds
+and authentication requirements against the real Waitron consumer. Required scripts,
+styles, images and any session bootstrap must be enumerated; no public `/api`
+wildcard, whole static tree or fallback proxy is permitted.
+
+| Functional surface | Proposed method family | Waitron business check |
+| --- | --- | --- |
+| Published customer menu, venue information and required assets | GET; HEAD only for explicitly listed resources | Only content published for this venue; no internal catalogue, staff data or private media. |
+| Booking/order availability and customer session bootstrap | GET for availability; POST for a specifically listed session/token exchange | Bind the session/token to this public host and venue; availability is advisory until a mutation commits. |
+| Customer booking creation and own booking view/change/cancellation | POST create; GET own view; PATCH/DELETE only for listed change/cancel operations | Check customer session or scoped booking capability, ownership, capacity and permitted state transitions. No booking enumeration. |
+| Customer basket, online order, table order and checkout submission/status | GET own state; POST submit; PATCH/DELETE only for listed editable basket/order operations | Check venue, session, object ownership, current prices/availability, permitted transition and any table scope. Customer input cannot choose fiscal authority or mark payment settled. |
+
+Gateway and application both enforce method, identically normalized path, host,
+tenant and applicable authentication/session binding. Reject malformed or ambiguous
+encodings, encoded separators, traversal, method overrides, upgrades, unlisted
+methods and routes; never allow parser differences to widen access. The gateway
+checks the agreed public session/token envelope; Waitron rechecks its current
+business authority and does not trust a forwarded tenant id. The exact envelope and
+forwarded identity format remain a builder acceptance gate. Staff passthrough cannot
+inspect encrypted methods or paths; those checks remain at the staff endpoint.
+
+Use separate host-only public, staff and gateway-challenge cookies, with distinct
+names, secure attributes and no shared parent-domain scope. Forward only the
+manifest's customer credentials and trusted, overwritten routing context. Refuse
+staff credentials on the public surface and scope response cookies to the public
+host. A solved bot challenge is not a customer login or business permission.
+Cookie-authenticated mutations require Origin/CSRF checks, which prevent another
+site from acting through your browser, plus replay controls. Scoped tokens must
+also reject cross-host, cross-venue, expired, revoked and inappropriate replay use.
+
+Everything else is blocked on the public path, including staff login/dashboard,
+manager/setup, sync, backups/restores, fiscal administration, printing and physical
+payment-terminal ports. Customer checkout remains an intended public function;
+terminal-port exclusion does not prohibit it. Payment providers, redirects and
+webhooks require separately agreed authenticated scope and acceptance cases.
+No provider integration or arbitrary webhook ingress is promised by this proposal.
+
+Table QR links bind venue/table context with expiry and revocation. They confer no
+staff role, bill ownership, payment authority or proof of physical presence; copied
+links still need the permitted customer session/token and business checks. Exact
+lifetimes and limits remain open. Cloud can inspect public submissions: minimise
+forwarded/stored personal data, keep bodies, cookies and QR/session secrets out of
+gateway logs, and prevent shared caches from exposing private state. Customer-data
+retention and security product policy require owner approval, not defaults here.
+
+Serialize customer mutations with staff work through the one authoritative Waitron
+writer. If the box is unreachable, return temporary unavailability; Cloud accepts
+no offsite booking/order queue. A lost reply leaves an uncertain outcome. Reconcile
+through a venue/session-bound operation id and status result before retrying; never
+blindly repeat a mutation or payment. Exact retry/status semantics are a joint gate.
+
+### A951 configuration and certificate lifecycle
+
+The proposed machine-authenticated exchange binds version, revision, installation,
+venue, cell, active target, peer identities, allowed networks/ports, hostnames and
+expiry to one configuration. Reject unsupported versions, stale revisions and foreign
+bindings before applying. Persist the last accepted revision and intent across
+reboot; acknowledge received, applied or failed revisions with bounded, redacted
+status. A lost acknowledgement reconciles the same revision, not a new placement.
+This is not a claim that today's gateway manifest is an appliance protocol.
+
+Generate WireGuard and staff TLS keys at the endpoint that uses them; send only
+public keys and CSRs. Scope each peer to its assigned `/32` and allowed service
+destinations/ports, deny peer-to-peer and cross-venue forwarding, and expose no raw
+device or management ports. Agree connect, reconnect, reboot, key rotation, staged
+cell move and revocation with acknowledgements and expiry enforcement. A move must
+retire the old route/peer and settle existing connections without resuming an old
+writer. Tunnel reconnection itself grants no trading authority.
+
+Reuse the landed [staff certificate exchange v1](#staff-certificate-exchange-version-1),
+whose current Cloud handler is opt-in and test-installation-only. Waitron/A951 still
+owns durable submission/polling, lease renewal, stale-result checks against local
+installation/request/hostname/revision/CSR digest, atomic install and TLS reload,
+including crash recovery. Do not widen v1 to production by implication. Its staff
+chain is separate from Waitron's local CA/trust and the gateway's public certificate.
+
+Failed DNS provisioning, issuance, renewal or apply retains a prior usable revision
+and certificate without extending their authority. Expired/revoked authority or an
+expired/mismatched certificate fails closed. Lost/corrupt established cache requires
+authenticated recovery, not rollback acceptance or direct WAN bypass. Report
+**active** (Waitron writer authority), **reachable** (fresh transport/application
+probe), **DNS ready** (selected name resolves correctly) and **certificate ready**
+(matching, valid chain actually installed/reloaded) separately, bound to revision
+and observation time. No acknowledgement, DNS answer or successful issuance proves
+all four; stale evidence is unknown.
+
+### Acceptance before enablement
+
+These are required future cases, not runtime receipts from this document.
+
+| Case | Required joint evidence |
+| --- | --- |
+| Two venues and public boundary | Accepted functional operations and listed assets work only for the intended host/tenant/session; wrong SNI/Host, method, encoding, tenant, credentials, replay and CSRF attempts fail at gateway and application. Staff/setup/backup/device paths remain blocked. |
+| Availability and uncertainty | Startup before active authority, WAN/box outage and lost mutation replies never acknowledge an offsite booking/order or duplicate an effect. Reconcile committed and uncommitted outcomes through real Waitron. |
+| DNS, certificates and cache | Initial DNS/issuance failure, failed renewal, hostname/key change during issuance, expiry, restart and cache loss retain only usable authorised state and otherwise refuse; no warning bypass or WAN escape. Verify actual install/reload, not just issuance. |
+| Appliance lifecycle and movement | Connect/reconnect/reboot/rotation, lost config acknowledgement, staged/cancelled/committed cell moves and revocation preserve the accepted revision, isolate the other venue, withdraw old peers/routes and reject the old writer. |
+| Venue devices | Fresh LAN clients after WAN loss and DNS-cache expiry reach `.local` with Waitron trust and no Cloud redirect. Separately test the selected certified staff path to an actual active LAN/Cloud target; a Cloud-only target stays unavailable offline. Test any selected router override explicitly. |
+| Customer privacy and QR | Copied/expired/revoked/wrong-table QR links, foreign sessions and cookie/cache/log checks cannot expose another customer's data or create staff/payment authority. Qualify any separately agreed payment flow independently. |
+
+Owner design approval, named bilateral owners/source pins, exact Waitron route/assets
+and session/retry contract, A951 implementation and qualification for appliance paths,
+live DNS/certificate
+and deployment evidence, and the existing recovery/fiscal gates remain open. No
+pricing, retention, security product policy or implementation approval is supplied.
 
 ## Exchanges to implement
 

@@ -5,6 +5,12 @@ HTTPS ends at their venue; public HTTPS ends at the gateway and passes a browser
 challenge before reaching Waitron over a second verified HTTPS connection. This
 milestone exposes only `/public/availability`. It does not publish menus or bookings.
 
+The [D88 public access/A951 proposal](waitron-integration-contract.md#public-access-and-a951-proposed)
+adds menu, booking, online-order and table-QR scope for the Cloud step soon after
+go-live, not go-live itself. It is unapproved and unimplemented. The existing
+`/_cloud/*` challenge handlers stay local to the gateway; they are not upstream
+business routes. Neither this local proof nor source reading qualifies the added scope.
+
 If the venue cannot answer after the browser challenge, you see a short unavailable
 page in English or Spanish, chosen from your browser language preferences. It follows
 your light or dark theme and offers **Try again** on the same public route. The gateway
@@ -114,7 +120,8 @@ activate a live subscription or install a tunnel on a customer appliance. Once f
 service observations confirm the selected configuration, the addresses become links.
 That confirmation expires with the observation or connection lease, even on an open page.
 
-Expand **Use the staff address on your local network** for DNS and offline-test guidance.
+The existing screen's **Use the staff address on your local network** guidance
+describes an optional registered-name DNS override, not the `.local` device default.
 Cloud cannot configure your router or prove that a device uses its local DNS resolver.
 The staff hostname must match the installed certificate and the local override.
 
@@ -359,6 +366,21 @@ staff and one active public name; it does not serve both custom and assigned ali
 
 ## Keep LAN access independent
 
+The owner's 2026-10-21 requirement makes Waitron's `.local` address the default for
+venue devices, using its existing local CA and client trust. Do not redirect that
+path through Cloud, require the WAN or bypass certificate warnings. Fresh offline
+clients still need qualification on supported devices; the recorded resolver proof
+below demonstrates the optional registered-name path, not `.local` trust.
+
+You can select the certified Cloud staff hostname for an actual active on-premises
+or hosted server. Staff TLS ends at that endpoint with its private key. A Cloud-only
+primary cannot be reached through link-local `.local` discovery or serve an offline
+LAN client; a local follower needs separately approved fenced promotion to write.
+Public certificates cover the registered DNS name, not `.local`. See the
+[shared proposal and reference boundaries](waitron-integration-contract.md#keep-local-staff-and-public-access-distinct).
+
+For the **optional registered staff hostname on the LAN**:
+
 Configure your local DNS resolver to return the server's reserved LAN address for the
 staff hostname. Clients must actually use that resolver. Where a router cannot override
 one name, point its DNS setting at a local resolver which handles this name and forwards
@@ -404,7 +426,8 @@ key and endpoint and require fresh trusted HTTPS with the intended venue body,
 unchanged certificate and newer handshakes. The versioned receipt records the
 clean measurement source and empty fixture cleanup. Repeat with an authenticated
 Waitron appliance trigger, active connections and the selected deployment before
-choosing or promising a faster recovery target. LAN access remains independent.
+choosing or promising a faster recovery target. LAN access to an active local server
+remains independent on the qualified local path.
 Live provider DNS and
 ACME credentials, production key storage, CSR/chain transport, appliance installation,
 automatic customer appliance setup and deployment hardening still need their own
