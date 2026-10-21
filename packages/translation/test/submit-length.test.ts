@@ -19,3 +19,9 @@ for(const {name,body,jobBytes} of [
     assert.equal(from.mock.callCount(),0,'a mismatched length must not allocate or hash the body');
   }finally{from.mock.restore();}
 });
+
+test('unpaired surrogates are accepted with their exact UTF-8 replacement bytes',()=>{
+  const fingerprint={jobSha256:'83d544ccc223c057d2bf80d3f2a32982c32c3c0db8e2674820da5064783fb097',jobBytes:3};
+  const proof=JSON.stringify({version:1,...fingerprint});
+  for(const body of ['\ud800','\udc00'])assert.deepEqual(checkSubmitBody(proof,body),fingerprint);
+});
