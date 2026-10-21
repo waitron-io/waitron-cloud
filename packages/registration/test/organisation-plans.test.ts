@@ -132,7 +132,7 @@ test('migration upgrades existing organisations without changing legacy data and
     await old.query('INSERT INTO organisations(id) VALUES($1)', [first]);
     await Promise.all([migrate(old), migrate(old)]);
     assert.deepEqual(await new OrganisationPlanStore(old).show(first), view());
-    assert.equal((await old.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '42');
+    assert.equal((await old.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '43');
     await assert.rejects(old.query("UPDATE organisations SET service_plan='trial'"));
     await assert.rejects(old.query('UPDATE organisations SET service_plan_revision=-1'));
     await assert.rejects(old.query('UPDATE organisations SET service_plan=NULL'));

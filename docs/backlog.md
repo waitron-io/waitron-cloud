@@ -1144,9 +1144,13 @@ notifications separately.
   exported from the compiled pinned Waitron bundle. The literal protocol vector
   matches Waitron's request digest; the manifest includes all 15 owners and binds
   package, dependency, migration and policy data to that release. These encoding
-  and admission checks do not verify an archive. Child integration, stored evidence,
-  recovery v2 and the genuine joint proof remain unfinished; snapshots stay
-  unavailable and deployment enforcement stays off.
+  checks do not verify an archive. The next additive migration stores immutable
+  attempt bindings, keeps historical verdicts separate, and supplies a current
+  qualification view. Old successful checks retain their retention protection but
+  gain no current qualification. The policy starts empty with its release gate
+  closed; old recovery requests gain no target identity. Child integration,
+  transactional admission, recovery v2 and the genuine joint proof remain
+  unfinished; snapshots stay unavailable and deployment enforcement stays off.
   The PR5 adapters are reconciled with current main, preserving their earlier
   storage, account, remote and controller behavior and historical test evidence.
   Target-bound verification integration, real isolation and cleanup checks, and a

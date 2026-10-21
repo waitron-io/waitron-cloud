@@ -14,3 +14,17 @@ test('migration refuses a newer release ledger without writing',async()=>{
  try{await assert.rejects(migrations.migrate(pool),/schema_incompatible/);assert.deepEqual((await pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,before);}
  finally{await pool.query("DELETE FROM schema_migrations WHERE name='999_future.sql'");}
 });
+test('target verification release checks every applied SQL digest',async()=>{
+ const {checkConsumerSchema}=await import(new URL('../../../deploy/local-stack/runtime.mjs',import.meta.url).href);
+ const root=new URL('../../../',import.meta.url).pathname;
+ assert.equal(migrations.migrationNames.at(-1),'043_backup_target_verification.sql');
+ const row=(await pool.query("SELECT * FROM schema_migrations WHERE name='043_backup_target_verification.sql'")).rows[0];
+ assert.ok(row);
+ await checkConsumerSchema(pool,root);
+ try{
+  await pool.query("UPDATE schema_migrations SET digest='tampered' WHERE name='043_backup_target_verification.sql'");
+  await assert.rejects(migrations.migrate(pool),/Applied migration has changed/);
+  await assert.rejects(checkConsumerSchema(pool,root),/schema_incompatible/);
+ }finally{await pool.query('UPDATE schema_migrations SET digest=$2 WHERE name=$1',[row.name,row.digest]);}
+ await checkConsumerSchema(pool,root);
+});
