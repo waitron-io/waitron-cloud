@@ -147,7 +147,6 @@ export class AuthenticatorFactorStore {
   async #lockSessions(c:Context,a:FactorAuthority):Promise<void> {
     await c.client.query('SELECT id FROM cloud_sessions WHERE account_id=$1 ORDER BY id FOR UPDATE',[c.accountId]);
     await resolveSession(c.client,a.token,{csrfToken:a.csrfToken,touch:false});
-    if(await factorNow(c.client)>=c.deadline) throw new FactorManagementError();
   }
   async #changed(c:Context):Promise<void> {
     await c.client.query('UPDATE cloud_factor_enrolments SET consumed_at=clock_timestamp() WHERE account_id=$1 AND consumed_at IS NULL',[c.accountId]);
