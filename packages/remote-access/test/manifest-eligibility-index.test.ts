@@ -26,7 +26,7 @@ async function venue(cellId:string){
 }
 async function measuredExport(cellId:string,mode:'existing'|'test-free-paid',publish=false){
  const connect=db.pool.connect.bind(db.pool);let lists=0,idReads=0,eligibleCount=0,arrayScans=0;
- const measuredIds=new Set<string>(),includes=Array.prototype.includes;
+ const measuredIds=new Set<string>(),includes=Array.prototype.includes,indexOf=Array.prototype.indexOf;
  const measured={async connect(){
   const client=await connect(),query=client.query,release=client.release;
   client.query=async function(this:PoolClient,...args:unknown[]){
@@ -48,10 +48,14 @@ async function measuredExport(cellId:string,mode:'existing'|'test-free-paid',pub
   client.release=function(...args:Parameters<PoolClient['release']>){client.query=query;client.release=release;return Reflect.apply(release,client,args);};
   return client;
  }} as Pool;
- // Include copied arrays: observing only the returned list misses copy-then-scan regressions.
+ // Observe includes/indexOf on copies too; the ID-read proxy only observes its own list.
  Array.prototype.includes=function(this:unknown[],value:unknown,fromIndex?:number){
   if(typeof value==='string'&&measuredIds.has(value))arrayScans++;
   return includes.call(this,value,fromIndex);
+ };
+ Array.prototype.indexOf=function(this:unknown[],value:unknown,fromIndex?:number){
+  if(typeof value==='string'&&measuredIds.has(value))arrayScans++;
+  return indexOf.call(this,value,fromIndex);
  };
  let manifest:GatewayManifest|undefined;
  try{
@@ -59,7 +63,7 @@ async function measuredExport(cellId:string,mode:'existing'|'test-free-paid',pub
   if(publish)await exporting.publishManifest(cellId,async value=>{manifest=value;},1234567890000);
   else manifest=await exporting.manifest(cellId,1234567890000);
  }
- finally{Array.prototype.includes=includes;}
+ finally{Array.prototype.includes=includes;Array.prototype.indexOf=indexOf;}
  assert(manifest);return {manifest,lists,idReads,eligibleCount,arrayScans};
 }
 
@@ -78,10 +82,10 @@ for(const publish of [false,true])for(const count of [4,16])test(`${publish?'pub
  expected.sort((a,b)=>a.venueId.localeCompare(b.venueId));
  assert.deepEqual(measured.manifest,{version:1,audience:'waitron-cloud-gateway',cellId:target,sequence:1,issuedAt:1234567890000,expiresAt:1234568490000,routes:expected});
  assert.equal(measured.lists,1,'must observe the real eligibility result');assert.equal(measured.eligibleCount,count);
- t.diagnostic(`${count} eligible installations: ${measured.idReads} ID reads, ${measured.arrayScans} array searches`);
+ t.diagnostic(`${count} eligible installations: ${measured.idReads} ID reads, ${measured.arrayScans} includes/indexOf calls`);
  assert(measured.idReads>0,'must observe membership processing');
  assert(measured.idReads<=count*2,`eligible IDs read ${measured.idReads} times for ${count} routes`);
- assert.equal(measured.arrayScans,0,'membership must not scan the returned list or a copy per route');
+ assert.equal(measured.arrayScans,0,'membership must not call includes/indexOf per route, including on a copy');
 });
 
 for(const publish of [false,true])test(`${publish?'published':'returned'} export keeps empty eligibility distinct from ordinary mode`,async()=>{
