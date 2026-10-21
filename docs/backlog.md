@@ -1191,7 +1191,7 @@ notifications separately.
   runtime exports and prepares local images without a venue source path. CI
   discovers all eighteen files, with the longer stack file split into three
   disjoint groups. Publication verification remains separate and offline.
-  The model command passes 1,513 checks. The owner-approved native deadline
+  The model command verifies public inputs and artifacts. The owner-approved native deadline
   fixture holds its generated idle observation until shutdown is requested,
   preserving both original 43/44-second limits and every source, startup and
   cleanup assertion. It also requires deadline and cleanup to finish within
