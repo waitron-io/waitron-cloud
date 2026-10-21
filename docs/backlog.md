@@ -1352,10 +1352,19 @@ notifications separately.
   and mismatched counters prevent a measured result. A generated local check runs
   through Cloud's actual HAProxy, public challenge and WireGuard paths on an internal
   network with no published ports. Both tunnel endpoints report matching counters.
-  These are transport checks against a synthetic upstream. You still need genuine
-  Waitron sign-in, read, dashboard and reconnect measurements before estimating an
-  owner session. IP and TCP overhead, the interpretation of WireGuard counters for
-  billing, public-traffic frequency and monthly owner activity remain unmeasured.
+  A separate generated venue now exercises the pinned Waitron provisioning,
+  identity and management routes through that same gateway. Its nine owner API
+  actions include refused anonymous access and invalid credentials, sign-in,
+  staff, dashboard canvas and theme reads, a fresh-connection read, sign-out and
+  refusal of the ended session. Six public actions cover the challenge, proof,
+  availability and refusal of management access. Both socket meters reconcile;
+  the two WireGuard endpoints also agree. Corrupt status, identity, cookie,
+  canvas and availability evidence prevents publication, as does an unexpected
+  input field. Names, credentials and response contents stay outside the result.
+  This measures a generated venue's API scenario, not a complete browser session
+  or Santet's owner activity. Browser assets, background updates, IP and TCP
+  overhead, the interpretation of WireGuard counters for billing, public-traffic
+  frequency and monthly owner activity remain unmeasured.
   You can now export captured-mail and fiscal API scenarios together through the
   [service receipt boundary](../scripts/cloud-cost/service-receipt.mjs). It checks
   independent counters and every grouped retry and refusal before returning an
@@ -1379,8 +1388,8 @@ notifications separately.
   the response path or wait forever for an already expired request. A controlled
   100 ms pause reproduces the earlier hang and passes with the controlled clock.
   Its timeout, cancellation, oversized-response and interruption checks remain intact.
-  The complete venue-cost model, genuine public/staff journeys and full cost export
-  remain open; the successful stream experiment above supplies only its own sample.
+  The complete venue-cost model, full browser journeys and joined cost export
+  remain open; each successful experiment supplies only its named sample.
   The pure calculations now cover aggregate request
   tiers, explicit resource capacities, dated growth and calendar retention, including
   protected recovery copies. Synthetic local HTTP checks reconcile retries, denied
