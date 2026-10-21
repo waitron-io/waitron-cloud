@@ -54,6 +54,36 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Diagnose generated stack startup (temporary)
+        if: matrix.file == 'stack-conformance.test.mjs' && matrix.group == '3/3'
+        run: |
+          python3 - <<'PYDIAG'
+          from pathlib import Path
+          p=Path('scripts/cloud-cost/local.mjs')
+          s=p.read_text().replace("const fail = () => {", "const fail = () => { console.error(new Error('GENERATED_LOCAL_GUARD').stack);")
+          s=s.replace("  requireThat(result.status === 0 && !result.error);", "  if(result.status !== 0 || result.error) console.error('GENERATED_DOCKER_FAILURE', JSON.stringify({argv,status:result.status,error:result.error?.message,stderr:result.stderr,stdout:result.stdout}));\n  requireThat(result.status === 0 && !result.error);")
+          s=s.replace("} catch { await close?.(); fail(); }", "} catch (error) { console.error('GENERATED_STARTUP_CAUSE', error.stack); await close?.(); fail(); }")
+          s=s.replace("} catch { fail(); }", "} catch (error) { console.error('GENERATED_LOCAL_CAUSE', error.stack); fail(); }")
+          p.write_text(s)
+          p=Path('scripts/cloud-cost/schema.mjs')
+          s=p.read_text().replace("const fail = () => {", "const fail = () => { console.error(new Error('GENERATED_SCHEMA_GUARD').stack);")
+          s=s.replace("} catch { fail(); }", "} catch (error) { console.error('GENERATED_SCHEMA_CAUSE', error.stack); fail(); }")
+          p.write_text(s)
+          PYDIAG
+          node --input-type=module <<'JSDIAG'
+          import {prepareConformance} from './scripts/cloud-cost/conformance-prepare.mjs';
+          import {runTests} from './scripts/cloud-cost/conformance.mjs';
+          const fixture=await prepareConformance(['stack-conformance.test.mjs']);
+          try {
+            for(let i=1;i<=24;i++) {
+              console.log('GENERATED_STARTUP_REPETITION',i);
+              const result=await runTests(['scripts/cloud-cost/fixtures/stack-conformance.test.mjs'],{pattern:'^genuineAmbiguousMultipartRepliesReconcileEveryCommittedStage_false$',env:{...process.env,...fixture.env}});
+              if(result.code) { process.exitCode=result.code; break; }
+            }
+          } finally {fixture.cleanup();}
+          JSDIAG
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: pnpm test:cloud-cost:conformance --only '${{ matrix.file }}' --pattern '${{ matrix.pattern }}' --skip-pattern '${{ matrix.skipPattern }}'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
