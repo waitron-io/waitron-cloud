@@ -797,7 +797,9 @@ venue does not subscribe to remote access or backups.
   checks completion after the entire delay. Existing request/attempt budgets,
   restart spacing and durable reservations remain covered. Overlapping calls are
   still unqualified; keep this measurement client sequential. These checks permit
-  no new provider requests.
+  no new provider requests. A far-future journal timestamp still pauses without
+  progress output; a diagnostic for unusually long waits remains an operator
+  usability follow-up.
   Keep manual entry and correction available when lookup is unavailable or wrong.
 - **Transactional email.** Offer managed SMTP delivery for password resets and other
   account administration emails from on-prem Waitron. Scope the relay to these
