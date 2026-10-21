@@ -61,3 +61,18 @@ test('a CI group executes only its selected cases in the real test runner', asyn
     assert.doesNotMatch(result.output,/✖ other group/);
   }finally{rmSync(root,{recursive:true,force:true});}
 });
+
+// Matching a parent name must not admit cases assigned to another group.
+test('the final stack group excludes earlier groups in the real runner', async () => {
+  const {runTests, conformanceMatrix}=await import('./conformance.mjs');
+  const root=mkdtempSync(join(tmpdir(),'cloud-conformance-final-group-'));
+  try {
+    const file=join(root,'cases.mjs');
+    writeFileSync(file,"import {test} from 'node:test'; test('completeSyntheticStackRunsRealServicesAndCleansOnlyItsOwnedResources',()=>{throw Error('first group ran');}); test('genuineLitestreamTransportBodyBytesAgreeWithSeparateStorageObserver',()=>{throw Error('second group ran');}); test('futureStackCheck',()=>{});");
+    const {pattern,skipPattern}=conformanceMatrix().filter(row=>row.file==='stack-conformance.test.mjs')[2];
+    const result=await runTests([file],{pattern,skipPattern,stdio:'pipe'});
+    assert.equal(result.code,0,result.output);
+    assert.match(result.output,/futureStackCheck/);
+    assert.doesNotMatch(result.output,/first group ran|second group ran/);
+  }finally{rmSync(root,{recursive:true,force:true});}
+});

@@ -12,12 +12,12 @@ export function conformanceMatrix() {
   const patterns=[first,second,'^(?!(?:'+first+'|'+second+'))'];
   // The last group includes new case names so additions cannot disappear from CI.
   return conformanceFiles().flatMap(file=>file==='stack-conformance.test.mjs'
-    ?patterns.map((pattern,index)=>({file,pattern,group:`${index+1}/3`}))
+    ?patterns.map((pattern,index)=>({file,pattern,group:`${index+1}/3`,...(index===2?{skipPattern:first+'|'+second}:{})}))
     :[{file,pattern:'.',group:'1/1'}]);
 }
 
-export function runTests(files,{pattern,...options}={}) {
-  return runCommand(process.execPath,['--test','--test-concurrency=1',...(pattern?['--test-name-pattern='+pattern]:[]),...files],options);
+export function runTests(files,{pattern,skipPattern,...options}={}) {
+  return runCommand(process.execPath,['--test','--test-concurrency=1',...(pattern?['--test-name-pattern='+pattern]:[]),...(skipPattern?['--test-skip-pattern='+skipPattern]:[]),...files],options);
 }
 
 function runCommand(command,args,{env=process.env,stdio='inherit'}={}) {
@@ -40,15 +40,17 @@ async function main(args) {
   const files=conformanceFiles();
   if(args.length===1 && args[0]==='--list') {console.log(JSON.stringify(files));return;}
   if(args.length===1 && args[0]==='--matrix') {console.log(JSON.stringify(conformanceMatrix()));return;}
-  if(args.length && !([2,4].includes(args.length) && args[0]==='--only' && files.includes(args[1])
-    && (args.length===2 || (args[2]==='--pattern' && args[3].length>0)))) throw Error('Use --list, --matrix or --only <listed file> [--pattern <expression>]');
-  const pattern=args.length===4?args[3]:undefined;
+  if(args.length && !([2,4,6].includes(args.length) && args[0]==='--only' && files.includes(args[1])
+    && (args.length===2 || (args[2]==='--pattern' && args[3].length>0))
+    && (args.length<6 || args[4]==='--skip-pattern'))) throw Error('Use --list, --matrix or --only <listed file> [--pattern <expression> [--skip-pattern <expression>]]');
+  const pattern=args.length>=4?args[3]:undefined;
+  const skipPattern=args.length===6?args[5]:undefined;
   const selected=args.length?[args[1]]:files;
   const {prepareConformance}=await import('./conformance-prepare.mjs');
   const fixture=await prepareConformance(selected);
   try {
     const host=selected.filter(name=>name!=='worker-storage-conformance.test.mjs');
-    if(host.length) process.exitCode=(await runTests(host.map(name=>join(here,'fixtures',name)),{env:{...process.env,...fixture.env},pattern})).code;
+    if(host.length) process.exitCode=(await runTests(host.map(name=>join(here,'fixtures',name)),{env:{...process.env,...fixture.env},pattern,skipPattern})).code;
     if(!process.exitCode && selected.includes('worker-storage-conformance.test.mjs')) {
       let id;
       try {
