@@ -4,6 +4,11 @@ Status: complete two-venue milestone proved locally, updated 2026-09-27. This tr
 [product requirements](product-and-platform.md) into responsibilities and exchanges.
 It does not declare endpoints implemented or replace Waitron's recovery rules.
 
+The [Cloud hosting proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md)
+adds a proposed coordination boundary for hosted primaries and Cloud standbys. Its
+operations are design requirements, not implemented endpoints or activation authority.
+Waitron and Cloud must agree the versioned contract before either builds that boundary.
+
 The first milestone connects two test venues to one cell, proves remote-access
 isolation, restores both backup types and replaces the gateway. Start with venue
 registration; services can then use the same identities and permissions.
@@ -87,6 +92,22 @@ protection and recovery from lost replies as part of the registration slice.
 Cloud owns permission to use its services. Waitron owns permission to become the
 active primary. A Cloud login, restore grant or fresh machine credential alone
 must not activate trading or change fiscal identity.
+
+## Hosted lifecycle and promotion (proposed)
+
+The [Cloud hosting design](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md#agree-one-shared-contract-before-building)
+records the proposed boundary for a new Cloud-primary venue, a Cloud standby and
+replacement of a failed Cloud host. This section is its shared contract home.
+Cloud owns resources, service credentials, durable operation history and routing.
+Waitron owns initial setup, node identity, activation, fencing and return.
+
+Before implementation, both repositories must accept a pinned contract describing
+identity binding, store and pointer versions, signatures and conditional writes,
+read-only following, peer enumeration, stop evidence, activation outcomes and
+uncertain retries. Agreement approves formats and expected behaviour; executable
+joint receipts qualify the later implementation before enablement. They are
+separate gates. Neither this proposal nor a backup verification result authorises
+trading. The contract remains unagreed and unimplemented.
 
 ## Exchanges to implement
 
