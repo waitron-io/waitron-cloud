@@ -1194,8 +1194,9 @@ notifications separately.
   unknown and changed-reader controls retain full work. The explicit generator
   never stages its output or follows a live policy link. Wider path selection,
   remaining receipt-audit renewal and job-duration work stay open. The planner
-  still has unused API/fetch wrappers from historical merge reuse; remove those
-  CLI-only wrappers while preserving its public function signature. Generation
+  now runs Git directly without the unused API callback or historical tree-fetch
+  wrapper. Its public function signature stays compatible; existing CLI checks
+  retain full main runs, exact output fields and zero PR API calls. Generation
   is a repository-root command; subfolder invocation refuses without writing.
   Its final generated-policy recheck remains defensive validation without an
   independent failure control; input-schema and admission guards are covered.
