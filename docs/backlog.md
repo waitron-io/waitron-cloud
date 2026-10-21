@@ -1458,6 +1458,24 @@ notifications separately.
   Representative archive size, selected-sale archive transfers, remote and public
   activity, storage forecasts and provider billing remain open. Daily and monthly
   costs stay unknown.
+  Local sandbox planning now refuses incomplete anonymous storage shapes, missing
+  regional rates, insufficient or inapplicable credits, and cap overruns. Its
+  conservative budget includes version-list and deletion batches, multipart aborts,
+  final checks, cleanup time, active key hours, delayed cleanup, cancelled deletion
+  and three billing calls. Every S3 attempt uses the largest complete request-class
+  price; credits stay separate from gross cost. A consumption guard reserves cleanup
+  capacity, counts failed attempts before dispatch, checks elapsed time and refuses
+  reuse or alteration of an approved budget. This checks a planning envelope only;
+  it does not establish generated-byte provenance or authorise provider creation.
+  Billing comparison keeps gross usage and credits separate, requires matching
+  region, operation, unit and time window, and leaves prior-key, other-activity and
+  ambiguous lines unmatched. Cost or quantity differences above 20% require an
+  explanation. Missing or empty billing stays pending. A local request planner
+  keeps continuations and retries within three physical calls; its caller must
+  record the debit before sending. Neither module calls AWS. A complete daily
+  vector, independent synthetic generation, the owned-resource runner and cleanup,
+  durable billing reader and live/billing commands remain open. The accepted
+  component projection cannot substitute for that daily vector.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled
