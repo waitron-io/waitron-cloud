@@ -153,3 +153,28 @@ test('elapsedWallTimeCannotBeHiddenByZeroReportedActionDuration', () => {
   assert.throws(() => guard.admit({ s3Attempts: 1, kmsAttempts: 0, peakBytes: 0, versions: 0, elapsedSeconds: 0 }), bad);
   assert.equal(guard.snapshot().s3Attempts, 0);
 });
+test('separateClassVolumeDiscountsCannotUnderpriceAMixedWorkload', () => {
+  const f = fixture();
+  for (const key of ['s3Put', 's3Get']) {
+    const first = f.rates[key][0], discounted = structuredClone(first);
+    first.value = 1; first.tier.end = 1;
+    discounted.value = 0; discounted.tier.begin = 1;
+    f.rates[key].push(discounted);
+  }
+  for (const key of ['s3List', 's3Delete', 's3Control']) f.rates[key][0].value = 0;
+  // One put and one get cost $2; neither class's whole-volume total exceeds $1.
+  assert.ok(run(f).costs.s3Requests >= 2, 'the upper bound must cover both independent first-tier charges');
+});
+test('marginalUpperBoundKeepsEachAttemptsMinimumAndRounding', () => {
+  const f = fixture(); f.credits.availableUsd = 2000;
+  for (const key of ['s3Put', 's3Get', 's3List', 's3Delete', 's3Control']) f.rates[key][0].value = 0;
+  const p = f.rates.s3Put[0]; p.value = 0.005; p.minimum.quantity = 1000;
+  p.rounding = { mode: 'ceil', quantum: 2000 };
+  const r = run(f); assert.equal(r.costs.s3Requests, 1090); assert.equal(r.preflightPassed, true);
+});
+test('minimumChargeRemainsWithoutARoundingRuleToMaskIt', () => {
+  const f = fixture(); f.credits.availableUsd = 2000;
+  for (const key of ['s3Put', 's3Get', 's3List', 's3Delete', 's3Control']) f.rates[key][0].value = 0;
+  const p = f.rates.s3Put[0]; p.value = 0.005; p.minimum.quantity = 1000;
+  const r = run(f); assert.equal(r.costs.s3Requests, 545); assert.equal(r.preflightPassed, true);
+});

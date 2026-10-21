@@ -87,10 +87,16 @@ export function preflightLive(input) {
         if (result.cost === null) gaps.push('rate:' + id);
         return result.cost;
       }
-      // Charge every physical S3 attempt at each request class, then take the
-      // largest complete class cost. Unknown control/free terms still refuse.
+      // Separate request classes can each consume their expensive tier before
+      // any volume discount. Bound every attempt by the largest marginal rate,
+      // including per-attempt minimums and rounding, after all classes validate.
       const s3 = ['s3Put', 's3Get', 's3List', 's3Delete', 's3Control'].map(id => price(id, totals.s3Attempts, 'Requests'));
-      costs.s3Requests = s3.includes(null) ? null : Math.max(...s3);
+      costs.s3Requests = s3.includes(null) ? null : totals.s3Attempts * Math.max(...['s3Put', 's3Get', 's3List', 's3Delete', 's3Control'].map(id => {
+        const rates = input.rates[id], first = rates.toSorted((a, b) => a.tier.begin - b.tier.begin)[0];
+        let billed = Math.max(1, first.minimum.quantity);
+        if (first.rounding.mode === 'ceil') billed = Math.ceil(billed / first.rounding.quantum) * first.rounding.quantum;
+        return billed * Math.max(...rates.map(rate => rate.value));
+      }));
       costs.kmsRequests = price('kmsRequests', totals.kmsAttempts, 'Requests');
       const keySeconds = b.activeKeySeconds + input.contingencies.delayedCleanupSeconds + input.contingencies.cancelledDeletionSeconds;
       number(keySeconds);

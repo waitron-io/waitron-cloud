@@ -1462,8 +1462,9 @@ notifications separately.
   regional rates, insufficient or inapplicable credits, and cap overruns. Its
   conservative budget includes version-list and deletion batches, multipart aborts,
   final checks, cleanup time, active key hours, delayed cleanup, cancelled deletion
-  and three billing calls. Every S3 attempt uses the largest complete request-class
-  price; credits stay separate from gross cost. A consumption guard reserves cleanup
+  and three billing calls. Every S3 attempt uses the largest marginal request price,
+  including minimums and rounding, so separate volume discounts cannot understate
+  a mixed workload. Credits stay separate from gross cost. A consumption guard reserves cleanup
   capacity, counts failed attempts before dispatch, checks elapsed time and refuses
   reuse or alteration of an approved budget. This checks a planning envelope only;
   it does not establish generated-byte provenance or authorise provider creation.
