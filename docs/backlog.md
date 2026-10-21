@@ -609,9 +609,12 @@ Remaining work:
   request-order check, and proves durable completion in the opposite order before walking pages.
   The earlier review M17 failure had no retained arrival trace, so that historical trigger
   remains unproved; the current CI ordering-precondition failure is independently reproduced.
-  Keep Task 12's whole-request bound ahead of the fingerprint helper: a small declared
-  size with a large actual body still hashes that body before refusing the mismatch.
-  A cheap byte-length refusal can be considered there; Task 1 exposes no HTTP route.
+  The fingerprint helper now refuses an actual UTF-8 byte count that differs from the
+  signed count before allocating its body buffer or hashing. The declared 1 MiB limit
+  keeps its existing precedence and refusal codes; matching lengths still require the
+  exact hash. Six allocation checks cover shorter, longer, empty, multibyte, unpaired
+  surrogate and oversized actual bodies. Keep Task 12's whole-request bound ahead of
+  this helper; it does not replace HTTP admission or body limits.
 - **Waitron and joint qualification:** Waitron's paging caller landed in
   [PR #1901](https://github.com/clintongormley/waitron/pull/1901) at
   `93de9902c53734dc89b1bd9b440669bc25f4c020`. The
