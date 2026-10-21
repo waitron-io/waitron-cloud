@@ -171,16 +171,23 @@ the local image. The pinned image refuses synthetic bad bytes and a missing real
 migration journal. These checks do not establish genuine archive success or a
 published release.
 You can exercise the dormant database admission core with
-`node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test test/verification-admission.test.ts`.
+`node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test test/verification-admission.test.ts test/claim-pipeline.test.ts`.
 It prepares an immutable request for a live claim, then checks policy, venue, job,
 point, publication metadata and the child receipt in one transaction. A blocked
 write can outlast its lease or request deadline; a final time check rolls back the
 whole outcome. Inconclusive checks remove current success while keeping historical
 retention evidence, and a completed integrity failure remains failed. These tests
 use synthetic child results to test admission; they do not prove archive recovery.
-The test worker still uses the older unqualified adapter. Connecting this core,
-replacing callback admission and completing the deletion and worker races remain
-part of Task 5.
+The dormant `BackupCatalogue.verifyClaim` path connects that core to storage,
+key unsealing and encrypted-stage disposal. It sends only the matching archive key
+to the bound verifier and compares its measurement with the independent stage.
+An inconsistent verdict, thrown error or uncertain cleanup cannot record archive
+success or corruption. Cancellation during disposal still returns the retry
+allowance; an expired claim changes nothing. A mismatch verdict requires
+the bound child's completed measurement and confirmed cleanup.
+The worker still uses the older unqualified callback path. Switching the worker
+and all callers together, then completing deletion lock order and worker races,
+remains part of Task 5.
 Keep snapshots unavailable and deployment
 enforcement off until the implementation, full integration proof and release gates
 pass. Ordinary fiscal restore still requires its existing activation authority.

@@ -10,6 +10,9 @@ import {
 } from "./storage.ts";
 import { bufferObject, type ReplayableObject, type StageOptions } from "./object-transfer.ts";
 import { isBackupCancellation } from "./cancellation.ts";
+import {prepareVerification,admitVerification,recordVerificationUnavailable,type VerificationClaim} from './verification-admission.ts';
+import type {DataRestoreVerifier,VerifiedChildOutput} from './container-verifier.ts';
+import type {BackupVerificationReason} from './verification-protocol.ts';
 export type MutationFence = (client:PoolClient)=>Promise<void>;
 interface StreamingObjectStore {
   stage(
@@ -376,6 +379,42 @@ export class BackupCatalogue {
     });
     await this.#objects(published.location).remove("incoming/" + id);
     return published.point;
+  }
+  async verifyClaim(claim:VerificationClaim,verify:DataRestoreVerifier,signal:AbortSignal=new AbortController().signal) {
+    const prepared=await transaction(this.#pool,async client=>{
+      const attempt=await prepareVerification(client,claim);
+      if(!attempt)return;
+      const row=(await client.query('SELECT endpoint,bucket,region FROM backup_locations WHERE venue_id=$1',[claim.venueId])).rows[0];
+      return {attempt,location:location(row)};
+    });
+    if(!prepared)return 'stale' as const;
+    const {attempt}=prepared;
+    let source:ReplayableObject|undefined,output:VerifiedChildOutput|undefined,reason:BackupVerificationReason|undefined;
+    try {
+      signal.throwIfAborted();
+      let keys:BackupKeys;
+      try {keys=await transaction(this.#pool,client=>pointKeys(client,this.#vault,attempt.point.venueId,attempt.point.keyVersion));}
+      catch {reason='secret_unavailable';throw Error('backup.key_unavailable');}
+      signal.throwIfAborted();
+      const objects=this.#objects(prepared.location);
+      source='stage' in objects?await objects.stage(attempt.point.objectKey,undefined,{signal}):bufferObject(await objects.read(attempt.point.objectKey));
+      signal.throwIfAborted();
+      const stagedReceipt={...source.receipt};
+      output=await verify(source,{version:attempt.point.keyVersion,reference:attempt.request.backupKey.reference,secret:keys.recoveryKey},attempt.request,signal);
+      // Independent stage and child measurements must agree before an archive verdict.
+      const measured=output?.result?.measuredArchive;
+      if(output?.result?.status==='invalid'&&stagedReceipt.size>0&&!measured)throw Error('backup.verifier_output');
+      if(measured&&(measured.sha256!==stagedReceipt.digest||measured.bytes!==stagedReceipt.size))throw Error('backup.verifier_output');
+      const mismatch=stagedReceipt.size!==attempt.point.size?'archive_size_mismatch':stagedReceipt.digest!==attempt.point.digest?'archive_digest_mismatch':undefined;
+      if(output?.result?.status==='invalid'&&(mismatch||['archive_size_mismatch','archive_digest_mismatch'].includes(output.result.reason))&&output.result.reason!==mismatch)throw Error('backup.verifier_output');
+    } catch(error) {
+      if(!reason)reason=isBackupCancellation(error,signal)?'cancelled':error instanceof Error&&error.message==='backup.verifier_timeout'?'deadline':error instanceof Error&&error.message==='backup.verifier_resource'?'resource_limit':error instanceof Error&&error.message==='backup.verifier_cleanup'?'cleanup_uncertain':'unexpected';
+    } finally {
+      // A verdict becomes admissible only after the caller-owned encrypted stage is gone.
+      try {await source?.dispose();}catch {reason='cleanup_uncertain';}
+    }
+    if(!reason&&signal.aborted)reason='cancelled';
+    return transaction(this.#pool,client=>reason?recordVerificationUnavailable(client,attempt,reason):admitVerification(client,attempt,output!));
   }
   async verify(
     id: string,

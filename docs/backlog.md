@@ -1172,8 +1172,15 @@ notifications separately.
   time check rolls back all changes if a blocked write outlasts the lease or
   request deadline. PostgreSQL tests cover all five outcome categories, duplicate
   results, policy changes and explicit lock waits; synthetic results prove this
-  boundary, not archive recovery. The worker still uses the older unqualified
-  callback path. Connecting it to the new core, updating all callers and deletion
+  boundary, not archive recovery. The dormant catalogue claim pipeline now connects
+  storage, key unsealing, independent byte measurements and encrypted-stage disposal
+  to that core. It passes only the matching archive key to the verifier, records
+  thrown or inconsistent results as unavailable, lets cleanup uncertainty override
+  passed and invalid results, and rejects expired results without changing job
+  state. PostgreSQL checks cover cancellation during cleanup, fresh retry tokens,
+  storage/key errors and policy, deletion and claim changes during external work.
+  These checks use synthetic child results. The worker still uses the older
+  unqualified callback path. Switching it to the new pipeline, updating all callers and deletion
   lock order, recovery v2 and the genuine joint proof remain unfinished; snapshots
   stay unavailable and deployment enforcement stays off.
   The PR5 adapters are reconciled with current main, preserving their earlier
