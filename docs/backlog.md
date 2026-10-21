@@ -3016,6 +3016,17 @@ notifications separately.
   bounds the text scanned, while separate cases retain the line-start anchor,
   split phrases, case handling and carriage-return/newline boundaries. The original
   process checks, combined 64 KiB output limit and failure ordering remain.
+  **Open: process-verifier CPU refusal timing.** A local 205-case backup run on
+  21 October passed 204 cases but the one-second CPU-limit case returned
+  `backup.verifier_timeout` at its unchanged five-second wall deadline instead of
+  `backup.verifier_resource`. The isolated original case passed in 1,015 ms.
+  Neither the process adapter nor its test differs from the current main revision
+  in this gateway batching branch. The full-run failure remains unexplained;
+  an isolated pass does not establish a correction. Capture child CPU usage,
+  resource-signal delivery and process-close timing on recurrence before changing
+  the resource refusal, permissions, assertions or deadlines. Local evidence is
+  `~/waitron-campaign-d/receipts/d98/resume-approved/backups.log` and
+  `cpu-isolated.log` in the same directory.
   Production host/kernel isolation, hostile native exploits, fleet sizing and large archives remain
   unverified; the process-only development adapter still lacks these total-resource bounds.
   The verifier distinguishes bounded infrastructure failures from archive verdicts:
