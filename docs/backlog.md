@@ -788,14 +788,16 @@ venue does not subscribe to remote access or backups.
   the new guard passes that bound without changing allowance, retry or deadline
   checks. CI run 38950506223 failed the original restart-spacing assertion, but
   retained no write/dispatch stages, so its exact trigger remains unproved.
-  No provider request is needed for this fix. Further offline timing qualification
-  remains: a review probe with a journal timestamp 500 ms ahead waits 607 ms, but
-  a 30-day offset overflows Node's timer and dispatches after 15 ms (7 ms with the
-  old constructor). A forward five-second clock jump after client creation also
-  shortens a 100 ms interval to 43 ms. Add an automated future-timestamp assertion
-  and qualify clock shifts, oversized timer waits and overlapping calls before
-  reusing this sequential measurement client for broader dispatch work. These
-  follow-ups do not change the request budget or permit new provider requests.
+  No provider request is needed for this fix. The sequential evaluator now converts
+  its initial journal delay to elapsed time, so later wall-clock changes neither
+  bypass nor extend request spacing. Long waits use bounded timer chunks and
+  recheck the deadline before reserving another request. Real-child offline checks
+  cover a journal thirty days ahead, a smaller future timestamp that eventually
+  permits dispatch, and forward/backward clock changes. A simulated long wait
+  checks completion after the entire delay. Existing request/attempt budgets,
+  restart spacing and durable reservations remain covered. Overlapping calls are
+  still unqualified; keep this measurement client sequential. These checks permit
+  no new provider requests.
   Keep manual entry and correction available when lookup is unavailable or wrong.
 - **Transactional email.** Offer managed SMTP delivery for password resets and other
   account administration emails from on-prem Waitron. Scope the relay to these
