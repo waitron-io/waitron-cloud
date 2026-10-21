@@ -207,7 +207,12 @@ attempt is saved and flushed to disk before dispatch. A crash after reservation
 still consumes that request. The counter refuses request 1,500, so each provider
 stays below the authorised 1,500-request ceiling. Requests start at least 1.1 seconds
 apart in the sequential corpus runner, including a restart using the journal's last
-reservation time. The HTTP deadline covers headers and body for 15 seconds. There
+reservation time. A future journal timestamp delays the next request until that
+time plus the spacing interval. The client measures the remaining wait with an
+elapsed-time clock and splits long waits into timer-safe chunks, so changing your
+wall clock cannot shorten spacing or overflow a long timer into an immediate
+request. Keep the runner sequential; overlapping calls are not qualified. The HTTP
+deadline covers headers and body for 15 seconds. There
 are no automatic retries or redirects. A crash may repeat an unfinished case; each
 case/operation permits at most two attempts in total, and receipts count those
 repeat reservations as retries. A request or attempt limit stops the run without

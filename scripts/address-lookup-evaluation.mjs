@@ -135,14 +135,18 @@ export class EvaluationClient {
     this.measurements=[];
     // A durable reservation can precede dispatch by a slow fsync. A fresh client
     // waits a whole interval instead of treating that old timestamp as dispatch.
-    this.nextAt=Math.max(Date.now(),...Object.values(budget.lastAt))+spacingMs;
+    const now=Date.now();
+    this.nextAt=performance.now()+Math.max(0,...Object.values(budget.lastAt).map(at=>at-now))+spacingMs;
   }
   async request(provider,operation,caseId,query) {
     const {url,options}=requestFor(provider,operation,query,this.keys);
-    const wait=this.nextAt-Date.now();
-    if(wait>0) await new Promise(resolve=>setTimeout(resolve,wait));
+    // Elapsed time preserves spacing across wall-clock changes. Capped waits
+    // prevent a future journal timestamp from overflowing Node's timer to 1 ms.
+    for(let wait;(wait=this.nextAt-performance.now())>0;) {
+      await new Promise(resolve=>setTimeout(resolve,Math.min(2147483647,Math.ceil(wait))));
+    }
     const event=this.budget.reserve(provider,operation,caseId);
-    this.nextAt=Date.now()+this.spacingMs;
+    this.nextAt=performance.now()+this.spacingMs;
     const start=performance.now();
     const measurement={...event,endpoint:url.origin+url.pathname,status:null,timeout:false,error:null};
     try {
