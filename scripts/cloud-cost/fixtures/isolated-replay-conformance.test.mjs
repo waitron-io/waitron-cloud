@@ -379,9 +379,24 @@ for (const mode of ['cancel', 'deadline']) test('isolatedHostCollectsNativeStora
       }
     } catch {}
   }, 10);
-  if (mode === 'deadline') { f.stream.windowSeconds = 43; f.windowSeconds = 44; }
+  if (mode === 'deadline') {
+    f.stream.windowSeconds = 43; f.windowSeconds = 44;
+    // Hold the generated idle observation until a real deadline requests cleanup.
+    prefixRuntime(f, `import generatedDeadlineTimers from 'node:timers/promises';
+      import {syncBuiltinESMExports as generatedDeadlineSync} from 'node:module';
+      const generatedDeadlineDelay=generatedDeadlineTimers.setTimeout;
+      let generatedDeadlineHeld=false;
+      generatedDeadlineTimers.setTimeout=(ms,...args)=>{
+        if(ms>29000&&ms<=30000){generatedDeadlineHeld=true;return generatedDeadlineDelay(ms+30000,...args);}
+        return generatedDeadlineDelay(ms,...args);
+      };
+      generatedDeadlineSync();
+      process.on('exit',()=>{if(!generatedDeadlineHeld)process.exitCode=1;});`);
+  }
+  const started=performance.now();
   try { await assert.rejects(controller.runIsolatedReplay({ ...f, signal: abort.signal }), bad); }
   finally { clearInterval(poll); }
+  if(mode==='deadline') assert.ok(performance.now()-started<56000, 'host deadline plus bounded cleanup must collect native streaming');
   assert.equal(reached, true, 'stop only after native streaming has started'); clean(f, before);
 });
 
