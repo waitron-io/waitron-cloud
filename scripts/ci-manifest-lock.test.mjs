@@ -137,3 +137,28 @@ test('manifest owner runs even when its dependency edit leaves the resolved impo
   const result = plan(base, commit()); selected(result, ['catalogue', 'page', 'unrelated']);
   assert.match(result.reason, /audited package selection/);
 }));
+
+for (const {directories, names, expected} of [
+  {directories: ['packages/catalogue'], names: ['catalogue', 'page', 'unrelated'], expected: 'packages/catalogue/package.json'},
+  {directories: ['packages/page', 'packages/catalogue'], names: ['catalogue', 'page', 'unrelated'], expected: 'packages/catalogue/package.json, packages/page/package.json'},
+  {directories: ['packages/unrelated'], names: ['unrelated'], expected: 'packages/unrelated/package.json'},
+]) test(`lock explanation names changed manifests separately from resolved importers: ${expected}`, () => fixture(({commit, add, save, manifests, lock, plan}) => {
+  add('packages/unrelated'); save(); const base = commit();
+  for (const directory of directories) manifests[directory].optionalDependencies = {};
+  lock.packages['adapter@1.0.0'].resolution.integrity = 'sha512-Yg=='; save();
+  const result = plan(base, commit());
+  selected(result, names);
+  const lockReason = result.reason.split('; pnpm-lock.yaml: ')[1];
+  assert.ok(lockReason, 'The dependency plan explains its lock selection');
+  assert.match(lockReason, /resolved dependency inputs changed for packages\/unrelated;/);
+  assert.equal(lockReason.match(/; changed manifests: ([^;]+);/)?.[1], expected);
+}));
+
+test('lock-only explanation does not report unedited consumer manifests as changed', () => fixture(({commit, add, save, lock, plan}) => {
+  add(); save(); const base = commit();
+  lock.packages['adapter@1.0.0'].resolution.integrity = 'sha512-Yg=='; save();
+  const result = plan(base, commit());
+  selected(result);
+  assert.match(result.reason, /resolved dependency inputs changed for packages\/catalogue;/);
+  assert.doesNotMatch(result.reason, /changed manifests:/);
+}));
