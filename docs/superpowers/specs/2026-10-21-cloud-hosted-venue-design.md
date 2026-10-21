@@ -2,6 +2,12 @@
 
 **D88 · 2026-10-21 · PROPOSED for owner approval. Nothing in this proposal authorises a build or deployment.**
 
+This documentation extends published #265 with the owner's local-device and public
+customer access scope. It comes with the **Cloud step soon after go-live**, not
+go-live. Publication is not owner design approval; implementation and provider work
+remain blocked. The first owner question below and existing recovery/fiscal gates
+are unchanged.
+
 You should be able to start a new venue with its main Waitron server in Cloud, or recover there after its local servers fail. Cloud supplies the place to run it, storage, connectivity and recovery coordination. Waitron decides whether a server may write sales or file fiscal records. **Promotion** enables a standby as the active writer; restoring a database does not confer that authority.
 
 ## Start with the evening you need to recover
@@ -119,7 +125,57 @@ Keep backup decryption, application vault access, installation credentials, memb
 
 ## Reach Cloud and the devices in your venue
 
-Tills reach the stable staff TLS hostname through the cell's passthrough gateway; TLS ends at that venue's Waitron instance. Public customer traffic uses a separate hostname with Cloud termination and an encrypted onward connection. Preserve hostname, cookie, route and permission separation, certificate renewal and refusal of direct bypass. Routes carry only confirmed active authority, not merely a restored database. A hosted primary makes trading dependent on internet and the Cloud path; local DNS cannot manufacture an offline server.
+Venue devices default to Waitron's `.local` address, using its existing local CA and
+client trust setup. Keep that path direct, with no Cloud redirect, WAN dependency or
+certificate-warning bypass. Fresh-device trust and offline operation remain to be
+qualified. Publicly trusted `.local` certificates are not supported; public
+certificates cover registered DNS names. The [shared access contract](../../waitron-integration-contract.md#public-access-and-a951-proposed)
+links the naming/trust references without claiming they prove browser configuration.
+
+You may instead select a certified Cloud **staff** hostname to reach an actually
+active on-premises or hosted server. Cloud passes staff TLS through to Waitron,
+which retains its private key and staff permission checks. A router override for
+that registered name remains optional. A Cloud-only primary has no local server for
+`.local` to discover, and a local follower cannot write without separately approved
+fenced promotion. Hosted trading depends on the internet and Cloud path.
+
+Customers use a separate stable per-venue **public** hostname for menus, bookings,
+online orders and table-QR ordering. Live DNS and public certificates lead to Cloud
+HTTPS termination and inspection. On-premises traffic continues over encrypted,
+scoped WireGuard transport with verified upstream HTTPS to the active box; a hosted
+target uses the isolated private cell path with encrypted, verified transport.
+Neither path publishes device ports or bypasses the gateway on the WAN.
+
+The single proposed shared home for public access and **A951**, Waitron's lasting
+box tunnel/certificate client, is the [integration-contract section](../../waitron-integration-contract.md#public-access-and-a951-proposed).
+It defines functional method families, dual gateway/application isolation, separate
+cookie scopes, QR limits, privacy, unavailable/uncertain outcomes, lifecycle and the
+acceptance matrix. Exact business paths, assets and session/token/retry formats
+require pinned joint Waitron acceptance before implementation; there is no public
+`/api` wildcard. All customer mutations pass through authoritative Waitron, with no
+offsite queue or blind retry after a lost reply. Physical terminal ports stay
+private; customer checkout and any payment-provider/webhook contract are separate
+scope, not implicitly promised or permanently excluded.
+
+This proposal establishes no A951 landing revision or completed client. It must own connect/reconnect/reboot,
+revision acknowledgements, rotation/move/revoke and staff renewal through the landed
+v1 CSR exchange, including local stale-result checks and atomic install/reload.
+Report active authority, reachability, DNS readiness and installed certificate
+readiness separately. Failed provisioning/renewal retains usable revisions only
+within their existing authority; expiry refuses access without a direct WAN escape.
+
+Source inspection for this extension used Cloud HEAD
+`de81d74fb1e5553a25736afce96381fd9ed7c7fe` (read with `git rev-parse HEAD`),
+separate from the original draft baseline. `packages/remote-access/src/public-gate.ts:25–58`
+currently forwards only `GET /public/availability`; `/_cloud/*` challenge handlers
+are local. `config.ts:28–53` separates HAProxy public termination from staff
+passthrough and generates per-peer `/32` routes. `manifest.ts:17–40` checks signed,
+expiring cell sequences. `staff-exchange.ts:25–64`, `reconciler.ts:145–183` and
+`packages/account-http/src/staff-certificates.ts:6–15`, read alongside the
+[staff v1 contract](../../waitron-integration-contract.md#staff-certificate-exchange-version-1),
+anchor the existing CSR backend boundary. The abbreviated files are all under
+`packages/remote-access/src/`. Reading these paths supplies no runtime receipts for
+customer business routes, A951, production transport or device trust.
 
 Printers, drawers and payment terminals stay local. Use a Waitron-owned authenticated outbound agent contract, never public raw printer/payment ports. The contract must identify venue, device, active server and command, persist acknowledgements, distinguish accepted from physically completed work, bound retries, and suppress duplicate effects with stable command identifiers. A timeout leaves an uncertain payment or print outcome, not permission to repeat it. Rehearse lost acknowledgements, restarts, failover, reconnect and stale-server refusal on the actual device path. USB devices die with their agent host unless moved; Cloud hosting alone cannot solve that. A947's print routing and A764 payment-ownership decisions need joint proof before offering complete hosted trading.
 

@@ -4,11 +4,24 @@
 
 The driver first asks the design's worked-example question about cold startup/restore versus a paid running follower. Keep later location/vendor, reliability/promotion, retention/exit, custody/support and package/pricing decisions sequential. Daily/30-day and monthly/12-month snapshots already have a starting policy; reconcile the continuous hourly/30-day proposal with Waitron's actual daily/seven-day configuration rather than reopening that snapshot choice.
 
+The #265 access extension belongs to the **Cloud step soon after go-live**, not
+go-live. It is a proposal publication before approval, not implementation-plan
+approval. Do not start the conditional slices or provider work from this document.
+The single [public access/A951 contract home](../../waitron-integration-contract.md#public-access-and-a951-proposed)
+contains the functional surfaces, lifecycle and required acceptance matrix. A951 is
+the named Waitron lasting-client dependency; obtain its accepted scope and landing
+pin rather than assuming a client exists.
+
 Before a boundary is built, Cloud and Waitron must accept the same versioned integration-contract revision with both source pins, named owners and acceptance cases. A947 is an unapproved counterpart, published as documentation at `490ece84c7e2e0f0185c0029d8c53a768e4f3fe2`; publication does not approve it, and later changes need reconciliation. A679 dormant-promotion preparation, W41s activation and W41s-10b fencing/witness work remain Waitron-owned prerequisites. A850's non-activating verifier and any `external-vault-archive-v2` use need actual landing and compatibility receipts. No Cloud fiscal allocation or activation authority is added.
 
 Each numbered line is one independently landable slice after its stated dependencies pass. Disabled adapters and documentation can land without enabling a customer service. Later slices remain blocked when a prerequisite is absent; no slice treats Kubernetes object deletion, route revocation or disk attachment as proof that an isolated old primary stopped.
 
 1. **Joint contract agreement, documentation only.** After owner design approval and actual bilateral acceptance, record both pins, initial-setup identity binding, store/pointer versions and signatures/CAS, read-only follow, peer enumeration, accepted fencing evidence, activation receipt and uncertainty/retry vectors in Cloud's integration contract; Waitron maintains its canonical links independently. Gate: both owners accept the same revision, including the unresolved promotion preparation and external-vault boundary.
+   Include the public access/A951 section: pin exact Waitron paths/assets and method
+   families, normalization, host/tenant/session/token checks at gateway and application,
+   cookie/CSRF/replay and mutation status/retry semantics. Gate: actual consumer
+   acceptance, no public `/api` wildcard, and separately agreed payment-provider or
+   webhook scope if offered. The functional table is not an existing endpoint list.
 2. **Placement and isolation specification, documentation only.** After the location/vendor decision and security approval, name country/cell/cluster/zone boundaries, shared-host versus dedicated-machine choice, resource quotas, credentials and recovery reserve. Gate: a reviewed data-flow and failure map names every shared dependency and leaves unverified capacity unknown.
 3. **Cost-model scope extension.** After slices 1–2 and access to landed D68 public artifacts, add hosting and cold/follower scenarios with separately unknown runtime, disk, keys, backup, traffic and fixed-floor inputs. Gate: representative measurements and dated price/billing assumptions; no extrapolated typical venue or complete EUR bill. D68's unpublished `4b7c515a718d9404a8ccce14b5ff493c78365e16` excludes these services today.
 4. **Durable lifecycle journal, disabled.** After slice 1, add venue-scoped intents, input fingerprints, serialized claims, external-resource references and recorded uncertain outcomes. Gate: restart, duplicate-worker, lost-reply, stale-completion and cross-venue refusal evidence; uncertain activation cannot trigger another writer.
@@ -22,7 +35,30 @@ Each numbered line is one independently landable slice after its stated dependen
 12. **Cloud host replacement, disabled.** After slice 8 and provider-specific stop/restart-prevention acceptance, coordinate same-zone disk reuse or new-disk restore in another approved zone. Gate: isolated old host cannot write/file, unknown stop blocks, and provider capacity/restore evidence replaces assumptions; no cross-zone disk reattachment claim.
 13. **Pinned upgrades, disabled.** After slices 6, 8 and 12 and Waitron schema compatibility rules, add staged stop/final-backup/migrate/verify operation handling. Gate: crash after migration, first write and new generation; rollback never restores an older ledger or resumes retired authority; pause and forward recovery work.
 14. **Local device integration, disabled.** After Waitron print-agent and A764 payment-ownership agreement plus slice 7 or 9, connect the authenticated outbound device path. Gate: actual acknowledgement, persisted command identity, duplicate suppression, uncertain outcome, reconnect, stale-writer refusal and USB-host failure; no raw public device ports.
+   Venue devices default to `.local` using Waitron local trust, without a Cloud redirect,
+   WAN dependency or warning bypass. Qualify fresh offline LAN clients independently
+   of any optional router override and selected certified staff path. A Cloud-only
+   primary requires the certified path to its active server; do not manufacture a
+   `.local` route or enable a local writer to mask WAN loss.
 15. **Optional on-site follower, disabled.** Only after a separately approved offline-promotion design, accepted Cloud fence proof and Waitron return/tail receipts, expose this service shape. Gate: WAN partition with mobile-data/second-uplink clients, no concurrent writers, preserved tail and fresh dormant rejoin; no offline trading promise before proof.
 16. **Launch qualification record, documentation only.** After the selected shape's slices (Cloud-primary: 1–8 and 12–14; one-box takeover adds 9; two-box adds 10; running and on-site followers add 11 and 15 respectively), owner reliability/custody/retention/pricing decisions and separately authorised provider rehearsals, record exact Cloud/Waitron/image/configuration pins, every failure-table result, resource/cost observations and launch-evidence checks. Gate: measured loss/recovery bounds, production credentials/transport/isolation, devices, monitoring, capacity reserve, exit and support proof; deployment and customer enablement require their own authority.
+   Include slice 7a and its full shared acceptance matrix for the added public service.
+   This qualification is for the later Cloud step; it does not expand go-live scope.
+
+**Additional conditional slice 7a: public customer access and lasting appliance
+integration, disabled.** After slice 1 and owner design approval, integrate live DNS/public certificate lifecycle, the joint customer route manifest
+and authenticated, revision-bound peer configuration/acknowledgements. On-premises
+targets require qualified A951 and use scoped WireGuard plus verified HTTPS. Hosted
+targets use the isolated private cell path after slice 7 or 9 confirms activation,
+with qualified endpoint configuration and certificate handling; an appliance client
+is required only when an appliance path is offered. Staff keeps a different
+hostname, endpoint private key and TLS passthrough. A951 supplies
+connect/reconnect/reboot, rotation/move/revoke and v1 CSR polling, stale-result
+checks and atomic install/reload; production use of the currently test-only v1
+backend needs its own qualification. Gate: every case in the shared acceptance
+matrix, including two venues, unavailable box with no offsite queue, lost mutation
+reply without blind retry, QR/privacy and separate active/reachable/DNS/certificate
+evidence. A tunnel alone is not readiness. This slice can qualify public access to
+an existing active box without building hosted capacity.
 
 Future feature and bugfix work follows repository TDD: observe the expected failing behavioural check, implement minimally, then verify the result. This outline supplies acceptance boundaries, not code, commands or a speculative endpoint specification. Preserve evidence about refusal and uncertainty as carefully as successful recovery; a restored database and a healthy pod are insufficient to enable a writer.
