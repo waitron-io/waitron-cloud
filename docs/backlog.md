@@ -1413,7 +1413,14 @@ notifications separately.
   importing live credentials; these file sizes do not represent production TLS or vault
   state. This stage runs separately from stream observation so its archive work cannot
   silently alter the accepted stream sample. Host and isolated-container checks use
-  generated sales. Representative archive size, storage upload/download accounting,
+  generated sales. A separate local rehearsal at Cloud source `73cd7239fc24d34271bca351e5b23c20aa9295ca`
+  replays all 207 selected source sales into a fresh venue, captures a 3,527,677-byte
+  archive and restores all 207 sales with clean integrity. Capture takes 0.204 seconds
+  and application restore takes 0.236 seconds in that one local experiment. These are
+  elapsed times on this Mac, with generated private-state files. They establish
+  neither the original venue's complete archive size nor AWS processing capacity.
+  The source database and its sidecar files remain unchanged, and owned scratch
+  and containers are removed. Representative archive size, storage upload/download accounting,
   remote activity, public browser activity, provider billing and daily projections
   remain open. Daily and monthly costs stay unknown.
   The fiscal timeout fixture now advances its 50 ms deadline
