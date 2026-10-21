@@ -2422,11 +2422,14 @@ notifications separately.
   customer security trail before enabling it. Review
   database and module dependencies. Keep the source review current and port applicable
   security fixes with failing regression tests in each affected repository.
-  **Review follow-ups.** An early deadline check in
-  `packages/registration/src/authenticator-factor.ts` duplicates the final check;
-  deleting the early check leaves all 41 management tests passing, while deleting the
-  final check fails three late-expiry tests. Keep those behaviour checks when simplifying
-  the redundant guard. You can sign in immediately after an authenticator change even
+  Authenticator management checks its proof deadline after all changes, before
+  committing the transaction. The duplicate earlier clock query is removed; all
+  42 existing management tests pass unchanged. Two additional removal cases cover
+  proof expiry while waiting for another session's lock and after management
+  writes. Deleting the final check in a disposable checkout fails five late-expiry
+  cases; deleting savepoint rollback also fails both new cases. They check that
+  factor, recovery-code, replay, pending-operation and session changes are undone.
+  You can sign in immediately after an authenticator change even
   when its ended-session read arrives late. The portal clears the old account from its
   controllers before showing the login form, so that read cannot cancel your new sign-in.
   Two controlled real PostgreSQL/Chromium cases show sign-in failing to complete

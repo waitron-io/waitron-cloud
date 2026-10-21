@@ -431,3 +431,34 @@ test('a password reset snapshot committed during password derivation cannot begi
     assert.equal((await pool.query('SELECT consumed_at FROM cloud_factor_recovery_codes')).rows[0].consumed_at,null);
   } finally {await blocker.query('ROLLBACK');blocker.release();await work?.catch(()=>{});await other.end();}
 });
+
+for(const waitAt of ['session lock','management write'] as const) test(`a TOTP window ending during the removal ${waitAt} preserves every management effect`,async()=>{
+  await active();const a=await authority(),peer=await authority();await seedCode('F'.repeat(32));
+  await store().begin({...a,proof:recovery('F'.repeat(32))});await loginChallenge();
+  const before=await factor();
+  const tables=[['cloud_factor_recovery_codes','code_hash'],['cloud_factor_enrolments','id'],
+    ['cloud_factor_login_challenges','token_hash'],['cloud_sessions','id']] as const;
+  const state=await Promise.all(tables.map(([table,key])=>pool.query(`SELECT * FROM ${table} ORDER BY ${key}`)));
+  await pool.query('CREATE TABLE factor_test_clock(moment timestamptz NOT NULL)');
+  await pool.query('INSERT INTO factor_test_clock VALUES($1)',[new Date(59_000)]);
+  await pool.query(`CREATE FUNCTION ${schema}.clock_timestamp() RETURNS timestamptz LANGUAGE SQL VOLATILE
+    AS 'SELECT moment FROM ${schema}.factor_test_clock'`);
+  const timedPool=new Pool({connectionString:process.env.TEST_DATABASE_URL,
+    options:`-c search_path=${schema},pg_catalog -c statement_timeout=10000`,application_name:schema});
+  const blocker=await pool.connect();let work:Promise<void>|undefined;
+  try {
+    await blocker.query('BEGIN');
+    if(waitAt==='session lock') await blocker.query('SELECT id FROM cloud_sessions WHERE token_hash=$1 FOR UPDATE',[digest(peer.token)]);
+    else await blocker.query('LOCK TABLE cloud_factor_enrolments IN SHARE MODE');
+    work=refused(store(keys,policy,timedPool).remove({...a,proof:proof('287082')}));
+    await blocked(waitAt==='session lock'?'ORDER BY id FOR UPDATE':'UPDATE cloud_factor_enrolments');
+    await pool.query('UPDATE factor_test_clock SET moment=$1',[new Date(91_000)]);
+    await blocker.query('COMMIT');await work;
+    assert.deepEqual(await factor(),before);
+    for(const [index,[table,key]] of tables.entries()) assert.deepEqual((await pool.query(`SELECT * FROM ${table} ORDER BY ${key}`)).rows,state[index]!.rows);
+    assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_replays')).rows[0].count,'0');
+  } finally {
+    await blocker.query('ROLLBACK');blocker.release();await work?.catch(()=>{});await timedPool.end();
+    await pool.query(`DROP FUNCTION ${schema}.clock_timestamp()`);await pool.query('DROP TABLE factor_test_clock');
+  }
+});
