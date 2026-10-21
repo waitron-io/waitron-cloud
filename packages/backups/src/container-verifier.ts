@@ -113,3 +113,5 @@ export async function createContainerWaitronVerifier(options:ContainerVerifierOp
   }
  };
 }
+
+export {createBoundContainerWaitronVerifier,type DataRestoreVerifier,type VerifiedChildOutput} from './bound-container-verifier.ts';

@@ -155,8 +155,22 @@ only a data result; it cannot supply trusted Docker ownership evidence. Its pinn
 bundle probe refused synthetic invalid bytes and a missing migration journal.
 The controller accepts the exact bound request in its dormant interface. It
 refuses mismatched cleanup, multiple same-token children, uncertain creation with
-no discoverable child, and malformed private journals. Wiring this into the Docker
-adapter and genuine archive success remain due.
+no discoverable child, and malformed private journals.
+You can exercise the dormant Docker adapter with
+`pnpm --dir packages/backups exec node --test test/bound-container-verifier.test.ts`.
+It requires an immutable image ID and a matching controller scope. It checks the
+actual child identity, request labels and isolation settings, waits for process
+exit, then confirms removal before returning the data result and ownership
+receipt. An uncertain removal overrides both passed and invalid results. Its
+private request and key frames go directly to the compiled verifier; the archive
+is staged once in the same quota-limited scratch filesystem. A supervisor with its own event loop stops even a CPU-blocked verifier after
+its host dies, and restart reclaims only its recorded container.
+The build archives the target manifest's pinned source revision, generates that
+source's runtime stamp and compares the compiled complete target before producing
+the local image. The pinned image refuses synthetic bad bytes and a missing real
+migration journal. These checks do not establish genuine archive success or a
+published release. The test worker still uses the older unqualified adapter until
+transactional admission is implemented.
 Keep snapshots unavailable and deployment
 enforcement off until the implementation, full integration proof and release gates
 pass. Ordinary fiscal restore still requires its existing activation authority.

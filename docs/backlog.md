@@ -1158,8 +1158,16 @@ notifications separately.
   now journals the same request token, claim and deadline, checks exact ownership
   on removal, and refuses ambiguous or unknown create outcomes. Private journals
   reject symbolic links, broad permissions, duplicate fields and oversized data.
-  Wiring that interface into the Docker adapter, transactional admission, recovery
-  v2 and the genuine joint proof remain unfinished; snapshots
+  The dormant Docker adapter now streams those frames directly into the compiled
+  verifier, checks the exact child, image, request and resource settings, and
+  confirms removal before returning a result and ownership receipt. Real Docker
+  checks cover private input, output forgery, resource limits, isolation, cleanup
+  refusal and a watchdog that survives its host. The immutable local image builds
+  from the pinned source and generated runtime stamp; all 15 owners match the
+  complete target. It refuses synthetic bad bytes and a missing actual migration
+  journal. These are boundary and invocation checks; genuine archive success is
+  still unproved. Worker admission, recovery v2 and the genuine joint proof remain
+  unfinished; snapshots
   stay unavailable and deployment enforcement stays off.
   The PR5 adapters are reconciled with current main, preserving their earlier
   storage, account, remote and controller behavior and historical test evidence.
