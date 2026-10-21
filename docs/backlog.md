@@ -992,10 +992,16 @@ notifications separately.
   routes, replacing ten and 136. Empty eligibility still excludes both kinds of
   route; ordinary mode retains them. Those exports now fetch active routes and
   incoming routes in two cell-scoped batches. Real PostgreSQL checks with four
-  and sixteen mixed routes observe five database calls in ordinary mode and
-  seven in test-plan mode, including transaction and policy calls, through both
-  returned and published manifests. Route names, target addresses, ports and keys,
-  move lifecycle, revocation and cell isolation remain covered. Eligibility still
+  and sixteen mixed routes observe five database calls in ordinary mode
+  (transaction, cell sequence and two route batches), plus two policy calls in
+  test-plan mode, through both returned and published manifests. A missing hostname
+  on an eligible route refuses the export before publication and rolls back its
+  sequence. Route names, target addresses, ports and keys,
+  move lifecycle, revocation and cell isolation remain covered. A controlled
+  PostgreSQL move completion between the two route reads omits that route for one
+  export on both the original and batched versions; the next export includes it.
+  Qualify a consistent route view across those reads before promising uninterrupted
+  cell movement. Eligibility still
   scans placed organisations and rebuilds target lists for current-work checks.
   Global policy locks and total target processing need production-scale measurement
   before larger capacity claims.

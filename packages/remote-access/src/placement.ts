@@ -210,18 +210,18 @@ export class RemoteAccessStore {
    const active=await client.query(`SELECT p.installation_id AS "installationId",p.venue_id AS "venueId",host(p.address) AS address,p.port,p.peer_public_key AS "peerPublicKey",
     s.hostname AS "staffHostname",u.hostname AS "publicHostname"
     FROM remote_placements p JOIN installations i ON i.id=p.installation_id
-    JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff'
-    JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public'
+    LEFT JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff'
+    LEFT JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public'
     WHERE p.cell_id=$1 AND i.revoked_at IS NULL ORDER BY p.venue_id`,[cellId]);
    const routes:GatewayRoute[]=[];
-   for(const row of active.rows){if(eligible&&!eligible.has(row.installationId))continue;routes.push(route(row));}
+   for(const row of active.rows){if(eligible&&!eligible.has(row.installationId))continue;if(!row.staffHostname||!row.publicHostname)fail('installation_unavailable');routes.push(route(row));}
    const moves=await client.query(`SELECT m.installation_id AS "installationId",m.venue_id AS "venueId",host(m.target_address) AS address,m.target_port AS port,m.target_peer_public_key AS "peerPublicKey",
     s.hostname AS "staffHostname",u.hostname AS "publicHostname"
     FROM remote_cell_moves m JOIN installations i ON i.id=m.installation_id
-    JOIN remote_hostnames s ON s.venue_id=m.venue_id AND s.kind='staff'
-    JOIN remote_hostnames u ON u.venue_id=m.venue_id AND u.kind='public'
+    LEFT JOIN remote_hostnames s ON s.venue_id=m.venue_id AND s.kind='staff'
+    LEFT JOIN remote_hostnames u ON u.venue_id=m.venue_id AND u.kind='public'
     WHERE m.target_cell_id=$1 AND m.state IN ('staged','ready') AND i.configuration_revision=m.expected_revision AND i.revoked_at IS NULL ORDER BY m.venue_id`,[cellId]);
-   for(const row of moves.rows){if(eligible&&!eligible.has(row.installationId))continue;routes.push(route(row));}routes.sort((a,b)=>a.venueId.localeCompare(b.venueId));
+   for(const row of moves.rows){if(eligible&&!eligible.has(row.installationId))continue;if(!row.staffHostname||!row.publicHostname)fail('installation_unavailable');routes.push(route(row));}routes.sort((a,b)=>a.venueId.localeCompare(b.venueId));
    return {version:1,audience:'waitron-cloud-gateway',cellId,sequence:Number(cell.sequence),issuedAt:now,expiresAt:now+600000,routes};
  }
 }

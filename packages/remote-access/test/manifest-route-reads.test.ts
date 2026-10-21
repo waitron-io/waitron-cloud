@@ -77,3 +77,18 @@ for(const publish of [false,true])test(`${publish?'published':'returned'} batche
  await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[moving.installationId]);
  assert.deepEqual((await measuredExport(target.id,'test-free-paid',publish)).manifest.routes.map(r=>r.installationId),[resident.installationId]);
 });
+
+// A broken hostname binding must fail the export before publication and roll back its sequence.
+for(const publish of [false,true])for(const incoming of [false,true])for(const kind of ['staff','public'] as const)test(`${publish?'published':'returned'} export refuses a missing ${kind} hostname on an ${incoming?'incoming':'active'} route`,async()=>{
+ const target=await cell(),source=await cell(),account=await owner(),neighbour=await venue(account,target),home=incoming?source:target,victim=await venue(account,home);
+ if(incoming)await store.stageMove({operationId:randomUUID(),installationId:victim.installationId,targetCellId:target.id,targetPeerPublicKey:peer(),expectedRevision:1});
+ await db.pool.query('DELETE FROM remote_hostnames WHERE venue_id=$1 AND kind=$2',[victim.venueId,kind]);
+ let published=false;
+ await assert.rejects(publish?store.publishManifest(target.id,async()=>{published=true;}):store.manifest(target.id),/installation_unavailable/);
+ assert.equal(published,false);
+ assert.equal(Number((await db.pool.query('SELECT sequence FROM remote_cells WHERE id=$1',[target.id])).rows[0].sequence),0);
+ await db.pool.query('INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES($1,$2,$3)',[`${kind==='staff'?'staff-':''}v-${victim.venueId}.reads-${home.id}.example.test`,victim.venueId,kind]);
+ const restored=await measuredExport(target.id,'existing',publish);
+ assert.equal(restored.manifest.sequence,1);
+ assert.deepEqual(restored.manifest.routes.map(r=>r.installationId).sort(),[neighbour.installationId,victim.installationId].sort());
+});

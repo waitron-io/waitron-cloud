@@ -552,8 +552,10 @@ active and incoming routes, through both the returned-manifest and publication
 methods. An empty test-mode list permits no installation; ordinary mode retains
 its existing behavior. Each single-cell export reads active routes and incoming
 routes in two batches. The local four- and sixteen-route checks observe five
-database calls in ordinary mode and seven in test-plan mode, including transaction
-and policy calls, through both export methods. Run them with
+database calls in ordinary mode (transaction, cell sequence and two route batches),
+plus two policy calls in test-plan mode, through both export methods. A missing
+hostname on an eligible route refuses the export before publication and rolls
+back its sequence. Run these checks with
 `node scripts/test-postgres.mjs exec pnpm --dir packages/remote-access exec node
 --test test/manifest-route-reads.test.ts`.
 These bounds do not cover the total work: certificate
