@@ -52,14 +52,15 @@ async function check() {
 export async function runStackService(role) {
   if (role === 'check') { process.stdout.write(JSON.stringify(await check())); return; }
   if (role === 'postgres') {
-    mkdirSync('/state/postgres', { mode: 0o700 });
+    // PostgreSQL replaces initialization files; keep them off the scanned ownership tree.
+    mkdirSync('/tmp/postgres', { mode: 0o700 });
     const endpoint = new URL(config().config.localEndpoints.postgres);
     writeFileSync('/state/postgres-password', endpoint.password, { mode: 0o600, flag: 'wx' });
-    const init = spawnSync('initdb', ['-D', '/state/postgres', '-U', endpoint.username, '--auth-local=trust',
+    const init = spawnSync('initdb', ['-D', '/tmp/postgres', '-U', endpoint.username, '--auth-local=trust',
       '--auth-host=scram-sha-256', '--pwfile=/state/postgres-password'], { stdio: 'ignore' });
     if (init.status !== 0) fail();
-    appendFileSync('/state/postgres/pg_hba.conf', '\nhost all all samenet scram-sha-256\n');
-    binary('postgres', ['-D', '/state/postgres', '-h', '0.0.0.0', '-k', '/tmp']); return;
+    appendFileSync('/tmp/postgres/pg_hba.conf', '\nhost all all samenet scram-sha-256\n');
+    binary('postgres', ['-D', '/tmp/postgres', '-h', '0.0.0.0', '-k', '/tmp']); return;
   }
   if (role === 's3') {
     mkdirSync('/state/storage', { mode: 0o700 });

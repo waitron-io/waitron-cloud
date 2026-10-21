@@ -1197,6 +1197,11 @@ notifications separately.
   cleanup assertion. It also requires deadline and cleanup to finish within
   56 seconds. The real generated cancellation and deadline checks both pass;
   neither check changes a production timeout.
+  Linux conformance exposed a PostgreSQL initialization race: temporary database
+  files now live on container-native scratch, outside the scanned ownership tree.
+  Ownership validation remains strict. Generated gateway fixtures explicitly
+  retain the file-access capability needed for their host-owned private mounts;
+  production gateways and private-data replay permissions are unchanged.
 
   Cancellation first drains admitted storage traffic before signalling the native
   writer, with a bounded fallback. Invalid transfer accounting still refuses

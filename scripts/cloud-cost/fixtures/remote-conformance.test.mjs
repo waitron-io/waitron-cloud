@@ -43,8 +43,9 @@ test('genuineGatewaySeparatesStaffTLSReconnectsFromPublicChallengeTraffic', { ti
   const journal = entries => secret('ownership.json', JSON.stringify({ owner, containers, networkId, entries }));
   const start = args => {
     journal({ state: 'container-intent', sequence: containers.length });
+    // Root must read and write this fixture's host-owned private mounts on Linux.
     const id = docker('create', '--pull=never', '--label', label, '--network', network,
-      '--cap-drop=ALL', '--cap-add=NET_ADMIN', '--cap-add=NET_BIND_SERVICE', '--read-only',
+      '--cap-drop=ALL', '--cap-add=NET_ADMIN', '--cap-add=NET_BIND_SERVICE', '--cap-add=DAC_OVERRIDE', '--read-only',
       '--security-opt=no-new-privileges:true', '--dns=127.0.0.1', '--log-driver=none',
       '--tmpfs=/tmp:rw,nosuid,size=16m', ...args);
     containers.push(id); journal({ state: 'container-created' }); docker('start', id); return id;
