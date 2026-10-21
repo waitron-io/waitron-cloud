@@ -2424,9 +2424,12 @@ notifications separately.
   security fixes with failing regression tests in each affected repository.
   Authenticator management checks its proof deadline after all changes, before
   committing the transaction. The duplicate earlier clock query is removed; all
-  42 existing management tests pass unchanged. Deleting the final check in a
-  disposable checkout fails three late-expiry tests, which retain the rollback
-  checks for factor, recovery-code, replay and session changes. You can sign in immediately after an authenticator change even
+  42 existing management tests pass unchanged. Two additional removal cases cover
+  proof expiry while waiting for another session's lock and after management
+  writes. Deleting the final check in a disposable checkout fails five late-expiry
+  cases; deleting savepoint rollback also fails both new cases. They check that
+  factor, recovery-code, replay, pending-operation and session changes are undone.
+  You can sign in immediately after an authenticator change even
   when its ended-session read arrives late. The portal clears the old account from its
   controllers before showing the login form, so that read cannot cancel your new sign-in.
   Two controlled real PostgreSQL/Chromium cases show sign-in failing to complete
