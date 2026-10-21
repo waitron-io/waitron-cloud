@@ -1154,8 +1154,12 @@ notifications separately.
   exit and private scratch cleanup. A pinned-bundle probe matches all 15 owners,
   refuses synthetic invalid archive bytes and a missing migration journal, then
   repeats after restoring that journal. This is invocation evidence, not genuine
-  archive success or Docker isolation. Container/controller binding, transactional
-  admission, recovery v2 and the genuine joint proof remain unfinished; snapshots
+  archive success or Docker isolation. The controller's dormant bound interface
+  now journals the same request token, claim and deadline, checks exact ownership
+  on removal, and refuses ambiguous or unknown create outcomes. Private journals
+  reject symbolic links, broad permissions, duplicate fields and oversized data.
+  Wiring that interface into the Docker adapter, transactional admission, recovery
+  v2 and the genuine joint proof remain unfinished; snapshots
   stay unavailable and deployment enforcement stays off.
   The PR5 adapters are reconciled with current main, preserving their earlier
   storage, account, remote and controller behavior and historical test evidence.

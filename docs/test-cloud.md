@@ -153,7 +153,10 @@ It sends separate private request and key frames, checks the compiled target, an
 validates output after process exit and scratch cleanup. The native path returns
 only a data result; it cannot supply trusted Docker ownership evidence. Its pinned
 bundle probe refused synthetic invalid bytes and a missing migration journal.
-Container/controller binding and genuine archive success remain due.
+The controller accepts the exact bound request in its dormant interface. It
+refuses mismatched cleanup, multiple same-token children, uncertain creation with
+no discoverable child, and malformed private journals. Wiring this into the Docker
+adapter and genuine archive success remain due.
 Keep snapshots unavailable and deployment
 enforcement off until the implementation, full integration proof and release gates
 pass. Ordinary fiscal restore still requires its existing activation authority.
