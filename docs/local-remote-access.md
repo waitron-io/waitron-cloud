@@ -543,7 +543,11 @@ from the plan command's successful database update.
 A single-cell export locks policies for its active placements and incoming staged
 or ready moves, so an unrelated organisation's plan update can proceed independently. An organisation that arrives after those locks were chosen
 waits for the next export. The reconciler's all-cell selection still locks the
-global policy set.
+global policy set. It reads active and incoming routes once each across all cells
+and groups them by destination, so adding cells does not add route-read queries.
+Empty cells still receive a route job to publish withdrawals. This bounds those
+two reads, not the total work: certificate requests, job writes, policy scans and
+current-work rechecks still need deployment-scale measurement.
 
 If exports stop, the last signed gateway authority still expires within its
 existing ten-minute maximum. Restarting a gateway does not extend that signed

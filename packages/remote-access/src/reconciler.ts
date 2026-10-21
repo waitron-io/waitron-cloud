@@ -41,23 +41,26 @@ async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanM
  const eligible=await eligibleRemoteInstallations(client,mode);
  const cells=(await client.query('SELECT id FROM remote_cells ORDER BY id')).rows;
  const targets:DesiredTarget[]=[];
- for(const cell of cells){
-  const active=(await client.query(`SELECT p.installation_id,p.venue_id,host(p.address) AS address,p.port,p.peer_public_key,
+ const active=(await client.query(`SELECT p.cell_id,p.installation_id,p.venue_id,host(p.address) AS address,p.port,p.peer_public_key,
     s.hostname AS staff_hostname,u.hostname AS public_hostname
    FROM remote_placements p JOIN installations i ON i.id=p.installation_id
    JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff'
    JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public'
-   WHERE p.cell_id=$1 AND i.revoked_at IS NULL ORDER BY p.venue_id`,[cell.id])).rows;
-  const staged=(await client.query(`SELECT m.installation_id,m.venue_id,host(m.target_address) AS address,m.target_port AS port,m.target_peer_public_key AS peer_public_key,
+   WHERE i.revoked_at IS NULL ORDER BY p.cell_id,p.venue_id`)).rows;
+ const staged=(await client.query(`SELECT m.target_cell_id AS cell_id,m.installation_id,m.venue_id,host(m.target_address) AS address,m.target_port AS port,m.target_peer_public_key AS peer_public_key,
     s.hostname AS staff_hostname,u.hostname AS public_hostname
    FROM remote_cell_moves m JOIN installations i ON i.id=m.installation_id
    JOIN remote_hostnames s ON s.venue_id=m.venue_id AND s.kind='staff'
    JOIN remote_hostnames u ON u.venue_id=m.venue_id AND u.kind='public'
-   WHERE m.target_cell_id=$1 AND m.state IN ('staged','ready') AND i.configuration_revision=m.expected_revision AND i.revoked_at IS NULL
-   ORDER BY m.venue_id`,[cell.id])).rows;
-  const routes=[...active,...staged].filter(row=>!eligible||eligible.includes(row.installation_id)).map(row=>({installationId:row.installation_id,venueId:row.venue_id,address:row.address,port:row.port,peerPublicKey:row.peer_public_key,staffHostname:row.staff_hostname,publicHostname:row.public_hostname}));
-  targets.push({kind:'route',targetId:cell.id,digest:routeDigest(routes)});
+   WHERE m.state IN ('staged','ready') AND i.configuration_revision=m.expected_revision AND i.revoked_at IS NULL
+   ORDER BY m.target_cell_id,m.venue_id`)).rows;
+ const routesByCell=new Map<string,GatewayRoute[]>();
+ for(const row of [...active,...staged]){
+  if(eligible&&!eligible.includes(row.installation_id))continue;
+  let routes=routesByCell.get(row.cell_id);if(!routes){routes=[];routesByCell.set(row.cell_id,routes);}
+  routes.push({installationId:row.installation_id,venueId:row.venue_id,address:row.address,port:row.port,peerPublicKey:row.peer_public_key,staffHostname:row.staff_hostname,publicHostname:row.public_hostname});
  }
+ for(const cell of cells)targets.push({kind:'route',targetId:cell.id,digest:routeDigest(routesByCell.get(cell.id)??[])});
  const certificates=(await client.query(`SELECT i.id,i.configuration_revision,p.venue_id,c.suffix,s.hostname AS staff_hostname,u.hostname AS public_hostname
   FROM installations i JOIN remote_placements p ON p.installation_id=i.id JOIN remote_cells c ON c.id=p.cell_id
   JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff'
