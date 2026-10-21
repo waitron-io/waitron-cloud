@@ -1317,17 +1317,33 @@ notifications separately.
   temporary filesystem before opening SQLite or the native stream. It keeps the
   same isolation, native binary, restore checks, accounting and host diagnostics.
   A new generated 207-sale regression fails before that change and passes after it;
-  every earlier test remains intact. This identifies a shared-folder-sensitive local
-  measurement defect, not a proved defect in the production storage service. The
+  every earlier test remains intact. This identifies a local measurement defect
+  that depends on the shared folder; its production relevance is unproved. The
   earlier untraced failure's exact cause remains an inference.
   A file-only watch also observes the live source's transaction log and shared-memory
   file changing after the read-only copy closes. That does not identify the writer.
   Prepare and verify a consistent frozen input before the long experiment, then keep
   its files unchanged throughout replay. Do not stop the source process or confuse
   later live-source activity with writes by the isolated experiment.
-  Do not publish the failed sample as measured cost. Complete
-  accounting/export across the remaining drivers, a qualified full venue sample
-  with idle evidence, and public/staff journeys stay open.
+  The [anonymous stream receipt](cost-model/measurements.json) now records a successful
+  repeat with all 207 selected sales, at 1,000 times their original spacing. Startup
+  takes 5.136 seconds, replay takes 54.181 seconds, and idle observation lasts
+  1,200.009 seconds. Native restore recovers all 207 sales with valid SQLite structure.
+  Both request counters reconcile all 342 storage attempts, including setup, observers
+  and cleanup: 6,071,372 request-body bytes sent and 2,243,287 received. These counts
+  exclude network-protocol overhead. The frozen input stays unchanged, the original
+  source passes its read-only copy checks before the experiment, and both private
+  roots and all experiment resources are removed. Five raw-data export probes are
+  rejected. This measures an accelerated fresh-venue experiment, not continuous
+  daily traffic or complete venue cost. Keep daily projections and other unmeasured
+  drivers unknown; the command still returns `costMeasured: false`.
+  Two existing tests for cancellation and time limits still watch the former journal
+  location. Their checks remain unchanged pending approval to read the actual worker journal. A proposed
+  observer passes both checks and detects disabled stop guards. Its full suite also
+  exposes an incomplete-journal read in the Ctrl+C signal test (SIGINT), reproduced on the unchanged
+  starting code. Make journal observation reliable while keeping every signal,
+  rejection, ownership and cleanup assertion. Accounting and export for the remaining
+  drivers, plus public and staff journeys, remain open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled
