@@ -30,7 +30,7 @@ async function measuredSchedule(){
  const measured={async connect(){
   const client=await connect(),query=client.query,release=client.release;
   client.query=function(this:PoolClient,...args:unknown[]){
-   if(typeof args[0]==='string'&&/^SELECT\b/.test(args[0])&&/FROM remote_(placements|cell_moves) [pm]\b/.test(args[0]))routeReads++;
+   if(typeof args[0]==='string'&&/^\s*SELECT\b/.test(args[0])&&/FROM remote_(placements|cell_moves) [pm]\b/.test(args[0]))routeReads++;
    return Reflect.apply(query,this,args);
   } as PoolClient['query'];
   client.release=function(...args:Parameters<PoolClient['release']>){client.query=query;client.release=release;return Reflect.apply(release,client,args);};
@@ -51,14 +51,15 @@ async function assertRoutes(cellId:string,ids:string[],mode:'existing'|'test-fre
 }
 
 test('route reads stay bounded as cells grow and keep empty-cell jobs',async t=>{
- const first=await cell();await venue(first);
+ const first=await cell(),resident=await venue(first);
  const small=await measuredSchedule();
  const cells=[first];for(let i=0;i<7;i++)cells.push(await cell());
  const large=await measuredSchedule();
- await assertRoutes(first,(await store.manifest(first)).routes.map(r=>r.installationId));
+ await assertRoutes(first,[resident.installationId]);
  for(const id of cells.slice(1))await assertRoutes(id,[]);
  t.diagnostic(`real PostgreSQL route reads: 1 cell=${small}; 8 cells=${large}`);
- assert.ok(large<=2,`8 cells need at most two route reads, observed ${large}`);
+ assert.equal(small,2,'one cell must measure both route reads');
+ assert.equal(large,2,'eight cells must measure exactly two route reads');
 });
 
 for(const mode of ['existing','test-free-paid'] as const)test(`batched ${mode} targets keep active and incoming routes in their own cells`,async()=>{
