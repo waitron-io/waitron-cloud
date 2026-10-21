@@ -29,12 +29,23 @@ async function fixture(t, mode = 'normal') {
   const database = join(root, 'venue.db'); const db = new DatabaseSync(database);
   db.exec('CREATE TABLE sales(id INTEGER PRIMARY KEY CHECK(id>0)); INSERT INTO sales VALUES(1)');
   if (mode === 'empty') db.exec('DELETE FROM sales'); db.close();
-  let stored, uploaded = 0;
+  let stored, uploaded = 0, releaseUpload, heldResponse, releaseInventory, inventoryHeld;
+  const heldUpload = new Promise(resolve => { heldResponse = resolve; });
+  const heldInventory = new Promise(resolve => { inventoryHeld = resolve; });
   const provider = createServer((req, res) => {
     const url = new URL(req.url, 'http://local'), parts = [];
     req.on('data', chunk => parts.push(chunk)); req.on('end', () => {
-      if (req.method === 'PUT') { stored = Buffer.concat(parts); uploaded++; res.end(); }
-      else if (url.searchParams.has('versioning')) res.end('<VersioningConfiguration/>');
+      if (req.method === 'PUT') {
+        stored = Buffer.concat(parts); uploaded++;
+        if (mode === 'held-upload' && uploaded === 2) {
+          releaseUpload = () => res.end(); heldResponse();
+        } else res.end();
+      }
+      else if (url.searchParams.has('versioning')) {
+        if (mode === 'held-opening') {
+          releaseInventory = () => res.end('<VersioningConfiguration/>'); inventoryHeld();
+        } else res.end('<VersioningConfiguration/>');
+      }
       else if (url.searchParams.has('uploads')) res.end('<ListMultipartUploadsResult><IsTruncated>false</IsTruncated></ListMultipartUploadsResult>');
       else if (url.searchParams.get('list-type') === '2') res.end('<ListBucketResult><IsTruncated>false</IsTruncated>'
         + (stored ? `<Contents><Key>stream.ltx</Key><Size>${stored.length}</Size></Contents>` : '') + '</ListBucketResult>');
@@ -93,7 +104,8 @@ process.once('SIGTERM',()=>{
   });
   return { source, root, journal, database, binary, binarySha256: createHash('sha256').update(text).digest('hex'),
     target: `http://127.0.0.1:${provider.address().port}`, sdk, bucket: 'synthetic-replay-stream', versioned: false,
-    uploaded: () => uploaded, stored: () => stored };
+    uploaded: () => uploaded, stored: () => stored, heldUpload, releaseUpload: () => releaseUpload(),
+    heldInventory, releaseInventory: () => releaseInventory() };
 }
 async function open(t, f) {
   assert.equal(typeof module.openReplayStream, 'function', 'run and collect the native writer around phase measurements');
@@ -227,4 +239,39 @@ test('replayStreamCleanupRefusesAReplacedScratchDirectory', async t => {
   const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
   for (const e of entries.filter(e => e.kind === 'stream-process' && e.state === 'started'))
     assert.throws(() => process.kill(e.pid, 0), { code: 'ESRCH' });
+});
+
+// Closing the measurement listener before the signalled writer drains its upload breaks collection.
+for (const reason of ['cancel', 'deadline']) test(`replayStreamDrainsAnAdmittedUploadBeforeCollectingTheSession_${reason}`, { timeout: 10000 }, async t => {
+  const f = await fixture(t, 'held-upload'), controller = new AbortController();
+  const began = performance.now();
+  const run = await open(t, { ...f, signal: controller.signal, windowSeconds: 5 });
+  const endpoint = JSON.parse(readFileSync(join(f.root, 'native-stream/stream.json'), 'utf8')).dbs[0].replica.endpoint;
+  await f.heldUpload;
+  if (reason === 'cancel') controller.abort();
+  else await wait(Math.max(0, 5100 - (performance.now() - began)));
+  f.releaseUpload();
+  await assert.rejects(run.finish({ expectedSales: 1 }), bad);
+  await run.close(); await run.close(); clean(f);
+  await assert.rejects(fetch(endpoint), error => error.cause?.code === 'ECONNREFUSED');
+});
+
+// A session acquired after cancellation must still be closed by the replay that owns it.
+for (const reason of ['cancel', 'deadline']) test(`replayStreamCollectsASessionStillOpeningAt_${reason}`, { timeout: 10000 }, async t => {
+  const f = await fixture(t, 'held-opening'), controller = new AbortController();
+  let adminUrl;
+  const observedSdk = { ...sdk, S3Client: class extends sdk.S3Client {
+    constructor(options) { super(options); adminUrl = options.endpoint; }
+  } };
+  const opening = module.openReplayStream({ ...f, sdk: observedSdk, signal: controller.signal,
+    windowSeconds: reason === 'deadline' ? 0.7 : 5 });
+  const refused = assert.rejects(opening, bad);
+  await f.heldInventory;
+  if (reason === 'cancel') controller.abort();
+  else await wait(800);
+  f.releaseInventory();
+  await refused;
+  await assert.rejects(fetch(adminUrl), error => error.cause?.code === 'ECONNREFUSED', 'collect the real session listener even when it opens after cancellation');
+  clean(f);
+  assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources, undefined, 'never admit a native child after cancellation');
 });

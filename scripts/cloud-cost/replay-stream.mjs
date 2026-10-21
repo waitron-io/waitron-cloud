@@ -15,7 +15,7 @@ const file = path => { const s = lstatSync(path); need(s.isFile() && s.nlink ===
 // Call only in the audited isolated worker. The caller owns the database and empty bucket.
 // This lifecycle owns its native children, configuration, restore copy and measurement session.
 export async function openReplayStream(input) {
-  let args, identity, session, writer, disposal, evidence, finishing, deadlineTimer, busy = false;
+  let args, identity, session, openingSession, writer, disposal, evidence, finishing, deadlineTimer, busy = false;
   let invalid = false, closed = false, starts = 0, phase = 'startup';
   const children = new Set();
   const record = entry => {
@@ -68,7 +68,8 @@ export async function openReplayStream(input) {
     closed = true; clearTimeout(deadlineTimer); args?.signal?.removeEventListener('abort', abort);
     const failures = [];
     for (const child of [...children]) { try { await stop(child); } catch { failures.push(true); } }
-    try { await session?.close(); } catch { failures.push(true); }
+    // Cancellation can arrive while the listener is being acquired, before session is assigned.
+    try { await (session ?? await openingSession)?.close(); } catch { failures.push(true); }
     if (identity) try {
       assertOwnedRoot(args); const s = lstatSync(args.workRoot);
       need(realpathSync(args.workRoot) === args.workRoot && s.ino === identity.ino && s.dev === identity.dev);
@@ -107,8 +108,10 @@ export async function openReplayStream(input) {
     args = { source, root, journal: structuredClone(journal), database, binary, binarySha256, target, sdk, bucket, versioned, signal, workRoot };
     signal.addEventListener('abort', abort, { once: true });
     deadlineTimer = setTimeout(() => controller.abort(), windowSeconds * 1000);
-    session = await openStreamMeasurement({ target, sdk, bucket, versioned, signal, clock: () => performance.now() / 1000,
+    // The replay owns cancellation order: collect its writer before closing the transport it drains through.
+    openingSession = openStreamMeasurement({ target, sdk, bucket, versioned, clock: () => performance.now() / 1000,
       allowBulkDeletes: true, allowMultipart: true, resolveMultipartReplies: true });
+    session = await openingSession;
     healthy(); record({ kind: 'stream-root', state: 'intent', path: workRoot });
     mkdirSync(workRoot, { mode: 0o700 }); identity = lstatSync(workRoot);
     record({ kind: 'stream-root', state: 'ready', path: workRoot, ino: identity.ino, dev: identity.dev });

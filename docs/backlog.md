@@ -1436,12 +1436,14 @@ notifications separately.
   it does not measure that archive's storage transfer or any monthly frequency.
   Object lifetimes, HTTP headers, TLS overhead and provider billing are outside the
   storage sample. Control-request prices remain unknown.
-  A separate stream shutdown issue remains open: the deadline check can report a
-  session-close refusal when an upload crosses its deadline. Delaying the second
-  storage PUT response by one second reproduces this on the prior implementation
-  with the existing deadline test. Both unchanged isolated versions pass without
-  that delay; this does not establish that the intermittent failure is fixed.
-  Resolve the shutdown ordering before calling the complete model ready.
+  Cancellation now stops and collects the stream writer before closing its HTTP
+  measurement listeners, so an admitted upload can drain through its existing
+  transport. Cleanup also collects a session that is still opening when the stop
+  arrives. Held-response checks cover both cancellation and deadline expiry,
+  reject any complete-looking result and verify child, scratch and listener cleanup.
+  With a one-second delayed storage reply, the unchanged original deadline check
+  passes with this ordering and fails on the prior implementation. The original
+  deadline, forced-stop limit and measurement checks remain unchanged.
   Representative archive size, storage transfers for the selected-sale archive,
   remote activity, public browser activity, provider billing and daily projections
   remain open. Daily and monthly costs stay unknown.
