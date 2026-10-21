@@ -68,7 +68,7 @@ jobs:
           p=Path('scripts/cloud-cost/schema.mjs')
           s=p.read_text().replace("const fail = () => {", "const fail = () => { console.error(new Error('GENERATED_SCHEMA_GUARD').stack);")
           s=s.replace("} catch { fail(); }", "} catch (error) { console.error('GENERATED_SCHEMA_CAUSE', error.stack); fail(); }")
-          s=s.replace("const child = join(path, entry); const stat = lstatSync(child);", "const child = join(path, entry); if(child.includes('/state/')) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10); const stat = lstatSync(child);")
+          s=s.replace("const child = join(path, entry); const stat = lstatSync(child);", "const child = join(path, entry); if(child.includes('/state/') && (child.endsWith('-journal') || child.endsWith('.tmp'))) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10); const stat = lstatSync(child);")
           p.write_text(s)
           PYDIAG
           node --input-type=module <<'JSDIAG'
