@@ -545,9 +545,12 @@ or ready moves, so an unrelated organisation's plan update can proceed independe
 waits for the next export. The reconciler's all-cell selection still locks the
 global policy set. It reads active and incoming routes once each across all cells
 and groups them by destination, so adding cells does not add route-read queries.
-Empty cells still receive a route job to publish withdrawals. This bounds those
-two reads, not the total work: certificate requests, job writes, policy scans and
-current-work rechecks still need deployment-scale measurement.
+Empty cells still receive a route job to publish withdrawals. Each target rebuild
+indexes the permitted installation IDs once, so each route and certificate lookup
+avoids another scan of that list. An empty test-mode list permits no installation;
+ordinary mode retains its existing behavior. These bounds do not cover the total
+work: certificate requests, job writes, policy scans, single-cell export lookups
+and current-work rechecks still need deployment-scale measurement.
 
 If exports stop, the last signed gateway authority still expires within its
 existing ten-minute maximum. Restarting a gateway does not extend that signed

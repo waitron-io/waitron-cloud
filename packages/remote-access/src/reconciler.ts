@@ -38,7 +38,8 @@ const rowJob=(row:Record<string,unknown>):RemoteConfigurationJob=>({kind:row.kin
 const staffDigest=(authorityDigest:string,request:StaffCertificateRequest)=>digest({authorityDigest,requestId:request.request_id,requestDigest:request.request_digest});
 
 async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanMode):Promise<DesiredTarget[]>{
- const eligible=await eligibleRemoteInstallations(client,mode);
+ const eligibleIds=await eligibleRemoteInstallations(client,mode);
+ const eligible=eligibleIds===undefined?undefined:new Set(eligibleIds);
  const cells=(await client.query('SELECT id FROM remote_cells ORDER BY id')).rows;
  const targets:DesiredTarget[]=[];
  const active=(await client.query(`SELECT p.cell_id,p.installation_id,p.venue_id,host(p.address) AS address,p.port,p.peer_public_key,
@@ -56,7 +57,7 @@ async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanM
    ORDER BY m.target_cell_id,m.venue_id`)).rows;
  const routesByCell=new Map<string,GatewayRoute[]>();
  for(const row of [...active,...staged]){
-  if(eligible&&!eligible.includes(row.installation_id))continue;
+  if(eligible&&!eligible.has(row.installation_id))continue;
   let routes=routesByCell.get(row.cell_id);if(!routes){routes=[];routesByCell.set(row.cell_id,routes);}
   routes.push({installationId:row.installation_id,venueId:row.venue_id,address:row.address,port:row.port,peerPublicKey:row.peer_public_key,staffHostname:row.staff_hostname,publicHostname:row.public_hostname});
  }
@@ -67,7 +68,7 @@ async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanM
   JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public'
   WHERE i.revoked_at IS NULL ORDER BY i.id`)).rows;
  for(const row of certificates){
-  if(eligible&&!eligible.includes(row.id))continue;
+  if(eligible&&!eligible.has(row.id))continue;
   for(const kind of ['staff','public'] as const){
    const hostname=row[`${kind}_hostname`],dnsName=`_acme-challenge.${kind==='staff'?'staff-':''}v-${row.venue_id}.${row.suffix}`;
    let desiredDigest=certificateDigest(row.id,kind,{revision:Number(row.configuration_revision),hostname,dnsName});

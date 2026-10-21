@@ -981,10 +981,15 @@ notifications separately.
   their destination cell. A real PostgreSQL check with eight cells observes two
   route reads instead of sixteen; empty-cell jobs and route/certificate contents
   remain covered, including moves, revision changes and plan restrictions.
-  Reconciler-wide eligibility still scans placed organisations and rebuilds target
-  lists for current-work checks. Its array lookups, global policy locks and total
-  target processing have no production-scale measurement; measure and narrow that
-  work before claiming larger capacity.
+  Reconciler eligibility now indexes the permitted installation IDs once per target
+  rebuild, rather than scanning the list for each route and certificate. Real
+  PostgreSQL checks with four and sixteen eligible installations observe four
+  and sixteen ID reads, replacing twenty and 272. Empty test-mode eligibility
+  still withdraws routes and certificate jobs; ordinary mode keeps its existing
+  behavior. Eligibility still scans placed organisations and rebuilds target lists
+  for current-work checks. Global policy locks, single-cell export lookups and
+  total target processing need production-scale measurement before larger capacity
+  claims.
   A real two-peer Docker gateway proof withdrew the downgraded route/peer in
   4,053 ms while its paid neighbour still served its own body; wall-clock short-lease
   expiry and an expired-cache restart restored no access. This is local synthetic

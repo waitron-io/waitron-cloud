@@ -97,3 +97,63 @@ for(const change of ['free','production','unconfigured'] as const)test(`batched 
  await assertRoutes(source,[],'test-free-paid');await assertRoutes(target,[resident.installationId],'test-free-paid');
  assert.equal((await db.pool.query("SELECT count(*)::integer AS n FROM remote_configuration_jobs WHERE kind<>'route' AND target_id=$1 AND enabled",[moving.installationId])).rows[0].n,0);
 });
+
+async function measuredEligibilitySchedule(mode:'existing'|'test-free-paid'){
+ const connect=db.pool.connect.bind(db.pool);let lists=0,idReads=0,eligibleCount=0,arrayScans=0;
+ const measuredIds=new Set<string>(),includes=Array.prototype.includes;
+ const measured={async connect(){
+  const client=await connect(),query=client.query,release=client.release;
+  client.query=async function(this:PoolClient,...args:unknown[]){
+   const result=await Reflect.apply(query,this,args);
+   if(typeof args[0]==='string'&&/SELECT\s+i\.id\s+FROM\s+installations\s+i\s+JOIN\s+venues\s+v\b/.test(args[0])){
+    const map=result.rows.map;
+    result.rows.map=function(...mapArgs:unknown[]){
+     const ids=Reflect.apply(map,this,mapArgs) as string[];lists++;eligibleCount+=ids.length;
+     for(const id of ids)measuredIds.add(id);
+     // Observe reads without replacing the real database's IDs or lookup behavior.
+     return new Proxy(ids,{get(target,key,receiver){
+      if(typeof key==='string'&&/^\d+$/.test(key))idReads++;
+      return Reflect.get(target,key,receiver);
+     }});
+    };
+   }
+   return result;
+  } as PoolClient['query'];
+  client.release=function(...args:Parameters<PoolClient['release']>){client.query=query;client.release=release;return Reflect.apply(release,client,args);};
+  return client;
+ }} as Pool;
+ // Include copied arrays: observing only the returned list misses copy-then-scan regressions.
+ Array.prototype.includes=function(this:unknown[],value:unknown,fromIndex?:number){
+  if(typeof value==='string'&&measuredIds.has(value))arrayScans++;
+  return includes.call(this,value,fromIndex);
+ };
+ try{await new RemoteConfigurationReconciler(measured,{planMode:mode}).schedule();}
+ finally{Array.prototype.includes=includes;}
+ return {lists,idReads,eligibleCount,arrayScans};
+}
+
+for(const count of [4,16])test(`eligibility processing reads at most twice the eligible IDs for ${count} placements`,async t=>{
+ const home=await cell();for(let i=0;i<count;i++)await venue(home);
+ const measured=await measuredEligibilitySchedule('test-free-paid');
+ const jobs=(await db.pool.query('SELECT kind,count(*)::integer AS n FROM remote_configuration_jobs WHERE enabled GROUP BY kind ORDER BY kind')).rows;
+ assert.deepEqual(jobs,[{kind:'certificate_public',n:count},{kind:'certificate_staff',n:count},{kind:'route',n:1}]);
+ assert.equal(measured.lists,1,'measurement must observe the eligibility result');assert.equal(measured.eligibleCount,count);
+ t.diagnostic(`${count} eligible installations: ${measured.idReads} ID reads, ${measured.arrayScans} array scans`);
+ assert.equal(measured.arrayScans,0,'membership must not repeatedly scan an array, including a copied list');
+ assert(measured.idReads>0,'measurement must observe membership processing');
+ assert(measured.idReads<=count*2,`eligible IDs read ${measured.idReads} times for ${count} placements`);
+});
+
+test('an empty eligibility list withdraws routes and certificates while ordinary mode retains them',async()=>{
+ const home=await cell(),resident=await venue(home);
+ await new RemoteConfigurationReconciler(db.pool,{planMode:'test-free-paid'}).schedule();
+ await new OrganisationPlanStore(db.pool).set(resident.organisationId,'free');
+ const empty=await measuredEligibilitySchedule('test-free-paid');
+ assert.deepEqual(empty,{lists:1,idReads:0,eligibleCount:0,arrayScans:0});
+ await assertRoutes(home,[],'test-free-paid');
+ assert.equal((await db.pool.query("SELECT count(*)::integer AS n FROM remote_configuration_jobs WHERE kind<>'route' AND enabled")).rows[0].n,0);
+ const ordinary=await measuredEligibilitySchedule('existing');
+ assert.deepEqual(ordinary,{lists:0,idReads:0,eligibleCount:0,arrayScans:0});
+ await assertRoutes(home,[resident.installationId]);
+ assert.equal((await db.pool.query("SELECT count(*)::integer AS n FROM remote_configuration_jobs WHERE kind<>'route' AND enabled")).rows[0].n,2);
+});
