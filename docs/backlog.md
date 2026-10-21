@@ -1365,9 +1365,19 @@ notifications separately.
   records its exact Cloud source, pinned Waitron revision, runtime and experiment
   window, with action-level body counts and both encrypted-traffic directions.
   This measures a generated venue's API scenario, not a complete browser session
-  or Santet's owner activity. Browser assets, background updates, IP and TCP
-  overhead, the interpretation of WireGuard counters for billing, public-traffic
-  frequency and monthly owner activity remain unmeasured.
+  or Santet's owner activity. You can now measure the built, pinned dashboard in
+  isolated Chromium through the real gateway with the [browser journey](../scripts/cloud-cost/browser.mjs).
+  A generated owner signs in, reads both overview reports, reloads with the session
+  cookie and cached assets, then signs out. Browser requests and both encrypted
+  traffic directions are counted separately. Normal caching stays enabled.
+  Completed-request body counts exclude interrupted live-update streams; their
+  body bytes and any missing final browser event remain explicitly unknown.
+  The socket counters include the encrypted stream traffic and must reconcile
+  after every connection closes. Missing assets, lost cookies, page errors and
+  outside requests refuse publication. The scenario uses English at 1280 pixels;
+  it does not establish Santet's owner activity or public browser behaviour.
+  IP and TCP overhead, the interpretation of WireGuard counters for billing,
+  public-traffic frequency and monthly owner activity remain unmeasured.
   You can now export captured-mail and fiscal API scenarios together through the
   [service receipt boundary](../scripts/cloud-cost/service-receipt.mjs). It checks
   independent counters and every grouped retry and refusal before returning an
@@ -1391,8 +1401,8 @@ notifications separately.
   the response path or wait forever for an already expired request. A controlled
   100 ms pause reproduces the earlier hang and passes with the controlled clock.
   Its timeout, cancellation, oversized-response and interruption checks remain intact.
-  The complete venue-cost model, full browser journeys and joined cost export
-  remain open; each successful experiment supplies only its named sample.
+  The complete venue-cost model, representative venue and public browser journeys,
+  and joined cost export remain open; each successful experiment supplies only its named sample.
   The pure calculations now cover aggregate request
   tiers, explicit resource capacities, dated growth and calendar retention, including
   protected recovery copies. Synthetic local HTTP checks reconcile retries, denied

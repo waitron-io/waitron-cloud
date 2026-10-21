@@ -16,6 +16,7 @@ export { openRemoteMeasurement } from './remote.mjs';
 export { replayScheduledSales } from './cadence.mjs';
 export { prepareReplayDay } from './replay-day.mjs';
 export { measureRemoteJourneys } from './remote-journey.mjs';
+export { measureRemoteBrowser } from './browser.mjs';
 export { replayPrivateDay } from './private-replay.mjs';
 export { runLocal } from './run-local.mjs';
 
