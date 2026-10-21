@@ -990,9 +990,14 @@ notifications separately.
   for active and incoming routes. Real PostgreSQL checks through both returned
   and published manifests observe four and sixteen ID reads for four and sixteen
   routes, replacing ten and 136. Empty eligibility still excludes both kinds of
-  route; ordinary mode retains them. Eligibility still scans placed organisations
-  and rebuilds target lists for current-work checks. Global policy locks, per-route
-  database reads and total target processing need production-scale measurement
+  route; ordinary mode retains them. Those exports now fetch active routes and
+  incoming routes in two cell-scoped batches. Real PostgreSQL checks with four
+  and sixteen mixed routes observe five database calls in ordinary mode and
+  seven in test-plan mode, including transaction and policy calls, through both
+  returned and published manifests. Route names, target addresses, ports and keys,
+  move lifecycle, revocation and cell isolation remain covered. Eligibility still
+  scans placed organisations and rebuilds target lists for current-work checks.
+  Global policy locks and total target processing need production-scale measurement
   before larger capacity claims.
   A real two-peer Docker gateway proof withdrew the downgraded route/peer in
   4,053 ms while its paid neighbour still served its own body; wall-clock short-lease
