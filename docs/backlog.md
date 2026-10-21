@@ -1397,15 +1397,24 @@ notifications separately.
   names its producing source revision and experiment window. Counts describe each
   local scenario. Email bytes, monthly scenario frequencies and billable quantities
   stay unknown; fiscal bytes cover HTTP bodies only.
-  The separate stream receipt stays unchanged. Joining all driver evidence into
-  the venue-cost export and deriving labelled daily projections remain open.
+  You can now read the accepted stream, two service scenarios, API journey and
+  browser journey together in the [local driver evidence](cost-model/local-driver-evidence.json).
+  The [export boundary](../scripts/cloud-cost/joined-evidence.mjs) checks every
+  sample before joining them. It preserves their separate windows, source revisions,
+  retries, refusals, body-count limits and encrypted-traffic counters because adding
+  these overlapping scenarios would double-count owner actions. Extra fields,
+  mismatched counters, missing source checks and invented monthly frequencies
+  refuse publication. The stream receipt stays byte-identical; its native restore
+  remains distinct from an application archive restore. Archive capture, application
+  restore, representative remote activity, public browser activity, provider billing
+  and daily projections remain open. Daily and monthly costs stay unknown.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled
   100 ms pause reproduces the earlier hang and passes with the controlled clock.
   Its timeout, cancellation, oversized-response and interruption checks remain intact.
   The complete venue-cost model, representative venue and public browser journeys,
-  and joined cost export remain open; each successful experiment supplies only its named sample.
+  and complete cost export remain open; each successful experiment supplies only its named sample.
   The pure calculations now cover aggregate request
   tiers, explicit resource capacities, dated growth and calendar retention, including
   protected recovery copies. Synthetic local HTTP checks reconcile retries, denied
