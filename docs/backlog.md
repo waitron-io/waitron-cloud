@@ -1425,18 +1425,24 @@ notifications separately.
   fresh-venue scope. Publication rejects extra or hidden fields, incomplete sales,
   failed integrity, mismatched byte counts and missing isolation or cleanup evidence.
   The earlier stream, service, API and browser samples remain unchanged.
-  A separate generated one-sale archive journey can publish all eleven storage
-  attempts only after independent HTTP body counters, actual application restore
-  and owned cleanup agree. Its full upload, HEAD, range read, download, unfinished
-  multipart and deletion operations remain distinct from the selected-sale sample.
-  Object lifetimes, HTTP headers and provider billing are outside that transfer sample.
+  The separate [generated storage sample](cost-model/archive-storage.json), produced
+  by source `3ee545cc3f723a806f7cca9c232685bc70ed5096`, captures and restores a one-sale
+  archive of 2,835,270 bytes. All eleven storage attempts reconcile between independent
+  HTTP body counters after actual application restore and owned cleanup. Outgoing
+  bodies total 2,835,466 bytes: 192 for bucket setup, the complete archive upload and
+  four bytes for an abandoned multipart part. Reads include the full archive and an
+  eleven-byte range. HEAD, listing, multipart abort and deletion stay in the request
+  vector. This generated scenario remains distinct from the 207-sale archive sample;
+  it does not measure that archive's storage transfer or any monthly frequency.
+  Object lifetimes, HTTP headers, TLS overhead and provider billing are outside the
+  storage sample. Control-request prices remain unknown.
   A separate stream shutdown issue remains open: the deadline check can report a
   session-close refusal when an upload crosses its deadline. Delaying the second
   storage PUT response by one second reproduces this on the prior implementation
   with the existing deadline test. Both unchanged isolated versions pass without
   that delay; this does not establish that the intermittent failure is fixed.
   Resolve the shutdown ordering before calling the complete model ready.
-  Representative archive size, storage upload/download accounting,
+  Representative archive size, storage transfers for the selected-sale archive,
   remote activity, public browser activity, provider billing and daily projections
   remain open. Daily and monthly costs stay unknown.
   The fiscal timeout fixture now advances its 50 ms deadline

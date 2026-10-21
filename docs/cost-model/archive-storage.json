@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 1,
+  "runId": "f4f7af01-cce2-4514-a5a7-11a6c122d088",
+  "cloudRevision": "3ee545cc3f723a806f7cca9c232685bc70ed5096",
+  "waitronRevision": "fbadd15785464e59747e697c11048bfbc6e4938f",
+  "kind": "local-aggregate",
+  "dataBoundary": {
+    "classification": "anonymous-aggregate",
+    "rawIncluded": false,
+    "exportSchema": 1
+  },
+  "window": {
+    "startedAt": "2026-10-21T03:53:09.617Z",
+    "endedAt": "2026-10-21T03:54:30.476Z",
+    "elapsedSeconds": 80.859
+  },
+  "cadence": {
+    "mode": "original",
+    "factor": 1,
+    "coveredSeconds": 80.859,
+    "configuredSchedule": null,
+    "observedSchedule": null
+  },
+  "inputs": [
+    {
+      "id": "archive-bytes",
+      "value": 2835270,
+      "unit": "bytes",
+      "status": "measured",
+      "source": "receipt:f4f7af01-cce2-4514-a5a7-11a6c122d088",
+      "scope": "venue",
+      "region": "local",
+      "observedAt": "2026-10-21T03:54:30.476Z",
+      "effectiveAt": null,
+      "bounds": null,
+      "reason": null
+    },
+    {
+      "id": "restore-bytes",
+      "value": 2835270,
+      "unit": "bytes",
+      "status": "measured",
+      "source": "receipt:f4f7af01-cce2-4514-a5a7-11a6c122d088",
+      "scope": "venue",
+      "region": "local",
+      "observedAt": "2026-10-21T03:54:30.476Z",
+      "effectiveAt": null,
+      "bounds": null,
+      "reason": null
+    },
+    {
+      "id": "successful-sales",
+      "value": 1,
+      "unit": "count",
+      "status": "measured",
+      "source": "receipt:f4f7af01-cce2-4514-a5a7-11a6c122d088",
+      "scope": "venue",
+      "region": "local",
+      "observedAt": "2026-10-21T03:54:30.476Z",
+      "effectiveAt": null,
+      "bounds": null,
+      "reason": null
+    }
+  ],
+  "accounting": {
+    "requests": [
+      {
+        "phase": "setup",
+        "operation": "bucket-create",
+        "requestClass": "s3-control",
+        "outcome": "success",
+        "retryOrdinal": 0,
+        "attempts": 1,
+        "successful": 1,
+        "failed": 0,
+        "retried": 0,
+        "bytesIn": 0,
+        "bytesOut": 192,
+        "attemptedBytesIn": 0,
+        "attemptedBytesOut": 192
+      },
+      {
+        "phase": "workload",
+        "operation": "put",
+        "requestClass": "s3-write",
+        "outcome": "success",
+        "retryOrdinal": 0,
+        "attempts": 1,
+        "successful": 1,
+        "failed": 0,
+        "retried": 0,
+        "bytesIn": 0,
+        "bytesOut": 2835270,
+        "attemptedBytesIn": 0,
+        "attemptedBytesOut": 2835270
+      },
+      {
+        "phase": "workload",
+        "operation": "head",
+        "requestClass": "s3-read",
+        "outcome": "success",
+        "retryOrdinal": 0,
+        "attempts": 1,
+        "successful": 1,
+        "failed": 0,
+        "retried": 0,
+        "bytesIn": 0,
+        "bytesOut": 0,
+        "attemptedBytesIn": 0,
+        "attemptedBytesOut": 0
+      },
+      {
+        "phase": "workload",
+        "operation": "get",
+        "requestClass": "s3-read",
+        "outcome": "success",
+        "retryOrdinal": 0,
+        "attempts": 2,
+        "successful": 2,
+        "failed": 0,
+        "retried": 0,
+        "bytesIn": 2835281,
+        "bytesOut": 0,
+        "attemptedBytesIn": 2835281,
+        "attemptedBytesOut": 0
+      },
+      {
+        "phase": "workload",
+        "operation": "multipart-create",
+        "requestClass": "s3-multipart",
+        "outcome": "success",
+        "retryOrdinal": 0,
+        "attempts": 1,
+        "successful": 1,
+        "failed": 0,
+        "retried": 0,
+        "bytesIn": 301,
+        "bytesOut": 0,
+        "attemptedBytesIn": 301,
+        "attemptedBytesOut": 0
+      },
+      {
+        "phase": "workload",
+        "operation": "multipart-upload",
+        "requestClass": "s3-multipart",
+        "outcome": "success",
+        "retryOrdinal": 0,
+        "attempts": 1,
+        "successful": 1,
+        "failed": 0,
+        "retried": 0,
+        "bytesIn": 0,
+        "bytesOut": 4,
+        "attemptedBytesIn": 0,
+        "attemptedBytesOut": 4
+      },
+      {
+        "phase": "workload",
+        "operation": "list",
+        "requestClass": "s3-list",
+        "outcome": "success",
+        "retryOrdinal": 0,
+        "attempts": 1,
+        "successful": 1,
+        "failed": 0,
+        "retried": 0,
+        "bytesIn": 563,
+        "bytesOut": 0,
+        "attemptedBytesIn": 563,
+        "attemptedBytesOut": 0
+      },
+      {
+        "phase": "cleanup",
+        "operation": "multipart-abort",
+        "requestClass": "s3-delete",
+        "outcome": "success",
+        "retryOrdinal": 0,
+        "attempts": 1,
+        "successful": 1,
+        "failed": 0,
+        "retried": 0,
+        "bytesIn": 0,
+        "bytesOut": 0,
+        "attemptedBytesIn": 0,
+        "attemptedBytesOut": 0
+      },
+      {
+        "phase": "cleanup",
+        "operation": "delete",
+        "requestClass": "s3-delete",
+        "outcome": "success",
+        "retryOrdinal": 0,
+        "attempts": 1,
+        "successful": 1,
+        "failed": 0,
+        "retried": 0,
+        "bytesIn": 0,
+        "bytesOut": 0,
+        "attemptedBytesIn": 0,
+        "attemptedBytesOut": 0
+      },
+      {
+        "phase": "cleanup",
+        "operation": "bucket-delete",
+        "requestClass": "s3-control",
+        "outcome": "success",
+        "retryOrdinal": 0,
+        "attempts": 1,
+        "successful": 1,
+        "failed": 0,
+        "retried": 0,
+        "bytesIn": 0,
+        "bytesOut": 0,
+        "attemptedBytesIn": 0,
+        "attemptedBytesOut": 0
+      }
+    ],
+    "objects": [],
+    "producer": {
+      "attempts": 11,
+      "bytesIn": 2836145,
+      "bytesOut": 2835466
+    },
+    "observer": {
+      "attempts": 11,
+      "bytesIn": 2836145,
+      "bytesOut": 2835466
+    },
+    "discrepancy": {
+      "attempts": 0,
+      "bytesIn": 0,
+      "bytesOut": 0
+    }
+  },
+  "checks": [
+    {
+      "code": "synthetic-only",
+      "passed": true,
+      "count": 1
+    },
+    {
+      "code": "all-sales-replayed",
+      "passed": true,
+      "count": 1
+    },
+    {
+      "code": "accounting-reconciled",
+      "passed": true,
+      "count": 11
+    },
+    {
+      "code": "cleanup-complete",
+      "passed": true,
+      "count": 0
+    }
+  ],
+  "cleanup": {
+    "ownedProcesses": 0,
+    "ownedContainers": 0,
+    "ownedNetworks": 0,
+    "ownedVolumes": 0,
+    "ownedObjects": 0,
+    "residualKinds": []
+  }
+}
