@@ -1364,8 +1364,14 @@ notifications separately.
   replay, consumption, inspection and signed reporting. Injected temporary
   refusals test both retries; an unauthenticated request leaves registry history
   empty. Export waits for owned listeners, clients and database-schema cleanup.
-  Counts describe each local scenario. Email bytes, monthly scenario frequencies
-  and billable quantities stay unknown; fiscal bytes cover HTTP bodies only.
+  The anonymous [retry and lifecycle sample](cost-model/service-mail-retry-fiscal-lifecycle.json)
+  records four mail attempts (three accepted, one refused, one retry) and eight
+  fiscal HTTP attempts (six successful, two failed, one retry).
+  The separate [signup, recovery and refusal sample](cost-model/service-signup-recovery-fiscal-refusal.json)
+  records three captured emails and one unauthenticated fiscal refusal. Each file
+  names its producing source revision and experiment window. Counts describe each
+  local scenario. Email bytes, monthly scenario frequencies and billable quantities
+  stay unknown; fiscal bytes cover HTTP bodies only.
   The separate stream receipt stays unchanged. Joining all driver evidence into
   the venue-cost export and deriving labelled daily projections remain open.
   The fiscal timeout fixture now advances its 50 ms deadline
