@@ -498,9 +498,12 @@ enabling translation. The `--once` regression proves an old queued job never rea
 provider before its startup sweep.
 The review's 50,000-retained-row probe used a sequential scan (5.4 ms locally). The per-pass
 job limit does not bound rows scanned. Measure retained-history growth at launch volume and
-qualify an append-only indexing migration if needed. The worker's lease query still has no age
-predicate; provider dispatch for a job aging between bounded sweeps remains unverified and
-must be qualified before activation. These are separate from deleting an expired body.
+qualify an append-only indexing migration if needed. The worker now skips queued and retryable
+running jobs submitted at least 24 hours ago when selecting a new lease, even if bounded
+cleanup has not reached them. PostgreSQL and loopback-provider checks cover both states at
+24 and 25 hours, younger work behind them, unchanged attempts/accounting and subsequent
+sweep deletion. A job aging after lease admission still needs dispatch qualification before
+activation. Admission does not replace deletion of an expired body.
 Task 19 adds the optional `translation` Compose profile and runtime role. The default stack
 omits the worker; only it receives provider settings, while account receives the translation
 switch, default off. Compose and runtime checks cover the profile, migration dependency,

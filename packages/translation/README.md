@@ -59,7 +59,9 @@ server also sweeps when `CLOUD_TRANSLATION=1`, even without a worker. A pass han
 most 100 jobs by default, so a backlog needs further passes. Cleanup failure pauses new
 worker jobs and retries after a minute. Enabled account startup cleanup failure refuses
 listening; scheduled failure retries while it keeps serving. Review that availability policy
-before activation. Retained-history scan growth and dispatch age between sweeps still need
+before activation. While waiting for cleanup, jobs submitted at least 24 hours ago cannot
+receive a new work lease, so old rows do not prevent younger jobs from running. The sweep
+still owns deletion. Retained-history scan growth and jobs aging after lease admission need
 [qualification](../../docs/backlog.md#translate-all-approved-design-implementation-still-open).
 
 Operational errors use fixed messages so menu names, generated text, keys and authorization
