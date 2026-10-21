@@ -17,6 +17,7 @@ export function checkSubmitBody(signedBody:string,body:string):SubmitFingerprint
   if(signed.version!==1||typeof signed.jobSha256!=='string'||!/^[0-9a-f]{64}$/.test(signed.jobSha256)
     ||!Number.isSafeInteger(signed.jobBytes)||Number(signed.jobBytes)<1)return invalid();
   if(Number(signed.jobBytes)>maxJobBytes)throw new TranslationError('job_too_large');
+  if(Buffer.byteLength(body,'utf8')!==signed.jobBytes)return invalid();
   const actual=jobFingerprint(body);
   if(actual.jobBytes!==signed.jobBytes||actual.jobSha256!==signed.jobSha256)return invalid();
   return actual;
