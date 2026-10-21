@@ -70,9 +70,9 @@ export class TranslationWorker {
  async #lease():Promise<{job:JobRow;leaseId:string}|undefined>{
   return transaction(this.#pool,async client=>{
    // Bounded cleanup can leave old rows behind; they must not receive fresh work leases.
-   const candidate=(await client.query<{id:string}>(`SELECT id FROM translation_jobs
-    WHERE (state='queued' OR (state='running' AND lease_until<clock_timestamp()))
+   const candidate=(await client.query<{id:string}>(`SELECT id FROM translation_jobs WHERE state='queued'
     AND created_at>clock_timestamp()-interval '24 hours'
+    OR (state='running' AND lease_until<clock_timestamp() AND created_at>clock_timestamp()-interval '24 hours')
     ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED`)).rows[0];
    if(!candidate)return undefined;
    const leaseId=randomUUID();
