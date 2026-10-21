@@ -727,3 +727,48 @@ test('generatedArchiveStoragePublishesACompleteAnonymousReceiptAfterCleanup', as
   assert.equal(/PRIVATE_SYNTHETIC_CANARY|private-part|UploadId|SYNTHETIC_PRIVATE_STATE/.test(JSON.stringify(receipt)), false);
   if (process.env.COST_ARCHIVE_STORAGE_OUTPUT) writeFileSync(process.env.COST_ARCHIVE_STORAGE_OUTPUT, JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
 });
+
+import { readdirSync } from 'node:fs';
+
+function assertStableHostFiles(stateRoot) {
+  assert.deepEqual(readdirSync(stateRoot).sort(), [
+    'gateway-cert.pem', 'gateway-key.pem', 'gateway.pem', 'haproxy.cfg',
+    'postgres-password', 'replay-config.json',
+  ], 'only fixed service configuration may remain on the scanned host mount');
+}
+
+// SQLite removes migration journals while the host audits ownership of mounted files.
+test('generatedVenueKeepsItsMutableDatabaseOffTheScannedHostTree', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  cpSync(new URL('./stack-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-stack-smoke.mjs'));
+  let stack; f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const waitron = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 'waitron');
+  const result = JSON.parse(docker('exec', waitron, 'node', '/code/cost-stack-smoke.mjs'));
+  assert.deepEqual(result.sales, { attempted: 1, successful: 1, failed: 0 });
+  assert.deepEqual(result.integrity, { ok: true, issues: 0 });
+  assert.equal(existsSync(join(f.stateRoot, 'replay')), false,
+    'the generated database and its transient migration journals must stay outside the scanned host mount');
+  assertStableHostFiles(f.stateRoot);
+  const scratch = JSON.parse(docker('exec', waitron, 'node', '--input-type=module', '-e',
+    "import {statSync} from 'node:fs'; process.stdout.write(JSON.stringify({venue:statSync('/tmp/replay/venue').isDirectory()}));"));
+  assert.deepEqual(scratch, { venue: true });
+});
+
+for (const [role, name, directory] of [['mailpit', 'mail.db', false], ['s3', 'storage', true]]) {
+  test(`generatedServiceKeepsItsMutableFilesOffTheScannedHostTree_${role}`, async t => {
+    const f = fixture(t), plan = local.prepareIsolatedStack(f);
+    let stack; f.onCleanup(async () => { await stack?.close(); });
+    stack = await local.startIsolatedStack({ ...f, prepared: plan });
+    const waitron = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 'waitron');
+    const result = JSON.parse(docker('exec', waitron, 'node', '/code/cost-stack-smoke.mjs'));
+    assert.equal(result.capturedMail, 1); assert.equal(result.storageRoundTrip, true);
+    assert.equal(existsSync(join(f.stateRoot, name)), false,
+      'mutable service files must stay outside the scanned host mount');
+    assertStableHostFiles(f.stateRoot);
+    const service = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === role);
+    const scratch = JSON.parse(docker('exec', service, 'node', '--input-type=module', '-e',
+      "import {statSync} from 'node:fs'; const stat=statSync(process.argv[1]); process.stdout.write(JSON.stringify({file:stat.isFile(),directory:stat.isDirectory()}));", '/tmp/' + name));
+    assert.deepEqual(scratch, { file: !directory, directory });
+  });
+}
