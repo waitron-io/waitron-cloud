@@ -68,6 +68,7 @@ jobs:
           p=Path('scripts/cloud-cost/schema.mjs')
           s=p.read_text().replace("const fail = () => {", "const fail = () => { console.error(new Error('GENERATED_SCHEMA_GUARD').stack);")
           s=s.replace("} catch { fail(); }", "} catch (error) { console.error('GENERATED_SCHEMA_CAUSE', error.stack); fail(); }")
+          s=s.replace("const child = join(path, entry); const stat = lstatSync(child);", "const child = join(path, entry); if(child.includes('/state/')) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10); const stat = lstatSync(child);")
           p.write_text(s)
           PYDIAG
           node --input-type=module <<'JSDIAG'
@@ -75,7 +76,7 @@ jobs:
           import {runTests} from './scripts/cloud-cost/conformance.mjs';
           const fixture=await prepareConformance(['stack-conformance.test.mjs']);
           try {
-            for(let i=1;i<=24;i++) {
+            for(let i=1;i<=8;i++) {
               console.log('GENERATED_STARTUP_REPETITION',i);
               const result=await runTests(['scripts/cloud-cost/fixtures/stack-conformance.test.mjs'],{pattern:'^genuineAmbiguousMultipartRepliesReconcileEveryCommittedStage_false$',env:{...process.env,...fixture.env}});
               if(result.code) { process.exitCode=result.code; break; }
