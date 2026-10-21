@@ -547,10 +547,12 @@ global policy set. It reads active and incoming routes once each across all cell
 and groups them by destination, so adding cells does not add route-read queries.
 Empty cells still receive a route job to publish withdrawals. Each target rebuild
 indexes the permitted installation IDs once, so each route and certificate lookup
-avoids another scan of that list. An empty test-mode list permits no installation;
-ordinary mode retains its existing behavior. These bounds do not cover the total
-work: certificate requests, job writes, policy scans, single-cell export lookups
-and current-work rechecks still need deployment-scale measurement.
+avoids another scan of that list. Single-cell exports also build one index for
+active and incoming routes, through both the returned-manifest and publication
+methods. An empty test-mode list permits no installation; ordinary mode retains
+its existing behavior. These bounds do not cover the total work: certificate
+requests, job writes, policy scans, per-route database reads and current-work
+rechecks still need deployment-scale measurement.
 
 If exports stop, the last signed gateway authority still expires within its
 existing ten-minute maximum. Restarting a gateway does not extend that signed

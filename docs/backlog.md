@@ -986,10 +986,14 @@ notifications separately.
   PostgreSQL checks with four and sixteen eligible installations observe four
   and sixteen ID reads, replacing twenty and 272. Empty test-mode eligibility
   still withdraws routes and certificate jobs; ordinary mode keeps its existing
-  behavior. Eligibility still scans placed organisations and rebuilds target lists
-  for current-work checks. Global policy locks, single-cell export lookups and
-  total target processing need production-scale measurement before larger capacity
-  claims.
+  behavior. Single-cell gateway exports now build the same kind of index once
+  for active and incoming routes. Real PostgreSQL checks through both returned
+  and published manifests observe four and sixteen ID reads for four and sixteen
+  routes, replacing ten and 136. Empty eligibility still excludes both kinds of
+  route; ordinary mode retains them. Eligibility still scans placed organisations
+  and rebuilds target lists for current-work checks. Global policy locks, per-route
+  database reads and total target processing need production-scale measurement
+  before larger capacity claims.
   A real two-peer Docker gateway proof withdrew the downgraded route/peer in
   4,053 ms while its paid neighbour still served its own body; wall-clock short-lease
   expiry and an expired-cache restart restored no access. This is local synthetic
