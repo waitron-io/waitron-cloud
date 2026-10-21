@@ -142,6 +142,8 @@ export class EvaluationClient {
     const {url,options}=requestFor(provider,operation,query,this.keys);
     // Elapsed time preserves spacing across wall-clock changes. Capped waits
     // prevent a future journal timestamp from overflowing Node's timer to 1 ms.
+    const initialWait=this.nextAt-performance.now();
+    if(initialWait>=60000)console.error(`Waiting ${Math.ceil(initialWait/1000)} seconds for address-evaluation request spacing; check for future journal timestamps.`);
     for(let wait;(wait=this.nextAt-performance.now())>0;) {
       await new Promise(resolve=>setTimeout(resolve,Math.min(2147483647,Math.ceil(wait))));
     }

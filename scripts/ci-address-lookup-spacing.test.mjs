@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
 
-function probe(body) {
+function probe(body, expectNotice = false) {
   const directory = mkdtempSync(join(tmpdir(), 'address-clock-'));
   try {
     const program = `
@@ -21,7 +21,8 @@ function probe(body) {
     `;
     const result = spawnSync(process.execPath, ['--input-type=module', '-e', program, directory], {encoding:'utf8', timeout:5000});
     assert.equal(result.status, 0, JSON.stringify({error:result.error?.message, signal:result.signal, stdout:result.stdout, stderr:result.stderr}));
-    assert.equal(result.stderr, '');
+    if (expectNotice) assert.match(result.stderr, /^Waiting \d+ seconds for address-evaluation request spacing; check for future journal timestamps\.\n$/);
+    else assert.equal(result.stderr, '');
   } finally { rmSync(directory, {recursive:true, force:true}); }
 }
 
@@ -39,7 +40,7 @@ test('a journal timestamp thirty days ahead cannot overflow into an immediate re
     assert.equal(budget.counts.google, 1);
     assert.equal(client.measurements.length, 0);
     assert.equal(existsSync(join(directory, 'measurements.jsonl')), false);
-  `);
+  `, true);
 });
 
 for (const shift of [5000, -1000]) {
@@ -106,5 +107,5 @@ test('a long journal wait reaches its deadline before spending another request',
     assert.equal(budget.counts.google, 2);
     assert.equal(calls, 1);
     assert.equal(budget.retries.google, 0);
-  `);
+  `, true);
 });

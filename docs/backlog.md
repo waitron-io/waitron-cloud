@@ -797,9 +797,11 @@ venue does not subscribe to remote access or backups.
   checks completion after the entire delay. Existing request/attempt budgets,
   restart spacing and durable reservations remain covered. Overlapping calls are
   still unqualified; keep this measurement client sequential. These checks permit
-  no new provider requests. A far-future journal timestamp still pauses without
-  progress output; a diagnostic for unusually long waits remains an operator
-  usability follow-up.
+  no new provider requests. Before a spacing wait of at least one minute, the
+  evaluator and regional comparison print one stderr notice with rounded-up
+  remaining seconds and guidance to check future journal timestamps. Ordinary
+  waits stay quiet; the notice does not shorten the wait or spend a request.
+  Offline child checks cover a paused wait and completion across timer chunks.
   Keep manual entry and correction available when lookup is unavailable or wrong.
 - **Transactional email.** Offer managed SMTP delivery for password resets and other
   account administration emails from on-prem Waitron. Scope the relay to these

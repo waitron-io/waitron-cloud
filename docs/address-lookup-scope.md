@@ -211,7 +211,11 @@ reservation time. A future journal timestamp delays the next request until that
 time plus the spacing interval. The client measures the remaining wait with an
 elapsed-time clock and splits long waits into timer-safe chunks, so changing your
 wall clock cannot shorten spacing or overflow a long timer into an immediate
-request. Keep the runner sequential; overlapping calls are not qualified. The HTTP
+request. If the remaining wait is at least one minute, you see one notice on stderr,
+with rounded-up seconds and guidance to check future journal timestamps. Check your
+clock and the journal's provenance before resuming; do not reset its request counts.
+Ordinary waits stay quiet, and stdout remains available for scores and receipts.
+Keep the runner sequential; overlapping calls are not qualified. The HTTP
 deadline covers headers and body for 15 seconds. There
 are no automatic retries or redirects. A crash may repeat an unfinished case; each
 case/operation permits at most two attempts in total, and receipts count those
