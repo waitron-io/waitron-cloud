@@ -77,7 +77,7 @@ export function scopeForPaths(paths, workspace) {
   return {full:false, packages:[...selected].sort()};
 }
 
-export const receiptSuites = ['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt'];
+export const receiptSuites = ['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt','test:cloud-cost'];
 const shards = {'@waitron-cloud/registration':5, '@waitron-cloud/account-http':3, '@waitron-cloud/backups':2, '@waitron-cloud/portal':3};
 export function workPlan(scope, workspace, root = process.cwd()) {
   const packages = [];

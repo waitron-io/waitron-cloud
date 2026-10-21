@@ -136,7 +136,7 @@ for await (const item of await ${api}(${binding === 'direct' ? directory : 'dire
     assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'nested helper loaded\n');
     const result = plan(base, head);
     assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], `${api} ${binding}`);
-    assert.equal(result.receipts.length, 5);
+    assert.equal(result.receipts.length, 6);
     assert.match(result.reason, /Unverified package revisions:.*repository-root directory scan options at packages\/portal\/src\/index\.mjs.*full package suite/s);
   });
 });
@@ -262,7 +262,7 @@ test('missing or malformed evidence from either revision selects every package a
       assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], `${sha} ${fault}`);
       assert.match(result.reason, /Unverified package revisions:.*full package suite/s);
       if (fault === 'malformed-tree') assert.match(result.reason, /Malformed package tree inventory/);
-      assert.equal(result.receipts.length, 5);
+      assert.equal(result.receipts.length, 6);
     }
   }
 }));
@@ -1002,7 +1002,7 @@ for (const name of ${call}) {
         {cwd: root, encoding: 'utf8'}), 'options helper loaded\n');
       const result = plan(base, head);
       assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal', 'unrelated'], binding + ' ' + options);
-      assert.equal(result.receipts.length, 5);
+      assert.equal(result.receipts.length, 6);
       assert.match(result.reason, /Unverified package revisions:.*repository-root directory scan options.*packages\/portal\/src\/index\.mjs.*full package suite/s);
     });
   }

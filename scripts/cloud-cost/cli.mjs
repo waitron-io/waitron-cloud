@@ -18,6 +18,12 @@ function argumentsFor(argv) {
 async function main(argv) {
   let abort;
   try {
+    if (['build', 'verify'].includes(argv[0])) {
+      if (argv.length !== 1) fail();
+      const { runPublicCommand } = await import('./publication.mjs');
+      process.stdout.write(JSON.stringify(await runPublicCommand(argv[0])) + '\n');
+      return;
+    }
     const options = argumentsFor(argv);
     const { runLocal } = await import('./run-local.mjs');
     const controller = new AbortController(); abort = () => controller.abort();
@@ -25,7 +31,7 @@ async function main(argv) {
     const result = await runLocal({ ...options, signal: controller.signal });
     process.stdout.write(JSON.stringify(result) + '\n');
   } catch {
-    process.stderr.write('Cloud cost local command refused.\n'); process.exitCode = 1;
+    process.stderr.write(['build', 'verify'].includes(argv[0]) ? 'Cloud cost public command refused.\n' : 'Cloud cost local command refused.\n'); process.exitCode = 1;
   } finally {
     if (abort) { process.removeListener('SIGINT', abort); process.removeListener('SIGTERM', abort); }
   }

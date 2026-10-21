@@ -1,4 +1,4 @@
-import { validateInput } from './schema.mjs';
+import { validateInput } from './input.mjs';
 
 const requireThat = value => { if (!value) throw new Error('Invalid cloud cost model'); };
 function safeError(error) {

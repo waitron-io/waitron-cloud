@@ -52,7 +52,7 @@ function fixture(run, alter = () => {}) {
 test('backend-only changes omit the unchanged pure milestone receipt and preserve all other work', () => {
   fixture(({plan}) => {
     const result = plan();
-    assert.deepEqual(result.receipts, ['test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt']);
+    assert.deepEqual(result.receipts, ['test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt','test:cloud-cost']);
     assert.equal(result.packages.length, 17);
     assert.equal(result.typecheck, true);
     assert.match(result.reason, /unchanged audited milestone inputs/i);

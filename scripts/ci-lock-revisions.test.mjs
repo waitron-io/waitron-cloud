@@ -31,7 +31,7 @@ function fixture(run) {
 
 function assertFull(plan) {
   assert.deepEqual(plan.packages, ['catalogue', 'page', 'unrelated'].map(packageName => ({package: packageName, shard: 1})));
-  assert.equal(plan.receipts.length, 5);
+  assert.equal(plan.receipts.length, 6);
   assert.equal(plan.typecheck, true);
   assert.equal(plan.reuse, null);
 }

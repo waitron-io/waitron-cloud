@@ -9,6 +9,7 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && pnpm --dir apps/portal typecheck && pnpm --dir packages/ui-smoke typecheck",
     "test": "node scripts/test-postgres.mjs",
+    "test:cloud-cost": "node --test --test-concurrency=1 scripts/cloud-cost/*.test.mjs && node scripts/cloud-cost/cli.mjs verify",
     "test:registration": "pnpm --filter @waitron-cloud/registration test",
     "test:abuse": "node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test --test-timeout=120000 test/abuse-receipt.test.ts test/abuse-boundaries.test.ts",
     "test:worker-scheduling": "node --test packages/registration/test/worker-loop.test.ts scripts/verify-worker-scheduling-receipt.test.mjs",

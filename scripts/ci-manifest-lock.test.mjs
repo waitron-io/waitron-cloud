@@ -62,7 +62,7 @@ function fixture(run) {
 
 function selected(plan, names = ['catalogue', 'page']) {
   assert.deepEqual(plan.packages, names.map(packageName => ({package: packageName, shard: 1})));
-  assert.equal(plan.receipts.length, 5);
+  assert.equal(plan.receipts.length, 6);
   assert.equal(plan.typecheck, true);
   assert.equal(plan.reuse, null);
 }

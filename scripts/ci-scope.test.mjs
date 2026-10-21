@@ -27,11 +27,11 @@ test('actual manifests resolve portal alone and identity dependents without a ha
   assert.deepEqual(scopeForPaths(['packages/identity/src/index.ts'], real).packages,
     ['@waitron-cloud/account-http','@waitron-cloud/backups','@waitron-cloud/fiscal-allocation','@waitron-cloud/identity','@waitron-cloud/operations','@waitron-cloud/portal','@waitron-cloud/registration','@waitron-cloud/remote-access','@waitron-cloud/translation','@waitron-cloud/ui-smoke']);
 });
-test('actual work plans preserve all seventeen nonempty package shards and five receipts', () => {
+test('actual work plans preserve all seventeen nonempty package shards and six receipts', () => {
   const real = loadWorkspace();
   const full = workPlan(scopeForPaths(['pnpm-lock.yaml'], real), real);
   assert.equal(full.packages.length, 17);
-  assert.equal(full.receipts.length, 5);
+  assert.equal(full.receipts.length, 6);
   assert.equal(full.typecheck, true);
   const portal = workPlan(scopeForPaths(['apps/portal/src/app.ts'], real), real);
   assert.deepEqual(portal.packages, [1,2,3].map(shard=>({package:'@waitron-cloud/portal',shard,shards:3})));
@@ -47,10 +47,10 @@ test('relative sibling imports include their actual test consumers',()=>{
     ['registration','operations'], ['operations','registration'],
   ]) assert.ok(scopeForPaths([`packages/${changed}/src/change.ts`],real).packages.includes(`@waitron-cloud/${consumer}`),`${changed} must test ${consumer}`);
 });
-test('backend work keeps all five receipts and no selected shard can be empty',()=>{
+test('backend work keeps all six receipts and no selected shard can be empty',()=>{
   const real=loadWorkspace();
   assert.deepEqual(workPlan({full:false,packages:['@waitron-cloud/operations']},real).receipts,
-    ['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt']);
+    ['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt','test:cloud-cost']);
   const empty=[{name:'@waitron-cloud/portal',directory:'packages/identity',scripts:{test:'node --test'}}];
   assert.throws(()=>workPlan({full:false,packages:['@waitron-cloud/portal']},empty),/empty test shard/);
 });

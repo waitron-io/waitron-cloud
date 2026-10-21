@@ -1477,6 +1477,31 @@ notifications separately.
   vector, independent synthetic generation, the owned-resource runner and cleanup,
   durable billing reader and live/billing commands remain open. The accepted
   component projection cannot substitute for that daily vector.
+  The [offline calculator](cloud-cost-calculator.html) and
+  [model explanation](cloud-cost-model.md) now expose priced subtotals for zero,
+  1, 10, 100 and 1,000 venues, with separate platform and venue quantities.
+  Every total remains incomplete and each required capability stays named as a
+  gap. Editable assumptions cover region, sales, archive retention, owner sessions,
+  resource capacities, disks, keys and traffic. Whole gateway and database steps,
+  separate startup/idle work, aggregate request pricing and calendar archive growth
+  use the same validated arithmetic in Node and the browser. The month-one archive
+  forecast is an alternative to the later retention window, never an extra charge
+  in that window. Missing billing terms remain unknown even when usage is known.
+  The page works offline in English and Spanish, light and dark, at 390 and 1280
+  pixels. Source dates, revisions, line quantities and the complete capability
+  inventory are available beside the incomplete estimate.
+  The [trial assessment](cost-model/live-check.json) explicitly stops before any
+  provider creation. Its incomplete object/lifetime, schedule, retry and billing
+  bounds cannot authorise a run. The illustrative high-cadence workload component
+  alone projects 130,000 requests above the 10,000 cap; that scenario is assumed,
+  not a proved upper bound on actual traffic. All 342 source attempts and their
+  separate phases remain attached. No resources or synthetic payloads were created
+  for this trial and no billing read is due for it. The earlier storage rehearsal
+  and its follow-ups remain separate. Public `build` and `verify` commands compare
+  the generated artifacts without opening private sources or contacting a provider.
+  CI now includes the synthetic cost suite alongside the five prior receipt suites.
+  Provider validation, representative activity, missing regional billing terms,
+  complete storage forecasts and a complete operating total remain open.
   The fiscal timeout fixture now advances its 50 ms deadline
   only after the provider admits the request, so a delayed event loop cannot skip
   the response path or wait forever for an already expired request. A controlled
