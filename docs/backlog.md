@@ -1330,9 +1330,13 @@ notifications separately.
   refusals currently mask their removal. The regular-file defenses have a paired
   removal control. Keep the refusal assertions when simplifying these redundant
   checks. Keep the renewal recipe's explicit manifest patterns aligned with
-  discovered workspace members; a mismatch currently retains full work. Add
-  changed manifest owners to the lock-specific reason when improving diagnostics;
-  the preceding selected-package list already includes them. The plan also requires measured
+  discovered workspace members; a mismatch currently retains full work. The
+  lock-specific explanation now lists changed package manifests separately from
+  changed resolved dependency inputs, so you can see why a manifest owner runs
+  even when its resolved inputs did not change. Saved-revision checks cover
+  single and multiple manifests, overlap with a changed resolved importer and
+  lock-only changes without edited manifests. Package selection, audits,
+  fallback, compiler and receipt checks retain their existing behavior. The plan also requires measured
   grouping to reduce the full run toward 55 rounded job-minutes while keeping
   each work job near five minutes. The historical D66/D67 full-run samples used 72 and
   73 minutes; these are timestamp-based rounding estimates, not invoices.

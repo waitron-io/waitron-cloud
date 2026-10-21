@@ -17,5 +17,6 @@ export function lockPackageScope(base, head, workspace, git, changedPaths = ['pn
   assert.ok(importers.length && !importers.includes('.'), 'Root or unchanged lock inputs require full work');
   const scope = scopeForRevisions([...new Set([...importers.map(id => `${id}/package.json`), ...changedPaths.filter(path => manifests.includes(path))])], workspace, base, head, git);
   assert.equal(scope.full, false, 'Unknown lock package consumer');
-  return {scope, reason: `pnpm-lock.yaml: audited package selection for resolved dependency inputs changed for ${importers.join(', ')}; all compiler and receipt checks retained`};
+  const changedManifests = changedPaths.filter(path => manifests.includes(path)).sort();
+  return {scope, reason: `pnpm-lock.yaml: audited package selection for resolved dependency inputs changed for ${importers.join(', ')}${changedManifests.length ? `; changed manifests: ${changedManifests.join(', ')}` : ''}; all compiler and receipt checks retained`};
 }
