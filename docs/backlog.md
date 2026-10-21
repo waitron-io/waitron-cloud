@@ -1140,6 +1140,13 @@ notifications separately.
   [Cloud implementation plan](superpowers/plans/2026-10-21-cloud-backup-verification.md)
   covers strict result admission, stored evidence, current target qualification,
   historical retention and version-bound recovery across all existing readers.
+  Cloud now has dormant strict request/result readers and a complete target manifest
+  exported from the compiled pinned Waitron bundle. The literal protocol vector
+  matches Waitron's request digest; the manifest includes all 15 owners and binds
+  package, dependency, migration and policy data to that release. These encoding
+  and admission checks do not verify an archive. Child integration, stored evidence,
+  recovery v2 and the genuine joint proof remain unfinished; snapshots stay
+  unavailable and deployment enforcement stays off.
   The PR5 adapters are reconciled with current main, preserving their earlier
   storage, account, remote and controller behavior and historical test evidence.
   Target-bound verification integration, real isolation and cleanup checks, and a
