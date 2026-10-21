@@ -67,7 +67,7 @@ test('the final stack group excludes earlier groups in the real runner', async (
   const {runTests, conformanceMatrix}=await import('./conformance.mjs');
   const root=mkdtempSync(join(tmpdir(),'cloud-conformance-final-group-'));
   try {
-    const file=join(root,'cases.mjs');
+    const file=join(root,'stack-conformance.test.mjs');
     writeFileSync(file,"import {test} from 'node:test'; test('completeSyntheticStackRunsRealServicesAndCleansOnlyItsOwnedResources',()=>{throw Error('first group ran');}); test('genuineLitestreamTransportBodyBytesAgreeWithSeparateStorageObserver',()=>{throw Error('second group ran');}); test('futureStackCheck',()=>{});");
     const {pattern,skipPattern}=conformanceMatrix().filter(row=>row.file==='stack-conformance.test.mjs')[2];
     const result=await runTests([file],{pattern,skipPattern,stdio:'pipe'});

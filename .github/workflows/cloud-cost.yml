@@ -61,9 +61,12 @@ jobs:
           p=Path('scripts/cloud-cost/local.mjs')
           s=p.read_text().replace('  } catch { await close?.(); fail(); }', '  } catch(error) { console.error("GENERATED_STARTUP_DIAGNOSTIC", error.stack); await close?.(); fail(); }')
           p.write_text(s)
+          p=Path('scripts/cloud-cost/schema.mjs')
+          s=p.read_text().replace('  } catch { fail(); }\n}', '  } catch(error) { console.error("GENERATED_SCHEMA_DIAGNOSTIC", error.stack); fail(); }\n}')
+          p.write_text(s)
           for p in Path('scripts/cloud-cost/fixtures').glob('remote*-conformance.test.mjs'):
             s=p.read_text().replace("'--log-driver=none'", "'--log-driver=local'")
-            s=s.replace('  } finally {\n', '  } finally {\n    for(const id of containers) { try { console.error("GENERATED_GATEWAY_DIAGNOSTIC", docker("logs", "--tail", "15", id)); } catch {} }\n')
+            s=s.replace('  } finally {\n', '  } finally {\n    for(const id of containers) { try { execFileSync("docker", ["logs", "--tail", "15", id], {stdio:"inherit", timeout:5000}); } catch {} }\n')
             p.write_text(s)
           PY
       - run: pnpm test:cloud-cost:conformance --only '${{ matrix.file }}' --pattern '${{ matrix.pattern }}' --skip-pattern '${{ matrix.skipPattern }}'
