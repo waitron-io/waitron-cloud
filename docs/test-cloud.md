@@ -64,26 +64,6 @@ The first proof starts a separate disposable Mac project with random loopback po
 
 These HTTPS checks do not establish an amd64 test-box deployment, a connected Waitron venue, public remote access or measured box capacity. The separate storage proof below exercises free/paid withdrawal with signed Cloud clients. The final deployment runbook will add the two-organisation connection steps after those proofs pass. Keep the quarantined test-box venue and its containers unchanged.
 
-## Backup verifier boundary
-
-The owner-approved [backup-verification contract](superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md)
-checks whether an archive restores its data without giving Cloud permission to
-activate a fiscal server. Its worked examples describe required outcomes, not
-executed results. Earlier local PR5 candidate receipts reached genuine encrypted
-capture and signed publication, then ordinary fiscal restore refused with
-`restore.hook_failed / sif.allocation_invalid / reauthentication_required`.
-That candidate code remains unpublished; this design publication adds no verifier.
-
-Waitron A850's interface landed in
-[#1939](https://github.com/clintongormley/waitron/pull/1939) at
-`5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa`. The
-[Cloud implementation plan](superpowers/plans/2026-10-21-cloud-backup-verification.md)
-covers the remaining result validation, catalogue and recovery integration.
-The interface's source release does not qualify a Cloud image or snapshot.
-Keep snapshots unavailable and deployment
-enforcement off until the implementation, full integration proof and release gates
-pass. Ordinary fiscal restore still requires its existing activation authority.
-
 ## Direct storage authority
 
 A plan change must reach storage itself because a venue can keep writing with credentials it already holds. The new private adapter records separate stream writer and recovery-reader identities, then publishes the storage permissions and checks them with signed requests. A downgrade disables the writer without discarding stored objects or its recovery reader. Explicit provisioning after an upgrade creates a fresh writer.
@@ -111,7 +91,7 @@ TEST_CLOUD_REAL_STS_EXPIRY=1 node --test \
 
 Use `TEST_CLOUD_STS_EXPIRY_SECONDS=12` only for a short diagnostic of the provider's refusal. The output labels it separately; it cannot count as the fifteen-minute proof. The S3 request after an issued credential expires must return `403 InvalidAccessKeyId`. An expired identity token at the STS endpoint has a different error.
 
-The corrected fifteen-minute proof passed on 18 October 2026. Its write was accepted before the recorded `02:43:00Z` expiry; the request at `02:43:01.013Z` returned `403 InvalidAccessKeyId`. This measures an issued credential at the native storage boundary. The earlier run with an incorrect error predicate remains failed evidence; the short diagnostic is separate. The delivered container proof above also obtains and uses a real scoped grant from the persistent issuer, but it does not repeat the full-duration wait.
+The corrected fifteen-minute proof passed on 18 October 2026. Its write was accepted before the recorded `02:43:00Z` expiry; the request at `02:43:01.013Z` returned `403 InvalidAccessKeyId`. This measures an issued credential at the native storage boundary. The earlier run with an incorrect error predicate remains failed evidence; the short diagnostic is separate. The delivered container proof below also obtains and uses a real scoped grant from the persistent issuer, but it does not repeat the full-duration wait.
 
 The dedicated storage process now runs the persistent issuer and SeaweedFS in the same container. Both use the private configuration volume. Inside the project, `waitron.local` resolves to storage; clients receive `https://waitron.local:8333` with the same trusted LAN CA. Account and storage containers have no Docker socket. The account asks for reload through a private Unix socket, a local connection stored in that volume. The storage process signals only the child it started, then the adapter verifies the changed permissions with signed requests.
 
@@ -151,6 +131,26 @@ The gateway ports remain on loopback. This proof does not connect the quarantine
 
 ## Backup verifier boundary
 
+The owner-approved [backup-verification contract](superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md)
+checks whether an archive restores its data without giving Cloud permission to
+activate a fiscal server. Its worked examples describe required outcomes, not
+executed results. Earlier local PR5 candidate receipts reached genuine encrypted
+capture and signed publication, then ordinary fiscal restore refused with
+`restore.hook_failed / sif.allocation_invalid / reauthentication_required`.
+The adapters have been reconciled with current Cloud main. Their earlier runtime
+receipts remain historical evidence; reconciliation does not establish the new
+verification path.
+
+Waitron A850's interface landed in
+[#1939](https://github.com/clintongormley/waitron/pull/1939) at
+`5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa`. The
+[Cloud implementation plan](superpowers/plans/2026-10-21-cloud-backup-verification.md)
+covers the remaining result validation, catalogue and recovery integration.
+The interface's source release does not qualify a Cloud image or snapshot.
+Keep snapshots unavailable and deployment
+enforcement off until the implementation, full integration proof and release gates
+pass. Ordinary fiscal restore still requires its existing activation authority.
+
 An interrupted worker must recover its own verifier without removing another venue's or project's container. The dedicated test worker holds one database session lock, records each create attempt in its private volume, and uses the recorded container ID for attachment, inspection and deletion. Removal checks the owner, private project scope, attempt token and pinned image. An uncertain create reply keeps the attempt reserved; a missing journal over an existing child stops startup. After the sixty-second ownership deadline, startup can reclaim the exact recorded attempt. You must resolve an ownership refusal before restarting; deleting the journal does not authorise cleanup.
 
 The trusted controller requires the Docker socket. The untrusted restore child receives no socket, network or host mount. Its memory is capped at 1,024 MiB, including a 256 MiB scratch filesystem. The image must have a complete image ID and the pinned Waitron revision label. The ordinary verifier retains its existing path. The backup profile remains unavailable in the deployment override, which still grants no Docker socket.
@@ -170,10 +170,7 @@ TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
   node --test deploy/test-cloud/snapshot-proof.test.mjs
 ```
 
-The disposable fixture captures an encrypted archive with genuine Waitron code at `e52c997c02d2fcd66d0e7239cbfd79ced4ddd0ee`, uploads it using scoped credentials and publishes it through the signed account API. Cloud now reads that revision's validated database file instead of assuming it returns database bytes. The subsequent restore hook refuses with `restore.hook_failed` / `sif.allocation_invalid`: Waitron's fiscal restore requires an authorised allocation operation. The Cloud verifier supplies none. A separate verification contract must settle that authority before you can mark this proof green. Do not skip the hook, mint an allocation automatically or enable the deployment to bypass the refusal.
+The disposable fixture captures an encrypted archive with genuine Waitron code at `e52c997c02d2fcd66d0e7239cbfd79ced4ddd0ee`, uploads it using scoped credentials and publishes it through the signed account API. Cloud now reads that revision's validated database file instead of assuming it returns database bytes. The historical run then refused with `restore.hook_failed` / `sif.allocation_invalid`: ordinary fiscal restore requires an authorised allocation operation. The Cloud verifier supplies none. That failure remains recorded. Integrate A850's approved data-only verification interface and repeat the full proof before claiming success. Ordinary recovery still needs its existing separate authority. Do not skip the hook, mint an allocation automatically or enable the deployment to bypass the refusal.
 
-The proposed [backup-verification contract](superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md)
-separates recovery checks from permission to activate a server. It requires owner
-approval and a separately owned Waitron implementation before Cloud can use it.
-Keep snapshots unavailable and deployment enforcement off until the contract and
-the complete integration proof pass their gates.
+Keep snapshots unavailable and deployment enforcement off until the remaining Cloud
+implementation, complete integration proof and release gates pass.

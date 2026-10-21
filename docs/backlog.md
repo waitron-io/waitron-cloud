@@ -1140,9 +1140,11 @@ notifications separately.
   [Cloud implementation plan](superpowers/plans/2026-10-21-cloud-backup-verification.md)
   covers strict result admission, stored evidence, current target qualification,
   historical retention and version-bound recovery across all existing readers.
-  The parked PR5 adapters still need reconciliation, implementation, real isolation
-  and cleanup checks, and a joint capture-to-recovery proof against the implementing
-  runtime with the continuous source absent. A source release does not establish
+  The PR5 adapters are reconciled with current main, preserving their earlier
+  storage, account, remote and controller behavior and historical test evidence.
+  Target-bound verification integration, real isolation and cleanup checks, and a
+  joint capture-to-recovery proof against the implementing runtime with the
+  continuous source absent remain due. A source release does not establish
   a published verifier image or qualify any snapshot. Snapshots
   remain unavailable on this test deployment, and enforcement stays off until the
   implementation, evidence and release gates pass.

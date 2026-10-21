@@ -120,19 +120,21 @@ Ordinary fiscal activation authority is unchanged.
 - [ ] Extract/adapt the existing local proof mechanisms without exporting storage admin secrets. Persist writer/reader identities separately and reload only the owned SeaweedFS IAM configuration on withdrawal; retry pending withdrawal after restart. Preserve recovery readers privately, prevent new free grants, and measure bounded old STS exposure. Wire account backup authority, a scoped verifier image/controller and the test remote reconciler with local CA/DNS inputs. Leave ordinary local stack/profiles unchanged; gateway health must no longer assume zero routes in this opt-in project.
 - [ ] Re-run real boundary tests and restart/withdrawal proofs to green; remove critical plan/scope/withdrawal guards in a disposable installed copy and observe failures. Audit verifier child labels/IDs and all Docker actions against the quarantine restriction. Finish with whole-workspace suites if scripts changed, otherwise all touched/dependant packages; finish/land. If existing wire cannot support the proof, give the parent the exact incompatibility instead of designing a new action.
 
-PR 5 checkpoint: persistent storage/account authority, real fifteen-minute expiry,
-volume-backed remote reconciliation and the delivered gateway's live certificate
-replacement/downgrade/restart proofs now pass. The backup worker selects the canonical
-storage endpoint and LAN CA in enabled mode. Its scoped verifier/controller, pinned
-Waitron image and paid snapshot verification remain before PR 5 review and landing.
-The scoped controller and file-backed archive adapter are implemented and locally
-tested. Genuine snapshot capture/publication reaches the pinned Waitron fiscal
-restore hook, which refuses `sif.allocation_invalid`; the verifier supplies no
-authorised allocation operation. PR 5 is blocked pending an explicitly agreed
-verification contract. The owner selected a separate contract that grants Cloud
-no fiscal authority. The [design proposal](../specs/2026-10-18-backup-verification-without-fiscal-authority.md)
-needs approval and a Waitron implementation before Cloud adapter work can use it.
-Do not skip that hook or grant fiscal writes implicitly.
+PR 5 checkpoint: the persistent storage/account authority, real fifteen-minute expiry,
+volume-backed remote reconciliation and gateway certificate replacement/downgrade/
+restart proofs passed in the earlier candidate. The backup worker selects the
+canonical storage endpoint and LAN CA in enabled mode. Its scoped controller and
+file-backed archive adapter are implemented and locally tested. These adapters
+have been reconciled with current Cloud main, preserving their original code and
+historical receipts.
+
+The earlier genuine snapshot capture/publication reached ordinary fiscal restore,
+which refused `sif.allocation_invalid` because the verifier supplied no authorised
+allocation operation. That refusal remains recorded. The owner-approved verification
+contract and landed Waitron A850 interface now permit the remaining Cloud integration
+under the linked implementation plan. Target-bound admission/recovery, image
+qualification, the joint proof and PR5 whole-branch review/CI/landing remain due.
+Do not skip the ordinary recovery hook or grant fiscal writes implicitly.
 The backup profile remains unavailable. Deployment enforcement stays off.
 Current runner instructions assign required package
 suites to CI and retire this plan's earlier local-full-suite and CI-cost instructions.
