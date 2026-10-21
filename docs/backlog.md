@@ -1148,9 +1148,15 @@ notifications separately.
   attempt bindings, keeps historical verdicts separate, and supplies a current
   qualification view. Old successful checks retain their retention protection but
   gain no current qualification. The policy starts empty with its release gate
-  closed; old recovery requests gain no target identity. Child integration,
-  transactional admission, recovery v2 and the genuine joint proof remain
-  unfinished; snapshots stay unavailable and deployment enforcement stays off.
+  closed; old recovery requests gain no target identity. A dormant native runner
+  now sends the request and matching key in separate bounded private frames and
+  calls only the compiled verification bundle. Its result is checked after process
+  exit and private scratch cleanup. A pinned-bundle probe matches all 15 owners,
+  refuses synthetic invalid archive bytes and a missing migration journal, then
+  repeats after restoring that journal. This is invocation evidence, not genuine
+  archive success or Docker isolation. Container/controller binding, transactional
+  admission, recovery v2 and the genuine joint proof remain unfinished; snapshots
+  stay unavailable and deployment enforcement stays off.
   The PR5 adapters are reconciled with current main, preserving their earlier
   storage, account, remote and controller behavior and historical test evidence.
   Target-bound verification integration, real isolation and cleanup checks, and a

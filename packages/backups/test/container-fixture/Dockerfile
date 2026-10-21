@@ -1,6 +1,6 @@
 FROM node:26
 WORKDIR /verifier
-COPY packages/backups/src/verify-process.ts packages/backups/src/waitron-verifier.ts packages/backups/src/waitron-verify-child.mjs packages/backups/src/container-entry.mjs ./
+COPY packages/backups/src/verify-process.ts packages/backups/src/waitron-verifier.ts packages/backups/src/waitron-verify-child.mjs packages/backups/src/container-entry.mjs packages/backups/src/verification-protocol.ts packages/backups/src/verification-transport.ts packages/backups/src/waitron-data-verify-child.mjs ./
 RUN mkdir -p /waitron/apps/server/src /waitron/apps/server/node_modules/tsx \
  && echo '{"type":"module"}' > /waitron/apps/server/package.json \
  && echo '{"name":"tsx","type":"module","exports":"./loader.mjs"}' > /waitron/apps/server/node_modules/tsx/package.json \

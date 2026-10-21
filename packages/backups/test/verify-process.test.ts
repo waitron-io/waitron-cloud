@@ -70,3 +70,37 @@ test('a timed-out verifier is reaped before temporary files are cleaned',async()
   pid=Number(await readFile(pidFile,'utf8'));assert.throws(()=>process.kill(pid,0));
  }finally{if(pid)try{process.kill(pid,'SIGKILL');}catch{/* Already reaped. */}await rm(root,{recursive:true,force:true});}
 });
+
+// These cases catch permissive decoding or parsing before the process is reaped.
+const boundRequest=JSON.parse(await readFile(new URL('./fixtures/verification-vector.json',import.meta.url),'utf8'));
+const boundResult={protocol:'backup-data-restore/v1',requestDigest:'ecac239bf44b948246432671c1f896219d079c9a3a11b1e3a96d7bd6240e786a',attemptToken:'child-1',measuredArchive:{sha256:'1'.repeat(64),bytes:8388608},targetDigest:boundRequest.target.digest,policyDigest:boundRequest.target.policyDigest,modules:['core','orders'].map(name=>({name,semanticsVersion:1,status:'passed',checks:[{code:'data',status:'passed'}]})),status:'passed',reason:'none',activation:'not_attempted'};
+const boundRun=(raw:string)=>runNodeVerifier(['-e',`process.stdout.write(${JSON.stringify(raw)})`],{input:{},boundRequest});
+test('exit_zero_without_bound_output_refused',async()=>{
+ for(const raw of ['', '{}', JSON.stringify({...boundResult,requestDigest:'0'.repeat(64)}),JSON.stringify({...boundResult,attemptToken:'foreign'}),JSON.stringify({...boundResult,modules:[]}),JSON.stringify({...boundResult,activation:'attempted'}),JSON.stringify(boundResult).slice(0,-1)])await assert.rejects(boundRun(raw),/^Error: backup.verifier_output$/);
+ assert.deepEqual(await boundRun(JSON.stringify(boundResult)),boundResult);
+});
+test('bound output refuses duplicate decoded keys and noncanonical numbers before parsing',async()=>{
+ const raw=JSON.stringify(boundResult);
+ for(const bad of [raw.replace('"bytes":8388608','"bytes":8.388608e6'),raw.replace('"attemptToken":"child-1"','"attemptToken":"foreign","attempt\\u0054oken":"child-1"'),raw.replace('"measuredArchive":{','"measuredArchive":{"bytes":1,')])await assert.rejects(boundRun(bad),/^Error: backup.verifier_output$/);
+});
+test('bound output refuses malformed UTF-8 and over-limit split output before decoding',async()=>{
+ const prefix=Buffer.from(JSON.stringify(boundResult).slice(0,-1)+',"ignored":"');
+ await assert.rejects(runNodeVerifier(['-e',`process.stdout.write(Buffer.from(${JSON.stringify([...prefix])}));process.stdout.write(Buffer.from([0xc0]));setImmediate(()=>process.stdout.write(Buffer.from([0xaf,34,125])))`],{input:{},boundRequest}),/^Error: backup.verifier_output$/);
+ await assert.rejects(boundRun(JSON.stringify(boundResult)+' '.repeat(32768)),/^Error: backup.verifier_output$/);
+});
+test('a valid bound result is not admitted before a later process failure or cancellation',async()=>{
+ await assert.rejects(runNodeVerifier(['-e',`process.stdout.write(${JSON.stringify(JSON.stringify(boundResult))});process.exitCode=3`],{input:{},boundRequest}),/^Error: backup.verifier_failed$/);
+ await assert.rejects(runNodeVerifier(['-e',`process.stdout.write(${JSON.stringify(JSON.stringify(boundResult))});setInterval(()=>{},1000)`],{input:{},boundRequest,timeoutMs:100}),/^Error: backup.verifier_timeout$/);
+});
+test('streamed private stdin preserves binary bytes without inheriting secrets',async()=>{
+ const inputStream=(async function*(){yield Buffer.from([0,255]);yield Buffer.from([1,2]);})();
+ assert.deepEqual(await runNodeVerifier(['-e',"const chunks=[];process.stdin.on('data',c=>chunks.push(c));process.stdin.on('end',()=>console.log(JSON.stringify([...Buffer.concat(chunks)])))"],{inputStream}),[0,255,1,2]);
+ await assert.rejects(runNodeVerifier(['-e',''],{input:{},inputStream:(async function*(){})()}),/^Error: backup.verifier_input$/);
+ await assert.rejects(runNodeVerifier(['-e',"process.stdin.resume()"],{inputStream:(async function*(){yield Buffer.from([1]);throw Error('private input failure')})()}),/^Error: backup.verifier_input$/);
+});
+test('the bound stdout limit is enforced before waiting for process close',async()=>{
+ await assert.rejects(runNodeVerifier(['-e',"process.stdout.write(' '.repeat(32769));setInterval(()=>{},1000)"],{input:{},boundRequest,timeoutMs:1000}),/^Error: backup.verifier_output$/);
+});
+test('invalid stream configuration refuses before a child can start',async()=>{
+ await assert.rejects(runNodeVerifier(['-e',''],{inputStream:{} as never}),/^Error: backup.verifier_input$/);
+});

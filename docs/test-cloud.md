@@ -147,6 +147,13 @@ Waitron A850's interface landed in
 [Cloud implementation plan](superpowers/plans/2026-10-21-cloud-backup-verification.md)
 covers the remaining result validation, catalogue and recovery integration.
 The interface's source release does not qualify a Cloud image or snapshot.
+You can exercise the dormant native runner with
+`pnpm --dir packages/backups exec node --test test/bound-waitron-verifier.test.ts test/verification-transport.test.ts test/verify-process.test.ts`.
+It sends separate private request and key frames, checks the compiled target, and
+validates output after process exit and scratch cleanup. The native path returns
+only a data result; it cannot supply trusted Docker ownership evidence. Its pinned
+bundle probe refused synthetic invalid bytes and a missing migration journal.
+Container/controller binding and genuine archive success remain due.
 Keep snapshots unavailable and deployment
 enforcement off until the implementation, full integration proof and release gates
 pass. Ordinary fiscal restore still requires its existing activation authority.
