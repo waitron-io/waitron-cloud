@@ -1,4 +1,26 @@
 import {spawn} from 'node:child_process';
+function fatalHeapDetector(){
+ const prefix='fatal error: ';
+ let matched=0,fatalLine=false,tail='',found=false;
+ return (text:string)=>{
+  if(found)return true;
+  for(const character of text){
+   if(character==='\n'){matched=0;fatalLine=false;tail='';continue;}
+   if(!fatalLine){
+    if(matched>=0){
+     if(character.toLowerCase()!==prefix[matched])matched=-1;
+     else if(++matched===prefix.length)fatalLine=true;
+    }
+   }else if(character==='\r'){fatalLine=false;matched=-1;tail='';}
+   else{
+    // The longest heap phrase is 18 characters; retain its boundary without rescanning the line.
+    tail=(tail+character).slice(-18);
+    if(/heap out of memory|heap limit/i.test(tail)){found=true;return true;}
+   }
+  }
+  return false;
+ };
+}
 interface VerifierLimits {cpuSeconds?:number;maxFileBytes?:number;maxOpenFiles?:number;heapMiB?:number;}
 export async function runNodeVerifier(args:string[],options:{input:unknown;timeoutMs?:number;signal?:AbortSignal;cwd?:string;readablePaths?:string[];writablePaths?:string[];allowWorker?:boolean;limits?:VerifierLimits}):Promise<unknown>{
  const timeout=options.timeoutMs??30000;
@@ -17,6 +39,7 @@ export async function runNodeVerifier(args:string[],options:{input:unknown;timeo
   const fileLimitUnit=process.platform==='darwin'?1024:512;
   const child=spawn('/bin/sh',['-c',limits,'verifier-limits',String(cpuSeconds),String(Math.ceil(maxFileBytes/fileLimitUnit)),String(maxOpenFiles),process.execPath,...nodeArgs],{cwd:options.cwd,env:{TSX_DISABLE_CACHE:'1'},detached:true,stdio:['pipe','pipe','pipe']});
   let output='',errors='',size=0,failure:string|undefined,closed=false;
+  const detectsFatalHeap=fatalHeapDetector();
   const kill=()=>{if(closed)return;try{if(child.pid)process.kill(-child.pid,'SIGKILL');else child.kill('SIGKILL');}catch{/* The process may already have exited. */}};
   const fail=(code:string)=>{failure??=code;kill();};
   const abort=()=>fail('backup.verifier_cancelled');options.signal?.addEventListener('abort',abort,{once:true});
@@ -24,9 +47,9 @@ export async function runNodeVerifier(args:string[],options:{input:unknown;timeo
   const collect=(bytes:Buffer,stdout:boolean)=>{
    size+=bytes.length;if(size>65536){fail('backup.verifier_output');return;}
    if(stdout)output+=bytes.toString('utf8');else{
-    errors+=bytes.toString('utf8');
+    const text=bytes.toString('utf8');errors+=text;
     // Fatal heap exhaustion is final; kernel crash collection can delay process exit past the watchdog.
-    if(/(?:^|\n)FATAL ERROR: [^\r\n]*(?:heap out of memory|heap limit)/i.test(errors))fail('backup.verifier_resource');
+    if(detectsFatalHeap(text))fail('backup.verifier_resource');
    }
   };
   child.stdout.on('data',bytes=>collect(bytes,true));child.stderr.on('data',bytes=>collect(bytes,false));

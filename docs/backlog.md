@@ -2779,9 +2779,12 @@ notifications separately.
   that would otherwise return valid JSON. Qualify untrusted diagnostic forwarding
   before expanding this trusted-local-archive adapter's scope. The reviewer also
   measured about 0.2–0.6 seconds of extra parent CPU for 40,000 one-byte stderr
-  writes from rescanning the accumulated text. The existing 64 KiB output limit
-  bounds this work. A separately tested incremental detector is an efficiency
-  follow-up; preserve split-line detection, the line-start anchor and output ordering.
+  writes from rescanning the accumulated text. The detector now reads each new
+  chunk once and retains at most 18 characters for a heap phrase split across
+  chunks. A real-child fixture delivers 40,000 stderr bytes one at a time and
+  bounds the text scanned, while separate cases retain the line-start anchor,
+  split phrases, case handling and carriage-return/newline boundaries. The original
+  process checks, combined 64 KiB output limit and failure ordering remain.
   Production host/kernel isolation, hostile native exploits, fleet sizing and large archives remain
   unverified; the process-only development adapter still lacks these total-resource bounds.
   The verifier distinguishes bounded infrastructure failures from archive verdicts:
