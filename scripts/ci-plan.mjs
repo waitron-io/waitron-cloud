@@ -65,23 +65,15 @@ export function createPlan(event, context, workspace, git, api) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
   const context = {sha:process.env.GITHUB_SHA,repository:process.env.GITHUB_REPOSITORY,branch:process.env.GITHUB_REF_NAME};
-  const git = (...args) => {
-    if (args[0]==='rev-parse' && /^[a-f0-9]{40}\^\{tree\}$/.test(args[1])) {
-      const sha=args[1].slice(0,40);
-      try { execFileSync('git',['cat-file','-e',sha],{stdio:'ignore',timeout:10_000}); }
-      catch { execFileSync('git',['fetch','--no-tags','origin',sha],{stdio:'ignore',timeout:30_000}); }
-    }
-    return execFileSync('git',args,{encoding:'utf8',timeout:30_000,stdio:['ignore','pipe','pipe']});
-  };
+  const git = (...args) => execFileSync('git',args,{encoding:'utf8',timeout:30_000,stdio:['ignore','pipe','pipe']});
   git.readBlobs = readGitBlobs;
-  const api = path => JSON.parse(execFileSync('gh',['api',path],{encoding:'utf8',timeout:30_000,stdio:['ignore','pipe','ignore']}));
   // Warn on every plan, including paths that never enter the document selector.
   // Audit renewal requires explicit reader review; warnings never bypass admission checks.
   try { auditDocumentation(git('rev-parse', 'HEAD').trim(), git); }
   catch {
     console.log('::warning title=Documentation-only CI unavailable::Review changed executable inputs and renew scripts/ci-input-audit.json with --write-staged using docs/ci-documentation-audit.md. Docs-only changes retain full CI until reviewed.');
   }
-  const plan = createPlan(event,context,loadWorkspace(),git,api);
+  const plan = createPlan(event,context,loadWorkspace(),git);
   const outputs = {
     plan:JSON.stringify(plan), typecheck:String(plan.typecheck),
     documentation:String(Boolean(plan.documentation)),
