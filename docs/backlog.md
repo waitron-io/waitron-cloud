@@ -1398,6 +1398,18 @@ notifications separately.
   Keep the four-second assertion and fault-injection ordering checks unchanged;
   passing repeats alone do not explain a failure. See [the ordering receipt](#portal-lost-reply-test-ordering).
 
+- **CI job record publication.** GitHub can report a successful package group
+  before its jobs list shows every partition as completed. The summary waits up
+  to 60 seconds for observed unfinished records, polling every two seconds;
+  each API read and sleep stays within the remaining allowance. It still requires
+  every planned job exactly once with a successful final result. Missing or
+  duplicate jobs, unsuccessful groups, lookup errors, unexpected executed jobs
+  and unsuccessful final records fail. A record that never settles fails with
+  its job name; the summary job retains its two-minute limit. Run
+  `node --test scripts/ci-summary.test.mjs scripts/ci-cli.test.mjs` to check the
+  command and refusal paths. This handles bounded publication delay; it does not
+  turn a permanently unfinished record or a failed run into success.
+
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. The summary also checks the plan's
   package allocation against the planner's registered package names and shard
