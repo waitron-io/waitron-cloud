@@ -6,9 +6,11 @@ This documentation extends published #265 with the owner's local-device and publ
 customer access scope. It comes with the **Cloud step soon after go-live**, not
 go-live. Publication is not owner design approval; implementation and provider work
 remain blocked. The owner selected cold recovery on 2026-10-21. The
-[data-protection proposal D101](2026-10-22-cloud-data-protection-design.md) reconciles
-the known location, exit, support and key decisions; full approval and existing
-recovery/fiscal gates remain required.
+[D101 data-protection design](2026-10-22-cloud-data-protection-design.md) was approved
+on 2026-10-22 around 08:30 for build planning only, including its D88 data-protection
+direction. Its [roadmap](../plans/2026-10-22-cloud-data-protection.md) records the reviewed
+documentation milestone; implementation requires separate build authority. Broader D88 hosting/isolation/shared contracts
+and existing recovery/fiscal gates remain separate and open.
 
 You should be able to start a new venue with its main Waitron server in Cloud, or recover there after its local servers fail. Cloud supplies the place to run it, storage, connectivity and recovery coordination. Waitron decides whether a server may write sales or file fiscal records. **Promotion** enables a standby as the active writer; restoring a database does not confer that authority.
 
@@ -48,7 +50,7 @@ A dedicated virtual machine per venue is expected to give a stronger host bounda
 The owner's country-pack policy names each country's home and permitted backup regions;
 same-country hosting is not always possible. For Spain, venue data, logs and keys stay
 in AWS Europe (Spain), `eu-south-2`, with **one extra backup copy in another EU region**.
-D101 recommends Paris conditionally, with Spain key dependencies and no automatic
+D101 records approved Paris `eu-west-3`, subject to qualification, with Spain key dependencies and no automatic
 cross-region runtime failover. Menu translation remains disabled until D101’s
 separate input-eligibility rule is accepted. Any later eligible menu text must be
 minimised and contain no personal data; review/detection alone cannot establish that
@@ -143,7 +145,7 @@ Restarting the previous image is permitted only when Waitron proves schema compa
 
 Stream directly to independently provisioned object storage and retain separately recoverable encrypted snapshots. Losing a gateway, host, cell runtime or tenant disk must leave the recovery path available through the independent portal. Separate object scopes and deletion authority so losing the stream does not delete snapshots. A snapshot restores to its own capture time; do not fast-forward an archive with unrelated stream files.
 
-The adopted starting policy is daily snapshots for 30 days and monthly snapshots for 12 months, plus protection of the last verified snapshot while subscribed. Longer selected retention is a paid-policy candidate. Scheduling detail remains open. The owner selected full exit download, 90 days of read-only backup recovery and then deletion except Cloud's own billing records. [D101 section 6](2026-10-22-cloud-data-protection-design.md#6-make-cancellation-return-and-deletion-one-recorded-instruction) proposes the contract instruction, earlier verified deletion, fixed clock, concurrency, all-copy proof and key dependencies; those controls and legal exceptions remain unbuilt/unapproved. The subscribed last-verified-copy protection does not silently extend exit retention. Continuous hourly snapshots with 30-day retention are Cloud's existing working proposal; inspected Waitron `packages/stream/src/litestream.ts:78` instead emits `interval: 24h` and `retention: 168h`. Reconcile and measure that conflict, rather than asking the owner to choose an already adopted snapshot policy again.
+The adopted starting policy is daily snapshots for 30 days and monthly snapshots for 12 months, plus protection of the last verified snapshot while subscribed. Longer selected retention is a paid-policy candidate. Scheduling detail remains open. The owner selected full exit download, 90 days of read-only backup recovery and then deletion except Cloud's own billing records. [D101 section 6](2026-10-22-cloud-data-protection-design.md#6-make-cancellation-return-and-deletion-one-recorded-instruction) records the engineering design approved for planning: the contract instruction, earlier verified deletion, fixed clock, concurrency, all-copy proof and key dependencies. Those controls remain unbuilt; legal exceptions, KMS deletion-waiting policy and provider/runtime qualification remain open. The [D101 roadmap](../plans/2026-10-22-cloud-data-protection.md) separates their build slices and gates. The subscribed last-verified-copy protection does not silently extend exit retention. Continuous hourly snapshots with 30-day retention are Cloud's existing working proposal; inspected Waitron `packages/stream/src/litestream.ts:78` instead emits `interval: 24h` and `retention: 168h`. Reconcile and measure that conflict, rather than asking the owner to choose an already adopted snapshot policy again.
 
 Verification must restore the exact artifact in isolation without activation, filing, payment calls or customer messages, and record digest/generation, formats, verifier version, keys and outcome. A850's non-activating path and Cloud qualification must be pinned before admitting affected backups. Existing local receipts used then-current restore hooks; they do not qualify a later fiscal contract. Failed verification keeps the protected older copy and shows stale health.
 
@@ -153,8 +155,9 @@ The owner chose AWS's key service for machine-scoped restore/verification. Human
 access requires venue approval for each time-limited support session, or an emergency
 where the venue cannot trade and cannot be reached, limited to keeping it running.
 Every action must be logged and visible to the venue; report emergency actions straight
-afterward. D101 proposes a 24-hour default, denial/revocation/expiry and active-command
-handling, plus evidence for the single on-call owner. These are unbuilt controls, not
+afterward. D101 records the approved 24-hour maximum for one venue approval, shorter
+where practical and fresh approval to extend, plus denial/revocation/expiry, active-command
+handling and evidence for the single on-call owner. These are unbuilt controls, not
 an unconditional administrator decrypt route, a deployed KMS claim or fiscal authority.
 The source-level backup vault still takes a supplied master key; see D101's pinned
 [key and support inspection](2026-10-22-cloud-data-protection-design.md#5-give-machines-scoped-keys-and-people-accountable-sessions).
@@ -275,8 +278,12 @@ The driver checked the official [StatefulSet](https://kubernetes.io/docs/concept
 ## Full approval and remaining evidence
 
 The cold shape, country-pack location rule, exit policy and normal/emergency support
-routes are answered. D101 asks for full design approval once, with its detailed
-recommendations and numbered lawyer questions. Do not reopen these owner choices.
+routes are answered. The complete D101/D88 data-protection engineering design was
+approved on 2026-10-22 around 08:30 for build planning only; O1 is answered. Follow the
+[D101 roadmap](../plans/2026-10-22-cloud-data-protection.md) for separately reviewed
+planning. All six lawyer questions, AI eligibility acceptance, KMS deletion-waiting
+policy and provider/runtime proof remain open. Broader D88 hosting/isolation/shared
+contracts are not approved. Do not reopen the answered owner choices.
 Supplier/entity/location/transfer qualification, legal annexes, shared-host security
 and actual bilateral contract acceptance remain prerequisites. Set tolerated data
 loss, recovery time and promotion permissions from measured evidence, then packages

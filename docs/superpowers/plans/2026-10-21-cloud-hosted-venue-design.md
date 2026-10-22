@@ -5,9 +5,14 @@
 The owner selected cold startup/restore only when needed, country-pack location
 policy, full exit download with 90-day read-only backups, and approved-session or
 strict emergency support with AWS key-service custody. The
-[D101 proposal](../specs/2026-10-22-cloud-data-protection-design.md) reconciles those
-answers and proposes their missing enforcement. Do not ask the cold-versus-running
-question again. Full design approval is still pending; a build plan comes afterward.
+[D101 design](../specs/2026-10-22-cloud-data-protection-design.md) and its D88
+data-protection direction were approved on 2026-10-22 around 08:30 for build planning
+only. The [D101 roadmap](2026-10-22-cloud-data-protection.md) records the reviewed
+documentation milestone; implementation requires separate build authority. Its approved engineering choices
+include a 24-hour maximum per venue support approval, fresh approval to extend,
+conditional Paris `eu-west-3` backup and exit/retry/concurrency rules. O1 is answered.
+Broader D88 hosting/isolation/shared contracts remain unapproved; legal/provider/runtime
+proof and separate AI eligibility acceptance remain open. Do not reopen answered choices.
 Keep reliability/promotion and package/pricing decisions after measurement; D103 owns
 monitor/release/compute proposals. Daily/30-day and monthly/12-month snapshots have a
 starting policy; reconcile the continuous hourly/30-day proposal with Waitron's actual
@@ -31,11 +36,11 @@ Each numbered line sketches a conditional delivery boundary, not an executable i
    cookie/CSRF/replay and mutation status/retry semantics. Gate: actual consumer
    acceptance, no public `/api` wildcard, and separately agreed payment-provider or
    webhook scope if offered. The functional table is not an existing endpoint list.
-2. **Placement and isolation specification, documentation only.** After full D101 approval, supplier/location qualification and security approval, name country/cell/cluster/zone boundaries, shared-host versus dedicated-machine choice, resource quotas, credentials and recovery reserve. Gate: a reviewed data-flow and failure map names every shared dependency and leaves unverified capacity unknown.
+2. **Placement and isolation specification, documentation only.** After the D101 planning-only design approval, supplier/location qualification and separate security approval, name country/cell/cluster/zone boundaries, shared-host versus dedicated-machine choice, resource quotas, credentials and recovery reserve. Gate: a reviewed data-flow and failure map names every shared dependency and leaves unverified capacity unknown.
 3. **Cost-model scope extension.** After slices 1–2, use the landed D68 public artifacts to add hosting and cold-recovery scenarios with separately unknown runtime, disk, keys, backup, traffic and fixed-floor inputs. Gate: representative measurements and dated price/billing assumptions; no extrapolated typical venue or complete EUR bill. D68 is landed, including follow-up `b8ff5555c996c5dec1086be49f7d046018bd3187`; its current inventory still excludes these services. A future running-follower cost scenario needs separate approval.
 4. **Durable lifecycle journal, disabled.** After slice 1, add venue-scoped intents, input fingerprints, serialized claims, external-resource references and recorded uncertain outcomes. Gate: restart, duplicate-worker, lost-reply, stale-completion and cross-venue refusal evidence; uncertain activation cannot trigger another writer.
 5. **Non-writing venue runtime adapter, disabled.** After slices 2 and 4 and compatibility agreement, package pinned Waitron images with persistent block storage and scoped worker authority. Gate: disk persistence, no business workers before activation, quota/neighbour isolation, management outage and cleanup restricted to owned resources; no live provisioning authorisation implied.
-6. **Hosted backup and key adapter, disabled.** After slice 5, A850 and any required external-vault extension, connect direct streams, independent verified snapshots, versioned secrets and protected retention. Add the D101 country-pack boundaries, one extra EU backup copy, scoped KMS machine authority, approved-session/emergency human access, and exit download/read-only/purge lifecycle only after full approval and legal/contract qualification. Gate: lost original, missing stream, older-key restore, failed verification and cleanup interruption, all without fiscal activation; reconcile the continuous policy first.
+6. **Hosted backup and key adapter, disabled.** After slice 5, A850 and any required external-vault extension, connect direct streams, independent verified snapshots, versioned secrets and protected retention. Add the D101 country-pack boundaries, one extra EU backup copy, scoped KMS machine authority, approved-session/emergency human access, and exit download/read-only/purge lifecycle under the [D101 roadmap](2026-10-22-cloud-data-protection.md), after separate build authority and legal/contract qualification. Gate: lost original, missing stream, older-key restore, failed verification and cleanup interruption, all without fiscal activation; reconcile the continuous policy first.
 7. **New venue Cloud-primary setup, disabled.** After slices 1, 4–6 and Waitron's no-predecessor bootstrap receipt, coordinate normal initial Waitron setup, verified activation outcome and staff/public routing. Gate: one venue/node binding under retries, no Cloud fiscal authority, no routing before confirmed activation and independent backup capture after setup.
 8. **Planned handover adapter, disabled.** After Waitron's agreed fence/flush contract and slices 4–6, coordinate sales/filing stop, outstanding outcomes, final source position, target verification and activation. Gate: exact final state, concurrent requests and crashes around every boundary; unknown stop or activation remains blocked.
 9. **Shared one-box recovery coordination, disabled.** After slices 6 and 8 plus Waitron's recovery/promotion acceptance, add recovery-point selection, explicit peer/stop checks, uncertain activation reconciliation and route cutover. The approved cold shape supplies an on-demand restored target. A running follower is outside the initial offering; slice 11 requires a separate future approval. Gate: actual recoverable time, absent source, uncertain stop, lost activation reply, confirmed receipt before stable-route cutover and returning-node refusal, first with controlled targets and then with the selected real target before enablement.
@@ -50,7 +55,7 @@ Each numbered line sketches a conditional delivery boundary, not an executable i
    primary requires the certified path to its active server; do not manufacture a
    `.local` route or enable a local writer to mask WAN loss.
 15. **Optional on-site follower, disabled.** Only after a separately approved offline-promotion design, accepted Cloud fence proof and Waitron return/tail receipts, expose this service shape. Gate: WAN partition with mobile-data/second-uplink clients, no concurrent writers, preserved tail and fresh dormant rejoin; no offline trading promise before proof.
-16. **Launch qualification record, documentation only.** After the selected shape's slices (Cloud-primary: 1–8 and 12–14; one-box takeover adds 9; two-box adds 10; future separately approved running and on-site followers add 11 and 15 respectively), full D101 approval, legal/exit/support/KMS qualification and owner reliability/pricing decisions, plus separately authorised provider rehearsals, record exact Cloud/Waitron/image/configuration pins, every failure-table result, resource/cost observations and launch-evidence checks. Gate: measured loss/recovery bounds, production credentials/transport/isolation, devices, monitoring, capacity reserve, exit and support proof; deployment and customer enablement require their own authority.
+16. **Launch qualification record, documentation only.** After the selected shape's slices (Cloud-primary: 1–8 and 12–14; one-box takeover adds 9; two-box adds 10; future separately approved running and on-site followers add 11 and 15 respectively), the D101 planning-only design approval, legal/exit/support/KMS qualification and owner reliability/pricing decisions, plus separately authorised provider rehearsals, record exact Cloud/Waitron/image/configuration pins, every failure-table result, resource/cost observations and launch-evidence checks. Gate: measured loss/recovery bounds, production credentials/transport/isolation, devices, monitoring, capacity reserve, exit and support proof; deployment and customer enablement require their own authority.
    Include slice 7a and its full shared acceptance matrix for the added public service.
    This qualification is for the later Cloud step; it does not expand go-live scope.
 
@@ -72,7 +77,8 @@ an existing active box without building hosted capacity.
 
 Future feature and bugfix work follows repository TDD: observe the expected failing behavioural check, implement minimally, then verify the result. This outline supplies acceptance boundaries, not code, commands or a speculative endpoint specification. Preserve evidence about refusal and uncertainty as carefully as successful recovery; a restored database and a healthy pod are insufficient to enable a writer.
 
-D101's first milestone is documentation only. It grants no authority to use parked
+D101's approved design and published build plan are documentation only. They grant no authority to use parked
 D79 (`fab41b1`) as landed verification or apply its migration 043. Preserve all existing
 fiscal, activation, shared-contract, public/staff access, A951, isolation and cost gates.
-No D101 control, supplier qualification or full design approval is proved by this outline.
+No D101 control or supplier qualification is proved by this outline. Its planning-only
+design approval does not approve the broader D88 build or enablement.

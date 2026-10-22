@@ -17,7 +17,11 @@ Recheck the provider sources when you select or change a service.
 
 The [D101 data-protection design](superpowers/specs/2026-10-22-cloud-data-protection-design.md)
 and reconciled [D88 hosting proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md)
-are proposed documentation, inspected at Cloud `60c0fbf` on 2026-10-22. They use
+record policy and proposed hosting, with source inspection at Cloud `60c0fbf` on
+2026-10-22. D101 is owner-approved for build planning only; its
+[implementation roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md) records
+the reviewed documentation milestone. Broader D88 hosting/isolation/shared contracts
+remain unapproved. They use
 [A980 section 2](https://github.com/clintongormley/waitron/blob/96a1129e385447e9b9a6dc545673009953a2c551/docs/superpowers/specs/2026-10-22-a980-data-protection-design.md#2-the-data-map)
 as the single application data map; Cloud builds no second application rights tool.
 The owner selected country-pack home/permitted backup regions; Spain venue data,
@@ -25,9 +29,13 @@ logs and keys in `eu-south-2` plus one extra backup in another EU region; menu-o
 translation without personal data; full exit download, 90-day read-only backups and
 then deletion except Cloud's own billing; per-session approved support or the narrow
 emergency route when the venue cannot trade and cannot be reached; scoped machine key use; and cold recovery.
-D102 owns the separate selected EU SES email exception. A 24-hour support default and
-Paris backup region remain D101 recommendations. Full design approval, legal annexes,
-supplier/entity/access/transfer evidence and all proposed runtime controls remain open.
+D102 owns the separate selected EU SES email exception. The owner approved a 24-hour
+maximum for how long one venue approval keeps support access open, shorter where
+practical with fresh approval to extend, and Paris `eu-west-3` for the extra backup,
+subject to qualification. All six D101 lawyer questions, the KMS deletion-waiting
+policy, legal annexes, supplier/entity/access/transfer evidence and runtime proof remain
+open. AI additionally requires separately accepted privacy-reviewed input eligibility,
+examples and limits. No D101 runtime control is implemented by this milestone.
 No production build starts from this documentation. D68 is landed, but hosting and
 recovery costs remain unmeasured. D79 is parked unpublished at `fab41b1`; its changes
 and migration 043 are not on this base and supply no launch evidence here.

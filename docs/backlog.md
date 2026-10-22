@@ -37,26 +37,32 @@ record the proposal. No owner design approval, implementation or provider author
 is implied. A951 owns the lasting Waitron tunnel/certificate client; its accepted
 implementation and landing pin remain required.
 
-**D101 data protection, PROPOSED documentation milestone:** the
-[Cloud design](superpowers/specs/2026-10-22-cloud-data-protection-design.md) uses
-[A980 section 2](https://github.com/clintongormley/waitron/blob/96a1129e385447e9b9a6dc545673009953a2c551/docs/superpowers/specs/2026-10-22-a980-data-protection-design.md#2-the-data-map)
-as the single application data map. It proposes the processing-agreement annexes,
-supplier/transfer register, support/KMS controls, exit/purge lifecycle and handoffs.
-The owner's 2026-10-21 choices are country-pack home/permitted backup regions;
-Spain data/logs/keys in `eu-south-2` plus one extra EU backup; menu-only translation
-with no personal data; full exit download, 90-day read-only backups and then deletion
-except Cloud's own billing; venue-approved time-limited support or strictly scoped
-emergency access when unable to trade and unreachable; machine-scoped keys; cold
-startup/restore. A 24-hour support default and Paris backup destination are proposals.
-D102 owns the selected EU Amazon SES exception, still unbuilt/unqualified. Full owner
-design approval, lawyer-reviewed terms, exact provider/access-location evidence and
-runtime acceptance remain open. AI remains disabled until a separately accepted
-input-eligibility rule upholds the no-personal-data instruction; review/detection
-alone cannot establish it for arbitrary text. KMS scheduled deletion and actual
-completion must be distinguished in the exit policy. Build planning follows full approval; D103 owns later
-monitor/release/compute proposals. D68 is landed, including `b8ff5555c996c5dec1086be49f7d046018bd3187`,
-but does not price hosting. Parked unpublished D79 (`fab41b1`) and its migration 043
-are not on inspected Cloud base `60c0fbf` or evidence of D101 runtime controls.
+**D101 data protection, approved design and published build planning:** the owner
+approved the complete D101/D88 data-protection engineering design from PR283
+(`9701cd2359d69f0a3e8960b761754cf492aac745`) on 2026-10-22 around 08:30 **for build
+planning only**. The [Cloud design](superpowers/specs/2026-10-22-cloud-data-protection-design.md)
+and [implementation roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md)
+use [A980 section 2](https://github.com/clintongormley/waitron/blob/96a1129e385447e9b9a6dc545673009953a2c551/docs/superpowers/specs/2026-10-22-a980-data-protection-design.md#2-the-data-map)
+as the single application map. Planning covers the service/supplier register and
+annexes, country/credential/outbound controls, support/KMS, exit/purge and handoffs;
+implementation remains **unbuilt**. One venue approval permits at most **24 hours**
+of support access, shorter where practical and fresh approval to extend. **Paris
+`eu-west-3`** is the approved extra encrypted backup destination, subject to service,
+contract and recovery qualification; Spain data/logs/keys remain in `eu-south-2`.
+The approved exit/retry/concurrency rules retain full download, fixed UTC 90-day
+read-only recovery, earlier verified deletion and all-copy evidence without fiscal
+row changes. O1 is answered. AI stays disabled until separately privacy-reviewed
+eligibility rules, positive/refusal examples and documented limits receive owner
+acceptance. All six lawyer questions, KMS deletion-waiting policy, exact provider/entity/
+access-location evidence, D102 email qualification and runtime proof remain open.
+The published plan records the reviewed documentation milestone; implementation
+requires separate build authority. This does not approve broader D88 hosting/isolation/shared contracts,
+spending, deployment, provider resources or contracts. D103's first C39 monitoring
+design is approved for planning only; release/compute decisions remain separate.
+D102/D104 hands-on work waits until 3 November. D68 is landed, including
+`b8ff5555c996c5dec1086be49f7d046018bd3187`, but does not price hosting. D79 is clean,
+parked and unpublished at `fab41b1`; migration 043 is absent from this tree. No further
+migration item starts until its slot resolves; the first D101 slice is SQL-free.
 
 ## Repository licence
 
@@ -939,8 +945,8 @@ notifications separately.
 | Decision | Next step |
 | --- | --- |
 | Customer model | Support an organisation with several legal businesses and tax identities across countries from the outset. A venue belongs to one organisation at a time. Focus signup on one owner with one venue or several venues in the same city; defer the ownership-transfer workflow. |
-| Cloud staff access | The disabled-by-default [temporary support grant core](temporary-support-grants.md) now records a current owner's approval for a named, separately eligible platform account, exact configured actions, an optional venue, explicit expiry and early revocation. Transactional enforcement rechecks expiry, the original approver and platform eligibility around protected database work, while fixed audit events omit reason and request data. No route or production action is configured. D101 records the owner’s per-session approval, every-action audit and narrow emergency conditions. Full design approval and implementation of platform roles, action catalogues, approver policy, expiry and active-session cancellation remain open. Possible on-prem SSH support still requires explicit server approval, a limited period and active-session termination on expiry or revocation. |
-| Residency | The owner selected country-pack home/permitted backup regions. Spain venue data, logs and keys use `eu-south-2`, with one extra backup copy elsewhere in the EU; EU SES is a separate email exception. [D101](superpowers/specs/2026-10-22-cloud-data-protection-design.md) proposes enforcement, supplier/access/transfer qualification and the disabled AI boundary. Full design approval, actual data-flow evidence and legal/provider qualification remain open; region availability is not a residency promise. See the [launch evidence boundary](launch-evidence.md). |
+| Cloud staff access | The disabled-by-default [temporary support grant core](temporary-support-grants.md) now records a current owner's approval for a named, separately eligible platform account, exact configured actions, an optional venue, explicit expiry and early revocation. Transactional enforcement rechecks expiry, the original approver and platform eligibility around protected database work, while fixed audit events omit reason and request data. No route or production action is configured. The [D101 roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md) records the approved engineering design for planning only: per-session approval with a 24-hour maximum, fresh approval to extend, every-action audit and narrow emergency conditions. Implementation of platform roles, action catalogues, approver policy, expiry and active-session cancellation remains unbuilt; legal qualification and runtime proof remain open. Possible on-prem SSH support still requires explicit server approval, a limited period and active-session termination on expiry or revocation. |
+| Residency | The owner selected country-pack home/permitted backup regions. Spain venue data, logs and keys use `eu-south-2`, with the extra encrypted copy in Paris `eu-west-3`, subject to qualification; EU SES is a separate email exception. [D101](superpowers/specs/2026-10-22-cloud-data-protection-design.md) is approved for build planning only, with a [published roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md). Enforcement is unbuilt; actual data-flow evidence, legal/provider qualification and separate AI eligibility acceptance remain open; region availability is not a residency promise. See the [launch evidence boundary](launch-evidence.md). |
 | Cells | Venues are independently placed, with a shared gateway per cell and stable customer-facing addresses on movement. The local two-cell workflow now stages a revision-bound destination, cancels a failed apply without replacing the source, requires a tested destination manifest sequence before commit, preserves hostnames/certificates and publishes newer source/destination manifests. Two 2026-09-26 Docker runs reconnected the fresh destination peer in 1,321 ms and 1,486 ms; the second receipt names clean head `e4f9356`, while the other venue stayed source-only. These are not production targets. Define group size, availability-zone layout and recovery-time objective; repeat movement with the selected gateway deployment, provider network, DNS/certificate reconciler and appliance automation. Keep backups and portal recovery independent of gateway machines. |
 | Provider support | AWS is the first provider and `eu-south-2` is the verified regional candidate. Select the exact RDS, S3, compute, ingress, DNS, certificate, key and monitoring configuration in the real account; the owner selected SES in an EU region, with D102 account/region and live-delivery qualification still open. Keep Google Cloud Madrid (`europe-southwest1`) as a future target that must pass the same service-by-service gate. Decide separately whether cross-provider failover is wanted. |
 | Product packages | Remote access and backups are the initial paid services. Address lookup and transactional account email are planned free services for open-source Waitron with a Cloud login and per-user limits; mobile notifications remain a candidate. Define their release scope, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
