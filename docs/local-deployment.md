@@ -286,6 +286,11 @@ Those local timings describe that run only. They are not availability or capacit
 
 ## Understand the production boundary
 
+Read the [C41 release and upgrade proposal](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md)
+for recommended release identity, shared maintenance versus hosted-venue cohorts,
+pause/resume and compatibility rules. It is unapproved and unbuilt; the local
+commands and receipts on this page do not implement that production process.
+
 The stack does not provide provider infrastructure, public ingress, production certificates,
 DNS, secret management, database backup or failover, external monitoring, alert routing,
 worker sizing, high availability or rollback across incompatible schemas. Use it to validate

@@ -8,7 +8,8 @@ the public-status publishing instructions available outside Waitron's AWS accoun
 This is D104's operating runbook and status-host recommendation, checked against
 Cloud `5d59bf3` on 22 October 2026. No phone service, outside observer or public page
 is configured by this document. The [D103 monitoring design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
-still needs approval; its thresholds and acknowledgment clocks remain proposals.
+is approved for planning only; its thresholds and acknowledgment clocks are not
+implemented by that approval.
 Production setup and the drills below are launch gates, not completed evidence.
 
 ## Prepare your independent route
@@ -26,7 +27,7 @@ delivery evidence; acknowledgment must come from you and identify the incident.
 Do not treat another message through the failed provider as an independent route.
 No provider or paid subscription is selected here, and no second responder exists.
 
-D103 proposes one repeat after ten minutes without acknowledgment, an unattended
+The planning-approved D103 policy calls for one repeat after ten minutes without acknowledgment, an unattended
 marker after twenty minutes, and a pause on expanding the monitored group. Keep
 its episode, deadlines and acknowledgment state outside the affected deployment.
 If you cannot provide coverage, record the gap and pause expansion; do not claim
@@ -48,8 +49,9 @@ availability or response-time promise to venues.
    private evidence and any independent observation or email failure.
 4. Stop making the incident worse. Hold discretionary changes to the affected
    component while investigating. An alert does not authorise failover, data
-   restoration, fiscal edits, secret access or a release-policy change. C41's
-   separate release design will govern automated release pauses.
+   restoration, fiscal edits, secret access or a release-policy change. The
+   separate [C41 release design](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md)
+   proposes release pauses and still needs approval.
 5. Publish a short status update once you confirm customer impact. If observation
    itself is down, say that you cannot confirm current service health. State what
    is affected, what you know, what you are doing and when you will update again.
