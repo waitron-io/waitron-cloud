@@ -4,7 +4,7 @@ import {join} from 'node:path';
 import {createBoundContainerWaitronVerifier} from '../../packages/backups/src/container-verifier.ts';
 import {openVerifierController} from './verifier-controller.mjs';
 const execute=promisify(execFile);
-export const verifierWaitronRevision='5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa';
+export const verifierWaitronRevision='ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
 export async function openTestBackupVerifier({directory,image,owner='waitron-cloud-test-backup',memoryMiB=1024,scratchMiB=256}){
  if(!/^sha256:[a-f0-9]{64}$/.test(image??''))throw Error('test_cloud.verifier_configuration');
  let info;try{[info]=JSON.parse((await execute('docker',['image','inspect',image],{timeout:10000,maxBuffer:65536})).stdout);}catch{throw Error('test_cloud.verifier_configuration');}

@@ -30,7 +30,7 @@ const owners = [
   "workforce-es",
 ];
 const digest =
-  "27b6669fe7367c9619bd71fb7ac6ce0edcd97d5a7f3c6e83d953468ed62932c5";
+  "2e9a53ebe041b37415b0983563edaa1529714b42f3cd2637987b976667164d10";
 
 function rehash(value: typeof manifest) {
   Object.assign(value, backupVerificationTargetDigests(value));
@@ -43,11 +43,11 @@ test("complete_pinned_public_target_includes_every_owner", () => {
   assert.equal(target.digest, digest);
   assert.equal(
     target.runtime.fingerprint,
-    "163574c6d3100c2a37db14eb56a111842aa85d27caf70802a2fd43e19126109f",
+    "a62d25dfd879e6092efd9f6ffac64dd1f08304585d4e0e535535a53e7b818cf6",
   );
   assert.deepEqual(target.modules.map((m) => m.name).sort(), owners);
   assert.equal(target.modules.find((m) => m.name === "fiscal-none")!.schema, 0);
-  assert.equal(target.modules.find((m) => m.name === "core")!.schema, 184);
+  assert.equal(target.modules.find((m) => m.name === "core")!.schema, 185);
   assert.equal(
     target.modules.find((m) => m.name === "core")!.packageVersion,
     "0.0.0",
@@ -265,3 +265,10 @@ for (const key of [
     assert.throws(() => validateBackupVerificationTarget(value));
   });
 }
+
+// An internally valid older bundle must not qualify the current worker-denying release.
+test("previous_release_target_cannot_qualify_the_current_verifier", () => {
+  const previous = readFileSync(new URL("fixtures/verification-target-a850.json", import.meta.url), "utf8");
+  assert.equal(validateBackupVerificationTarget(JSON.parse(previous)).runtime.revision, "5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa");
+  assert.throws(() => readVerificationTarget(previous), {message: "Invalid backup verification target"});
+});

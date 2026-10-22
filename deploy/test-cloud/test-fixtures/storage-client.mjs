@@ -33,7 +33,7 @@ export async function storageClientProof(phase){
   const response=await machine(item,'backup-stream-configure',{revision,localVenueId:item.localVenueId,sourceNodeId:item.sourceNodeId,pointerSignerPublicKey:item.pointerSignerPublicKey});assert.equal(response.status,200,JSON.stringify(response.body));return response.body;
  }
  try{
-  if(phase==='seed'){
+  if(phase==='seed'||phase==='seed-snapshot'){
    runtime=await openTestCaptureRuntime({pool,directory,mode:'test-free-paid'});
    const catalogue=new BackupCatalogue(pool,runtime.options.vault,runtime.options.objects,'test-free-paid');
    async function venue(paid){
@@ -48,6 +48,10 @@ export async function storageClientProof(phase){
    for(const action of ['backup-reserve','backup-stream-configure']){const refusal=await machine(free,action,action==='backup-stream-configure'?{revision:0,localVenueId:free.localVenueId,sourceNodeId:free.sourceNodeId,pointerSignerPublicKey:free.pointerSignerPublicKey}:{});assert.equal(refusal.status,403);assert.equal(refusal.body.error,'permission_denied');}
    const capture=await machine(a,'backup-reserve');assert.equal(capture.status,200,JSON.stringify(capture.body));assert.equal(capture.body.location.endpoint,endpoint);assert.ok(Date.parse(capture.body.expiresAt)<=Date.now()+901000);
    const snapshot=client(capture.body.credentials);await put(snapshot,a.location.bucket,capture.body.incomingKey);await assert.rejects(put(snapshot,a.location.bucket,'incoming/foreign'),denied);await assert.rejects(put(snapshot,b.location.bucket,capture.body.incomingKey),denied);
+   if(phase==='seed-snapshot'){
+    await atomicPrivateFile(saved,JSON.stringify({a,b}));
+    console.log(JSON.stringify({phase,freeCapture:403,paidCapture:200,continuousConfigured:false}));return;
+   }
    a.stream=await stream(a);b.stream=await stream(b);assert.equal(a.stream.bucket.endpoint,endpoint);assert.notEqual(a.stream.bucket.accessKeyId,capture.body.credentials.accessKeyId);
    const writer=client(a.stream.bucket);await put(writer,a.location.bucket,a.stream.bucket.prefix+'before');await assert.rejects(put(writer,a.location.bucket,capture.body.incomingKey),denied);await assert.rejects(put(writer,b.location.bucket,b.stream.bucket.prefix+'cross-venue'),denied);
    await assert.rejects(put(snapshot,a.location.bucket,a.stream.bucket.prefix+'snapshot-escape'),denied);

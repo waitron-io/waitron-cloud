@@ -1,9 +1,9 @@
 {
   "version": 1,
   "runtime": {
-    "release": "waitron-5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa",
-    "revision": "5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa",
-    "fingerprint": "163574c6d3100c2a37db14eb56a111842aa85d27caf70802a2fd43e19126109f"
+    "release": "waitron-ec91a9e34d2daba146f4ee61850ea4136ad5cfb7",
+    "revision": "ec91a9e34d2daba146f4ee61850ea4136ad5cfb7",
+    "fingerprint": "a62d25dfd879e6092efd9f6ffac64dd1f08304585d4e0e535535a53e7b818cf6"
   },
   "modules": [
     {
@@ -46,9 +46,9 @@
       "name": "core",
       "packageVersion": "0.0.0",
       "requires": {},
-      "schema": 184,
+      "schema": 185,
       "migrationTable": "__drizzle_migrations_db",
-      "migrationDigest": "e6eacc769717a4f7d237e8394f217b98287b87b7d528973ee5723f3e8f4bb3a0",
+      "migrationDigest": "9aa633c442b54199b8d7e874e2b9fff0b9d2518dc8f2b7fdda7925dd0ef88c1f",
       "semanticsVersion": 1,
       "policyDigest": "61e601999aededee078e7b41de16836dd136eafda308aa8c13330877d46ef3f9"
     },
@@ -160,9 +160,9 @@
         "catalogue": "*",
         "core": "*"
       },
-      "schema": 65,
+      "schema": 66,
       "migrationTable": "__drizzle_migrations_venue_service",
-      "migrationDigest": "f0d5ccc397c7145b88fe3cd35fa360d74548019aa62909d8d70c519f3e6206dd",
+      "migrationDigest": "6b90eca7b25c30b7f8456cf77d92bc71c71887b6462b8a060c1c0850c7ac0e2c",
       "semanticsVersion": 1,
       "policyDigest": "886491f999a00ace285a76fa092da76f729dcedea1dcc8065ea020c3a84d3873"
     },
@@ -193,7 +193,7 @@
     }
   ],
   "compositionDigest": "519fdde2da8bb7d1b365ede2dc190a671a164eda5bac203e855a276836072a14",
-  "migrationDigest": "90d24ce8260e99c3a2bb1a356fbacb269611f1699db361a9b518ec74748542ea",
+  "migrationDigest": "edce9114d7bf77f432b334b14f58444776ce972136571b23e5836e796b6d5615",
   "policyDigest": "1ef4524067150927adc411e1bee08f00d87a28eae33f9ec03b145412c255b73f",
-  "digest": "27b6669fe7367c9619bd71fb7ac6ce0edcd97d5a7f3c6e83d953468ed62932c5"
+  "digest": "2e9a53ebe041b37415b0983563edaa1529714b42f3cd2637987b976667164d10"
 }

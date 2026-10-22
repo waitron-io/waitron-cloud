@@ -10,6 +10,19 @@
 
 **Spec:** [Approved backup verification contract](../specs/2026-10-18-backup-verification-without-fiscal-authority.md); [PR5](2026-10-17-test-cloud-free-paid.md#pr-5-supply-real-local-backup-and-remote-adapters-for-the-test-project); [documentation ownership](../../documentation-ownership.md).
 
+## Current execution pin
+
+The owner required worker threads to remain denied. The compatible A1004 release
+is now `ec91a9e34d2daba146f4ee61850ea4136ad5cfb7` (Waitron #1968), superseding W
+below for continued execution. Its compiled target digest is
+`2e9a53ebe041b37415b0983563edaa1529714b42f3cd2637987b976667164d10` and runtime
+fingerprint is `a62d25dfd879e6092efd9f6ffac64dd1f08304585d4e0e535535a53e7b818cf6`.
+All 15 owners remain; core is schema 185 and venue-service is schema 66.
+`deploy/backup-verifier/target.json` contains the entire descriptor exported from
+that compiled bundle. The build compares every field. The original W/H receipts
+below remain historical. The private transport, isolation, limits and authority
+rules remain in force.
+
 ## Global Constraints
 
 - Cloud planning base: `a31df0093529f5ebccc6fe3561dbcd194166ce48`. Parked PR5 branch: `feat/test-cloud-service-adapters`, `fecbf8f478e1842fc0cf5596bd205b5cfe25a0b2`; compare `1e854db468e5af3bb9ebc7907d3e395d2a9a8390..fecbf8f`. Its storage/account/remote/controller work is absent from main. Rebase and reconcile before continuing it, preserving all 54 fault receipts and prior runtime receipts in the campaign ledger. Do not duplicate those adapters or claim their receipts prove this new path.

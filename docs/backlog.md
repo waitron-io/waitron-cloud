@@ -1238,12 +1238,19 @@ notifications separately.
   continuous-source presence, uncertain cleanup and publication claims for a local
   candidate. It keeps ordinary fiscal refusal distinct from a complete proof.
   The receipt producer and the genuine joint orchestration remain unfinished.
-  A fresh genuine 15-module capture against pinned `5516dd57` returns
-  `unavailable` / `unexpected` during verification. Diagnostic-only logging traces
-  `ERR_ACCESS_DENIED` / `WorkerThreads` to Waitron's placement-lock watchdog.
-  Cloud's tested worker-thread denial stays intact; an owner decision or compatible
-  upstream lock implementation is required. No successful admission/recovery is
-  claimed, and no Waitron source or fiscal evidence was changed.
+  Waitron A1004 is now pinned at `ec91a9e34d2daba146f4ee61850ea4136ad5cfb7`.
+  The build compares the complete compiled target, including all 15 owners and
+  the newer core/venue-service schemas. The older target is refused. Genuine
+  local capture now verifies with worker threads still denied. The fixture creates
+  its synthetic certificate with Waitron's existing generator and normal vault
+  writer before capture; missing credentials correctly remain unavailable.
+  Wrong-key and changed-byte controls refuse, and the untouched archive passes
+  afterward. Signed publication through the real machine API, storage staging,
+  scoped worker verification, committed current evidence and child removal pass
+  together. Continuous stream objects and database pointers are checked absent
+  before capture, after publication and after admission. Only the disposable proof
+  database enables release readiness. Full v2 owner approval, target delivery,
+  ordinary recovery and the version 2 receipt producer remain unfinished.
   A joint capture-to-recovery proof against the implementing runtime with the
   continuous source absent remains due. A source release does not establish
   a published verifier image or qualify any snapshot. Snapshots

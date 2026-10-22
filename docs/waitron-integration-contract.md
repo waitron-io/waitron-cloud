@@ -388,7 +388,12 @@ require fiscal activation authority. Waitron A850 landed in
 `5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa`. Follow the
 [Cloud implementation plan](superpowers/plans/2026-10-21-cloud-backup-verification.md)
 for result admission, catalogue qualification and version-bound recovery.
-Cloud integration and joint runtime proof remain pending. Keep the
+The current local Cloud candidate pins the compatible A1004 revision
+`ec91a9e34d2daba146f4ee61850ea4136ad5cfb7`. Genuine capture, signed publication,
+strict module verification and committed admission pass together with no continuous
+source. Worker threads remain denied and no activation is attempted. Full v2
+owner approval, target delivery and separately authorised ordinary recovery still
+need one joint proof. Published-image qualification remains open. Keep the
 affected snapshots unavailable until the implementation and evidence gates pass;
 fiscal activation authority remains unchanged.
 

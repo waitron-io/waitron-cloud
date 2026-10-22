@@ -7,9 +7,12 @@ import {randomUUID,sign} from 'node:crypto';
 import {loadRuntime} from '../../local-stack/runtime.mjs';
 import {atomicPrivateFile} from '../storage-authority.mjs';
 import {createLeaseIssuer,encodeMachine} from '../../../packages/registration/src/index.ts';
+import {setVerificationPolicy} from '../../../packages/backups/src/verification-admission.ts';
+import {readVerificationTarget} from '../../../packages/backups/src/verification-target.ts';
+import {transaction} from '../../../packages/registration/src/transaction.ts';
 import {receipt} from '../../../packages/backups/src/storage.ts';
 const {Pool}=createRequire(new URL('../../../packages/registration/package.json',import.meta.url))('pg');
-const {S3Client,PutObjectCommand}=createRequire(new URL('../../../packages/backups/package.json',import.meta.url))('@aws-sdk/client-s3');
+const {S3Client,PutObjectCommand,ListObjectsV2Command}=createRequire(new URL('../../../packages/backups/package.json',import.meta.url))('@aws-sdk/client-s3');
 export async function snapshotClientProof(phase,input={}){
  const directory='/run/local-stack',config=await loadRuntime(directory),saved=directory+'/snapshot-proof-state.json',state=JSON.parse(await readFile(directory+'/storage-proof-state.json','utf8')),item=state.a;
  const pool=new Pool({connectionString:`postgres://${config.database.user}:${config.database.password}@postgres:5432/${config.database.name}`,connectionTimeoutMillis:5000,statement_timeout:10000}),ca=await readFile(directory+'/lan/ca.pem'),issuer=createLeaseIssuer(config.installation.issuerKey);
@@ -19,6 +22,18 @@ export async function snapshotClientProof(phase,input={}){
   return new Promise((resolve,reject)=>{const req=request({hostname:'proxy',port:3000,servername:'waitron.local',ca,path:'/api/installations/'+action,method:'POST',headers:{host:'waitron.local:3000','content-type':'application/json','content-length':Buffer.byteLength(encoded)}},res=>{let text='';res.on('data',part=>text+=part);res.once('end',()=>{try{assert.equal(res.statusCode,200);resolve(JSON.parse(text));}catch{reject(Error('fixture.machine_refused'));}});});req.setTimeout(10000,()=>req.destroy(Error('fixture.machine_timeout')));req.once('error',reject);req.end(encoded);});
  }
  try{
+  if(phase==='continuous'){
+   const pointerRows=Number((await pool.query('SELECT count(*) FROM backup_managed_streams')).rows[0].count);
+   const s3=new S3Client({endpoint:'https://waitron.local:8333',region:'local',credentials:{accessKeyId:config.storage.accessKeyId,secretAccessKey:config.storage.secretAccessKey},forcePathStyle:true,maxAttempts:1,requestHandler:{httpsAgent:new Agent({ca})}});let streamObjects=0;
+   try{for(const venue of [state.a,state.b]){const list=await s3.send(new ListObjectsV2Command({Bucket:venue.location.bucket,Prefix:'streams/',MaxKeys:1000}));assert(!list.IsTruncated);streamObjects+=(list.Contents??[]).length;}}finally{s3.destroy();}
+   assert.equal(pointerRows,0);assert.equal(streamObjects,0);return{streamObjects,pointerRows};
+  }
+  if(phase==='configure'){
+   assert.match(input.image,/^sha256:[a-f0-9]{64}$/);
+   const target=readVerificationTarget(await readFile(new URL('../../backup-verifier/target.json',import.meta.url),'utf8'));
+   // This disposable proof database alone opts into recovery qualification; deployment stays disabled.
+   await transaction(pool,c=>setVerificationPolicy(c,target,'local.waitron-verifier@'+input.image,true));return{configured:true};
+  }
   if(phase==='reserve'){
    const capture=await machine('backup-reserve',randomUUID());await atomicPrivateFile(saved,JSON.stringify({capture}));return{recoveryKey:capture.recoveryKey};
   }
@@ -33,7 +48,9 @@ export async function snapshotClientProof(phase,input={}){
   if(phase==='assert'){
    const row=(await pool.query('SELECT verification FROM backup_points WHERE id=$1',[data.point.id])).rows[0];assert.equal(row.verification,'verified');
    const job=(await pool.query("SELECT status,last_success_at,attempts FROM backup_jobs WHERE target_id=$1 AND kind='verify'",[data.point.id])).rows[0];assert.equal(job.status,'pending');assert.ok(job.last_success_at);assert.equal(job.attempts,0);
-   return{realWaitronSnapshotVerified:true,scopedSignedCapture:true};
+   const attempt=(await pool.query('SELECT a.*,q.current_verification FROM backup_verification_attempts a JOIN backup_point_qualification q ON q.verification_id=a.id WHERE a.point_id=$1 AND a.id=(SELECT current_evidence_id FROM backup_points WHERE id=$1)',[data.point.id])).rows[0];
+   assert.equal(attempt.state,'finished');assert.equal(attempt.status,'passed');assert.equal(attempt.current_verification,'verified');assert.equal(attempt.cleanup_confirmed,true);assert.equal(attempt.result.activation,'not_attempted');assert.equal(attempt.result.modules.length,15);
+   return{realWaitronSnapshotVerified:true,scopedSignedCapture:true,controllerScope:attempt.controller_scope,attemptId:attempt.id,targetDigest:attempt.target_digest};
   }
   throw Error('fixture.phase');
  }finally{await pool.end();}

@@ -27,7 +27,7 @@ test('test worker opens the pinned bound verifier and preserves its scope across
  const {bufferObject}=await import('../../packages/backups/src/object-transfer.ts'),{readFileSync}=await import('node:fs');
  const {openTestBackupVerifier}=await import('./backup-worker.mjs');
  const vector=JSON.parse(await readFile(new URL('../../packages/backups/test/fixtures/verification-vector.json',import.meta.url),'utf8'));
- const revision='5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa';
+ const revision='ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
  const docker=(...args)=>execFileSync('docker',args,{encoding:'utf8',timeout:120000}).trim(),root=fileURLToPath(new URL('../../',import.meta.url));
  const directory=await mkdtemp(join(tmpdir(),'worker-bound-runtime-')),tag='cloud-worker-bound:'+randomUUID();t.after(()=>rm(directory,{recursive:true,force:true}));
  const image=docker('build','-q','--label','cloud.waitron-revision='+revision,'-t',tag,'-f',join(root,'packages/backups/test/container-fixture/Bound.Dockerfile'),root);t.after(()=>docker('image','rm',tag));

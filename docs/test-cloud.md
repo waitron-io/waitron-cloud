@@ -263,7 +263,7 @@ TEST_CLOUD_VERIFIER_CONTROLLER_PROOF=1 node --test \
   deploy/test-cloud/verifier-controller.test.mjs
 ```
 
-The complete snapshot proof is currently a failing integration check:
+You can exercise genuine capture, signed publication and admission through the scoped worker:
 
 ```sh
 TEST_CLOUD_SNAPSHOT_PROOF_IMAGE=<local-cloud-image-id> \
@@ -271,17 +271,38 @@ TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
   node --test deploy/test-cloud/snapshot-proof.test.mjs
 ```
 
-The parked fixture still uses the earlier `e52c997c` capture contract and needs
-Task 10's complete v2 orchestration. Its historical fiscal restore refusal remains
-recorded. A fresh local probe against the pinned `5516dd57` image genuinely captures
-an encrypted archive with all 15 modules, but data verification returns
-`unavailable` / `unexpected`. A diagnostic image that adds error classification
-logging, without changing any guard, identifies `ERR_ACCESS_DENIED` for
-`WorkerThreads` in `startWatchdog`, called by `lockVenueDirectory`. Waitron's placement lock
-starts a worker thread; the Cloud child deliberately denies worker creation.
-That denial remains tested in `packages/backups/test/container-fixture/bound-bundle.mjs`.
-Resolve this security boundary before repeating the full integration proof;
-no successful verification, admission or recovery is claimed by that probe.
+The current local candidate pins Waitron A1004 at
+`ec91a9e34d2daba146f4ee61850ea4136ad5cfb7`. Its complete compiled target includes
+all 15 owners, core schema 185 and venue-service schema 66. A1004 removes the
+verification-only lock watchdog; the Cloud child still denies worker threads.
+The image build compares its complete compiled descriptor with the checked-in
+manifest before accepting the candidate.
+
+The scenario captures a genuine encrypted archive, publishes it through the signed
+machine API, stages it from storage and verifies it through the delivered scoped
+worker. It checks committed current evidence and confirmed child removal.
+Continuous stream objects and database pointers are absent before capture, after
+publication and after admission. Only the disposable proof database opts into
+release readiness; the deployment profile stays unavailable and enforcement off.
+
+The capture fixture uses Waitron's existing synthetic certificate generator and
+normal vault writer before capture. Without that certificate, the genuine archive
+correctly returns `unavailable` / `secret_unavailable`. It never rewrites captured
+fiscal evidence to obtain a pass. You can run the independent real-image controls
+with the same verifier image:
+
+```sh
+TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
+  node --test deploy/test-cloud/verifier-genuine.test.mjs
+```
+
+Those checks require every owner's passed result, refuse a wrong recovery key and
+changed archive bytes, then verify the untouched original again. No activation is
+attempted. These local candidates remain unpublished and unqualified for release.
+The full v2 recovery client, owner approval, target delivery and separately
+authorised ordinary restore still need one joint scenario. The historical fiscal
+restore refusal remains recorded. Capture-to-admission success does not complete
+that recovery proof.
 
 Task 10 adds `scripts/verify-backup-verifier-proof.mjs` for the new version 2
 receipt. It requires one run's genuine capture, signed publication, complete bound
