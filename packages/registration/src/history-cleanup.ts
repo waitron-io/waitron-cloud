@@ -81,14 +81,14 @@ export class HistoryCleanup {
       const value = policy.cutoffs[category];
       if (value) categories[category] = await transaction(this.#pool, async client => {
         await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext('history-cleanup:' || $1))", [category]);
-        return this.#category(client, category, value, policy.chunkSize, options.apply);
+        return this.#category(client, category, value, policy.chunkSize, options.apply, policy.cutoffs.backupJobs);
       });
     }
     return {schemaVersion: 1, mode: options.apply ? 'apply' : 'dry-run', chunkSize: policy.chunkSize, categories};
   }
 
   async #category(client: PoolClient, category: HistoryCleanupCategory, cutoff: string,
-    limit: number, apply: boolean): Promise<HistoryCleanupCategoryReport> {
+    limit: number, apply: boolean, jobCutoff?: string): Promise<HistoryCleanupCategoryReport> {
     switch (category) {
       case 'relayAdmissionCounters': {
         await client.query(relayBoundsLock);
@@ -141,15 +141,20 @@ export class HistoryCleanup {
       case 'emailDeliveries': return this.#emailDeliveries(client, cutoff, limit, apply);
       case 'backupJobs': return this.#simple(client, cutoff, limit, apply, {
         eligible: `SELECT count(*)::integer AS count FROM backup_jobs
-          WHERE status='completed' AND COALESCE(last_success_at,available_at)<$1`,
+          WHERE status='completed' AND COALESCE(last_success_at,available_at)<$1
+          AND NOT EXISTS(SELECT 1 FROM backup_verification_attempts a WHERE a.job_id=backup_jobs.id)`,
+        blocked: `SELECT count(*)::integer AS count FROM backup_jobs j WHERE status='completed' AND COALESCE(last_success_at,available_at)<$1
+          AND EXISTS(SELECT 1 FROM backup_verification_attempts a WHERE a.job_id=j.id)`,
         apply: `WITH selected AS(SELECT id FROM backup_jobs
           WHERE status='completed' AND COALESCE(last_success_at,available_at)<$1
+          AND NOT EXISTS(SELECT 1 FROM backup_verification_attempts a WHERE a.job_id=backup_jobs.id)
           ORDER BY COALESCE(last_success_at,available_at),id LIMIT $2 FOR UPDATE SKIP LOCKED)
           DELETE FROM backup_jobs j USING selected s WHERE j.id=s.id
-          AND j.status='completed' AND COALESCE(j.last_success_at,j.available_at)<$1 RETURNING j.id`,
+          AND j.status='completed' AND COALESCE(j.last_success_at,j.available_at)<$1
+          AND NOT EXISTS(SELECT 1 FROM backup_verification_attempts a WHERE a.job_id=j.id) RETURNING j.id`,
       });
       case 'recoveryHistory': return this.#recoveryHistory(client, cutoff, limit, apply);
-      case 'backupTombstones': return this.#backupTombstones(client, cutoff, limit, apply);
+      case 'backupTombstones': return this.#backupTombstones(client, cutoff, limit, apply, jobCutoff);
     }
   }
 
@@ -285,36 +290,53 @@ export class HistoryCleanup {
     return {cutoff, eligible, blocked, deleted, hasMore: apply ? eligible > deleted : eligible > 0};
   }
 
-  async #backupTombstones(client: PoolClient, cutoff: string, limit: number, apply: boolean) {
+  async #backupTombstones(client: PoolClient, cutoff: string, limit: number, apply: boolean, jobCutoff?: string) {
+    // Evidence and its job stay together until the point's own deletion policy permits both.
     const referenced = `(EXISTS(SELECT 1 FROM backup_recoveries r WHERE r.point_id=p.id)
-      OR EXISTS(SELECT 1 FROM backup_jobs j WHERE j.target_id=p.id))`;
+      OR EXISTS(SELECT 1 FROM backup_jobs j WHERE j.target_id=p.id
+        AND NOT (j.status='completed' AND $2::timestamptz IS NOT NULL AND COALESCE(j.last_success_at,j.available_at)<$2)))`;
     const aged = `p.deleted_at<$1`;
     const metered = `(p.kind<>'snapshot' OR (EXISTS(SELECT 1 FROM usage_events u WHERE u.event_type='backup.storage_added_bytes' AND u.source_kind='backup_point' AND u.source_reference=p.id::text)
       AND EXISTS(SELECT 1 FROM usage_events u WHERE u.event_type='backup.upload_bytes' AND u.source_kind='backup_point' AND u.source_reference=p.id::text)
       AND EXISTS(SELECT 1 FROM usage_events u WHERE u.event_type='backup.storage_removed_bytes' AND u.source_kind='backup_point' AND u.source_reference=p.id::text)))`;
+    const values=[cutoff,jobCutoff??null];
     const eligible = await count(client, `SELECT count(*)::integer AS count FROM backup_points p
-      WHERE ${aged} AND NOT ${referenced} AND ${metered}`, [cutoff]);
+      WHERE ${aged} AND NOT ${referenced} AND ${metered}`, values);
     const blocked = await count(client, `SELECT count(*)::integer AS count FROM backup_points p
-      WHERE ${aged} AND (${referenced} OR NOT ${metered})`, [cutoff]);
+      WHERE ${aged} AND (${referenced} OR NOT ${metered})`, values);
     let deleted = 0;
     if (apply) {
       const selected = await client.query<{id: string}>(`SELECT p.id FROM backup_points p
         JOIN backup_captures c ON c.id=p.id
         WHERE ${aged} AND NOT ${referenced} AND ${metered}
-        ORDER BY p.deleted_at,p.id LIMIT $2 FOR UPDATE OF p,c SKIP LOCKED`, [cutoff, limit]);
-      const ids = selected.rows.map(row => row.id);
-      if (ids.length) {
-        await client.query(`WITH selected AS(
-          SELECT id FROM backup_verifications WHERE point_id=ANY($1::uuid[]) FOR UPDATE SKIP LOCKED)
-          DELETE FROM backup_verifications v USING selected s WHERE v.id=s.id`, [ids]);
-        const result = await client.query(`DELETE FROM backup_points p WHERE p.id=ANY($2::uuid[]) AND ${aged}
-          AND NOT ${referenced} AND ${metered}
-          AND NOT EXISTS(SELECT 1 FROM backup_verifications v WHERE v.point_id=p.id)
-          RETURNING p.id`, [cutoff, ids]);
-        const removed = result.rows.map(row => row.id as string);
-        deleted = removed.length;
-        if (removed.length) await client.query(`DELETE FROM backup_captures c WHERE c.id=ANY($2::uuid[])
-          AND c.cleaned_at<$1 AND NOT EXISTS(SELECT 1 FROM backup_points p WHERE p.id=c.id)`, [cutoff, removed]);
+        ORDER BY p.deleted_at,p.id LIMIT $3 FOR UPDATE OF p,c SKIP LOCKED`, [...values,limit]);
+      for(const {id} of selected.rows){
+        await client.query('SAVEPOINT backup_history_point');
+        let complete=true;
+        // Skip an entire graph if any child is busy; never erase only its history or pointers.
+        for(const [table,column] of [['backup_jobs','target_id'],['backup_verification_attempts','point_id'],['backup_verifications','point_id']] as const){
+          const total=await count(client,`SELECT count(*)::integer AS count FROM ${table} WHERE ${column}=$1`,[id]);
+          const locked=await client.query(`SELECT id FROM ${table} WHERE ${column}=$1 ORDER BY id FOR UPDATE SKIP LOCKED`,[id]);
+          if(locked.rowCount!==total){complete=false;break;}
+        }
+        if(complete){
+          await client.query('UPDATE backup_points SET current_evidence_id=NULL,last_attempt_id=NULL WHERE id=$1',[id]);
+          await client.query('DELETE FROM backup_verification_attempts WHERE point_id=$1',[id]);
+          await client.query('DELETE FROM backup_verifications WHERE point_id=$1',[id]);
+          const result=await client.query(`DELETE FROM backup_points p WHERE p.id=$3 AND ${aged}
+            AND NOT ${referenced} AND ${metered} RETURNING p.id`,[...values,id]);
+          complete=result.rowCount===1;
+          if(complete){
+            await client.query(`DELETE FROM backup_jobs j WHERE target_id=$1 AND status='completed'
+              AND COALESCE(last_success_at,available_at)<$2
+              AND NOT EXISTS(SELECT 1 FROM backup_verification_attempts a WHERE a.job_id=j.id)`,[id,jobCutoff??null]);
+            await client.query(`DELETE FROM backup_captures c WHERE id=$1 AND cleaned_at<$2
+              AND NOT EXISTS(SELECT 1 FROM backup_points p WHERE p.id=c.id)`,[id,cutoff]);
+            deleted++;
+          }
+        }
+        if(!complete)await client.query('ROLLBACK TO SAVEPOINT backup_history_point');
+        await client.query('RELEASE SAVEPOINT backup_history_point');
       }
     }
     return {cutoff, eligible, blocked, deleted, hasMore: apply ? eligible > deleted : eligible > 0};

@@ -121,7 +121,9 @@ async function active(client: PoolClient, id: string, mode: PlanMode) {
   if (row.environment !== "test") backupFail("local_integration_only");
   return row;
 }
-const pointColumns = `id,venue_id AS "venueId",installation_id AS "installationId",key_version AS "keyVersion",kind,object_key AS "objectKey",digest,size,captured_at AS "capturedAt",retention,source_node_id AS "sourceNodeId",modules,verification,deleting,deleted_at AS "deletedAt"`;
+const metadataColumns = `p.id,p.venue_id AS "venueId",p.installation_id AS "installationId",p.key_version AS "keyVersion",p.kind,p.object_key AS "objectKey",p.digest,p.size,p.captured_at AS "capturedAt",p.retention,p.source_node_id AS "sourceNodeId",p.modules,p.deleting,p.deleted_at AS "deletedAt"`;
+const pointColumns = `${metadataColumns},CASE WHEN p.kind='snapshot' THEN COALESCE(q.current_verification,'pending') ELSE p.verification END AS verification`;
+const qualifiedPoints = `backup_points p LEFT JOIN backup_point_qualification q ON q.point_id=p.id`;
 type StoredPoint = Omit<BackupPoint, "size" | "capturedAt" | "deletedAt"> & {
   size: string | number;
   capturedAt: Date;
@@ -141,18 +143,23 @@ export async function point(
 ): Promise<BackupPoint | undefined> {
   const row = (
     await client.query(
-      `SELECT ${pointColumns} FROM backup_points WHERE id=$1`,
+      `SELECT ${pointColumns} FROM ${qualifiedPoints} WHERE p.id=$1`,
       [id],
     )
   ).rows[0];
   return row ? decodedPoint(row) : undefined;
+}
+// Recovery checks the signed proof before consulting evidence; metadata alone carries no verdict.
+export async function pointMetadata(client:PoolClient,id:string):Promise<Omit<BackupPoint,'verification'>|undefined>{
+  const row=(await client.query<Omit<StoredPoint,'verification'>>(`SELECT ${metadataColumns} FROM backup_points p WHERE p.id=$1`,[id])).rows[0];
+  return row?{...row,size:Number(row.size),capturedAt:row.capturedAt.toISOString(),deletedAt:row.deletedAt?.toISOString()??null}:undefined;
 }
 export async function venuePoints(
   client: PoolClient,
   id: string,
 ): Promise<BackupPoint[]> {
   const rows = await client.query(
-    `SELECT ${pointColumns} FROM backup_points WHERE venue_id=$1 AND deleted_at IS NULL AND NOT deleting ORDER BY captured_at DESC,id DESC`,
+    `SELECT ${pointColumns} FROM ${qualifiedPoints} WHERE p.venue_id=$1 AND p.deleted_at IS NULL AND NOT p.deleting ORDER BY p.captured_at DESC,p.id DESC`,
     [id],
   );
   return rows.rows.map(decodedPoint);

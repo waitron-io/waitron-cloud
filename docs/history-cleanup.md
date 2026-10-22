@@ -39,6 +39,15 @@ pnpm history:cleanup -- --policy ./history-cleanup.json
 
 The JSON receipt reports `eligible`, `blocked`, `deleted` and `hasMore` for each enabled category. `blocked` counts rows retained by a dependency rule, such as an open incident or backup-job reference; it does not count rows temporarily locked by a worker. A dry run always reports zero deletions and leaves the database unchanged.
 
+A backup's verification evidence also retains its job. To remove that evidence,
+you must enable both `backupJobs` and `backupTombstones`, and both cutoffs must
+permit removal. Recovery references, active work and missing usage records keep
+the backup's history. Cleanup removes the point, evidence and completed job
+together; if any child row is busy, it leaves the whole point for a later pass.
+This prevents a cleanup from erasing the evidence that still protects a retained
+copy. Key retirement continues to count retained captures and points even when
+their latest check is unavailable.
+
 When the counts match your policy, apply one bounded chunk per category:
 
 ```sh

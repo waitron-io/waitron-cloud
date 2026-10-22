@@ -36,11 +36,11 @@ export async function backupResponse(c:Context,options:{pool:Pool;origin:string;
   if(!permission.rowCount)throw new AccountHttpError(403,'forbidden');
   // Tombstoned points retain their ordering key, so a cleanup between pages cannot skip history.
   if(after&&!(await client.query('SELECT 1 FROM backup_points WHERE id=$1 AND venue_id=$2',[after,venueId])).rowCount)throw new AccountHttpError(400,'invalid_input');
-  const result=await client.query(`SELECT p.id,p.captured_at,p.verification,p.retention,
+  const result=await client.query(`SELECT p.id,p.captured_at,COALESCE(qualification.current_verification,'pending') AS verification,p.retention,
    ${retentionExpirySql} AS expires_at,
    CASE WHEN EXISTS(SELECT 1 FROM backup_recoveries r WHERE r.point_id=p.id AND r.status<>'closed' AND r.expires_at>clock_timestamp()) THEN 'recovery'
     WHEN p.id=(SELECT q.id FROM backup_points q WHERE q.venue_id=$1 AND q.kind='snapshot' AND NOT q.deleting AND q.deleted_at IS NULL ORDER BY EXISTS(SELECT 1 FROM backup_verifications v WHERE v.point_id=q.id AND v.outcome='verified') DESC,q.captured_at DESC,q.id DESC LIMIT 1) THEN 'fallback' ELSE NULL END AS protection
-   FROM backup_points p WHERE p.venue_id=$1 AND p.kind='snapshot' AND NOT p.deleting AND p.deleted_at IS NULL
+   FROM backup_points p LEFT JOIN backup_point_qualification qualification ON qualification.point_id=p.id WHERE p.venue_id=$1 AND p.kind='snapshot' AND NOT p.deleting AND p.deleted_at IS NULL
    AND ($2::uuid IS NULL OR (p.captured_at,p.id)<(SELECT captured_at,id FROM backup_points WHERE id=$2 AND venue_id=$1))
    ORDER BY p.captured_at DESC,p.id DESC LIMIT 51`,[venueId,after]);
   const defaultPoint=(await client.query("SELECT p.id FROM backup_points p JOIN backup_point_qualification q ON q.point_id=p.id WHERE p.venue_id=$1 AND q.current_verification='verified' ORDER BY p.captured_at DESC,p.id DESC LIMIT 1",[venueId])).rows[0];

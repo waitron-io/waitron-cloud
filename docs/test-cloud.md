@@ -211,8 +211,17 @@ You can exercise these boundaries with
 `node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test test/recovery-qualification.test.ts`
 and
 `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test test/recovery-qualification.test.ts`.
-These are synthetic checks. Remaining status consumers, the genuine joint proof
-and the reviewed release remain unfinished. Keep snapshots unavailable and
+These are synthetic checks. Catalogue pages, verified timestamps, monitoring and
+operator status use the same current evidence. An unavailable recheck keeps the
+historical fallback, stored bytes and key dependencies. A completed invalid check
+still counts as failed after an inconclusive retry. Delivery rechecks a queued
+backup notice against the current point and the existing failure grace period.
+You can run the reader and retention checks with
+`node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test test/catalogue.test.ts test/key-operations.test.ts test/managed-streams.test.ts`
+and the monitoring/history checks with
+`node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/monitoring.test.ts test/history-cleanup.test.ts`.
+Portal copy, upgrade receipts, the genuine joint proof and the reviewed release
+remain unfinished. Keep snapshots unavailable and
 plan enforcement off.
 You can exercise these rules with
 `node scripts/test-postgres.mjs exec node --test packages/backups/test/worker-admission.test.ts packages/backups/test/worker.test.ts`.

@@ -31,9 +31,10 @@ async function diagnostic(client:PoolClient,accountId:string,installationId:stri
   LEFT JOIN remote_hostnames h ON h.venue_id=p.venue_id AND h.kind=service.kind
   LEFT JOIN remote_probe_observations r ON r.installation_id=p.installation_id AND r.venue_id=p.venue_id AND r.service=service.kind
    AND r.configuration_revision=$3 AND r.hostname=h.hostname ORDER BY service.kind`,[installationId,row.venue_id,row.configuration_revision])).rows;
- const backups=(await client.query(`SELECT max(captured_at) AS latest,
-  max(captured_at) FILTER(WHERE verification='verified') AS verified FROM backup_points
-  WHERE installation_id=$1 AND kind='snapshot' AND NOT deleting AND deleted_at IS NULL`,[installationId])).rows[0];
+ const backups=(await client.query(`SELECT max(p.captured_at) AS latest,
+  max(p.captured_at) FILTER(WHERE q.current_verification='verified') AS verified FROM backup_points p
+  LEFT JOIN backup_point_qualification q ON q.point_id=p.id
+  WHERE p.installation_id=$1 AND p.kind='snapshot' AND NOT p.deleting AND p.deleted_at IS NULL`,[installationId])).rows[0];
  const remoteChecks=Object.fromEntries(remoteRows.map(item=>[item.kind,item.checked_at?{status:item.fresh?item.status:'unknown',checkedAt:item.checked_at.toISOString(),certificateNotAfter:timestamp(item.certificate_not_after)}:null]));
  return {version:1 as const,generatedAt:row.generated_at.toISOString(),installation:{installationId:row.id,venueId:row.venue_id,environment:row.environment,revision:row.configuration_revision,
   access:{status:row.revoked_at?'revoked' as const:'active' as const,lastContactAt:timestamp(row.last_contact_at),leaseExpiresAt:timestamp(row.lease_expires_at)},

@@ -13,6 +13,7 @@ import {
   lockVenue,
   location,
   point,
+  pointMetadata,
   pointKeys,
   uuid,
 } from "./catalogue.ts";
@@ -290,7 +291,7 @@ export class BackupRecovery {
   async authenticate(id:string,action:"info"|"read"|"restored",proof:RecoveryMachineEnvelope){
     if(!uuid(id)||!["info","read","restored"].includes(action))backupFail("invalid_proof");
     return this.#transaction(async client=>{
-      const row=await operation(client,id),p=row.source_kind==='snapshot'?await point(client,row.point_id):undefined;
+      const row=await operation(client,id),p=row.source_kind==='snapshot'?await pointMetadata(client,row.point_id):undefined;
       if(row.source_kind==='snapshot'&&!p)backupFail("unavailable");
       const digest=row.source_kind==='continuous'?streamRecoveryDigest(row.stream_generation):p!.digest;
       validateProof(this.#origin,id,action,action==="info"?"":digest,row.target_public_key,proof,row.verification_target);
@@ -305,14 +306,14 @@ export class BackupRecovery {
     return this.#transaction(async (client) => {
       const first = await operation(client, id);
       if(this.#planMode!=='existing') {
-        const firstPoint=first.source_kind==='snapshot'?await point(client,first.point_id):undefined;
+        const firstPoint=first.source_kind==='snapshot'?await pointMetadata(client,first.point_id):undefined;
         validateProof(this.#origin,id,action,action==='info'?'':first.source_kind==='continuous'?streamRecoveryDigest(first.stream_generation):firstPoint?.digest??'',first.target_public_key,proof,first.verification_target);
       }
       await permission(client, first.account_id, first.venue_id);
       await backupPlan(client,first.venue_id,this.#planMode);
       if(first.source_kind==='snapshot')await lockVerificationPolicy(client);
       // Approval outlives observation freshness; the comparison below still binds delivery to the exact frozen generation.
-      const l = await lockVenue(client, first.venue_id),row = await operation(client,id),continuous=row.source_kind==='continuous',p=continuous?undefined:await point(client,row.point_id),stream=continuous?await currentStream(client,row.venue_id,true,false):undefined;
+      const l = await lockVenue(client, first.venue_id),row = await operation(client,id),continuous=row.source_kind==='continuous',p=continuous?undefined:await pointMetadata(client,row.point_id),stream=continuous?await currentStream(client,row.venue_id,true,false):undefined;
       if (
         row.status === "closed" ||
         !(await operationCurrent(client,id)) ||
@@ -330,14 +331,13 @@ export class BackupRecovery {
         proof,
         row.verification_target,
       );
-      if (!continuous&&p!.verification !== "verified") backupFail("unverified");
       const binding=await snapshotBinding(client,row);
       if (action === "info") {
         if(!await operationCurrent(client,id))backupFail('unavailable');
         validateProof(this.#origin,id,action,'',row.target_public_key,proof,row.verification_target);
         return continuous
          ?{source:continuousSource(row,digest),operationExpiresAt:row.expires_at.toISOString() as string}
-         :{...binding,source:snapshotSource(row),point:p!,operationExpiresAt:row.expires_at.toISOString() as string};
+         :{...binding,source:snapshotSource(row),point:{...p!,verification:"verified" as const},operationExpiresAt:row.expires_at.toISOString() as string};
       }
       if (action === "restored")
         await client.query(
@@ -358,7 +358,7 @@ export class BackupRecovery {
       );
       const operationExpiresAt=row.expires_at.toISOString() as string;
       if(continuous)return {source:continuousSource(row,digest),stream:{venueId:row.venue_id,location:location(l),prefix:stream!.object_prefix,readerReference:stream!.reader_reference,pointerSignerPublicKey:stream!.pointer_signer_public_key,recoveryKey:keys.recoveryKey,localVenueId:stream!.local_venue_id,generation:stream!.generation!},operationExpiresAt};
-      return {...binding,source:snapshotSource(row),point:p!,location:location(l),keys,operationExpiresAt};
+      return {...binding,source:snapshotSource(row),point:{...p!,verification:"verified" as const},location:location(l),keys,operationExpiresAt};
     });
   }
   async catalogue(token: string, venueId: string) {

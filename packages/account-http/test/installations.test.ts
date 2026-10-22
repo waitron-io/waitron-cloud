@@ -76,6 +76,7 @@ test('venue overview includes public business context and verified snapshot time
  const objects=new Map<string,Buffer>(),vault=new BackupKeyVault(randomBytes(32));
  const backups=new BackupCatalogue(db.pool,vault,()=>({async read(k){return objects.get(k)!;},async put(k,b){objects.set(k,Buffer.from(b));return receipt(b);},async remove(k){objects.delete(k);}}));
  await backups.provision(id,{endpoint:'https://storage.test',bucket:'venue-snapshots',region:'local'});
+ const {configureRecoveryVerification}=await import('../../backups/test/fixtures/verification.ts');await configureRecoveryVerification(db.pool);
  const dates=[4,3,2,1].map(days=>new Date(Date.now()-days*86400000).toISOString());let secret='';
  for(let n=0;n<4;n++){
   const capture=await backups.reserveCapture(id,randomUUID()),bytes=Buffer.from('archive '+n);secret=capture.keys.recoveryKey;objects.set(capture.incomingKey,bytes);

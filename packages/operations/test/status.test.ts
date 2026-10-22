@@ -138,3 +138,20 @@ test('rejected health responses close unfinished response streams',async()=>{
   }finally{server.closeConnections();await server.close();}
  }
 });
+
+test('legacy_rows_never_drive_default_or_healthy: operations storage requires current evidence',async()=>{
+ const target=await configuredVenue(),point=randomUUID();
+ await db.pool.query("INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,1,'sealed')",[target.venue]);
+ await db.pool.query('INSERT INTO backup_captures(id,venue_id,installation_id,key_version) VALUES($1,$2,$3,1)',[point,target.venue,target.installation]);
+ await db.pool.query("INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules,verification) VALUES($1,$2,$3,1,'snapshot',$1::uuid::text,$4,10,clock_timestamp(),'daily',$5,'{\"core\":1}','verified')",[point,target.venue,target.installation,'a'.repeat(64),randomUUID()]);
+ const server=await healthy();try{
+  let storage=(await operationsStatus(db.pool,{controlApiUrl:server.url})).components.storage;
+  assert.equal(storage.healthy,0);assert.equal(storage.pending,1);assert.equal(storage.code,'verification_pending');
+  const {admitPointFixture}=await import('../../backups/test/fixtures/verification.ts');await admitPointFixture(db.pool,point);
+  storage=(await operationsStatus(db.pool,{controlApiUrl:server.url})).components.storage;
+  assert.equal(storage.healthy,1);assert.equal(storage.code,'current');
+  await db.pool.query('UPDATE backup_verification_policy SET revision=revision+1');
+  storage=(await operationsStatus(db.pool,{controlApiUrl:server.url})).components.storage;
+  assert.equal(storage.healthy,0);assert.equal(storage.pending,1);
+ }finally{await server.close();}
+});

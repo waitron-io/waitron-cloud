@@ -1203,13 +1203,28 @@ notifications separately.
   expiry during waits, with complete rollback of registration, key rotation and
   routes. Synthetic fixtures explicitly opt into disposable release readiness;
   their existing owner, plan, confirmation and continuous-recovery assertions stay.
-  Remaining status consumers and the genuine joint proof are unfinished. Snapshots
+  Catalogue pages, diagnostics, venue summaries, monitoring and operations status
+  now use that same current evidence. A queued backup notice rechecks the actual
+  point before delivery; inconclusive work cannot create a failed-copy notice.
+  Historical successes still protect the fallback, bytes and key dependencies.
+  History cleanup keeps attempt evidence and its job until both explicit cutoffs,
+  recovery references and usage records permit removing the complete graph; a
+  locked child leaves all its history intact. Focused PostgreSQL checks cover
+  these decisions and acknowledged retention/admission/policy lock waits.
+  These are synthetic boundary checks. A local parallel backup run reached the
+  container-worker deadline and returned a wall timeout instead of the CPU-limit
+  result in `verify-process.test.ts`. Both unchanged files pass isolated runs;
+  `node --test --test-concurrency=1 --test-timeout=30000 'test/*.test.ts'`
+  in the backups package passes all 757 tests. The original resource failures
+  remain unexplained. Capture Docker stages, host deadline and CPU-limit timing
+  if they recur; keep the limits and assertions intact.
+  The genuine joint proof is unfinished. Snapshots
   stay unavailable and deployment enforcement stays off. Deployment still needs
   writable private controller state separate from its read-only configuration
   mount before enabling a backup profile.
   The PR5 adapters are reconciled with current main, preserving their earlier
   storage, account, remote and controller behavior and historical test evidence.
-  Remaining qualification consumers and a joint capture-to-recovery proof against
+  Portal copy, schema-upgrade receipts and a joint capture-to-recovery proof against
   the implementing runtime with the continuous source absent remain due. A source release does not establish
   a published verifier image or qualify any snapshot. Snapshots
   remain unavailable on this test deployment, and enforcement stays off until the

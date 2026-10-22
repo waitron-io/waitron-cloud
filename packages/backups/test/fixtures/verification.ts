@@ -32,3 +32,20 @@ export async function configureRecoveryVerification(pool:Pool){
  if(policy?.target?.digest===fixtureTarget.digest&&policy.verifier_image===fixtureImage&&policy.release_ready)return;
  await transaction(pool,c=>setVerificationPolicy(c,fixtureTarget,fixtureImage,true));
 }
+
+// Synthetic persisted evidence for reader tests; no archive or release proof is implied.
+export async function admitPointFixture(pool:Pool,pointId:string,status:BackupVerificationResult['status']='passed',reason:BackupVerificationResult['reason']='none'){
+ const {randomUUID}=await import('node:crypto');
+ const {prepareVerification,admitVerification}=await import('../../src/verification-admission.ts');
+ const p=(await pool.query('SELECT venue_id FROM backup_points WHERE id=$1',[pointId])).rows[0];
+ await configureRecoveryVerification(pool);
+ const claimId=randomUUID();
+ const job=(await pool.query(`INSERT INTO backup_jobs(kind,venue_id,target_id,status,claim_id,lease_until,attempts,runs)
+ VALUES('verify',$1,$2,'running',$3,clock_timestamp()+interval '120 seconds',1,1)
+ ON CONFLICT(kind,target_id) DO UPDATE SET status='running',claim_id=$3,lease_until=clock_timestamp()+interval '120 seconds',attempts=1,runs=backup_jobs.runs+1 RETURNING id`,[p.venue_id,pointId,claimId])).rows[0];
+ const attempt=await transaction(pool,c=>prepareVerification(c,{id:job.id,venueId:p.venue_id,pointId,claimId,number:1,controllerScope:'reader-fixture'}));
+ if(!attempt)throw Error('reader fixture preparation refused');
+ const verdict=await transaction(pool,c=>admitVerification(c,attempt,verificationOutput(attempt.request,status,reason)));
+ if(verdict!== (status==='passed'?'verified':status==='invalid'?'failed':'unavailable'))throw Error('reader fixture admission refused');
+ return attempt;
+}

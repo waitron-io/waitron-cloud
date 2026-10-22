@@ -91,7 +91,7 @@ export async function operationsStatus(pool:Pool,options:OperationsStatusOptions
    count(*) FILTER(WHERE latest.id IS NULL)::integer AS missing,
    min(latest.captured_at) FILTER(WHERE latest.verification='verified') AS oldest
    FROM installations i JOIN installation_services s ON s.installation_id=i.id AND s.service='retained_snapshots' AND s.state<>'unconfigured'
-   LEFT JOIN LATERAL(SELECT p.id,p.verification,p.captured_at FROM backup_points p WHERE p.installation_id=i.id AND p.kind='snapshot' AND NOT p.deleting AND p.deleted_at IS NULL ORDER BY p.captured_at DESC,p.id DESC LIMIT 1)latest ON true
+   LEFT JOIN LATERAL(SELECT p.id,COALESCE(q.current_verification,'pending') AS verification,p.captured_at FROM backup_points p LEFT JOIN backup_point_qualification q ON q.point_id=p.id WHERE p.installation_id=i.id AND p.kind='snapshot' AND NOT p.deleting AND p.deleted_at IS NULL ORDER BY p.captured_at DESC,p.id DESC LIMIT 1)latest ON true
    WHERE i.revoked_at IS NULL`,[snapshotStale]),
   pool.query(`SELECT count(*)::integer AS sources,count(*) FILTER(WHERE caught_up_at IS NULL)::integer AS unknown,
    count(*) FILTER(WHERE caught_up_at IS NOT NULL AND caught_up_at<=clock_timestamp()-$1*interval '1 second')::integer AS stale,
