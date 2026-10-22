@@ -2526,6 +2526,12 @@ notifications separately.
   the local fixture failure; it does not fix Docker Hub's response or guarantee
   registry availability. Other backup fixtures still acquire their base inside
   their own build; extend this preparation helper there if acquisition fails.
+  The later [D108 qualification run 39786287483](https://github.com/waitron-io/waitron-cloud/actions/runs/39786287483/job/119850413048)
+  exhausted both browser-install attempts before any portal test ran. D117's
+  signed alternative source above now has two consecutive full exact-head runs
+  and an independent merge qualification, each installing in one attempt and
+  executing every browser test. The historical primary-archive slowness remains
+  unexplained. Every fixture head requires its own CI qualification.
   A separate test-harness route failure is also open. In
   [run 39813909743](https://github.com/waitron-io/waitron-cloud/actions/runs/39813909743/job/119947375548),
   registration shard 2 never ran its tests: pulling `axllent/mailpit:v1.31.1`
