@@ -219,6 +219,7 @@ jobs:
       - name: Require precisely the planned jobs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CI_PLAN: ${{ needs.changes.outputs.plan }}
           CI_RESULTS: ${{ toJSON(needs) }}
         run: node scripts/ci-summary.mjs

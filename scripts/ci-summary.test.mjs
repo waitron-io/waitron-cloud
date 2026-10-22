@@ -206,7 +206,7 @@ test('default publication allowance caps API calls, each read and the total wait
     }), /Timed out.*package \(@waitron-cloud\/portal, shard 3\/3\)/);
     assert.equal(elapsed, 60_000);
     assert.equal(timeouts.length, 30);
-    assert.equal(timeouts[0], 30_000);
+    assert.equal(timeouts[0], 10_000);
     assert.equal(timeouts.at(-1), 2_000);
   } finally {
     t.mock.restoreAll();
@@ -220,4 +220,147 @@ test('publication wait refuses records without a usable job name', async () => {
     await assert.rejects(() => summary.waitForSummary(plan, results, clock), /Invalid job record/);
     assert.equal(clock.reads(), 1);
   }
+});
+
+const identity = {runId: 42, runAttempt: 2, headSha: 'a'.repeat(40)};
+function finishedSteps() {
+  return [
+    {name: 'Set up job', number: 1, status: 'completed', conclusion: 'success'},
+    {name: 'Unused platform command', number: 2, status: 'completed', conclusion: 'skipped'},
+    {name: 'Run tests', number: 3, status: 'completed', conclusion: 'success'},
+    {name: 'Post checkout', number: 7, status: 'completed', conclusion: 'success'},
+    {name: 'Complete job', number: 8, status: 'completed', conclusion: 'success'},
+  ];
+}
+function finishedShard() {
+  return {...jobs.at(-1), status: 'in_progress', conclusion: null,
+    run_id: 42, run_attempt: 2, head_sha: identity.headSha, steps: finishedSteps()};
+}
+const withShard = shard => [...jobs.slice(0, -1), shard];
+
+test('final successful needs plus same-attempt finished steps resolve a permanently stale shard', async () => {
+  const clock = publication([withShard(finishedShard())]);
+  await summary.waitForSummary(plan, results, {...clock, identity});
+  assert.equal(clock.reads(), 1);
+  assert.equal(clock.elapsed(), 0);
+  // The synchronous final-record check remains the stricter landing contract.
+  assert.throws(() => assertSummary(plan, results, withShard(finishedShard())), /unfinished/);
+});
+
+test('step evidence cannot override cancelled, timed out, skipped or failed final results', async () => {
+  for (const conclusion of ['failure', 'cancelled', 'timed_out', 'skipped', 'unknown']) {
+    const clock = publication([withShard({...finishedShard(), status: 'completed', conclusion})]);
+    await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /did not pass/);
+  }
+  for (const result of ['failure', 'cancelled', 'skipped', 'timed_out', undefined]) {
+    const clock = publication([withShard(finishedShard())]);
+    await assert.rejects(() => summary.waitForSummary(plan, {...results, packages: result}, {...clock, identity}), /packages did not match/);
+    assert.equal(clock.reads(), 0);
+  }
+});
+
+test('stale step evidence refuses another run, commit or attempt and missing identity', async () => {
+  for (const change of [{run_id: 41}, {run_attempt: 1}, {run_attempt: 3}, {head_sha: 'b'.repeat(40)}, {run_id: undefined}, {run_attempt: undefined}, {head_sha: undefined}]) {
+    const clock = publication([withShard({...finishedShard(), ...change})]);
+    await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Timed out.*shard 3\/3/);
+  }
+  const clock = publication([withShard(finishedShard())]);
+  await assert.rejects(() => summary.waitForSummary(plan, results, clock), /Timed out.*shard 3\/3/);
+  for (const badIdentity of [
+    {...identity, runId: 0}, {...identity, runId: 1.5},
+    {...identity, runAttempt: 0}, {...identity, runAttempt: 1.5},
+    {...identity, headSha: 'bad'},
+  ]) {
+    const shard = {...finishedShard(), run_id: badIdentity.runId, run_attempt: badIdentity.runAttempt, head_sha: badIdentity.headSha};
+    await assert.rejects(() => summary.waitForSummary(plan, results, {...publication([withShard(shard)]), identity: badIdentity}), /Timed out.*shard 3\/3/);
+  }
+});
+
+test('step evidence must include successful final cleanup and no failed, unknown or incomplete step', async () => {
+  const variants = [
+    [], finishedSteps().slice(0, -1),
+    [{name: 'Complete job', number: 1, status: 'completed', conclusion: 'success'}],
+    [null, ...finishedSteps().slice(1)],
+    finishedSteps().map((step, i) => i === 0 ? {...step, name: 'Other setup'} : step),
+    finishedSteps().map((step, i) => i === 2 ? {...step, name: 'Complete job'} : step),
+    finishedSteps().map((step, i) => i === 2 ? {...step, name: 'Complete job'} : i === 4 ? {...step, name: 'Other last step'} : step),
+    finishedSteps().map((step, i) => i === 2 ? {...step, name: undefined} : step),
+    [...finishedSteps(), {name: 'Late work', number: 9, status: 'completed', conclusion: 'success'}],
+    [...finishedSteps().slice(0, -1), {...finishedSteps().at(-1), name: 'Other final step'}],
+  ];
+  for (const index of [0, 2, 3, 4]) {
+    const changes = [{conclusion: 'failure'}, {conclusion: 'cancelled'}, {conclusion: null}, {conclusion: 'unknown'}, {status: 'in_progress'}, {number: 0}, {number: 1.5}];
+    if (index === 0 || index === 4) changes.push({conclusion: 'skipped'});
+    if (index > 0) changes.push({number: 1});
+    for (const change of changes) {
+      variants.push(finishedSteps().map((step, i) => i === index ? {...step, ...change} : step));
+    }
+  }
+  for (const steps of variants) {
+    const clock = publication([withShard({...finishedShard(), steps})]);
+    await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Timed out.*shard 3\/3/);
+  }
+  for (const change of [{status: 'queued'}, {conclusion: 'failure'}, {conclusion: 'unknown'}]) {
+    const clock = publication([withShard({...finishedShard(), ...change})]);
+    await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Timed out.*shard 3\/3/);
+  }
+});
+
+test('a rerun can reuse a completed successful earlier attempt but never unfinished earlier steps', async () => {
+  const earlier = {...finishedShard(), run_attempt: 1, status: 'completed', conclusion: 'success'};
+  await summary.waitForSummary(plan, results, {...publication([withShard(earlier)]), identity});
+  const clock = publication([withShard({...earlier, status: 'in_progress', conclusion: null})]);
+  await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Timed out.*shard 3\/3/);
+});
+
+test('executed summary binds completed shard steps to the workflow run, attempt and source commit', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cloud-summary-steps-'));
+  try {
+    writeFileSync(join(root, 'jobs.json'), JSON.stringify([{jobs: withShard(finishedShard())}]));
+    writeFileSync(join(root, 'gh'), '#!/bin/sh\ncat "$CI_PUBLICATION_FIXTURE/jobs.json"\n', {mode: 0o700});
+    const run = spawnSync(process.execPath, ['scripts/ci-summary.mjs'], {
+      env: {...process.env, PATH: `${root}:${process.env.PATH}`, CI_PUBLICATION_FIXTURE: root,
+        CI_PLAN: JSON.stringify(plan),
+        CI_RESULTS: JSON.stringify(Object.fromEntries(Object.entries(results).map(([name, result]) => [name, {result}]))),
+        GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_RUN_ID: '42', GITHUB_RUN_ATTEMPT: '2', CI_HEAD_SHA: identity.headSha},
+      encoding: 'utf8', timeout: 5_000,
+    });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout, /Final needs and completed steps:.*shard 3\/3/);
+    assert.match(run.stdout, /run 42, attempt 2, a{40}/);
+    assert.match(run.stdout, /Passed 3 package jobs/);
+  } finally {
+    rmSync(root, {recursive: true, force: true});
+  }
+});
+
+test('step evidence never supplies an omitted or duplicated partition or unplanned executed job', async () => {
+  for (const records of [jobs.slice(0, -1), [...withShard(finishedShard()), finishedShard()]]) {
+    const clock = publication([records]);
+    await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Missing or duplicate job/);
+  }
+  const clock = publication([[...jobs, {...finishedShard(), name: 'legacy'}]]);
+  await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Timed out.*legacy/);
+});
+
+test('transient API timeouts retry within the existing total allowance then require real records', async () => {
+  const clock = publication([jobs]);
+  let calls = 0;
+  await summary.waitForSummary(plan, results, {...clock, readJobs: () => {
+    if (calls++ < 2) throw Object.assign(new Error('spawnSync gh ETIMEDOUT'), {code: 'ETIMEDOUT'});
+    return jobs;
+  }});
+  assert.equal(calls, 3);
+  assert.equal(clock.elapsed(), 40);
+});
+
+test('persistent transient reads stop at the deadline and retain the pending name and last error', async () => {
+  const clock = publication([jobs]);
+  let calls = 0;
+  await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, readJobs: () => {
+    if (calls++ === 0) return unfinishedJobs();
+    throw Object.assign(new Error('spawnSync gh ETIMEDOUT'), {code: 'ETIMEDOUT'});
+  }}), /shard 3\/3.*ETIMEDOUT/);
+  assert.equal(clock.elapsed(), 50);
+  assert.equal(calls, 3);
 });

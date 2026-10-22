@@ -55,7 +55,14 @@ test('strict summary always runs and receives the plan and every dependency resu
   assert.match(job('summary'),/needs: \[changes, root, typecheck, receipts, packages, documentation, scripts\]/);
   assert.match(job('summary'),/CI_PLAN: \$\{\{ needs.changes.outputs.plan \}\}/);
   assert.match(job('summary'),/CI_RESULTS: \$\{\{ toJSON\(needs\) \}\}/);
+  assert.match(job('summary'),/CI_HEAD_SHA: \$\{\{ github.event.pull_request.head.sha \|\| github.sha \}\}/);
   assert.match(job('summary'),/run: node scripts\/ci-summary.mjs/);
+});
+
+test('required dependency results cannot ignore a job failure after its steps finish', () => {
+  for (const name of ['changes', 'root', 'typecheck', 'receipts', 'packages', 'documentation', 'scripts']) {
+    assert.doesNotMatch(job(name), /^    continue-on-error:/m);
+  }
 });
 test('all work gates follow the planner and every checkout tests the exact PR head',()=>{
   for (const name of ['root','typecheck','receipts','packages','documentation']) {
