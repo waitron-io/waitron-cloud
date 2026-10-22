@@ -268,3 +268,44 @@ Keep historical KMS keys available while any retained state depends on them.
 The offline checks do not qualify role assumption, bucket-policy enforcement, backend
 migration, lock contention or recovery. Those remain named prerequisites for a later,
 separately authorized live rehearsal.
+
+## Keep each zone's outgoing path independent
+
+A single outgoing gateway would couple otherwise separate availability zones, AWS's
+independent data-centre boundaries. The network module gives each of three zones its
+own NAT gateway, which lets private machines make outgoing internet connections,
+and its own public IP and private route table. Each cell's subnet uses the NAT in its
+own zone. Database subnets use separate route tables without an internet default.
+Private route tables also use a regional S3 gateway endpoint for storage traffic.
+
+Supply zone IDs, such as the synthetic test values `eus2-az1` through `eus2-az3`,
+rather than account-dependent zone letters. The module checks them against available
+standard zones in the provider region. Its scope is `global` in Frankfurt or `es` in
+Madrid; provider and requested regions must match. Maps use zone IDs as keys, and
+sorting those IDs keeps subnet assignments stable when you reorder the input list.
+
+You can verify these declarations without contacting AWS:
+
+```sh
+node deploy/aws/check.mjs --suite network
+node --test deploy/aws/network.test.mjs
+```
+
+The defaults keep global and Spain separate: `10.40.0.0/16` and `10.50.0.0/16`.
+Each VPC, a private regional network, reserves its first two `/22` blocks for public
+and database tiers. Each tier has three `/24` subnets. Cells start at the second `/20`
+block, with three `/22` subnets each. Omit a cell's `subnet_cidr` to assign successive
+blocks by sorted cell name, or supply it explicitly to keep an existing assignment
+stable as you add names. Adding an earlier sorted name can change omitted assignments;
+review those planned replacements before any later authorised operation. Explicit
+ranges must be aligned IPv4 `/20` blocks inside the VPC, outside the reserved tiers
+and disjoint from other cells. The `/16` carving has fifteen cell address slots; it
+does not set a venue capacity or release-wave limit.
+
+OpenTofu 1.11's mock provider gives these resource instances the same computed IDs.
+The extra graph check evaluates the module's actual routing expressions with distinct
+symbolic resource IDs, so a route accidentally using another zone cannot hide behind
+identical mock values. It removes each zone from consideration and checks every
+surviving cell path. This checks declared relationships, not packet delivery or a
+network failure drill. Live reachability, NAT quotas, region availability and behaviour
+during a zone outage still need separate qualification after live work is authorised.
