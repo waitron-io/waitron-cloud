@@ -3,7 +3,7 @@ import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createLeaseIssuer,transaction} from '@waitron-cloud/registration';
-import {collectJob,createJob,createOpenAiClient,jobFingerprint,lockVenue,parseJob,readJob,writtenItems} from '../src/index.ts';
+import {collectJob,createJob,createLoopbackOpenAiClient,jobFingerprint,lockVenue,parseJob,readJob,writtenItems} from '../src/index.ts';
 import {connectedVenue,database,giveConsent} from './fixtures.ts';
 import {echoFirstPass,emptyReview,isReview,responsesBody,startFakeOpenAi,type FakeReply} from './fake-openai.ts';
 import {TranslationWorker} from '../src/index.ts';
@@ -26,7 +26,7 @@ async function queue(items:object[]):Promise<{v:Venue;job:{id:string}}>{
  return {v,job};
 }
 const worker=(baseUrl:string,options:{batchConcurrency?:number;maxLeases?:number}={},timeoutMs=100)=>
- new TranslationWorker(db.pool,createOpenAiClient({apiKey:'k',baseUrl,timeoutMs}),{wait:async()=>{},...options});
+ new TranslationWorker(db.pool,createLoopbackOpenAiClient({apiKey:'k',baseUrl,timeoutMs}),{wait:async()=>{},...options});
 const row=async(id:string)=>(await db.pool.query('SELECT *,lease_until<=clock_timestamp() AS lease_free FROM translation_jobs WHERE id=$1',[id])).rows[0];
 const saved=async(id:string)=>(await db.pool.query('SELECT batch_results FROM translation_job_bodies WHERE job_id=$1',[id])).rows[0]?.batch_results as Record<string,unknown>|undefined;
 async function collected(v:Venue,id:string){
@@ -208,7 +208,7 @@ test('shutdown while waiting for a database connection hands back the new lease 
  const {job}=await queue(many('a','A',1)),controller=new AbortController();
  const held=await pool.connect(),fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
  try{
-  const pending=new TranslationWorker(pool,createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}),{wait:async()=>{}}).runOnce(controller.signal);
+  const pending=new TranslationWorker(pool,createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}),{wait:async()=>{}}).runOnce(controller.signal);
   await until(()=>pool.waitingCount===1);controller.abort();held.release();
   assert.equal(await pending,true);assert.equal(fake.requests.length,0);
   const stopped=await row(job.id);assert.deepEqual([stopped.state,stopped.lease_free,stopped.lease_count,stopped.done],['running',true,0,0]);
@@ -270,7 +270,7 @@ test('a cap reached before work makes every pending ref failed without a provide
 test('review totals are saved with the batch, while provider calls hold no job transaction lock',async()=>{
  const {job}=await queue(many('a','A',2));
  const fake=await startFakeOpenAi(r=>isReview(r)?{json:responsesBody(JSON.stringify({changes:[{id:'p01',language:'ca',name:'Cervesa'},{id:'p01',language:'fr',name:'Refused'}]}))}:echoFirstPass(r));
- const client=createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:100});let probes=0;
+ const client=createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:100});let probes=0;
  try{await new TranslationWorker(db.pool,{...client,async respond(call,signal){
   // Probe at the provider boundary without charging database instrumentation to its HTTP deadline.
   await transaction(db.secondPool,async c=>{if(++probes===1)await c.query('SELECT pg_sleep(0.15)');await c.query('SELECT id FROM translation_jobs WHERE id=$1 FOR UPDATE NOWAIT',[job.id]);});
@@ -286,7 +286,7 @@ test('the oldest unlocked job is leased while another queued job is locked',asyn
  const {Pool}=await import('pg'),selectionPool=new Pool({...db.pool.options,options:db.pool.options.options+' -c lock_timeout=500ms'});
  try{
   await held.query('BEGIN');await held.query('SELECT id FROM translation_jobs WHERE id=$1 FOR UPDATE',[a.job.id]);
-  await new TranslationWorker(selectionPool,createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:100}),{wait:async()=>{}}).runOnce(live());
+  await new TranslationWorker(selectionPool,createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:100}),{wait:async()=>{}}).runOnce(live());
   assert.equal((await row(b.job.id)).state,'done');assert.equal((await row(a.job.id)).state,'queued');
   await held.query('ROLLBACK');await worker(fake.baseUrl).runOnce(live());assert.equal((await row(a.job.id)).state,'done');
  }finally{await held.query('ROLLBACK');held.release();await selectionPool.end();await fake.close();}
@@ -309,7 +309,7 @@ test('a full paged walk retains submit order and exact text despite regrouped fa
   return {json:responsesBody(JSON.stringify({products:products.map(p=>({id:p.id,...Object.fromEntries(languages.map(l=>[l,name])),placeholder:false,corrections:[fix]}))}))};
  });
  try{
-  const client=createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:10000});
+  const client=createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:10000});
   const leading=(input:string)=>JSON.parse(input.split('Products:\n')[1]!)[0].internal as string;
   const reordered={...client,async respond(call:Parameters<typeof client.respond>[0],signal?:AbortSignal){
    if(call.effort==='low'){

@@ -2,21 +2,21 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {once} from 'node:events';
 import {createServer,type ServerResponse} from 'node:http';
-import {createOpenAiClient,openAiBaseUrl,ProviderError} from '../src/index.ts';
+import {createLoopbackOpenAiClient,openAiBaseUrl,ProviderError} from '../src/index.ts';
 import {responsesBody,startFakeOpenAi,echoFirstPass,emptyReview,isReview,type FakeReply} from './fake-openai.ts';
 import {firstPassInput,firstPassInstructions,reviewInstructions,reviewInput,checkFirstPass,type ParsedJob} from '../src/index.ts';
 const call={instructions:'I',input:'U',effort:'low'} as const;
 async function failure(reply:FakeReply,options:{timeoutMs?:number;maxResponseBytes?:number}={},signal?:AbortSignal):Promise<ProviderError>{
  const fake=await startFakeOpenAi(()=>reply);
  try{
-  const error=await createOpenAiClient({apiKey:'sk-test-key',baseUrl:fake.baseUrl,...options}).respond(call,signal).then(()=>undefined,(e:unknown)=>e);
+  const error=await createLoopbackOpenAiClient({apiKey:'sk-test-key',baseUrl:fake.baseUrl,...options}).respond(call,signal).then(()=>undefined,(e:unknown)=>e);
   assert.ok(error instanceof ProviderError,String(error));return error;
  }finally{await fake.close();}
 }
 test('a request carries the pinned model, the effort, store false and the key, and returns text and tokens',async()=>{
  const fake=await startFakeOpenAi(()=>({json:responsesBody('{"products":[]}',{input_tokens:1200,output_tokens:340})}));
  try{
-  const client=createOpenAiClient({apiKey:'sk-test-key',baseUrl:fake.baseUrl});
+  const client=createLoopbackOpenAiClient({apiKey:'sk-test-key',baseUrl:fake.baseUrl});
   assert.deepEqual(await client.respond(call),{text:'{"products":[]}',inputTokens:1200,outputTokens:340});
   const r=fake.requests[0]!;
   assert.equal(r.path,'/responses');assert.equal(r.headers.authorization,'Bearer sk-test-key');
@@ -34,7 +34,7 @@ test("a caller's abort is reported as a network error",async()=>{
 });
 test('a server that is not there is a retryable network error',async()=>{
  const fake=await startFakeOpenAi(()=>({json:responsesBody('x')}));await fake.close();
- const e=await createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}).respond(call).then(()=>undefined,(error:unknown)=>error);
+ const e=await createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}).respond(call).then(()=>undefined,(error:unknown)=>error);
  assert.ok(e instanceof ProviderError);assert.deepEqual([e.kind,e.retryable],['network',true]);
 });
 test('a 429 carries Retry-After in milliseconds, read as seconds or as a date and capped at 60 seconds',async()=>{
@@ -52,7 +52,7 @@ test('server errors retry, other refusals do not',async()=>{
 test('a redirect is refused and never followed',async()=>{
  let followed=0;const target=await startFakeOpenAi(()=>{followed++;return {json:responsesBody('x')};});
  const fake=await startFakeOpenAi(()=>({status:307,headers:{location:target.baseUrl+'/responses'}}));
- try{await assert.rejects(createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}).respond(call),(e:unknown)=>e instanceof ProviderError&&e.kind==='redirect'&&!e.retryable);assert.equal(followed,0);}
+ try{await assert.rejects(createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}).respond(call),(e:unknown)=>e instanceof ProviderError&&e.kind==='redirect'&&!e.retryable);assert.equal(followed,0);}
  finally{await fake.close();await target.close();}
 });
 test('a body that is not the Responses shape, an incomplete reply or an oversized body is malformed and retryable',async()=>{
@@ -92,7 +92,7 @@ test('ordered output text is joined across messages, ignoring reasoning and refu
   {type:'message',content:[{type:'refusal',refusal:'no',text:'NOT OUTPUT'},{type:'output_text',text:'one'}]},
   {type:'message',content:[{type:'output_text',text:'two'},{type:'output_text',text:42}]},null,
  ]}}));
- try{assert.deepEqual(await createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl+'/v1/'}).respond({...call,effort:'medium'}),{text:'onetwo',inputTokens:100,outputTokens:50});
+ try{assert.deepEqual(await createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl+'/v1/'}).respond({...call,effort:'medium'}),{text:'onetwo',inputTokens:100,outputTokens:50});
  assert.equal(fake.requests[0]!.path,'/v1/responses');assert.equal(fake.requests[0]!.body.reasoning.effort,'medium');}
  finally{await fake.close();}
 });
@@ -102,7 +102,7 @@ test('usage requires nonnegative safe integers for both token counts',async()=>{
   assert.deepEqual([e.kind,e.retryable,e.usage],['malformed',true,undefined]);
  }
  const fake=await startFakeOpenAi(()=>({json:responsesBody('',{input_tokens:0,output_tokens:0})}));
- try{assert.deepEqual(await createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}).respond(call),{text:'',inputTokens:0,outputTokens:0});}finally{await fake.close();}
+ try{assert.deepEqual(await createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}).respond(call),{text:'',inputTokens:0,outputTokens:0});}finally{await fake.close();}
 });
 test('JSON primitives, arrays and missing output are malformed',async()=>{
  for(const json of [null,[],42,'text',{}, {...responsesBody('x'),output:{}}]){
@@ -114,7 +114,7 @@ test('the response bound counts UTF-8 bytes and allows the exact boundary',async
  assert.ok(size>raw.length);
  const fake=await startFakeOpenAi(()=>({raw}));
  try{
-  const client=createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,maxResponseBytes:size});
+  const client=createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,maxResponseBytes:size});
   assert.equal((await client.respond(call)).text,'🍋'.repeat(30));
   const e=await failure({raw},{maxResponseBytes:size-1});assert.equal(e.kind,'malformed');
  }finally{await fake.close();}
@@ -143,27 +143,27 @@ async function streaming(handler:(res:ServerResponse)=>void){
 }
 test('the timeout remains active after response headers arrive',async()=>{
  const fake=await streaming(res=>{res.writeHead(200,{'content-type':'application/json'});res.flushHeaders();res.write('{');});
- try{await assert.rejects(createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:100}).respond(call),(e:unknown)=>e instanceof ProviderError&&e.kind==='timeout'&&e.retryable);}finally{await fake.close();}
+ try{await assert.rejects(createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:100}).respond(call),(e:unknown)=>e instanceof ProviderError&&e.kind==='timeout'&&e.retryable);}finally{await fake.close();}
 });
 test('a caller abort while reading the response stays a retryable network error',async()=>{
  const controller=new AbortController();
  const fake=await streaming(res=>{res.writeHead(200);res.flushHeaders();res.write('{');controller.abort();});
- try{await assert.rejects(createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}).respond(call,controller.signal),(e:unknown)=>e instanceof ProviderError&&e.kind==='network'&&e.retryable);}finally{await fake.close();}
+ try{await assert.rejects(createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}).respond(call,controller.signal),(e:unknown)=>e instanceof ProviderError&&e.kind==='network'&&e.retryable);}finally{await fake.close();}
 });
 test('the size bound cancels an unfinished response as soon as it exceeds the bound',async()=>{
  let resolveClosed!:()=>void;const closed=new Promise<void>(resolve=>{resolveClosed=resolve;});
  const fake=await streaming(res=>{res.once('close',resolveClosed);res.writeHead(200);res.write('x'.repeat(1001));});
- try{await assert.rejects(createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,maxResponseBytes:1000,timeoutMs:500}).respond(call),(e:unknown)=>e instanceof ProviderError&&e.kind==='malformed');await Promise.race([closed,new Promise<never>((_resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('response connection retained')),300);timer.unref();})]);}finally{await fake.close();}
+ try{await assert.rejects(createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,maxResponseBytes:1000,timeoutMs:500}).respond(call),(e:unknown)=>e instanceof ProviderError&&e.kind==='malformed');await Promise.race([closed,new Promise<never>((_resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('response connection retained')),300);timer.unref();})]);}finally{await fake.close();}
 });
 test('a broken response stream becomes a sanitized network error',async()=>{
  const fake=await streaming(res=>{res.writeHead(200,{'content-length':'1000',connection:'close'});res.write('PRIVATE-NAME');res.end();});
- try{await assert.rejects(createOpenAiClient({apiKey:'sk-test-key',baseUrl:fake.baseUrl,timeoutMs:500}).respond(call),(e:unknown)=>e instanceof ProviderError&&e.kind==='network'&&!e.message.includes('PRIVATE-NAME'));}finally{await fake.close();}
+ try{await assert.rejects(createLoopbackOpenAiClient({apiKey:'sk-test-key',baseUrl:fake.baseUrl,timeoutMs:500}).respond(call),(e:unknown)=>e instanceof ProviderError&&e.kind==='network'&&!e.message.includes('PRIVATE-NAME'));}finally{await fake.close();}
 });
 test('fake helpers accept actual assembled prompts through the HTTP client',async()=>{
  const job:ParsedJob={country:'ES',languages:{default:'ca',enabled:['es','ca','en']},houseStyle:[],items:[{ref:'product:1',kind:'product',family:'product:1',category:'Snacks',staffName:'OLIVES',existing:{},missing:['ca','es','en']}]};
  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview({input_tokens:4,output_tokens:5}):echoFirstPass(r,{input_tokens:2,output_tokens:3}));
  try{
-  const client=createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl});
+  const client=createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl});
   const first=await client.respond({instructions:firstPassInstructions(job),input:firstPassInput(job,job.items),effort:'low'});
   assert.deepEqual(JSON.parse(first.text),{products:[{id:'p01',ca:'OLIVES [ca]',es:'OLIVES [es]',en:'OLIVES [en]',placeholder:false,corrections:[]}]});
   assert.deepEqual([first.inputTokens,first.outputTokens],[2,3]);
@@ -182,7 +182,7 @@ test('an HTTP error cancels its unread response connection',async()=>{
  let resolveClosed!:()=>void;const closed=new Promise<void>(resolve=>{resolveClosed=resolve;});
  const fake=await streaming(res=>{res.once('close',resolveClosed);res.writeHead(401);res.write('PRIVATE-NAME');});
  try{
-  await assert.rejects(createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:5000}).respond(call),(e:unknown)=>e instanceof ProviderError&&e.kind==='refused');
+  await assert.rejects(createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:5000}).respond(call),(e:unknown)=>e instanceof ProviderError&&e.kind==='refused');
   await Promise.race([closed,new Promise<never>((_resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('error connection retained')),300);timer.unref();})]);
  }finally{await fake.close();}
 });
@@ -191,8 +191,8 @@ test('default requests receive a 120-second timeout and explicit limits override
  t.mock.method(AbortSignal,'timeout',(ms:number)=>{requested.push(ms);return timeout(ms);});
  const fake=await startFakeOpenAi(()=>({json:responsesBody('x')}));
  try{
-  await createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}).respond(call);
-  await createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:5000}).respond(call);
+  await createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}).respond(call);
+  await createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs:5000}).respond(call);
   assert.deepEqual(requested,[120000,5000]);
  }finally{await fake.close();}
 });
@@ -200,7 +200,7 @@ test('the default response bound admits exactly 4 MiB and refuses the next byte'
  const limit=4194304,body=responsesBody(''),overhead=Buffer.byteLength(JSON.stringify(body));let extra=0;
  const fake=await startFakeOpenAi(()=>({json:responsesBody('x'.repeat(limit-overhead+extra))}));
  try{
-  const client=createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl});
+  const client=createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl});
   assert.equal((await client.respond(call)).text.length,limit-overhead);extra=1;
   await assert.rejects(client.respond(call),(e:unknown)=>e instanceof ProviderError&&e.kind==='malformed');
  }finally{await fake.close();}

@@ -42,7 +42,7 @@ test('neither the account server nor the worker writes a name, the key or an aut
  const server=child(new URL('../../account-http/src/server-cli.ts',import.meta.url),{CLOUD_EMAIL_ACTIVE_KEY_ID:'test',CLOUD_EMAIL_KEYS:JSON.stringify(db.keys),
   CLOUD_HTTP_RATE_KEY:db.rateKey,CLOUD_PORTAL_ORIGIN:origin,CLOUD_HTTP_PORT:'0',CLOUD_HTTP_HOST:'127.0.0.1',NODE_ENV:'test',CLOUD_HTTP_TRUSTED_PROXY_IPS:'',
   CLOUD_INSTALLATION_ISSUER_KEY:issuerKey,CLOUD_TRANSLATION:'1'});
- const worker=child(new URL('../src/worker-cli.ts',import.meta.url),{CLOUD_OPENAI_API_KEY:apiKey,CLOUD_OPENAI_BASE_URL:fake.baseUrl});
+ const worker=child(new URL('../src/worker-cli.ts',import.meta.url),{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:apiKey,CLOUD_OPENAI_BASE_URL:fake.baseUrl});
  const durable=await mkdtemp(join(tmpdir(),'translation-pages-'));
  let failure:unknown;
  try{

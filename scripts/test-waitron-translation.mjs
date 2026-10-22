@@ -46,7 +46,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
  const bundles=await Promise.all(bundleFiles.map(name=>readFile(join(waitron,'apps/dashboard/dist/assets',name),'utf8')));
  assert.ok(bundles.some(text=>text.includes('content.suggestions_ready_partly')&&text.includes("couldn't be done this time")),'translation_proof_current_dashboard_required');
  const require=createRequire(join(waitron,'apps/server/package.json')),tsx=require.resolve('tsx');
- const [{startPortalFixture},{SignupStore},{TranslationWorker,createOpenAiClient,sweepTranslationJobs},{startFakeOpenAi,echoFirstPass,isReview,emptyReview,responsesBody},{DatabaseSync}]=await Promise.all([
+ const [{startPortalFixture},{SignupStore},{TranslationWorker,createLoopbackOpenAiClient,sweepTranslationJobs},{startFakeOpenAi,echoFirstPass,isReview,emptyReview,responsesBody},{DatabaseSync}]=await Promise.all([
   import('../apps/portal/test/fixtures.ts'),import('../packages/registration/src/index.ts'),import('../packages/translation/src/index.ts'),import('../packages/translation/test/fake-openai.ts'),import('node:sqlite'),
  ]);
  let f,context,provider,root,stage='setup',generation=0,workerWork,loss,gate,firstSuggestion,releaseSnapshot;
@@ -166,7 +166,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   assert.equal(filtered.length,3);assert.deepEqual(filtered.map(item=>item.ref).sort(),expectedRefs);
   assert.ok(filtered.every(item=>JSON.stringify(item.missing)==='["en"]'));
   receipt.jobId=cloudJob.id;receipt.filteredRefs=filtered.map(item=>item.ref);
-  stage='worker';const worker=new TranslationWorker(f.db.pool,createOpenAiClient({apiKey:'synthetic-local-proof-key',baseUrl:provider.baseUrl}));
+  stage='worker';const worker=new TranslationWorker(f.db.pool,createLoopbackOpenAiClient({apiKey:'synthetic-local-proof-key',baseUrl:provider.baseUrl}));
   workerWork=worker.runOnce(abort.signal);assert.equal(await checked(workerWork),true);
   assert.equal((await f.db.pool.query('SELECT state FROM translation_jobs WHERE id=$1',[cloudJob.id])).rows[0].state,'done');
   if(gate){

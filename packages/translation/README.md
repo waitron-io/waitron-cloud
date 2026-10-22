@@ -7,14 +7,27 @@ must save every page before releasing the job. The
 [wire contract](../../docs/waitron-integration-contract.md#translate-all-version-1)
 defines signatures, request limits, cursor paging and refusals.
 
-Translation stays off until the remaining quality trials, joint Waitron paging proof and
+Outbound AI is denied until a separate privacy-reviewed input rule and supplier/location
+evidence receive owner acceptance. This includes apparently harmless menu text.
+`createOpenAiClient().respond()` always refuses without sending a request, reading
+the input or charging tokens. A regional URL or enable flag cannot change that.
+Translation also stays off until the remaining quality trials, joint Waitron paging proof and
 [launch decisions](../../docs/launch-evidence.md) are complete. Local fake-provider tests
 establish protocol behavior, not translation quality or permission to send real menus.
 
 ## Run the worker locally
 
-Apply the registration migrations to your local `DATABASE_URL`, supply
-`CLOUD_OPENAI_API_KEY` through your ignored environment, then run:
+Apply the registration migrations to your local `DATABASE_URL`. With ordinary settings,
+the worker settles queued jobs as `provider_unavailable` without calling AI. For synthetic
+proof only, start a fake server on literal HTTP `127.0.0.1` with an explicit port, and set:
+
+```sh
+export CLOUD_TRANSLATION_LOCAL_PROOF=1
+export CLOUD_OPENAI_BASE_URL=http://127.0.0.1:4010/v1
+export CLOUD_OPENAI_API_KEY=synthetic-local-proof-key
+```
+
+Then run:
 
 ```sh
 pnpm translation:worker --once
@@ -23,10 +36,12 @@ pnpm translation:worker
 
 `--once` sweeps old menus, processes at most one available job and exits. Continuous mode
 runs two jobs at once, with up to four batches per job. `DATABASE_URL` and a nonempty
-`CLOUD_OPENAI_API_KEY` are required. `CLOUD_OPENAI_BASE_URL` is optional and defaults to
-`https://api.openai.com/v1`; only use an override for your local fake server. It accepts
-HTTPS, or HTTP on `127.0.0.1` or `localhost`. Inside a container, loopback means that
-container; a fake server in another Compose service needs HTTPS. Redirects are refused and each provider call has a 120-second deadline.
+`CLOUD_OPENAI_API_KEY` are required. Only the explicit proof flag together with a strict
+loopback URL selects `createLoopbackOpenAiClient`. Missing ports, HTTPS, `localhost`,
+alternate numeric spellings, credentials, queries and fragments are refused. Inside a
+container, the fake server must run in that same container. Redirects are refused and
+each local provider call retains its 120-second deadline. This test transport approves
+neither content eligibility nor production processing.
 
 To run the worker in the [local Compose stack](../../docs/local-deployment.md), build
 and migrate that stack first, export your local provider settings in the shell, then run:
@@ -38,7 +53,8 @@ docker compose --env-file deploy/local-stack/local.env --profile translation up 
 The worker waits for migrations, restarts unless stopped, and has fifteen seconds to stop.
 It is absent from the default stack. The Compose account service receives
 `CLOUD_TRANSLATION`, default `0`; the worker alone receives the provider key and base URL.
-The runtime passes only the database and those explicit provider settings to the worker.
+The runtime passes only the database, explicit proof flag and provider settings to the
+worker. Other roles receive no proof flag. Test-cloud translation remains unavailable.
 To test the API locally, set `CLOUD_TRANSLATION=1` in the shell and recreate `account`
 with the same `--env-file`. The direct account command also needs
 `CLOUD_INSTALLATION_ISSUER_KEY`; Compose supplies its persisted local issuer.
@@ -118,7 +134,8 @@ Keep new results under the ignored `quality/results/` directory.
 
 `quality/original/` and `quality/grading.template.html` preserve the experiment verbatim;
 do not run the archived Python scripts. Their paths, provider calls and grading-store
-integration belong to that experiment. The maintained runner and page builder use the production client and a separate page template.
+integration belong to that experiment. The maintained runner uses the same parser and two-pass logic with the explicit local
+transport; the page builder uses a separate page template.
 Fresh quality measurements, owner Tasks 22–24, require the real key and owner grading after
 2 November 2026. They remain release gates; rescoring old results does not satisfy them.
 
@@ -135,8 +152,9 @@ new names, sorted within each product and language, with the model hidden. Its m
 `page.template.html` offers English and Spanish and follows your light or dark theme.
 The copied `grading.template.html`, `original/` and all recorded data remain unchanged.
 
-After 2 November 2026, run these commands by hand from `packages/translation` with the
-owner's key exported as `CLOUD_OPENAI_API_KEY` in your shell:
+Real quality trials remain blocked after 2 November until the separate privacy and
+supplier gates are accepted and a reviewed enabling change lands. For synthetic proof
+only, use the local settings above and run from `packages/translation`:
 
 ```sh
 pnpm quality:trial --set tuning --runs 3
@@ -145,8 +163,8 @@ pnpm quality:grading --set tuning --round r2 quality/results/tuning-*.json
 ```
 
 Repeat with `blind`. The trial accepts 1–10 repeats and an optional `--out <directory>`.
-It sends real requests and costs money, so never run it in CI. Automated tests use a local
-fake provider and a test-only key. Each output file records the set, prompt version,
+It refuses ordinary settings before creating output. Explicit local proof uses a fake
+provider and synthetic key; it supplies no translation-quality measurement. Each output file records the set, prompt version,
 model, repeat, names, failed items, usage and estimated cost at the recorded model prices.
 Files have unique names and private permissions. The trial has no production venue budget;
 keep these manual runs small. It prints file paths, and exits unsuccessfully if a first pass

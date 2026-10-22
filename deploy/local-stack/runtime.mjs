@@ -41,7 +41,7 @@ export function runtimeEnvironment(role,config,environment={},origin='http://loc
   backup:{DATABASE_URL,CLOUD_BACKUP_MASTER_KEY:config.backup.masterKey,CLOUD_BACKUP_ENDPOINT:config.storage.endpoint,CLOUD_BACKUP_REGION:config.storage.region,CLOUD_BACKUP_ACCESS_KEY:config.storage.accessKeyId,CLOUD_BACKUP_SECRET_KEY:config.storage.secretAccessKey,CLOUD_BACKUP_CA_FILE:'/run/local-stack/storage-ca.pem',...Object.fromEntries(['CLOUD_VERIFIER_IMAGE','CLOUD_VERIFIER_OWNER','CLOUD_VERIFIER_MEMORY_MIB','CLOUD_VERIFIER_SCRATCH_MIB'].filter(name=>environment[name]!==undefined).map(name=>[name,environment[name]]))},
   gateway:{GATEWAY_STATE_DIR:'/state',GATEWAY_MANIFEST:'/run/local-stack/gateway-manifest.json',GATEWAY_CELL_ID:config.gateway.cellId,GATEWAY_TRUST_KEY:'/run/local-stack/gateway-issuer.pem',GATEWAY_WIREGUARD_KEY:'/run/local-stack/gateway-wireguard.key',GATEWAY_BOT_KEY:'/run/local-stack/gateway-bot.key',GATEWAY_SUBNET:String(config.gateway.subnet)},
   manifest:{LOCAL_STACK_CONFIG_DIR:'/run/local-stack'},reconcile:{DATABASE_URL},
-  translation:{DATABASE_URL,...Object.fromEntries(['CLOUD_OPENAI_API_KEY','CLOUD_OPENAI_BASE_URL'].filter(name=>environment[name]!==undefined).map(name=>[name,environment[name]]))}
+  translation:{DATABASE_URL,...Object.fromEntries(['CLOUD_TRANSLATION_LOCAL_PROOF','CLOUD_OPENAI_API_KEY','CLOUD_OPENAI_BASE_URL'].filter(name=>environment[name]!==undefined).map(name=>[name,environment[name]]))}
  };
  if(!Object.hasOwn(roles,role))throw new Error('local_stack.role_invalid');return roles[role];
 }

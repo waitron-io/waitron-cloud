@@ -5,8 +5,8 @@
 You need to know who can see your venue's data, where copies go and what happens when
 membership ends before you entrust Cloud with it. This proposal supplies Cloud's half
 of that agreement. It does not approve a contract, establish legal compliance or enable
-hosting. Every runtime control proposed below is **unbuilt**, even where a local
-component could be reused. Source inspection is not executed runtime verification.
+hosting. The first outbound AI refusal is implemented locally after separate slice 1 authority
+on 2026-10-22. Other runtime controls proposed below remain **unbuilt**. Source inspection is not executed runtime verification.
 
 Cloud source references use base **`60c0fbf25618a30977657fe74cce90fc5dbb915b`**.
 The [ownership boundary](../../documentation-ownership.md) keeps application behaviour
@@ -15,9 +15,10 @@ and [conditional outline](../plans/2026-10-21-cloud-hosted-venue-design.md) rema
 The owner approved the complete D101/D88 data-protection engineering design from
 PR283 (`9701cd2359d69f0a3e8960b761754cf492aac745`) on 2026-10-22 around 08:30
 for build planning only. The [implementation roadmap](../plans/2026-10-22-cloud-data-protection.md)
-records the reviewed documentation milestone. Implementation requires separate build authority.
+records the reviewed roadmap. The owner subsequently approved it and authorised slice 1
+only; later slices require separate build authority.
 Broader D88 hosting/isolation and shared contracts remain unapproved; no deployment,
-spending, provider resources, contract execution or runtime implementation is authorised.
+spending, provider resources or contract execution is authorised.
 
 ## 1. Keep the decisions separate from the recommendations
 
@@ -340,14 +341,14 @@ These are approved engineering acceptance cases, not executed tests. The linked
 ## 9. Conditional delivery and the one owner decision now
 
 1. **Design approval recorded:** the owner approved the complete D101/D88 data-protection engineering design from PR283 on 2026-10-22 around 08:30 for build planning only. O1 is answered, including the 24-hour maximum, conditional Paris destination and exit/retry/concurrency rules. Broader D88 hosting/isolation and shared contracts are not approved.
-2. **Build planning published:** the [roadmap](../plans/2026-10-22-cloud-data-protection.md) records the reviewed documentation milestone; implementation requires separate build authority. Complete lawyer-reviewed annexes, shared A980/Waitron contracts and supplier/location evidence before affected flows can be enabled. All six section 10 questions remain open; AI additionally requires separate privacy review and owner acceptance of eligibility examples and limits.
-3. **Implementation remains unbuilt:** later authorised work covers country-policy controls and the disabled AI boundary, support/KMS authority, export/90-day/purge and incident handoffs, with refusal/concurrency evidence. Reuse actual landed interfaces; D79 is clean, parked and unpublished at `fab41b1`, and its migration 043 is not on this tree. No further migration item starts until its slot resolves; the first planned slice is SQL-free.
+2. **Roadmap approved, slice 1 authorised:** the [roadmap](../plans/2026-10-22-cloud-data-protection.md) records the reviewed slices. Only slice 1 has separate build authority. Complete lawyer-reviewed annexes, shared A980/Waitron contracts and supplier/location evidence before affected flows can be enabled. All six section 10 questions remain open; AI additionally requires separate privacy review and owner acceptance of eligibility examples and limits.
+3. **Slice 1 implemented locally:** the outbound AI boundary refuses production calls; only explicit synthetic loopback proof is available. Later authorised work covers country-policy controls, support/KMS authority, export/90-day/purge and incident handoffs, with refusal/concurrency evidence. Reuse actual landed interfaces; D79 is clean, parked and unpublished at `fab41b1`, and its migration 043 is not on this tree. No further migration item starts until its slot resolves; the first planned slice is SQL-free.
 4. **Before enablement:** satisfy the [launch evidence gate](../../launch-evidence.md#pass-the-production-evidence-gate), legal/provider/location and KMS deletion-waiting policy, D102 email evidence and applicable D88/A951/fiscal/isolation contracts. D68 is landed, but hosting/recovery costs and reliability still need measurement. D103's first C39 monitoring design is approved for planning only; release/compute remain separate. D102/D104 hands-on work waits until 3 November.
 
 **O1, answered:** full data-protection engineering design approved for build planning
 only on 2026-10-22 around 08:30. No repeat owner question. AI eligibility, all six lawyer
 questions, KMS deletion-waiting policy, provider qualification and runtime proof remain
-open. Approval does not authorise spending, deployment, contracts or implementation.
+open. Approval authorises only slice 1 locally, without spending, deployment or contracts.
 
 ## 10. Questions for the lawyer, not engineering guesses
 

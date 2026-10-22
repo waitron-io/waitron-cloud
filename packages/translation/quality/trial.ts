@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {setTimeout as delay} from 'node:timers/promises';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {createOpenAiClient,openAiBaseUrl,parseJob,planBatches,translateBatch,translationModel,translationPromptVersion,type BatchHooks,type ItemResult,type ParsedJob} from '../src/index.ts';
+import {createLoopbackOpenAiClient,ProviderError,parseJob,planBatches,translateBatch,translationModel,translationPromptVersion,type BatchHooks,type ItemResult,type ParsedJob} from '../src/index.ts';
 import {languages,loadSet,type GradedSet,type SetName} from './scorer.ts';
 
 export function trialJob(set:GradedSet):ParsedJob{
@@ -18,7 +18,8 @@ export async function runTrial(options:{set:SetName;runs:number;outDir:URL;env:N
  const apiKey=options.env.CLOUD_OPENAI_API_KEY;
  if(!apiKey?.trim())throw new Error('CLOUD_OPENAI_API_KEY is required');
  if(options.set!=='tuning'&&options.set!=='blind')throw new Error('Invalid graded set');
- const client=createOpenAiClient({apiKey,baseUrl:openAiBaseUrl(options.env)}),job=trialJob(loadSet(options.set)),batches=planBatches(job.items);
+ if(options.env.CLOUD_TRANSLATION_LOCAL_PROOF!=='1')throw new ProviderError('refused');
+ const client=createLoopbackOpenAiClient({apiKey,baseUrl:options.env.CLOUD_OPENAI_BASE_URL??''}),job=trialJob(loadSet(options.set)),batches=planBatches(job.items);
  mkdirSync(options.outDir,{recursive:true});
  // A unique stamp and exclusive creation preserve earlier paid trial evidence.
  const stamp=new Date().toISOString().replace(/[:.]/g,'-')+'-'+randomUUID(),written:URL[]=[];

@@ -2,7 +2,7 @@ import {validateHeaderValue} from 'node:http';
 import {setTimeout as delay} from 'node:timers/promises';
 import {Pool} from 'pg';
 import {migrationNames,runWorkerLoop} from '@waitron-cloud/registration';
-import {createOpenAiClient,openAiBaseUrl} from './openai-client.ts';
+import {createOpenAiClient,createLoopbackOpenAiClient,openAiBaseUrl} from './openai-client.ts';
 import {TranslationWorker} from './worker.ts';
 import {sweepTranslationJobs} from './retention.ts';
 let pool:Pool|undefined;
@@ -30,7 +30,9 @@ try{
  const args=process.argv.slice(2);
  if(args.length>1||(args.length===1&&args[0]!=='--once')||!process.env.DATABASE_URL||!process.env.CLOUD_OPENAI_API_KEY?.trim())throw Error();
  validateHeaderValue('authorization',`Bearer ${process.env.CLOUD_OPENAI_API_KEY}`);
- const client=createOpenAiClient({apiKey:process.env.CLOUD_OPENAI_API_KEY,baseUrl:openAiBaseUrl(process.env)});
+ const client=process.env.CLOUD_TRANSLATION_LOCAL_PROOF==='1'
+  ?createLoopbackOpenAiClient({apiKey:process.env.CLOUD_OPENAI_API_KEY,baseUrl:process.env.CLOUD_OPENAI_BASE_URL??''})
+  :createOpenAiClient({apiKey:process.env.CLOUD_OPENAI_API_KEY,baseUrl:openAiBaseUrl(process.env)});
  pool=new Pool({connectionString:process.env.DATABASE_URL,max:jobConcurrency+2,connectionTimeoutMillis:5000,statement_timeout:10000});
  // A client can emit an error while borrowed or being discarded, outside the idle pool handler.
  pool.on('connect',client=>{client.on('error',fail);});

@@ -247,6 +247,7 @@ services:
     command: ["node", "deploy/local-stack/runtime.mjs", "translation"]
     profiles: [translation]
     environment:
+      CLOUD_TRANSLATION_LOCAL_PROOF: ${CLOUD_TRANSLATION_LOCAL_PROOF:-}
       CLOUD_OPENAI_API_KEY: ${CLOUD_OPENAI_API_KEY:-}
       CLOUD_OPENAI_BASE_URL: ${CLOUD_OPENAI_BASE_URL:-}
     depends_on:

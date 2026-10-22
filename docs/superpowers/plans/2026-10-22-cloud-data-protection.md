@@ -59,6 +59,11 @@ Each slice ends with its focused tests, typecheck for code changes, and updated 
 
 ## Slice 1: Deny outbound AI, retain synthetic local proof (SQL-free)
 
+**Authority update, 2026-10-22:** the owner approved this roadmap and authorised
+slice 1 only. The implementation keeps production requests denied; synthetic
+loopback proof does not close privacy, supplier or release gates. Later slices
+still need their own prerequisites and authority.
+
 **Landable result:** No production AI request can leave through supported Cloud service or maintained trial entry points. Local fake-provider tests still exercise the real parsing, billing, retry and cancellation transport. No migration, production SQL change, policy allow rule, personal-data detector, new HTTP status, or supplier enablement.
 
 **Files:** Modify `packages/translation/src/openai-client.ts`, `src/index.ts`, `src/worker-cli.ts`, `quality/trial.ts`, `README.md` within that package; `.env.example`, `compose.yaml`, `deploy/local-stack/runtime.mjs`, `deploy/local-stack/runtime.test.mjs`, `scripts/test-waitron-translation.mjs`. Create `packages/translation/test/outbound-disabled.test.ts`. Extend `test/openai-client.test.ts`, `test/batch-runner.test.ts`, `test/worker-cli.test.ts`, `test/no-names-in-logs.test.ts`, `test/local-stack-runtime.test.ts`, `quality/trial.test.ts` within that package. Migrate adapter construction in `test/worker.test.ts`, `test/retention.test.ts`, `test/worker-retention-admission.test.ts` to the local factory; preserve their assertions. Update `docs/backlog.md` only to record actual local implementation after it exists.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createOpenAiClient,parseJob,translateBatch,type BatchHooks,type ModelClient} from '../src/index.ts';
+import {createOpenAiClient,createLoopbackOpenAiClient,parseJob,translateBatch,type BatchHooks,type ModelClient} from '../src/index.ts';
 import {echoFirstPass,emptyReview,isReview,responsesBody,startFakeOpenAi,type FakeReply,type FakeRequest} from './fake-openai.ts';
 const job=parseJob(JSON.stringify({version:1,country:'ES',languages:{default:'ca',enabled:['ca','es','en']},
  items:[{ref:'product:1',kind:'product',family:'product:1',category:'BAR TAPAS',staffName:'GUILDAS',existing:{},missing:['ca','es','en']},
@@ -13,7 +13,7 @@ function hooksFor(allow:()=>boolean=()=>true){
 }
 async function withFake(handler:(r:FakeRequest)=>FakeReply|Promise<FakeReply>,run:(client:ModelClient,fake:Awaited<ReturnType<typeof startFakeOpenAi>>)=>Promise<void>,timeoutMs=100){
  const fake=await startFakeOpenAi(handler);
- try{await run(createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs}),fake);}finally{await fake.close();}
+ try{await run(createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl,timeoutMs}),fake);}finally{await fake.close();}
 }
 const live=()=>new AbortController().signal;
 test('a timeout, malformed JSON and a missing product each retry, then the batch succeeds',async()=>{
@@ -195,4 +195,13 @@ test('spending and renewal failures are both retained without repeating the paid
   });
   assert.equal(fake.requests.length,1);
  });
+});
+
+test('the production refusal ends the batch without review, waiting or spending',async t=>{
+ let requests=0,attempts=0;
+ t.mock.method(globalThis,'fetch',async()=>{requests++;throw Error('must not send');});
+ const {waits,spent,hooks}=hooksFor();hooks.attempted=async()=>{attempts++;};
+ const outcome=await translateBatch(job,job.items,createOpenAiClient({apiKey:'synthetic'}),hooks,live());
+ assert.deepEqual(outcome,{kind:'failed',reason:'provider_unavailable'});
+ assert.deepEqual(waits,[]);assert.deepEqual(spent,[]);assert.equal(requests,0);assert.equal(attempts,1);
 });

@@ -38,7 +38,7 @@ test('two real production-path trials write scorer inputs and count both passes'
  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
  const dir=mkdtempSync(join(tmpdir(),'translation-trial-'));
  try{
-  const files=await trial.runTrial({set:'blind',runs:2,outDir:pathToFileURL(dir+'/'),env:{CLOUD_OPENAI_API_KEY:'test-only-key',CLOUD_OPENAI_BASE_URL:fake.baseUrl}});
+  const files=await trial.runTrial({set:'blind',runs:2,outDir:pathToFileURL(dir+'/'),env:{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'test-only-key',CLOUD_OPENAI_BASE_URL:fake.baseUrl}});
   assert.equal(files.length,2);assert.equal(new Set(files.map(String)).size,2);
   for(const [i,file] of files.entries()){
    const r=JSON.parse(readFileSync(file,'utf8'));
@@ -62,7 +62,7 @@ test('invalid trial options fail before any provider request or output',async()=
  assert.equal(typeof trial.runTrial,'function','runTrial must exist');
  const fake=await startFakeOpenAi(()=>({status:401})),dir=mkdtempSync(join(tmpdir(),'translation-trial-invalid-'));
  try{
-  for(const runs of [0,11,1.5,NaN])await assert.rejects(trial.runTrial({set:'blind',runs,outDir:pathToFileURL(dir+'/'),env:{CLOUD_OPENAI_API_KEY:'test-key',CLOUD_OPENAI_BASE_URL:fake.baseUrl}}),/runs/);
+  for(const runs of [0,11,1.5,NaN])await assert.rejects(trial.runTrial({set:'blind',runs,outDir:pathToFileURL(dir+'/'),env:{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'test-key',CLOUD_OPENAI_BASE_URL:fake.baseUrl}}),/runs/);
   await assert.rejects(trial.runTrial({set:'blind',runs:1,outDir:pathToFileURL(dir+'/'),env:{CLOUD_OPENAI_BASE_URL:fake.baseUrl}}),/CLOUD_OPENAI_API_KEY/);
   assert.equal(fake.requests.length,0);assert.deepEqual(readdirSync(dir),[]);
  }finally{await fake.close();rmSync(dir,{recursive:true,force:true});}
@@ -73,7 +73,7 @@ test('a refused first pass records failures; a refused review cannot look fully 
   const fake=await startFakeOpenAi(r=>!failReview||isReview(r)?{status:401}:echoFirstPass(r));
   const dir=mkdtempSync(join(tmpdir(),'translation-trial-fail-'));
   try{
-   const [file]=await trial.runTrial({set:'blind',runs:1,outDir:pathToFileURL(dir+'/'),env:{CLOUD_OPENAI_API_KEY:'test-key',CLOUD_OPENAI_BASE_URL:fake.baseUrl}});
+   const [file]=await trial.runTrial({set:'blind',runs:1,outDir:pathToFileURL(dir+'/'),env:{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'test-key',CLOUD_OPENAI_BASE_URL:fake.baseUrl}});
    const r=JSON.parse(readFileSync(file!,'utf8'));
    assert.equal(r.failed.length,30);assert.equal(Object.keys(r.names).length,failReview?30:0);
    assert.deepEqual(r.usage,failReview?{inputTokens:100,outputTokens:50}:{inputTokens:0,outputTokens:0});
@@ -85,10 +85,10 @@ test('the trial command is strict about options and prints written result paths'
  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r)),dir=mkdtempSync(join(tmpdir(),'translation-trial-cli-'));
  try{
  for(const args of [[],['--set','blind','--runs','1','--unknown'],['--set','blind','--runs','1','--unknown','value'],['--set','blind','--runs','1','--runs','2'],['--set','blind','--runs','1','--out']]){
-  const r=await command(cli,[...args,'--out',dir],{CLOUD_OPENAI_API_KEY:'private-test-value',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
+  const r=await command(cli,[...args,'--out',dir],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'private-test-value',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
   assert.notEqual(r.code,0);assert.equal(r.stdout,'');assert.match(r.stderr,/usage:/);assert.ok(!r.stderr.includes('private-test-value'));
  }
-  const r=await command(cli,['--set','blind','--runs','1','--out',dir],{CLOUD_OPENAI_API_KEY:'private-test-value',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
+  const r=await command(cli,['--set','blind','--runs','1','--out',dir],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'private-test-value',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
   assert.equal(r.code,0,r.stderr);assert.equal(r.stderr,'');
   const file=r.stdout.trim();assert.ok(file.startsWith(dir+'/blind-'));assert.ok(file.endsWith('-1.json'));
   assert.equal(JSON.parse(readFileSync(file,'utf8')).failed.length,0);
@@ -98,7 +98,7 @@ test('the trial command is strict about options and prints written result paths'
 test('a refused trial prints its diagnostic path and exits unsuccessfully',async()=>{
  const fake=await startFakeOpenAi(()=>({status:401})),dir=mkdtempSync(join(tmpdir(),'translation-trial-cli-failed-'));
  try{
-  const r=await command(cli,['--set','blind','--runs','1','--out',dir],{CLOUD_OPENAI_API_KEY:'private-test-value',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
+  const r=await command(cli,['--set','blind','--runs','1','--out',dir],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'private-test-value',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
   assert.equal(r.code,1,r.stderr);assert.equal(r.stderr,'');
   const file=r.stdout.trim();assert.ok(file.startsWith(dir+'/blind-'));
   assert.equal(JSON.parse(readFileSync(file,'utf8')).failed.length,30);
@@ -110,7 +110,21 @@ test('a colliding output filename preserves the earlier trial evidence',async()=
  writeFileSync(file,'Earlier paid trial evidence');
  mock.method(crypto,'randomUUID',()=> 'fixed');mock.method(Date.prototype,'toISOString',()=> '2026-10-17T12:00:00.000Z');syncBuiltinESMExports();
  try{
-  await assert.rejects(trial.runTrial({set:'blind',runs:1,outDir:pathToFileURL(dir+'/'),env:{CLOUD_OPENAI_API_KEY:'test-key',CLOUD_OPENAI_BASE_URL:fake.baseUrl}}),{code:'EEXIST'});
+  await assert.rejects(trial.runTrial({set:'blind',runs:1,outDir:pathToFileURL(dir+'/'),env:{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'test-key',CLOUD_OPENAI_BASE_URL:fake.baseUrl}}),{code:'EEXIST'});
   assert.equal(readFileSync(file,'utf8'),'Earlier paid trial evidence');
  }finally{mock.restoreAll();syncBuiltinESMExports();await fake.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('maintained trials deny default, global and regional calls and flag-only before output',async t=>{
+ let requests=0;t.mock.method(globalThis,'fetch',async()=>{requests++;throw Error('must not send');});
+ const dir=mkdtempSync(join(tmpdir(),'translation-trial-denied-'));
+ try{
+  for(const flag of [undefined,'','0','1'])for(const baseUrl of [undefined,'https://api.openai.com/v1','https://eu.api.openai.com/v1']){
+   await assert.rejects(trial.runTrial({set:'blind',runs:1,outDir:pathToFileURL(dir+'/'),env:{CLOUD_OPENAI_API_KEY:'synthetic-private',CLOUD_TRANSLATION_LOCAL_PROOF:flag,CLOUD_OPENAI_BASE_URL:baseUrl}}));
+   assert.deepEqual(readdirSync(dir),[]);
+  }
+  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
+  try{await assert.rejects(trial.runTrial({set:'blind',runs:1,outDir:pathToFileURL(dir+'/'),env:{CLOUD_OPENAI_API_KEY:'synthetic-private',CLOUD_OPENAI_BASE_URL:fake.baseUrl}}));assert.equal(fake.requests.length,0);}finally{await fake.close();}
+  assert.equal(requests,0);
+ }finally{rmSync(dir,{recursive:true,force:true});}
 });

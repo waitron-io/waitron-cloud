@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
 import {createLeaseIssuer,transaction} from '@waitron-cloud/registration';
-import {createJob,createOpenAiClient,jobFingerprint,lockVenue,sweepTranslationJobs,TranslationWorker} from '../src/index.ts';
+import {createJob,createLoopbackOpenAiClient,jobFingerprint,lockVenue,sweepTranslationJobs,TranslationWorker} from '../src/index.ts';
 import {connectedVenue,database,giveConsent} from './fixtures.ts';
 import {echoFirstPass,emptyReview,isReview,startFakeOpenAi} from './fake-openai.ts';
 
@@ -38,7 +38,7 @@ test(`a ${state} job submitted ${age} ago is not leased or sent while awaiting c
  const beforeJob=await jobRow(old.id),beforeBody=await bodyRow(old.id);
  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
  try{
-  const worker=new TranslationWorker(db.pool,createOpenAiClient({apiKey:'local-test',baseUrl:fake.baseUrl,timeoutMs:5000}));
+  const worker=new TranslationWorker(db.pool,createLoopbackOpenAiClient({apiKey:'local-test',baseUrl:fake.baseUrl,timeoutMs:5000}));
   const leased=await worker.runOnce(new AbortController().signal);
   assert.equal(fake.requests.length,0,'old menu must not reach the provider');
   assert.equal(leased,false,'old work must not receive a new lease');
