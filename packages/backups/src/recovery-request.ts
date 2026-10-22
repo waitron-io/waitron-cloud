@@ -3,18 +3,23 @@ import {verify} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
 import {recordSecurityAuditEvent,transaction,type PlanMode} from '@waitron-cloud/registration';
-import {BackupRecovery,decode,publicKey,type Proof,type RecoveryApprovalInput} from './recovery.ts';
+import {BackupRecovery,decode,publicKey,type RecoveryApprovalInput} from './recovery.ts';
 import {backupFail,uuid,uniqueViolation} from './catalogue.ts';
 import type {BackupKeyVault} from './keys.ts';
+import {recoveryNegotiation,requestPayloadV2,type RecoveryMachineEnvelope} from './recovery-v2.ts';
+import type {BackupVerificationTarget} from './verification-protocol.ts';
 type Action='start'|'status';
-interface Claims {id:string;publicKey:string;code:string;issuedAt:number;}
-interface Row {id:string;public_key:string;code_hash:string;expires_at:Date;failed_codes:number;account_id:string|null;operation_id:string|null;}
+interface Claims {id:string;publicKey:string;code:string;issuedAt:number;version:1|2;target:BackupVerificationTarget|null;}
+interface Row {id:string;public_key:string;code_hash:string;expires_at:Date;failed_codes:number;account_id:string|null;operation_id:string|null;protocol_version:2|null;verification_target:BackupVerificationTarget|null;}
 export function requestPayload(origin:string,id:string,action:Action,key:string,code:string,issuedAt:number){return Buffer.from(JSON.stringify(['waitron-cloud-recovery-request-v1',origin,id,action,key,code,issuedAt]));}
-export function verifyRecoveryRequest(origin:string,action:Action,proof:Proof):Claims {
+export function verifyRecoveryRequest(origin:string,action:Action,proof:RecoveryMachineEnvelope):Claims {
  try{
-  const bytes=decode(proof.payload,2048),v:unknown=JSON.parse(new TextDecoder('utf8',{fatal:true}).decode(bytes));
-  if(!Array.isArray(v)||v.length!==7||!uuid(v[2])||typeof v[4]!=='string'||typeof v[5]!=='string'||!/^\d{8}$/.test(v[5])||!Number.isSafeInteger(v[6])||Math.abs(Date.now()-v[6])>60000||!requestPayload(origin,v[2],action,v[4],v[5],v[6]).equals(bytes)||!verify(null,bytes,publicKey(v[4]),decode(proof.signature,86)))throw Error();
-  return {id:v[2],publicKey:v[4],code:v[5],issuedAt:v[6]};
+  const negotiation=recoveryNegotiation(proof),bytes=decode(proof.payload,2048),v:unknown=JSON.parse(new TextDecoder('utf8',{fatal:true}).decode(bytes));
+  const version=negotiation.version,time=version===2?7:6;
+  if(!Array.isArray(v)||v.length!==(version===2?8:7)||!uuid(v[2])||typeof v[4]!=='string'||typeof v[5]!=='string'||!/^\d{8}$/.test(v[5])||!Number.isSafeInteger(v[time])||Math.abs(Date.now()-v[time])>60000)throw Error();
+  const expected=version===2?requestPayloadV2(origin,v[2],action,v[4],v[5],negotiation.target!.digest,v[time]):requestPayload(origin,v[2],action,v[4],v[5],v[time]);
+  if(!expected.equals(bytes)||!verify(null,bytes,publicKey(v[4]),decode(proof.signature,86)))throw Error();
+  return {id:v[2],publicKey:v[4],code:v[5],issuedAt:v[time],...negotiation};
  }catch{return backupFail('invalid_proof');}
 }
 async function lock(client:PoolClient,id:string):Promise<Row>{
@@ -26,14 +31,14 @@ function view(row:Row){return {requestId:row.id,state:row.operation_id?'approved
 export class RecoveryRequests {
  readonly planMode:PlanMode;readonly pool:Pool;readonly vault:BackupKeyVault;readonly origin:string;readonly #codes:RecoveryCodes;
  constructor(pool:Pool,vault:BackupKeyVault,origin:string,keys:RecoveryCodeKeys|null|undefined=recoveryCodeKeysFromEnv(process.env),planMode:PlanMode='existing'){this.planMode=planMode;this.pool=pool;this.vault=vault;this.origin=origin;this.#codes=new RecoveryCodes(keys??undefined);}
- async machine(action:Action,proof:Proof){
+ async machine(action:Action,proof:RecoveryMachineEnvelope){
   const c=verifyRecoveryRequest(this.origin,action,proof);
   return transaction(this.pool,async client=>{
    if(action==='start'){
     if((await client.query('SELECT 1 FROM installations WHERE public_key=$1 UNION ALL SELECT 1 FROM backup_recoveries WHERE target_public_key=$1 AND id<>$2',[c.publicKey,c.id])).rowCount)backupFail('target_not_fresh');
-    await client.query('INSERT INTO backup_recovery_requests(id,public_key,code_hash) VALUES($1,$2,$3) ON CONFLICT(id) DO NOTHING',[c.id,c.publicKey,this.#codes.protect({id:c.id,public_key:c.publicKey},c.code)]);
+    await client.query('INSERT INTO backup_recovery_requests(id,public_key,code_hash,protocol_version,verification_target) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO NOTHING',[c.id,c.publicKey,this.#codes.protect({id:c.id,public_key:c.publicKey},c.code),c.version===2?2:null,c.target]);
    }
-   const row=await lock(client,c.id);if(row.public_key!==c.publicKey||!this.#codes.matches(row,row.code_hash,c.code))backupFail('conflict');await available(client,row);verifyRecoveryRequest(this.origin,action,proof);return view(row);
+   const row=await lock(client,c.id);if((row.protocol_version??1)!==c.version||(row.verification_target?.digest??null)!==(c.target?.digest??null)||row.public_key!==c.publicKey||!this.#codes.matches(row,row.code_hash,c.code))backupFail('conflict');await available(client,row);verifyRecoveryRequest(this.origin,action,proof);return {...(row.protocol_version===2?{version:2 as const}:{}),...view(row)};
   }).catch(error=>{if(uniqueViolation(error,'backup_recovery_requests_public_key_key'))backupFail('target_not_fresh');throw error;});
  }
  async #browser(id:string,code:string,token:string,csrf:string,input?:RecoveryApprovalInput){

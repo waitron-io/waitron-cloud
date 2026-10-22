@@ -191,6 +191,17 @@ A missing target policy leaves verification jobs unclaimed. Policy locks precede
 job claims and retention venue locks, so a policy change cannot race an old claim.
 When a claim has expired, verification results, cleanup errors and shutdown leave
 job counters untouched.
+You can check machine recovery negotiation with
+`node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test test/recovery-v2.test.ts test/recovery-request.test.ts test/continuous-recovery.test.ts`
+and the HTTP boundary with
+`node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test test/recovery-v2.test.ts`.
+Version 2 binds the complete requested target to the fresh key and request ID.
+Snapshot metadata and read grants return the selected attempt's stored descriptor,
+so a retry cannot silently change targets or downgrade to version 1. Owner forms
+keep their existing limits; only the machine route accepts the larger descriptor.
+These tests use synthetic archive-verification evidence in disposable databases.
+Repeated qualification checks throughout recovery and replacement and the genuine
+joint proof remain unfinished. Keep snapshots unavailable and enforcement off.
 You can exercise these rules with
 `node scripts/test-postgres.mjs exec node --test packages/backups/test/worker-admission.test.ts packages/backups/test/worker.test.ts`.
 The synthetic fixtures test admission and isolation; the complete genuine

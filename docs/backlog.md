@@ -1186,16 +1186,24 @@ notifications separately.
   claims and retention venue locks. Late verification, error and cancellation
   results leave expired claims untouched. Existing tests now seed explicit
   synthetic bound evidence, while the genuine local proof requires the bound
-  image as well as its original independent checks. Recovery v2, remaining
-  qualification consumers and the genuine joint proof are unfinished. Snapshots
+  image as well as its original independent checks. Machine recovery now negotiates
+  Waitron's exact v2 signed target binding, persists it with the fresh request key,
+  and returns the selected immutable attempt's descriptor on snapshot info/read.
+  Replays cannot change the target or downgrade versions. The machine-only reader
+  rejects duplicate fields and malformed UTF-8, accepts bounded complete targets,
+  and caps responses at 65,536 bytes without widening owner forms. Synthetic
+  database and HTTP checks cover all three target actions, signature expiry after
+  a confirmed lock wait, and unchanged v1/continuous behavior. Current qualification
+  and release readiness are required for v2 approval; v1 cannot approve a currently
+  qualified snapshot. Repeated qualification checks at every recovery/replacement
+  boundary, remaining status consumers and the genuine joint proof are unfinished. Snapshots
   stay unavailable and deployment enforcement stays off. Deployment still needs
   writable private controller state separate from its read-only configuration
   mount before enabling a backup profile.
   The PR5 adapters are reconciled with current main, preserving their earlier
   storage, account, remote and controller behavior and historical test evidence.
-  Target-bound verification integration, real isolation and cleanup checks, and a
-  joint capture-to-recovery proof against the implementing runtime with the
-  continuous source absent remain due. A source release does not establish
+  Remaining qualification consumers and a joint capture-to-recovery proof against
+  the implementing runtime with the continuous source absent remain due. A source release does not establish
   a published verifier image or qualify any snapshot. Snapshots
   remain unavailable on this test deployment, and enforcement stays off until the
   implementation, evidence and release gates pass.
