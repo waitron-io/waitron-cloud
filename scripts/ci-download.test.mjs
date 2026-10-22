@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
-import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
@@ -11,19 +12,35 @@ const browserStep = workflow.match(/      - name: Install Chromium with bounded 
 
 // Execute the workflow's shell. Only the outside installer and sudo boundary are controlled.
 async function install(t, scenario = {}) {
+  const mirror = createServer((request, response) => {
+    if (request.url === '/archive.ubuntu.com/font.deb') response.end('qualified dependency bytes');
+    // The other source accepts the connection but never supplies its package.
+  });
+  await new Promise(resolve => mirror.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { mirror.closeAllConnections(); await new Promise(resolve => mirror.close(resolve)); });
   const root = await mkdtemp(join(tmpdir(), 'cloud-ci-download-'));
   t.after(async () => {
     try { process.kill(Number(await readFile(join(root, 'holder.pid'), 'utf8')), 'SIGKILL'); } catch {}
     await rm(root, {recursive: true, force: true});
   });
+  await mkdir(join(root, 'sources.list.d'));
+  await writeFile(join(root, 'sources.list.d', 'ubuntu.sources'), 'Types: deb\nURIs: mirror+file:/etc/apt/apt-mirrors.txt\nSuites: noble noble-updates noble-security\nComponents: main universe\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n');
   await writeFile(join(root, 'sudo'), '#!/bin/sh\nexec "$@"\n', {mode: 0o700});
   await writeFile(join(root, 'pnpm'), `#!/usr/bin/env python3
-import fcntl, os, pathlib, signal, subprocess, sys, time
+import fcntl, os, pathlib, signal, subprocess, sys, time, urllib.request
 root = pathlib.Path(os.environ['DOWNLOAD_FIXTURE'])
 count = root / 'attempts'
 n = int(count.read_text()) + 1 if count.exists() else 1
 count.write_text(str(n))
 assert sys.argv[1:] == ['--filter', '@waitron-cloud/ui-smoke', 'exec', 'playwright', 'install', '--with-deps', 'chromium']
+if os.environ.get('DOWNLOAD_SOURCE_REQUIRED') == '1':
+    source = (root / 'sources.list.d' / 'ubuntu.sources').read_text()
+    host = 'azure.archive.ubuntu.com' if 'mirror+file:/etc/apt/apt-mirrors.txt' in source else 'archive.ubuntu.com'
+    print('fetching controlled dependency from ' + host, flush=True)
+    with urllib.request.urlopen(os.environ['DOWNLOAD_MIRROR'] + '/' + host + '/font.deb') as response:
+        assert response.read() == b'qualified dependency bytes'
+    (root / 'installed').write_text('yes')
+    sys.exit(0)
 if os.environ.get('DOWNLOAD_FAIL') == '1':
     sys.exit(9)
 if n == 1:
@@ -46,7 +63,7 @@ with (root / 'apt.lock').open('a+') as lock:
 (root / 'installed').write_text('yes')
 `, {mode: 0o700});
   // Shorten only elapsed waits; keep the workflow's command, retry and cleanup wiring.
-  const shell = browserStep.replaceAll('120s', '1s').replaceAll('10s', '0.2s')
+  const shell = browserStep.replaceAll('scripts/ci-browser-source.py', `scripts/ci-browser-source.py --apt-root ${root}`).replaceAll('120s', '1s').replaceAll('10s', '0.2s')
     .replaceAll('sleep 5', 'sleep 0.01').replaceAll('--timeout 120', '--timeout 1')
     .replaceAll('--grace 10', '--grace 0.2').replaceAll('--lock-wait 30', '--lock-wait 0.3')
     .replaceAll('--retry-delay 5', '--retry-delay 0.01')
@@ -54,7 +71,7 @@ with (root / 'apt.lock').open('a+') as lock:
   const child = spawn('bash', ['-e', '-o', 'pipefail', '-c', shell], {
     cwd: new URL('../', import.meta.url),
     env: {...process.env, PATH: `${root}:${process.env.PATH}`, DOWNLOAD_FIXTURE: root,
-      DOWNLOAD_FAIL: scenario.fail ? '1' : '0'}, stdio: ['ignore', 'pipe', 'pipe'],
+      DOWNLOAD_MIRROR: `http://127.0.0.1:${mirror.address().port}`, DOWNLOAD_FAIL: scenario.fail ? '1' : '0', DOWNLOAD_SOURCE_REQUIRED: scenario.source ? '1' : '0'}, stdio: ['ignore', 'pipe', 'pipe'],
   });
   t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); });
   let output = '';
@@ -178,4 +195,12 @@ while True: time.sleep(0.1)
   const done = await result;
   assert.equal((done.output.match(/Download attempt \d/g) ?? []).length, 1);
   assert.throws(() => process.kill(pid, 0), {code: 'ESRCH'});
+});
+
+// Leaving Azure configured must exhaust the real supervisor instead of reaching installation.
+test('workflow escapes an unavailable Ubuntu mirror before installing browser dependencies', {timeout: 15000}, async t => {
+  const result = await install(t, {source: true});
+  assert.equal(result.code, 0, result.output);
+  assert.equal(result.attempts, 1);
+  assert.equal(result.installed, 'yes');
 });
