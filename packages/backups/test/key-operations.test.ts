@@ -1,3 +1,4 @@
+import {verifyPointFixture,verificationOutput} from './fixtures/verification.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
@@ -245,20 +246,14 @@ test("a restarted worker and backup catalogue use retained keys after rotation",
 
   const restartedCatalogue = new BackupCatalogue(db.pool, new BackupKeyVault(master), storage);
   let restored = "";
-  await restartedCatalogue.verify(point.id, "managed-key-drill", async (source) => {
+  await verifyPointFixture(db.pool,restartedCatalogue,point.id,async (source,_key,request) => {
     const chunks: Buffer[] = [];
     for await (const chunk of source.open()) chunks.push(Buffer.from(chunk));
-    restored = Buffer.concat(chunks, source.receipt.size).toString();
+    restored = Buffer.concat(chunks, source.receipt.size).toString();return verificationOutput(request);
   });
   assert.equal(restored, `managed key archive ${point.id}`);
-  await assert.rejects(
-    new BackupCatalogue(db.pool, new BackupKeyVault(randomBytes(32)), storage).verify(
-      point.id,
-      "managed-key-drill",
-      async () => assert.fail("wrong master key must not reach restore"),
-    ),
-    /backup.key_unavailable/,
-  );
+  assert.equal(await verifyPointFixture(db.pool,new BackupCatalogue(db.pool,new BackupKeyVault(randomBytes(32)),storage),point.id,async()=>assert.fail('wrong master key must not reach restore')),'unavailable');
+  assert.equal((await db.pool.query('SELECT reason FROM backup_verification_attempts WHERE point_id=$1 ORDER BY created_at DESC LIMIT 1',[point.id])).rows[0].reason,'secret_unavailable');
   assert.deepEqual(
     (await db.pool.query("SELECT outcome FROM backup_verifications WHERE point_id=$1", [point.id])).rows,
     [{ outcome: "verified" }],

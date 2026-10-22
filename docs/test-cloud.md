@@ -178,16 +178,25 @@ write can outlast its lease or request deadline; a final time check rolls back t
 whole outcome. Inconclusive checks remove current success while keeping historical
 retention evidence, and a completed integrity failure remains failed. These tests
 use synthetic child results to test admission; they do not prove archive recovery.
-The dormant `BackupCatalogue.verifyClaim` path connects that core to storage,
+The `BackupCatalogue.verifyClaim` path connects that core to storage,
 key unsealing and encrypted-stage disposal. It sends only the matching archive key
 to the bound verifier and compares its measurement with the independent stage.
 An inconsistent verdict, thrown error or uncertain cleanup cannot record archive
 success or corruption. Cancellation during disposal still returns the retry
 allowance; an expired claim changes nothing. A mismatch verdict requires
 the bound child's completed measurement and confirmed cleanup.
-The worker still uses the older unqualified callback path. Switching the worker
-and all callers together, then completing deletion lock order and worker races,
-remains part of Task 5.
+The worker uses this path and no longer accepts callback completion as verification.
+Both entry points open the bound verifier and pass its persistent controller scope.
+A missing target policy leaves verification jobs unclaimed. Policy locks precede
+job claims and retention venue locks, so a policy change cannot race an old claim.
+When a claim has expired, verification results, cleanup errors and shutdown leave
+job counters untouched.
+You can exercise these rules with
+`node scripts/test-postgres.mjs exec node --test packages/backups/test/worker-admission.test.ts packages/backups/test/worker.test.ts`.
+The synthetic fixtures test admission and isolation; the complete genuine
+capture-to-recovery proof remains a later release gate.
+Keep controller state on a writable private mount, separate from the read-only
+configuration mount. That deployment wiring remains part of the release gate.
 Keep snapshots unavailable and deployment
 enforcement off until the implementation, full integration proof and release gates
 pass. Ordinary fiscal restore still requires its existing activation authority.

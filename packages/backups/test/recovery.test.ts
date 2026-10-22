@@ -1,3 +1,4 @@
+import {verifyPointFixture} from './fixtures/verification.ts';
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import {setTimeout as delay} from "node:timers/promises";
@@ -119,7 +120,7 @@ test("owner-authorised replacement is durable, target-bound and does not activat
     recovery.start(owner.token, owner.csrfToken, input),
     /backup.unverified/,
   );
-  await catalogue.verify(point.id, "waitron-test", async () => {});
+  await verifyPointFixture(db.pool,catalogue,point.id);
   await assert.rejects(
     recovery.start(stranger.token, stranger.csrfToken, input),
     /backup.permission_denied/,
@@ -183,7 +184,7 @@ test("owner-authorised replacement is durable, target-bound and does not activat
       modules: { core: 1 },
     },
   );
-  await catalogue.verify(secondPoint.id, "worker", async () => {});
+  await verifyPointFixture(db.pool,catalogue,secondPoint.id);
   await assert.rejects(
     other.start(owner.token, owner.csrfToken, {
       ...input,
@@ -288,7 +289,7 @@ test("owner-authorised replacement is durable, target-bound and does not activat
     sourceNodeId: randomUUID(),
     modules: { core: 1 },
   });
-  await catalogue.verify(newer.id, "waitron-test", async () => {});
+  await verifyPointFixture(db.pool,catalogue,newer.id);
   assert.equal(await catalogue.cleanupOne(installed.venueId), null);
   await recovery.close(owner.token, owner.csrfToken, input.id);
   await assert.rejects(

@@ -16,6 +16,7 @@ import { BackupKeyVault } from "../packages/backups/src/keys.ts";
 import { bufferObject, stageReadable } from "../packages/backups/src/object-transfer.ts";
 import { BackupObjects, receipt } from "../packages/backups/src/storage.ts";
 import { BackupWorker } from "../packages/backups/src/worker.ts";
+import {configureVerification} from '../packages/backups/test/fixtures/verification.ts';
 import { verifyBackupTransferReceipt } from "./verify-backup-transfer-receipt.mjs";
 
 const waitron = resolve(process.env.WAITRON_CHECKOUT ?? "");
@@ -321,7 +322,8 @@ try {
     /backup.capture_expired/,
   );
 
-  const scheduler = new BackupWorker(db.pool, catalogue, async () => {});
+  await configureVerification(db.pool);
+  const scheduler = new BackupWorker(db.pool, catalogue, async () => assert.fail('scheduling cannot verify'),'transfer-receipt');
   await scheduler.schedule();
   await db.pool.query(
     "UPDATE backup_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'verify'",
@@ -350,7 +352,7 @@ try {
     })),
     cancellingWorker = new BackupWorker(db.pool, cancellingCatalogue, async () => {
       assert.fail("restore must not start");
-    }),
+    },'transfer-receipt'),
     controller = new AbortController(),
     running = cancellingWorker.runOnce(controller.signal);
   await stageStarted;

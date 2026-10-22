@@ -4,7 +4,7 @@ import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {promisify} from 'node:util';
 import {setTimeout as delay} from 'node:timers/promises';
-import type {RestoreVerifier} from './worker.ts';
+import type {LegacyRestoreVerifier} from './waitron-verifier.ts';
 const execute=promisify(execFile),label='cloud.backup-verifier.owner';
 function containerDiagnostic(error:unknown,messages:string[]){
  const detail=error as {code?:unknown;signal?:unknown;killed?:boolean;stderr?:string};
@@ -30,7 +30,7 @@ async function docker(args:string[],missingId?:string){
  try{return (await execute('docker',args,{timeout:10000,maxBuffer:65536})).stdout.trim();}
  catch(error){if(missingId!==undefined&&missingContainer(error,missingId))return '';const detail=error as {code?:unknown;signal?:unknown;killed?:boolean};throw Error('backup.verifier_container',{cause:{operation:args[0],code:detail.code,signal:detail.signal,killed:detail.killed}});}
 }
-export async function createContainerWaitronVerifier(options:ContainerVerifierOptions):Promise<RestoreVerifier>{
+export async function createContainerWaitronVerifier(options:ContainerVerifierOptions):Promise<LegacyRestoreVerifier>{
  const {image,owner}=options,memory=options.memoryMiB??1024,scratch=options.scratchMiB??256;
  if(typeof image!=='string'||typeof owner!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9_.:/@-]{0,255}$/.test(image)||!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/.test(owner)||!Number.isInteger(memory)||memory<128||memory>2048||!Number.isInteger(scratch)||scratch<1||scratch>512)throw Error('backup.verifier_configuration');
  // Image volumes would add writable storage outside the one quota-limited scratch mount.

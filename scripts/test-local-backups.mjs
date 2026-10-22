@@ -29,6 +29,8 @@ import { BackupKeyVault } from "../packages/backups/src/keys.ts";
 import { BackupObjects, receipt } from "../packages/backups/src/storage.ts";
 import { BackupWorker } from '../packages/backups/src/worker.ts';
 import { createWaitronVerifier } from '../packages/backups/src/waitron-verifier.ts';
+import {openTestBackupVerifier} from '../deploy/test-cloud/backup-worker.mjs';
+import {setVerificationPolicy} from '../packages/backups/src/verification-admission.ts';
 import { BackupCatalogue } from "../packages/backups/src/catalogue.ts";
 import {
   BackupRecovery,
@@ -508,8 +510,11 @@ try {
     assert.deepEqual(await captureClient(venue.root,'publish',{id:reservation.id,metadata}),point);
     let result;
     const restore = await createWaitronVerifier(waitron);
-    const queue = new BackupWorker(f.db.pool, catalogue, async (...args) => {
-      const checked = await restore(...args);
+    const controllerRoot=await root(),{verify,controllerScope}=await openTestBackupVerifier({directory:controllerRoot,image:process.env.CLOUD_VERIFIER_IMAGE});
+    const verificationTarget=JSON.parse(await readFile(new URL('../deploy/backup-verifier/target.json',import.meta.url),'utf8'));
+    await transaction(f.db.pool,c=>setVerificationPolicy(c,verificationTarget,'local.waitron-verifier@'+process.env.CLOUD_VERIFIER_IMAGE,false));
+    const queue = new BackupWorker(f.db.pool, catalogue, async (source,key,request,signal) => {
+      const checked = await restore(source,{recoveryKey:key.secret},{modules:request.archive.modules,capturedAt:request.capturedAt,sourceNodeId:request.sourceNodeId},signal);
       assert(checked.networkDenied);
       assert(checked.childProcessDenied);
       assert(checked.addonDenied);
@@ -519,8 +524,10 @@ try {
       assert(checked.hooks.includes("fiscal-verifactu"));
       assert.equal(checked.cloudCredentialPresent, false);
       assert.equal(checked.staffKeyPresent, false);
-      if(args[2].id===point.id)result=checked;
-    });
+      const output=await verify(source,key,request,signal);
+      if(request.pointId===point.id)result=checked;
+      return output;
+    },controllerScope);
     await queue.schedule();
     const deadline=Date.now()+60000;
     while(!result&&Date.now()<deadline){

@@ -6,15 +6,17 @@ import {join} from 'node:path';
 import {pipeline} from 'node:stream/promises';
 import {fileURLToPath} from 'node:url';
 import {runNodeVerifier} from './verify-process.ts';
-import type {RestoreVerifier} from './worker.ts';
+import type {BackupPoint} from './catalogue.ts';
+import type {BackupKeys} from './keys.ts';
 import {readBackupVerificationRequest,type BackupVerificationRequest,type BackupVerificationResult} from './verification-protocol.ts';
 import {readVerificationKey,verificationInput,type VerificationKey} from './verification-transport.ts';
 import type {ReplayableObject} from './object-transfer.ts';
+export type LegacyRestoreVerifier=(source:ReplayableObject,keys:BackupKeys,point:BackupPoint,signal:AbortSignal)=>Promise<unknown>;
 export type NativeDataRestoreVerifier=(source:ReplayableObject,key:VerificationKey,request:BackupVerificationRequest,signal:AbortSignal)=>Promise<BackupVerificationResult>;
 interface WaitronVerifierOptions {temporaryRoot?:string;}
 // tsx probes a case-inverted checkout path to detect case sensitivity; grant only that alias.
 const swapCase=(value:string)=>value.replace(/[a-z]/gi,letter=>letter===letter.toLowerCase()?letter.toUpperCase():letter.toLowerCase());
-export async function createWaitronVerifier(checkout:string,options:WaitronVerifierOptions={}):Promise<RestoreVerifier>{
+export async function createWaitronVerifier(checkout:string,options:WaitronVerifierOptions={}):Promise<LegacyRestoreVerifier>{
  let root:string,tsx:string;
  try{
   if(!process.allowedNodeEnvironmentFlags.has('--allow-net'))throw Error();

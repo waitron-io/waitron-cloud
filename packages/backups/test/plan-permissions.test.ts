@@ -1,8 +1,12 @@
+import {verifyPointFixture} from './fixtures/verification.ts';
 import assert from 'node:assert/strict';
 import {after,before,beforeEach,test} from 'node:test';
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {login} from '@waitron-cloud/identity';
 import {SignupStore,RegistrationStore,OrganisationPlanStore,InstallationStore,createLeaseIssuer,encodeMachine,transaction,type MachineAction,type SignedEnvelope} from '@waitron-cloud/registration';
 import {database} from '../../account-http/test/fixtures.ts';
@@ -52,9 +56,9 @@ async function paid(){await plans.set(a.organisationId,'paid');await catalogue()
 async function snapshot(days=0){
  const reserved=await catalogue().reserveCapture(a.installationId,randomUUID()),bytes=Buffer.from('encrypted archive '+reserved.id);objects.set(reserved.incomingKey,bytes);
  const metadata={...receipt(bytes),capturedAt:new Date(Date.now()-days*86400000).toISOString(),retention:'daily' as const,sourceNodeId:randomUUID(),modules:{core:1}};
- const point=await catalogue().publish(a.installationId,reserved.id,metadata);await catalogue().verify(point.id,'plan-test',async()=>{});return {point,metadata};
+ const point=await catalogue().publish(a.installationId,reserved.id,metadata);await verifyPointFixture(db.pool,catalogue(),point.id);return {point,metadata};
 }
-before(async()=>{db=await database();plans=new OrganisationPlanStore(db.pool);await execute('docker',['build','-q','-t',workerImage,'-f','packages/backups/test/container-fixture/Dockerfile','.'],{cwd:root,timeout:120000});workerImageBuilt=true;},{timeout:150000});
+before(async()=>{db=await database();plans=new OrganisationPlanStore(db.pool);await execute('docker',['build','-q','-t',workerImage,'-f','packages/backups/test/container-fixture/Worker.Dockerfile','.'],{cwd:root,timeout:120000});workerImageBuilt=true;},{timeout:150000});
 after(async()=>{try{if(workerImageBuilt)await execute('docker',['image','rm',workerImage],{timeout:30000});}finally{await db?.close();}});
 beforeEach(async()=>{await resetSchema(db.pool);objects.clear();grants=0;provisions=0;wait=undefined;removeWait=undefined;a=await installed('plan-a');b=await installed('plan-b');});
 
@@ -257,13 +261,16 @@ test('ordinary_mode_keeps_missing_installation_and_local_backup_refusal_order',a
 
 test('worker_CLI_test_mode_pauses_free_expiry_without_contacting_storage',async()=>{
  await paid();const first=await snapshot(90);await snapshot(80);await plans.set(a.organisationId,'free');
- const worker=new BackupWorker(db.pool,catalogue(),async()=>{});await worker.schedule();
+ const worker=new BackupWorker(db.pool,catalogue(),async()=>assert.fail('scheduling cannot verify'),'plan-fixture');await worker.schedule();
  await db.pool.query("UPDATE backup_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'retention'");
  {
   const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+db.schema);
-  const result=await execute(process.execPath,['packages/backups/src/worker-cli.ts','--once'],{cwd:root,timeout:30000,env:{PATH:process.env.PATH,DATABASE_URL:url.href,CLOUD_TEST_SERVICE_PLANS:'1',CLOUD_BACKUP_MASTER_KEY:randomBytes(32).toString('hex'),CLOUD_VERIFIER_IMAGE:workerImage,CLOUD_VERIFIER_OWNER:'plan-'+randomUUID(),CLOUD_BACKUP_ENDPOINT:'https://127.0.0.1:9',CLOUD_BACKUP_REGION:'local',CLOUD_BACKUP_ACCESS_KEY:'test',CLOUD_BACKUP_SECRET_KEY:'test'}});
+  const directory=await mkdtemp(join(tmpdir(),'plan-worker-controller-'));
+  try{const imageId=(await execute('docker',['image','inspect','--format','{{.Id}}',workerImage])).stdout.trim();
+  const result=await execute(process.execPath,['packages/backups/src/worker-cli.ts','--once'],{cwd:root,timeout:30000,env:{PATH:process.env.PATH,DATABASE_URL:url.href,CLOUD_TEST_SERVICE_PLANS:'1',CLOUD_BACKUP_MASTER_KEY:randomBytes(32).toString('hex'),CLOUD_VERIFIER_IMAGE:imageId,CLOUD_VERIFIER_OWNER:'plan-'+randomUUID(),LOCAL_STACK_CONFIG_DIR:directory,CLOUD_BACKUP_ENDPOINT:'https://127.0.0.1:9',CLOUD_BACKUP_REGION:'local',CLOUD_BACKUP_ACCESS_KEY:'test',CLOUD_BACKUP_SECRET_KEY:'test'}});
   assert.equal(JSON.parse(result.stdout).failures,0);
   assert.deepEqual((await db.pool.query('SELECT deleting,deleted_at FROM backup_points WHERE id=$1',[first.point.id])).rows[0],{deleting:false,deleted_at:null});
+  }finally{await rm(directory,{recursive:true,force:true});}
  }
 });
 test('worker_CLI_rejects_malformed_plan_mode_before_mutation',async()=>{

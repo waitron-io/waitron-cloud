@@ -33,9 +33,10 @@ test('migration upgrades the previous release with legacy request rows intact',a
   for(const name of migrationNames){if(name==='028_recovery_code_protection.sql')break;const sql=await readFile(new URL('../../registration/migrations/'+name,import.meta.url),'utf8');await pool.query(sql);await pool.query('INSERT INTO schema_migrations(name,digest) VALUES($1,$2)',[name,createHash('sha256').update(sql).digest('hex')]);}
   const legacy=createHash('sha256').update(code).digest('hex');await pool.query('INSERT INTO backup_recovery_requests(id,public_key,code_hash,failed_codes) VALUES($1,$2,$3,2)',[binding.id,binding.public_key,legacy]);
   const before=(await pool.query('SELECT * FROM backup_recovery_requests')).rows;
-  await migrate(pool);assert.deepEqual((await pool.query('SELECT * FROM backup_recovery_requests')).rows,before);
+  const expected=before.map(row=>({...row,protocol_version:null,verification_target:null}));
+  await migrate(pool);assert.deepEqual((await pool.query('SELECT * FROM backup_recovery_requests')).rows,expected);
   assert.equal(await upgradeRecoveryCodes(pool,config),1);const row=(await pool.query('SELECT * FROM backup_recovery_requests')).rows[0];
-  assert(new RecoveryCodes(config).matches(row,row.code_hash,code));assert.deepEqual({...row,code_hash:legacy},before[0]);
+  assert(new RecoveryCodes(config).matches(row,row.code_hash,code));assert.deepEqual({...row,code_hash:legacy},expected[0]);
   assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,String(migrationNames.length));
  }finally{await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();}
 });

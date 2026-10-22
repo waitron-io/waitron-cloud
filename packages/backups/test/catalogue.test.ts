@@ -1,3 +1,4 @@
+import {verifyPointFixture,verificationOutput} from './fixtures/verification.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -213,39 +214,24 @@ test("publication verifies bytes, is immutable and starts unverified", async () 
 test("successful restore verification protects a point; altered storage fails verification", async () => {
   const old = await capture(a, 50);
   let observed = false;
-  await store.verify(
-    old.point.id,
-    "waitron-test",
-    async (source, keys, point) => {
+  await verifyPointFixture(db.pool,store,old.point.id,async (source,key,request) => {
       assert.deepEqual(await bytes(source), old.bytes);
-      assert.equal(keys.recoveryKey, old.reservation.keys.recoveryKey);
-      assert.equal(point.digest, source.receipt.digest);
-      observed = true;
+      assert.equal(key.secret, old.reservation.keys.recoveryKey);
+      assert.equal(request.archive.sha256, source.receipt.digest);
+      observed = true;return verificationOutput(request);
     },
   );
   assert(observed);
   assert.equal(stages, disposals);
   await store.rotate(a.installationId);
-  await store.verify(old.point.id, "waitron-retry", async (_, keys) =>
-    assert.equal(keys.recoveryKey, old.reservation.keys.recoveryKey),
-  );
+  await verifyPointFixture(db.pool,store,old.point.id,async (_source,key,request)=>{assert.equal(key.secret,old.reservation.keys.recoveryKey);return verificationOutput(request);});
   const bad = await capture(a, 40);
-  await assert.rejects(
-    store.verify(bad.point.id, "waitron-test", async () => {
-      throw Error("incompatible");
-    }),
-    /backup.verification_failed/,
-  );
+  assert.equal(await verifyPointFixture(db.pool,store,bad.point.id,async(_s,_k,r)=>verificationOutput(r,'invalid','archive_invalid')),'failed');
   assert.equal(stages, disposals);
   assert.equal(await store.cleanupOne(a.venueId), bad.point.id);
   assert.equal(await store.cleanupOne(a.venueId), null);
   objects.set("venue-a/" + old.point.objectKey, Buffer.from("altered"));
-  await assert.rejects(
-    store.verify(old.point.id, "waitron-test", async () =>
-      assert.fail("must not reach restore"),
-    ),
-    /backup.verification_failed/,
-  );
+  assert.equal(await verifyPointFixture(db.pool,store,old.point.id,async(source,_k,r)=>{const output=verificationOutput(r,'invalid','archive_size_mismatch');output.result.measuredArchive={sha256:source.receipt.digest,bytes:source.receipt.size};return output;}),'failed');
   const checks = await db.pool.query(
     "SELECT outcome FROM backup_verifications WHERE point_id=$1 ORDER BY checked_at",
     [old.point.id],
@@ -270,7 +256,7 @@ test("verification disposes a stage completed as shutdown arrives without record
   async putStaged(){throw Error('unused');},
   async remove(){throw Error('unused');},
  }));
- await assert.rejects(cancelling.verify(item.point.id,'shutdown',async()=>assert.fail('restore must not start'),undefined,controller.signal),error=>error instanceof Error&&error.name==='AbortError');
+ assert.equal(await verifyPointFixture(db.pool,cancelling,item.point.id,async()=>assert.fail('restore must not start'),controller.signal),'unavailable');
  assert.equal(disposed,1);
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_verifications WHERE point_id=$1',[item.point.id])).rows[0].count,'0');
  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[item.point.id])).rows[0].verification,'pending');
@@ -280,7 +266,7 @@ test("cleanup is resumable, serialised and keeps the last verified snapshot and 
     protectedPoint = await capture(a, 60),
     monthly = await capture(a, 60, "monthly");
   for (const item of [older, protectedPoint])
-    await store.verify(item.point.id, "waitron-test", async () => {});
+    await verifyPointFixture(db.pool,store,item.point.id);
   failDelete = true;
   await assert.rejects(store.cleanupOne(a.venueId), /store offline/);
   assert.equal(
@@ -308,12 +294,12 @@ test("verification releases the venue while restoring and refuses a point delete
   let entered!: () => void, release!: () => void;
   const begun = new Promise<void>((r) => (entered = r)),
     gate = new Promise<void>((r) => (release = r));
-  const verification = store.verify(item.point.id, "slow-worker", async () => {
+  const verification = verifyPointFixture(db.pool,store,item.point.id,async(_s,_k,r) => {
     entered();
-    await gate;
+    await gate;return verificationOutput(r);
   });
   const result = verification.then(
-    () => null,
+    verdict => verdict,
     (e) => e,
   );
   await begun;
@@ -332,7 +318,7 @@ test("verification releases the venue while restoring and refuses a point delete
     release();
     await result;
   }
-  assert.match(String(await result), /backup.unavailable/);
+  assert.equal(await result,'stale');
   assert.equal(stages, disposals);
   assert.equal(
     (
@@ -352,12 +338,8 @@ test("key-vault failure does not change archive verification status", async () =
     new BackupKeyVault(randomBytes(32)),
     storage,
   );
-  await assert.rejects(
-    wrong.verify(item.point.id, "wrong-master", async () =>
-      assert.fail("restore must not run"),
-    ),
-    /backup.key_unavailable/,
-  );
+  assert.equal(await verifyPointFixture(db.pool,wrong,item.point.id,async()=>assert.fail('restore must not run')),'unavailable');
+  assert.equal((await db.pool.query('SELECT reason FROM backup_verification_attempts WHERE point_id=$1',[item.point.id])).rows[0].reason,'secret_unavailable');
   assert.equal(
     (
       await db.pool.query(
@@ -431,10 +413,9 @@ test("test-only storage refuses verification and retention after a venue becomes
     "UPDATE venues SET environment='production' WHERE id=$1",
     [a.venueId],
   );
-  await assert.rejects(
-    store.verify(item.point.id, "worker", async () => {}),
-    /backup.local_integration_only/,
-  );
+  assert.equal(await verifyPointFixture(db.pool,store,item.point.id,async()=>assert.fail('production must not verify')),'stale');
+  assert.equal((await db.pool.query('SELECT count(*) FROM backup_verification_attempts WHERE point_id=$1',[item.point.id])).rows[0].count,'0');
+  assert.equal((await db.pool.query('SELECT count(*) FROM backup_verifications WHERE point_id=$1',[item.point.id])).rows[0].count,'0');
   await assert.rejects(
     store.cleanupOne(a.venueId),
     /backup.local_integration_only/,

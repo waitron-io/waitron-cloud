@@ -5,8 +5,9 @@ import {BackupCatalogue} from './catalogue.ts';
 import {BackupKeyVault} from './keys.ts';
 import {BackupWorker,backupWorkerStatus,retryFailedBackupJobs} from './worker.ts';
 import {workerObjects} from './worker-config.ts';
-import {createContainerWaitronVerifier} from './container-verifier.ts';
-let pool:Pool|undefined,storage:ReturnType<typeof workerObjects>|undefined;
+// @ts-expect-error deployment controller is JavaScript
+import {openTestBackupVerifier,claimTestBackupWorker} from '../../../deploy/test-cloud/backup-verifier-runtime.mjs';
+let pool:Pool|undefined,storage:ReturnType<typeof workerObjects>|undefined,ownership:{release():Promise<void>}|undefined;
 const stop=new AbortController(),shutdown=()=>stop.abort();
 process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
 try{
@@ -20,10 +21,11 @@ try{
   console.log(JSON.stringify({retried:await retryFailedBackupJobs(pool)}));
  }else{
   const master=process.env.CLOUD_BACKUP_MASTER_KEY??'';if(!/^[a-fA-F0-9]{64}$/.test(master))throw Error();
-  const restore=await createContainerWaitronVerifier({image:process.env.CLOUD_VERIFIER_IMAGE??'',owner:process.env.CLOUD_VERIFIER_OWNER??'',memoryMiB:process.env.CLOUD_VERIFIER_MEMORY_MIB===undefined?undefined:Number(process.env.CLOUD_VERIFIER_MEMORY_MIB),scratchMiB:process.env.CLOUD_VERIFIER_SCRATCH_MIB===undefined?undefined:Number(process.env.CLOUD_VERIFIER_SCRATCH_MIB)});
+  ownership=await claimTestBackupWorker(pool,shutdown);
+  const {verify,controllerScope}=await openTestBackupVerifier({directory:process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',image:process.env.CLOUD_VERIFIER_IMAGE,owner:process.env.CLOUD_VERIFIER_OWNER??'',memoryMiB:process.env.CLOUD_VERIFIER_MEMORY_MIB===undefined?undefined:Number(process.env.CLOUD_VERIFIER_MEMORY_MIB),scratchMiB:process.env.CLOUD_VERIFIER_SCRATCH_MIB===undefined?undefined:Number(process.env.CLOUD_VERIFIER_SCRATCH_MIB)});
   const ca=process.env.CLOUD_BACKUP_CA_FILE?await readFile(process.env.CLOUD_BACKUP_CA_FILE,'utf8'):undefined;
   storage=workerObjects(process.env,ca);
-  const worker=new BackupWorker(pool,new BackupCatalogue(pool,new BackupKeyVault(Buffer.from(master,'hex')),storage.objects,planMode),restore);
+  const worker=new BackupWorker(pool,new BackupCatalogue(pool,new BackupKeyVault(Buffer.from(master,'hex')),storage.objects,planMode),verify,controllerScope);
   if(mode==='--once'){
    await worker.schedule();try{await worker.runOnce(stop.signal);}finally{storage.close();}
    console.log(JSON.stringify(await worker.status()));
@@ -34,6 +36,6 @@ try{
  // Provider and database errors can contain credentials; emit only a fixed diagnostic.
  console.error('Backup worker failed; check database, storage, key and Waitron verifier configuration');process.exitCode=1;
 }finally{
- storage?.close();try{await pool?.end();}catch{process.exitCode=1;}
+ storage?.close();try{try{await ownership?.release();}finally{await pool?.end();}}catch{process.exitCode=1;}
  process.removeListener('SIGINT',shutdown);process.removeListener('SIGTERM',shutdown);
 }

@@ -1179,10 +1179,18 @@ notifications separately.
   passed and invalid results, and rejects expired results without changing job
   state. PostgreSQL checks cover cancellation during cleanup, fresh retry tokens,
   storage/key errors and policy, deletion and claim changes during external work.
-  These checks use synthetic child results. The worker still uses the older
-  unqualified callback path. Switching it to the new pipeline, updating all callers and deletion
-  lock order, recovery v2 and the genuine joint proof remain unfinished; snapshots
-  stay unavailable and deployment enforcement stays off.
+  These checks use synthetic child results. The worker now uses the strict claim
+  pipeline and the callback-success catalogue method is removed. Both runtime
+  entry points pass the persistent controller scope and pin the implementing
+  Waitron revision. Jobs wait for a configured target; policy locks precede
+  claims and retention venue locks. Late verification, error and cancellation
+  results leave expired claims untouched. Existing tests now seed explicit
+  synthetic bound evidence, while the genuine local proof requires the bound
+  image as well as its original independent checks. Recovery v2, remaining
+  qualification consumers and the genuine joint proof are unfinished. Snapshots
+  stay unavailable and deployment enforcement stays off. Deployment still needs
+  writable private controller state separate from its read-only configuration
+  mount before enabling a backup profile.
   The PR5 adapters are reconciled with current main, preserving their earlier
   storage, account, remote and controller behavior and historical test evidence.
   Target-bound verification integration, real isolation and cleanup checks, and a
