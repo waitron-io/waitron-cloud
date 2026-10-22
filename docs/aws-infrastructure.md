@@ -309,3 +309,54 @@ identical mock values. It removes each zone from consideration and checks every
 surviving cell path. This checks declared relationships, not packet delivery or a
 network failure drill. Live reachability, NAT quotas, region availability and behaviour
 during a zone outage still need separate qualification after live work is authorised.
+
+## Keep a cell's machines and administration private
+
+A cell must keep running when one zone loses a machine. The cell module declares
+one EKS cluster, AWS's managed Kubernetes service, with three managed machine groups.
+Each group has exactly one private subnet and one on-demand `t3.medium` machine.
+Its minimum, desired and maximum counts all remain one, so a three-zone subnet list
+cannot place every machine in the same zone. Increasing capacity needs a deliberate
+configuration change and the later placement and growth rehearsals in P1 and P4.
+
+Pass the network module's VPC and the cell's map of private subnet IDs, keyed by zone
+ID. Use a stable name such as `es-01` or `global-01` and supply `kubernetes_version`
+explicitly. The test fixture uses `1.34`; it does not establish that AWS offers that
+version or machine type in the chosen region. You can check the declarations locally:
+
+```sh
+node deploy/aws/check.mjs --suite cell
+```
+
+The machine template requires encrypted 20 GiB gp3 root disks, no public IP or SSH
+key, and IMDSv2, AWS's token-based machine metadata protocol. Its one-hop response
+limit prevents ordinary containers from fetching the machine's credentials through
+metadata. Within a cell, machines can use TCP ports 23–65535, UDP ports 53–65535 and
+ICMP, which carries network error and path-discovery messages. These ranges keep
+SSH port 22 closed while allowing service and DNS traffic. The control plane can
+reach their HTTPS and management ports. The additional security groups allow no public
+incoming connection. Outgoing node traffic uses the network's private routes.
+Runtime firewall rules, public service ingress and workload isolation still need
+their separate integration rehearsals.
+
+The Kubernetes API has a private endpoint only. Name at least one exact operator
+role in the cell's AWS account; only those named roles receive explicit cluster
+administration through EKS access entries. The identity that creates the cluster
+gets no implicit administration grant. You still need a separately qualified private
+operator connection and a recovery procedure before live use. No operator tunnel,
+cluster login credentials or kubeconfig is created by this module.
+
+The control plane and machines use separate service roles. Their managed policies
+provide cluster operation, node registration, private registry pulls and the IPv4
+network plugin. The network plugin initially uses the machine role, which remains
+available to privileged host-network workloads; the metadata hop limit does not
+isolate those workloads. Dedicated workload permissions and the cluster's OIDC
+identity, which lets Kubernetes service accounts obtain narrowly scoped roles,
+belong to Task 8. Control-plane API, audit, authentication, controller and scheduler
+logs are enabled; Task 9 owns retention and delivery.
+
+These mocked plans check declarations and input refusals. They do not prove machine
+placement, private API access, metadata enforcement, operator permissions or continuity
+during a zone failure. P1's local cluster rehearsal and a separately authorised live
+provider rehearsal must qualify those behaviours. Task 12 must keep cell creation
+dependent on the complete network, including its routes and associations.
