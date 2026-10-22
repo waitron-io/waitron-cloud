@@ -2880,8 +2880,15 @@ notifications separately.
   opted-in venue mail, with worked outage and backup timelines. Owner approval is
   required before implementation; publication supplies no production alerting or
   recovery guarantee. D103's release/upgrade and compute proposals remain separate
-  later decisions. D104 owns the paging connection and independent public status page;
-  D102's SES feedback, suppression, alerts and live qualification remain open.
+  later decisions. D104's [incident runbook](incident-response.md) now records
+  sole-owner phone response, private investigation/access boundaries, bilingual
+  public updates, verified closure and launch drills. It recommends Cloudflare
+  Pages Free with Direct Upload and a directly usable public `pages.dev` fallback
+  outside Waitron's AWS. This is a documented procedure and host proposal only:
+  phone provider/independent delivery-failure handling, account/page setup, supplier
+  metadata review and live outage/coverage-gap proof remain open. Hands-on setup
+  waits for the owner's return on 3 November; ask before any paid service. D102's
+  SES feedback, suppression, alerts and live qualification remain open.
   Optional quiet periods and one still-open reminder are implemented with both timings
   disabled by default. Each incident opening captures its original recipients and fixed
   database deadlines. The portal remains immediate; brief incidents recover silently.
@@ -3184,6 +3191,18 @@ notifications separately.
   separate from upload freshness; production workers still need enforceable resource and
   network isolation, without activating a primary or contacting fiscal/payment services. Define the external-key format extension
   rather than assuming it exists in the inspected manifest v1.
+
+## CI PostgreSQL image pull
+
+D104's documentation-only [run 39733028534](https://github.com/waitron-io/waitron-cloud/actions/runs/39733028534/job/119672295764)
+failed before account HTTP shard 3 started its tests: Docker's request to
+`auth.docker.io` timed out while pulling `postgres:18-alpine`. The recorded failure
+is in `scripts/test-postgres.mjs:30`, before the owned container is marked running.
+This is separate from the reset-mail capture failure below. No runtime, test,
+fixture, workflow or dependency change accompanied the incident, and no registry
+fix is claimed. Next: qualify bounded image-pull failure handling with a failing
+test first, preserving the existing test assertions, deadlines and owned-container
+cleanup. A later successful run alone does not prove that handling is fixed.
 
 ## Account HTTP reset-mail capture
 
