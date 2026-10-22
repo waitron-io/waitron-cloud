@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {database} from '../packages/account-http/test/fixtures.ts';
 import {seed,seedAccountState} from './schema-upgrade-fixture.mjs';
 const root=fileURLToPath(new URL('..',import.meta.url));
-test('backup upgrade fixture proves legacy refusal, actual key unsealing and exact recovery evidence, and detects lost state',async()=>{
+test('backup upgrade fixture proves legacy refusal, actual key unsealing and exact recovery evidence, and detects lost state',async t=>{
  const path=new URL('./schema-upgrade-backup-fixture.mjs',import.meta.url);
  const {existsSync}=await import('node:fs');assert(existsSync(path),'backup upgrade fixture is missing');
  const fixture=await import(path.href),db=await database();
@@ -17,6 +17,9 @@ test('backup upgrade fixture proves legacy refusal, actual key unsealing and exa
   const proof=await fixture.seedLegacyBackups(root,db.pool,state);
   const legacy=await fixture.upgradedBackups(root,db.pool,state,proof);
   assert.deepEqual(legacy,{legacyUnqualified:true,historyPreserved:true,keysPreserved:true,holdsPreserved:true});
+  const saved=Object.fromEntries(['CLOUD_RECOVERY_ACTIVE_KEY_ID','CLOUD_RECOVERY_KEYS'].map(k=>[k,process.env[k]]));
+  t.after(()=>{for(const [k,v] of Object.entries(saved))if(v===undefined)delete process.env[k];else process.env[k]=v;});
+  delete process.env.CLOUD_RECOVERY_ACTIVE_KEY_ID;delete process.env.CLOUD_RECOVERY_KEYS;
   const fresh=await fixture.freshBackupEvidence(root,db.pool,state,proof);
   assert.deepEqual(fresh,{freshEvidence:true,v2Binding:true});
   const before=await fixture.backupState(db.pool);

@@ -53,7 +53,7 @@ export async function freshBackupEvidence(root,pool,state,proof){
  const attempt=await admitPointFixture(pool,point.id);assert.equal((await pool.query('SELECT current_verification FROM backup_point_qualification WHERE point_id=$1',[point.id])).rows[0].current_verification,'verified');
  const key=generateKeyPairSync('ed25519'),id=randomUUID(),code='12345678',origin='http://127.0.0.1:3000',publicKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url');
  const bytesToSign=Buffer.from(JSON.stringify(['waitron-cloud-recovery-request-v2',origin,id,'start',publicKey,code,fixtureTarget.digest,Date.now()]));
- const requests=new RecoveryRequests(pool,proof.vault,origin);
+ const requests=new RecoveryRequests(pool,proof.vault,origin,{activeKeyId:'upgrade-recovery',keys:{'upgrade-recovery':randomBytes(32).toString('hex')}});
  await requests.machine('start',{version:2,target:fixtureTarget,payload:bytesToSign.toString('base64url'),signature:sign(null,bytesToSign,key.privateKey).toString('base64url')});
  await requests.approve(id,code,owner.credentials.token,owner.credentials.csrfToken,{pointId:point.id,oldServerUnavailable:true,acceptDataLoss:true});
  const operation=(await pool.query('SELECT verification_attempt_id,verification_target FROM backup_recoveries WHERE id=$1',[id])).rows[0];
