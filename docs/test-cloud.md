@@ -290,6 +290,11 @@ download's digest and size, and compares the target before staging. Ordinary res
 then reaches the unchanged `FISCAL_RESTORE` refusal without separate fiscal authority.
 It sends no restored report, replaces no installation and leaves no first-start marker.
 This refusal does not prove successful ordinary recovery or authorised activation.
+The same run also supplies a valid descriptor for a different runtime and refuses it
+before any remote read. A damaged copy of the downloaded archive is refused after
+the real storage grant and before staging. Both controls preserve the recovery
+state, place no data and send no restored report. This checks an alternate target;
+it does not claim to have executed a second runtime binary.
 The temporary target receives the LAN CA and its own recovery state through private
 input; it receives no Cloud configuration volume or master key.
 
@@ -314,6 +319,32 @@ attempted. These local candidates remain unpublished and unqualified for release
 The joint scenario now covers the v2 client, owner approval and target delivery.
 Separately authorised ordinary recovery and the remaining same-run refusal controls
 remain open. Earlier independent controls are not relabelled as part of this run.
+
+You can qualify the separately authorised recovery fixture against the same image:
+
+```sh
+TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
+  node --test deploy/test-cloud/verifier-authorised.test.mjs
+```
+
+This reuses Waitron's existing `archiveHost()` and `archiveCommand()` from the
+[authorised fixture recipe](https://github.com/clintongormley/waitron/blob/71ea6745700bf1076eccd28c55b8e94a87411fe9/docs/developers/authorised-cloud-restore-fixture.md).
+Its original synthetic archive restores, but does not pass the complete data
+verifier. The Cloud fixture instead captures the same disposable source through
+Waitron's backup writer after normal node-identity and test-certificate setup.
+All 15 module checks then pass. It prepares a new recovery operation for these
+exact recaptured bytes, using the fixture's controlled later clock, and executes
+the ordinary restore. The recovered counters stay at 123; the restored series
+start at 1 and the database holds two fiscal allocations. A wrong node key and a
+valid key without module preparation both refuse and preserve the destination.
+No venue server starts, and generated keys stay inside the disposable container.
+
+This fixture qualification is separate from the scoped worker and Cloud recovery
+scenario. It does not supply a controller receipt or complete the joint gate.
+The joint scenario still needs this authorised source and its exact preparation
+through publication, admission and v2 delivery in one run. Its receipt must also
+distinguish the verifier's non-activation from the separately authorised ordinary
+restore's fiscal activation. The existing incomplete refusal receipt stays unchanged.
 
 The current producer writes a version 2 receipt from the scenario's actual committed
 request, result, selected recovery attempt and client assertions. It emits the receipt

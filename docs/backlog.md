@@ -1261,6 +1261,16 @@ notifications separately.
   refuse to certify this incomplete proof. Separately authorised ordinary recovery
   and remaining same-run controls are still due. Historical two-venue resource and
   security assertions remain available without qualifying the newer contract.
+  The same genuine run now refuses an alternate runtime target before any remote
+  read and a damaged downloaded copy before staging, preserving recovery state.
+  The separately authorised A1017 fixture is qualified against the pinned runtime:
+  a normal recapture after node-identity and test-certificate setup passes all 15
+  module checks, then a new operation bound to those bytes performs ordinary
+  recovery with the original counters retained. Wrong node keys and missing module
+  preparation both preserve the destination. This independent qualification
+  cannot complete the joint gate. Its authorised source and preparation still need
+  publication, admission and v2 delivery in one scenario; the receipt must separate
+  verifier non-activation from authorised ordinary recovery's fiscal activation.
   A joint capture-to-recovery proof against the implementing runtime with the
   continuous source absent remains due. A source release does not establish
   a published verifier image or qualify any snapshot. Snapshots

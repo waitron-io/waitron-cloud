@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {request} from 'node:https';
 import {createCloudRecoveryClient} from '/waitron/apps/server/src/cloud-recovery.ts';
 import {currentBackupVerificationTarget} from '/waitron/apps/server/src/backup-verification-target.ts';
+import {backupVerificationTargetDigests,validateBackupVerificationTarget} from '/waitron/apps/server/src/backup-verification-protocol.ts';
 import {stageRestoreRequest,runStagedRestore} from '/waitron/apps/server/src/restore-request.ts';
 import {REBUILD_MARKER} from '/waitron/apps/server/src/rebuild-first-start.ts';
 const root='/tmp/cloud-integration-backup-recovery-d79',origin='https://waitron.local:3000';
@@ -38,6 +39,30 @@ if(phase==='start'){
  },input.pointId);
  assert(actions.includes('info'));assert(actions.includes('read'));
  console.log(JSON.stringify({...checked,client:'pinned-compiled-waitron',targetDigest:currentBackupVerificationTarget().digest,actions}));
+}else if(phase==='delivery-refusals'){
+ const original=await client.preview(async archive=>Buffer.from(archive.artifact),input.pointId);
+ assert.equal(createHash('sha256').update(original).digest('hex'),input.digest);
+ const saved=await readFile(join(root,'cloud-recovery.json'));
+ let placementCalls=0,downloads=0;
+ const stage=async()=>{placementCalls++;};
+ const current=currentBackupVerificationTarget(),runtime={...current.runtime,fingerprint:createHash('sha256').update(current.runtime.fingerprint+'alternate-binary').digest('hex')};
+ const alternate=validateBackupVerificationTarget({...current,runtime,...backupVerificationTargetDigests({runtime,modules:current.modules})});
+ assert.notEqual(alternate.digest,current.digest);
+ actions.length=0;
+ const changed=createCloudRecoveryClient({stateDir:root,origin,environment:'preproduction',snapshotProtocol:2,target:()=>alternate,fetch:fetchApi,storageCa:ca});
+ await assert.rejects(changed.restore(stage,input.pointId),/Cloud recovery is unavailable/);
+ assert.deepEqual(actions,[],'a changed runtime must refuse before any remote read');
+ // Damage a copy at the transport boundary; the unchanged client must check its actual grant.
+ const damaged=Buffer.from(original);damaged[damaged.length-1]^=1;
+ const broken=createCloudRecoveryClient({stateDir:root,origin,environment:'preproduction',snapshotProtocol:2,target:currentBackupVerificationTarget,fetch:fetchApi,storageCa:ca,download:async grant=>{
+  downloads++;assert.equal(grant.point.id,input.pointId);assert.equal(grant.point.digest,input.digest);return damaged;
+ }});
+ await assert.rejects(broken.restore(stage,input.pointId),/Cloud recovery is unavailable/);
+ assert.equal(downloads,1,'the damaged copy must reach the real client integrity check');
+ assert(actions.includes('info'));assert(actions.includes('read'));assert(!actions.includes('restored'));
+ assert.equal(placementCalls,0);assert.equal(await absent('restore-request.json'),true);assert.equal(await absent('venue/venue.db'),true);
+ assert.deepEqual(await readFile(join(root,'cloud-recovery.json')),saved);
+ console.log(JSON.stringify({alternateTargetRefused:true,damagedArchiveRefused:true,placementCalls,restoredReports:0,stateUnchanged:true}));
 }else if(phase==='restore-refusal'){
  await client.restore(archive=>stageRestoreRequest(root,archive),input.pointId);
  assert.equal(JSON.parse(await readFile(join(root,'restore-request.json'),'utf8')).version,2);
