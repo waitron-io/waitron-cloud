@@ -18,14 +18,17 @@ const prior=existsSync(log)?readFileSync(log,'utf8').trim().split('\\n').filter(
 appendFileSync(log,JSON.stringify({args,pid:process.pid})+'\\n');
 const fail=message=>{console.error(message);process.exit(1);};
 if(args[0]==='image'&&args[1]==='inspect'){
- if(scenario==='cached')console.log('local-image');else fail('Error response from daemon: No such image: node:26');
+ if(['cached','run-failed','run-refused'].includes(scenario))console.log('local-image');else fail('Error response from daemon: No such image: node:26');
 }else if(args[0]==='pull'){
  if(scenario==='denied')fail('unauthorized: authentication required');
  if(scenario==='exhausted'||scenario==='transient'&&!prior.some(row=>row.args[0]==='pull'))fail('unexpected status: 502 Bad Gateway');
  if(scenario==='timeout')setTimeout(()=>fail('hung beyond short test budget'),1200);
 }else if(args[0]==='build'){
- if(scenario!=='cached'&&scenario!=='success')fail('fixture build failed');
-}else if(args[0]==='image'&&args[1]==='rm')fail('No such image: never built');
+ if(!['cached','success','run-failed','run-refused'].includes(scenario))fail('fixture build failed');
+}else if(args[0]==='run'&&scenario==='run-failed')fail('fixture container created but start failed');
+else if(args[0]==='run'&&scenario==='run-refused')fail('fixture container creation refused');
+else if(args[0]==='rm'&&scenario==='run-refused')fail('Error response from daemon: No such container: never created');
+else if(args[0]==='image'&&args[1]==='rm'&&!['run-failed','run-refused'].includes(scenario))fail('No such image: never built');
 else if(args[0]==='port')console.log('127.0.0.1:59999');
 `,{mode:0o755});
  const env:NodeJS.ProcessEnv={...process.env,PATH:directory+':'+process.env.PATH,FIXTURE_DOCKER_LOG:log,FIXTURE_DOCKER_SCENARIO:scenario};
@@ -39,7 +42,8 @@ async function setupFailure(env:NodeJS.ProcessEnv){
  }catch(error){
   const failure=error as Error&{code:number;stdout:string;stderr:string};
   assert.equal(failure.code,1);
-  assert.match(failure.stdout+failure.stderr,/fixture build failed|authentication required/);
+  assert.match(failure.stdout+failure.stderr,/fixture build failed|authentication required|fixture container created but start failed|fixture container creation refused/);
+  return failure.stdout+failure.stderr;
  }
 }
 
@@ -99,4 +103,20 @@ test('acquisition deadline stops its child and leaves no budget for a retry or b
 test('fixture preparation cannot widen the existing two-minute command budget',async(t)=>{
  const f=await controlledDocker(t,'cached');
  await assert.rejects(build(f.env,120001),/fixture_image.invalid_budget/);
+});
+
+test('failed container start still removes its attempted container and built image',async(t)=>{
+ const f=await controlledDocker(t,'run-failed');await setupFailure(f.env);
+ const commands=(await f.commands()).map(row=>row.args),run=commands.find(args=>args[0]==='run')!;
+ const name=run[run.indexOf('--name')+1]!;
+ assert.deepEqual(commands.filter(args=>args[0]==='rm'),[['rm','-f','-v',name]]);
+ assert.equal(commands.filter(args=>args[0]==='image'&&args[1]==='rm').length,1);
+});
+
+test('refused container creation preserves its error and still removes the built image',async(t)=>{
+ const f=await controlledDocker(t,'run-refused'),output=await setupFailure(f.env);
+ const commands=(await f.commands()).map(row=>row.args);
+ assert.equal(commands.filter(args=>args[0]==='rm').length,1);
+ assert.equal(commands.filter(args=>args[0]==='image'&&args[1]==='rm').length,1);
+ assert.doesNotMatch(output,/No such container/);
 });

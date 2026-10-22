@@ -2515,9 +2515,11 @@ notifications separately.
   retries transient registry failures at most three times, and shares its existing
   120-second image-preparation budget across acquisition and one build. Cached
   bases need no pull; authentication refusals stop immediately. Cleanup removes
-  only the image and PostgreSQL container that setup created. The readiness probe
+  only the built image and the uniquely named attempted PostgreSQL container,
+  including a container whose start failed; an already absent container is harmless.
+  The readiness probe
   checks TCP because PostgreSQL's temporary initialization server already accepts
-  local sockets. Seven controlled acquisition/failure checks and the two unchanged
+  local sockets. Nine controlled acquisition/failure checks and the two unchanged
   real outage/malformed-archive tests pass with the existing limits. This handles
   the local fixture failure; it does not fix Docker Hub's response or guarantee
   registry availability. Other backup fixtures still acquire their base inside
