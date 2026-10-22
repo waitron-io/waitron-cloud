@@ -1,5 +1,10 @@
 # Monitor connected venues locally
 
+For the proposed production policy, read the
+[D103 monitoring thresholds](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md).
+That proposal needs owner approval. The settings and local behaviour below remain
+the implemented baseline; publication does not enable production monitoring.
+
 Use the account portal to see contact and snapshot problems without opening the venue's
 server. You can opt in to service emails and choose English or Spanish. Your preference
 covers the venues you currently own, across your organisations. It starts disabled and

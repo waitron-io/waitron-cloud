@@ -2875,6 +2875,13 @@ notifications separately.
   data. Stale health is shown as unknown and the permission is rechecked before release.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
+  The [D103 threshold proposal](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
+  separates existing local detection from proposed production operator alerts and
+  opted-in venue mail, with worked outage and backup timelines. Owner approval is
+  required before implementation; publication supplies no production alerting or
+  recovery guarantee. D103's release/upgrade and compute proposals remain separate
+  later decisions. D104 owns the paging connection and independent public status page;
+  D102's SES feedback, suppression, alerts and live qualification remain open.
   Optional quiet periods and one still-open reminder are implemented with both timings
   disabled by default. Each incident opening captures its original recipients and fixed
   database deadlines. The portal remains immediate; brief incidents recover silently.

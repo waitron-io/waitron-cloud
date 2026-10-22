@@ -220,6 +220,10 @@ identify their Cloud resources.
 
 ## Production limits
 
+The [D103 monitoring proposal](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
+recommends initial thresholds, phone-alert conditions and worked timelines for owner
+approval. It does not configure a collector, paging service or production policy.
+
 This status surface is local operational tooling, not a deployed monitor. The repository
 offers opt-in local collection and a loopback metrics endpoint. It does not configure
 production collection, alerts or a public status page. The checks reflect current database projections; they do not prove provider
