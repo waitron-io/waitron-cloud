@@ -1274,6 +1274,17 @@ notifications separately.
   failures to these races remains an inference. Keep their logs and all ownership,
   isolation, accounting and cleanup assertions and deadlines. Temporary diagnostic
   workflows are removed.
+  Another stack-start refusal occurred in
+  [run 39743485615, stack group 1](https://github.com/waitron-io/waitron-cloud/actions/runs/39743485615/job/119706230844):
+  `genuineArchiveAndSignedSdkTrafficReconcileThroughRealStorage` failed after
+  3.6 seconds before its archive assertions; the other nine group cases passed.
+  `startIsolatedStack` replaces its underlying error at `local.mjs:659`, so the
+  cause is unknown. The test-image handling branch changes no cost runtime,
+  fixture or workflow. The exact case passes locally through the new launcher
+  with all archive, accounting and cleanup assertions intact. That passing probe
+  explains neither the Linux failure nor a correction. Next: capture a bounded,
+  sanitised startup stage and underlying refusal before cleanup, then reproduce
+  it without relaxing ownership, isolation, accounting or cleanup checks.
   A separate paced-replay check refused after 75.8 seconds in `39637622744`.
   Its saved error is generic and exposes no underlying stage. One generated-only
   instrumented Linux run passes (`39638725311`); this does not establish a cause
@@ -2288,7 +2299,15 @@ notifications separately.
   setup and queueing. Measure both the candidate and its merge before claiming the
   target is met.
   Browser packages install Chromium with at most two attempts, each bounded to
-  120 seconds plus ten seconds to stop it. Main pushes use a unique concurrency
+  120 seconds plus ten seconds to stop it. In
+  [run 39744422290](https://github.com/waitron-io/waitron-cloud/actions/runs/39744422290/job/119709401502),
+  UI-smoke never reached its tests: the first dependency download exceeded the
+  120-second limit and the retry found the package-manager lock held by an
+  `apt-get` process. This does not prove which process escaped timeout cleanup.
+  Next: reproduce that descendant lifetime and qualify owned-process cleanup
+  before retry, retaining both setup bounds and all browser assertions. A clean
+  runner's recovery is not evidence of an installer correction.
+  Main pushes use a unique concurrency
   group per run so a later merge cannot cancel an earlier merge's checks;
   superseded pull request runs still cancel. The workflow text guard checks shard
   completeness and deadlines. The summary checks actual job records against the
@@ -3221,10 +3240,20 @@ failed before account HTTP shard 3 started its tests: Docker's request to
 `auth.docker.io` timed out while pulling `postgres:18-alpine`. The recorded failure
 is in `scripts/test-postgres.mjs:30`, before the owned container is marked running.
 This is separate from the reset-mail capture failure below. No runtime, test,
-fixture, workflow or dependency change accompanied the incident, and no registry
-fix is claimed. Next: qualify bounded image-pull failure handling with a failing
-test first, preserving the existing test assertions, deadlines and owned-container
-cleanup. A later successful run alone does not prove that handling is fixed.
+fixture, workflow or dependency change accompanied the incident, and the external
+registry failure's cause remains unproved.
+
+The test launcher now acquires both images before creating either container. It
+uses cached images without registry access. For a missing image, it retries a
+recognised connection failure at most three times within one shared 120-second
+acquisition budget, including inspection and retry waits. Access refusals and
+other terminal errors stop immediately; a failed daemon inspection does not
+become an image pull. Container starts disable implicit pulling and are never
+retried. Package commands, assertions, readiness deadlines and owned cleanup retain
+their existing behaviour. Run `node --test scripts/ci-test-postgres.test.mjs` for
+the controlled launcher checks, including timeout termination, retry exhaustion,
+Mailpit acquisition, command exit status and cleanup. These checks qualify local
+failure handling; they do not prove Docker Hub availability or explain its outage.
 
 ## Account HTTP reset-mail capture
 

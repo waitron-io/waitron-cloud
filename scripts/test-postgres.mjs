@@ -9,6 +9,33 @@ let running = false;
 let mailRunning = false;
 let child;
 const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', timeout: 120_000 }).trim();
+async function ensureTestImage(image) {
+  const deadline = performance.now() + 120_000;
+  const remaining = () => Math.ceil(deadline - performance.now());
+  const command = (...args) => execFileSync('docker', args, {
+    encoding: 'utf8', timeout: Math.max(1, remaining()), killSignal: 'SIGKILL',
+  });
+  try {
+    command('image', 'inspect', image);
+    return;
+  } catch (error) {
+    if (!/No such (?:image|object):/i.test(String(error.stderr))) throw error;
+  }
+  for (let attempt = 1; ; attempt++) {
+    try {
+      command('pull', image);
+      return;
+    } catch (error) {
+      const pause = attempt * 1000;
+      const transient = error.code === 'ETIMEDOUT'
+        || /Client\.Timeout|i\/o timeout|TLS handshake timeout|context deadline exceeded|connection reset by peer|unexpected EOF/i.test(String(error.stderr));
+      if (!transient || attempt >= 3 || remaining() <= pause) throw error;
+      console.error(`Test image pull timed out or lost its connection; retrying ${image} (${attempt + 1}/3)`);
+      await delay(pause);
+      if (remaining() <= 0) throw error;
+    }
+  }
+}
 function cleanup() {
   if (mailRunning) {
     docker('rm', '-f', '-v', `${name}-mail`);
@@ -27,7 +54,10 @@ for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
   });
 }
 try {
-  docker('run', '--detach', '--rm', '--name', name, '--publish', '127.0.0.1::5432',
+  // Acquire both images before resource ownership starts; container creation is never retried.
+  await ensureTestImage('postgres:18-alpine');
+  await ensureTestImage('axllent/mailpit:v1.31.1');
+  docker('run', '--pull=never', '--detach', '--rm', '--name', name, '--publish', '127.0.0.1::5432',
     '--env', `POSTGRES_PASSWORD=${password}`, '--env', 'POSTGRES_DB=cloud_test', 'postgres:18-alpine');
   running = true;
   let ready = false;
@@ -42,7 +72,7 @@ try {
   }
   if (!ready) throw new Error('Test PostgreSQL did not become ready within 30 seconds');
   const port = docker('port', name, '5432/tcp').split(':').at(-1);
-  docker('run', '--detach', '--rm', '--name', `${name}-mail`, '--publish', '127.0.0.1::1025',
+  docker('run', '--pull=never', '--detach', '--rm', '--name', `${name}-mail`, '--publish', '127.0.0.1::1025',
     '--publish', '127.0.0.1::8025', '--env', 'MP_MAX_MESSAGE_SIZE=1', 'axllent/mailpit:v1.31.1');
   mailRunning = true;
   const smtpPort = docker('port', `${name}-mail`, '1025/tcp').split(':').at(-1);
