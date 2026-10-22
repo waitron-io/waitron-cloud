@@ -1,10 +1,12 @@
 # Notice failures without turning every blip into an alarm
 
-**C39 · 2026-10-22 · PROPOSED for full owner design approval. Documentation only.**
+**C39 · 2026-10-22 · Full design approved for planning only. Documentation only.**
 
 You need a phone alert when you must act, unknown status when evidence stops, and useful incident
-mail without a message for every blip. This proposal recommends policy, not approved thresholds
-or promises. You are the sole operator on call; a venue owner receiving optional mail has a separate role.
+mail without a message for every blip. The owner approved this full policy and its starting
+thresholds on 2026-10-22 around 08:35 for planning only. Implementation, the exact daily
+backup schedule and first monitored group need separate authority. You are the sole
+operator on call; a venue owner receiving optional mail has a separate role.
 
 Source inspection uses base `9701cd2359d69f0a3e8960b761754cf492aac745`, file reads and `rg` searches;
 guide references include this publication's backlinks. No runtime behaviour was exercised: this is policy
@@ -207,4 +209,8 @@ privacy/gate breach or two false P1 pages in 24 hours. Keep observation running 
 Re-evaluate after each stage, every **30 days**, and after schedule/topology/verifier/provider changes,
 using detection, false-page, unknown-time and acknowledgment evidence. Resume only after you accept corrections.
 
-Do you approve this full first C39 monitoring proposal, including its proposed thresholds, five-minute mail quiet time, one 60-minute reminder and sole-owner paging rules, or what would you change before a separate implementation plan is prepared?
+The full design, including its thresholds, five-minute mail quiet time, one 60-minute reminder
+and sole-owner paging rules, is approved for separate planning. Build and enablement remain
+gated; decide the exact daily schedule and first monitored group before enablement.
+The [C41 release/upgrade proposal](2026-10-22-cloud-release-upgrade-design.md) remains a
+separate, unapproved decision.

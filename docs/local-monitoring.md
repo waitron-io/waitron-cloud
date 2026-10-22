@@ -2,8 +2,10 @@
 
 For the proposed production policy, read the
 [D103 monitoring thresholds](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md).
-That proposal needs owner approval. The settings and local behaviour below remain
-the implemented baseline; publication does not enable production monitoring.
+The owner approved that design for planning only on 22 October 2026. Build authority,
+the exact daily schedule and first monitored group remain gated. The settings and
+local behaviour below remain the implemented baseline; publication does not enable
+production monitoring.
 
 Use the account portal to see contact and snapshot problems without opening the venue's
 server. You can opt in to service emails and choose English or Spanish. Your preference

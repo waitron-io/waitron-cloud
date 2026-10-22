@@ -58,11 +58,25 @@ access-location evidence, D102 email qualification and runtime proof remain open
 The published plan records the reviewed documentation milestone; implementation
 requires separate build authority. This does not approve broader D88 hosting/isolation/shared contracts,
 spending, deployment, provider resources or contracts. D103's first C39 monitoring
-design is approved for planning only; release/compute decisions remain separate.
+design is approved for planning only; C41 release/upgrade and C60 compute decisions remain separate.
 D102/D104 hands-on work waits until 3 November. D68 is landed, including
 `b8ff5555c996c5dec1086be49f7d046018bd3187`, but does not price hosting. D79 is clean,
 parked and unpublished at `fab41b1`; migration 043 is absent from this tree. No further
 migration item starts until its slot resolves; the first D101 slice is SQL-free.
+
+**D103 / C41 release and upgrade design, published proposal:** the
+[engineering proposal](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md)
+is **unapproved and unbuilt**. It recommends immutable release identity, separate
+shared Cloud maintenance and hosted-venue cohorts, bounded evidence/soak gates,
+durable human-controlled pause/resume, stopped-writer migration and independent
+restore proof. Compatible code rollback preserves current data; incompatible
+changes repair forward, with restoration and any data-loss authority separate.
+Publication is neither an implementation plan nor operational proof. One fresh
+builder check and driver review are complete; the full-proposal owner decision
+precedes separate planning. Build, rollout,
+provider, Waitron authority and existing migration gates remain closed. C39's full
+design was approved on 2026-10-22 around 08:35 for planning only, with exact daily
+schedule and first monitoring cohort still gated. C60 remains separate.
 
 ## Repository licence
 
@@ -2881,12 +2895,14 @@ notifications separately.
   data. Stale health is shown as unknown and the permission is rechecked before release.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
-  The [D103 threshold proposal](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
+  The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
   separates existing local detection from proposed production operator alerts and
-  opted-in venue mail, with worked outage and backup timelines. Owner approval is
-  required before implementation; publication supplies no production alerting or
-  recovery guarantee. D103's release/upgrade and compute proposals remain separate
-  later decisions. D104's [incident runbook](incident-response.md) now records
+  opted-in venue mail, with worked outage and backup timelines. The owner approved
+  the full design on 2026-10-22 around 08:35 for planning only; exact daily schedule,
+  first cohort and separate build authority remain gated. No production alerting or
+  recovery guarantee follows. The [C41 release/upgrade proposal](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md)
+  is published, unapproved and unbuilt; C60 compute remains separate.
+  D104's [incident runbook](incident-response.md) now records
   sole-owner phone response, private investigation/access boundaries, bilingual
   public updates, verified closure and launch drills. It recommends Cloudflare
   Pages Free with Direct Upload and a directly usable public `pages.dev` fallback
@@ -3295,7 +3311,7 @@ changing any check. The assertions and deadlines remain unchanged.
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |
 | Address lookup (free) | [Spain measured on 2026-10-16](address-lookup-scope.md#measured-on-spain-2026-10-16): 40 public/synthetic cases; none of the three tested providers reaches the proposed selectable-match gate under the first-result mapping. The approved second comparison adds 60 public residential/rural addresses and 120 paired queries, first-versus-list scoring and explicit province inference. The original field references and a separate rural-municipality sensitivity remain distinct; accepted locality level and actual setup integration stay open. The owner prefers a Google-first plan with Geoapify fallback. The [terms finding and proposed design](address-lookup-scope.md#google-can-propose-an-address-you-must-confirm-what-you-keep) distinguish whole-address confirmation from a Places click and propose attribution, no shared cache, account limits and zero paid usage. Provider activation, effective account terms/quotas, fallback eligibility, locality policy and actual setup acceptance remain open. See [free services](#free-services-for-open-source-waitron). |
 | Messaging | The [version 1 on-prem relay contract](transactional-email-relay-contract.md) has a disabled local-proof grant/reservation core; opt-in signed routes, an encrypted queue and a disabled local capture worker with bounded claims and accepted/uncertain outcomes; production origin verification, Waitron durable caller, joint proof and production decisions remain open. Include free transactional account email for open-source Waitron with a Cloud login and per-user limits; evaluate free mobile notifications separately. Amazon SES in an EU region is owner-selected for email; D102 owns region/account, sender, tracking, bounce/complaint, suppression and live-delivery qualification. Configure the implemented TLS SMTP adapter and agreed caller interface; selection is not deployment evidence. |
-| Automated upgrades | Treat cloud services, cloud-hosted Waitron and on-prem installations separately; choose rollout groups, compatibility, maintenance windows, pause and recovery behaviour. |
+| Automated upgrades | The [C41 engineering proposal](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md) is published, unapproved and unbuilt. It separates shared Cloud maintenance from independently hosted Waitron cohorts and on-prem update ownership; proposes release identity, bounded stages, compatibility, pause/resume and data-preserving recovery rules. Owner approval precedes separate planning; implementation, maintenance windows, cohort consent, provider and cross-repository gates remain open. C60 compute is separate. |
 | Monitoring | External venue and remote-route health, backup staleness, customer incidents and bilingual email alerts are implemented locally. Accepted public/staff probes now emit retry-safe organisation usage events and the portal shows their measured total. Add filing/device signals, broader functional checks and performance evidence. The local deployment now schedules usage reconciliation; define production operations, cost, allowance and limit policy before using measurements for enforcement. |
 
 Further candidates remain in the complete inventory: loyalty and gift cards,
