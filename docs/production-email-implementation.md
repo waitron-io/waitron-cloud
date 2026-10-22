@@ -1,11 +1,13 @@
 # Production account email
 
-Prefer a delivery provider that processes administrative email in Spain. The AWS SES
-endpoint list checked on 2026-09-22 has no Spain endpoint. Acumbamail is a candidate:
-its terms locate its servers in Madrid, and its transactional SMTP service accepts TLS
-connections on port 465. This is a candidate for verification, not a purchased service
-or a claim about the recipient's mail provider, international transit, or every
-subprocessor. Keep the queue independent of the provider.
+The owner selected **Amazon SES in an EU region** on 2026-10-21. D102 owns the
+Paris/Frankfurt recommendation, account setup and live qualification. The
+[SES endpoint table](https://docs.aws.amazon.com/general/latest/gr/ses.html) lists
+those regions but no Spain endpoint. This is an approved email-processing exception,
+not a claim about recipient mail providers, transit or every subprocessor. The
+[D101 proposal](superpowers/specs/2026-10-22-cloud-data-protection-design.md) records
+the supplier/location/legal evidence still needed. Keep the queue independent of
+the provider; SES selection does not establish configured delivery.
 
 ## Scope and contract
 
@@ -78,23 +80,21 @@ messages cannot be replayed after their encrypted payload has been erased.
 
 ## Before enabling live delivery
 
-Select and configure the provider account and verified sender domain. Confirm the
-processing/storage locations, retention, subcontractors and suppression rules for the
+D102 must qualify and configure the selected SES account/region and verified sender
+domain. Confirm the processing/storage locations, retention, subcontractors and suppression rules for the
 chosen service. Disable open/click tracking and link rewriting for account emails;
 confirm with a real delivered message. Configure SPF, DKIM and DMARC as instructed by
 the provider. Use an application credential, configure a monitored bounce address and
-prove delivery, permanent bounce and complaint handling. Acumbamail documents that
-SMTP activation requires a paid email-volume plan or credits and a support request.
+prove delivery, permanent bounce and complaint handling.
 
 Authenticated delivery-event ingestion, suppression reconciliation, alerts, production
 secret provisioning and a live delivery proof need the selected account/provider.
 The transport implementation does not pretend those operational pieces are deployed.
-There is no cross-country fallback; SES can be added if an appropriate location is
-approved later. The public portal routes are still a separate implementation.
+There is no automatic cross-country or provider fallback. D102 must qualify the
+selected EU SES path before enabling it. The public portal routes are still a
+separate implementation.
 
-Sources checked 2026-09-22:
+SES selection reconciled 2026-10-22; transport source retained from the 2026-09-22 implementation:
 
 - [AWS SES endpoints](https://docs.aws.amazon.com/general/latest/gr/ses.html)
-- [Acumbamail server-location terms](https://acumbamail.com/terminos-de-uso/)
-- [Acumbamail transactional SMTP setup](https://soporte.acumbamail.com/article/69-configurar-el-envio-de-email-transaccional)
 - [Nodemailer SMTP options](https://nodemailer.com/smtp)
