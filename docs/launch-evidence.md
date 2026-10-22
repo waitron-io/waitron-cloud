@@ -13,6 +13,25 @@ This audit was checked on 27 September 2026 against Cloud main
 `3efca036d4ddbb9e252931579a51ef80ae9f1e5c` and the official sources linked below.
 Recheck the provider sources when you select or change a service.
 
+## Read the D101 decisions as policy, not runtime evidence
+
+The [D101 data-protection design](superpowers/specs/2026-10-22-cloud-data-protection-design.md)
+and reconciled [D88 hosting proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md)
+are proposed documentation, inspected at Cloud `60c0fbf` on 2026-10-22. They use
+[A980 section 2](https://github.com/clintongormley/waitron/blob/96a1129e385447e9b9a6dc545673009953a2c551/docs/superpowers/specs/2026-10-22-a980-data-protection-design.md#2-the-data-map)
+as the single application data map; Cloud builds no second application rights tool.
+The owner selected country-pack home/permitted backup regions; Spain venue data,
+logs and keys in `eu-south-2` plus one extra backup in another EU region; menu-only
+translation without personal data; full exit download, 90-day read-only backups and
+then deletion except Cloud's own billing; per-session approved support or the narrow
+emergency route when the venue cannot trade and cannot be reached; scoped machine key use; and cold recovery.
+D102 owns the separate selected EU SES email exception. A 24-hour support default and
+Paris backup region remain D101 recommendations. Full design approval, legal annexes,
+supplier/entity/access/transfer evidence and all proposed runtime controls remain open.
+No production build starts from this documentation. D68 is landed, but hosting and
+recovery costs remain unmeasured. D79 is parked unpublished at `fab41b1`; its changes
+and migration 043 are not on this base and supply no launch evidence here.
+
 ## Read the local evidence narrowly
 
 The first milestone is complete locally. Each row names the executable evidence and
@@ -81,8 +100,8 @@ Official AWS documentation currently supports these candidates:
 | Container or virtual-machine compute | [ECS on Fargate supports `eu-south-2`](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AWS_Fargate-Regions.html), and [EC2 publishes regional instance availability](https://docs.aws.amazon.com/ec2/latest/instancetypes/ec2-instance-regions.html). | Choose the workload packaging, sizes, zone layout, quotas, capacity and recovery path. |
 | Public certificates | [Certificate Manager lists `eu-south-2`](https://docs.aws.amazon.com/general/latest/gr/acm.html). | Prove that the selected ingress and renewal design preserves the separate staff TLS contract. |
 | Public DNS | [Route 53 is a global service](https://docs.aws.amazon.com/general/latest/gr/r53.html). | Map the DNS data and control path separately. Do not describe it as Spain-regional merely because the workload is in Spain. |
-| Menu translation | OpenAI is the implemented adapter; consent names OpenAI, Anthropic and Google as possible processors. Requests set `store: false`. [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data), checked 2026-10-17, say abuse-monitoring logs are "retained for up to 30 days", subject to legal and safety exceptions. | Confirm EU processing, eligibility and approval for Zero Data Retention or Modified Abuse Monitoring, production key custody and each selected provider's terms. `store: false` does not itself remove abuse-monitoring logs. See the [approved design](superpowers/specs/2026-10-14-translate-all-design.md#openai). |
-| Administrative email | The current [SES endpoint table](https://docs.aws.amazon.com/general/latest/gr/ses.html) does not list Spain. | Select a separate relay, then verify its processing locations, retention, tracking, subprocessors, bounce handling and live delivery. |
+| Menu translation | OpenAI is the actual adapter; Anthropic and Google remain candidates. At Cloud `60c0fbf`, [openai-client.ts:63](https://github.com/waitron-io/waitron-cloud/blob/60c0fbf25618a30977657fe74cce90fc5dbb915b/packages/translation/src/openai-client.ts#L63) sets `store: false`. [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data) describe default abuse-monitoring retention up to 30 days with exceptions. | Qualify exact project/model/endpoint, EU processing/retention approval and legal/access evidence. Build D101's [proposed outbound boundary](superpowers/specs/2026-10-22-cloud-data-protection-design.md#4-enforce-a-country-policy-and-qualify-every-outbound-flow): arbitrary menu text can contain personal data, so AI stays disabled pending a separately accepted input-eligibility rule. `store: false` does not prove EU processing or zero retention; no candidate fallback is approved. |
+| Administrative email | The owner selected Amazon SES in an EU region on 2026-10-21. The [SES endpoint table](https://docs.aws.amazon.com/general/latest/gr/ses.html) lists Paris/Frankfurt, with no Spain endpoint. | D102 selects region/account and qualifies entities, locations, retention, tracking off, sender-domain authentication, bounce/complaint intake, suppression, alerts and live delivery. This email exception does not relocate venue data/logs/keys or prove deployment. |
 
 Service availability is not deployment evidence. Before provisioning, inspect region
 enablement, account-specific zones, product versions, quotas and capacity. After
@@ -132,16 +151,17 @@ the EDPB's [transfer guidelines](https://www.edpb.europa.eu/documents/guideline/
 and the AEPD's [breach-notification guidance](https://www.aepd.es/derechos-y-deberes/cumple-tus-deberes/medidas-de-cumplimiento/brechas-de-datos-personales-notificacion).
 This repository records engineering evidence, not a legal assessment.
 
-Only these owner decisions prevent the initial service from becoming a customer
-promise:
+These decisions and qualifications remain necessary before making a customer promise.
+D101 records the owner choices already answered; those choices still need enforcement
+and legal/provider evidence:
 
-| Decision | What you must decide | What it unlocks |
+| Area | Known choices and remaining work | What it unlocks |
 | --- | --- | --- |
-| Data location and vendor chain | The scoped Spain-location promise, roles by purpose, permitted providers and subprocessors, access locations, contracts and transfer safeguards. | Final AWS service selection, a deployable data-flow map, customer terms and truthful location wording. |
+| Data location and vendor chain | D101 country-pack policy, Spain home plus one extra EU backup, SES exception, roles by purpose, exact supplier/entities/access locations, contracts and transfer safeguards. These choices are not deployed proof. | Final AWS service selection, a deployable data-flow map, customer terms and truthful location wording. |
 | Service reliability | Tolerated data loss, recovery time, availability, promotion authority and planned-handover rules for remote access and backups. | Availability-zone layout, backup/replication settings, monitoring thresholds and live acceptance tests. |
-| Retention and exit | Continuous-backup retention, snapshot timing, longer paid retention, cancellation, deletion, protected-copy behavior and audit/security-record cutoffs. | Production lifecycle jobs, restore inventory, cancellation flow and retention wording. |
+| Retention and exit | Continuous/snapshot detail and longer paid retention; implement the selected full exit download, 90-day read-only backups and purge, including earlier verified delete, all copies, keys and billing/legally approved exceptions in D101. | Production lifecycle jobs, restore inventory, cancellation flow and retention wording. |
 | Packages and price | Whether remote access and backups are separate or bundled, trials, usage limits, tax/commercial assumptions and excess-use behavior. | Checkout, billing and customer price publication. It does not block a private deployment rehearsal. |
-| Operational authority | Platform roles, support actions, customer approvers, emergency access, incident responsibilities and production key custody. | Enabling support grants, staff operations, incident response and secret rotation. |
+| Operational authority | Implement D101 per-session venue approval, expiry/revocation, every-action venue-visible audit, narrow emergency evidence/reporting and scoped machine KMS access; qualify roles and incident responsibilities. | Enabling support grants, staff operations, incident response and secret rotation. |
 
 Do not infer a universal retention period, a Spain-only guarantee, GDPR compliance,
 an uptime or recovery promise, or a price from the provider pages. Those claims need
@@ -170,8 +190,11 @@ commit and configuration. It must show:
    explicit activation and post-replacement capture against the selected provider.
 9. External monitoring, incident handling, quiet periods, escalation, capacity and
    spend alerts, plus measured results against the adopted service objectives.
-10. Cancellation, expiry, export and deletion behavior against the adopted terms,
-    including the protected last verified snapshot and every operational-history cutoff.
+10. Cancellation, expiry, export and deletion behavior against lawyer-reviewed terms
+    and D101 acceptance cases: full portable download, fixed 90-day clock, earlier
+    verified delete, resubscription races, all-region/all-copy purge and key dependencies.
+    Reconcile protected snapshots, platform backups, billing exceptions and history
+    cutoffs; report residual/uncertain deletion honestly, with no fiscal-row changes.
 
 Hosted Waitron, automatic cloud failover, independent booking pages, invoice archives,
 analytics, cross-provider operation, other countries, address lookup, the on-premises
