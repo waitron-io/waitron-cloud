@@ -20,6 +20,8 @@ def main():
         # Change the mirror URI only; suites, components and signing keys stay intact.
         updated = re.sub(r'(?<!\S)https?://azure\.archive\.ubuntu\.com/ubuntu(?=/?(?:\s|$))',
                          'https://archive.ubuntu.com/ubuntu', original)
+        updated = re.sub(r'(?<!\S)mirror\+file:/etc/apt/apt-mirrors\.txt(?=\s|$)',
+                         'https://archive.ubuntu.com/ubuntu', updated)
         if updated != original:
             path.write_text(updated)
             print(f'Using https://archive.ubuntu.com/ubuntu in {path}', flush=True)

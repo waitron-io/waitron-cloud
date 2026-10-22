@@ -24,7 +24,7 @@ async function install(t, scenario = {}) {
     await rm(root, {recursive: true, force: true});
   });
   await mkdir(join(root, 'sources.list.d'));
-  await writeFile(join(root, 'sources.list.d', 'ubuntu.sources'), 'Types: deb\nURIs: http://azure.archive.ubuntu.com/ubuntu/\nSuites: noble noble-updates noble-security\nComponents: main universe\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n');
+  await writeFile(join(root, 'sources.list.d', 'ubuntu.sources'), 'Types: deb\nURIs: mirror+file:/etc/apt/apt-mirrors.txt\nSuites: noble noble-updates noble-security\nComponents: main universe\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n');
   await writeFile(join(root, 'sudo'), '#!/bin/sh\nexec "$@"\n', {mode: 0o700});
   await writeFile(join(root, 'pnpm'), `#!/usr/bin/env python3
 import fcntl, os, pathlib, signal, subprocess, sys, time, urllib.request
@@ -35,7 +35,7 @@ count.write_text(str(n))
 assert sys.argv[1:] == ['--filter', '@waitron-cloud/ui-smoke', 'exec', 'playwright', 'install', '--with-deps', 'chromium']
 if os.environ.get('DOWNLOAD_SOURCE_REQUIRED') == '1':
     source = (root / 'sources.list.d' / 'ubuntu.sources').read_text()
-    host = 'azure.archive.ubuntu.com' if 'azure.archive.ubuntu.com' in source else 'archive.ubuntu.com'
+    host = 'azure.archive.ubuntu.com' if 'mirror+file:/etc/apt/apt-mirrors.txt' in source else 'archive.ubuntu.com'
     print('fetching controlled dependency from ' + host, flush=True)
     with urllib.request.urlopen(os.environ['DOWNLOAD_MIRROR'] + '/' + host + '/font.deb') as response:
         assert response.read() == b'qualified dependency bytes'

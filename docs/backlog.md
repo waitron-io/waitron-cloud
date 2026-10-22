@@ -2334,7 +2334,8 @@ notifications separately.
   `azure.archive.ubuntu.com`; no browser test ran. Each attempt was stopped,
   and the second progressed without the earlier package-lock collision. The
   underlying mirror slowness remains unexplained. Before browser installation,
-  CI replaces only the Azure Ubuntu archive URI with
+  CI replaces the direct Azure Ubuntu archive URI or the runner's
+  `mirror+file:/etc/apt/apt-mirrors.txt` reference with
   `https://archive.ubuntu.com/ubuntu`. Your release, components, architectures,
   signing keys and third-party sources stay intact. Ubuntu documents the
   [primary archive](https://ubuntu.com/project/docs/how-ubuntu-is-made/concepts/package-archive/)
