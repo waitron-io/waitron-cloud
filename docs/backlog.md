@@ -2447,14 +2447,18 @@ notifications separately.
   from the primary archive. Earlier
   [run 39787485838](https://github.com/waitron-io/waitron-cloud/actions/runs/39787485838)
   reached package downloads but timed out fetching fonts and NSS libraries.
+  An initial alternative, kernel.org, was refused by a GitHub runner at its
+  IPv4 address in [run 39810150851](https://github.com/waitron-io/waitron-cloud/actions/runs/39810150851/job/119934129050).
+  Its local signed-download probe passed, so local reachability alone cannot
+  qualify the source for Actions.
   CI now directs recognised Azure, primary and runner mirror-file archive
-  references to `https://mirrors.kernel.org/ubuntu`. This changes only the URI;
+  references to `https://mirror.math.princeton.edu/pub/ubuntu`. This changes only the URI;
   your release, components, architectures, signing keys and other sources stay
   intact. Ubuntu's existing signed release metadata and package hash checks
   still decide which bytes you can install. No additional signing key, cache,
   unsigned source or longer deadline is introduced. See
   [Ubuntu's archive verification](https://documentation.ubuntu.com/security/software-integrity/archive-verification/)
-  and the [mirror operator's archive](https://mirrors.kernel.org/).
+  and the [Princeton's Ubuntu archive](https://mirror.math.princeton.edu/pub/ubuntu/).
   Run `node --test scripts/ci-browser-source.test.mjs scripts/ci-download.test.mjs`
   to check source preservation and the workflow against controlled stalled runner mirror-file
   and primary sources. Both must reach the alternative in one attempt. Real

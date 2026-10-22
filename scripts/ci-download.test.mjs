@@ -13,7 +13,7 @@ const browserStep = workflow.match(/      - name: Install Chromium with bounded 
 // Execute the workflow's shell. Only the outside installer and sudo boundary are controlled.
 async function install(t, scenario = {}) {
   const mirror = createServer((request, response) => {
-    if (request.url === '/mirrors.kernel.org/font.deb') response.end('qualified dependency bytes');
+    if (request.url === '/mirror.math.princeton.edu/font.deb') response.end('qualified dependency bytes');
     // The other source accepts the connection but never supplies its package.
   });
   await new Promise(resolve => mirror.listen(0, '127.0.0.1', resolve));
