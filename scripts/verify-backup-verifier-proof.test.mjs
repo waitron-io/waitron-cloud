@@ -51,7 +51,7 @@ for(const [name,change] of [
  ['remaining child',r=>{r.cleanup.containers=1;}],
  ['candidate called published',r=>{r.publication='published';}],
  ['phase borrowed from another run',r=>{r.phases[2].runId='older-run';}],
- ['skipped phase called executed',r=>{r.phases[1].state='skipped';}],
+ ['skipped phase called executed',r=>{r.phases[1].state='skipped';r.phases[1].checks=[];r.phases[1].reason='skip-is-not-evidence';}],
  ['missing executed assertion',r=>{r.phases[2].checks.pop();}],
  ['foreign image',r=>{r.verification.receipt.imageId='sha256:'+'4'.repeat(64);}],
  ['foreign request',r=>{r.verification.receipt.requestDigest='5'.repeat(64);}],
