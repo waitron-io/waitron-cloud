@@ -33,9 +33,10 @@ install the pinned provider without contacting a registry. Its configuration inc
 direct provider download method. Initializing from this mirror reports the provider as
 unauthenticated: preparation checks the pinned archive checksum, but does not retrieve a
 registry signature during initialization. Each root is a separate OpenTofu configuration
-entry point. Root lockfiles still need checksums for both
-supported architectures when those roots are introduced. Test execution uses only the
-existing local image and refuses an implicit image download.
+entry point. The account root's committed lockfile contains checksums for both
+supported architectures. Add and qualify the same protection as you introduce each later
+root. Test execution uses only the existing local image and refuses an implicit image
+download.
 
 OpenTofu and provider downloads require HTTPS and official distribution hosts, including redirects.
 They ignore your proxy settings, check a three-minute deadline before each read, and
@@ -166,7 +167,21 @@ or retiring an account from the Organization is destructive even if the account 
 open, and needs a separately authorized operation. These checks perform no import,
 account creation, removal or retirement.
 
-The account suite currently initializes disposable ARM64 lockfiles. Committed root
-lockfiles and installation checks for both supported architectures remain unfinished;
-the root is not yet qualified for portable use. State custody, live permissions and
-parent-unit ownership also remain unqualified.
+The account root installs from its committed lockfile on Linux ARM64 and AMD64 without
+changing it. The checksums cover the mirror's executable packages, built from the
+checksum-verified release archives. The archive checksums are retained too. Local
+qualification runs initialization with the lockfile read-only, validation and all account
+plans on both architectures; AMD64 runs under emulation. Removing either executable
+checksum refuses installation on its matching architecture.
+
+The standalone module tests generate disposable locks for the current architecture.
+Their incomplete-lock warning does not apply to the account root. Run the root lock
+regression check with:
+
+```sh
+node --test deploy/aws/locks.test.mjs
+```
+
+That check runs the real account suite and refuses a root initialization that changes
+the committed lock. State custody, live permissions and parent-unit ownership remain
+unqualified. An offline plan passing on both architectures does not prove live AWS access.
