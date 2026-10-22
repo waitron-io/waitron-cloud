@@ -1225,10 +1225,12 @@ notifications separately.
   Task 9 adds portal wording that separates checked data from activation and treats
   inconclusive checks as pending. The version 5 schema proof targets migrations
   42-to-43 with synthetic legacy history, recovery holds, external backup keys,
-  current evidence and v2 request bindings. Actual old-to-new/disaster proof and
-  final root checks are still pending at this candidate commit; the genuine joint
-  proof and reviewed release remain open. The earlier schema receipt versions and
-  all fiscal authority rules remain unchanged.
+  current evidence and v2 request bindings. The actual old-to-new/disaster proof
+  passes on `ee927ed9ac4486f4d9166e0c95ac661eab674bf5`, including interrupted
+  rollback, old-binary refusal and cleanup. It exposed helper lookup failure during
+  `pg_restore`; unlanded migration 043 now retains its schema search path. All 42
+  shipped migrations remain unchanged. The genuine joint proof and reviewed release
+  remain open; earlier receipt versions and fiscal authority rules remain unchanged.
   The PR5 adapters are reconciled with current main, preserving their earlier
   storage, account, remote and controller behavior and historical test evidence.
   Portal copy, schema-upgrade receipts and a joint capture-to-recovery proof against

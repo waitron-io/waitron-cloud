@@ -229,10 +229,13 @@ You can run the schema-upgrade proof with
 `node scripts/schema-upgrade-receipt.mjs /tmp/cloud-backup-schema-upgrade.json --backup-verification --old a31df0093529f5ebccc6fe3561dbcd194166ce48 --new <committed-candidate-SHA>`
 and validate it with
 `node scripts/verify-schema-upgrade-receipt.mjs /tmp/cloud-backup-schema-upgrade.json`.
+The local run at `ee927ed9ac4486f4d9166e0c95ac661eab674bf5` passes.
 Version 5 records the 42-to-43 migration, interrupted rollback, old-binary refusal,
 legacy retention, matching external keys and restored v2 evidence. Its evidence is
 synthetic and cannot qualify a genuine archive or release image. The earlier receipt
-versions keep their original release pairs and assertions.
+versions keep their original release pairs and assertions. The actual restore also
+checks the new validation functions under PostgreSQL’s empty restore search path;
+their nested helpers resolve in the schema where the migration created them.
 The genuine joint proof and reviewed release remain unfinished. Keep snapshots
 unavailable and plan enforcement off.
 You can exercise these rules with
