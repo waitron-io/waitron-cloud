@@ -9,6 +9,7 @@ Prepare the tools once, then run the canary and source-policy checks:
 
 ```sh
 node deploy/aws/check.mjs --prepare-tools
+pnpm --dir deploy/aws install --ignore-workspace --frozen-lockfile
 node deploy/aws/check.mjs --suite canary
 node --test --test-concurrency=1 deploy/aws/*.test.mjs
 ```
@@ -95,7 +96,37 @@ in order and refuses a missing test file. Only the canary is implemented so far,
 It does not report the unfinished infrastructure as verified. Missing local tools produce
 the `--prepare-tools` setup instruction without downloading anything.
 
-The infrastructure handoff schema and remaining resource suites still need the work in the
+The separate dependency install supplies Ajv, the JSON Schema validator used by the
+contract tests. It leaves the application workspace dependencies unchanged. Its version
+and dependency checksums are pinned in `deploy/aws/pnpm-lock.yaml`.
+
+## Pass infrastructure references to the runtime
+
+The runtime needs resource addresses and permission references without receiving passwords
+or cluster credentials. The [infrastructure_v1 schema](../deploy/aws/contracts/infrastructure-v1.schema.json)
+defines that handoff. Run `node --test deploy/aws/contracts.test.mjs` to validate independent
+global and Spain fixtures and exercise refusals for unknown fields, missing references,
+unknown roles and a running recovery region. These are contract checks, not resource outputs;
+the resource modules and composed roots remain unfinished.
+
+Every fixed object rejects extra fields. Reference maps accept named string references;
+they reject embedded objects, such as a password object in a database secret reference.
+A string alone cannot prove where a secret is held. Keep secret values outside the
+handoff and supply only their references. The schema fixes the current region pairs to
+Frankfurt/Ireland for global and Madrid/Paris for Spain. Global has no venue stream or
+snapshot bucket. Recovery always has `runtime_enabled: false`; a valid handoff grants
+no permission to activate a writer.
+
+The [P1 role contract](../deploy/aws/contracts/p1-roles-v1.json) records the eight agreed
+logical roles, matching service accounts, namespaces and ingress ports. P1 owns image
+digests and runtime deployment; OpenTofu consumes no image reference. Its
+[country-cell plan](superpowers/plans/2026-10-22-cloud-country-cell.md) maps migrations,
+mail, usage, probes and operations to `registration-worker`, and manifest publication
+to `remote-reconciler`. Translation stays disabled behind its separate production gate.
+The global namespace is reserved until P3 supplies the global/country split. Agreement
+on these names and ports does not qualify AWS permissions, ingress or secret delivery.
+
+The remaining resource suites follow the
 [implementation plan](superpowers/plans/2026-10-22-cloud-aws-layer.md).
 Passing source-policy tests does not qualify AWS permissions, deployed infrastructure,
 recovery or continuity. You still need separate approval before accessing AWS, creating
