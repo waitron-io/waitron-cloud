@@ -1364,9 +1364,13 @@ notifications separately.
   itself refuses, its error can still be generic; preserve the private journal's
   validated trace before fixture cleanup. Both historical paced failures remain
   unexplained. Capture the trace on recurrence and fix its cause; preserve the 207-sale restore, integrity, source and
-  cleanup checks and limits. A branch-only Linux investigation repeats the unchanged
-  generated paced case with the landed diagnostics; its passing runs do not establish
-  a correction. Remove that temporary workflow when the investigation finishes.
+  cleanup checks and limits. An unchanged generated reproduction passed 13 times
+  locally and 36 times across all 12 jobs of
+  [Linux run 39857085282](https://github.com/waitron-io/waitron-cloud/actions/runs/39857085282)
+  at `42f3b05d981769fb754ebcf984766a4f885f284e`. These passes do not identify or
+  correct the historical failures. Local scratch samples peaked at 22,444 KiB
+  within the unchanged 65,536 KiB limit; those samples do not establish the peak
+  during a failure. The temporary branch-only investigation workflow is removed.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.
