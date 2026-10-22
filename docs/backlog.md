@@ -1384,6 +1384,13 @@ notifications separately.
   The corrected composition preserves the full two-second observation, the idle
   refusal, early-timer-wake checks and every original deadline. Diagnostic-only
   generated failures now retain their phase and elapsed-stage trace.
+  The same named paced-replay test also failed after 76.1 seconds in
+  [run 39829272927](https://github.com/waitron-io/waitron-cloud/actions/runs/39829272927/job/120000877058),
+  while qualifying the browser-source repair after Actions recovery. Its image
+  build completed, then `runIsolatedReplay` returned the same generic error.
+  That diagnostic head changed no cost-model files relative to `5b709aa`.
+  Its saved log has no underlying worker stage; the later bounded traces and
+  separate startup correction do not establish that historical failure's cause.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.
