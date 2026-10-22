@@ -13,7 +13,7 @@ const browserStep = workflow.match(/      - name: Install Chromium with bounded 
 // Execute the workflow's shell. Only the outside installer and sudo boundary are controlled.
 async function install(t, scenario = {}) {
   const mirror = createServer((request, response) => {
-    if (request.url === '/archive.ubuntu.com/font.deb') response.end('qualified dependency bytes');
+    if (request.url === '/mirror.math.princeton.edu/font.deb') response.end('qualified dependency bytes');
     // The other source accepts the connection but never supplies its package.
   });
   await new Promise(resolve => mirror.listen(0, '127.0.0.1', resolve));
@@ -24,7 +24,7 @@ async function install(t, scenario = {}) {
     await rm(root, {recursive: true, force: true});
   });
   await mkdir(join(root, 'sources.list.d'));
-  await writeFile(join(root, 'sources.list.d', 'ubuntu.sources'), 'Types: deb\nURIs: mirror+file:/etc/apt/apt-mirrors.txt\nSuites: noble noble-updates noble-security\nComponents: main universe\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n');
+  await writeFile(join(root, 'sources.list.d', 'ubuntu.sources'), 'Types: deb\nURIs: ' + (scenario.primary ? 'https://archive.ubuntu.com/ubuntu' : 'mirror+file:/etc/apt/apt-mirrors.txt') + '\nSuites: noble noble-updates noble-security\nComponents: main universe\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n');
   await writeFile(join(root, 'sudo'), '#!/bin/sh\nexec "$@"\n', {mode: 0o700});
   await writeFile(join(root, 'pnpm'), `#!/usr/bin/env python3
 import fcntl, os, pathlib, signal, subprocess, sys, time, urllib.request
@@ -35,7 +35,7 @@ count.write_text(str(n))
 assert sys.argv[1:] == ['--filter', '@waitron-cloud/ui-smoke', 'exec', 'playwright', 'install', '--with-deps', 'chromium']
 if os.environ.get('DOWNLOAD_SOURCE_REQUIRED') == '1':
     source = (root / 'sources.list.d' / 'ubuntu.sources').read_text()
-    host = 'azure.archive.ubuntu.com' if 'mirror+file:/etc/apt/apt-mirrors.txt' in source else 'archive.ubuntu.com'
+    host = 'azure.archive.ubuntu.com' if 'mirror+file:/etc/apt/apt-mirrors.txt' in source else urllib.parse.urlparse(source.split('URIs: ', 1)[1].splitlines()[0]).hostname
     print('fetching controlled dependency from ' + host, flush=True)
     with urllib.request.urlopen(os.environ['DOWNLOAD_MIRROR'] + '/' + host + '/font.deb') as response:
         assert response.read() == b'qualified dependency bytes'
@@ -200,6 +200,14 @@ while True: time.sleep(0.1)
 // Leaving Azure configured must exhaust the real supervisor instead of reaching installation.
 test('workflow escapes an unavailable Ubuntu mirror before installing browser dependencies', {timeout: 15000}, async t => {
   const result = await install(t, {source: true});
+  assert.equal(result.code, 0, result.output);
+  assert.equal(result.attempts, 1);
+  assert.equal(result.installed, 'yes');
+});
+
+// Keeping the primary archive configured must exhaust both bounded attempts.
+test('workflow escapes a stalled primary archive without a second install attempt', {timeout: 15000}, async t => {
+  const result = await install(t, {source: true, primary: true});
   assert.equal(result.code, 0, result.output);
   assert.equal(result.attempts, 1);
   assert.equal(result.installed, 'yes');

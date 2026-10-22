@@ -1,4 +1,4 @@
-"""Use Ubuntu's primary signed archive for CI browser dependencies."""
+"""Use a signed Ubuntu mirror for CI browser dependencies."""
 
 import argparse
 from pathlib import Path
@@ -16,15 +16,17 @@ def main():
     for path in files:
         if not path.is_file():
             continue
-        original = path.read_text()
+        with path.open(newline='') as source:
+            original = source.read()
         # Change the mirror URI only; suites, components and signing keys stay intact.
-        updated = re.sub(r'(?<!\S)https?://azure\.archive\.ubuntu\.com/ubuntu(?=/?(?:\s|$))',
-                         'https://archive.ubuntu.com/ubuntu', original)
+        updated = re.sub(r'(?<!\S)https?://(?:azure\.)?archive\.ubuntu\.com/ubuntu(?=/?(?:\s|$))',
+                         'https://mirror.math.princeton.edu/pub/ubuntu', original)
         updated = re.sub(r'(?<!\S)mirror\+file:/etc/apt/apt-mirrors\.txt(?=\s|$)',
-                         'https://archive.ubuntu.com/ubuntu', updated)
+                         'https://mirror.math.princeton.edu/pub/ubuntu', updated)
         if updated != original:
-            path.write_text(updated)
-            print(f'Using https://archive.ubuntu.com/ubuntu in {path}', flush=True)
+            with path.open('w', newline='') as source:
+                source.write(updated)
+            print(f'Using https://mirror.math.princeton.edu/pub/ubuntu in {path}', flush=True)
 
 
 if __name__ == '__main__':

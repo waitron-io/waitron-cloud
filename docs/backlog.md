@@ -1384,6 +1384,13 @@ notifications separately.
   The corrected composition preserves the full two-second observation, the idle
   refusal, early-timer-wake checks and every original deadline. Diagnostic-only
   generated failures now retain their phase and elapsed-stage trace.
+  The same named paced-replay test also failed after 76.1 seconds in
+  [run 39829272927](https://github.com/waitron-io/waitron-cloud/actions/runs/39829272927/job/120000877058),
+  while qualifying the browser-source repair after Actions recovery. Its image
+  build completed, then `runIsolatedReplay` returned the same generic error.
+  That diagnostic head changed no cost-model files relative to `5b709aa`.
+  Its saved log has no underlying worker stage; the later bounded traces and
+  separate startup correction do not establish that historical failure's cause.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.
@@ -2441,24 +2448,35 @@ notifications separately.
   retry exhaustion, cancellation, lock release and refusal to touch an unrelated
   lock holder. Actual CI separately qualifies the root boundary and browser
   cache access. This handling does not establish why the outside download stalled.
-  PR291's first [run 39769929280](https://github.com/waitron-io/waitron-cloud/actions/runs/39769929280)
-  again exhausted both 120-second attempts while fetching fonts from
-  `azure.archive.ubuntu.com`; no browser test ran. Each attempt was stopped,
-  and the second progressed without the earlier package-lock collision. The
-  underlying mirror slowness remains unexplained. Before browser installation,
-  CI replaces the direct Azure Ubuntu archive URI or the runner's
-  `mirror+file:/etc/apt/apt-mirrors.txt` reference with
-  `https://archive.ubuntu.com/ubuntu`. Your release, components, architectures,
-  signing keys and third-party sources stay intact. Ubuntu documents the
-  [primary archive](https://ubuntu.com/project/docs/how-ubuntu-is-made/concepts/package-archive/)
-  and its [signature checks](https://documentation.ubuntu.com/security/software-integrity/archive-verification/).
+  Ubuntu's Azure mirror and primary archive have both exhausted these limits.
+  In [run 39804073424](https://github.com/waitron-io/waitron-cloud/actions/runs/39804073424/attempts/2),
+  portal shard 1 timed out twice fetching the 15 MB `noble/universe` package index
+  from the primary archive. Earlier
+  [run 39787485838](https://github.com/waitron-io/waitron-cloud/actions/runs/39787485838)
+  reached package downloads but timed out fetching fonts and NSS libraries.
+  An initial alternative, kernel.org, was refused by a GitHub runner at its
+  IPv4 address in [run 39810150851](https://github.com/waitron-io/waitron-cloud/actions/runs/39810150851/job/119934129050).
+  Its local signed-download probe passed, so local reachability alone cannot
+  qualify the source for Actions.
+  CI now directs recognised Azure, primary and runner mirror-file archive
+  references to `https://mirror.math.princeton.edu/pub/ubuntu`. This changes only the URI;
+  your release, components, architectures, signing keys and other sources stay
+  intact. Ubuntu's existing signed release metadata and package hash checks
+  still decide which bytes you can install. No additional signing key, cache,
+  unsigned source or longer deadline is introduced. See
+  [Ubuntu's archive verification](https://documentation.ubuntu.com/security/software-integrity/archive-verification/)
+  and the [Princeton's Ubuntu archive](https://mirror.math.princeton.edu/pub/ubuntu/).
   Run `node --test scripts/ci-browser-source.test.mjs scripts/ci-download.test.mjs`
-  to check source preservation and a controlled HTTP mirror that accepts a
-  connection but never returns its dependency. The unchanged source exhausts
-  both attempts; the primary source succeeds. Keep all installer bounds and
-  browser assertions. Actual Actions runs must still prove dependency installation
-  and browser execution on each head; this source change promises no network
-  availability or explanation of the Azure stall.
+  to check source preservation and the workflow against controlled stalled runner mirror-file
+  and primary sources. Both must reach the alternative in one attempt. Real
+  Actions qualification must also show two consecutive full runs of the same
+  head and its independent merge run, with one install attempt and every portal
+  and UI-smoke test executed. The public mirror can still fail; the existing
+  supervisor must then refuse the install within its unchanged limits. The
+  observed transfer bottlenecks do not establish the outside servers' cause.
+  The rewrite recognises the runner's current lowercase, whitespace-delimited
+  URIs. Qualify compact Deb822 URI fields or capitalised hostnames before
+  widening that support when a runner changes its source format.
   A separate backup-fixture download remains open: D107's corrected-head
   [run 39776383906](https://github.com/waitron-io/waitron-cloud/actions/runs/39776383906/job/119816424815)
   could not build the verification fixture because Docker Hub returned
@@ -2468,6 +2486,16 @@ notifications separately.
   base-image acquisition and cleanup after an unsuccessful build in a separate
   change, preserving the outage and malformed-archive assertions. A later green
   run proves recovery only; it does not fix this registry response.
+  A separate test-harness route failure is also open. In
+  [run 39813909743](https://github.com/waitron-io/waitron-cloud/actions/runs/39813909743/job/119947375548),
+  registration shard 2 never ran its tests: pulling `axllent/mailpit:v1.31.1`
+  from Docker Hub failed with an IPv6 `network is unreachable` error.
+  `scripts/test-postgres.mjs` refuses that response outside its current transient
+  error list. Qualify the runner's Docker Hub route and acquisition handling
+  separately, retaining the existing 120-second deadline and three-attempt
+  maximum. A later successful pull does not establish a route fix. The job's
+  stale `in_progress` record hid its failed step, so read the actual job log as
+  well as its final status before counting any tests.
   Main pushes use a unique concurrency
   group per run so a later merge cannot cancel an earlier merge's checks;
   superseded pull request runs still cancel. The workflow text guard checks shard
