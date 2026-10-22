@@ -2347,6 +2347,15 @@ notifications separately.
   browser assertions. Actual Actions runs must still prove dependency installation
   and browser execution on each head; this source change promises no network
   availability or explanation of the Azure stall.
+  A separate backup-fixture download remains open: D107's corrected-head
+  [run 39776383906](https://github.com/waitron-io/waitron-cloud/actions/runs/39776383906/job/119816424815)
+  could not build the verification fixture because Docker Hub returned
+  `502 Bad Gateway` for the `node:26` manifest. The two infrastructure tests
+  in `packages/backups/test/verification-infrastructure.test.ts` did not run;
+  cleanup also refused to remove the image that was never built. Qualify bounded
+  base-image acquisition and cleanup after an unsuccessful build in a separate
+  change, preserving the outage and malformed-archive assertions. A later green
+  run proves recovery only; it does not fix this registry response.
   Main pushes use a unique concurrency
   group per run so a later merge cannot cancel an earlier merge's checks;
   superseded pull request runs still cancel. The workflow text guard checks shard
