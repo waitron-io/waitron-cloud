@@ -3020,9 +3020,13 @@ notifications separately.
   The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
   separates existing local detection from proposed production operator alerts and
   opted-in venue mail, with worked outage and backup timelines. The owner approved
-  the full design on 2026-10-22 around 08:35 for planning only; exact daily schedule,
-  first cohort and separate build authority remain gated. No production alerting or
-  recovery guarantee follows. The [C41 release/upgrade proposal](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md)
+  the full design on 2026-10-22 around 08:35 for planning only. The separate
+  [C39 implementation plan](superpowers/plans/2026-10-22-cloud-monitoring-thresholds.md)
+  is published for owner plan approval; implementation is unbuilt. The exact daily
+  schedule, first monitored group and separate build authority remain gated. New
+  database work waits for D79's migration slot, and production observation and phone
+  delivery still need independent qualification. No production alerting or recovery
+  guarantee follows. The [C41 release/upgrade proposal](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md)
   is published, unapproved and unbuilt; C60 compute remains separate.
   D104's [incident runbook](incident-response.md) now records
   sole-owner phone response, private investigation/access boundaries, bilingual
@@ -3047,8 +3051,10 @@ notifications separately.
   [design](superpowers/specs/2026-10-13-monitoring-quiet-escalation-design.md) and
   [plan](superpowers/plans/2026-10-13-monitoring-quiet-escalation.md) record the scope;
   the local packaged install, restart and rebuilt upgrade each use all 37 migrations
-  and leave no project containers, networks, volumes or image. Production quiet/reminder
-  thresholds, external checks, wider escalation and rollout policy remain open.
+  and leave no project containers, networks, volumes or image. C39's quiet/reminder,
+  escalation and monitoring-cohort policy is approved for planning. The
+  [implementation plan](superpowers/plans/2026-10-22-cloud-monitoring-thresholds.md)
+  awaits plan approval; implementation, enablement and deployed external checks remain open.
   The [local monitor](local-monitoring.md) now records missing contact, stale snapshots
   and failed verification for configured test installations. The portal shows incident
   evidence and stale monitoring; owners can opt in to English/Spanish email alerts.
@@ -3098,8 +3104,10 @@ notifications separately.
   changes, migration-digest refusal, database outage/recovery, restart and read-only
   write refusal, with 26 label combinations and empty project cleanup.
   Next: choose the terminal-delivery cutoff, repeat the receipt and aggregate checks in
-  the selected deployment environment, and add external representative checks,
-  production quiet/reminder thresholds, wider escalation and rollout pause criteria.
+  the selected deployment environment, and implement and qualify external representative
+  checks and the planning-approved C39 quiet/reminder, escalation and monitoring-cohort
+  pause policy under its [plan](superpowers/plans/2026-10-22-cloud-monitoring-thresholds.md).
+  Separate plan/build authority, schedule/cohort decisions and enablement gates remain open.
 - **Usage metering.** Cloud now records immutable organisation-scoped events for
   snapshot storage and transfer, completed installation operations, accepted monitoring
   probes and terminal administrative alert outcomes. Bounded reconciliation repairs
