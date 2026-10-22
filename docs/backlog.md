@@ -78,6 +78,59 @@ provider, Waitron authority and existing migration gates remain closed. C39's fu
 design was approved on 2026-10-22 around 08:35 for planning only, with exact daily
 schedule and first monitoring cohort still gated. C60 remains separate.
 
+## Launch platform work, in priority order
+
+Ordered at the owner's request on 2026-10-22. The order follows what stops the first real
+venue using a paid service. Each area gets its own design session with the owner, in this
+order. Remote access matters most because Waitron's customer-facing features wait on it
+(Waitron A951, A1013, A508, A509, A1012).
+
+1. **Production deployment.** Nothing reaches a real venue until Cloud runs somewhere:
+   "No public cloud service is deployed". Decided: AWS in Spain (`eu-south-2`), with Paris
+   (`eu-west-3`) as the extra encrypted backup copy. The
+   [C41 release and upgrade proposal](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md)
+   is unapproved, and C60 (compute and sizing) has no document. Missing: infrastructure
+   described in code (the repository has none), a pipeline that deploys (the only workflows
+   are `ci.yml`, `cloud-cost.yml` and `ui-release.yml`), the production domain and its DNS,
+   production secret custody (D101 proposes AWS KMS), backups of Cloud's own database on the
+   provider, and spending alerts on the AWS account. First session: the owner's decision on
+   C41, then C60, then the infrastructure.
+2. **Production monitoring, alerting and the status page.** No real venue should depend on a
+   Cloud nobody is watching. Built for test installations only: venue contact, snapshot age,
+   backup verification and remote-route checks, plus opt-in alert emails to venue owners
+   ([local monitoring](local-monitoring.md)). The
+   [C39 thresholds](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md) are
+   approved for planning only. [Incident response](incident-response.md) (D104) proposes the
+   owner as the only person on call and a free hosted status page. Missing: production
+   collection and retained history, checks from outside the affected cell, a chosen paging
+   provider, and the status page itself.
+3. **Billing.** Remote access and backups are paid services, and so is the rota solver
+   below. Today billing is one bullet under _Platform work to scope_. The plan switch is a
+   test-only one an operator sets by hand, and the usage ledger is "observational only"
+   ([usage metering](usage-metering.md)). Missing: what is charged for, prices and free
+   allowances; a payment provider and checkout; trials; Cloud's own invoices to venues under
+   Spanish rules, with the customer's tax number (signup leaves "Tax details, billing and
+   country-specific validation" to "the later billing journey"); failed payments;
+   cancellation; and closing an account.
+4. **Terms, the data processing agreement and service promises.** These are needed before
+   the first customer, paid or not, and a lawyer is needed for each, so the questions should
+   go out early. The [launch evidence](launch-evidence.md) requires "lawyer-reviewed terms",
+   and the D101 design lists six open lawyer questions. Missing: terms of service, the data
+   processing agreement with each venue, and the promises Cloud makes about how quickly a
+   venue is recovered, how much data a failure can lose, and uptime.
+5. **Roles and invitations.** Today an organisation has an owner and a yes/no "can register
+   venues", and nobody can be invited: "The exact roles and permitted actions remain to be
+   agreed" ([product and platform](product-and-platform.md)). Wanted: an owner brings in a
+   manager or an accountant with a fitting role. Organisations with several venues already
+   work; ownership transfer is deferred.
+6. **Support and the operator console.** Time-limited support access is built but unused:
+   "Nothing uses this primitive in production yet"
+   ([support grants](temporary-support-grants.md)). Missing: a way for a customer to ask for
+   help, a help desk or support process, an operator console for the owner, and an audit
+   trail of what Cloud staff did.
+
+Production email (D102: bounces and complaints) is already tracked and is not repeated here.
+
 ## Repository licence
 
 The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
@@ -2762,7 +2815,8 @@ notifications separately.
   alerts, scoped IP counters and live session/factor counts when it fails, preserving
   the original exception even if collecting diagnostics fails.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
-  services, usage accounting, trials, failed payment and cancellation.
+  services, usage accounting, trials, failed payment and cancellation. Item 3 of
+  [launch platform work](#launch-platform-work-in-priority-order).
 - **Venue and node registration.** The agreed Waitron signup and connection journey is
   implemented locally. The Cloud account backend creates a new customer's organisation
   and first legal business. Signed matching-code pairing requires current Cloud approval
