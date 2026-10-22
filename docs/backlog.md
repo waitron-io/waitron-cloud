@@ -2988,8 +2988,9 @@ notifications separately.
   availability checks for sign-in, remote access and backups. The plan is a documentation
   milestone; implementation and those runtime checks remain unfinished. AWS accounts,
   spending, live infrastructure and production schema changes need separate authority.
-  Global account separation, the action controller, release waves, hosted venues and
-  regional failover remain later plans. Country/provider/cell registry, repeatable resource
+  Global account separation and the action controller have planning entries below;
+  release waves, hosted venues and regional failover remain later plans.
+  Country/provider/cell registry, repeatable resource
   creation, recovery from partial failures, capacity and customer movement remain open. The local
   movement state machine now reserves a destination without replacing the source, rejects
   competing/stale operations, retains durable retry results and revokes the old route only
@@ -3008,6 +3009,16 @@ notifications separately.
   expired storage credentials are refused, recovery restores management access and a fresh
   manifest removes a revoked route. Repeat the drill with the selected deployment database,
   gateway reconciler and provider-native storage before setting an availability promise.
+- **Global and country separation (P3).** The approved production design's
+  global account and country service boundary is described in the
+  [implementation plan](superpowers/plans/2026-10-22-cloud-global-country-split.md).
+  This is planning only. Separate databases, offline verification of global sign-in,
+  data transfer and cutover, and the independent deployment/outage rehearsal are not
+  built or proved. The owner must approve the plan before implementation, and every
+  migration task waits for D79's reserved migration 043 slot to resolve. Recheck the
+  actual migration inventory before allocating the plan's later migration names.
+  P1 owns the Kubernetes runtime handoff; P4 owns the action controller. Production
+  schema changes, provider resources, spending and live mail need separate authority.
 - **Repair actions and Cloud controller (P4).** The approved production design's
   action-by-action automation is described in the
   [implementation plan](superpowers/plans/2026-10-22-cloud-action-controller.md).
