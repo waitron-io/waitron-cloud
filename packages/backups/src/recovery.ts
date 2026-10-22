@@ -16,6 +16,7 @@ import {
   pointKeys,
   uuid,
 } from "./catalogue.ts";
+import {lockVerificationPolicy} from './verification-admission.ts';
 import {recoveryNegotiation,recoveryPayloadV2,snapshotRecoveryTarget,type RecoveryMachineEnvelope,type SnapshotRecoveryVerification} from './recovery-v2.ts';
 interface RecoveryBaseInput {
   id: string;
@@ -125,6 +126,9 @@ async function operation(client: PoolClient, id: string) {
   if (!row) backupFail("unavailable");
   return row;
 }
+async function requestCurrent(client:PoolClient,id:string):Promise<boolean>{
+  return (await client.query('SELECT expires_at>clock_timestamp() AND failed_codes<5 AS valid FROM backup_recovery_requests WHERE id=$1',[id])).rows[0]?.valid===true;
+}
 async function operationCurrent(client:PoolClient,id:string):Promise<boolean>{
   return (await client.query("SELECT expires_at>clock_timestamp() AS valid FROM backup_recoveries WHERE id=$1",[id])).rows[0]?.valid === true;
 }
@@ -161,10 +165,13 @@ function view(row: Record<string, unknown>):RecoveryView {
     expiresAt: (row.expires_at as Date).toISOString(),
   };
 }
-async function snapshotBinding(client:PoolClient,row:Record<string,unknown>):Promise<V2Response>{
- if(row.verification_target===null||row.verification_target===undefined)return {};
- const target=snapshotRecoveryTarget(row.verification_target),attempt=(await client.query('SELECT request,request_digest FROM backup_verification_attempts WHERE id=$1 AND point_id=$2',[row.verification_attempt_id,row.point_id])).rows[0];
- if(!attempt||attempt.request.target.digest!==target.digest)backupFail('unverified');
+export async function snapshotBinding(client:PoolClient,row:Record<string,unknown>,refusal='unverified'):Promise<V2Response>{
+ if(row.source_kind==='continuous')return {};
+ if(!row.verification_attempt_id||!row.verification_target)backupFail(refusal);
+ const target=snapshotRecoveryTarget(row.verification_target),attempt=(await client.query(`SELECT a.request,a.request_digest,q.verification_id,q.current_verification,q.qualified_target_digest
+  FROM backup_point_qualification q JOIN backup_verification_attempts a ON a.id=q.verification_id
+  WHERE q.point_id=$1`,[row.point_id])).rows[0];
+ if(!attempt||attempt.current_verification!=='verified'||attempt.verification_id!==row.verification_attempt_id||attempt.qualified_target_digest!==target.digest||attempt.request.target.digest!==target.digest)backupFail(refusal);
  return {version:2,verification:{protocol:'backup-data-restore/v1',target,policyDigest:target.policyDigest,requestDigest:attempt.request_digest,archiveSha256:attempt.request.archive.sha256,archiveBytes:attempt.request.archive.bytes,pointId:row.point_id as string}};
 }
 /** Owner grants authorise data recovery; target reports never activate trading or change routing. */
@@ -193,20 +200,11 @@ export class BackupRecovery {
     if (input.oldServerUnavailable !== true || input.acceptDataLoss !== true)
       backupFail("confirmation_required");
     return this.#transaction(async (client) => {
+      const request=(await client.query('SELECT * FROM backup_recovery_requests WHERE id=$1 FOR UPDATE',[input.id])).rows[0];
       const session = await resolveSession(client, token, {csrfToken,touch:false});
       let venueId:string,p:Awaited<ReturnType<typeof point>>|undefined,stream:StreamRow|undefined;
       if(continuous){venueId=input.venueId;await permission(client,session.accountId,venueId);await backupPlan(client,venueId,this.#planMode);await lockVenue(client,venueId);stream=await currentStream(client,venueId,true);}
-      else{const first=await point(client,input.pointId);if(!first)backupFail('unavailable');venueId=first.venueId;await permission(client,session.accountId,venueId);await backupPlan(client,venueId,this.#planMode);await lockVenue(client,venueId);p=await point(client,input.pointId);if(!p||p.kind!=="snapshot"||p.deleting||p.deletedAt)backupFail("unavailable");if(p.verification!=="verified")backupFail("unverified");}
-      const request=(await client.query('SELECT protocol_version,verification_target FROM backup_recovery_requests WHERE id=$1 AND public_key=$2',[input.id,input.targetPublicKey])).rows[0];
-      let verificationId:string|null=null,verificationTarget:unknown=null;
-      if(!continuous){
-        const q=(await client.query('SELECT * FROM backup_point_qualification WHERE point_id=$1',[p!.id])).rows[0];
-        if(request?.protocol_version===2){
-          const target=snapshotRecoveryTarget(request.verification_target);
-          if(q?.current_verification!=='verified'||q.qualified_target_digest!==target.digest)backupFail('unverified');
-          verificationId=q.verification_id;verificationTarget=target;
-        }else if(q?.current_verification==='verified')backupFail('unverified');
-      }else if(request?.protocol_version===2)backupFail('unverified');
+      else{const first=await point(client,input.pointId);if(!first)backupFail('unavailable');venueId=first.venueId;await permission(client,session.accountId,venueId);await backupPlan(client,venueId,this.#planMode);await lockVerificationPolicy(client);await lockVenue(client,venueId);p=await point(client,input.pointId);if(!p||p.kind!=="snapshot"||p.deleting||p.deletedAt)backupFail("unavailable");if(p.verification!=="verified")backupFail("unverified");}
       await expireRecoveries(client,venueId);
       const prior = (
         await client.query("SELECT * FROM backup_recoveries WHERE id=$1", [
@@ -221,10 +219,14 @@ export class BackupRecovery {
           (continuous&&(prior.stream_configuration_revision!==stream!.configuration_revision||prior.stream_generation!==stream!.generation||prior.stream_recoverable_at.getTime()!==stream!.recoverable_at!.getTime()||prior.stream_source_node_id!==stream!.source_node_id))||
           prior.account_id !== session.accountId ||
           prior.target_public_key !== input.targetPublicKey ||
-          prior.mode !== input.mode ||
-          prior.verification_attempt_id!==verificationId || (prior.verification_target?.digest??null)!==((verificationTarget as {digest:string}|null)?.digest??null)
+          prior.mode !== input.mode
         )
           backupFail("conflict");
+        if(!continuous){
+          if(request?.protocol_version!==2||request.public_key!==input.targetPublicKey||request.verification_target?.digest!==prior.verification_target?.digest)backupFail('conflict');
+          await snapshotBinding(client,prior,'conflict');
+        }
+        if(continuous&&request?.protocol_version===2)backupFail('unverified');
         await resolveSession(client, token, { csrfToken, touch: false });
         return view(prior);
       }
@@ -246,6 +248,14 @@ export class BackupRecovery {
         ).rowCount
       )
         backupFail("target_not_fresh");
+      let verificationId:string|null=null,verificationTarget:unknown=null;
+      if(!continuous){
+        if(request?.protocol_version!==2||request.public_key!==input.targetPublicKey||(request.account_id&&request.account_id!==session.accountId))backupFail('unverified');
+        if(!request.operation_id&&!await requestCurrent(client,input.id))backupFail('unavailable');
+        const target=snapshotRecoveryTarget(request.verification_target),q=(await client.query('SELECT * FROM backup_point_qualification WHERE point_id=$1',[p!.id])).rows[0];
+        if(q?.current_verification!=='verified'||q.qualified_target_digest!==target.digest)backupFail('unverified');
+        verificationId=q.verification_id;verificationTarget=target;
+      }else if(request?.protocol_version===2)backupFail('unverified');
       await resolveSession(client, token, { csrfToken });
       const row = (
         await client.query(
@@ -268,6 +278,7 @@ export class BackupRecovery {
           ],
         )
       ).rows[0];
+      if(!continuous){await snapshotBinding(client,row);if(!request.operation_id&&!await requestCurrent(client,input.id))backupFail('unavailable');}
       await resolveSession(client, token, { csrfToken, touch: false });
       return view(row);
     }).catch((error) => {
@@ -299,6 +310,7 @@ export class BackupRecovery {
       }
       await permission(client, first.account_id, first.venue_id);
       await backupPlan(client,first.venue_id,this.#planMode);
+      if(first.source_kind==='snapshot')await lockVerificationPolicy(client);
       // Approval outlives observation freshness; the comparison below still binds delivery to the exact frozen generation.
       const l = await lockVenue(client, first.venue_id),row = await operation(client,id),continuous=row.source_kind==='continuous',p=continuous?undefined:await point(client,row.point_id),stream=continuous?await currentStream(client,row.venue_id,true,false):undefined;
       if (
@@ -320,15 +332,20 @@ export class BackupRecovery {
       );
       if (!continuous&&p!.verification !== "verified") backupFail("unverified");
       const binding=await snapshotBinding(client,row);
-      if (action === "info") return continuous
-       ?{source:continuousSource(row,digest),operationExpiresAt:row.expires_at.toISOString() as string}
-       :{...binding,source:snapshotSource(row),point:p!,operationExpiresAt:row.expires_at.toISOString() as string};
+      if (action === "info") {
+        if(!await operationCurrent(client,id))backupFail('unavailable');
+        validateProof(this.#origin,id,action,'',row.target_public_key,proof,row.verification_target);
+        return continuous
+         ?{source:continuousSource(row,digest),operationExpiresAt:row.expires_at.toISOString() as string}
+         :{...binding,source:snapshotSource(row),point:p!,operationExpiresAt:row.expires_at.toISOString() as string};
+      }
       if (action === "restored")
         await client.query(
           "UPDATE backup_recoveries SET status='restored',restored_at=COALESCE(restored_at,clock_timestamp()) WHERE id=$1",
           [id],
         );
       const keys = await pointKeys(client,this.#vault,row.venue_id,continuous?stream!.key_version:p!.keyVersion);
+      if(!continuous)await snapshotBinding(client,row);
       if (!(await operationCurrent(client,id))) backupFail("unavailable");
       validateProof(
         this.#origin,
@@ -349,14 +366,16 @@ export class BackupRecovery {
     return this.#transaction(async (client) => {
       const session = await resolveSession(client, token, { touch: false });
       await permission(client, session.accountId, venueId);
+      await lockVerificationPolicy(client);
       await lockVenue(client, venueId);
       const points = await venuePoints(client, venueId),stream=await currentStream(client,venueId).catch(()=>undefined);
+      const qualified=new Set((await client.query("SELECT q.point_id FROM backup_point_qualification q JOIN backup_points p ON p.id=q.point_id WHERE p.venue_id=$1 AND q.current_verification='verified'",[venueId])).rows.map(r=>r.point_id));
       await resolveSession(client, token, { touch: false });
       return {
         points,
         defaultPointId:
           points.find(
-            (p) => p.kind === "snapshot" && p.verification === "verified",
+            (p) => p.kind === "snapshot" && qualified.has(p.id),
           )?.id ?? null,
         continuousRecovery:stream?{recoverableAt:stream.recoverable_at!.toISOString(),checkedAt:stream.observed_at!.toISOString(),sourceNodeId:stream.source_node_id}:null,
       };

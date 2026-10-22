@@ -25,3 +25,10 @@ export async function verifyPointFixture(pool:Pool,catalogue:import('../../src/c
  ON CONFLICT(kind,target_id) DO UPDATE SET status='running',claim_id=$3,lease_until=clock_timestamp()+interval '120 seconds',attempts=1,runs=backup_jobs.runs+1 RETURNING id`,[p.venue_id,pointId,claimId])).rows[0];
  return catalogue.verifyClaim({id:job.id,venueId:p.venue_id,pointId,claimId,number:1,controllerScope:'verification-fixture'},verify,signal);
 }
+
+// Explicit opt-in for synthetic recovery fixtures only; deployed policy remains release-disabled.
+export async function configureRecoveryVerification(pool:Pool){
+ const policy=(await pool.query('SELECT target,verifier_image,release_ready FROM backup_verification_policy WHERE id=1')).rows[0];
+ if(policy?.target?.digest===fixtureTarget.digest&&policy.verifier_image===fixtureImage&&policy.release_ready)return;
+ await transaction(pool,c=>setVerificationPolicy(c,fixtureTarget,fixtureImage,true));
+}

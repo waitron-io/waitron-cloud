@@ -20,6 +20,7 @@ export function otherTarget(count=32):BackupVerificationTarget{
 export function machineTarget(target:BackupVerificationTarget=fixtureTarget){
  const key=generateKeyPairSync('ed25519');
  return {id:randomUUID() as string,code:'12345678',publicKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),target,
+  sign(bytes:Buffer){return sign(null,bytes,key.privateKey).toString('base64url');},
   envelope(action:'start'|'status'|'info'|'read'|'restored',digest='',issuedAt=Date.now(),at=origin,version=2):RecoveryMachineEnvelope&{id?:string}{
    const request=action==='start'||action==='status';
    const values=request?[`waitron-cloud-recovery-request-v${version}`,at,this.id,action,this.publicKey,this.code]:[`waitron-cloud-recovery-v${version}`,at,this.id,action,digest];

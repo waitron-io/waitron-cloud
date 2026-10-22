@@ -200,8 +200,20 @@ Snapshot metadata and read grants return the selected attempt's stored descripto
 so a retry cannot silently change targets or downgrade to version 1. Owner forms
 keep their existing limits; only the machine route accepts the larger descriptor.
 These tests use synthetic archive-verification evidence in disposable databases.
-Repeated qualification checks throughout recovery and replacement and the genuine
-joint proof remain unfinished. Keep snapshots unavailable and enforcement off.
+Every snapshot approval requires a persisted v2 request and current qualification.
+Metadata, key delivery and restored reports require the exact evidence you approved;
+if a newer check replaces it, approve a new operation. Replacement preparation,
+completion and retrieval of its completed result enforce the same binding.
+Policy locks precede venue locks. A final check after database and provider waits
+prevents expired approval or changed evidence from releasing archive credentials.
+A restored report alone changes no installation, backup key or route.
+You can exercise these boundaries with
+`node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test test/recovery-qualification.test.ts`
+and
+`node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test test/recovery-qualification.test.ts`.
+These are synthetic checks. Remaining status consumers, the genuine joint proof
+and the reviewed release remain unfinished. Keep snapshots unavailable and
+plan enforcement off.
 You can exercise these rules with
 `node scripts/test-postgres.mjs exec node --test packages/backups/test/worker-admission.test.ts packages/backups/test/worker.test.ts`.
 The synthetic fixtures test admission and isolation; the complete genuine

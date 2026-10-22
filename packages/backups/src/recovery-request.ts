@@ -27,7 +27,7 @@ async function lock(client:PoolClient,id:string):Promise<Row>{
 }
 async function available(client:PoolClient,row:Row){if(!row.operation_id&&(row.failed_codes>=5||!(await client.query('SELECT expires_at>clock_timestamp() AS valid FROM backup_recovery_requests WHERE id=$1',[row.id])).rows[0]?.valid))backupFail('unavailable');}
 function view(row:Row){return {requestId:row.id,state:row.operation_id?'approved' as const:'awaiting_owner' as const,expiresAt:row.expires_at.toISOString(),operationId:row.operation_id};}
-/** Request locks precede account, membership and venue locks; no recovery operation locks a request. */
+/** Request locks precede account, membership, policy and venue locks, including direct recovery starts. */
 export class RecoveryRequests {
  readonly planMode:PlanMode;readonly pool:Pool;readonly vault:BackupKeyVault;readonly origin:string;readonly #codes:RecoveryCodes;
  constructor(pool:Pool,vault:BackupKeyVault,origin:string,keys:RecoveryCodeKeys|null|undefined=recoveryCodeKeysFromEnv(process.env),planMode:PlanMode='existing'){this.planMode=planMode;this.pool=pool;this.vault=vault;this.origin=origin;this.#codes=new RecoveryCodes(keys??undefined);}

@@ -1193,10 +1193,17 @@ notifications separately.
   rejects duplicate fields and malformed UTF-8, accepts bounded complete targets,
   and caps responses at 65,536 bytes without widening owner forms. Synthetic
   database and HTTP checks cover all three target actions, signature expiry after
-  a confirmed lock wait, and unchanged v1/continuous behavior. Current qualification
-  and release readiness are required for v2 approval; v1 cannot approve a currently
-  qualified snapshot. Repeated qualification checks at every recovery/replacement
-  boundary, remaining status consumers and the genuine joint proof are unfinished. Snapshots
+  a confirmed lock wait, and unchanged v1 continuous recovery. Every snapshot
+  approval now requires a persisted v2 request and current qualification. Metadata,
+  keys, restored reports and replacement prepare, completion and completed-result
+  lookup all recheck the exact approved evidence; a newer success cannot silently
+  replace it. Snapshot defaults use current qualification. Policy locks precede
+  venue locks, and provider grants are rechecked before credentials leave Cloud.
+  PostgreSQL barriers prove refusal after policy, evidence or metadata changes and
+  expiry during waits, with complete rollback of registration, key rotation and
+  routes. Synthetic fixtures explicitly opt into disposable release readiness;
+  their existing owner, plan, confirmation and continuous-recovery assertions stay.
+  Remaining status consumers and the genuine joint proof are unfinished. Snapshots
   stay unavailable and deployment enforcement stays off. Deployment still needs
   writable private controller state separate from its read-only configuration
   mount before enabling a backup profile.
