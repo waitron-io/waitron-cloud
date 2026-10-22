@@ -2329,6 +2329,14 @@ notifications separately.
   retry exhaustion, cancellation, lock release and refusal to touch an unrelated
   lock holder. Actual CI separately qualifies the root boundary and browser
   cache access. This handling does not establish why the outside download stalled.
+  PR291's first [run 39769929280](https://github.com/waitron-io/waitron-cloud/actions/runs/39769929280)
+  again exhausted both 120-second attempts while fetching fonts from
+  `azure.archive.ubuntu.com`; no browser test ran. Each attempt was stopped,
+  and the second progressed without the earlier package-lock collision. The
+  underlying mirror slowness remains unexplained. Preserve the limits and
+  assertions; qualify a reliable dependency source or existing runner cache in
+  a separately scoped CI follow-up. A later passing run is recovery, not proof
+  of that repair.
   Main pushes use a unique concurrency
   group per run so a later merge cannot cancel an earlier merge's checks;
   superseded pull request runs still cancel. The workflow text guard checks shard
