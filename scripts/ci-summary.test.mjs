@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {spawnSync} from 'node:child_process';
+import childProcess, {spawnSync} from 'node:child_process';
+import {syncBuiltinESMExports} from 'node:module';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -160,4 +161,63 @@ test('publication wait refuses lookup errors and an API read that exhausts the d
   await assert.rejects(() => summary.waitForSummary(plan, results, {
     ...clock, now: () => elapsed, readJobs: () => { elapsed = 51; return jobs; },
   }), /Timed out/);
+});
+
+
+test('publication wait names the unfinished job when its next API read times out', async () => {
+  let elapsed = 0;
+  let reads = 0;
+  await assert.rejects(() => summary.waitForSummary(plan, results, {
+    timeoutMs: 50, pollMs: 20, now: () => elapsed,
+    sleep: async ms => { elapsed += ms; },
+    readJobs: () => {
+      if (reads++ === 0) return unfinishedJobs();
+      elapsed = 50;
+      throw new Error('spawnSync gh ETIMEDOUT');
+    },
+  }), /package \(@waitron-cloud\/portal, shard 3\/3\).*spawnSync gh ETIMEDOUT/);
+});
+
+test('publication wait keeps unfinished unplanned jobs pending and requires their skipped result', async () => {
+  const pending = [...jobs, {name: 'documentation', status: 'queued', conclusion: null}];
+  const stuck = publication([pending]);
+  await assert.rejects(() => summary.waitForSummary(plan, results, stuck), /Timed out.*documentation/);
+  for (const conclusion of ['success', 'failure', 'cancelled', null]) {
+    const clock = publication([pending, [...jobs, {name: 'documentation', status: 'completed', conclusion}]]);
+    await assert.rejects(() => summary.waitForSummary(plan, results, clock), /Unexpected executed job: documentation/);
+  }
+  const skipped = publication([pending, [...jobs, {name: 'documentation', status: 'completed', conclusion: 'skipped'}]]);
+  await summary.waitForSummary(plan, results, skipped);
+  assert.equal(skipped.elapsed(), 20);
+});
+
+test('default publication allowance caps API calls, each read and the total wait', async t => {
+  let elapsed = 0;
+  const timeouts = [];
+  t.mock.method(childProcess, 'execFileSync', (command, args, options) => {
+    timeouts.push(options.timeout);
+    assert.ok(timeouts.length <= 30, 'Too many API reads within one minute');
+    return JSON.stringify([{jobs: unfinishedJobs()}]);
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(() => summary.waitForSummary(plan, results, {
+      now: () => elapsed, sleep: async ms => { elapsed += ms; },
+    }), /Timed out.*package \(@waitron-cloud\/portal, shard 3\/3\)/);
+    assert.equal(elapsed, 60_000);
+    assert.equal(timeouts.length, 30);
+    assert.equal(timeouts[0], 30_000);
+    assert.equal(timeouts.at(-1), 2_000);
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
+
+test('publication wait refuses records without a usable job name', async () => {
+  for (const record of [null, {}, {name: ''}, {name: 42}]) {
+    const clock = publication([[...jobs, record]]);
+    await assert.rejects(() => summary.waitForSummary(plan, results, clock), /Invalid job record/);
+    assert.equal(clock.reads(), 1);
+  }
 });

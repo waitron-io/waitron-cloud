@@ -84,6 +84,7 @@ function expectedSummaryJobs(plan, results) {
 
 function assertSummaryJobs(expected, jobs, waiting = null) {
   for (const job of jobs) {
+    assert.ok(job && typeof job.name === 'string' && job.name.trim().length > 0, 'Invalid job record: missing job name');
     if (job.name === 'summary' || expected.includes(job.name)) continue;
     if (waiting && job.status !== 'completed') {
       waiting.push(job.name);
@@ -102,7 +103,6 @@ function assertSummaryJobs(expected, jobs, waiting = null) {
     assert.equal(matches[0].conclusion, 'success', `${name} did not pass`);
   }
 }
-
 
 export function assertSummary(plan, results, jobs) {
   assertSummaryJobs(expectedSummaryJobs(plan, results), jobs);
@@ -126,7 +126,12 @@ export async function waitForSummary(plan, results, {
   for (;;) {
     const remaining = deadline - now();
     assert.ok(remaining > 0, `Timed out waiting for job records: ${waiting.join(', ')}`);
-    const jobs = await readJobs(Math.ceil(remaining));
+    let jobs;
+    try {
+      jobs = await readJobs(Math.ceil(remaining));
+    } catch (error) {
+      throw new Error(`Could not read job records for ${waiting.join(', ') || expected.join(', ')}: ${error.message}`, {cause: error});
+    }
     assert.ok(now() < deadline, `Timed out reading job records: ${waiting.join(', ') || expected.join(', ')}`);
     waiting = [];
     // needs has settled, but each matrix partition must publish its own final record.
