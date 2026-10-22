@@ -45,7 +45,9 @@ and [implementation roadmap](superpowers/plans/2026-10-22-cloud-data-protection.
 use [A980 section 2](https://github.com/clintongormley/waitron/blob/96a1129e385447e9b9a6dc545673009953a2c551/docs/superpowers/specs/2026-10-22-a980-data-protection-design.md#2-the-data-map)
 as the single application map. Planning covers the service/supplier register and
 annexes, country/credential/outbound controls, support/KMS, exit/purge and handoffs;
-implementation remains **unbuilt**. One venue approval permits at most **24 hours**
+the owner approved the roadmap and authorised only slice 1 on 2026-10-22. The
+outbound AI refusal and explicit synthetic loopback transport are implemented locally;
+remaining runtime controls are **unbuilt**. One venue approval permits at most **24 hours**
 of support access, shorter where practical and fresh approval to extend. **Paris
 `eu-west-3`** is the approved extra encrypted backup destination, subject to service,
 contract and recovery qualification; Spain data/logs/keys remain in `eu-south-2`.
@@ -55,13 +57,13 @@ row changes. O1 is answered. AI stays disabled until separately privacy-reviewed
 eligibility rules, positive/refusal examples and documented limits receive owner
 acceptance. All six lawyer questions, KMS deletion-waiting policy, exact provider/entity/
 access-location evidence, D102 email qualification and runtime proof remain open.
-The published plan records the reviewed documentation milestone; implementation
-requires separate build authority. This does not approve broader D88 hosting/isolation/shared contracts,
+The published plan records the reviewed roadmap; slices after 1 still require separate
+build authority. This does not approve broader D88 hosting/isolation/shared contracts,
 spending, deployment, provider resources or contracts. D103's first C39 monitoring
 design is approved for planning only; C41 release/upgrade and C60 compute decisions remain separate.
 D102/D104 hands-on work waits until 3 November. D68 is landed, including
 `b8ff5555c996c5dec1086be49f7d046018bd3187`, but does not price hosting. D79 is clean,
-parked and unpublished at `fab41b1`; migration 043 is absent from this tree. No further
+parked and unpublished at `7939a27`; migration 043 is absent from this tree. No further
 migration item starts until its slot resolves; the first D101 slice is SQL-free.
 
 **D103 / C41 release and upgrade design, published proposal:** the
@@ -560,6 +562,17 @@ environment names and normal idle shutdown (0.27 seconds); its project is remove
 A built release image and active-provider Compose shutdown still need qualification.
 This does not establish full-stack translation delivery,
 quality, joint Waitron paging or production provider approval.
+D101 slice 1 blocks every production adapter call before input inspection or network
+access, including direct review/retry calls and apparently clean menu text. Queued
+jobs settle as `provider_unavailable` without token usage; maintained trials refuse
+ordinary settings before output. Synthetic-only proof requires `CLOUD_TRANSLATION_LOCAL_PROOF=1`
+and literal HTTP `127.0.0.1` with an explicit port, validated before URL normalisation.
+Only the translation Compose role receives that flag. The existing transport tests
+retain response limits, cancellation, redirects, retries and token accounting through
+the explicit loopback factory. The real source-mounted launcher checks its child's
+proof settings and still refuses changed migration digests. Frozen experiments,
+owner grades and saved results remain byte-identical. Separate privacy eligibility,
+supplier/location acceptance, quality and joint/release qualification stay open.
 Task 20 preserves the original trial scripts, grading template, both product and shown-name
 sets, all 141 owner grades and six Luna-review result files byte for byte. The offline scorer
 reproduces the original totals: tuning 252 names, 6 needing work and 10 wrong; blind 243 names,
@@ -2316,6 +2329,14 @@ notifications separately.
   retry exhaustion, cancellation, lock release and refusal to touch an unrelated
   lock holder. Actual CI separately qualifies the root boundary and browser
   cache access. This handling does not establish why the outside download stalled.
+  PR291's first [run 39769929280](https://github.com/waitron-io/waitron-cloud/actions/runs/39769929280)
+  again exhausted both 120-second attempts while fetching fonts from
+  `azure.archive.ubuntu.com`; no browser test ran. Each attempt was stopped,
+  and the second progressed without the earlier package-lock collision. The
+  underlying mirror slowness remains unexplained. Preserve the limits and
+  assertions; qualify a reliable dependency source or existing runner cache in
+  a separately scoped CI follow-up. A later passing run is recovery, not proof
+  of that repair.
   Main pushes use a unique concurrency
   group per run so a later merge cannot cancel an earlier merge's checks;
   superseded pull request runs still cancel. The workflow text guard checks shard

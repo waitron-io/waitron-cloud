@@ -20,7 +20,7 @@ async function stale(){
 const look=async(id:string)=>(await db.pool.query('SELECT j.state,(SELECT count(*)::int FROM translation_job_bodies b WHERE b.job_id=j.id) AS bodies FROM translation_jobs j WHERE j.id=$1',[id])).rows[0];
 function worker(args:string[],baseUrl:string,nodeArgs:string[]=[]){
  const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options',`-c search_path=${db.schema}`);
- const child=spawn(process.execPath,[...nodeArgs,new URL('../src/worker-cli.ts',import.meta.url).pathname,...args],{env:{...process.env,DATABASE_URL:url.href,CLOUD_OPENAI_API_KEY:'sk-private-retention-key',CLOUD_OPENAI_BASE_URL:baseUrl},stdio:['ignore','pipe','pipe']});
+ const child=spawn(process.execPath,[...nodeArgs,new URL('../src/worker-cli.ts',import.meta.url).pathname,...args],{env:{...process.env,DATABASE_URL:url.href,CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'sk-private-retention-key',CLOUD_OPENAI_BASE_URL:baseUrl},stdio:['ignore','pipe','pipe']});
  let stdout='',stderr='';child.stdout.on('data',c=>{stdout+=c;});child.stderr.on('data',c=>{stderr+=c;});
  const deadline=setTimeout(()=>child.kill('SIGKILL'),15000);
  const exited=once(child,'close').then(([code,signal])=>{clearTimeout(deadline);return {code,signal,stdout,stderr};});

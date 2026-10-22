@@ -38,14 +38,14 @@ test('the packaged translation launcher checks migration digests before dispatch
       - ${JSON.stringify(root+':/app:ro')}
 `);
  const prefix=['compose','--project-name',project,'--env-file',join(root,'deploy/local-stack/local.env'),'-f',join(root,'compose.yaml'),'-f',override,'--profile','translation'];
- const env={...process.env,COMPOSE_PROFILES:'',CLOUD_OPENAI_API_KEY:'local-fake-key',CLOUD_OPENAI_BASE_URL:'http://127.0.0.1:9/v1'};
+ const env={...process.env,COMPOSE_PROFILES:'',CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'local-fake-key',CLOUD_OPENAI_BASE_URL:'http://127.0.0.1:9/v1'};
  const compose=(...args:string[])=>spawnSync('docker',[...prefix,...args],{encoding:'utf8',env,timeout:20000});
  const success=(...args:string[])=>{const value=compose(...args);assert.equal(value.status,0,value.stdout+value.stderr);return value.stdout;};
  try{
   success('up','-d','--no-build','translation-worker');
   const child=success('exec','-T','translation-worker','node','--input-type=module','-e',
-   "import{readdirSync,readFileSync}from'node:fs';const ready=()=>readdirSync('/proc').filter(x=>/^\\d+$/.test(x)).some(pid=>{try{return readFileSync('/proc/'+pid+'/cmdline','utf8').split('\\0').includes('packages/translation/src/worker-cli.ts')}catch{return false}});for(let i=0;i<100;i++){if(ready()){console.log(true);process.exit(0)}await new Promise(r=>setTimeout(r,50))}console.log(false);");
-  assert.equal(child.trim(),'true');
+   "import{readdirSync,readFileSync}from'node:fs';const ready=()=>readdirSync('/proc').filter(x=>/^\\d+$/.test(x)).some(pid=>{try{return readFileSync('/proc/'+pid+'/cmdline','utf8').split('\\0').includes('packages/translation/src/worker-cli.ts')}catch{return false}});for(let i=0;i<100;i++){if(ready()){const pid=readdirSync('/proc').find(pid=>{try{return readFileSync('/proc/'+pid+'/cmdline','utf8').split('\\0').includes('packages/translation/src/worker-cli.ts')}catch{return false}});const env=Object.fromEntries(readFileSync('/proc/'+pid+'/environ','utf8').split('\\0').filter(Boolean).map(line=>{const i=line.indexOf('=');return [line.slice(0,i),line.slice(i+1)]}));console.log(JSON.stringify({proof:env.CLOUD_TRANSLATION_LOCAL_PROOF,base:env.CLOUD_OPENAI_BASE_URL,key:env.CLOUD_OPENAI_API_KEY}));process.exit(0)}await new Promise(r=>setTimeout(r,50))}console.log(false);");
+  assert.deepEqual(JSON.parse(child),{proof:'1',base:env.CLOUD_OPENAI_BASE_URL,key:env.CLOUD_OPENAI_API_KEY});
   success('stop','translation-worker');
   success('exec','-T','postgres','psql','-U','cloud','-d','cloud','-c',"UPDATE schema_migrations SET digest=repeat('0',64) WHERE name=(SELECT name FROM schema_migrations ORDER BY name LIMIT 1)");
   const invalid=spawnSync('docker',[...prefix,'run','--rm','--no-deps','translation-worker'],{encoding:'utf8',env,timeout:10000});

@@ -82,18 +82,21 @@ test('translation is optional and receives provider settings without exposing th
  assert.deepEqual(worker.command,['node','deploy/local-stack/runtime.mjs','translation']);
  assert.equal(worker.depends_on.migrate.condition,'service_completed_successfully');
  assert.equal(worker.restart,'unless-stopped');assert.equal(worker.stop_grace_period,'15s');
- const settings={CLOUD_OPENAI_API_KEY:'local-fake-key',CLOUD_OPENAI_BASE_URL:'http://127.0.0.1:4010/v1',CLOUD_TRANSLATION:'1'};
+ const settings={CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'local-fake-key',CLOUD_OPENAI_BASE_URL:'http://127.0.0.1:4010/v1',CLOUD_TRANSLATION:'1'};
  const resolve=env=>JSON.parse(execFileSync('docker',['compose','--env-file','/dev/null','--profile','translation','config','--format','json'],{encoding:'utf8',env:{...process.env,...env}})).services;
  const enabled=resolve(settings);
  assert.equal(enabled['translation-worker'].environment.CLOUD_OPENAI_API_KEY,settings.CLOUD_OPENAI_API_KEY);
  assert.equal(enabled['translation-worker'].environment.CLOUD_OPENAI_BASE_URL,settings.CLOUD_OPENAI_BASE_URL);
+ assert.equal(enabled['translation-worker'].environment.CLOUD_TRANSLATION_LOCAL_PROOF,'1');
  assert.equal(enabled.account.environment.CLOUD_TRANSLATION,'1');
  for(const [name,service] of Object.entries(enabled))if(name!=='translation-worker'){
+  assert.equal(service.environment?.CLOUD_TRANSLATION_LOCAL_PROOF,undefined,name);
   assert.equal(service.environment?.CLOUD_OPENAI_API_KEY,undefined,name);
   assert.equal(service.environment?.CLOUD_OPENAI_BASE_URL,undefined,name);
  }
- const defaults=resolve({CLOUD_OPENAI_API_KEY:'',CLOUD_OPENAI_BASE_URL:'',CLOUD_TRANSLATION:''});
+ const defaults=resolve({CLOUD_TRANSLATION_LOCAL_PROOF:'',CLOUD_OPENAI_API_KEY:'',CLOUD_OPENAI_BASE_URL:'',CLOUD_TRANSLATION:''});
  assert.equal(defaults.account.environment.CLOUD_TRANSLATION,'0');
+ assert.equal(defaults['translation-worker'].environment.CLOUD_TRANSLATION_LOCAL_PROOF,'');
  assert.equal(defaults['translation-worker'].environment.CLOUD_OPENAI_API_KEY,'');
  assert.equal(defaults['translation-worker'].environment.CLOUD_OPENAI_BASE_URL,'');
  const env={...process.env,COMPOSE_PROFILES:''};

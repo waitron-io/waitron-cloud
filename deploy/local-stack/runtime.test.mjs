@@ -128,11 +128,11 @@ test('translation receives only its database and explicitly supplied provider se
  const {config}=await configured();
  const database=`postgres://cloud:${config.database.password}@postgres:5432/cloud`;
  assert.deepEqual(runtimeEnvironment('translation',config),{DATABASE_URL:database});
- const settings={CLOUD_OPENAI_API_KEY:'local-fake-key',CLOUD_OPENAI_BASE_URL:'http://127.0.0.1:4010/v1',UNRELATED_SECRET:'private',CLOUD_EMAIL_KEYS:'foreign',CLOUD_TRANSLATION:'1'};
- assert.deepEqual(runtimeEnvironment('translation',config,settings),{DATABASE_URL:database,CLOUD_OPENAI_API_KEY:'local-fake-key',CLOUD_OPENAI_BASE_URL:'http://127.0.0.1:4010/v1'});
+ const settings={CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'local-fake-key',CLOUD_OPENAI_BASE_URL:'http://127.0.0.1:4010/v1',UNRELATED_SECRET:'private',CLOUD_EMAIL_KEYS:'foreign',CLOUD_TRANSLATION:'1'};
+ assert.deepEqual(runtimeEnvironment('translation',config,settings),{DATABASE_URL:database,CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'local-fake-key',CLOUD_OPENAI_BASE_URL:'http://127.0.0.1:4010/v1'});
  for(const role of ['migrate','account','email','monitor','usage','probe','backup','gateway','manifest','reconcile']){
   const env=runtimeEnvironment(role,config,settings);
-  assert.equal(env.CLOUD_OPENAI_API_KEY,undefined,role);assert.equal(env.CLOUD_OPENAI_BASE_URL,undefined,role);
+  assert.equal(env.CLOUD_TRANSLATION_LOCAL_PROOF,undefined,role);assert.equal(env.CLOUD_OPENAI_API_KEY,undefined,role);assert.equal(env.CLOUD_OPENAI_BASE_URL,undefined,role);
  }
 });
 

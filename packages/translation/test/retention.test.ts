@@ -3,7 +3,7 @@ import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {after,before,test} from 'node:test';
 import {Pool} from 'pg';
 import {createLeaseIssuer,transaction} from '@waitron-cloud/registration';
-import {collectJob,createJob,createOpenAiClient,jobFingerprint,lockVenue,monthSpend,parseJob,readJob,releaseJob,sweepTranslationJobs,TranslationError,TranslationWorker,writtenItems} from '../src/index.ts';
+import {collectJob,createJob,createLoopbackOpenAiClient,jobFingerprint,lockVenue,monthSpend,parseJob,readJob,releaseJob,sweepTranslationJobs,TranslationError,TranslationWorker,writtenItems} from '../src/index.ts';
 import {connectedVenue,database,giveConsent} from './fixtures.ts';
 import {echoFirstPass,emptyReview,isReview,startFakeOpenAi} from './fake-openai.ts';
 let db:Awaited<ReturnType<typeof database>>;
@@ -59,7 +59,7 @@ test('a worker that loses its job to the sweep stops without writing',async()=>{
   return echoFirstPass(r);
  });
  try{
-  assert.equal(await new TranslationWorker(db.pool,createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}),{wait:async()=>{}}).runOnce(new AbortController().signal),true);
+  assert.equal(await new TranslationWorker(db.pool,createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl}),{wait:async()=>{}}).runOnce(new AbortController().signal),true);
   assert.deepEqual(await look(job.id),{state:'expired',lease_id:null,bodies:0});
   assert.equal(fake.requests.length,1);
   assert.equal((await db.pool.query('SELECT count(*)::integer AS n FROM usage_events WHERE source_reference=$1',[job.id])).rows[0].n,0);
@@ -174,7 +174,7 @@ test('expiry retains the real completed-job usage ledger and cap spend without k
  const job=await transaction(db.pool,async c=>{await lockVenue(c,v.venueId);return createJob(c,{installationId:v.installationId,venueId:v.venueId,operationId:randomUUID(),fingerprint:jobFingerprint(body),body,total:1});});
  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
  try{
-  assert.equal(await new TranslationWorker(db.pool,createOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl})).runOnce(new AbortController().signal),true);
+  assert.equal(await new TranslationWorker(db.pool,createLoopbackOpenAiClient({apiKey:'k',baseUrl:fake.baseUrl})).runOnce(new AbortController().signal),true);
   const ledger=(await db.pool.query('SELECT * FROM usage_events WHERE source_reference=$1 ORDER BY event_type',[job.id])).rows;assert.equal(ledger.length,4);
   const before=await transaction(db.pool,c=>monthSpend(c,v.venueId));assert(before>0n);
   await db.pool.query("UPDATE translation_jobs SET finished_at=clock_timestamp()-interval '25 hours' WHERE id=$1",[job.id]);

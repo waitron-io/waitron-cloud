@@ -23,3 +23,15 @@ test('base runtime accepts only the explicit canonical origin while retaining lo
  assert.equal(runtimeEnvironment('email',config,{},'https://waitron.local:3000').CLOUD_PORTAL_ORIGIN,'https://waitron.local:3000');
  assert.throws(()=>runtimeEnvironment('account',config,{},'http://waitron.local:3000'),/local_stack.origin_invalid/);
 });
+
+test('test Cloud drops local AI proof settings for every runtime role',async t=>{
+ const {testRuntimeEnvironment}=await import('./runtime.mjs');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-test-ai-boundary-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const config=await bootstrap(dir);
+ const ambient={CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'synthetic-private',CLOUD_OPENAI_BASE_URL:'http://127.0.0.1:4010/v1',CLOUD_TRANSLATION:'1'};
+ for(const role of ['migrate','account','email','monitor','usage','probe','backup','gateway','manifest','reconcile','translation']){
+  const environment=testRuntimeEnvironment(role,config,ambient);
+  for(const key of ['CLOUD_TRANSLATION_LOCAL_PROOF','CLOUD_OPENAI_API_KEY','CLOUD_OPENAI_BASE_URL'])assert.equal(environment[key],undefined,role+':'+key);
+  if(role==='account')assert.equal(environment.CLOUD_TRANSLATION,'0');
+ }
+});

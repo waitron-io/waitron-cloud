@@ -18,7 +18,7 @@ beforeEach(async()=>{await db.pool.query('DELETE FROM translation_job_bodies');a
 function command(args:string[],overrides:NodeJS.ProcessEnv={},nodeArgs:string[]=[]){
  const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options',`-c search_path=${db.schema}`);const applicationName=randomUUID();url.searchParams.set('application_name',applicationName);
  const child=spawn(process.execPath,[...nodeArgs,new URL('../src/worker-cli.ts',import.meta.url).pathname,...args],{env:{...process.env,
-  DATABASE_URL:url.href,CLOUD_OPENAI_API_KEY:'sk-private-cli-key',CLOUD_OPENAI_BASE_URL:'',...overrides},stdio:['ignore','pipe','pipe']});
+  DATABASE_URL:url.href,CLOUD_TRANSLATION_LOCAL_PROOF:'',CLOUD_OPENAI_API_KEY:'sk-private-cli-key',CLOUD_OPENAI_BASE_URL:'',...overrides},stdio:['ignore','pipe','pipe']});
  let stdout='',stderr='';child.stdout.on('data',chunk=>{stdout+=chunk;});child.stderr.on('data',chunk=>{stderr+=chunk;});
  const deadline=setTimeout(()=>child.kill('SIGKILL'),20000);
  const exited=once(child,'close').then(([code,signal])=>{clearTimeout(deadline);return {code,signal,stdout,stderr};});
@@ -51,7 +51,7 @@ test('a schema missing a migration exits 1 with the fixed line',async()=>{
 test('--once runs a queued job to the end and prints nothing',async()=>{
  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
  try{
-  const job=await queue(),out=await command(['--once'],{CLOUD_OPENAI_BASE_URL:fake.baseUrl}).exited;
+  const job=await queue(),out=await command(['--once'],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_BASE_URL:fake.baseUrl}).exited;
   assert.deepEqual([out.code,out.stdout,out.stderr],[0,'','']);
   assert.equal((await db.pool.query('SELECT state FROM translation_jobs WHERE id=$1',[job.id])).rows[0].state,'done');
  }finally{await fake.close();}
@@ -59,7 +59,7 @@ test('--once runs a queued job to the end and prints nothing',async()=>{
 test('SIGTERM during a provider call exits 0, saves nothing and hands the lease back',async()=>{
  const fake=await startFakeOpenAi(()=>new Promise(()=>{}));
  try{
-  const job=await queue(),run=command([],{CLOUD_OPENAI_BASE_URL:fake.baseUrl});
+  const job=await queue(),run=command([],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
   await until(()=>fake.requests.length===1);
   run.child.kill('SIGTERM');
   const out=await run.exited;
@@ -78,7 +78,7 @@ test(`an invalid provider key (${name}) is refused before an idle run`,async()=>
 test('--once with no job exits quietly without a provider call',async()=>{
  const fake=await startFakeOpenAi(()=>{throw new Error('no job should call');});
  try{
-  const out=await command(['--once'],{CLOUD_OPENAI_BASE_URL:fake.baseUrl}).exited;
+  const out=await command(['--once'],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_BASE_URL:fake.baseUrl}).exited;
   assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[0,null,'','']);
   assert.equal(fake.requests.length,0);
  }finally{await fake.close();}
@@ -87,7 +87,7 @@ test('--once completes just one of two queued jobs with stored names and usage',
  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
  try{
   const first=await queue(),second=await queue();
-  const out=await command(['--once'],{CLOUD_OPENAI_BASE_URL:fake.baseUrl}).exited;
+  const out=await command(['--once'],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_BASE_URL:fake.baseUrl}).exited;
   assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[0,null,'','']);
   assert.deepEqual((await db.pool.query('SELECT state,done,failed,input_tokens,output_tokens FROM translation_jobs WHERE id=$1',[first.id])).rows,
    [{state:'done',done:1,failed:0,input_tokens:'200',output_tokens:'100'}]);
@@ -102,7 +102,7 @@ test('--once completes just one of two queued jobs with stored names and usage',
 });
 test('SIGINT during review saves no partial batch and hands its lease back',async()=>{
  const fake=await startFakeOpenAi(r=>isReview(r)?new Promise(()=>{}):echoFirstPass(r));
- const job=await queue(),run=command([],{CLOUD_OPENAI_BASE_URL:fake.baseUrl});
+ const job=await queue(),run=command([],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
  try{
   await until(()=>fake.requests.length===2);run.child.kill('SIGINT');
   const out=await run.exited;assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[0,null,'','']);
@@ -122,7 +122,7 @@ test(`${signal} while idle stops polling quietly`,async()=>{
 });
 test('continuous work leases two jobs, leaves a third queued and releases both on stop',async()=>{
  const fake=await startFakeOpenAi(()=>new Promise(()=>{}));
- const jobs=[await queue(),await queue(),await queue()],run=command([],{CLOUD_OPENAI_BASE_URL:fake.baseUrl});
+ const jobs=[await queue(),await queue(),await queue()],run=command([],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
  try{
   await until(()=>fake.requests.length>=2);
   assert.equal(fake.requests.length,2);
@@ -178,7 +178,7 @@ test('disconnected database clients exit with one fixed line and no raw error',a
 for(const args of [[],['--once']])
 test(`shutdown fails visibly when its lease cannot be returned (${args.length?'once':'loop'})`,async()=>{
  const fake=await startFakeOpenAi(()=>new Promise(()=>{})),job=await queue();
- const run=command(args,{CLOUD_OPENAI_BASE_URL:fake.baseUrl});let renamed=false;
+ const run=command(args,{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_BASE_URL:fake.baseUrl});let renamed=false;
  try{
   await until(()=>fake.requests.length===1);
   await db.pool.query('ALTER TABLE translation_jobs RENAME TO unavailable_private_jobs');renamed=true;
@@ -270,4 +270,24 @@ test(`a terminated ${stage} query exits with one fixed fatal line before its cli
   for(const error of errors)assert.deepEqual(error,{code:'57P01',severity:'FATAL'});
   assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);
  }finally{await rm(directory,{recursive:true,force:true});}
+});
+
+test('without explicit local proof a queued job is refused without provider success or usage',async()=>{
+ const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
+ try{
+  const job=await queue(),out=await command(['--once'],{CLOUD_TRANSLATION_LOCAL_PROOF:'',CLOUD_OPENAI_BASE_URL:fake.baseUrl}).exited;
+  assert.deepEqual([out.code,out.stdout,out.stderr],[0,'','']);assert.equal(fake.requests.length,0);
+  const row=(await db.pool.query('SELECT state,done,failed,input_tokens,output_tokens,reason FROM translation_jobs WHERE id=$1',[job.id])).rows[0];
+  assert.deepEqual(row,{state:'failed',done:0,failed:1,input_tokens:'0',output_tokens:'0',reason:'provider_unavailable'});
+  assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM usage_events WHERE source_reference=$1',[job.id])).rows[0].n,0);
+ }finally{await fake.close();}
+});
+test('a local proof flag with a missing, global or regional URL fails before claiming a job',async()=>{
+ for(const baseUrl of ['', 'https://api.openai.com/v1','https://eu.api.openai.com/v1','http://localhost:4010']){
+  const job=await queue(),out=await command(['--once'],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_BASE_URL:baseUrl}).exited;
+  assert.deepEqual([out.code,out.stdout,out.stderr],[1,'',failed]);
+  assert.equal((await db.pool.query('SELECT state FROM translation_jobs WHERE id=$1',[job.id])).rows[0].state,'queued');
+  await db.pool.query('DELETE FROM translation_job_bodies WHERE job_id=$1',[job.id]);
+  await db.pool.query('DELETE FROM translation_jobs WHERE id=$1',[job.id]);
+ }
 });

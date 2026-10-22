@@ -53,7 +53,20 @@ function parseResponses(text:string):ModelReply{
   .flatMap(part=>{const content=record(part);return content?.type==='output_text'&&typeof content.text==='string'?[content.text]:[];}).join('');
  return {text:reply,...tokens};
 }
-export function createOpenAiClient(options:{apiKey:string;baseUrl?:string;timeoutMs?:number;maxResponseBytes?:number}):ModelClient{
+type ClientOptions={apiKey:string;baseUrl?:string;timeoutMs?:number;maxResponseBytes?:number};
+export function createOpenAiClient(_options:ClientOptions):ModelClient{
+ // No content is eligible for outbound AI until the separate privacy rule is accepted.
+ return {provider:'openai',model:translationModel,async respond(){throw new ProviderError('refused');}};
+}
+export function createLoopbackOpenAiClient(options:ClientOptions&{baseUrl:string}):ModelClient{
+ // Check the original authority so URL normalisation cannot permit alternate loopback spellings.
+ const match=/^http:\/\/127\.0\.0\.1:([1-9][0-9]*)(?:\/[^?#\s\\]*)?$/.exec(options.baseUrl);
+ if(!match||Number(match[1])>65535)throw new Error('invalid_openai_base_url');
+ const url=new URL(options.baseUrl);
+ if(url.protocol!=='http:'||url.hostname!=='127.0.0.1'||url.username||url.password||url.search||url.hash)throw new Error('invalid_openai_base_url');
+ return localTransport(options);
+}
+function localTransport(options:ClientOptions):ModelClient{
  const base=(options.baseUrl??defaultBaseUrl).replace(/\/$/,''),timeout=options.timeoutMs??120000,max=options.maxResponseBytes??4194304;
  return {provider:'openai',model:translationModel,async respond(call,signal){
   const combined=AbortSignal.any([AbortSignal.timeout(timeout),...(signal?[signal]:[])]);

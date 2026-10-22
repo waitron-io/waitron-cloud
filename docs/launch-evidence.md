@@ -15,12 +15,17 @@ Recheck the provider sources when you select or change a service.
 
 ## Read the D101 decisions as policy, not runtime evidence
 
+D101 slice 1 now implements the outbound AI refusal and an explicit synthetic-only
+loopback transport. The owner approved the roadmap and authorised this slice alone.
+That local proof supplies no privacy eligibility, supplier approval or deployment
+evidence; all other D101 runtime controls still need separate build authority.
+
 The [D101 data-protection design](superpowers/specs/2026-10-22-cloud-data-protection-design.md)
 and reconciled [D88 hosting proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md)
 record policy and proposed hosting, with source inspection at Cloud `60c0fbf` on
-2026-10-22. D101 is owner-approved for build planning only; its
-[implementation roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md) records
-the reviewed documentation milestone. Broader D88 hosting/isolation/shared contracts
+2026-10-22. The owner approved the D101 design, then its
+[implementation roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md),
+and authorised only the first local slice. Broader D88 hosting/isolation/shared contracts
 remain unapproved. They use
 [A980 section 2](https://github.com/clintongormley/waitron/blob/96a1129e385447e9b9a6dc545673009953a2c551/docs/superpowers/specs/2026-10-22-a980-data-protection-design.md#2-the-data-map)
 as the single application data map; Cloud builds no second application rights tool.
@@ -35,9 +40,10 @@ practical with fresh approval to extend, and Paris `eu-west-3` for the extra bac
 subject to qualification. All six D101 lawyer questions, the KMS deletion-waiting
 policy, legal annexes, supplier/entity/access/transfer evidence and runtime proof remain
 open. AI additionally requires separately accepted privacy-reviewed input eligibility,
-examples and limits. No D101 runtime control is implemented by this milestone.
+examples and limits. Only the local AI refusal and explicit synthetic transport are implemented; other
+D101 runtime controls remain unbuilt.
 No production build starts from this documentation. D68 is landed, but hosting and
-recovery costs remain unmeasured. D79 is parked unpublished at `fab41b1`; its changes
+recovery costs remain unmeasured. D79 is parked unpublished at `7939a27`; its changes
 and migration 043 are not on this base and supply no launch evidence here.
 
 ## Read the local evidence narrowly
