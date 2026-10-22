@@ -56,7 +56,7 @@ async function fixture(t, mode = 'normal') {
   t.after(() => { provider.closeAllConnections(); return new Promise(resolve => provider.close(resolve)); });
   const binary = join(root, 'synthetic-writer');
   const text = `#!${process.execPath}
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { request } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
@@ -82,6 +82,11 @@ if (process.argv[2] === 'restore') {
 if (mode === 'exit') process.exit(19);
 if (mode === 'hangup') process.kill(process.pid, 'SIGHUP');
 const upload = () => { if (!stopping) serial = serial.then(()=>send('PUT',readFileSync(c.path))).catch(()=>process.exit(18)); };
+if (mode === 'read-before-upload') {
+  await send('GET', Buffer.alloc(0));
+  writeFileSync(c.path + '.read-complete', 'ready');
+  while (!existsSync(c.path + '.allow-upload')) await new Promise(resolve => setTimeout(resolve, 10));
+}
 upload(); const timer=setInterval(upload,50);
 process.once('SIGTERM',()=>{
   if(mode === 'hang') return;
@@ -348,4 +353,40 @@ test('replayStreamContainsAsynchronousDiagnosticObserverRejections', async t => 
   const f = await fixture(t, 'restore');
   const run = await open(t, { ...f, onDiagnostic: async () => { throw Error('PRIVATE_ASYNC_CANARY'); } });
   await upload(f); await assert.rejects(run.finish({ expectedSales: 1 }), bad); clean(f);
+});
+
+// A completed read must not admit workload before any startup upload has succeeded.
+test('replayStreamReadinessWaitsForAnUploadAfterAnInitialRead', { timeout: 10000 }, async t => {
+  const f = await fixture(t, 'read-before-upload');
+  let run;
+  const opening = module.openReplayStream(f).then(value => { run = value; return value; });
+  try {
+    for (let i = 0; i < 200 && !existsSync(f.database + '.read-complete'); i++) await wait(10);
+    assert.equal(existsSync(f.database + '.read-complete'), true, 'complete the child read before testing readiness');
+    await wait(50);
+    assert.equal(run, undefined, 'a read alone cannot prove the startup upload required by admission');
+    writeFileSync(f.database + '.allow-upload', 'ready');
+    await opening;
+    await run.setPhase('workload'); await run.setPhase('idle'); await run.setPhase('verification');
+    const result = await run.finish({ expectedSales: 1 });
+    assert.ok(result.stream.requests.accounting.requests.some(row => row.phase === 'startup'
+      && row.operation === 'put' && row.successful > 0));
+    assert.deepEqual(result.restored, { sales: 1, integrity: true });
+  } finally {
+    writeFileSync(f.database + '.allow-upload', 'ready');
+    await (await opening).close();
+  }
+  clean(f);
+});
+
+// Cancellation while waiting for the first upload still collects the recorded writer.
+test('replayStreamCancellationCollectsAWriterThatOnlyCompletedARead', { timeout: 10000 }, async t => {
+  const f = await fixture(t, 'read-before-upload'), controller = new AbortController();
+  const opening = module.openReplayStream({ ...f, signal: controller.signal });
+  const refused = assert.rejects(opening, bad);
+  try {
+    for (let i = 0; i < 200 && !existsSync(f.database + '.read-complete'); i++) await wait(10);
+    assert.equal(existsSync(f.database + '.read-complete'), true);
+  } finally { controller.abort(); await refused; }
+  clean(f);
 });

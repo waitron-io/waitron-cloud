@@ -317,3 +317,49 @@ test('streamMeasurementHandsOffTheExactStorageSnapshotTime', async t => {
   assert.equal(result.storageEndedAt, result.storage.windowSeconds + 2);
   assert.ok(result.storageEndedAt < result.phases.reduce((n, p) => n + p.elapsedSeconds, 0));
 });
+
+// Reads and unsuccessful writes cannot satisfy the native startup-upload requirement.
+test('streamMeasurementUploadReadinessRequiresASuccessfullyCompletedPut', async t => {
+  const f = await fixture(t), session = await open(t, f);
+  assert.equal(typeof session.waitForUpload, 'function');
+  let ready = false;
+  const waiting = session.waitForUpload().then(() => { ready = true; });
+  assert.equal(await send(session.url, 'GET', 0, 1), 200);
+  assert.equal(ready, false, 'a completed read is not an upload');
+  f.state.failedWrites = 1;
+  assert.equal(await send(session.url, 'PUT', 4, 2), 503);
+  assert.equal(ready, false, 'a refused upload is not startup readiness');
+  assert.equal(await send(session.url, 'PUT', 4, 3), 200);
+  await waiting; assert.equal(ready, true);
+  await session.waitForUpload();
+});
+
+test('streamMeasurementCloseRejectsUploadReadinessWithoutAnySuccessfulWrite', async t => {
+  const f = await fixture(t), session = await open(t, f);
+  assert.equal(typeof session.waitForUpload, 'function');
+  const waiting = assert.rejects(session.waitForUpload(), bad);
+  await session.close(); await waiting;
+  await assert.rejects(session.waitForUpload(), bad);
+});
+
+// Starting to send a body does not prove its upload has completed.
+test('streamMeasurementUploadReadinessWaitsForTheCompleteRequestBody', async t => {
+  const f = await fixture(t), session = await open(t, f), before = f.state.requests;
+  assert.equal(typeof session.waitForUpload, 'function');
+  let ready = false;
+  const waiting = session.waitForUpload().then(() => { ready = true; });
+  let finishBody;
+  const sent = new Promise((resolve, reject) => {
+    const req = request(session.url + '/' + bucket + '/' + key, { method: 'PUT', agent: false, headers: {
+      'content-length': 4, 'amz-sdk-invocation-id': '11111111-2222-4333-8444-000000000001',
+      'amz-sdk-request': 'attempt=1; max=2',
+    } }, res => { res.resume(); res.on('end', resolve); res.on('error', reject); });
+    req.on('error', reject); req.write(Buffer.alloc(2)); finishBody = () => req.end(Buffer.alloc(2));
+  });
+  try {
+    for (let i = 0; i < 100 && f.state.requests === before; i++) await new Promise(resolve => setImmediate(resolve));
+    assert.ok(f.state.requests > before, 'admit the unfinished upload at the backend');
+    assert.equal(ready, false);
+  } finally { finishBody(); await sent; }
+  await waiting; assert.equal(ready, true);
+});

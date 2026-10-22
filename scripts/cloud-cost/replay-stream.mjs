@@ -113,10 +113,9 @@ export async function openReplayStream(input) {
     return session.checkpoint();
   };
   const start = async () => {
-    const before = session.activity();
     at('replicate'); writer = launch(['replicate', '-config', join(args.workRoot, 'stream.json')]); starts++;
-    // A completed native transfer proves readiness; observer polling and elapsed time do not.
-    await Promise.race([session.waitForActivity(before), writer.done.then(() => fail())]); healthy();
+    // Startup admission requires a successful native upload; reads cannot establish that readiness.
+    await Promise.race([session.waitForUpload(), writer.done.then(() => fail())]); healthy();
   };
   try {
     assertOwnedRoot(input);

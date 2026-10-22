@@ -13,7 +13,7 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
   allowBulkDeletes = false, allowMultipart = false, resolveMultipartReplies = false, signal }) {
   let admin, observer, front, client, history, meter, disposal, finishing, evidence;
   let invalid = false, state = 'opening', phase = 'startup', phaseStart, last = -Infinity;
-  let nativeCompleted = 0;
+  let nativeCompleted = 0, nativeUploaded = false;
   const activityWaiters = new Set();
   const windows = [];
   const now = () => {
@@ -76,9 +76,12 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
     front = await createLitestreamTransport({ target: observer.url, meter, phase, allowBulkDeletes,
       lifetimes: { begin: input => {
         need(state === 'active'); const complete = history.begin(input);
+        const upload = classifyStorageOperation({ ...input, allowBulkDeletes }) === 'put';
         return event => {
           complete(event); need(!event.interrupted); nativeCompleted++;
-          for (const waiter of activityWaiters) if (nativeCompleted > waiter.after) {
+          const uploaded = upload && event.statusCode >= 200 && event.statusCode < 300;
+          if (uploaded) nativeUploaded = true;
+          for (const waiter of activityWaiters) if (nativeCompleted > waiter.after && (!waiter.upload || uploaded)) {
             activityWaiters.delete(waiter); waiter.resolve(nativeCompleted);
           }
         };
@@ -96,6 +99,11 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
       need(!invalid && state === 'active' && !signal?.aborted && Number.isSafeInteger(after) && after >= 0 && after <= nativeCompleted);
       if (nativeCompleted > after) return nativeCompleted;
       return new Promise((resolve, reject) => activityWaiters.add({ after, resolve, reject }));
+    },
+    waitForUpload: async () => {
+      need(!invalid && state === 'active' && !signal?.aborted);
+      if (nativeUploaded) return;
+      return new Promise((resolve, reject) => activityWaiters.add({ after: 0, upload: true, resolve, reject }));
     },
     whenIdle: async action => {
       need(!invalid && state === 'active' && !signal?.aborted);

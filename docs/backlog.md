@@ -1371,6 +1371,13 @@ notifications separately.
   correct the historical failures. Local scratch samples peaked at 22,444 KiB
   within the unchanged 65,536 KiB limit; those samples do not establish the peak
   during a failure. The temporary branch-only investigation workflow is removed.
+  A controlled child-process test separately reproduces premature stream readiness:
+  a completed read can release workload before the first successful upload.
+  Readiness now waits for a completed successful native PUT, matching the existing
+  startup admission requirement. Reads, refused and unfinished writes do not
+  satisfy it, and the original deadline still collects a writer that never uploads.
+  This fixes the reproduced readiness gap; without a trace from the historical
+  failures, it does not identify their cause.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.
