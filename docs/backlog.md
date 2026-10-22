@@ -2479,6 +2479,16 @@ notifications separately.
   base-image acquisition and cleanup after an unsuccessful build in a separate
   change, preserving the outage and malformed-archive assertions. A later green
   run proves recovery only; it does not fix this registry response.
+  A separate test-harness route failure is also open. In
+  [run 39813909743](https://github.com/waitron-io/waitron-cloud/actions/runs/39813909743/job/119947375548),
+  registration shard 2 never ran its tests: pulling `axllent/mailpit:v1.31.1`
+  from Docker Hub failed with an IPv6 `network is unreachable` error.
+  `scripts/test-postgres.mjs` refuses that response outside its current transient
+  error list. Qualify the runner's Docker Hub route and acquisition handling
+  separately, retaining the existing 120-second deadline and three-attempt
+  maximum. A later successful pull does not establish a route fix. The job's
+  stale `in_progress` record hid its failed step, so read the actual job log as
+  well as its final status before counting any tests.
   Main pushes use a unique concurrency
   group per run so a later merge cannot cancel an earlier merge's checks;
   superseded pull request runs still cancel. The workflow text guard checks shard
