@@ -1,0 +1,52 @@
+name: Paced replay investigation
+on:
+  push:
+    branches: [fix/cost-paced-replay]
+permissions:
+  contents: read
+  packages: read
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        probe: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+      - uses: pnpm/action-setup@v6
+        env:
+          npm_config_fetch_timeout: '15000'
+          npm_config_fetch_retries: '1'
+          npm_config_fetch_retry_mintimeout: '1000'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Reproduce with the unchanged generated replay
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node --input-type=module <<'NODE'
+          import {prepareConformance} from './scripts/cloud-cost/conformance-prepare.mjs';
+          import {runTests} from './scripts/cloud-cost/conformance.mjs';
+          const file = 'paced-replay-conformance.test.mjs';
+          const fixture = await prepareConformance([file]);
+          try {
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              console.log('Paced reproduction ' + attempt + ' of 3');
+              const result = await runTests(['scripts/cloud-cost/fixtures/' + file],
+                {env: {...process.env, ...fixture.env}});
+              if (result.code) { process.exitCode = result.code; break; }
+            }
+          } finally { fixture.cleanup(); }
+          NODE

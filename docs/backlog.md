@@ -1364,7 +1364,9 @@ notifications separately.
   itself refuses, its error can still be generic; preserve the private journal's
   validated trace before fixture cleanup. Both historical paced failures remain
   unexplained. Capture the trace on recurrence and fix its cause; preserve the 207-sale restore, integrity, source and
-  cleanup checks and limits.
+  cleanup checks and limits. A branch-only Linux investigation repeats the unchanged
+  generated paced case with the landed diagnostics; its passing runs do not establish
+  a correction. Remove that temporary workflow when the investigation finishes.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.
