@@ -3192,6 +3192,18 @@ notifications separately.
   network isolation, without activating a primary or contacting fiscal/payment services. Define the external-key format extension
   rather than assuming it exists in the inspected manifest v1.
 
+## CI PostgreSQL image pull
+
+D104's documentation-only [run 39733028534](https://github.com/waitron-io/waitron-cloud/actions/runs/39733028534/job/119672295764)
+failed before account HTTP shard 3 started its tests: Docker's request to
+`auth.docker.io` timed out while pulling `postgres:18-alpine`. The recorded failure
+is in `scripts/test-postgres.mjs:30`, before the owned container is marked running.
+This is separate from the reset-mail capture failure below. No runtime, test,
+fixture, workflow or dependency change accompanied the incident, and no registry
+fix is claimed. Next: qualify bounded image-pull failure handling with a failing
+test first, preserving the existing test assertions, deadlines and owned-container
+cleanup. A later successful run alone does not prove that handling is fixed.
+
 ## Account HTTP reset-mail capture
 
 [CI run 39730254198](https://github.com/waitron-io/waitron-cloud/actions/runs/39730254198)
