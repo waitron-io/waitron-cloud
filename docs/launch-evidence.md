@@ -190,6 +190,10 @@ commit and configuration. It must show:
    explicit activation and post-replacement capture against the selected provider.
 9. External monitoring, incident handling, quiet periods, escalation, capacity and
    spend alerts, plus measured results against the adopted service objectives.
+   D104's [incident runbook](incident-response.md) now records the sole-owner phone
+   response and recommends Cloudflare Pages outside Waitron's AWS. Qualify the
+   independent page read/update, phone delivery/failure/acknowledgment and owner
+   coverage-gap drills there; no provider setup or production proof is complete.
 10. Cancellation, expiry, export and deletion behavior against lawyer-reviewed terms
     and D101 acceptance cases: full portable download, fixed 90-day clock, earlier
     verified delete, resubscription races, all-region/all-copy purge and key dependencies.

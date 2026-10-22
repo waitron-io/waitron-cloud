@@ -220,6 +220,12 @@ identify their Cloud resources.
 
 ## Production limits
 
+Use the [incident runbook](incident-response.md) for the initial sole-owner response,
+private investigation, bilingual public updates and verified closure. It recommends
+Cloudflare Pages Direct Upload outside Waitron's AWS, with an independent public
+fallback address. Phone routing, account/page setup and outage drills remain open;
+the runbook supplies no deployed incident service.
+
 The [D103 monitoring proposal](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
 recommends initial thresholds, phone-alert conditions and worked timelines for owner
 approval. It does not configure a collector, paging service or production policy.
