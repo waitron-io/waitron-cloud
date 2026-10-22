@@ -995,3 +995,54 @@ a test on each side compares its copy with it.
   ]
 }
 ```
+
+## Hosted writer retirement: A1018 (direction agreed)
+
+To replace a hosted writer without creating two servers selling from the same
+history, you need both proof that the old runtime cannot resume and its complete
+final data. This section records Cloud's 2026-10-22 direction agreement; the broader
+[hosted lifecycle proposal](#hosted-lifecycle-and-promotion-proposed) above remains
+unagreed and unimplemented.
+
+Cloud agreed the direction of Waitron's [A1018 proposal at
+`db7cddeb2d38984b284b23e8e391e7ebd7cb9156`](https://github.com/clintongormley/waitron/blob/db7cddeb2d38984b284b23e8e391e7ebd7cb9156/docs/superpowers/specs/2026-10-22-a1018-cloud-stop-proof-design.md)
+on 2026-10-22, against the [production design at
+`35af2d396d916223ff4f319d8f44093685d62da5`](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/superpowers/specs/2026-10-22-cloud-production-deployment-design.md).
+This section is the shared Cloud home. Pin its eventual publication revision from
+Waitron before building against it. The agreement approves the direction, not a wire
+schema, fiscal operation, runtime or provider profile.
+
+To continue the same history, retire the exact old process and its descendants,
+prevent its future launch or resume outside the venue disk, and independently inspect
+its complete final database, write-ahead log (WAL, changes awaiting incorporation
+into the database) and module-owned state. Bind those receipts to the
+country, venue, installation, operation, authority revision, old/new runtime and
+writer generations, final manifest, issuer trust and selected successor. A quiescence
+statement reports stopped application work; it cannot prove its signer has exited.
+A missing final disk or uncertain stop leaves continuation waiting.
+
+One durable country authority across cells and failover regions grants the selected
+successor once. An already admitted process keeps selling through authority loss;
+a restart waits for fresh admission. A private preparation grant permits isolated
+inspection or restore of a copy, with no writable live venue mount or business work.
+It is not a live writer grant. Reconcile a lost activation reply against the same
+runtime and durable operation before routing; never launch another candidate simply
+because an answer was lost. Continuation preserves the logical node and its fiscal
+allocation. Cloud admission supplies no fiscal authority.
+
+The candidate mechanisms are a host-owned Linux cgroup v2 supervisor for a reachable
+host and reconciled EC2 instance termination for an unreachable host, each combined
+with externally retained launch denial and post-stop data inspection. A cgroup
+is the kernel's grouping of a process and its descendants. Neither profile
+is qualified. Boot attestation, clone/resume resistance, complete persistence and
+secret-version inventories, trust rotation, wire schemas and all joint failure
+checks in A1018 remain unbuilt and unverified. No provider account, resource or live
+operation is authorised by this agreement.
+
+Production section 6's automatic restart/replacement exceptions change initiation
+permission, not the evidence needed for a new hosted writer. An explicitly selected,
+authorised cold restore remains a separate fresh-chain recovery with accepted tail
+loss and no A1018 stop-proof requirement. Preserve its existing recovery-key,
+operation, source-live and sole-recovery gates. Record the displaced source as
+unresolved if its stop is unknown; never convert failed continuation into cold restore
+automatically. Owner design approval remains pending through Waitron's A1018 question.
