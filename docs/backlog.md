@@ -2299,14 +2299,23 @@ notifications separately.
   setup and queueing. Measure both the candidate and its merge before claiming the
   target is met.
   Browser packages install Chromium with at most two attempts, each bounded to
-  120 seconds plus ten seconds to stop it. In
-  [run 39744422290](https://github.com/waitron-io/waitron-cloud/actions/runs/39744422290/job/119709401502),
-  UI-smoke never reached its tests: the first dependency download exceeded the
-  120-second limit and the retry found the package-manager lock held by an
-  `apt-get` process. This does not prove which process escaped timeout cleanup.
-  Next: reproduce that descendant lifetime and qualify owned-process cleanup
-  before retry, retaining both setup bounds and all browser assertions. A clean
-  runner's recovery is not evidence of an installer correction.
+  120 seconds plus ten seconds to stop it. The privileged CI supervisor gives
+  each attempt its own process group, stops that group after success, failure,
+  timeout or cancellation, and reaps its direct child. Running the supervisor
+  with root permission lets it stop apt's root children; the explicit browser
+  cache path keeps the installed browser available to the runner. Before each
+  attempt it waits at most 30 seconds for the existing apt/dpkg locks, without
+  deleting lock files or stopping another process. The retry delay stays five
+  seconds and all browser assertions and test deadlines stay intact.
+  [Run 39744422290](https://github.com/waitron-io/waitron-cloud/actions/runs/39744422290/job/119709401502)
+  failed before UI-smoke tests: a timed-out dependency install left apt holding
+  its lock. A controlled reproduction runs the workflow shell with a real
+  lock-holding child that ignores termination: the old retry fails, while the
+  supervised retry kills that child and succeeds. Run
+  `node --test scripts/ci-download.test.mjs scripts/ci-workflow.test.mjs` to check
+  retry exhaustion, cancellation, lock release and refusal to touch an unrelated
+  lock holder. Actual CI separately qualifies the root boundary and browser
+  cache access. This handling does not establish why the outside download stalled.
   Main pushes use a unique concurrency
   group per run so a later merge cannot cancel an earlier merge's checks;
   superseded pull request runs still cancel. The workflow text guard checks shard

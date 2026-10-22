@@ -189,13 +189,13 @@ jobs:
       - name: Install Chromium with bounded retry
         if: matrix.package == '@waitron-cloud/portal' || matrix.package == '@waitron-cloud/ui-smoke'
         run: |
-          for attempt in 1 2; do
-            if timeout --kill-after=10s 120s pnpm --filter @waitron-cloud/ui-smoke exec playwright install --with-deps chromium; then
-              break
-            fi
-            if [ "$attempt" -eq 2 ]; then exit 1; fi
-            sleep 5
-          done
+          # Root supervision can stop apt children; use the runner's browser cache.
+          sudo env "PATH=$PATH" "PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright" \
+            python3 scripts/ci-download.py --timeout 120 --attempts 2 \
+            --grace 10 --lock-wait 30 --retry-delay 5 \
+            --lock /var/lib/dpkg/lock-frontend --lock /var/lib/dpkg/lock \
+            --lock /var/lib/apt/lists/lock --lock /var/cache/apt/archives/lock \
+            -- pnpm --filter @waitron-cloud/ui-smoke exec playwright install --with-deps chromium
       - if: ${{ !matrix.shards && !matrix.members }}
         run: node scripts/test-postgres.mjs --filter ${{ matrix.package }} test
       - if: matrix.members

@@ -46,9 +46,9 @@ test('work jobs stop within eight minutes and planner/summary within two',()=>{
 test('browser setup is limited to browser packages and bounded across two attempts',()=>{
   const packages=job('packages');
   assert.match(packages,/if: matrix.package == '@waitron-cloud\/portal' \|\| matrix.package == '@waitron-cloud\/ui-smoke'/);
-  assert.match(packages,/timeout --kill-after=10s 120s pnpm --filter @waitron-cloud\/ui-smoke exec playwright install --with-deps chromium/);
-  assert.match(packages,/for attempt in 1 2; do/);
-  assert.match(packages,/if \[ "\$attempt" -eq 2 \]; then exit 1; fi/);
+  assert.match(packages,/python3 scripts\/ci-download.py --timeout 120 --attempts 2/);
+  assert.match(packages,/--grace 10 --lock-wait 30 --retry-delay 5/);
+  assert.match(packages,/-- pnpm --filter @waitron-cloud\/ui-smoke exec playwright install --with-deps chromium/);
 });
 test('strict summary always runs and receives the plan and every dependency result',()=>{
   assert.match(job('summary'),/if: \$\{\{ always\(\) \}\}/);
