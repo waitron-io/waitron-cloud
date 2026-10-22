@@ -116,10 +116,17 @@ Run the focused hostile fixtures and PostgreSQL worker test:
 ```sh
 pnpm --dir packages/backups exec node --test test/container-verifier.test.ts
 node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test test/container-worker.test.ts
-WAITRON_CHECKOUT=/absolute/path/to/waitron \
-  CLOUD_VERIFIER_IMAGE=waitron-backup-verifier:local \
+TEST_CLOUD_SNAPSHOT_PROOF_IMAGE=<local-cloud-image-id> \
+  TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
   node scripts/backup-verifier-proof.mjs /tmp/backup-verifier-proof.json
 ```
+
+The current producer runs the target-bound scenario described in the
+[test Cloud guide](test-cloud.md#backup-verifier-boundary). It saves incomplete
+version 2 evidence and exits with status 1 while ordinary recovery lacks its
+separate authority and the remaining same-run controls are unfinished. The older
+two-venue assertions remain in `runLegacyBackupVerifierProof`; the historical
+results below do not qualify the new contract.
 
 The 2026-09-29 local run used Docker 29.3.0. Native `Buffer` allocations hit the 192 MiB
 memory limit with Docker `OOMKilled=true`. Many 512 KiB files hit the 16 MiB total scratch

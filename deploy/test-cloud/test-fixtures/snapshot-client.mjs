@@ -11,6 +11,7 @@ import {setVerificationPolicy} from '../../../packages/backups/src/verification-
 import {readVerificationTarget} from '../../../packages/backups/src/verification-target.ts';
 import {transaction} from '../../../packages/registration/src/transaction.ts';
 import {receipt} from '../../../packages/backups/src/storage.ts';
+import {createSession} from '../../../packages/identity/src/index.ts';
 const {Pool}=createRequire(new URL('../../../packages/registration/package.json',import.meta.url))('pg');
 const {S3Client,PutObjectCommand,ListObjectsV2Command}=createRequire(new URL('../../../packages/backups/package.json',import.meta.url))('@aws-sdk/client-s3');
 export async function snapshotClientProof(phase,input={}){
@@ -38,6 +39,47 @@ export async function snapshotClientProof(phase,input={}){
    const capture=await machine('backup-reserve',randomUUID());await atomicPrivateFile(saved,JSON.stringify({capture}));return{recoveryKey:capture.recoveryKey};
   }
   const data=JSON.parse(await readFile(saved,'utf8'));
+  async function owner(path,body){
+   const encoded=JSON.stringify(body);
+   return new Promise((resolve,reject)=>{const req=request({hostname:'proxy',port:3000,servername:'waitron.local',ca,path:'/api/account/'+path,method:'POST',headers:{host:'waitron.local:3000',origin:'https://waitron.local:3000',cookie:'__Host-cloud_session='+data.session.token,'x-csrf-token':data.session.csrfToken,'content-type':'application/json','content-length':Buffer.byteLength(encoded)}},res=>{let text='';res.on('data',part=>text+=part);res.once('end',()=>{try{assert.equal(res.statusCode,200,'fixture.owner_refused_'+res.statusCode);resolve(JSON.parse(text));}catch(error){reject(error);}});});req.setTimeout(10000,()=>req.destroy(Error('fixture.owner_timeout')));req.once('error',reject);req.end(encoded);});
+  }
+  if(phase==='catalogue'){
+   if(!data.session){
+    data.session=await transaction(pool,async c=>{const id=randomUUID();await c.query('INSERT INTO cloud_accounts(id) VALUES($1)',[id]);await c.query('INSERT INTO organisation_memberships(account_id,organisation_id,can_register_venues,is_owner) VALUES($1,$2,true,true)',[id,item.organisationId]);return createSession(c,id);});
+    await atomicPrivateFile(saved,JSON.stringify(data));
+   }
+   const listed=await owner('backups/list',{venueId:item.venueId});
+   assert.equal(listed.defaultPointId,data.point.id);assert.equal(listed.continuousRecovery,null);
+   assert.equal(listed.points.find(p=>p.id===data.point.id)?.verification,'verified');
+   assert(!JSON.stringify(listed).includes('recoveryKey'));
+   return{currentPointIsDefault:true,continuousRecovery:null};
+  }
+  if(phase==='approve'){
+   const proof={requestId:input.requestId,code:input.code};
+   const inspected=await owner('recovery/inspect',proof);assert.equal(inspected.state,'awaiting_owner');
+   assert.equal((await pool.query('SELECT verification_target FROM backup_recovery_requests WHERE id=$1',[input.requestId])).rows[0].verification_target.digest,input.targetDigest);
+   const approved=await owner('recovery/approve',{...proof,source:'snapshot',pointId:data.point.id,oldServerUnavailable:'true',acceptDataLoss:'true'});assert.equal(approved.state,'approved');
+   const selected=(await pool.query('SELECT r.verification_attempt_id,p.current_evidence_id FROM backup_recoveries r JOIN backup_points p ON p.id=r.point_id WHERE r.id=$1',[input.requestId])).rows[0];assert.equal(selected.verification_attempt_id,selected.current_evidence_id);assert.ok(selected.verification_attempt_id);
+   assert(!JSON.stringify(approved).includes('recoveryKey'));
+   data.recoveryRequestId=input.requestId;await atomicPrivateFile(saved,JSON.stringify(data));
+   return{state:approved.state,pointId:data.point.id,digest:data.point.digest,bytes:data.point.size};
+  }
+  if(phase==='recovery-pending'){
+   const recovery=(await pool.query('SELECT status FROM backup_recoveries WHERE id=$1',[input.requestId])).rows[0];assert.equal(recovery.status,'pending');
+   assert.equal((await pool.query('SELECT superseded_by FROM installations WHERE id=$1',[item.installationId])).rows[0].superseded_by,null);
+   return{restored:false};
+  }
+  if(phase==='evidence'){
+   const attempt=(await pool.query('SELECT a.* FROM backup_verification_attempts a JOIN backup_points p ON p.current_evidence_id=a.id WHERE p.id=$1',[data.point.id])).rows[0];
+   const selected=(await pool.query('SELECT verification_attempt_id,verification_target,status FROM backup_recoveries WHERE id=$1',[data.recoveryRequestId])).rows[0];
+   assert.equal(attempt.status,'passed');assert.equal(attempt.cleanup_confirmed,true);assert.equal(selected.verification_attempt_id,attempt.id);assert.equal(selected.verification_target.digest,attempt.target_digest);assert.equal(selected.status,'pending');
+   return{
+    archive:{kind:'genuine-waitron',captureId:attempt.request.captureId,pointId:data.point.id,sourceNodeId:attempt.request.sourceNodeId,sha256:data.point.digest,bytes:data.point.size,modules:data.point.modules},
+    verification:{attemptId:attempt.id,request:attempt.request,result:attempt.result,childId:attempt.child_id,cleanupConfirmed:attempt.cleanup_confirmed},
+    admission:{attemptId:attempt.id,requestDigest:attempt.request_digest,pointId:data.point.id,targetDigest:attempt.target_digest,verification:'verified'},
+    recovery:{protocolVersion:2,pointId:data.point.id,attemptId:selected.verification_attempt_id,targetDigest:selected.verification_target.digest},
+   };
+  }
   if(phase==='publish'){
    const archive=Buffer.from(input.archive,'base64'),client=new S3Client({endpoint:data.capture.location.endpoint,region:'local',credentials:data.capture.credentials,forcePathStyle:true,maxAttempts:1,requestHandler:{httpsAgent:new Agent({ca})}});
    try{await client.send(new PutObjectCommand({Bucket:data.capture.location.bucket,Key:data.capture.incomingKey,Body:archive}));}finally{client.destroy();}

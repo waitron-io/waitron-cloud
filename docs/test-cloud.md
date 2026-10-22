@@ -263,7 +263,7 @@ TEST_CLOUD_VERIFIER_CONTROLLER_PROOF=1 node --test \
   deploy/test-cloud/verifier-controller.test.mjs
 ```
 
-You can exercise genuine capture, signed publication and admission through the scoped worker:
+You can exercise genuine capture, signed publication, admission and target-bound delivery:
 
 ```sh
 TEST_CLOUD_SNAPSHOT_PROOF_IMAGE=<local-cloud-image-id> \
@@ -281,8 +281,20 @@ manifest before accepting the candidate.
 The scenario captures a genuine encrypted archive, publishes it through the signed
 machine API, stages it from storage and verifies it through the delivered scoped
 worker. It checks committed current evidence and confirmed child removal.
-Continuous stream objects and database pointers are absent before capture, after
-publication and after admission. Only the disposable proof database opts into
+The owner API selects that snapshot as its default. The scenario compiles the unchanged
+pinned Waitron recovery client and ordinary restore boundary with Waitron's build
+tool and runtime identity, in a separate disposable target image. Its real v2
+request receives owner approval for the exact committed verification attempt.
+The client obtains target info and scoped storage access, independently checks the
+download's digest and size, and compares the target before staging. Ordinary restore
+then reaches the unchanged `FISCAL_RESTORE` refusal without separate fiscal authority.
+It sends no restored report, replaces no installation and leaves no first-start marker.
+This refusal does not prove successful ordinary recovery or authorised activation.
+The temporary target receives the LAN CA and its own recovery state through private
+input; it receives no Cloud configuration volume or master key.
+
+Continuous stream objects and database pointers are checked absent at all nine
+capture-to-recovery boundaries. Only the disposable proof database opts into
 release readiness; the deployment profile stays unavailable and enforcement off.
 
 The capture fixture uses Waitron's existing synthetic certificate generator and
@@ -299,13 +311,24 @@ TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
 Those checks require every owner's passed result, refuse a wrong recovery key and
 changed archive bytes, then verify the untouched original again. No activation is
 attempted. These local candidates remain unpublished and unqualified for release.
-The full v2 recovery client, owner approval, target delivery and separately
-authorised ordinary restore still need one joint scenario. The historical fiscal
-restore refusal remains recorded. Capture-to-admission success does not complete
-that recovery proof.
+The joint scenario now covers the v2 client, owner approval and target delivery.
+Separately authorised ordinary recovery and the remaining same-run refusal controls
+remain open. Earlier independent controls are not relabelled as part of this run.
 
-Task 10 adds `scripts/verify-backup-verifier-proof.mjs` for the new version 2
-receipt. It requires one run's genuine capture, signed publication, complete bound
+The current producer writes a version 2 receipt from the scenario's actual committed
+request, result, selected recovery attempt and client assertions. It emits the receipt
+only after confirming removal of its containers, networks, volumes and scratch.
+Run it with both local candidates available:
+
+```sh
+TEST_CLOUD_SNAPSHOT_PROOF_IMAGE=<local-cloud-image-id> \
+TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
+  node scripts/backup-verifier-proof.mjs /tmp/cloud-backup-verifier-proof.json
+```
+
+This command currently saves **incomplete** evidence and exits with status 1.
+The receipt records the ordinary fiscal refusal and unexecuted gates explicitly.
+`scripts/verify-backup-verifier-proof.mjs` requires one run's genuine capture, signed publication, complete bound
 module output, committed admission, v2 recovery and separately authorised ordinary
 restore. It also checks continuous-source absence, named refusal assertions and
 confirmed owned cleanup. You can validate a completed receipt with:
@@ -316,8 +339,9 @@ node scripts/verify-backup-verifier-proof.mjs /tmp/cloud-backup-verifier-proof.j
 
 An explicit `FISCAL_RESTORE` refusal can be recorded as incomplete evidence, but
 the command still refuses to certify the full proof. Local images remain
-`unqualified` for publication. The producer in `backup-verifier-proof.mjs` still
-uses its older interface; it must be migrated before it can produce this receipt.
+`unqualified` for publication. The historical two-venue producer and its original
+resource and security assertions remain in `runLegacyBackupVerifierProof` for older
+runtime investigations; they cannot certify the current version 2 contract.
 Ordinary recovery keeps its separate fiscal authority requirement.
 Keep snapshots unavailable and deployment enforcement off until the remaining Cloud
 implementation, complete integration proof and release gates pass.

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {readFile} from 'node:fs/promises';
+import {readFile,mkdtemp,rm} from 'node:fs/promises';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {backupVerificationRequestDigest} from '../packages/backups/src/verification-protocol.ts';
 const target=JSON.parse(await readFile(new URL('../deploy/backup-verifier/target.json',import.meta.url),'utf8'));
 const vector=JSON.parse(await readFile(new URL('../packages/backups/test/fixtures/verification-vector.json',import.meta.url),'utf8'));
@@ -82,4 +86,30 @@ test('records an ordinary fiscal refusal as incomplete and cannot certify the fu
 test('records not-run placement and recovery without borrowing old success',()=>{
  const r=jointReceipt();for(const name of ['placement','recovery']){const p=r.phases.find(p=>p.name===name);p.state='not-run';p.checks=[];p.reason='separate-authority-unavailable';}r.recovery.placement='not-run';r.recovery.ordinaryRestore='not-run';
  assert.equal(verify(r,{requireComplete:false}),r);assert.throws(()=>verify(r),/incomplete/);
+});
+const producer=await import('./backup-verifier-proof.mjs').catch(()=>({}));
+const parseRun=(...args)=>{assert.equal(typeof producer.readJointProofRun,'function','same-run proof producer is missing');return producer.readJointProofRun(...args);};
+const transcript=(receipt,summary={tests:1,pass:1,fail:0,cancelled:0,skipped:0})=>'# CLOUD_BACKUP_JOINT='+JSON.stringify(receipt)+'\n'+Object.entries(summary).map(([name,value])=>'# '+name+' '+value).join('\n')+'\n';
+test('proof producer preserves incomplete fiscal evidence without certifying recovery',()=>{
+ const r=jointReceipt();r.phases.find(p=>p.name==='recovery').state='unavailable';r.phases.find(p=>p.name==='recovery').checks=['no-activation','no-route-movement'];r.phases.find(p=>p.name==='recovery').reason='FISCAL_RESTORE';r.recovery.ordinaryRestore='FISCAL_RESTORE';
+ const actual=parseRun(transcript(r));assert.deepEqual(actual,r);assert.throws(()=>verify(actual),/incomplete/);
+});
+for(const [name,output,reason] of [
+ ['missing same-run receipt',()=>transcript(jointReceipt()).split('\n').slice(1).join('\n'),/one same-run receipt/],
+ ['skipped real scenario',()=>transcript(jointReceipt(),{tests:1,pass:0,fail:0,cancelled:0,skipped:1}),/executed scenario/],
+ ['failed real scenario',()=>transcript(jointReceipt(),{tests:1,pass:0,fail:1,cancelled:0,skipped:0}),/executed scenario/],
+ ['cancelled real scenario',()=>transcript(jointReceipt(),{tests:1,pass:0,fail:0,cancelled:1,skipped:0}),/executed scenario/],
+ ['two borrowed receipts',()=>transcript(jointReceipt())+'# CLOUD_BACKUP_JOINT='+JSON.stringify(jointReceipt())+'\n',/one same-run receipt/],
+ ['a malformed receipt',()=>transcript({version:1}),/joint proof fields/],
+ ['a skip hidden beside a pass',()=>transcript(jointReceipt(),{tests:1,pass:1,fail:0,cancelled:0,skipped:1}),/executed scenario/],
+ ['a failure hidden beside a pass',()=>transcript(jointReceipt(),{tests:1,pass:1,fail:1,cancelled:0,skipped:0}),/executed scenario/],
+ ['a cancellation hidden beside a pass',()=>transcript(jointReceipt(),{tests:1,pass:1,fail:0,cancelled:1,skipped:0}),/executed scenario/],
+ ['a second scenario',()=>transcript(jointReceipt(),{tests:2,pass:1,fail:0,cancelled:0,skipped:0}),/executed scenario/],
+ ['a missing pass count',()=>transcript(jointReceipt()).replace('# pass 1\n',''),/executed scenario/],
+ ['a duplicated count',()=>transcript(jointReceipt())+'# skipped 0\n',/executed scenario/],
+])test('proof producer refuses '+name,()=>assert.throws(()=>parseRun(output()),reason));
+test('proof producer CLI retains incomplete evidence and exits with a refusal',{skip:!process.env.TEST_CLOUD_SNAPSHOT_PROOF_IMAGE||!process.env.TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE,timeout:240000},async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'cloud-joint-producer-test-')),path=join(directory,'proof.json');t.after(()=>rm(directory,{recursive:true,force:true}));
+ await assert.rejects(promisify(execFile)(process.execPath,['scripts/backup-verifier-proof.mjs',path],{cwd:new URL('../',import.meta.url),env:process.env,timeout:220000,maxBuffer:2*1024*1024}),error=>error.code===1&&error.stderr.includes('Saved incomplete joint evidence'));
+ const receipt=JSON.parse(await readFile(path,'utf8'));assert.equal(receipt.version,2);assert.equal(receipt.recovery.ordinaryRestore,'FISCAL_RESTORE');assert.equal(verify(receipt,{requireComplete:false}),receipt);assert.throws(()=>verify(receipt),/incomplete/);
 });

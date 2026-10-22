@@ -1237,7 +1237,8 @@ notifications separately.
   incomplete module coverage, substituted image/request/attempt evidence,
   continuous-source presence, uncertain cleanup and publication claims for a local
   candidate. It keeps ordinary fiscal refusal distinct from a complete proof.
-  The receipt producer and the genuine joint orchestration remain unfinished.
+  The receipt producer and genuine joint orchestration now record incomplete
+  version 2 evidence; the full recovery gate remains unfinished.
   Waitron A1004 is now pinned at `ec91a9e34d2daba146f4ee61850ea4136ad5cfb7`.
   The build compares the complete compiled target, including all 15 owners and
   the newer core/venue-service schemas. The older target is refused. Genuine
@@ -1249,8 +1250,17 @@ notifications separately.
   scoped worker verification, committed current evidence and child removal pass
   together. Continuous stream objects and database pointers are checked absent
   before capture, after publication and after admission. Only the disposable proof
-  database enables release readiness. Full v2 owner approval, target delivery,
-  ordinary recovery and the version 2 receipt producer remain unfinished.
+  database enables release readiness. The same scenario now compiles the pinned
+  Waitron v2 client with its unchanged restore boundary. The owner API chooses the
+  qualified default and approves the exact committed attempt. The real client
+  checks target info, scoped storage delivery, digest and size before staging.
+  Ordinary restore reaches the unchanged fiscal-authority refusal, reports no
+  restored state and replaces no installation. Continuous objects and pointers
+  are checked absent at all nine boundaries. The version 2 producer emits actual
+  bound evidence only after confirmed cleanup; both producer and strict validator
+  refuse to certify this incomplete proof. Separately authorised ordinary recovery
+  and remaining same-run controls are still due. Historical two-venue resource and
+  security assertions remain available without qualifying the newer contract.
   A joint capture-to-recovery proof against the implementing runtime with the
   continuous source absent remains due. A source release does not establish
   a published verifier image or qualify any snapshot. Snapshots

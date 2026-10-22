@@ -391,9 +391,13 @@ for result admission, catalogue qualification and version-bound recovery.
 The current local Cloud candidate pins the compatible A1004 revision
 `ec91a9e34d2daba146f4ee61850ea4136ad5cfb7`. Genuine capture, signed publication,
 strict module verification and committed admission pass together with no continuous
-source. Worker threads remain denied and no activation is attempted. Full v2
-owner approval, target delivery and separately authorised ordinary recovery still
-need one joint proof. Published-image qualification remains open. Keep the
+source. Worker threads remain denied. The same local scenario now uses the actual
+pinned compiled v2 client for owner approval, target delivery and independent
+archive checks before staging. Ordinary restore refuses absent fiscal authority;
+it reports no restored state or replacement and leaves no first-start marker.
+The version 2 receipt records this incomplete outcome after confirmed cleanup.
+Separately authorised ordinary recovery, remaining same-run controls and
+published-image qualification remain open. Keep the
 affected snapshots unavailable until the implementation and evidence gates pass;
 fiscal activation authority remains unchanged.
 

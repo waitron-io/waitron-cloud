@@ -8,6 +8,13 @@ import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {bufferObject} from '../packages/backups/src/object-transfer.ts';
 import {createContainerWaitronVerifier} from '../packages/backups/src/container-verifier.ts';
+import {pathToFileURL} from 'node:url';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {verifyBackupVerifierProof} from './verify-backup-verifier-proof.mjs';
+// The older adapter's two-venue/resource contract has no target binding.
+// Its result cannot certify the version 2 release receipt.
+export async function runLegacyBackupVerifierProof(){
 const checkout=await realpath(process.env.WAITRON_CHECKOUT??''),image=process.env.CLOUD_VERIFIER_IMAGE;
 assert(image,'Set CLOUD_VERIFIER_IMAGE to your built image');
 const require=createRequire(join(checkout,'apps/server/package.json')),owner='proof-'+randomUUID(),roots=[],children=[],snapshots=[];
@@ -43,4 +50,31 @@ try{
 }finally{
  for(const {server,done} of children){server.kill('SIGTERM');await done;}
  await Promise.all(roots.map(root=>rm(root,{recursive:true,force:true})));
+}
+}
+
+export function readJointProofRun(output){
+ const matches=[...output.matchAll(/^# CLOUD_BACKUP_JOINT=(.*)$/gm)];
+ assert.equal(matches.length,1,'proof needs one same-run receipt');
+ for(const [name,want] of Object.entries({tests:1,pass:1,fail:0,cancelled:0,skipped:0})){
+  const counts=[...output.matchAll(new RegExp('^# '+name+' (\\d+)$','gm'))];
+  assert.equal(counts.length,1,'proof needs an executed scenario');assert.equal(Number(counts[0][1]),want,'proof needs an executed scenario');
+ }
+ return verifyBackupVerifierProof(JSON.parse(matches[0][1]),{requireComplete:false});
+}
+
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
+ const destination=process.argv[2]??'/tmp/cloud-backup-verifier-proof.json';
+ try{
+  assert(process.argv.length<=3,'Usage: node scripts/backup-verifier-proof.mjs [RECEIPT.json]');
+  assert(process.env.TEST_CLOUD_SNAPSHOT_PROOF_IMAGE&&process.env.TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE,'Set TEST_CLOUD_SNAPSHOT_PROOF_IMAGE and TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE to the built local candidates');
+  // A separate runner must execute its files even when a parent test launches this command.
+  const environment={...process.env};delete environment.NODE_TEST_CONTEXT;
+  const {stdout}=await promisify(execFile)(process.execPath,['--test','--test-reporter=tap','deploy/test-cloud/snapshot-proof.test.mjs'],{cwd:new URL('../',import.meta.url),env:environment,timeout:300000,maxBuffer:2*1024*1024});
+  const value=readJointProofRun(stdout);await writeFile(destination,JSON.stringify(value,null,2)+'\n',{mode:0o600});
+  verifyBackupVerifierProof(value);console.log('Verified complete joint backup proof');
+ }catch(error){
+  console.error(error?.message==='joint backup verification and recovery proof is incomplete'?'Saved incomplete joint evidence; ordinary recovery and remaining controls are not qualified':error instanceof assert.AssertionError?error.message:'Joint backup proof failed; no new receipt was certified');
+  process.exitCode=1;
+ }
 }
