@@ -2333,10 +2333,19 @@ notifications separately.
   again exhausted both 120-second attempts while fetching fonts from
   `azure.archive.ubuntu.com`; no browser test ran. Each attempt was stopped,
   and the second progressed without the earlier package-lock collision. The
-  underlying mirror slowness remains unexplained. Preserve the limits and
-  assertions; qualify a reliable dependency source or existing runner cache in
-  a separately scoped CI follow-up. A later passing run is recovery, not proof
-  of that repair.
+  underlying mirror slowness remains unexplained. Before browser installation,
+  CI replaces only the Azure Ubuntu archive URI with
+  `https://archive.ubuntu.com/ubuntu`. Your release, components, architectures,
+  signing keys and third-party sources stay intact. Ubuntu documents the
+  [primary archive](https://ubuntu.com/project/docs/how-ubuntu-is-made/concepts/package-archive/)
+  and its [signature checks](https://documentation.ubuntu.com/security/software-integrity/archive-verification/).
+  Run `node --test scripts/ci-browser-source.test.mjs scripts/ci-download.test.mjs`
+  to check source preservation and a controlled HTTP mirror that accepts a
+  connection but never returns its dependency. The unchanged source exhausts
+  both attempts; the primary source succeeds. Keep all installer bounds and
+  browser assertions. Actual Actions runs must still prove dependency installation
+  and browser execution on each head; this source change promises no network
+  availability or explanation of the Azure stall.
   Main pushes use a unique concurrency
   group per run so a later merge cannot cancel an earlier merge's checks;
   superseded pull request runs still cancel. The workflow text guard checks shard
