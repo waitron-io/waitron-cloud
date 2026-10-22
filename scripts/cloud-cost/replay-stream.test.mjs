@@ -308,3 +308,28 @@ test('resourceCollectionCannotReportSuccessForAReplacedStreamRoot',async t=>{
   await assert.rejects(run.closeResources(),bad);
   assert.equal(readFileSync(join(scratch,'sentinel'),'utf8'),'keep');
 });
+
+// Losing native exit evidence or the refusing stage makes the next paced failure untraceable.
+for (const [mode, stage, code] of [['restore', 'restore', 17], ['integrity', 'restore-integrity', 0]])
+  test('replayStreamReportsSanitisedNativeFailureBeforeCleanup_' + mode, async t => {
+    const f = await fixture(t, mode), trace = [];
+    const run = await open(t, { ...f, onDiagnostic: event => trace.push(event) });
+    await upload(f);
+    await assert.rejects(run.finish({ expectedSales: 1 }), bad);
+    clean(f);
+    assert.ok(trace.some(event => event.kind === 'stream-refusal' && event.stage === stage), JSON.stringify(trace));
+    assert.ok(trace.some(event => event.kind === 'native' && event.operation === 'restore'
+      && event.code === code && event.signal === null && event.stderrBytes > 0), JSON.stringify(trace));
+    assert.equal(JSON.stringify(trace).includes('PRIVATE_'), false);
+  });
+
+// An observer must never interrupt collection or replace the measurement's refusal.
+test('replayStreamCollectsResourcesWhenTheDiagnosticObserverThrows', async t => {
+  const f = await fixture(t, 'restore');
+  const run = await open(t, { ...f, onDiagnostic: event => {
+    if (event.kind === 'stream-refusal') throw Error('PRIVATE_OBSERVER_CANARY');
+  } });
+  await upload(f);
+  await assert.rejects(run.finish({ expectedSales: 1 }), bad);
+  clean(f);
+});

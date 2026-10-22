@@ -1355,8 +1355,13 @@ notifications separately.
   Its saved error is generic and exposes no underlying stage. One generated-only
   instrumented Linux run passes (`39638725311`); this does not establish a cause
   or correction. The paced-replay worker does not use the stack service runtime
-  changed above. Capture its worker refusal and native stream trace on recurrence;
-  preserve its 207-sale restore, integrity, source and cleanup checks and limits.
+  changed above. The isolated controller now preserves a bounded failure trace
+  through cleanup: fixed replay and stream stages, native exit codes and signals,
+  stderr byte counts and fixed keyword flags. Raw output, paths and exception text
+  stay private. Generated failures exercise the worker boundary and malformed-trace
+  refusals. Both historical paced failures remain unexplained. Capture the trace on
+  recurrence and fix its cause; preserve the 207-sale restore, integrity, source and
+  cleanup checks and limits.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.

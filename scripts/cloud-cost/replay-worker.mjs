@@ -4,13 +4,18 @@ import { createRequire } from 'node:module';
 import { openWorkerStorage, streamCounters } from './worker-storage.mjs';
 import { randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { workerFailureTrace } from './worker-diagnostic.mjs';
 import { replayPrivateDay } from './private-replay.mjs';
 
 let stage = 'configuration';
+const trace = [];
+const onDiagnostic = event => { trace.push(event); if (trace.length > 32) trace.shift(); };
 function recordFailure() {
   // The first refusal remains available after later cleanup; no raw exception is persisted.
   try { writeFileSync('/state/worker-failure.json', JSON.stringify({ schemaVersion: 1, stage }), { mode: 0o600, flag: 'wx' }); }
   catch { /* An existing diagnostic must never be overwritten. */ }
+  try { writeFileSync('/state/worker-trace.json', JSON.stringify(workerFailureTrace(trace)), { mode: 0o600, flag: 'wx' }); }
+  catch { /* Invalid or unavailable traces do not replace the first refusal. */ }
 }
 
 async function run() {
@@ -37,7 +42,7 @@ async function run() {
         target: storage.target, bucket: storage.bucket, versioned: false, sdk };
     }
     stage = 'replay';
-    const result = await replayPrivateDay({ ...options, ...(stream ? { stream } : {}), source, root, journal, database, codeRoot: '/code', stateRoot: root + '/replay' });
+    const result = await replayPrivateDay({ ...options, ...(stream ? { stream } : {}), source, root, journal, database, onDiagnostic, codeRoot: '/code', stateRoot: root + '/replay' });
     if (storage) {
       stage = 'storage-cleanup';
       const native = result.stream;

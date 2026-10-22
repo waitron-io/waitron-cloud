@@ -16,6 +16,12 @@ const file = path => { const s = lstatSync(path); need(s.isFile() && s.nlink ===
 // This lifecycle owns its native children, configuration, restore copy and measurement session.
 export async function openReplayStream(input) {
   let args, identity, session, openingSession, writer, disposal, evidence, finishing, deadlineTimer, busy = false;
+  let diagnosticStage = 'admission';
+  const diagnose = event => {
+    try { input.onDiagnostic?.(event); } catch { /* Diagnostics cannot interrupt owned resource collection. */ }
+  };
+  const at = stage => { diagnosticStage = stage; diagnose({ kind: 'stream', stage }); };
+  const refused = () => diagnose({ kind: 'stream-refusal', stage: diagnosticStage });
   let invalid = false, closed = false, resourcesCollected = false, starts = 0, phase = 'startup';
   const children = new Set();
   const record = entry => {
@@ -33,8 +39,15 @@ export async function openReplayStream(input) {
     record({ kind: 'stream-process', state: 'intent', operation: argv[0] });
     const child = spawn(args.binary, argv, { env: { PATH: process.env.PATH, HOME: args.workRoot,
       AWS_ACCESS_KEY_ID: 'SYNTHETIC', AWS_SECRET_ACCESS_KEY: 'SYNTHETIC', AWS_EC2_METADATA_DISABLED: 'true' },
-      stdio: ['ignore', capture ? 'pipe' : 'ignore', 'ignore'] });
+      stdio: ['ignore', capture ? 'pipe' : 'ignore', 'pipe'] });
     const item = { child, stopping: false, text: '', bad: false };
+    let stderrBytes = 0, tail = ''; const flags = new Set();
+    child.stderr.on('data', bytes => {
+      stderrBytes = Math.min(1000000000, stderrBytes + bytes.length);
+      const text = tail + bytes.toString('utf8').toLowerCase();
+      for (const flag of ['error', 'checksum', 'sqlite', 'wal', 'snapshot', 'compaction']) if (text.includes(flag)) flags.add(flag);
+      tail = text.slice(-16);
+    });
     children.add(item);
     if (capture) child.stdout.on('data', bytes => {
       if (item.text.length + bytes.length > 128) { item.bad = true; child.kill('SIGKILL'); }
@@ -44,6 +57,7 @@ export async function openReplayStream(input) {
       child.once('error', () => { item.bad = true; });
       child.once('close', (code, signal) => {
         children.delete(item);
+        diagnose({ kind: 'native', operation: argv[0], code, signal, stderrBytes, stderrFlags: [...flags].sort() });
         try {
           if (child.pid) record({ kind: 'stream-process', state: 'collected', pid: child.pid, operation: argv[0] });
         } catch { item.bad = true; }
@@ -99,7 +113,7 @@ export async function openReplayStream(input) {
   };
   const start = async () => {
     const before = session.activity();
-    writer = launch(['replicate', '-config', join(args.workRoot, 'stream.json')]); starts++;
+    at('replicate'); writer = launch(['replicate', '-config', join(args.workRoot, 'stream.json')]); starts++;
     // A completed native transfer proves readiness; observer polling and elapsed time do not.
     await Promise.race([session.waitForActivity(before), writer.done.then(() => fail())]); healthy();
   };
@@ -121,12 +135,14 @@ export async function openReplayStream(input) {
     signal.addEventListener('abort', abort, { once: true });
     deadlineTimer = setTimeout(() => controller.abort(), windowSeconds * 1000);
     // The replay owns cancellation order: collect its writer before closing the transport it drains through.
+    at('measurement-open');
     openingSession = openStreamMeasurement({ target, sdk, bucket, versioned, clock: () => performance.now() / 1000,
       allowBulkDeletes: true, allowMultipart: true, resolveMultipartReplies: true });
     session = await openingSession;
     healthy(); record({ kind: 'stream-root', state: 'intent', path: workRoot });
     mkdirSync(workRoot, { mode: 0o700 }); identity = lstatSync(workRoot);
     record({ kind: 'stream-root', state: 'ready', path: workRoot, ino: identity.ino, dev: identity.dev });
+    at('version');
     const version = launch(['version'], true), versionTimer = setTimeout(() => { version.bad = true; version.child.kill('SIGKILL'); }, 2000);
     try { const result = await version.done; successful(result); need(result.text.trim() === '0.5.17'); }
     finally { clearTimeout(versionTimer); }
@@ -135,16 +151,16 @@ export async function openReplayStream(input) {
       dbs: [{ path: database, 'monitor-interval': '1s', replica: { type: 's3', bucket, path: 'stream', endpoint: session.url,
         region: 'eu-north-1', 'force-path-style': true, 'sync-interval': '1s' } }] }), { mode: 0o600, flag: 'wx' });
     await start();
-  } catch { invalid = true; await dispose().catch(() => {}); fail(); }
+  } catch { refused(); invalid = true; await dispose().catch(() => {}); fail(); }
   return {
     setPhase: async next => {
       try {
         healthy(); need(!busy && !finishing && ['workload', 'idle', 'verification'].includes(next)
           && (phase === 'startup' && next === 'workload' || phase === 'workload' && next === 'idle'
             || phase === 'idle' && next === 'verification'));
-        busy = true; await session.changePhase(next);
+        at('phase'); busy = true; await session.changePhase(next);
         healthy(); phase = next; return { phase };
-      } catch { invalid = true; await dispose().catch(() => {}); fail(); }
+      } catch { refused(); invalid = true; await dispose().catch(() => {}); fail(); }
       finally { busy = false; }
     },
     finish: async ({ expectedSales } = {}) => {
@@ -152,25 +168,25 @@ export async function openReplayStream(input) {
       if (!finishing) finishing = (async () => {
         try {
           healthy(); need(!busy && Number.isSafeInteger(expectedSales) && expectedSales > 0 && expectedSales <= 100000);
-          await quiesce(); healthy(); session.setPhase('restore');
+          at('quiesce'); await quiesce(); healthy(); session.setPhase('restore');
           const output = join(args.workRoot, 'restored.db'); need(!existsSync(output));
-          const restore = launch(['restore', '-config', join(args.workRoot, 'stream.json'), '-o', output, args.database]);
+          at('restore'); const restore = launch(['restore', '-config', join(args.workRoot, 'stream.json'), '-o', output, args.database]);
           const timeout = setTimeout(() => { restore.bad = true; restore.child.kill('SIGKILL'); }, 30000);
           try { successful(await restore.done); } finally { clearTimeout(timeout); }
-          healthy(); need(file(output).size > 0);
+          at('restore-file'); healthy(); need(file(output).size > 0);
           // This is an owned restore copy. A read-only SQLite handle skips CHECK validation.
           const db = new DatabaseSync(output);
           try {
             db.exec('PRAGMA query_only=ON');
-            need(db.prepare('PRAGMA integrity_check').get().integrity_check === 'ok'
-              && db.prepare('SELECT count(*) AS n FROM sales').get().n === expectedSales);
+            at('restore-integrity'); need(db.prepare('PRAGMA integrity_check').get().integrity_check === 'ok');
+            at('restore-sales'); need(db.prepare('SELECT count(*) AS n FROM sales').get().n === expectedSales);
           } finally { db.close(); }
-          const stream = await session.finish(); healthy();
+          at('accounting'); const stream = await session.finish(); healthy();
           const result = { stream, restored: { sales: expectedSales, integrity: true },
             native: { version: '0.5.17', writerStarts: starts, phaseRestarts: starts - 1 },
             cleanup: { processes: 0, privateRoots: 0 } };
-          await dispose(); evidence = result; return result;
-        } catch { invalid = true; await dispose().catch(() => {}); fail(); }
+          at('cleanup'); await dispose(); evidence = result; return result;
+        } catch { refused(); invalid = true; await dispose().catch(() => {}); fail(); }
       })();
       try { const result = await finishing; need(result.restored.sales === expectedSales); return structuredClone(result); }
       catch { fail(); }

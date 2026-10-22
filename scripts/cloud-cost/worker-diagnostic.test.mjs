@@ -32,3 +32,29 @@ test('workerDiagnosticRefusesAccessorsWithoutInvokingThem', () => {
   assert.throws(() => diagnostic.workerFailureStage(value), { message: 'Invalid cloud cost worker diagnostic' });
   assert.equal(reads, 0);
 });
+
+// Dropping the closed trace validator would expose worker paths and native error text.
+test('workerTraceRetainsOnlyBoundedStageAndNativeExitEvidence', () => {
+  const trace = [{ kind: 'replay', stage: 'stream-finish' },
+    { kind: 'stream-refusal', stage: 'restore-integrity' },
+    { kind: 'native', operation: 'restore', code: 17, signal: null, stderrBytes: 42, stderrFlags: ['checksum', 'error'] }];
+  assert.equal(typeof diagnostic.workerFailureTrace, 'function');
+  const admitted = diagnostic.workerFailureTrace(trace);
+  assert.deepEqual(admitted, trace);
+  trace[2].stderrFlags.push('wal');
+  assert.deepEqual(admitted[2].stderrFlags, ['checksum', 'error']);
+});
+
+for (const [name, trace] of Object.entries({
+  oversized: Array.from({ length: 33 }, () => ({ kind: 'replay', stage: 'workload' })),
+  raw: [{ kind: 'stream', stage: 'restore', message: 'PRIVATE_ERROR_CANARY' }],
+  stage: [{ kind: 'stream', stage: 'PRIVATE_STAGE_CANARY' }],
+  operation: [{ kind: 'native', operation: '/PRIVATE_PATH', code: 1, signal: null, stderrBytes: 0, stderrFlags: [] }],
+  output: [{ kind: 'native', operation: 'restore', code: 1, signal: null, stderrBytes: 10, stderrFlags: ['PRIVATE_NATIVE_CANARY'] }],
+  code: [{ kind: 'native', operation: 'restore', code: 'PRIVATE_CODE', signal: null, stderrBytes: 0, stderrFlags: [] }],
+  signal: [{ kind: 'native', operation: 'restore', code: null, signal: 'PRIVATE_SIGNAL', stderrBytes: 0, stderrFlags: [] }],
+  getter: [{ kind: 'stream', get stage() { throw Error('PRIVATE_GETTER'); } }],
+})) test('workerTraceRefusesUntrustedDetails_' + name, () => {
+  assert.equal(typeof diagnostic.workerFailureTrace, 'function');
+  assert.throws(() => diagnostic.workerFailureTrace(trace), { message: 'Invalid cloud cost worker diagnostic' });
+});
