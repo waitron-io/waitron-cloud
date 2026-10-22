@@ -6,8 +6,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { prepareTools, toolsImage } from './tools.mjs';
+
 const runProcess = promisify(execFile);
-const toolsImage = 'waitron-cloud-aws-tools:task1-parser';
 const inspector = fileURLToPath(new URL('./inspect.py', import.meta.url));
 
 function isSource(name) {
@@ -111,6 +112,16 @@ async function cleanupContainer(name, execute, options) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  console.error('Infrastructure suite execution and tool preparation are not implemented; run the source-policy tests documented in docs/aws-infrastructure.md.');
-  process.exitCode = 1;
+  if (process.argv.length === 3 && process.argv[2] === '--prepare-tools') {
+    try {
+      await prepareTools();
+      console.log(`Prepared software image ${toolsImage}`);
+    } catch (error) {
+      console.error(error.message);
+      process.exitCode = 1;
+    }
+  } else {
+    console.error('Infrastructure suite execution is not implemented; run the source-policy tests documented in docs/aws-infrastructure.md.');
+    process.exitCode = 1;
+  }
 }

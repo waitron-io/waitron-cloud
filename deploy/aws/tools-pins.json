@@ -1,0 +1,32 @@
+{
+  "tofu": {
+    "version": "1.11.0",
+    "platforms": {
+      "amd64": {
+        "url": "https://github.com/opentofu/opentofu/releases/download/v1.11.0/tofu_1.11.0_linux_amd64.zip",
+        "sha256": "c425c2080e3f204a1fe094356777535a34c4bc9fdbca4eccb74cdd25c1ae8a94",
+        "member": "tofu"
+      },
+      "arm64": {
+        "url": "https://github.com/opentofu/opentofu/releases/download/v1.11.0/tofu_1.11.0_linux_arm64.zip",
+        "sha256": "be01f174589a6f95ef3401d6514c32a01c0812fb14bfdd8883868089a6a833a2",
+        "member": "tofu"
+      }
+    }
+  },
+  "aws": {
+    "version": "6.42.0",
+    "platforms": {
+      "amd64": {
+        "url": "https://releases.hashicorp.com/terraform-provider-aws/6.42.0/terraform-provider-aws_6.42.0_linux_amd64.zip",
+        "sha256": "5bcc36226fa5d8a3c37e41ac8cfd2b1eb73e7ae96f8418f6776dcaa16a987198",
+        "member": "terraform-provider-aws_v6.42.0_x5"
+      },
+      "arm64": {
+        "url": "https://releases.hashicorp.com/terraform-provider-aws/6.42.0/terraform-provider-aws_6.42.0_linux_arm64.zip",
+        "sha256": "99564c99a0672b2a8b666ab2040f36a7c6f372fa79ac43a6657a54734e46fff8",
+        "member": "terraform-provider-aws_v6.42.0_x5"
+      }
+    }
+  }
+}

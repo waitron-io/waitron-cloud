@@ -5,17 +5,43 @@ plan. Cloud's first check refuses unsafe source files before an infrastructure c
 can start. It parses HCL, OpenTofu's configuration language, inside a container with no
 network connection and no host credentials or home-directory mount.
 
-The implementation is in progress. You can run the source-policy checks now:
+Prepare the tools once, then run the source-policy checks:
 
 ```sh
-docker build --pull=false --tag waitron-cloud-aws-tools:task1-parser deploy/aws
+node deploy/aws/check.mjs --prepare-tools
 node --test --test-concurrency=1 deploy/aws/*.test.mjs
 ```
 
-The build downloads software from PyPI. The base image is fixed by its digest, an
-identifier for its exact contents. The parser and both dependencies have fixed versions
-and verified download hashes. Test execution uses only the existing local image and
-refuses an implicit image download.
+Preparation downloads software from PyPI and the official OpenTofu and HashiCorp release
+sites. The base image is fixed by its digest, an identifier for its exact contents.
+The parser and both dependencies have fixed versions and verified download hashes.
+OpenTofu 1.11.0 and AWS provider 6.42.0 use the archive checksums recorded in
+`deploy/aws/tools-pins.json`. Preparation selects Linux ARM64 or AMD64 to match your
+Docker engine and refuses other architectures. It submits only the six named software
+build files to Docker, so ambient files cannot enter the build context.
+
+On success, the command prints:
+
+```text
+Prepared software image waitron-cloud-aws-tools:1.11.0-aws6.42.0
+```
+
+The image contains an offline provider mirror, a local directory from which OpenTofu can
+install the pinned provider without contacting a registry. Its configuration includes no
+direct provider download method. Initializing from this mirror reports the provider as
+unauthenticated: preparation checks the pinned archive checksum, but does not retrieve a
+registry signature during initialization. Root lockfiles still need checksums for both
+supported architectures when those roots are introduced. Test execution uses only the
+existing local image and refuses an implicit image download.
+
+OpenTofu and provider downloads require HTTPS and official distribution hosts, including redirects.
+They ignore your proxy settings, check a three-minute deadline before each read, and
+limit each network operation to 15 seconds. Archives are limited to 256 MiB; the selected
+executable must be a single regular entry of at most 1 GiB. A checksum mismatch refuses
+installation. Failed downloads remove their partial files, and preparation removes its
+disposable build context after success or failure. The Docker build command has a
+seven-minute limit. These limits bound software preparation; they do not set service
+or infrastructure timeouts.
 
 The source checker requires every test run, including a setup run, to say
 `command = plan`. Every AWS provider and alias must select a mock, a substitute that
@@ -46,8 +72,8 @@ symlinks and files larger than 1 MiB are refused before a container starts. A st
 alternative input, such as a variable file, remains visible so the parser can refuse it.
 The future suite runner still needs to use this copy boundary.
 
-This first step does not provide `--prepare-tools`, `runSuite`, OpenTofu, a provider
-mirror, the canary or the infrastructure handoff schema. The rest of Task 1 in the
+Preparation and source inspection are available. The fixed `runSuite` entry point,
+repository canary and infrastructure handoff schema remain unbuilt. The rest of Task 1 in the
 [implementation plan](superpowers/plans/2026-10-22-cloud-aws-layer.md) supplies those parts.
 Passing source-policy tests does not qualify AWS permissions, deployed infrastructure,
 recovery or continuity. You still need separate approval before accessing AWS, creating

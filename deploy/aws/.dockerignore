@@ -1,0 +1,7 @@
+**
+!Dockerfile
+!.dockerignore
+!tools-requirements.txt
+!tools-pins.json
+!prepare.py
+!test-cli.tfrc

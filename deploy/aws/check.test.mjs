@@ -176,10 +176,10 @@ test('local module execution stays refused until provider maps are qualified', a
   await assert.rejects(checkSources(await fixture(t, { config: `${main}\nmodule "network" { source = "../network" }` })), /module execution.*not qualified/);
 });
 
-test('unfinished suite and preparation entry points refuse to report success', async () => {
+test('unfinished suite and invalid preparation entry points refuse to report success', async () => {
   const { execFile } = await import('node:child_process');
   const { promisify } = await import('node:util');
-  for (const args of [[], ['--suite', 'canary'], ['--prepare-tools'], ['--all']]) {
+  for (const args of [[], ['--suite', 'canary'], ['--prepare-tools', '--suite', 'canary'], ['--all']]) {
     await assert.rejects(promisify(execFile)(process.execPath, [new URL('./check.mjs', import.meta.url).pathname, ...args]),
       (error) => error.code === 1 && /not implemented/.test(error.stderr));
   }
