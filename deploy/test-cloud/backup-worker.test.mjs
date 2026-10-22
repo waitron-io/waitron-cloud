@@ -43,3 +43,9 @@ test('test worker opens the pinned bound verifier and preserves its scope across
  assert.equal(output.result.status,'passed');assert.equal(output.receipt.controllerScope,identity.scope);assert.equal(output.receipt.cleanupConfirmed,true);
  assert.equal((await openTestBackupVerifier(settings)).controllerScope,identity.scope);
 });
+
+// Missing or overlapping state must be refused before any database or Docker operation.
+test('enabled worker requires writable controller state outside its configuration',async()=>{
+ const {runTestBackupWorker}=await import('./backup-worker.mjs');
+ for(const state of [undefined,'relative-state','/run/local-stack','/run/local-stack/verifier-state','/run/local-stack/../local-stack'])await assert.rejects(runTestBackupWorker({CLOUD_TEST_SERVICE_PLANS:'1',DATABASE_URL:'postgres://invalid',LOCAL_STACK_CONFIG_DIR:'/run/local-stack',CLOUD_VERIFIER_STATE_DIR:state},[]),/test_cloud.backup_configuration/);
+});

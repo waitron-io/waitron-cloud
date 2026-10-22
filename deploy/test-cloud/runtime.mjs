@@ -11,7 +11,7 @@ export function testRuntimeEnvironment(role,config,environment={}){
  if(role==='account'){result.CLOUD_TRANSLATION='0';result.CLOUD_HTTP_TRUSTED_PROXY_IPS='10.79.0.2';if(flag==='1')result.CLOUD_STAFF_CERTIFICATES='1';}
  if(role==='gateway'){result.GATEWAY_UPSTREAM_CA='/run/local-stack/lan/ca.pem';result.GATEWAY_CERTIFICATE_REFRESH='1';}
  if(role==='email')result.CLOUD_MAIL_TRANSPORT='test-capture';
- if(role==='backup'&&flag==='1'){result.CLOUD_BACKUP_ENDPOINT='https://waitron.local:8333';result.CLOUD_BACKUP_CA_FILE='/run/local-stack/lan/ca.pem';if(environment.CLOUD_VERIFIER_IMAGE!==undefined)result.CLOUD_VERIFIER_IMAGE=environment.CLOUD_VERIFIER_IMAGE;}
+ if(role==='backup'&&flag==='1'){result.CLOUD_VERIFIER_STATE_DIR='/run/backup-verifier';result.CLOUD_BACKUP_ENDPOINT='https://waitron.local:8333';result.CLOUD_BACKUP_CA_FILE='/run/local-stack/lan/ca.pem';if(environment.CLOUD_VERIFIER_IMAGE!==undefined)result.CLOUD_VERIFIER_IMAGE=environment.CLOUD_VERIFIER_IMAGE;}
  return result;
 }
 export async function launchTestRuntime(role,directory=process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack'){

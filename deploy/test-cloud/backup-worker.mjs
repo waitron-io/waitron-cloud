@@ -1,5 +1,6 @@
 import {readFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
+import {isAbsolute,resolve,relative} from 'node:path';
 import {createRequire} from 'node:module';
 import {parsePlanMode,runWorkerLoop} from '../../packages/registration/src/index.ts';
 import {BackupCatalogue} from '../../packages/backups/src/catalogue.ts';
@@ -12,6 +13,10 @@ const {Pool}=createRequire(new URL('../../packages/registration/package.json',im
 export async function runTestBackupWorker(env=process.env,args=process.argv.slice(2)){
  if(parsePlanMode(env.CLOUD_TEST_SERVICE_PLANS)!=='test-free-paid')throw Error('test_cloud.plan_mode');
  const mode=args[0];if(args.length>1||mode&&!['--once','--status','--retry-failed'].includes(mode)||!env.DATABASE_URL)throw Error('test_cloud.backup_configuration');
+ if(!['--status','--retry-failed'].includes(mode)){
+  const state=env.CLOUD_VERIFIER_STATE_DIR,config=resolve(env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack');
+  if(!state||!isAbsolute(state)||!relative(config,resolve(state)).startsWith('../'))throw Error('test_cloud.backup_configuration');
+ }
  const stop=new AbortController(),shutdown=()=>stop.abort();process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
  const pool=new Pool({connectionString:env.DATABASE_URL,max:3,connectionTimeoutMillis:5000,statement_timeout:10000});
  let storage,ownership;pool.on('error',()=>{process.exitCode=1;stop.abort();});
@@ -21,7 +26,7 @@ export async function runTestBackupWorker(env=process.env,args=process.argv.slic
   if(mode==='--retry-failed')return console.log(JSON.stringify({retried:await retryFailedBackupJobs(pool)}));
   const master=env.CLOUD_BACKUP_MASTER_KEY??'';if(!/^[a-fA-F0-9]{64}$/.test(master))throw Error('test_cloud.backup_configuration');
   ownership=await claimTestBackupWorker(pool,shutdown);
-  const {verify,controllerScope}=await openTestBackupVerifier({directory:env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',image:env.CLOUD_VERIFIER_IMAGE});
+  const {verify,controllerScope}=await openTestBackupVerifier({directory:env.CLOUD_VERIFIER_STATE_DIR,image:env.CLOUD_VERIFIER_IMAGE});
   const ca=await readFile(env.CLOUD_BACKUP_CA_FILE,'utf8');storage=workerObjects(env,ca);
   const worker=new BackupWorker(pool,new BackupCatalogue(pool,new BackupKeyVault(Buffer.from(master,'hex')),storage.objects,'test-free-paid'),verify,controllerScope);
   if(mode==='--once'){await worker.schedule();await worker.runOnce(stop.signal);console.log(JSON.stringify(await worker.status()));}

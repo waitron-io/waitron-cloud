@@ -154,6 +154,7 @@ services:
     profiles: !override [unavailable]
     volumes: !override
       - local-stack-config:/run/local-stack:ro
+      - test-backup-verifier-state:/run/backup-verifier
   remote-reconciler:
     mem_limit: 32m
     logging:
@@ -221,3 +222,6 @@ networks:
           ip_range: 10.79.0.128/25
 
 secrets: !reset {}
+
+volumes:
+  test-backup-verifier-state:

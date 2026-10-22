@@ -1219,9 +1219,9 @@ notifications separately.
   remain unexplained. Capture Docker stages, host deadline and CPU-limit timing
   if they recur; keep the limits and assertions intact.
   The genuine joint proof is unfinished. Snapshots
-  stay unavailable and deployment enforcement stays off. Deployment still needs
-  writable private controller state separate from its read-only configuration
-  mount before enabling a backup profile.
+  stay unavailable and deployment enforcement stays off. The unavailable backup
+  profile now has a private writable controller-state volume separate from its
+  read-only configuration. It still receives no Docker socket.
   Task 9 adds portal wording that separates checked data from activation and treats
   inconclusive checks as pending. The version 5 schema proof targets migrations
   42-to-43 with synthetic legacy history, recovery holds, external backup keys,
@@ -1233,8 +1233,19 @@ notifications separately.
   remain open; earlier receipt versions and fiscal authority rules remain unchanged.
   The PR5 adapters are reconciled with current main, preserving their earlier
   storage, account, remote and controller behavior and historical test evidence.
-  Portal copy, schema-upgrade receipts and a joint capture-to-recovery proof against
-  the implementing runtime with the continuous source absent remain due. A source release does not establish
+  Task 10's new version 2 receipt validator refuses missing genuine phases,
+  incomplete module coverage, substituted image/request/attempt evidence,
+  continuous-source presence, uncertain cleanup and publication claims for a local
+  candidate. It keeps ordinary fiscal refusal distinct from a complete proof.
+  The receipt producer and the genuine joint orchestration remain unfinished.
+  A fresh genuine 15-module capture against pinned `5516dd57` returns
+  `unavailable` / `unexpected` during verification. Diagnostic-only logging traces
+  `ERR_ACCESS_DENIED` / `WorkerThreads` to Waitron's placement-lock watchdog.
+  Cloud's tested worker-thread denial stays intact; an owner decision or compatible
+  upstream lock implementation is required. No successful admission/recovery is
+  claimed, and no Waitron source or fiscal evidence was changed.
+  A joint capture-to-recovery proof against the implementing runtime with the
+  continuous source absent remains due. A source release does not establish
   a published verifier image or qualify any snapshot. Snapshots
   remain unavailable on this test deployment, and enforcement stays off until the
   implementation, evidence and release gates pass.

@@ -74,3 +74,12 @@ test('test backup selects the scoped controller and forwards only explicit pinne
  assert.equal(api.testRuntimeCommand('backup'),'deploy/test-cloud/backup-worker.mjs');
  assert.equal(value.CLOUD_VERIFIER_IMAGE,'sha256:'+'a'.repeat(64));assert.equal(value.CLOUD_VERIFIER_OWNER,undefined);assert.equal(value.CLOUD_VERIFIER_MEMORY_MIB,undefined);
 });
+
+// Only the enabled backup worker may write its separate controller state.
+test('backup runtime supplies a private controller directory independently of read-only config',async t=>{
+ const {testRuntimeEnvironment}=await import('./runtime.mjs'),dir=await mkdtemp(join(tmpdir(),'cloud-controller-runtime-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
+ const enabled=testRuntimeEnvironment('backup',config,{CLOUD_TEST_SERVICE_PLANS:'1'});
+ assert.equal(enabled.CLOUD_VERIFIER_STATE_DIR,'/run/backup-verifier');
+ for(const role of ['account','storage','email','migrate'])assert.equal(testRuntimeEnvironment(role,config,{CLOUD_TEST_SERVICE_PLANS:'1'}).CLOUD_VERIFIER_STATE_DIR,undefined);
+ assert.equal(testRuntimeEnvironment('backup',config,{}).CLOUD_VERIFIER_STATE_DIR,undefined);
+});

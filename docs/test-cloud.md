@@ -242,8 +242,12 @@ You can exercise these rules with
 `node scripts/test-postgres.mjs exec node --test packages/backups/test/worker-admission.test.ts packages/backups/test/worker.test.ts`.
 The synthetic fixtures test admission and isolation; the complete genuine
 capture-to-recovery proof remains a later release gate.
-Keep controller state on a writable private mount, separate from the read-only
-configuration mount. That deployment wiring remains part of the release gate.
+The unavailable backup profile now mounts its own writable
+`test-backup-verifier-state` volume at `/run/backup-verifier`. Configuration remains
+read-only at `/run/local-stack`; only the enabled backup runtime receives
+`CLOUD_VERIFIER_STATE_DIR`. The worker refuses missing, relative or overlapping
+state paths before opening its database. This supplies private journal storage;
+it grants no Docker socket or permission to enable the profile.
 Keep snapshots unavailable and deployment
 enforcement off until the implementation, full integration proof and release gates
 pass. Ordinary fiscal restore still requires its existing activation authority.
@@ -267,7 +271,32 @@ TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
   node --test deploy/test-cloud/snapshot-proof.test.mjs
 ```
 
-The disposable fixture captures an encrypted archive with genuine Waitron code at `e52c997c02d2fcd66d0e7239cbfd79ced4ddd0ee`, uploads it using scoped credentials and publishes it through the signed account API. Cloud now reads that revision's validated database file instead of assuming it returns database bytes. The historical run then refused with `restore.hook_failed` / `sif.allocation_invalid`: ordinary fiscal restore requires an authorised allocation operation. The Cloud verifier supplies none. That failure remains recorded. Integrate A850's approved data-only verification interface and repeat the full proof before claiming success. Ordinary recovery still needs its existing separate authority. Do not skip the hook, mint an allocation automatically or enable the deployment to bypass the refusal.
+The parked fixture still uses the earlier `e52c997c` capture contract and needs
+Task 10's complete v2 orchestration. Its historical fiscal restore refusal remains
+recorded. A fresh local probe against the pinned `5516dd57` image genuinely captures
+an encrypted archive with all 15 modules, but data verification returns
+`unavailable` / `unexpected`. A diagnostic image that adds error classification
+logging, without changing any guard, identifies `ERR_ACCESS_DENIED` for
+`WorkerThreads` in `startWatchdog`, called by `lockVenueDirectory`. Waitron's placement lock
+starts a worker thread; the Cloud child deliberately denies worker creation.
+That denial remains tested in `packages/backups/test/container-fixture/bound-bundle.mjs`.
+Resolve this security boundary before repeating the full integration proof;
+no successful verification, admission or recovery is claimed by that probe.
 
+Task 10 adds `scripts/verify-backup-verifier-proof.mjs` for the new version 2
+receipt. It requires one run's genuine capture, signed publication, complete bound
+module output, committed admission, v2 recovery and separately authorised ordinary
+restore. It also checks continuous-source absence, named refusal assertions and
+confirmed owned cleanup. You can validate a completed receipt with:
+
+```sh
+node scripts/verify-backup-verifier-proof.mjs /tmp/cloud-backup-verifier-proof.json
+```
+
+An explicit `FISCAL_RESTORE` refusal can be recorded as incomplete evidence, but
+the command still refuses to certify the full proof. Local images remain
+`unqualified` for publication. The producer in `backup-verifier-proof.mjs` still
+uses its older interface; it must be migrated before it can produce this receipt.
+Ordinary recovery keeps its separate fiscal authority requirement.
 Keep snapshots unavailable and deployment enforcement off until the remaining Cloud
 implementation, complete integration proof and release gates pass.
