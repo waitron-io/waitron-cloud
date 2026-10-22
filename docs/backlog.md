@@ -2505,15 +2505,33 @@ notifications separately.
   runner sources remain unqualified; check their archive location before adding
   that architecture. The current workflow uses x64 runners. D117 preserves line
   endings, closing the review's separate newline-format note.
-  A separate backup-fixture download remains open: D107's corrected-head
+  D107's corrected-head
   [run 39776383906](https://github.com/waitron-io/waitron-cloud/actions/runs/39776383906/job/119816424815)
   could not build the verification fixture because Docker Hub returned
   `502 Bad Gateway` for the `node:26` manifest. The two infrastructure tests
   in `packages/backups/test/verification-infrastructure.test.ts` did not run;
-  cleanup also refused to remove the image that was never built. Qualify bounded
-  base-image acquisition and cleanup after an unsuccessful build in a separate
-  change, preserving the outage and malformed-archive assertions. A later green
-  run proves recovery only; it does not fix this registry response.
+  cleanup also refused to remove the image that was never built. The outage
+  fixture now acquires a missing base before creating its PostgreSQL container,
+  makes at most three pull attempts for transient registry failures, and shares its existing
+  120-second image-preparation budget across acquisition and one build. Cached
+  bases need no pull; authentication refusals stop immediately. Cleanup removes
+  the uniquely requested image tag when present and the uniquely named attempted
+  PostgreSQL container, including failed builds and starts. Docker's forced
+  container removal accepts an absent container; other cleanup errors remain
+  visible and image cleanup still runs after container-removal failure.
+  The readiness probe
+  checks TCP because PostgreSQL's temporary initialization server already accepts
+  local sockets. Thirteen controlled acquisition/failure checks and the two unchanged
+  real outage/malformed-archive tests pass with the existing limits. This handles
+  the local fixture failure; it does not fix Docker Hub's response or guarantee
+  registry availability. Other backup fixtures still acquire their base inside
+  their own build; extend this preparation helper there if acquisition fails.
+  The later [D108 qualification run 39786287483](https://github.com/waitron-io/waitron-cloud/actions/runs/39786287483/job/119850413048)
+  exhausted both browser-install attempts before any portal test ran. D117's
+  signed alternative source above now has two consecutive full exact-head runs
+  and an independent merge qualification, each installing in one attempt and
+  executing every browser test. The historical primary-archive slowness remains
+  unexplained. Every fixture head requires its own CI qualification.
   A separate test-harness route failure is also open. In
   [run 39813909743](https://github.com/waitron-io/waitron-cloud/actions/runs/39813909743/job/119947375548),
   registration shard 2 never ran its tests: pulling `axllent/mailpit:v1.31.1`

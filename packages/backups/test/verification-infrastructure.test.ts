@@ -26,25 +26,37 @@ import {BackupKeyVault} from '../src/keys.ts';
 import {receipt} from '../src/storage.ts';
 import {BackupWorker,type RestoreVerifier} from '../src/worker.ts';
 import {createContainerWaitronVerifier} from '../src/container-verifier.ts';
+import {buildFixtureImage} from './container-fixture/image.ts';
 
 const owner='outage-'+randomUUID(),image='cloud-verifier-test:'+owner,postgres='cloud-postgres-'+owner;
 const root=fileURLToPath(new URL('../../../',import.meta.url));
 const docker=(...args:string[])=>execFileSync('docker',args,{encoding:'utf8',timeout:120000,stdio:['pipe','pipe','pipe']}).trim();
 let originalUrl:string|undefined,bytes:Buffer;
-async function ready(){for(let n=0;n<100;n++){try{docker('exec',postgres,'pg_isready','-U','postgres');return;}catch{await delay(100);}}throw Error('PostgreSQL restart timed out');}
+let postgresAttempted=false;
+// The temporary initialization server accepts sockets before the TCP server starts.
+async function ready(){for(let n=0;n<100;n++){try{docker('exec',postgres,'pg_isready','-h','127.0.0.1','-U','postgres');return;}catch{await delay(100);}}throw Error('PostgreSQL restart timed out');}
 before(async()=>{
  originalUrl=process.env.TEST_DATABASE_URL;
+ await buildFixtureImage(image,root);
  const listener=createServer();await new Promise<void>(resolve=>listener.listen(0,'127.0.0.1',resolve));const port=(listener.address() as {port:number}).port;await new Promise<void>(resolve=>listener.close(()=>resolve()));
- const password=randomUUID();docker('run','-d','--name',postgres,'-p',`127.0.0.1:${port}:5432`,'-e','POSTGRES_PASSWORD='+password,'postgres:18-alpine');
+ const password=randomUUID();postgresAttempted=true;
+ docker('run','-d','--name',postgres,'-p',`127.0.0.1:${port}:5432`,'-e','POSTGRES_PASSWORD='+password,'postgres:18-alpine');
  await ready();process.env.TEST_DATABASE_URL=`postgres://postgres:${password}@127.0.0.1:${docker('port',postgres,'5432/tcp').split(':').at(-1)}/postgres`;
- docker('build','-q','-t',image,'-f',join(root,'packages/backups/test/container-fixture/Dockerfile'),root);
  const dir=await mkdtemp(join(tmpdir(),'outage-snapshot-'));
  try{const path=join(dir,'data.db'),db=new DatabaseSync(path);db.exec('CREATE TABLE proof(value TEXT)');db.close();bytes=await readFile(path);}finally{await rm(dir,{recursive:true,force:true});}
 },{timeout:150000});
 after(()=>{
  if(originalUrl===undefined)delete process.env.TEST_DATABASE_URL;else process.env.TEST_DATABASE_URL=originalUrl;
  const ids=docker('ps','-aq','--filter','label=cloud.backup-verifier.owner='+owner).split(/\s+/).filter(Boolean);if(ids.length)docker('rm','-f',...ids);
- docker('rm','-f','-v',postgres);docker('image','rm',image);
+ try{
+  // A failed start can leave the uniquely named container created by this attempt.
+  if(postgresAttempted)docker('rm','-f','-v',postgres);
+ }finally{
+  // A failed build client can leave its uniquely requested image tag behind.
+  let present=true;
+  try{docker('image','inspect',image);}catch(error){if(/No such (?:image|object):/i.test(String((error as {stderr?:string}).stderr)))present=false;else throw error;}
+  if(present)docker('image','rm',image);
+ }
 });
 async function fixture(){
  const db=await database(),objects=new Map<string,Buffer>();
