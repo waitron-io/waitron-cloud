@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, lstatSync, realpathSync, mkdirSync, rmSync
 import { join, relative, isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+import { setTimeout as delay } from 'node:timers/promises';
 import { assertOwnedRoot } from './schema.mjs';
 import { openStreamMeasurement } from './stream-measurement.mjs';
 import { nativeFailureSignal } from './worker-diagnostic.mjs';
@@ -113,16 +114,29 @@ export async function openReplayStream(input) {
     return session.checkpoint();
   };
   const start = async () => {
+    const before = session.activity(), observation = new AbortController();
     at('replicate'); writer = launch(['replicate', '-config', join(args.workRoot, 'stream.json')]); starts++;
-    // Startup admission requires a successful native upload; reads cannot establish that readiness.
-    await Promise.race([session.waitForUpload(), writer.done.then(() => fail())]); healthy();
+    const exited = writer.done.then(() => fail());
+    try {
+      await Promise.race([session.waitForActivity(before), exited]); healthy();
+      // Observation starts at the first native transfer; upload readiness shares that window.
+      const until = performance.now() + args.startupSeconds * 1000;
+      const observe = async () => {
+        let remaining;
+        while ((remaining = until - performance.now()) > 0)
+          await delay(Math.ceil(remaining), undefined, { signal: observation.signal });
+      };
+      // A completed read cannot release startup without a successful ordinary upload.
+      await Promise.race([Promise.all([observe(), session.waitForUpload()]), exited]); healthy();
+    } finally { observation.abort(); }
   };
   try {
     assertOwnedRoot(input);
     const { source, root, journal, database, binary, binarySha256, target, sdk, bucket, versioned,
-      signal: callerSignal, windowSeconds = 7200 } = input;
+      signal: callerSignal, windowSeconds = 7200, startupSeconds = 0 } = input;
     need(callerSignal === undefined || callerSignal instanceof AbortSignal); need(!callerSignal?.aborted);
     need(typeof windowSeconds === 'number' && Number.isFinite(windowSeconds) && windowSeconds > 0 && windowSeconds <= 7200);
+    need(typeof startupSeconds === 'number' && Number.isFinite(startupSeconds) && startupSeconds >= 0 && startupSeconds <= 300);
     need(inside(root, database) && file(database).size > 0);
     need(isAbsolute(binary) && typeof binarySha256 === 'string' && /^[a-f0-9]{64}$/.test(binarySha256));
     need(file(binary).size <= 100 * 1024 * 1024
@@ -131,7 +145,7 @@ export async function openReplayStream(input) {
     // lstat also rejects dangling links, which existsSync deliberately does not see.
     try { lstatSync(workRoot); fail(); } catch (error) { need(error.code === 'ENOENT'); }
     const controller = new AbortController(), signal = callerSignal ? AbortSignal.any([callerSignal, controller.signal]) : controller.signal;
-    args = { source, root, journal: structuredClone(journal), database, binary, binarySha256, target, sdk, bucket, versioned, signal, workRoot };
+    args = { source, root, journal: structuredClone(journal), database, binary, binarySha256, target, sdk, bucket, versioned, signal, workRoot, startupSeconds };
     signal.addEventListener('abort', abort, { once: true });
     deadlineTimer = setTimeout(() => controller.abort(), windowSeconds * 1000);
     // The replay owns cancellation order: collect its writer before closing the transport it drains through.

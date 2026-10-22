@@ -36,15 +36,20 @@ async function run() {
     credentials: { accessKeyId: 'SYNTHETIC', secretAccessKey: 'SYNTHETIC' } });
   stage = 'bucket'; await client.send(new sdk.CreateBucketCommand({ Bucket })); created = true;
   const abort = new AbortController(); let result = null, refused = false, lastPhase;
+  const observed = [], began = performance.now();
   stage = 'private-replay'; try { result = await replayPrivateDay({ ...args, database: copy.database, locationId, codeRoot: '/code', stateRoot: root + '/replay', config, initial,
     expected: { sales: 4, paid: 4, tradingDays: 2, busiest: 3 }, originalInventory: { timeZone: 'Europe/Madrid', days: 2, busiest: 3 },
     cadence: { mode: 'accelerated', factor: 100 }, windowSeconds: 10, signal: abort.signal,
+    onDiagnostic(event) { observed.push({ ...event, elapsedMs: Math.round(performance.now() - began) }); },
     onProgress(value) { lastPhase = value.phase; if (mode === 'cancel' && value.successfulSales === 1) abort.abort(); },
     stream: { binary: '/code/litestream', binarySha256: createHash('sha256').update(readFileSync('/code/litestream')).digest('hex'),
       target: 'http://127.0.0.1:8334', sdk, bucket: Bucket, versioned: false, startupSeconds: 2, idleSeconds: 2,
       windowSeconds: mode === 'deadline' ? 4.01 : 60 } }); }
   catch { if (mode === 'normal') throw Error('Synthetic normal replay refused'); refused = true; }
-  if (mode === 'cancel' && !abort.signal.aborted || mode === 'deadline' && lastPhase !== 'idle') throw Error('Synthetic stop not reached');
+  if (mode === 'cancel' && !abort.signal.aborted || mode === 'deadline' && lastPhase !== 'idle') {
+    console.error(JSON.stringify({ mode, lastPhase: lastPhase ?? null, refused, observed }));
+    throw Error('Synthetic stop not reached');
+  }
   stage = 'result'; const entries = JSON.parse(readFileSync(journal.path, 'utf8')).localResources;
   const started = entries.filter(e => e.kind === 'stream-process' && e.state === 'started');
   const collected = started.every(e => entries.some(r => r.kind === 'stream-process' && r.state === 'collected' && r.pid === e.pid));

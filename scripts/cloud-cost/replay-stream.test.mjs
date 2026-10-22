@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes, createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
 const require = createRequire(new URL('../../packages/backups/package.json', import.meta.url));
 const sdk = require('@aws-sdk/client-s3');
 const module = await import('./replay-stream.mjs').catch(error => {
@@ -32,6 +32,7 @@ async function fixture(t, mode = 'normal') {
   let stored, uploaded = 0, releaseUpload, heldResponse, releaseInventory, inventoryHeld;
   const heldUpload = new Promise(resolve => { heldResponse = resolve; });
   const heldInventory = new Promise(resolve => { inventoryHeld = resolve; });
+  let readCompleted; const firstRead = new Promise(resolve => { readCompleted = resolve; });
   const provider = createServer((req, res) => {
     const url = new URL(req.url, 'http://local'), parts = [];
     req.on('data', chunk => parts.push(chunk)); req.on('end', () => {
@@ -49,7 +50,11 @@ async function fixture(t, mode = 'normal') {
       else if (url.searchParams.has('uploads')) res.end('<ListMultipartUploadsResult><IsTruncated>false</IsTruncated></ListMultipartUploadsResult>');
       else if (url.searchParams.get('list-type') === '2') res.end('<ListBucketResult><IsTruncated>false</IsTruncated>'
         + (stored ? `<Contents><Key>stream.ltx</Key><Size>${stored.length}</Size></Contents>` : '') + '</ListBucketResult>');
-      else res.end(stored ?? Buffer.alloc(0));
+      else {
+        if (mode === 'read-before-upload' && req.method === 'GET')
+          res.once('finish', () => readCompleted(performance.now()));
+        res.end(stored ?? Buffer.alloc(0));
+      }
     });
   });
   provider.listen(0, '127.0.0.1'); await once(provider, 'listening');
@@ -82,6 +87,7 @@ if (process.argv[2] === 'restore') {
 if (mode === 'exit') process.exit(19);
 if (mode === 'hangup') process.kill(process.pid, 'SIGHUP');
 const upload = () => { if (!stopping) serial = serial.then(()=>send('PUT',readFileSync(c.path))).catch(()=>process.exit(18)); };
+if (mode === 'read-then-exit') { await send('GET', Buffer.alloc(0)); process.exit(19); }
 if (mode === 'read-before-upload') {
   await send('GET', Buffer.alloc(0));
   writeFileSync(c.path + '.read-complete', 'ready');
@@ -112,7 +118,7 @@ process.once('SIGTERM',()=>{
   return { source, root, journal, database, binary, binarySha256: createHash('sha256').update(text).digest('hex'),
     target: `http://127.0.0.1:${provider.address().port}`, sdk, bucket: 'synthetic-replay-stream', versioned: false,
     uploaded: () => uploaded, stored: () => stored, heldUpload, releaseUpload: () => releaseUpload(),
-    heldInventory, releaseInventory: () => releaseInventory() };
+    heldInventory, releaseInventory: () => releaseInventory(), firstRead };
 }
 async function open(t, f) {
   assert.equal(typeof module.openReplayStream, 'function', 'run and collect the native writer around phase measurements');
@@ -389,4 +395,49 @@ test('replayStreamCancellationCollectsAWriterThatOnlyCompletedARead', { timeout:
     assert.equal(existsSync(f.database + '.read-complete'), true);
   } finally { controller.abort(); await refused; }
   clean(f);
+});
+
+// Upload readiness and the minimum startup observation must share the first-transfer clock.
+test('replayStreamOverlapsTheStartupObservationWithWaitingForItsFirstUpload', { timeout: 10000 }, async t => {
+  const f = await fixture(t, 'read-before-upload');
+  const opening = module.openReplayStream({ ...f, startupSeconds: 2, windowSeconds: 3.2 });
+  let release;
+  try {
+    const firstReadAt = await f.firstRead;
+    release = setTimeout(() => writeFileSync(f.database + '.allow-upload', 'ready'), 1500);
+    const run = await opening;
+    assert.ok(performance.now() - firstReadAt >= 2000, 'observe the full startup minimum after a completed native transfer');
+    const result = await run.finish({ expectedSales: 1 });
+    assert.deepEqual(result.restored, { sales: 1, integrity: true });
+    assert.ok(result.stream.phases[0].elapsedSeconds >= 2);
+  } finally {
+    clearTimeout(release); writeFileSync(f.database + '.allow-upload', 'ready');
+    await opening.then(run => run.close(), () => {});
+  }
+  clean(f);
+});
+
+for (const startupSeconds of [-1, NaN, 301, '2'])
+  test('replayStreamRefusesInvalidStartupObservation_' + startupSeconds, async t => {
+    const f = await fixture(t, 'read-then-exit'); let run;
+    try {
+      await assert.rejects(async () => { run = await module.openReplayStream({ ...f, startupSeconds }); }, bad);
+      assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources, undefined);
+    } finally { await run?.close(); }
+  });
+
+// Early native exit must cancel the concurrent observation, not leave its timer alive.
+test('replayStreamEarlyExitCollectsItsStartupObservation', async t => {
+  const f = await fixture(t, 'read-then-exit');
+  await assert.rejects(module.openReplayStream({ ...f, startupSeconds: 30, windowSeconds: 2 }), bad);
+  clean(f);
+});
+
+test('replayStreamEarlyExitLeavesNoStartupTimerKeepingTheProcessAlive', () => {
+  const child = spawnSync(process.execPath, ['--test',
+    '--test-name-pattern=^replayStreamEarlyExitCollectsItsStartupObservation$', new URL(import.meta.url).pathname],
+    { env: { PATH: process.env.PATH }, timeout: 8000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  assert.equal(child.status, 0, child.stderr + child.stdout);
+  assert.match(child.stdout, /[ℹ#] tests 1\b/);
+  assert.match(child.stdout, /[ℹ#] pass 1\b/);
 });

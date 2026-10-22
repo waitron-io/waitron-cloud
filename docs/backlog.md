@@ -1377,7 +1377,13 @@ notifications separately.
   startup admission requirement. Reads, refused and unfinished writes do not
   satisfy it, and the original deadline still collects a writer that never uploads.
   This fixes the reproduced readiness gap; without a trace from the historical
-  failures, it does not identify their cause.
+  failures, it does not identify their cause. Startup observation keeps the original
+  first-transfer clock and overlaps upload readiness. The first candidate instead
+  waited for an upload and then began a separate observation; a real generated
+  reproduction exhausted the unchanged 4.01-second deadline during startup.
+  The corrected composition preserves the full two-second observation, the idle
+  refusal, early-timer-wake checks and every original deadline. Diagnostic-only
+  generated failures now retain their phase and elapsed-stage trace.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.
