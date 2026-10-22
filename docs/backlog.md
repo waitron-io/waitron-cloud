@@ -3221,10 +3221,20 @@ failed before account HTTP shard 3 started its tests: Docker's request to
 `auth.docker.io` timed out while pulling `postgres:18-alpine`. The recorded failure
 is in `scripts/test-postgres.mjs:30`, before the owned container is marked running.
 This is separate from the reset-mail capture failure below. No runtime, test,
-fixture, workflow or dependency change accompanied the incident, and no registry
-fix is claimed. Next: qualify bounded image-pull failure handling with a failing
-test first, preserving the existing test assertions, deadlines and owned-container
-cleanup. A later successful run alone does not prove that handling is fixed.
+fixture, workflow or dependency change accompanied the incident, and the external
+registry failure's cause remains unproved.
+
+The test launcher now acquires both images before creating either container. It
+uses cached images without registry access. For a missing image, it retries a
+recognised connection failure at most three times within one shared 120-second
+acquisition budget, including inspection and retry waits. Access refusals and
+other terminal errors stop immediately; a failed daemon inspection does not
+become an image pull. Container starts disable implicit pulling and are never
+retried. Package commands, assertions, readiness deadlines and owned cleanup retain
+their existing behaviour. Run `node --test scripts/ci-test-postgres.test.mjs` for
+the controlled launcher checks, including timeout termination, retry exhaustion,
+Mailpit acquisition, command exit status and cleanup. These checks qualify local
+failure handling; they do not prove Docker Hub availability or explain its outage.
 
 ## Account HTTP reset-mail capture
 
