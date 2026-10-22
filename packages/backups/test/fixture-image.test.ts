@@ -18,17 +18,22 @@ const prior=existsSync(log)?readFileSync(log,'utf8').trim().split('\\n').filter(
 appendFileSync(log,JSON.stringify({args,pid:process.pid})+'\\n');
 const fail=message=>{console.error(message);process.exit(1);};
 if(args[0]==='image'&&args[1]==='inspect'){
- if(['cached','run-failed','run-refused'].includes(scenario))console.log('local-image');else fail('Error response from daemon: No such image: node:26');
+ if(args[2]!=='node:26'){
+  if(prior.some(row=>row.args[0]==='build')&&['cached','run-failed','run-refused','cleanup-refused','tagged-failure'].includes(scenario))console.log('owned-image');
+  else fail('Error response from daemon: No such image: '+args[2]);
+ }else if(scenario==='inspect-denied')fail('Cannot connect to the Docker daemon');
+ else if(['cached','run-failed','run-refused','cleanup-refused','tagged-failure'].includes(scenario))console.log('local-image');else fail('Error response from daemon: No such image: node:26');
 }else if(args[0]==='pull'){
  if(scenario==='denied')fail('unauthorized: authentication required');
  if(scenario==='exhausted'||scenario==='transient'&&!prior.some(row=>row.args[0]==='pull'))fail('unexpected status: 502 Bad Gateway');
  if(scenario==='timeout')setTimeout(()=>fail('hung beyond short test budget'),1200);
 }else if(args[0]==='build'){
- if(!['cached','success','run-failed','run-refused'].includes(scenario))fail('fixture build failed');
+ if(!['cached','success','run-failed','run-refused','cleanup-refused'].includes(scenario))fail('fixture build failed');
 }else if(args[0]==='run'&&scenario==='run-failed')fail('fixture container created but start failed');
 else if(args[0]==='run'&&scenario==='run-refused')fail('fixture container creation refused');
-else if(args[0]==='rm'&&scenario==='run-refused')fail('Error response from daemon: No such container: never created');
-else if(args[0]==='image'&&args[1]==='rm'&&!['run-failed','run-refused'].includes(scenario))fail('No such image: never built');
+else if(args[0]==='run'&&scenario==='cleanup-refused')fail('fixture container created but start failed');
+else if(args[0]==='rm'&&scenario==='cleanup-refused')fail('fixture cleanup daemon refused');
+else if(args[0]==='image'&&args[1]==='rm'&&!['run-failed','run-refused','cleanup-refused','tagged-failure'].includes(scenario))fail('No such image: never built');
 else if(args[0]==='port')console.log('127.0.0.1:59999');
 `,{mode:0o755});
  const env:NodeJS.ProcessEnv={...process.env,PATH:directory+':'+process.env.PATH,FIXTURE_DOCKER_LOG:log,FIXTURE_DOCKER_SCENARIO:scenario};
@@ -64,7 +69,7 @@ test('failed outage fixture build never removes an image it did not create',asyn
 
 async function build(env:NodeJS.ProcessEnv,budget=120000){
  const module=new URL('./container-fixture/image.ts',import.meta.url).href;
- return execute(process.execPath,['--input-type=module','-e',`import {buildFixtureImage} from ${JSON.stringify(module)};await buildFixtureImage('owned-fixture:test',${JSON.stringify(root)},${budget});`],{cwd:root,env,timeout:10000});
+ return execute(process.execPath,['--input-type=module','-e',`import {buildFixtureImage} from ${JSON.stringify(module)};const start=performance.now();try{await buildFixtureImage('owned-fixture:test',${JSON.stringify(root)},${budget});}finally{console.log(JSON.stringify({elapsedMs:performance.now()-start}));}`],{cwd:root,env,timeout:10000});
 }
 
 test('cached base image builds once without registry acquisition',async(t)=>{
@@ -119,4 +124,29 @@ test('refused container creation preserves its error and still removes the built
  assert.equal(commands.filter(args=>args[0]==='rm').length,1);
  assert.equal(commands.filter(args=>args[0]==='image'&&args[1]==='rm').length,1);
  assert.doesNotMatch(output,/No such container/);
+});
+
+test('container cleanup errors remain visible and cannot skip image cleanup',async(t)=>{
+ const f=await controlledDocker(t,'cleanup-refused'),output=await setupFailure(f.env);
+ assert.match(output,/fixture cleanup daemon refused/);
+ assert.equal((await f.commands()).filter(row=>row.args[0]==='image'&&row.args[1]==='rm').length,1);
+});
+
+test('failed build that left its uniquely requested tag is cleaned up',async(t)=>{
+ const f=await controlledDocker(t,'tagged-failure');await setupFailure(f.env);
+ assert.equal((await f.commands()).filter(row=>row.args[0]==='image'&&row.args[1]==='rm').length,1);
+});
+
+test('daemon inspection failure cannot fall through to acquisition or build',async(t)=>{
+ const f=await controlledDocker(t,'inspect-denied');await assert.rejects(build(f.env),/Cannot connect to the Docker daemon/);
+ assert.deepEqual((await f.commands()).map(row=>row.args),[['image','inspect','node:26']]);
+});
+
+test('insufficient remaining budget refuses before the retry delay',async(t)=>{
+ const f=await controlledDocker(t,'exhausted');
+ await assert.rejects(build(f.env,500),error=>{
+  const failure=error as {stderr:string;stdout:string};assert.match(failure.stderr,/502 Bad Gateway/);
+  assert(JSON.parse(failure.stdout).elapsedMs<1000,'the one-second retry pause must not run');return true;
+ });
+ assert.equal((await f.commands()).filter(row=>row.args[0]==='pull').length,1);
 });

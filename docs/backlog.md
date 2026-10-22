@@ -2512,14 +2512,16 @@ notifications separately.
   in `packages/backups/test/verification-infrastructure.test.ts` did not run;
   cleanup also refused to remove the image that was never built. The outage
   fixture now acquires a missing base before creating its PostgreSQL container,
-  retries transient registry failures at most three times, and shares its existing
+  makes at most three pull attempts for transient registry failures, and shares its existing
   120-second image-preparation budget across acquisition and one build. Cached
   bases need no pull; authentication refusals stop immediately. Cleanup removes
-  only the built image and the uniquely named attempted PostgreSQL container,
-  including a container whose start failed; an already absent container is harmless.
+  the uniquely requested image tag when present and the uniquely named attempted
+  PostgreSQL container, including failed builds and starts. Docker's forced
+  container removal accepts an absent container; other cleanup errors remain
+  visible and image cleanup still runs after container-removal failure.
   The readiness probe
   checks TCP because PostgreSQL's temporary initialization server already accepts
-  local sockets. Nine controlled acquisition/failure checks and the two unchanged
+  local sockets. Thirteen controlled acquisition/failure checks and the two unchanged
   real outage/malformed-archive tests pass with the existing limits. This handles
   the local fixture failure; it does not fix Docker Hub's response or guarantee
   registry availability. Other backup fixtures still acquire their base inside

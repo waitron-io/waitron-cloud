@@ -15,8 +15,8 @@ export async function buildFixtureImage(image:string,root:string,budgetMs=120000
   for(let attempt=1;;attempt++){
    try{await docker('pull','node:26');break;}
    catch(error){
-    const failure=error as {code?:string;stderr?:string},pause=attempt*1000;
-    const transient=failure.code==='ETIMEDOUT'||/\b(?:500|502|503|504)\b|Client\.Timeout|i\/o timeout|TLS handshake timeout|context deadline exceeded|connection reset by peer|unexpected EOF/i.test(String(failure.stderr));
+    const failure=error as {stderr?:string},pause=attempt*1000;
+    const transient=/\b(?:500|502|503|504)\b|Client\.Timeout|i\/o timeout|TLS handshake timeout|context deadline exceeded|connection reset by peer|unexpected EOF/i.test(String(failure.stderr));
     if(!transient||attempt>=3||remaining()<=pause)throw error;
     await delay(pause);
     if(remaining()<=0)throw error;
