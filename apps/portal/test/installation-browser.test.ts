@@ -3,6 +3,7 @@ import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
 import axe from 'axe-core';
+import {admitPointFixture} from '../../../packages/backups/test/fixtures/verification.ts';
 import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
 import {startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
@@ -33,7 +34,8 @@ for(const locale of ['en','es'] as const)test(`${locale} installation status and
   await f.db.pool.query("INSERT INTO backup_locations(venue_id,installation_id,endpoint,bucket,region) VALUES($1,$2,'https://store.test','browser-fixture','local')",[installed.venueId,installed.installationId]);
   await f.db.pool.query("INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,1,'unusable-fixture-key')",[installed.venueId]);
   await f.db.pool.query('INSERT INTO backup_captures(id,venue_id,installation_id,key_version) VALUES($1,$2,$3,1)',[pointId,installed.venueId,installed.installationId]);
-  await f.db.pool.query("INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules,verification) VALUES($1,$2,$3,1,'snapshot',$4,$5,1,$6,'daily',$7,'{}','verified')",[pointId,installed.venueId,installed.installationId,'snapshots/'+pointId,'0'.repeat(64),capturedAt,randomUUID()]);
+  await f.db.pool.query("INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules,verification) VALUES($1,$2,$3,1,'snapshot',$4,$5,1,$6,'daily', $7,jsonb_build_object('core',1),'verified')",[pointId,installed.venueId,installed.installationId,'snapshots/'+pointId,'0'.repeat(64),capturedAt,randomUUID()]);
+  await admitPointFixture(f.db.pool,pointId);
 
   await page.getByRole('button',{name:c.viewSnapshots,exact:true}).click();await page.getByLabel(c.chooseSnapshot,{exact:true}).waitFor();
   await choose.selectOption(org2);assert.equal(await page.getByLabel(c.chooseSnapshot,{exact:true}).count(),0);await choose.selectOption(owner.organisationId);assert.equal(await page.getByLabel(c.chooseSnapshot,{exact:true}).count(),0);

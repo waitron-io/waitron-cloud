@@ -44,3 +44,14 @@ test('monitoring receipt requires the separate 36-to-37 upgrade and both restore
  for(const key of names)for(const change of [v=>delete v.checks[key],v=>v.checks[key]=false]){const v=structuredClone(valid);change(v);assert.throws(()=>verify(v),/schema_upgrade_receipt/,key);}
  for(const change of [v=>v.schemaVersion=3,v=>v.releases.old.migrations=35,v=>v.releases.new.migrations=38,v=>v.releases.new.head=v.releases.old.head,v=>v.releases.old.head='main',v=>v.checks.pairingUpgraded=true,v=>v.checks.secret='private',v=>v.cleanup.checkouts=1,v=>v.cleanup.containers=1,v=>v.cleanup.volumes=1,v=>v.driver.key='private']){const v=structuredClone(valid);change(v);assert.throws(()=>verify(v),/schema_upgrade_receipt/);}
 });
+test('backup verification receipt requires legacy refusal, preserved history and keys, current evidence and restored v2 binding',async()=>{
+ const {verifySchemaUpgradeReceipt:verify}=await import(path.href);
+ const names=['oldStarted','newRefusedOld','migrationInterrupted','rollbackComplete','newRefusedInterrupted','retryApplied','oldRefusedNew','newStarted','identityPreserved','tenantsIsolated','completionRetry','pendingMailPreserved','mailDelivered','backupRestored','oldRecovered','wrongKeyRefused','upgradedUnchanged','accountStatePreserved','relayStatePreserved','monitoringStatePreserved'];
+ const backupNames=['legacyUnqualified','historyPreserved','keysPreserved','holdsPreserved','freshEvidence','v2Binding','oldBinaryRefused','restartIdempotent','oldSqlUnchanged','restoredEvidence','restoredHistory','restoredKeys','restoredHolds','restoredV2Binding','restoredLegacyUnqualified'];
+ const valid={schemaVersion:5,measuredAt:'2026-10-22T04:00:00.000Z',driver:{head:'c'.repeat(40),dirty:false},releases:{old:{head:'a'.repeat(40),migrations:42,digest:'a'.repeat(64)},new:{head:'b'.repeat(40),migrations:43,digest:'b'.repeat(64)}},checks:Object.fromEntries(names.map(name=>[name,true])),backupVerification:Object.fromEntries(backupNames.map(name=>[name,true])),timings:{upgradeMs:1,recoveryMs:2},cleanup:{containers:0,volumes:0,checkouts:0},limitations:['Synthetic database state; no archive verification or fiscal authority.']};
+ assert.equal(verify(valid),valid);
+ for(const section of ['checks','backupVerification'])for(const key of Object.keys(valid[section]))for(const mode of ['missing','false','truthy']){
+  const v=structuredClone(valid);if(mode==='missing')delete v[section][key];else v[section][key]=mode==='false'?false:'true';assert.throws(()=>verify(v),/schema_upgrade_receipt/,`${section}.${key} ${mode}`);
+ }
+ for(const change of [v=>delete v.backupVerification,v=>v.backupVerification.legacyPromoted=true,v=>v.backupVerification.privateKey='secret',v=>v.releases.new.migrations=42,v=>v.releases.old.migrations=41,v=>v.releases.new.migrations=44,v=>v.releases.new.digest=v.releases.old.digest,v=>v.schemaVersion=4]){const v=structuredClone(valid);change(v);assert.throws(()=>verify(v),/schema_upgrade_receipt/);}
+});

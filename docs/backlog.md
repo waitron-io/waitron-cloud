@@ -1222,6 +1222,13 @@ notifications separately.
   stay unavailable and deployment enforcement stays off. Deployment still needs
   writable private controller state separate from its read-only configuration
   mount before enabling a backup profile.
+  Task 9 adds portal wording that separates checked data from activation and treats
+  inconclusive checks as pending. The version 5 schema proof targets migrations
+  42-to-43 with synthetic legacy history, recovery holds, external backup keys,
+  current evidence and v2 request bindings. Actual old-to-new/disaster proof and
+  final root checks are still pending at this candidate commit; the genuine joint
+  proof and reviewed release remain open. The earlier schema receipt versions and
+  all fiscal authority rules remain unchanged.
   The PR5 adapters are reconciled with current main, preserving their earlier
   storage, account, remote and controller behavior and historical test evidence.
   Portal copy, schema-upgrade receipts and a joint capture-to-recovery proof against

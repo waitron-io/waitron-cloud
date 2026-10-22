@@ -220,9 +220,21 @@ You can run the reader and retention checks with
 `node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test test/catalogue.test.ts test/key-operations.test.ts test/managed-streams.test.ts`
 and the monitoring/history checks with
 `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/monitoring.test.ts test/history-cleanup.test.ts`.
-Portal copy, upgrade receipts, the genuine joint proof and the reviewed release
-remain unfinished. Keep snapshots unavailable and
-plan enforcement off.
+The portal explains that a successful data restore check needs separate activation
+permission. An unavailable check keeps the copy pending without calling it corrupt.
+The English and Spanish browser checks cover current evidence, historical protection,
+recovery controls and verified timestamps at phone and desktop widths in both themes.
+
+You can run the schema-upgrade proof with
+`node scripts/schema-upgrade-receipt.mjs /tmp/cloud-backup-schema-upgrade.json --backup-verification --old a31df0093529f5ebccc6fe3561dbcd194166ce48 --new <committed-candidate-SHA>`
+and validate it with
+`node scripts/verify-schema-upgrade-receipt.mjs /tmp/cloud-backup-schema-upgrade.json`.
+Version 5 records the 42-to-43 migration, interrupted rollback, old-binary refusal,
+legacy retention, matching external keys and restored v2 evidence. Its evidence is
+synthetic and cannot qualify a genuine archive or release image. The earlier receipt
+versions keep their original release pairs and assertions.
+The genuine joint proof and reviewed release remain unfinished. Keep snapshots
+unavailable and plan enforcement off.
 You can exercise these rules with
 `node scripts/test-postgres.mjs exec node --test packages/backups/test/worker-admission.test.ts packages/backups/test/worker.test.ts`.
 The synthetic fixtures test admission and isolation; the complete genuine

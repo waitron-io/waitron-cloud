@@ -29,3 +29,9 @@ test('monitoring quiet upgrades select only their complete distinct pinned pair'
  assert.deepEqual(fixture.upgradeRevisions(['--monitoring-quiet',...pair]),want);assert.deepEqual(fixture.upgradeRevisions([...pair,'--monitoring-quiet']),want);
  for(const args of [['--monitoring-quiet'],['--monitoring-quiet','--old','a'.repeat(40)],['--monitoring-quiet','--old','main','--new','b'.repeat(40)],['--monitoring-quiet','--old','a'.repeat(40),'--new','a'.repeat(40)],['--monitoring-quiet','--monitoring-quiet',...pair],['--monitoring-quiet','--relay-stop',...pair],['--relay-stop','--monitoring-quiet',...pair]])assert.throws(()=>fixture.upgradeRevisions(args),/revisions/);
 });
+test('backup verification upgrades select only their complete pinned pair without selecting a historical proof',()=>{
+ const pair=['--old','a'.repeat(40),'--new','b'.repeat(40)],want={oldHead:'a'.repeat(40),newHead:'b'.repeat(40),factor:false,backupVerification:true};
+ assert.deepEqual(fixture.upgradeRevisions(['--backup-verification',...pair]),want);
+ assert.deepEqual(fixture.upgradeRevisions([...pair,'--backup-verification']),want);
+ for(const args of [['--backup-verification'],['--backup-verification',...pair,'--backup-verification'],['--backup-verification','--relay-stop',...pair],['--monitoring-quiet','--backup-verification',...pair],['--backup-verification','--old','main','--new','b'.repeat(40)]])assert.throws(()=>fixture.upgradeRevisions(args),/revisions/);
+});
