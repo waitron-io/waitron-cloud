@@ -125,7 +125,6 @@ export async function replayPrivateDay(args) {
       at('stream-open');
       stream = await openReplayStream({ ...streamOptions, source, root, journal, database: freshDatabase, signal, onDiagnostic: diagnose });
       at('startup');
-      await observeFor(streamOptions.startupSeconds, signal);
       await stream.setPhase('workload');
     }
     let successfulSales = 0;

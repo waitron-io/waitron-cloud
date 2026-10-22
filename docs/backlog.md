@@ -1364,7 +1364,26 @@ notifications separately.
   itself refuses, its error can still be generic; preserve the private journal's
   validated trace before fixture cleanup. Both historical paced failures remain
   unexplained. Capture the trace on recurrence and fix its cause; preserve the 207-sale restore, integrity, source and
-  cleanup checks and limits.
+  cleanup checks and limits. An unchanged generated reproduction passed 13 times
+  locally and 36 times across all 12 jobs of
+  [Linux run 39857085282](https://github.com/waitron-io/waitron-cloud/actions/runs/39857085282)
+  at `42f3b05d981769fb754ebcf984766a4f885f284e`. These passes do not identify or
+  correct the historical failures. Local scratch samples peaked at 22,444 KiB
+  within the unchanged 65,536 KiB limit; those samples do not establish the peak
+  during a failure. The temporary branch-only investigation workflow is removed.
+  A controlled child-process test separately reproduces premature stream readiness:
+  a completed read can release workload before the first successful upload.
+  Readiness now waits for a completed successful native PUT, matching the existing
+  startup admission requirement. Reads, refused and unfinished writes do not
+  satisfy it, and the original deadline still collects a writer that never uploads.
+  This fixes the reproduced readiness gap; without a trace from the historical
+  failures, it does not identify their cause. Startup observation keeps the original
+  first-transfer clock and overlaps upload readiness. The first candidate instead
+  waited for an upload and then began a separate observation; a real generated
+  reproduction exhausted the unchanged 4.01-second deadline during startup.
+  The corrected composition preserves the full two-second observation, the idle
+  refusal, early-timer-wake checks and every original deadline. Diagnostic-only
+  generated failures now retain their phase and elapsed-stage trace.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.
