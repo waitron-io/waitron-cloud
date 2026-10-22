@@ -4,6 +4,7 @@ import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
 import test from 'node:test';
 
 const workflow = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
@@ -111,8 +112,9 @@ test('browser workflow delegates retries to owned cleanup with permission to sto
   assert.doesNotMatch(browserStep, /for attempt|pkill|killall|rm .*lock/);
 });
 
-async function retry(t, command, options = []) {
-  const child = spawn('python3', ['scripts/ci-download.py', '--timeout', '1', '--attempts', '2',
+async function retry(t, command, options = [], loader = null) {
+  const program = loader ? ['-c', loader] : ['scripts/ci-download.py'];
+  const child = spawn('python3', [...program, '--timeout', '1', '--attempts', '2',
     '--grace', '0.2', '--lock-wait', '0.3', '--retry-delay', '0.01', ...options, '--', ...command], {
     cwd: new URL('../', import.meta.url), stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -196,6 +198,110 @@ while True: time.sleep(0.1)
   assert.equal((done.output.match(/Download attempt \d/g) ?? []).length, 1);
   assert.throws(() => process.kill(pid, 0), {code: 'ESRCH'});
 });
+
+test('a second cancellation signal cannot interrupt cleanup of its termination-resistant child', {timeout: 5000}, async t => {
+  const {child, result} = await retry(t, ['python3', '-u', '-c', `
+import os, signal, time
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+print('CHILD=' + str(os.getpid()), flush=True)
+os.close(1); os.close(2)
+while True: time.sleep(0.1)
+`], ['--grace', '0.4']);
+  let output = '';
+  const pid = await new Promise(resolve => child.stdout.on('data', data => {
+    output += data;
+    const match = output.match(/CHILD=(\d+)/);
+    if (match) resolve(Number(match[1]));
+  }));
+  t.after(() => { try { process.kill(pid, 'SIGKILL'); } catch {} });
+  child.kill('SIGINT');
+  await delay(50);
+  child.kill('SIGTERM');
+  const done = await result;
+  assert.equal(done.code, 130, done.output);
+  assert.equal((done.output.match(/Download attempt \d/g) ?? []).length, 1);
+  assert.throws(() => process.kill(pid, 0), {code: 'ESRCH'});
+});
+
+test('cancelling the lock wait starts no installer and preserves the unrelated holder', {timeout: 5000}, async t => {
+  const {holder, lock} = await heldLock(t);
+  const loader = `
+import importlib.util, sys
+spec=importlib.util.spec_from_file_location('supervisor','scripts/ci-download.py')
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+wait=module.wait_for_locks
+def ready(*args,**kwargs):
+    print('LOCK_WAIT_READY',flush=True)
+    return wait(*args,**kwargs)
+module.wait_for_locks=ready
+sys.argv=['scripts/ci-download.py',*sys.argv[1:]]
+raise SystemExit(module.main())
+`;
+  const {child, result} = await retry(t, ['python3', '-c', 'print("INSTALL STARTED")'], ['--lock', lock, '--lock-wait', '3'], loader);
+  let output = '';
+  await new Promise(resolve => child.stdout.on('data', data => {
+    output += data;
+    if (output.includes('LOCK_WAIT_READY')) resolve();
+  }));
+  child.kill('SIGTERM');
+  const done = await result;
+  assert.equal(done.code, 143, done.output);
+  assert.doesNotMatch(done.output, /Download attempt|INSTALL STARTED/);
+  assert.equal(holder.exitCode, null);
+  assert.equal(holder.signalCode, null);
+});
+
+test('cancelling a pending retry starts no second attempt', {timeout: 5000}, async t => {
+  const {child, result} = await retry(t, ['python3', '-u', '-c', 'print("FAILED_READY",flush=True);raise SystemExit(9)'], ['--retry-delay', '2']);
+  let output = '';
+  await new Promise(resolve => child.stdout.on('data', data => {
+    output += data;
+    if (output.includes('FAILED_READY')) resolve();
+  }));
+  await delay(100);
+  child.kill('SIGINT');
+  const done = await result;
+  assert.equal(done.code, 130, done.output);
+  assert.equal((done.output.match(/Download attempt \d/g) ?? []).length, 1);
+});
+
+for (const exitCode of [0, 9]) {
+  test(`an installer exiting ${exitCode} cannot leave a background child`, {timeout: 5000}, async t => {
+    const root = await mkdtemp(join(tmpdir(), 'download-exited-')), pids = join(root, 'children');
+    t.after(async () => {
+      for (const pid of (await readFile(pids, 'utf8').catch(() => '')).split('\n').filter(Boolean)) {
+        try { process.kill(Number(pid), 'SIGKILL'); } catch {}
+      }
+      await rm(root, {recursive: true, force: true});
+    });
+    const {result} = await retry(t, ['python3', '-u', '-c', `
+import os, pathlib, subprocess, sys, time
+root=pathlib.Path(sys.argv[1])
+ready=root / str(os.getpid())
+child=subprocess.Popen([sys.executable,'-c',"""
+import pathlib, signal, sys, time
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+pathlib.Path(sys.argv[1]).write_text('ready')
+while True: time.sleep(0.01)
+""",str(ready)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+with (root / 'children').open('a') as file: file.write(str(child.pid)+'\\n')
+while not ready.exists(): time.sleep(0.01)
+sys.exit(${exitCode})
+`, root]);
+    const done = await result;
+    assert.equal(done.code, exitCode === 0 ? 0 : 1, done.output);
+    const owned = (await readFile(pids, 'utf8')).trim().split('\n').map(Number);
+    assert.equal(owned.length, exitCode === 0 ? 1 : 2);
+    for (const pid of owned) {
+      const deadline = Date.now() + 1000;
+      while (Date.now() < deadline) {
+        try { process.kill(pid, 0); } catch { break; }
+        await delay(10);
+      }
+      assert.throws(() => process.kill(pid, 0), {code: 'ESRCH'});
+    }
+  });
+}
 
 // Leaving Azure configured must exhaust the real supervisor instead of reaching installation.
 test('workflow escapes an unavailable Ubuntu mirror before installing browser dependencies', {timeout: 15000}, async t => {

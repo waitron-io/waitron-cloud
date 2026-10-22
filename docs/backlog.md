@@ -2431,22 +2431,43 @@ notifications separately.
   setup and queueing. Measure both the candidate and its merge before claiming the
   target is met.
   Browser packages install Chromium with at most two attempts, each bounded to
-  120 seconds plus ten seconds to stop it. The privileged CI supervisor gives
-  each attempt its own process group, stops that group after success, failure,
-  timeout or cancellation, and reaps its direct child. Running the supervisor
-  with root permission lets it stop apt's root children; the explicit browser
-  cache path keeps the installed browser available to the runner. Before each
+  120 seconds plus a shared ten-second cleanup allowance. On Linux, the privileged
+  supervisor adopts its own orphaned descendants, including dpkg processes that
+  start a separate session. It checks current parentage before signalling through
+  stable process handles, and reaps adopted children after success, failure,
+  timeout or cancellation. A second cancellation signal cannot interrupt that
+  cleanup. Kernel handle and signal support are probed before installation;
+  pre-existing children cause refusal instead of being assigned to the attempt.
+  Each process receives at most one signal per cleanup phase. Unconfirmed
+  cleanup refuses another attempt. The explicit browser cache path keeps the
+  installed browser available to the runner. Before each
   attempt it waits at most 30 seconds for the existing apt/dpkg locks, without
   deleting lock files or stopping another process. The retry delay stays five
-  seconds and all browser assertions and test deadlines stay intact.
+  seconds and all browser assertions and test deadlines stay intact. These
+  configured allowances total at most `2 × (30 + 120 + 10) + 5 = 325` seconds,
+  excluding job setup; the job still has its eight-minute limit. The lock waits
+  are additional time introduced by the earlier supervisor change.
+  D109's retrospective review found that apt could move dpkg outside the earlier
+  process group and that a second cancellation could skip the forced stop.
+  Real Linux session/lock checks now cover escaped children, stale ownership
+  data, unavailable kernel support, inherited children, repeated termination
+  and refused cleanup while preserving an
+  unrelated holder. Host checks cover repeated cancellation and background
+  children after successful and failed parent exits. A real disposable local
+  package install leaves no apt/dpkg/install-script processes behind after its
+  timeout. The interrupted package configuration still refuses the next install:
+  cleanup releases process ownership and locks, not dpkg's unfinished records.
+  Use a fresh CI runner; this helper does not run automatic package repair.
   [Run 39744422290](https://github.com/waitron-io/waitron-cloud/actions/runs/39744422290/job/119709401502)
   failed before UI-smoke tests: a timed-out dependency install left apt holding
   its lock. A controlled reproduction runs the workflow shell with a real
   lock-holding child that ignores termination: the old retry fails, while the
   supervised retry kills that child and succeeds. Run
-  `node --test scripts/ci-download.test.mjs scripts/ci-workflow.test.mjs` to check
+  `node --test scripts/ci-download.test.mjs scripts/ci-download-linux.test.mjs scripts/ci-workflow.test.mjs` to check
   retry exhaustion, cancellation, lock release and refusal to touch an unrelated
-  lock holder. Actual CI separately qualifies the root boundary and browser
+  lock holder. On macOS, set `CI_DOWNLOAD_LINUX_IMAGE` to a cached Linux image
+  with Python 3 (for example `node:26`) to execute the Linux checks in an owned
+  container. Actual CI separately qualifies the root boundary and browser
   cache access. This handling does not establish why the outside download stalled.
   Ubuntu's Azure mirror and primary archive have both exhausted these limits.
   In [run 39804073424](https://github.com/waitron-io/waitron-cloud/actions/runs/39804073424/attempts/2),
@@ -2477,6 +2498,13 @@ notifications separately.
   The rewrite recognises the runner's current lowercase, whitespace-delimited
   URIs. Qualify compact Deb822 URI fields or capitalised hostnames before
   widening that support when a runner changes its source format.
+  D109's retrospective review also leaves explicit follow-ups for the source
+  helper: report a changed runner layout when no recognised URI is found; refuse
+  or handle a non-UTF-8 vendor file before partially rewriting other sources;
+  and add a deliberate-fault check for the leading whitespace boundary. ARM
+  runner sources remain unqualified; check their archive location before adding
+  that architecture. The current workflow uses x64 runners. D117 preserves line
+  endings, closing the review's separate newline-format note.
   A separate backup-fixture download remains open: D107's corrected-head
   [run 39776383906](https://github.com/waitron-io/waitron-cloud/actions/runs/39776383906/job/119816424815)
   could not build the verification fixture because Docker Hub returned
@@ -3464,15 +3492,17 @@ notifications separately.
 D104's documentation-only [run 39733028534](https://github.com/waitron-io/waitron-cloud/actions/runs/39733028534/job/119672295764)
 failed before account HTTP shard 3 started its tests: Docker's request to
 `auth.docker.io` timed out while pulling `postgres:18-alpine`. The recorded failure
-is in `scripts/test-postgres.mjs:30`, before the owned container is marked running.
+is in the container-start path of `scripts/test-postgres.mjs`, before the owned
+container is marked running.
 This is separate from the reset-mail capture failure below. No runtime, test,
 fixture, workflow or dependency change accompanied the incident, and the external
 registry failure's cause remains unproved.
 
 The test launcher now acquires both images before creating either container. It
 uses cached images without registry access. For a missing image, it retries a
-recognised connection failure at most three times within one shared 120-second
-acquisition budget, including inspection and retry waits. Access refusals and
+recognised connection failure with at most three attempts within each image's
+120-second acquisition budget, including inspection and retry waits. A pull
+killed at that deadline has no time left for another attempt. Access refusals and
 other terminal errors stop immediately; a failed daemon inspection does not
 become an image pull. Container starts disable implicit pulling and are never
 retried. Package commands, assertions, readiness deadlines and owned cleanup retain
@@ -3480,6 +3510,14 @@ their existing behaviour. Run `node --test scripts/ci-test-postgres.test.mjs` fo
 the controlled launcher checks, including timeout termination, retry exhaustion,
 Mailpit acquisition, command exit status and cleanup. These checks qualify local
 failure handling; they do not prove Docker Hub availability or explain its outage.
+D109's retrospective review left additional coverage open: prove the checks before
+and after retry waits, forced termination and each recognised connection response
+with deliberate faults. A timeout generated by the launcher exhausts the shared
+per-image budget; qualify its redundant retry classification separately without
+increasing that budget. Also qualify cancellation during acquisition: the reviewed
+fixture observed container creation followed by cleanup after a cancellation that
+arrived during a synchronous pull. It did not leak a container. The review did not
+prove whether client termination also stops the daemon's registry transfer.
 
 ## Account HTTP reset-mail capture
 
