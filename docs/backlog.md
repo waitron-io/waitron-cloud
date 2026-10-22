@@ -2456,13 +2456,16 @@ notifications separately.
   [Ubuntu's archive verification](https://documentation.ubuntu.com/security/software-integrity/archive-verification/)
   and the [mirror operator's archive](https://mirrors.kernel.org/).
   Run `node --test scripts/ci-browser-source.test.mjs scripts/ci-download.test.mjs`
-  to check source preservation and the workflow against controlled stalled Azure
+  to check source preservation and the workflow against controlled stalled runner mirror-file
   and primary sources. Both must reach the alternative in one attempt. Real
   Actions qualification must also show two consecutive full runs of the same
   head and its independent merge run, with one install attempt and every portal
   and UI-smoke test executed. The public mirror can still fail; the existing
   supervisor must then refuse the install within its unchanged limits. The
   observed transfer bottlenecks do not establish the outside servers' cause.
+  The rewrite recognises the runner's current lowercase, whitespace-delimited
+  URIs. Qualify compact Deb822 URI fields or capitalised hostnames before
+  widening that support when a runner changes its source format.
   A separate backup-fixture download remains open: D107's corrected-head
   [run 39776383906](https://github.com/waitron-io/waitron-cloud/actions/runs/39776383906/job/119816424815)
   could not build the verification fixture because Docker Hub returned

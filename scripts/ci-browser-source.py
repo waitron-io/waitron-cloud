@@ -16,14 +16,16 @@ def main():
     for path in files:
         if not path.is_file():
             continue
-        original = path.read_text()
+        with path.open(newline='') as source:
+            original = source.read()
         # Change the mirror URI only; suites, components and signing keys stay intact.
         updated = re.sub(r'(?<!\S)https?://(?:azure\.)?archive\.ubuntu\.com/ubuntu(?=/?(?:\s|$))',
                          'https://mirrors.kernel.org/ubuntu', original)
         updated = re.sub(r'(?<!\S)mirror\+file:/etc/apt/apt-mirrors\.txt(?=\s|$)',
                          'https://mirrors.kernel.org/ubuntu', updated)
         if updated != original:
-            path.write_text(updated)
+            with path.open('w', newline='') as source:
+                source.write(updated)
             print(f'Using https://mirrors.kernel.org/ubuntu in {path}', flush=True)
 
 
