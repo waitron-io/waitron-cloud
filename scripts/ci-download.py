@@ -21,6 +21,14 @@ def adopt_descendants():
         return False
     if not hasattr(os, 'pidfd_open') or not hasattr(signal, 'pidfd_send_signal'):
         raise RuntimeError('Linux process ownership tracking is unavailable')
+    if owned_children():
+        raise RuntimeError('Pre-existing children cannot be assigned to an install attempt')
+    # Python can expose these functions even when the kernel cannot implement them.
+    handle = os.pidfd_open(os.getpid())
+    try:
+        signal.pidfd_send_signal(handle, 0)
+    finally:
+        os.close(handle)
     # Reparent orphaned descendants here even when dpkg starts another session.
     libc = ctypes.CDLL(None, use_errno=True)
     if libc.prctl(36, 1, 0, 0, 0) != 0:  # PR_SET_CHILD_SUBREAPER
@@ -33,6 +41,7 @@ def adopt_descendants():
 def stop_adopted(child, grace):
     deadline = time.monotonic() + grace
     term_deadline = deadline - min(1, grace / 2)
+    signalled = set()
     while True:
         child.poll()
         children = owned_children()
@@ -51,7 +60,12 @@ def stop_adopted(child, grace):
                 # must never turn a stale child number into an unrelated target.
                 if parent == os.getpid():
                     sig = signal.SIGTERM if time.monotonic() < term_deadline else signal.SIGKILL
-                    signal.pidfd_send_signal(handle, sig)
+                    with open(f'/proc/{pid}/stat') as status:
+                        started = status.read().rsplit(')', 1)[1].split()[19]
+                    identity = (pid, started, sig)
+                    if identity not in signalled:
+                        signalled.add(identity)
+                        signal.pidfd_send_signal(handle, sig)
             except (ProcessLookupError, FileNotFoundError):
                 pass
             except OSError:

@@ -2436,7 +2436,9 @@ notifications separately.
   start a separate session. It checks current parentage before signalling through
   stable process handles, and reaps adopted children after success, failure,
   timeout or cancellation. A second cancellation signal cannot interrupt that
-  cleanup. Missing ownership support stops before installation; unconfirmed
+  cleanup. Kernel handle and signal support are probed before installation;
+  pre-existing children cause refusal instead of being assigned to the attempt.
+  Each process receives at most one signal per cleanup phase. Unconfirmed
   cleanup refuses another attempt. The explicit browser cache path keeps the
   installed browser available to the runner. Before each
   attempt it waits at most 30 seconds for the existing apt/dpkg locks, without
@@ -2448,7 +2450,8 @@ notifications separately.
   D109's retrospective review found that apt could move dpkg outside the earlier
   process group and that a second cancellation could skip the forced stop.
   Real Linux session/lock checks now cover escaped children, stale ownership
-  data, unavailable ownership support and refused cleanup while preserving an
+  data, unavailable kernel support, inherited children, repeated termination
+  and refused cleanup while preserving an
   unrelated holder. Host checks cover repeated cancellation and background
   children after successful and failed parent exits. A real disposable local
   package install leaves no apt/dpkg/install-script processes behind after its

@@ -45,7 +45,15 @@ if n == 1:
     subprocess.Popen([sys.executable, '-c', """
 import fcntl, os, pathlib, signal, sys, time
 root = pathlib.Path(sys.argv[1])
-signal.signal(signal.SIGTERM, signal.SIG_IGN)
+if os.environ['PROBE_MODE']=='term-once':
+    count=0
+    def terminated(signum,frame):
+        global count
+        count+=1
+        (root / 'term-count').write_text(str(count))
+    signal.signal(signal.SIGTERM,terminated)
+else:
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
 with (root / 'apt.lock').open('a+') as lock:
     fcntl.lockf(lock, fcntl.LOCK_EX)
     (root / 'detached.pid').write_text(str(os.getpid()))
@@ -59,7 +67,7 @@ with (root / 'apt.lock').open('a+') as lock:
     detached = None
     try:
         supervisor = [sys.executable, '-I', sys.argv[1]]
-        if mode != 'detached':
+        if mode not in ('detached','term-once'):
             wrapper = root / 'supervisor.py'
             wrapper.write_text('''
 import importlib.util, os, signal, sys
@@ -85,6 +93,17 @@ elif os.environ['PROBE_MODE']=='adoption-refused':
             module.ctypes.set_errno(1)
             return -1
     module.ctypes.CDLL=lambda *args,**kwargs:Refused()
+elif os.environ['PROBE_MODE']=='kernel-refused':
+    def unavailable_handle(*args): raise OSError(38,'function not implemented')
+    os.pidfd_open=unavailable_handle
+elif os.environ['PROBE_MODE']=='kernel-send-refused':
+    def unavailable_sender(*args): raise OSError(38,'function not implemented')
+    signal.pidfd_send_signal=unavailable_sender
+elif os.environ['PROBE_MODE']=='preexisting':
+    child=module.subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)'],
+        stdout=module.subprocess.DEVNULL,stderr=module.subprocess.DEVNULL)
+    from pathlib import Path
+    (Path(os.environ['FIXTURE_ROOT'])/'inherited.pid').write_text(str(child.pid))
 else:
     send=signal.pidfd_send_signal
     def refused_kill(handle,sig,*args):
@@ -99,11 +118,13 @@ raise SystemExit(module.main())
             '--grace', '0.4', '--lock-wait', '0.2', '--retry-delay', '0.01',
             *(['--lock', str(lock)] if mode != 'uncertain' else []),
             '--', sys.executable, str(installer), str(root),
-        ], env={**os.environ, 'PROBE_MODE':mode, 'FOREIGN_PID':str(foreign.pid)},
+        ], env={**os.environ, 'PROBE_MODE':mode, 'FOREIGN_PID':str(foreign.pid), 'FIXTURE_ROOT':str(root)},
             capture_output=True, text=True, timeout=5)
-        if mode in ('unavailable','adoption-refused'):
+        if mode in ('unavailable','adoption-refused','kernel-refused','kernel-send-refused','preexisting'):
             assert result.returncode == 1, result.stdout + result.stderr
             assert not (root / 'attempts').exists(), 'unconfirmed ownership started an installer'
+            if mode == 'preexisting':
+                assert not gone(int((root / 'inherited.pid').read_text())), 'a pre-existing child was stopped'
         elif mode == 'uncertain':
             detached = int((root / 'detached.pid').read_text())
             assert result.returncode == 1, result.stdout + result.stderr
@@ -116,6 +137,8 @@ raise SystemExit(module.main())
             assert (root / 'attempts').read_text() == '2'
             assert (root / 'installed').read_text() == 'yes'
             assert gone(detached), 'the detached lock holder survived supervision'
+            if mode == 'term-once':
+                assert (root / 'term-count').read_text() == '1', 'termination was sent repeatedly'
         assert foreign.poll() is None, 'an unrelated holder was stopped'
         with unrelated_lock.open('a+') as handle:
             try:
@@ -124,7 +147,7 @@ raise SystemExit(module.main())
                 pass
             else:
                 raise AssertionError('the unrelated lock was released')
-        if mode in ('unavailable','adoption-refused'):
+        if mode in ('unavailable','adoption-refused','kernel-refused','kernel-send-refused','preexisting'):
             print(json.dumps({'attempts':0, 'ownershipUnavailable':True, 'unrelatedAlive':True}))
         elif mode == 'uncertain':
             print(json.dumps({'attempts':1, 'cleanupUnconfirmed':True, 'unrelatedAlive':True}))
