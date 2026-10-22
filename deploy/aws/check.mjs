@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, readdir, lstat, realpath, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, lstat, realpath, readFile, writeFile, mkdir, rm, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +12,7 @@ const runProcess = promisify(execFile);
 const inspector = fileURLToPath(new URL('./inspect.py', import.meta.url));
 
 function isSource(name) {
-  return /\.(?:tf|tofu|tfvars|tftest\.hcl|tofutest\.hcl|tf\.json|tofu\.json|tftest\.json|tofutest\.json|tfvars\.json)$/.test(name);
+  return name.split('/').at(-1) === '.terraform.lock.hcl' || /\.(?:tf|tofu|tfvars|tftest\.hcl|tofutest\.hcl|tf\.json|tofu\.json|tftest\.json|tofutest\.json|tfvars\.json)$/.test(name);
 }
 
 async function copySources(source, target) {
@@ -67,27 +67,91 @@ async function copyTrackedSources(source, target) {
 
 export async function checkSources(directory, { execute = runProcess, trackedOnly = false } = {}) {
   const scratch = await mkdtemp(join(tmpdir(), 'cloud-aws-inspection-'));
+  try {
+    if (trackedOnly) await copyTrackedSources(directory, join(scratch, 'source'));
+    else await copySources(directory, join(scratch, 'source'));
+    await inspectSnapshot(scratch, execute);
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
+async function inspectSnapshot(scratch, execute, image = toolsImage) {
   const name = `cloud-aws-inspection-${randomUUID()}`;
   const options = { timeout: 30_000, maxBuffer: 1024 * 1024, env: { PATH: process.env.PATH, HOME: process.env.HOME } };
   let submitted = false;
   try {
-    if (trackedOnly) await copyTrackedSources(directory, join(scratch, 'source'));
-    else await copySources(directory, join(scratch, 'source'));
+    await chmod(scratch, 0o755);
     await writeFile(join(scratch, 'inspect.py'), await readFile(inspector), { mode: 0o644 });
     submitted = true;
     await execute('docker', [
-      'run', '--rm', '--name', name, '--label', `io.waitron.aws-inspection=${name}`, '--pull', 'never', '--network', 'none', '--cap-drop', 'ALL',
+      'run', '--rm', '--name', name, '--label', `io.waitron.aws-inspection=${name}`, '--pull', 'never', '--network', 'none', '--cap-drop', 'ALL', '--user', '65532:65532',
       '--security-opt', 'no-new-privileges', '--read-only',
       '--tmpfs', '/tmp:rw,noexec,nosuid,size=64m', '--pids-limit', '64', '--memory', '256m', '--cpus', '1',
       '--mount', `type=bind,source=${scratch},target=/candidate,readonly`,
-      toolsImage, 'python', '-I', '/candidate/inspect.py', '/candidate/source',
+      image, 'python', '-I', '/candidate/inspect.py', '/candidate/source',
     ], options);
   } catch (error) {
     if (error.stderr?.trim()) throw new Error(error.stderr.trim());
     throw error;
   } finally {
+    if (submitted) await cleanupContainer(name, execute, options);
+  }
+}
+
+const suites = new Map([
+  ['canary', ['canary']],
+  ['accounts', ['modules/accounts', 'roots/accounts']],
+  ['state', ['modules/state', 'roots/state']],
+  ...['network', 'cell', 'database', 'storage', 'observability', 'ingress'].map((name) => [name, [`modules/${name}`]]),
+  ['custody', ['modules/custody', 'modules/workload-permissions', 'fixtures/custody']],
+  ['dns', ['modules/dns', 'roots/delegation']],
+  ['integration', ['roots/global', 'roots/country']],
+]);
+
+export async function runSuite(name, { directory = fileURLToPath(new URL('.', import.meta.url)), execute = runProcess } = {}) {
+  if (!suites.has(name)) throw new Error('Unknown infrastructure suite');
+  const options = { timeout: 30_000, maxBuffer: 4 * 1024 * 1024, env: { PATH: process.env.PATH, HOME: process.env.HOME } };
+  let image;
+  try {
+    const result = JSON.parse((await execute('docker', ['image', 'inspect', toolsImage], options)).stdout);
+    if (result.length !== 1 || !/^sha256:[a-f0-9]{64}$/.test(result[0].Id)) throw new Error('Invalid local image identity');
+    image = result[0].Id;
+  } catch (error) {
+    throw new Error('Local infrastructure tools unavailable; run node deploy/aws/check.mjs --prepare-tools', { cause: error });
+  }
+  const scratch = await mkdtemp(join(tmpdir(), 'cloud-aws-suite-'));
+  const container = `cloud-aws-suite-${randomUUID()}`;
+  let submitted = false;
+  try {
+    await copyTrackedSources(directory, join(scratch, 'source'));
+    const plan = suites.get(name).map((directory) => ({ directory, filter: `tests/${name}.tftest.hcl` }));
+    for (const entry of plan) {
+      try {
+        if (!(await lstat(join(scratch, 'source', entry.directory, entry.filter))).isFile()) throw new Error('Not a file');
+      } catch {
+        throw new Error(`Missing infrastructure suite source: ${entry.directory}/${entry.filter}`);
+      }
+    }
+    await inspectSnapshot(scratch, execute, image);
+    await writeFile(join(scratch, 'suite.json'), JSON.stringify(plan), { mode: 0o644 });
+    await writeFile(join(scratch, 'run.py'), await readFile(new URL('./run.py', import.meta.url)), { mode: 0o644 });
+    submitted = true;
+    const result = await execute('docker', [
+      'run', '--rm', '--name', container, '--label', `io.waitron.aws-inspection=${container}`,
+      '--pull', 'never', '--network', 'none', '--cap-drop', 'ALL', '--user', '65532:65532',
+      '--security-opt', 'no-new-privileges', '--read-only',
+      '--tmpfs', '/tmp:rw,noexec,nosuid,size=512m,mode=1777', '--pids-limit', '128', '--memory', '1g', '--cpus', '2',
+      '--mount', `type=bind,source=${scratch},target=/candidate,readonly`,
+      image, 'python', '-I', '/candidate/run.py',
+    ], { ...options, timeout: 300_000 });
+    return result.stdout;
+  } catch (error) {
+    if (error.stderr?.trim()) throw new Error(error.stderr.trim());
+    throw error;
+  } finally {
     try {
-      if (submitted) await cleanupContainer(name, execute, options);
+      if (submitted) await cleanupContainer(container, execute, options);
     } finally {
       await rm(scratch, { recursive: true, force: true });
     }
@@ -111,17 +175,21 @@ async function cleanupContainer(name, execute, options) {
   await execute('docker', ['container', 'rm', '--force', records[0].Id], options);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (process.argv.length === 3 && process.argv[2] === '--prepare-tools') {
-    try {
+if (process.argv[1] && await realpath(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const args = process.argv.slice(2);
+  try {
+    if (args.length === 1 && args[0] === '--prepare-tools') {
       await prepareTools();
       console.log(`Prepared software image ${toolsImage}`);
-    } catch (error) {
-      console.error(error.message);
-      process.exitCode = 1;
+    } else if (args.length === 2 && args[0] === '--suite') {
+      process.stdout.write(await runSuite(args[1]));
+    } else if (args.length === 1 && args[0] === '--all') {
+      for (const name of suites.keys()) process.stdout.write(await runSuite(name));
+    } else {
+      throw new Error('Usage: node deploy/aws/check.mjs --prepare-tools | --suite <name> | --all');
     }
-  } else {
-    console.error('Infrastructure suite execution is not implemented; run the source-policy tests documented in docs/aws-infrastructure.md.');
+  } catch (error) {
+    console.error(error.message);
     process.exitCode = 1;
   }
 }

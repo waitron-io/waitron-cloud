@@ -5,10 +5,11 @@ plan. Cloud's first check refuses unsafe source files before an infrastructure c
 can start. It parses HCL, OpenTofu's configuration language, inside a container with no
 network connection and no host credentials or home-directory mount.
 
-Prepare the tools once, then run the source-policy checks:
+Prepare the tools once, then run the canary and source-policy checks:
 
 ```sh
 node deploy/aws/check.mjs --prepare-tools
+node deploy/aws/check.mjs --suite canary
 node --test --test-concurrency=1 deploy/aws/*.test.mjs
 ```
 
@@ -70,11 +71,32 @@ file before checking it; stage a deletion to remove it from the copy. Untracked 
 ignored files cannot change the candidate. Conflicted files, unsupported indexed paths,
 symlinks and files larger than 1 MiB are refused before a container starts. A staged
 alternative input, such as a variable file, remains visible so the parser can refuse it.
-The future suite runner still needs to use this copy boundary.
+The suite runner uses this boundary too. It inspects one source copy, then executes that
+same copy using the exact local image identifier it checked. Later checkout edits cannot
+change the files between inspection and execution. A staged provider lockfile is retained;
+its provider source, version, constraints and checksum syntax must match the supported
+AWS lockfile shape. Software preparation separately verifies the pinned archive bytes.
 
-Preparation and source inspection are available. The fixed `runSuite` entry point,
-repository canary and infrastructure handoff schema remain unbuilt. The rest of Task 1 in the
-[implementation plan](superpowers/plans/2026-10-22-cloud-aws-layer.md) supplies those parts.
+The canary checks a mocked Madrid region without declaring resources. A successful run
+ends with `Success! 1 passed, 0 failed.` Each suite initializes with `-backend=false`
+and `-input=false`, validates its configuration, then runs its named test file. Work happens
+in a fresh temporary filesystem inside the container. OpenTofu receives a closed set of
+environment settings, including the mirror configuration and empty AWS configuration and
+credential paths, so ambient command flags cannot change initialization. A failed command
+stops the suite. Each command has a 90-second deadline; each suite container has a
+five-minute deadline and limits of 1 GiB memory, two CPUs, 128 processes and 512 MiB of
+temporary storage. The source inspector has its separate smaller limits.
+
+You can select only `canary`, `accounts`, `state`, `network`, `cell`, `database`, `storage`,
+`custody`, `observability`, `ingress`, `dns` or `integration`. Each name selects fixed module
+and root paths; the CLI accepts no custom command or directory. `--all` runs those suites
+in order and refuses a missing test file. Only the canary is implemented so far, so
+`--all` currently reports its passing test, then fails on the missing accounts suite.
+It does not report the unfinished infrastructure as verified. Missing local tools produce
+the `--prepare-tools` setup instruction without downloading anything.
+
+The infrastructure handoff schema and remaining resource suites still need the work in the
+[implementation plan](superpowers/plans/2026-10-22-cloud-aws-layer.md).
 Passing source-policy tests does not qualify AWS permissions, deployed infrastructure,
 recovery or continuity. You still need separate approval before accessing AWS, creating
 accounts or resources, spending money or applying infrastructure.

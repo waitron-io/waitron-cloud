@@ -121,6 +121,21 @@ def inspect(directory):
         if path.is_dir():
             continue
         name = path.name
+        if name == ".terraform.lock.hcl":
+            lock = parse(path)
+            providers = list(blocks(lock, "provider"))
+            require(set(lock) == {"provider"} and len(providers) == 1, "provider lock must contain only the AWS provider")
+            address, body = providers[0]
+            require(address == "registry.opentofu.org/hashicorp/aws", "provider lock source is not pinned AWS")
+            require(literal(body.get("version")) == "6.42.0", "provider lock version is not pinned AWS")
+            require(set(body) <= {"version", "constraints", "hashes", "__is_block__"}, "provider lock contains unsupported fields")
+            if "constraints" in body:
+                require(literal(body["constraints"]) == "6.42.0", "provider lock constraints are not pinned AWS")
+            hashes = body.get("hashes")
+            require(isinstance(hashes, list) and hashes and all(
+                re.fullmatch(r"(?:zh:[a-f0-9]{64}|h1:[A-Za-z0-9+/]{43}=)", literal(value)) for value in hashes
+            ), "provider lock needs valid checksums")
+            continue
         require(not (name.endswith((".tofu", ".json", ".tfvars", ".tfvars.json", ".tofutest.hcl"))
                      or name in {"override.tf", "override.tf.json"} or name.endswith("_override.tf")),
                 f"{name}: unsupported alternative input file")
