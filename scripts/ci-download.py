@@ -72,13 +72,12 @@ def stop_adopted(child, grace):
 def stop_attempt(child, grace, adopted=False):
     if adopted:
         return stop_adopted(child, grace)
-    deadline = time.monotonic() + grace
     try:
         os.killpg(child.pid, signal.SIGTERM)
     except ProcessLookupError:
         pass
     try:
-        child.wait(timeout=grace / 2)
+        child.wait(timeout=grace)
     except subprocess.TimeoutExpired:
         pass
     # A leader can exit on TERM while a descendant keeps the package lock open.
@@ -87,7 +86,7 @@ def stop_attempt(child, grace, adopted=False):
     except ProcessLookupError:
         pass
     try:
-        child.wait(timeout=max(0, deadline - time.monotonic()))
+        child.wait(timeout=grace)
     except subprocess.TimeoutExpired:
         return False
     return True
