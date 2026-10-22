@@ -80,6 +80,59 @@ provider, Waitron authority and existing migration gates remain closed. C39's fu
 design was approved on 2026-10-22 around 08:35 for planning only, with exact daily
 schedule and first monitoring cohort still gated. C60 remains separate.
 
+## Launch platform work, in priority order
+
+Ordered at the owner's request on 2026-10-22. The order follows what stops the first real
+venue using a paid service. Each area gets its own design session with the owner, in this
+order. Remote access matters most because Waitron's customer-facing features wait on it
+(Waitron A951, A1013, A508, A509, A1012).
+
+1. **Production deployment.** Nothing reaches a real venue until Cloud runs somewhere:
+   "No public cloud service is deployed". Decided: AWS in Spain (`eu-south-2`), with Paris
+   (`eu-west-3`) as the extra encrypted backup copy. The
+   [C41 release and upgrade proposal](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md)
+   is unapproved, and C60 (compute and sizing) has no document. Missing: infrastructure
+   described in code (the repository has none), a pipeline that deploys (the only workflows
+   are `ci.yml`, `cloud-cost.yml` and `ui-release.yml`), the production domain and its DNS,
+   production secret custody (D101 proposes AWS KMS), backups of Cloud's own database on the
+   provider, and spending alerts on the AWS account. First session: the owner's decision on
+   C41, then C60, then the infrastructure.
+2. **Production monitoring, alerting and the status page.** No real venue should depend on a
+   Cloud nobody is watching. Built for test installations only: venue contact, snapshot age,
+   backup verification and remote-route checks, plus opt-in alert emails to venue owners
+   ([local monitoring](local-monitoring.md)). The
+   [C39 thresholds](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md) are
+   approved for planning only. [Incident response](incident-response.md) (D104) proposes the
+   owner as the only person on call and a free hosted status page. Missing: production
+   collection and retained history, checks from outside the affected cell, a chosen paging
+   provider, and the status page itself.
+3. **Billing.** Remote access and backups are paid services, and so is the rota solver
+   below. Today billing is one bullet under _Platform work to scope_. The plan switch is a
+   test-only one an operator sets by hand, and the usage ledger is "observational only"
+   ([usage metering](usage-metering.md)). Missing: what is charged for, prices and free
+   allowances; a payment provider and checkout; trials; Cloud's own invoices to venues under
+   Spanish rules, with the customer's tax number (signup leaves "Tax details, billing and
+   country-specific validation" to "the later billing journey"); failed payments;
+   cancellation; and closing an account.
+4. **Terms, the data processing agreement and service promises.** These are needed before
+   the first customer, paid or not, and a lawyer is needed for each, so the questions should
+   go out early. The [launch evidence](launch-evidence.md) requires "lawyer-reviewed terms",
+   and the D101 design lists six open lawyer questions. Missing: terms of service, the data
+   processing agreement with each venue, and the promises Cloud makes about how quickly a
+   venue is recovered, how much data a failure can lose, and uptime.
+5. **Roles and invitations.** Today an organisation has an owner and a yes/no "can register
+   venues", and nobody can be invited: "The exact roles and permitted actions remain to be
+   agreed" ([product and platform](product-and-platform.md)). Wanted: an owner brings in a
+   manager or an accountant with a fitting role. Organisations with several venues already
+   work; ownership transfer is deferred.
+6. **Support and the operator console.** Time-limited support access is built but unused:
+   "Nothing uses this primitive in production yet"
+   ([support grants](temporary-support-grants.md)). Missing: a way for a customer to ask for
+   help, a help desk or support process, an operator console for the owner, and an audit
+   trail of what Cloud staff did.
+
+Production email (D102: bounces and complaints) is already tracked and is not repeated here.
+
 ## Repository licence
 
 The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
@@ -2802,7 +2855,8 @@ notifications separately.
   alerts, scoped IP counters and live session/factor counts when it fails, preserving
   the original exception even if collecting diagnostics fails.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
-  services, usage accounting, trials, failed payment and cancellation.
+  services, usage accounting, trials, failed payment and cancellation. Item 3 of
+  [launch platform work](#launch-platform-work-in-priority-order).
 - **Venue and node registration.** The agreed Waitron signup and connection journey is
   implemented locally. The Cloud account backend creates a new customer's organisation
   and first legal business. Signed matching-code pairing requires current Cloud approval
@@ -3385,6 +3439,9 @@ changing any check. The assertions and deadlines remain unchanged.
 | Hosted Waitron | The [Cloud hosting proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md) covers dedicated venue runtimes, country/cell placement, storage, upgrades, Cloud-only recovery and separate public/staff access. The [conditional outline](superpowers/plans/2026-10-21-cloud-hosted-venue-design.md) includes public/A951 qualification for the Cloud step soon after go-live. A Cloud-only primary needs its actual certified active-server path; `.local` cannot provide offline service. Owner design approval, joint acceptance, isolation, hardware, sizing, costs and launch gates remain open; no hosting implementation is supplied. |
 | Bookings and public pages | D88 proposes stable per-venue public names for menus, bookings, online orders and table-QR ordering in the later Cloud step. Pin exact Waitron routes/assets and authorization/session/CSRF/replay checks before implementation. Serialize mutations through authoritative Waitron; when the box is unreachable accept no offsite queue, and reconcile lost replies before retry. Qualify QR expiry/revocation/non-authority and privacy. Customer checkout remains intended; payment-provider/webhook scope is separately agreed and distinct from blocking physical terminal ports. No independent booking store or synchronization product is approved. |
 | Invoice archive | Define the archived objects and access grants, including owner-approved AEAT/advisor access, retention, download and customer exit. Have hosting/archive questions reviewed for the launch country. |
+| Rota solver (paid) | Waitron's A588 (owner, 2026-10-22): a paid service that drafts a venue's rota with Google's OR-Tools (its CP-SAT solver, Apache 2.0 licence); the manager adjusts the draft in Waitron. The box sends the open shifts and each person's staff roles, contract terms, country-pack rule set and preferences ([Waitron A586](https://github.com/clintongormley/waitron/blob/main/docs/backlog/workforce.md#a586-each-persons-contract-terms), A587). That is staff personal data, so add it to the D101 data map. In Waitron a broken labour rule or preference warns and never refuses (owner, 2026-10-22); decide whether a draft may break a rule when no plan keeps them all, and how it names what it broke. Define the request contract, a solve-time limit, pricing and metering, and what Waitron shows when Cloud cannot be reached. |
+| Sales and cost comparisons (opt-in) | **Deep backlog** (owner, 2026-10-22). A venue that opts in sends anonymised sales and cost figures, and sees how its figures compare with other venues that have also opted in. This is the benchmarking the [inherited inventory](reference/2026-08-29-cloud-services-inventory.md) already lists ("your food-cost % vs. similar delis nearby"), delivered with analytics and reports. Decide which figures are sent, how venues are grouped for a fair comparison, the smallest group shown so no venue can be picked out, withdrawing consent, and its place in the D101 data map. |
+| Supplier price lists and reviews | **Deep backlog, after the comparisons** (owner, 2026-10-22). Build up suppliers' price lists and venues' reviews of suppliers, so a restaurant can order supplies at better prices. Decide where prices come from (venues' own purchase invoices, with opt-in, or suppliers themselves), how reviews are kept honest, how it reaches Waitron's purchasing, and whether suppliers take part. |
 | Analytics and reports | Choose ingestion, supported source versions, country and cell placement, search/aggregation engine, scheduled reports and group reporting. Elasticsearch is a candidate. |
 | Multiple venues | Define group visibility, permitted changes and how central catalogue/configuration changes are delivered and acknowledged. |
 | Address lookup (free) | [Spain measured on 2026-10-16](address-lookup-scope.md#measured-on-spain-2026-10-16): 40 public/synthetic cases; none of the three tested providers reaches the proposed selectable-match gate under the first-result mapping. The approved second comparison adds 60 public residential/rural addresses and 120 paired queries, first-versus-list scoring and explicit province inference. The original field references and a separate rural-municipality sensitivity remain distinct; accepted locality level and actual setup integration stay open. The owner prefers a Google-first plan with Geoapify fallback. The [terms finding and proposed design](address-lookup-scope.md#google-can-propose-an-address-you-must-confirm-what-you-keep) distinguish whole-address confirmation from a Places click and propose attribution, no shared cache, account limits and zero paid usage. Provider activation, effective account terms/quotas, fallback eligibility, locality policy and actual setup acceptance remain open. See [free services](#free-services-for-open-source-waitron). |
