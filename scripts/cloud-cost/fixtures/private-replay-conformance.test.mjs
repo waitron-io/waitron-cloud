@@ -319,3 +319,13 @@ for (const bytes of ['new Uint8Array()', "'PRIVATE_SYNTHETIC_BYTES'"]) test('pri
   await assert.rejects(local.replayPrivateDay({ ...f, codeRoot, archive: true, onProgress: p => phases.push(p.phase) }), invalid);
   assert.equal(phases.at(-1), 'archive'); assert.equal(existsSync(f.stateRoot), false);
 });
+
+for (const mode of ['sync', 'async']) test('privateDayDiagnosticObserverCannotInterruptReplay_' + mode, async t => {
+  const f = await setup(t), before = fingerprint(f.database);
+  const throws = () => { throw Error('PRIVATE_DIAGNOSTIC_CANARY'); };
+  const result = await local.replayPrivateDay({ ...f, onDiagnostic: mode === 'sync' ? throws : async () => throws() });
+  assert.deepEqual(result.replay.counts, { expected: 3, attempted: 3, successful: 3, failed: 0 });
+  assert.deepEqual(result.cleanup, { ownedReplayRoots: 0 });
+  assert.equal(existsSync(f.stateRoot), false);
+  assert.equal(fingerprint(f.database), before);
+});

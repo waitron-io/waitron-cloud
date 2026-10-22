@@ -1,3 +1,6 @@
+const nativeSignals = ['SIGTERM', 'SIGKILL', 'SIGSEGV', 'SIGABRT', 'SIGBUS', 'SIGILL', 'SIGPIPE', 'SIGINT', 'other'];
+export const nativeFailureSignal = signal => signal === null || nativeSignals.includes(signal) ? signal : 'other';
+
 // Diagnostic stages are fixed codes. Raw worker errors never cross this boundary.
 export function workerFailureStage(value) {
   const fail = () => { throw Error('Invalid cloud cost worker diagnostic'); };
@@ -32,7 +35,7 @@ export function workerFailureTrace(value) {
       exact(event, ['kind', 'operation', 'code', 'signal', 'stderrBytes', 'stderrFlags']);
       need(event.kind === 'native' && ['version', 'replicate', 'restore'].includes(event.operation));
       need(event.code === null || Number.isSafeInteger(event.code) && event.code >= 0 && event.code <= 255);
-      need(event.signal === null || ['SIGTERM', 'SIGKILL', 'SIGSEGV', 'SIGABRT', 'SIGBUS', 'SIGILL', 'SIGPIPE', 'SIGINT'].includes(event.signal));
+      need(event.signal === null || nativeSignals.includes(event.signal));
       need(Number.isSafeInteger(event.stderrBytes) && event.stderrBytes >= 0 && event.stderrBytes <= 1000000000);
       need(Array.isArray(event.stderrFlags) && event.stderrFlags.length <= 6
         && event.stderrFlags.every(flag => ['error', 'checksum', 'sqlite', 'wal', 'snapshot', 'compaction'].includes(flag))

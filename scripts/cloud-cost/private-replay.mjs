@@ -67,7 +67,7 @@ export async function replayPrivateDay(args) {
   let replay, identity, result, stream, streamTimer;
   let stage = 'configuration';
   const diagnose = event => {
-    try { args.onDiagnostic?.(event); } catch { /* Diagnostics cannot interrupt owned resource collection. */ }
+    try { Promise.resolve(args.onDiagnostic?.(event)).catch(() => {}); } catch { /* Diagnostics cannot interrupt owned resource collection. */ }
   };
   const at = next => { if (stage !== next) { stage = next; diagnose({ kind: 'replay', stage }); } };
   try {

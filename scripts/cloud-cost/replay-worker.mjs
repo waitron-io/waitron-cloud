@@ -55,6 +55,7 @@ async function run() {
         cleanup: { ...native.cleanup, listeners: 0, clients: 0, buckets: 0, objects: 0, multipartUploads: 0 } };
     }
     stage = 'result';
+    writeFileSync('/state/worker-trace.json', JSON.stringify(workerFailureTrace(trace)), { mode: 0o600, flag: 'wx' });
     writeFileSync('/state/result.json', JSON.stringify(result), { mode: 0o600, flag: 'wx' });
   } catch { recordFailure(); throw Error('Invalid cloud cost replay worker'); }
   finally { stage = 'storage-cleanup'; await storage?.close(); }

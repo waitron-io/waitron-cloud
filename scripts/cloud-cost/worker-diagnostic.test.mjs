@@ -51,6 +51,7 @@ for (const [name, trace] of Object.entries({
   stage: [{ kind: 'stream', stage: 'PRIVATE_STAGE_CANARY' }],
   operation: [{ kind: 'native', operation: '/PRIVATE_PATH', code: 1, signal: null, stderrBytes: 0, stderrFlags: [] }],
   output: [{ kind: 'native', operation: 'restore', code: 1, signal: null, stderrBytes: 10, stderrFlags: ['PRIVATE_NATIVE_CANARY'] }],
+  nativeRaw: [{ kind: 'native', operation: 'restore', code: 1, signal: null, stderrBytes: 10, stderrFlags: [], error: 'PRIVATE_NATIVE_CANARY' }],
   code: [{ kind: 'native', operation: 'restore', code: 'PRIVATE_CODE', signal: null, stderrBytes: 0, stderrFlags: [] }],
   signal: [{ kind: 'native', operation: 'restore', code: null, signal: 'PRIVATE_SIGNAL', stderrBytes: 0, stderrFlags: [] }],
   getter: [{ kind: 'stream', get stage() { throw Error('PRIVATE_GETTER'); } }],

@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { openReplay } from '../waitron-adapter.mjs';
 import { runIsolatedReplay } from '../isolated-replay.mjs';
+import { withReplayDiagnostics } from './replay-diagnostics.mjs';
 
 const prepared = JSON.parse(readFileSync(process.env.COST_SYNTHETIC_CONFIG, 'utf8'));
 const stack = JSON.parse(readFileSync(process.env.COST_STACK_FIXTURE, 'utf8'));
@@ -59,13 +60,13 @@ test('pacedReplayRestoresEverySaleWithValidStructureAfterSustainedWrites', async
   let locationId;
   try { locationId = db.prepare('SELECT id FROM locations').get().id; } finally { db.close(); }
   const before = fingerprint(database);
-  const result = await runIsolatedReplay({ source, root, journal, codeRoot, database, locationId, config, initial,
+  const result = await withReplayDiagnostics(() => runIsolatedReplay({ source, root, journal, codeRoot, database, locationId, config, initial,
     expected: { sales: 208, paid: 208, tradingDays: 2, busiest: 207 },
     originalInventory: { timeZone: 'Europe/Madrid', days: 2, busiest: 207 },
     cadence: { mode: 'accelerated', factor: 100 }, replayWindowSeconds: 120, windowSeconds: 200, image: stack.image,
     stream: { binarySha256: createHash('sha256').update(readFileSync(join(codeRoot, 'litestream'))).digest('hex'),
       copyImage: docker(['image', 'inspect', 'node:26.11.1-slim', '--format', '{{.Id}}']),
-      startupSeconds: 2, idleSeconds: 2, windowSeconds: 150 } });
+      startupSeconds: 2, idleSeconds: 2, windowSeconds: 150 } }), text => t.diagnostic(text));
   assert.deepEqual(result.admission.replay.counts, { expected: 207, attempted: 207, successful: 207, failed: 0 });
   assert.ok(result.admission.replay.timing.elapsedSeconds >= 61.8);
   assert.deepEqual(result.admission.stream.restored, { sales: 207, integrity: true });

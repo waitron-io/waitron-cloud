@@ -737,3 +737,16 @@ for (const mode of ['raw', 'oversized', 'permissions'])
     assert.equal(entries.some(entry => entry.kind === 'worker-trace'), false);
     clean(f, before);
   });
+
+// A worker can exit successfully while its result still fails the controller's admission checks.
+test('isolatedRefusalRetainsTraceWhenACompletedWorkerResultIsRejected', async t => {
+  const f = await fixture(t), before = fingerprint(f.database);
+  prefixRuntime(f, `import {writeFileSync as writeResult} from 'node:fs';
+    writeResult('/state/worker-trace.json','[{"kind":"replay","stage":"verification"}]',{mode:0o600,flag:'wx'});
+    writeResult('/state/result.json','{}',{mode:0o600,flag:'wx'});process.exit(0);`);
+  let refusal;
+  await assert.rejects(controller.runIsolatedReplay(f), error => { refusal = error; return error.message === bad.message; });
+  assert.equal(refusal.diagnostic?.controllerStage, 'replay-admission');
+  assert.deepEqual(refusal.diagnostic.trace, [{ kind: 'replay', stage: 'verification' }]);
+  clean(f, before);
+});

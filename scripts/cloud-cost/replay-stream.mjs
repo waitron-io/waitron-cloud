@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { assertOwnedRoot } from './schema.mjs';
 import { openStreamMeasurement } from './stream-measurement.mjs';
+import { nativeFailureSignal } from './worker-diagnostic.mjs';
 
 const fail = () => { throw Error('Invalid cloud cost replay stream'); };
 const need = value => { if (!value) fail(); };
@@ -18,7 +19,7 @@ export async function openReplayStream(input) {
   let args, identity, session, openingSession, writer, disposal, evidence, finishing, deadlineTimer, busy = false;
   let diagnosticStage = 'admission';
   const diagnose = event => {
-    try { input.onDiagnostic?.(event); } catch { /* Diagnostics cannot interrupt owned resource collection. */ }
+    try { Promise.resolve(input.onDiagnostic?.(event)).catch(() => {}); } catch { /* Diagnostics cannot interrupt owned resource collection. */ }
   };
   const at = stage => { diagnosticStage = stage; diagnose({ kind: 'stream', stage }); };
   const refused = () => diagnose({ kind: 'stream-refusal', stage: diagnosticStage });
@@ -57,7 +58,7 @@ export async function openReplayStream(input) {
       child.once('error', () => { item.bad = true; });
       child.once('close', (code, signal) => {
         children.delete(item);
-        diagnose({ kind: 'native', operation: argv[0], code, signal, stderrBytes, stderrFlags: [...flags].sort() });
+        diagnose({ kind: 'native', operation: argv[0], code, signal: nativeFailureSignal(signal), stderrBytes, stderrFlags: [...flags].sort() });
         try {
           if (child.pid) record({ kind: 'stream-process', state: 'collected', pid: child.pid, operation: argv[0] });
         } catch { item.bad = true; }

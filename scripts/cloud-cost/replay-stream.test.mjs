@@ -80,6 +80,7 @@ if (process.argv[2] === 'restore') {
   process.exit(mode === 'restore' ? 17 : 0);
 }
 if (mode === 'exit') process.exit(19);
+if (mode === 'hangup') process.kill(process.pid, 'SIGHUP');
 const upload = () => { if (!stopping) serial = serial.then(()=>send('PUT',readFileSync(c.path))).catch(()=>process.exit(18)); };
 upload(); const timer=setInterval(upload,50);
 process.once('SIGTERM',()=>{
@@ -332,4 +333,19 @@ test('replayStreamCollectsResourcesWhenTheDiagnosticObserverThrows', async t => 
   await upload(f);
   await assert.rejects(run.finish({ expectedSales: 1 }), bad);
   clean(f);
+});
+
+test('replayStreamPreservesTraceForAnUnlistedNativeSignal', async t => {
+  const f = await fixture(t, 'hangup'), trace = [];
+  await assert.rejects(module.openReplayStream({ ...f, onDiagnostic: event => trace.push(event) }), bad);
+  clean(f);
+  assert.ok(trace.some(event => event.kind === 'native' && event.operation === 'replicate' && event.signal === 'other'), JSON.stringify(trace));
+  const { workerFailureTrace } = await import('./worker-diagnostic.mjs');
+  assert.deepEqual(workerFailureTrace(trace), trace);
+});
+
+test('replayStreamContainsAsynchronousDiagnosticObserverRejections', async t => {
+  const f = await fixture(t, 'restore');
+  const run = await open(t, { ...f, onDiagnostic: async () => { throw Error('PRIVATE_ASYNC_CANARY'); } });
+  await upload(f); await assert.rejects(run.finish({ expectedSales: 1 }), bad); clean(f);
 });
