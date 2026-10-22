@@ -1274,6 +1274,17 @@ notifications separately.
   failures to these races remains an inference. Keep their logs and all ownership,
   isolation, accounting and cleanup assertions and deadlines. Temporary diagnostic
   workflows are removed.
+  Another stack-start refusal occurred in
+  [run 39743485615, stack group 1](https://github.com/waitron-io/waitron-cloud/actions/runs/39743485615/job/119706230844):
+  `genuineArchiveAndSignedSdkTrafficReconcileThroughRealStorage` failed after
+  3.6 seconds before its archive assertions; the other nine group cases passed.
+  `startIsolatedStack` replaces its underlying error at `local.mjs:659`, so the
+  cause is unknown. The test-image handling branch changes no cost runtime,
+  fixture or workflow. The exact case passes locally through the new launcher
+  with all archive, accounting and cleanup assertions intact. That passing probe
+  explains neither the Linux failure nor a correction. Next: capture a bounded,
+  sanitised startup stage and underlying refusal before cleanup, then reproduce
+  it without relaxing ownership, isolation, accounting or cleanup checks.
   A separate paced-replay check refused after 75.8 seconds in `39637622744`.
   Its saved error is generic and exposes no underlying stage. One generated-only
   instrumented Linux run passes (`39638725311`); this does not establish a cause
