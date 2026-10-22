@@ -2299,7 +2299,15 @@ notifications separately.
   setup and queueing. Measure both the candidate and its merge before claiming the
   target is met.
   Browser packages install Chromium with at most two attempts, each bounded to
-  120 seconds plus ten seconds to stop it. Main pushes use a unique concurrency
+  120 seconds plus ten seconds to stop it. In
+  [run 39744422290](https://github.com/waitron-io/waitron-cloud/actions/runs/39744422290/job/119709401502),
+  UI-smoke never reached its tests: the first dependency download exceeded the
+  120-second limit and the retry found the package-manager lock held by an
+  `apt-get` process. This does not prove which process escaped timeout cleanup.
+  Next: reproduce that descendant lifetime and qualify owned-process cleanup
+  before retry, retaining both setup bounds and all browser assertions. A clean
+  runner's recovery is not evidence of an installer correction.
+  Main pushes use a unique concurrency
   group per run so a later merge cannot cancel an earlier merge's checks;
   superseded pull request runs still cancel. The workflow text guard checks shard
   completeness and deadlines. The summary checks actual job records against the
