@@ -3185,6 +3185,24 @@ notifications separately.
   network isolation, without activating a primary or contacting fiscal/payment services. Define the external-key format extension
   rather than assuming it exists in the inspected manifest v1.
 
+## Account HTTP reset-mail capture
+
+[CI run 39730254198](https://github.com/waitron-io/waitron-cloud/actions/runs/39730254198)
+on documentation-only `ea288eafac4bf7e8fafe5592fb3d81f0afecc7bf` passed 180 of 181
+account HTTP shard-3 tests. Its signup/recovery journey could not find the reset
+message in Mailpit (`packages/account-http/test/account-http.test.ts:50,90`).
+The runtime, fixture and workflow paths are unchanged from main `9701cd2`.
+The local unmodified shard command below passes all 181 tests, including that
+journey. This does not explain the CI failure or prove a fix. Preserve the assertion and deadline.
+If it recurs, capture the worker result, redacted outbox state, SMTP outcome and
+Mailpit listing/visibility boundaries before deciding whether delivery or capture
+failed. Keep recipients, tokens and raw SMTP responses out of diagnostic artifacts.
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node \
+  --test --test-timeout=30000 --test-shard=3/3 'test/*.test.ts'
+```
+
 ## Portal session test startup
 
 A local full portal run during the receipt-selection work passed 195 of 196
