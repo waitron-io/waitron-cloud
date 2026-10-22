@@ -1415,7 +1415,9 @@ notifications separately.
   Without sufficient evidence, the summary waits within its original 60 seconds,
   polling every two seconds. Each API read has a ten-second limit, capped by
   remaining time; timed-out reads retry inside that same allowance. Other lookup
-  errors fail immediately. Exhaustion names the pending jobs and last timeout;
+  errors fail immediately. A timed-out API process is forcibly stopped so ignoring
+  a termination request cannot extend its allowance. Each partition's step
+  evidence is reported once. Exhaustion names the pending jobs and last timeout;
   the summary job retains its two-minute limit. Run
   `node --test scripts/ci-summary.test.mjs scripts/ci-cli.test.mjs` to check the
   command and refusal paths. Landing still requires every actual job record final.

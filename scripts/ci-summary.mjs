@@ -109,7 +109,7 @@ export function assertSummary(plan, results, jobs) {
 }
 
 function readCurrentJobs(timeoutMs) {
-  const pages = JSON.parse(execFileSync('gh', ['api','--paginate','--slurp',`repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/jobs?filter=latest&per_page=100`], {encoding:'utf8',timeout:Math.min(10_000, timeoutMs)}));
+  const pages = JSON.parse(execFileSync('gh', ['api','--paginate','--slurp',`repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/jobs?filter=latest&per_page=100`], {encoding:'utf8',timeout:Math.min(10_000, timeoutMs),killSignal:'SIGKILL'}));
   return pages.flatMap(page => page.jobs);
 }
 
@@ -144,6 +144,7 @@ export async function waitForSummary(plan, results, {
   const deadline = now() + timeoutMs;
   let waiting = [];
   let lookupError;
+  const reported = new Set();
   for (;;) {
     const remaining = deadline - now();
     const names = waiting.join(', ') || expected.join(', ');
@@ -168,10 +169,13 @@ export async function waitForSummary(plan, results, {
       ? {...job, status: 'completed', conclusion: 'success'} : job);
     assertSummaryJobs(expected, resolved, waiting);
     for (let index = 0; index < jobs.length; index++) {
-      if (resolved[index] !== jobs[index]) report(`Final needs and completed steps: ${jobs[index].name} (run ${identity.runId}, attempt ${identity.runAttempt}, ${identity.headSha})`);
+      if (resolved[index] !== jobs[index] && !reported.has(jobs[index].name)) {
+        report(`Final needs and completed steps: ${jobs[index].name} (run ${identity.runId}, attempt ${identity.runAttempt}, ${identity.headSha})`);
+        reported.add(jobs[index].name);
+      }
     }
     if (waiting.length === 0) return;
-    await sleep(Math.min(pollMs, deadline - now()));
+    await sleep(Math.max(0, Math.min(pollMs, deadline - now())));
   }
 }
 
