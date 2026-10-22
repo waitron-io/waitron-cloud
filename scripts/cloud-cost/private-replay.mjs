@@ -65,6 +65,11 @@ async function observeFor(seconds, signal) {
 // State belongs to this invocation; an admitted sale settles before the adapter closes and cleanup begins.
 export async function replayPrivateDay(args) {
   let replay, identity, result, stream, streamTimer;
+  let stage = 'configuration';
+  const diagnose = event => {
+    try { Promise.resolve(args.onDiagnostic?.(event)).catch(() => {}); } catch { /* Diagnostics cannot interrupt owned resource collection. */ }
+  };
+  const at = next => { if (stage !== next) { stage = next; diagnose({ kind: 'replay', stage }); } };
   try {
     const { source, root, journal, database, locationId, codeRoot, stateRoot, signal: callerSignal, onProgress } = args;
     let signal = callerSignal, streamOptions;
@@ -95,17 +100,20 @@ export async function replayPrivateDay(args) {
       && (cadence.mode !== 'original' || cadence.factor === 1));
     requireThat(Number.isFinite(windowSeconds) && windowSeconds > 0 && windowSeconds <= 3600);
     // The validated copy is a standalone database; this read must precede every direct SQLite open.
+    at('input');
     const clock = readPrivateReplayClock({ source, root, journal, database, locationId });
     record(args, { state: 'intent' });
     mkdirSync(stateRoot, { mode: 0o700 }); identity = lstatSync(stateRoot);
     record(args, { state: 'ready', ino: identity.ino, dev: identity.dev });
     const initial = { ...args.initial, location: { ...args.initial.location,
       timeZone: clock.timeZone, dayCutover: clock.dayCutover + ':00' } };
+    at('adapter-open');
     replay = await openReplay({ codeRoot, stateRoot, config: args.config, initial });
     // openReplay has checked the pinned manifest and runtime hash before this import.
     const runtime = await import(pathToFileURL(join(codeRoot, 'runtime.mjs')).href);
     const selectionArgs = { source, root, journal, database, locationId,
       calendar: { businessDayAt: runtime.businessDayAt, businessDayBounds: runtime.businessDayBounds }, expected: args.expected };
+    at('selection');
     const discovered = discoverPrivateReplayDay(selectionArgs);
     requireThat(discovered.selection !== null);
     const originalInventory = inventory(database, locationId, args.originalInventory);
@@ -114,13 +122,15 @@ export async function replayPrivateDay(args) {
       expectedSales: discovered.selection.expectedSales, events: bills.events });
     const freshDatabase = join(stateRoot, 'venue/venue.db'), freshBeforeBytes = logicalBytes(freshDatabase);
     if (streamOptions) {
-      stream = await openReplayStream({ ...streamOptions, source, root, journal, database: freshDatabase, signal });
+      at('stream-open');
+      stream = await openReplayStream({ ...streamOptions, source, root, journal, database: freshDatabase, signal, onDiagnostic: diagnose });
+      at('startup');
       await observeFor(streamOptions.startupSeconds, signal);
       await stream.setPhase('workload');
     }
     let successfulSales = 0;
     const progress = async phase => {
-      requireThat(!signal?.aborted); await onProgress?.({ phase, successfulSales }); requireThat(!signal?.aborted);
+      at(phase); requireThat(!signal?.aborted); await onProgress?.({ phase, successfulSales }); requireThat(!signal?.aborted);
     };
     await progress('workload');
     const scheduled = await replayScheduledSales({ ...prepared, cadence, windowSeconds, signal,
@@ -128,7 +138,7 @@ export async function replayPrivateDay(args) {
     const counts = replay.counts();
     requireThat(counts.attempted === prepared.expectedSales && counts.successful === prepared.expectedSales && counts.failed === 0);
     if (stream) {
-      await stream.setPhase('idle'); await progress('idle');
+      at('idle'); await stream.setPhase('idle'); await progress('idle');
       await observeFor(streamOptions.idleSeconds, signal);
       await stream.setPhase('verification');
     }
@@ -140,7 +150,7 @@ export async function replayPrivateDay(args) {
     result = { complete: true, source: { counts: discovered.counts, originalInventory }, replay: scheduled,
       integrity: { ok: true, issues: 0 }, storage: { copiedDatabaseBytes: lstatSync(database).size,
         freshBeforeBytes, freshAfterBytes, freshGrowthBytes: freshAfterBytes - freshBeforeBytes } };
-    if (stream) result.stream = await stream.finish({ expectedSales: prepared.expectedSales });
+    if (stream) { at('stream-finish'); result.stream = await stream.finish({ expectedSales: prepared.expectedSales }); }
     if (args.archive) {
       await progress('archive');
       // This fresh venue has no live TLS or vault credentials. Only generated stand-ins enter its archive.
@@ -160,7 +170,7 @@ export async function replayPrivateDay(args) {
       result.archive = { capturedBytes: captured.bytes.length, captureSeconds, restoreSeconds,
         restored: { ok: true, issues: 0, sales: restored.sales } };
     }
-  } catch { fail(); }
+  } catch { diagnose({ kind: 'replay-refusal', stage }); fail(); }
   finally {
     clearTimeout(streamTimer);
     try {
@@ -175,7 +185,7 @@ export async function replayPrivateDay(args) {
         record(args, { state: 'removed' });
       }
       requireThat(streamCleanup === undefined || streamCleanup.measurementValid === true);
-    } catch { fail(); }
+    } catch { diagnose({ kind: 'replay-refusal', stage: 'cleanup' }); fail(); }
   }
   return { ...result, cleanup: { ownedReplayRoots: 0 } };
 }

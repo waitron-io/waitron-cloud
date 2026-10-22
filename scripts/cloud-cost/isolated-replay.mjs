@@ -7,7 +7,7 @@ import { recordOwnedResource as record } from './owned-journal.mjs';
 import { validateStreamSettings, validateStreamAdmission, summarizeStreamAccounting } from './stream-admission.mjs';
 import { validateReplayConfig } from './waitron-adapter.mjs';
 import { prepareIsolatedPrivateCopy, proveDockerIsolation, runForegroundContainer } from './local.mjs';
-import { workerFailureStage } from './worker-diagnostic.mjs';
+import { workerFailureStage, workerFailureTrace } from './worker-diagnostic.mjs';
 
 const fail = () => { throw Error('Invalid isolated cloud cost replay'); };
 const need = value => { if (!value) fail(); };
@@ -115,7 +115,19 @@ function admit(args) {
 // The caller owns the prepared runtime/root; only this invocation's added resources are removed.
 export async function runIsolatedReplay(input) {
   let args, copy, networkId, containerId, networkName, containerName, stageIdentity, harnessIdentity, timer, abort;
-  let admission, isolation, stageRoot, harness;
+  let admission, isolation, stageRoot, harness, diagnostic;
+  const retainTrace = () => {
+    try {
+      assertOwnedRoot(args); const identity = lstatSync(stageRoot);
+      need(realpathSync(stageRoot) === stageRoot && identity.ino === stageIdentity.ino && identity.dev === stageIdentity.dev);
+      const path = join(stageRoot, 'worker-trace.json');
+      if (existsSync(path)) {
+        const stat = file(path); need(stat.size <= 8192 && (stat.mode & 0o7777) === 0o600);
+        diagnostic.trace = workerFailureTrace(JSON.parse(readFileSync(path, 'utf8')));
+        record(args, { kind: 'worker-trace', state: 'recorded', trace: diagnostic.trace });
+      }
+    } catch { diagnostic.traceInvalid = true; }
+  };
   try {
     args = admit(input);
     const { root, codeRoot, journal, source, database, image } = args;
@@ -172,26 +184,35 @@ export async function runIsolatedReplay(input) {
       try {
         assertOwnedRoot(args); const identity = lstatSync(stageRoot);
         need(realpathSync(stageRoot) === stageRoot && identity.ino === stageIdentity.ino && identity.dev === stageIdentity.dev);
-        const diagnostic = join(stageRoot, 'worker-failure.json');
-        if (existsSync(diagnostic)) {
-          const stat = file(diagnostic);
+        const stagePath = join(stageRoot, 'worker-failure.json');
+        if (existsSync(stagePath)) {
+          const stat = file(stagePath);
           need(stat.size <= 256 && (stat.mode & 0o7777) === 0o600);
-          stage = workerFailureStage(JSON.parse(readFileSync(diagnostic, 'utf8')));
+          stage = workerFailureStage(JSON.parse(readFileSync(stagePath, 'utf8')));
         }
       } catch { stage = 'worker-diagnostic-invalid'; }
       record(args, { kind: 'worker-refusal', state: 'recorded', stage });
+      diagnostic = { stage };
+      retainTrace();
       fail();
     }
     containerId = undefined;
     remaining(); need(!args.signal?.aborted);
+    diagnostic = { stage: 'result', controllerStage: 'worker-result' }; retainTrace();
     const output = join(stageRoot, 'result.json'); need(file(output).size <= (args.stream ? 1024 * 1024 : 16384) && (lstatSync(output).mode & 0o777) === 0o600);
     const result = JSON.parse(readFileSync(output, 'utf8'));
     if (args.stream) {
       const { stream, ...replay } = result;
-      admission = { ...validateReplayAdmission(replay, args), stream: validateStreamAdmission(stream,
+      diagnostic.controllerStage = 'replay-admission'; const checkedReplay = validateReplayAdmission(replay, args);
+      diagnostic.controllerStage = 'stream-admission';
+      admission = { ...checkedReplay, stream: validateStreamAdmission(stream,
         { ...args.stream, expectedSales: args.expected.busiest }) };
-    } else admission = validateReplayAdmission(result, args);
-  } catch { fail(); }
+    } else { diagnostic.controllerStage = 'replay-admission'; admission = validateReplayAdmission(result, args); }
+  } catch {
+    const error = Error('Invalid isolated cloud cost replay');
+    if (diagnostic) error.diagnostic = diagnostic;
+    throw error;
+  }
   finally {
     clearTimeout(timer); args?.signal?.removeEventListener('abort', abort);
     if (args) {

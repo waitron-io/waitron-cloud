@@ -692,3 +692,61 @@ test('localCommandCarriesArchiveStageThroughWorkerAndAdmission', async t => {
   assert.equal(/PRIVATE_|recoveryKey|artifact|taxId|locationId|\/tmp|2026-/.test(JSON.stringify(result)), false);
   clean(f, before);
 });
+
+// Cleanup must not erase the first private refusal or the native process outcome.
+test('isolatedRefusalRetainsReplayTraceAfterWorkerCleanup', async t => {
+  const f = await fixture(t), before = fingerprint(f.database);
+  prefixRuntime(f, 'throw Error("PRIVATE_REFUSAL_CANARY");');
+  let refusal;
+  await assert.rejects(controller.runIsolatedReplay(f), error => { refusal = error; return error.message === bad.message; });
+  assert.equal(refusal.diagnostic?.stage, 'replay');
+  assert.ok(refusal.diagnostic.trace.some(event => event.kind === 'replay-refusal' && event.stage === 'adapter-open'));
+  assert.equal(JSON.stringify(refusal.diagnostic).includes('PRIVATE_'), false);
+  clean(f, before);
+});
+
+test('isolatedRefusalRetainsNativeTraceAfterWorkerCleanup', async t => {
+  const f = await streamedFixture(t), before = fingerprint(f.database);
+  const binary = '#!/usr/local/bin/node\nif(process.argv[2]==="version"){console.log("0.5.17");}else{console.error("checksum error PRIVATE_NATIVE_CANARY");process.exit(17);}\n';
+  writeFileSync(join(f.codeRoot, 'litestream'), binary, { mode: 0o700 });
+  f.stream.binarySha256 = createHash('sha256').update(binary).digest('hex');
+  let refusal;
+  await assert.rejects(controller.runIsolatedReplay(f), error => { refusal = error; return error.message === bad.message; });
+  assert.equal(refusal.diagnostic?.stage, 'replay');
+  const trace = refusal.diagnostic.trace;
+  assert.ok(trace.some(event => event.kind === 'stream-refusal' && event.stage === 'replicate'), JSON.stringify(trace));
+  assert.ok(trace.some(event => event.kind === 'native' && event.operation === 'replicate' && event.code === 17
+    && event.stderrFlags.includes('checksum') && event.stderrFlags.includes('error')), JSON.stringify(trace));
+  assert.equal(JSON.stringify(refusal.diagnostic).includes('PRIVATE_'), false);
+  clean(f, before);
+});
+
+for (const mode of ['raw', 'oversized', 'permissions'])
+  test('isolatedRefusalNeverPublishesAnUntrustedTrace_' + mode, async t => {
+    const f = await fixture(t), before = fingerprint(f.database);
+    const trace = mode === 'raw' ? '[{"kind":"replay","stage":"workload","error":"PRIVATE_TRACE_CANARY"}]'
+      : (mode === 'oversized' ? ' '.repeat(8192) : '') + '[{"kind":"replay","stage":"workload"}]';
+    prefixRuntime(f, `import {writeFileSync as writeTrace} from 'node:fs';
+      writeTrace('/state/worker-trace.json',${JSON.stringify(trace)},{mode:${mode === 'permissions' ? '0o644' : '0o600'},flag:'wx'});
+      throw Error('PRIVATE_REFUSAL_CANARY');`);
+    let refusal;
+    await assert.rejects(controller.runIsolatedReplay(f), error => { refusal = error; return error.message === bad.message; });
+    assert.deepEqual(refusal.diagnostic, { stage: 'replay', traceInvalid: true });
+    assert.equal(JSON.stringify(refusal).includes('PRIVATE_'), false);
+    const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
+    assert.equal(entries.some(entry => entry.kind === 'worker-trace'), false);
+    clean(f, before);
+  });
+
+// A worker can exit successfully while its result still fails the controller's admission checks.
+test('isolatedRefusalRetainsTraceWhenACompletedWorkerResultIsRejected', async t => {
+  const f = await fixture(t), before = fingerprint(f.database);
+  prefixRuntime(f, `import {writeFileSync as writeResult} from 'node:fs';
+    writeResult('/state/worker-trace.json','[{"kind":"replay","stage":"verification"}]',{mode:0o600,flag:'wx'});
+    writeResult('/state/result.json','{}',{mode:0o600,flag:'wx'});process.exit(0);`);
+  let refusal;
+  await assert.rejects(controller.runIsolatedReplay(f), error => { refusal = error; return error.message === bad.message; });
+  assert.equal(refusal.diagnostic?.controllerStage, 'replay-admission');
+  assert.deepEqual(refusal.diagnostic.trace, [{ kind: 'replay', stage: 'verification' }]);
+  clean(f, before);
+});
