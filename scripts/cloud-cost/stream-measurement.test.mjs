@@ -21,7 +21,11 @@ async function fixture(t, versioned = false) {
     req.on('data', chunk => chunks.push(chunk));
     req.on('end', () => {
       const url = new URL(req.url, 'http://local'), bytes = Buffer.concat(chunks);
-      if (req.method === 'PUT') {
+      if (req.method === 'POST' && url.searchParams.has('uploads')) {
+        res.end(`<InitiateMultipartUploadResult><Bucket>${bucket}</Bucket><Key>${key}</Key><UploadId>part-upload</UploadId></InitiateMultipartUploadResult>`);
+      } else if (req.method === 'PUT' && url.searchParams.has('uploadId')) {
+        res.setHeader('etag', '"part-etag"'); res.end();
+      } else if (req.method === 'PUT') {
         if (!versioned) rows.length = 0;
         const row = { version: 'v' + ++number, bytes: bytes.length, marker: false }; rows.push(row);
         if (versioned) res.setHeader('x-amz-version-id', row.version);
@@ -361,5 +365,25 @@ test('streamMeasurementUploadReadinessWaitsForTheCompleteRequestBody', async t =
     assert.ok(f.state.requests > before, 'admit the unfinished upload at the backend');
     assert.equal(ready, false);
   } finally { finishBody(); await sent; }
+  await waiting; assert.equal(ready, true);
+});
+
+// A stored multipart part is incomplete storage, not the ordinary startup PUT required by admission.
+test('streamMeasurementUploadReadinessExcludesACompletedMultipartPart', async t => {
+  const f = await fixture(t), session = await open(t, f, { allowMultipart: true });
+  let ready = false;
+  const waiting = session.waitForUpload().then(() => { ready = true; });
+  const partRequest = (method, suffix, bytes, invocation) => new Promise((resolve, reject) => {
+    const req = request(session.url + '/' + bucket + '/' + key + suffix, { method, agent: false, headers: {
+      'content-length': bytes, 'amz-sdk-invocation-id': `11111111-2222-4333-8444-${String(invocation).padStart(12, '0')}`,
+      'amz-sdk-request': 'attempt=1; max=2',
+    } }, res => { res.resume(); res.on('end', () => resolve(res.statusCode)); res.on('error', reject); });
+    req.on('error', reject); req.end(Buffer.alloc(bytes));
+  });
+  assert.equal(await partRequest('POST', '?uploads', 0, 1), 200);
+  assert.equal(await partRequest('PUT', '?partNumber=1&uploadId=part-upload', 4, 2), 200);
+  assert.equal(session.activity(), 2, 'complete both multipart requests through the real measurement transport');
+  assert.equal(ready, false, 'a completed part cannot release startup');
+  assert.equal(await send(session.url, 'PUT', 4, 3), 200);
   await waiting; assert.equal(ready, true);
 });
