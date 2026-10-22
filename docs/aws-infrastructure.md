@@ -32,7 +32,8 @@ The image contains an offline provider mirror, a local directory from which Open
 install the pinned provider without contacting a registry. Its configuration includes no
 direct provider download method. Initializing from this mirror reports the provider as
 unauthenticated: preparation checks the pinned archive checksum, but does not retrieve a
-registry signature during initialization. Root lockfiles still need checksums for both
+registry signature during initialization. Each root is a separate OpenTofu configuration
+entry point. Root lockfiles still need checksums for both
 supported architectures when those roots are introduced. Test execution uses only the
 existing local image and refuses an implicit image download.
 
@@ -91,8 +92,8 @@ temporary storage. The source inspector has its separate smaller limits.
 You can select only `canary`, `accounts`, `state`, `network`, `cell`, `database`, `storage`,
 `custody`, `observability`, `ingress`, `dns` or `integration`. Each name selects fixed module
 and root paths; the CLI accepts no custom command or directory. `--all` runs those suites
-in order and refuses a missing test file. Only the canary is implemented so far, so
-`--all` currently reports its passing test, then fails on the missing accounts suite.
+in order and refuses a missing test file. The canary and account suites are implemented,
+so `--all` currently reports those results, then fails on the missing state suite.
 It does not report the unfinished infrastructure as verified. Missing local tools produce
 the `--prepare-tools` setup instruction without downloading anything.
 
@@ -131,3 +132,41 @@ The remaining resource suites follow the
 Passing source-policy tests does not qualify AWS permissions, deployed infrastructure,
 recovery or continuity. You still need separate approval before accessing AWS, creating
 accounts or resources, spending money or applying infrastructure.
+
+## Describe member accounts without replacing the Organization
+
+Global and Spain need separate member accounts. You supply the existing Organization ID,
+the parent organizational unit, and maps of existing references and proposed new members.
+The account module describes only new member accounts; existing references stay outside
+its creation loop. It declares no Organization or organization-wide policy resource.
+
+Run the account checks locally:
+
+```sh
+node deploy/aws/check.mjs --suite accounts
+node --test deploy/aws/accounts.test.mjs
+```
+
+All provider reads and proposed creations in this suite are mocked. The module checks
+the supplied Organization against its provider's Organization, confirms existing members
+belong to it, and refuses the management account, shared workload accounts, overlapping
+existing/new scopes and names other than `global` or `es`. The administration root binds
+the module only to `aws.organization`. Its protected `member_ids` output stays outside
+the runtime handoff.
+
+Contact addresses are sensitive inputs indexed by member name. Resource addresses come
+from the separate, non-sensitive new-member map, so an email address never becomes a
+resource address. Sensitivity hides values in normal output; future live state would
+still need the separate protected state custody. Examples use synthetic account IDs and
+contacts under `.invalid`; future real inputs stay outside Git.
+
+Managed accounts explicitly prevent destruction and disable closing on deletion.
+Removing an existing-member reference does not remove that account from AWS. Removing
+or retiring an account from the Organization is destructive even if the account remains
+open, and needs a separately authorized operation. These checks perform no import,
+account creation, removal or retirement.
+
+The account suite currently initializes disposable ARM64 lockfiles. Committed root
+lockfiles and installation checks for both supported architectures remain unfinished;
+the root is not yet qualified for portable use. State custody, live permissions and
+parent-unit ownership also remain unqualified.
