@@ -9,7 +9,7 @@ defines signatures, request limits, cursor paging and refusals.
 
 Outbound AI is denied until a separate privacy-reviewed input rule and supplier/location
 evidence receive owner acceptance. This includes apparently harmless menu text.
-`createOpenAiClient().respond()` always refuses without sending a request, reading
+`createOpenAiClient(...).respond(...)` always refuses without sending a request, reading
 the input or charging tokens. A regional URL or enable flag cannot change that.
 Translation also stays off until the remaining quality trials, joint Waitron paging proof and
 [launch decisions](../../docs/launch-evidence.md) are complete. Local fake-provider tests

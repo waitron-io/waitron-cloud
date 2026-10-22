@@ -40,9 +40,10 @@ practical with fresh approval to extend, and Paris `eu-west-3` for the extra bac
 subject to qualification. All six D101 lawyer questions, the KMS deletion-waiting
 policy, legal annexes, supplier/entity/access/transfer evidence and runtime proof remain
 open. AI additionally requires separately accepted privacy-reviewed input eligibility,
-examples and limits. No D101 runtime control is implemented by this milestone.
+examples and limits. Only the local AI refusal and explicit synthetic transport are implemented; other
+D101 runtime controls remain unbuilt.
 No production build starts from this documentation. D68 is landed, but hosting and
-recovery costs remain unmeasured. D79 is parked unpublished at `fab41b1`; its changes
+recovery costs remain unmeasured. D79 is parked unpublished at `7939a27`; its changes
 and migration 043 are not on this base and supply no launch evidence here.
 
 ## Read the local evidence narrowly

@@ -1,6 +1,6 @@
 # Protect venue data when Cloud handles it
 
-**D101 · 2026-10-22 · Owner-approved engineering design for build planning only. Runtime controls remain unbuilt.**
+**D101 · 2026-10-22 · Owner-approved engineering design; roadmap approved and slice 1 authorised. Other runtime controls remain unbuilt.**
 
 You need to know who can see your venue's data, where copies go and what happens when
 membership ends before you entrust Cloud with it. This proposal supplies Cloud's half
@@ -342,7 +342,7 @@ These are approved engineering acceptance cases, not executed tests. The linked
 
 1. **Design approval recorded:** the owner approved the complete D101/D88 data-protection engineering design from PR283 on 2026-10-22 around 08:30 for build planning only. O1 is answered, including the 24-hour maximum, conditional Paris destination and exit/retry/concurrency rules. Broader D88 hosting/isolation and shared contracts are not approved.
 2. **Roadmap approved, slice 1 authorised:** the [roadmap](../plans/2026-10-22-cloud-data-protection.md) records the reviewed slices. Only slice 1 has separate build authority. Complete lawyer-reviewed annexes, shared A980/Waitron contracts and supplier/location evidence before affected flows can be enabled. All six section 10 questions remain open; AI additionally requires separate privacy review and owner acceptance of eligibility examples and limits.
-3. **Slice 1 implemented locally:** the outbound AI boundary refuses production calls; only explicit synthetic loopback proof is available. Later authorised work covers country-policy controls, support/KMS authority, export/90-day/purge and incident handoffs, with refusal/concurrency evidence. Reuse actual landed interfaces; D79 is clean, parked and unpublished at `fab41b1`, and its migration 043 is not on this tree. No further migration item starts until its slot resolves; the first planned slice is SQL-free.
+3. **Slice 1 implemented locally:** the outbound AI boundary refuses production calls; only explicit synthetic loopback proof is available. Later authorised work covers country-policy controls, support/KMS authority, export/90-day/purge and incident handoffs, with refusal/concurrency evidence. Reuse actual landed interfaces; D79 is clean, parked and unpublished at `7939a27`, and its migration 043 is not on this tree. No further migration item starts until its slot resolves; the first planned slice is SQL-free.
 4. **Before enablement:** satisfy the [launch evidence gate](../../launch-evidence.md#pass-the-production-evidence-gate), legal/provider/location and KMS deletion-waiting policy, D102 email evidence and applicable D88/A951/fiscal/isolation contracts. D68 is landed, but hosting/recovery costs and reliability still need measurement. D103's first C39 monitoring design is approved for planning only; release/compute remain separate. D102/D104 hands-on work waits until 3 November.
 
 **O1, answered:** full data-protection engineering design approved for build planning
