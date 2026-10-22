@@ -93,8 +93,8 @@ temporary storage. The source inspector has its separate smaller limits.
 You can select only `canary`, `accounts`, `state`, `network`, `cell`, `database`, `storage`,
 `custody`, `observability`, `ingress`, `dns` or `integration`. Each name selects fixed module
 and root paths; the CLI accepts no custom command or directory. `--all` runs those suites
-in order and refuses a missing test file. The canary and account suites are implemented,
-so `--all` currently reports those results, then fails on the missing state suite.
+in order and refuses a missing test file. The canary, account and state suites are implemented,
+so `--all` currently reports those results, then fails on the missing network suite.
 It does not report the unfinished infrastructure as verified. Missing local tools produce
 the `--prepare-tools` setup instruction without downloading anything.
 
@@ -185,3 +185,86 @@ node --test deploy/aws/locks.test.mjs
 That check runs the real account suite and refuses a root initialization that changes
 the committed lock. State custody, live permissions and parent-unit ownership remain
 unqualified. An offline plan passing on both architectures does not prove live AWS access.
+
+
+## Keep infrastructure state separate from workloads
+
+Infrastructure state records resource ownership and can contain sensitive provider
+attributes. Each of administration, global and Spain has its own versioned S3 bucket
+and KMS encryption key. Organization administration stays in the existing administration
+account. Global and Spain use their own member accounts and home regions.
+
+Run the declarations through mocked plans and the lifecycle/backend checks:
+
+```sh
+node deploy/aws/check.mjs --suite state
+node --test deploy/aws/state.test.mjs
+```
+
+The module takes a scope, home region, expected account, exact deployment-role references
+indexed by root, and a separate recovery-role reference. It checks the mocked provider's
+account and region. The root exposes only `custody = {bucket_name, kms_key_ref, region}`.
+It creates no role or trust policy; you must supply and separately qualify those identities.
+The root-role map keeps each deployment's state and lock permissions separate.
+
+| Custody scope | Home region | Permitted roots |
+| --- | --- | --- |
+| `administration` | Frankfurt | `accounts`, `state` |
+| `global` | Frankfurt | `global`, `state`, `delegation` |
+| `es` | Madrid | `country`, `state`, `delegation` |
+
+Each supplied root needs a distinct role in that scope's account. Its state key is
+`<scope>/<root>/terraform.tfstate`; its lock adds `.tflock`. Deployment roles can read
+and write their exact state and create or remove their exact lock. Explicit denials
+cover sibling objects, wider listing, foreign principals and state deletion, including
+historical versions. The recovery role can list and read retained versions; recovery
+writes use the matching deployment role through a separately reviewed access procedure.
+There is no expiry rule for state versions.
+
+The bucket blocks public access and unencrypted transport. Writes must name the exact
+KMS key. S3 Bucket Keys are disabled because key permissions use the individual object's
+encryption context, the object address attached to a key operation. Deployment key use
+is restricted to that root's state and lock through its home region's S3 service. KMS
+rotation is enabled. Both bucket and key prevent destruction through OpenTofu, and the
+bucket disables forced deletion. These are declared protections; AWS administrators
+can change policies outside OpenTofu, and mocked plans do not prove live enforcement.
+
+### Bootstrap and recovery need separate authorization
+
+A backend cannot create the bucket that already needs to hold its state. This build
+performs no bootstrap, migration, import or state upload. The state root has an empty
+partial S3 backend; every local check initializes with `-backend=false` and uses only
+mocked providers. Its committed provider lock follows the account root's two-platform
+checksums.
+
+After separate live authorization, use this sequence as an operator checklist:
+
+1. Verify the account inventory, home regions, exact role identities and their trust
+   policies. Qualify the recovery role's ability to administer the key and recover
+   retained state without relying on the running workload or the state bucket itself.
+2. Prepare a private external directory on encrypted storage for bootstrap state and
+   its backups. Keep all state, plans, contacts and backend settings outside Git.
+   Secure its recovery key and access procedure independently of the new KMS key.
+3. Under the separately authorized bootstrap identity, create each scope's custody
+   using protected local state. Review the plan for replacement or deletion before
+   any operation. Retain the encrypted local copy until recovery is verified.
+4. Prepare each root's external backend settings with its own bucket, region, exact
+   key and KMS ARN, `encrypt = true`, `use_lockfile = true`, and an account allowlist.
+   Select only the default workspace. Extra workspace paths are outside these grants.
+   Use the [OpenTofu 1.11 S3 backend reference](https://opentofu.org/docs/v1.11/language/settings/backends/s3/)
+   when qualifying that configuration. Credentials belong in the approved short-lived
+   identity mechanism, never in backend files or command arguments.
+5. Review and explicitly migrate the local state to that root's S3 key. Migration is
+   an authorized operator operation, never an automatic upload during initialization.
+   Verify version retention, exact-key encryption, concurrent lock refusal, lock release
+   and recovery through the separately retained procedure before retiring local copies.
+
+If custody already exists, review imports and state moves against the existing resource
+IDs and addresses. Confirm there is exactly one authoritative state before moving it.
+Never replace a bucket or key to make the plan fit, never upload an arbitrary local
+state automatically, and never remove a lock without proving its writer stopped.
+Keep historical KMS keys available while any retained state depends on them.
+
+The offline checks do not qualify role assumption, bucket-policy enforcement, backend
+migration, lock contention or recovery. Those remain named prerequisites for a later,
+separately authorized live rehearsal.
