@@ -1,6 +1,6 @@
 # Protect venue data when Cloud handles it
 
-**D101 · 2026-10-22 · PROPOSED for full owner design approval. Documentation only.**
+**D101 · 2026-10-22 · Owner-approved engineering design for build planning only. Runtime controls remain unbuilt.**
 
 You need to know who can see your venue's data, where copies go and what happens when
 membership ends before you entrust Cloud with it. This proposal supplies Cloud's half
@@ -12,24 +12,31 @@ Cloud source references use base **`60c0fbf25618a30977657fe74cce90fc5dbb915b`**.
 The [ownership boundary](../../documentation-ownership.md) keeps application behaviour
 in Waitron and managed services in Cloud. D88's [hosting design](2026-10-21-cloud-hosted-venue-design.md)
 and [conditional outline](../plans/2026-10-21-cloud-hosted-venue-design.md) remain proposed.
-No production build starts before full design approval; a build plan comes afterward.
+The owner approved the complete D101/D88 data-protection engineering design from
+PR283 (`9701cd2359d69f0a3e8960b761754cf492aac745`) on 2026-10-22 around 08:30
+for build planning only. The [implementation roadmap](../plans/2026-10-22-cloud-data-protection.md)
+records the reviewed documentation milestone. Implementation requires separate build authority.
+Broader D88 hosting/isolation and shared contracts remain unapproved; no deployment,
+spending, provider resources, contract execution or runtime implementation is authorised.
 
 ## 1. Keep the decisions separate from the recommendations
 
-These are the owner's Cloud decisions of 2026-10-21, carried into D101 and D88:
+These are the owner's Cloud decisions of 2026-10-21, with the 2026-10-22
+planning approval recorded below, carried into D101 and D88:
 
 | Decision | Meaning for this proposal |
 | --- | --- |
 | Country packs choose locations | Each pack names a home region and permitted backup regions. Same-country hosting is not always possible. Spain uses AWS `eu-south-2` for venue data, logs and keys, with one extra backup copy in another EU region. |
 | Translation sends menu text only | Never send personal data. Arbitrary text entered in a menu can contain it; section 4 proposes the missing outbound boundary. SES email in an EU region is a separate approved exception, owned by D102. |
-| Cancellation provides an exit | Full standard-format download of database, latest backup and its key; plain fiscal-retention warning; backups read-only for 90 days, recoverable on resubscription; then delete everything except Cloud's own billing records. Section 6 proposes the clocks and earlier-deletion handling. |
-| Support needs approval each time | Time-limited session, every action logged and visible to you. The owner's example was 24 hours; **24 hours is a proposed default**, not an approved exact limit. |
+| Cancellation provides an exit | Full standard-format download of database, latest backup and its key; plain fiscal-retention warning; backups read-only for 90 days, recoverable on resubscription; then delete everything except Cloud's own billing records. Section 6 records the approved engineering clocks and earlier-deletion handling. |
+| Support needs approval each time | Time-limited session, every action logged and visible to you. **24 hours is the approved maximum** for one venue approval, shorter where practical; extension requires fresh approval. |
 | Emergency has two conditions | Your venue cannot trade **and** cannot be reached. Access only keeps it running, with a log and a report straight afterward. Keys use AWS's key service; machines have scoped restore/verification access, Cloud personnel only these two support routes. |
 | Standby starts cold | Start and restore only when needed. A continuously running Cloud follower is a future, unapproved option. Reliability and prices wait for measurement and D68. |
 | Suppliers need exact qualification | AWS infrastructure, owner-selected Amazon SES in the EU; OpenAI is the actual translation adapter, Anthropic and Google remain candidates. No supplier chain is certified Spain-only by these decisions. |
 
-The remaining details below are engineering recommendations for full-design review,
-not additional owner answers. D103 owns later monitor, release and compute proposals.
+The engineering design below is approved for planning, with the legal, provider and
+separate AI-eligibility gates still open. D103's first C39 monitoring design was approved
+for planning only on 2026-10-22 around 08:35; release and compute decisions remain separate.
 D104 owns the incident runbook and an external public status page. Neither is built here.
 
 ## 2. Use one application map and purpose-specific roles
@@ -101,9 +108,10 @@ approval evidence. Bind placements, jobs and credentials to that revision. Refus
 unknown pack, stale location change or unspecified destination before sending data.
 A new country may have a different home; translation is not globally Spain-only.
 
-For Spain, recommend **Paris `eu-west-3`** for the one extra encrypted backup copy
-to separate its regional failure boundary, subject to service, contract and recovery qualification. This is a recommendation,
-not a selected region. Keep operational data, logs and AWS KMS keys in `eu-south-2`.
+For Spain, the owner approved **Paris `eu-west-3`** for the one extra encrypted backup
+copy to separate its regional failure boundary, subject to service, contract and
+recovery qualification. This is an approved engineering choice, not provider proof.
+Keep operational data, logs and AWS KMS keys in `eu-south-2`.
 No automatic cross-region runtime failover or key replication is authorised. Test the
 extra copy with its Spain key dependencies; until that passes, make no Spain-outage
 recovery promise. An unavailable Spain key can make that copy temporarily unusable.
@@ -164,8 +172,8 @@ verification isolated from fiscal/payment services and messages. Preserve D88's 
 Waitron activation and `external-vault-archive-v2` gates.
 
 For normal support, ask an authorised venue approver for each session, naming the
-operator, venue, reason, actions and expiry. Recommend a 24-hour maximum by default,
-shorter when practical, with a fresh approval to extend. Refuse missing, denied,
+operator, venue, reason, actions and expiry. Enforce the approved 24-hour maximum
+for one venue approval, shorter when practical, with a fresh approval to extend. Refuse missing, denied,
 expired, revoked, wrong-venue or overbroad grants. Cloud staff administrator status alone
 never permits personal-data reads, shell access or decryption. Reauthenticate sensitive
 approvals and make every read, command, decrypt request, refusal and outcome visible
@@ -204,11 +212,11 @@ Cancellation alone follows that instruction; it must not override an earlier ver
 delete instruction. Counsel must settle exceptions before this policy can be offered.
 [GDPR Article 28(3)(g)](https://www.boe.es/buscar/doc.php?id=DOUE-L-2016-80807&lang=es).
 
-Propose these states: **active**, **exit preparing**, **read-only until deadline**,
+The approved engineering states are: **active**, **exit preparing**, **read-only until deadline**,
 **purging**, **purged**. Record cancellation receipt and effective service-end time
 separately. Compute the deadline once as 90 × 24 hours after effective end, using the
 authoritative database UTC clock. Show both dates to the venue. Retried requests do
-not move the deadline. This clock definition is a recommendation, not statutory law.
+not move the deadline. This clock definition is an approved engineering choice, not statutory law.
 
 Before ending writes, reconcile in-flight sales/filing and obtain Waitron's stop/final
 capture evidence. Preserve the best existing backup if final capture fails; show its
@@ -314,7 +322,8 @@ A980 O9 masking and Q57 role resolution also apply at Cloud intake and onward sh
 
 ## 8. Prove the boundaries before enablement
 
-These are proposed acceptance cases, not executed tests or an implementation plan.
+These are approved engineering acceptance cases, not executed tests. The linked
+[roadmap](../plans/2026-10-22-cloud-data-protection.md) maps them to implementation slices.
 
 | Case | Required observable result |
 | --- | --- |
@@ -330,16 +339,15 @@ These are proposed acceptance cases, not executed tests or an implementation pla
 
 ## 9. Conditional delivery and the one owner decision now
 
-1. **Documentation first:** primary driver reviews this proposal and D88 reconciliation; owner approves the full design. No runtime/provider work follows merely from publishing it.
-2. **After approval:** prepare the build plan; complete lawyer-reviewed annexes, shared A980/Waitron contracts and supplier/location evidence. Unresolved legal or provider gates block only affected flows, which stay disabled.
-3. **Then build and qualify:** country-policy controls and the disabled AI boundary, support/KMS authority, export/90-day/purge and incident handoffs, with focused refusal/concurrency evidence. Reuse actual landed interfaces; D79 is parked, unpublished at `fab41b1`, and its migration 043 is not on this base.
-4. **Before enablement:** satisfy the [launch evidence gate](../../launch-evidence.md#pass-the-production-evidence-gate), D102 email evidence and applicable D88/A951/fiscal/isolation contracts. D68 is landed, but hosting/recovery costs and reliability still need measurement; D103 proposals remain separate.
+1. **Design approval recorded:** the owner approved the complete D101/D88 data-protection engineering design from PR283 on 2026-10-22 around 08:30 for build planning only. O1 is answered, including the 24-hour maximum, conditional Paris destination and exit/retry/concurrency rules. Broader D88 hosting/isolation and shared contracts are not approved.
+2. **Build planning published:** the [roadmap](../plans/2026-10-22-cloud-data-protection.md) records the reviewed documentation milestone; implementation requires separate build authority. Complete lawyer-reviewed annexes, shared A980/Waitron contracts and supplier/location evidence before affected flows can be enabled. All six section 10 questions remain open; AI additionally requires separate privacy review and owner acceptance of eligibility examples and limits.
+3. **Implementation remains unbuilt:** later authorised work covers country-policy controls and the disabled AI boundary, support/KMS authority, export/90-day/purge and incident handoffs, with refusal/concurrency evidence. Reuse actual landed interfaces; D79 is clean, parked and unpublished at `fab41b1`, and its migration 043 is not on this tree. No further migration item starts until its slot resolves; the first planned slice is SQL-free.
+4. **Before enablement:** satisfy the [launch evidence gate](../../launch-evidence.md#pass-the-production-evidence-gate), legal/provider/location and KMS deletion-waiting policy, D102 email evidence and applicable D88/A951/fiscal/isolation contracts. D68 is landed, but hosting/recovery costs and reliability still need measurement. D103's first C39 monitoring design is approved for planning only; release/compute remain separate. D102/D104 hands-on work waits until 3 November.
 
-**O1, for driver triage:** approve this full D101 design and reconciled D88 direction,
-including the recommended 24-hour support default, conditional Paris backup destination
-and exit/concurrency rules? AI remains disabled pending its separately accepted
-eligibility rule. Key-deletion, legal and provider gates must be resolved before
-enablement. This asks for design approval only. It does not approve spending, a deployment or a signed contract.
+**O1, answered:** full data-protection engineering design approved for build planning
+only on 2026-10-22 around 08:30. No repeat owner question. AI eligibility, all six lawyer
+questions, KMS deletion-waiting policy, provider qualification and runtime proof remain
+open. Approval does not authorise spending, deployment, contracts or implementation.
 
 ## 10. Questions for the lawyer, not engineering guesses
 
