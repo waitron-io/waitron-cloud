@@ -2431,22 +2431,40 @@ notifications separately.
   setup and queueing. Measure both the candidate and its merge before claiming the
   target is met.
   Browser packages install Chromium with at most two attempts, each bounded to
-  120 seconds plus ten seconds to stop it. The privileged CI supervisor gives
-  each attempt its own process group, stops that group after success, failure,
-  timeout or cancellation, and reaps its direct child. Running the supervisor
-  with root permission lets it stop apt's root children; the explicit browser
-  cache path keeps the installed browser available to the runner. Before each
+  120 seconds plus a shared ten-second cleanup allowance. On Linux, the privileged
+  supervisor adopts its own orphaned descendants, including dpkg processes that
+  start a separate session. It checks current parentage before signalling through
+  stable process handles, and reaps adopted children after success, failure,
+  timeout or cancellation. A second cancellation signal cannot interrupt that
+  cleanup. Missing ownership support stops before installation; unconfirmed
+  cleanup refuses another attempt. The explicit browser cache path keeps the
+  installed browser available to the runner. Before each
   attempt it waits at most 30 seconds for the existing apt/dpkg locks, without
   deleting lock files or stopping another process. The retry delay stays five
-  seconds and all browser assertions and test deadlines stay intact.
+  seconds and all browser assertions and test deadlines stay intact. These
+  configured allowances total at most `2 × (30 + 120 + 10) + 5 = 325` seconds,
+  excluding job setup; the job still has its eight-minute limit. The lock waits
+  are additional time introduced by the earlier supervisor change.
+  D109's retrospective review found that apt could move dpkg outside the earlier
+  process group and that a second cancellation could skip the forced stop.
+  Real Linux session/lock checks now cover escaped children, stale ownership
+  data, unavailable ownership support and refused cleanup while preserving an
+  unrelated holder. Host checks cover repeated cancellation and background
+  children after successful and failed parent exits. A real disposable local
+  package install leaves no apt/dpkg/install-script processes behind after its
+  timeout. The interrupted package configuration still refuses the next install:
+  cleanup releases process ownership and locks, not dpkg's unfinished records.
+  Use a fresh CI runner; this helper does not run automatic package repair.
   [Run 39744422290](https://github.com/waitron-io/waitron-cloud/actions/runs/39744422290/job/119709401502)
   failed before UI-smoke tests: a timed-out dependency install left apt holding
   its lock. A controlled reproduction runs the workflow shell with a real
   lock-holding child that ignores termination: the old retry fails, while the
   supervised retry kills that child and succeeds. Run
-  `node --test scripts/ci-download.test.mjs scripts/ci-workflow.test.mjs` to check
+  `node --test scripts/ci-download.test.mjs scripts/ci-download-linux.test.mjs scripts/ci-workflow.test.mjs` to check
   retry exhaustion, cancellation, lock release and refusal to touch an unrelated
-  lock holder. Actual CI separately qualifies the root boundary and browser
+  lock holder. On macOS, set `CI_DOWNLOAD_LINUX_IMAGE` to a cached Linux image
+  with Python 3 (for example `node:26`) to execute the Linux checks in an owned
+  container. Actual CI separately qualifies the root boundary and browser
   cache access. This handling does not establish why the outside download stalled.
   Ubuntu's Azure mirror and primary archive have both exhausted these limits.
   In [run 39804073424](https://github.com/waitron-io/waitron-cloud/actions/runs/39804073424/attempts/2),
