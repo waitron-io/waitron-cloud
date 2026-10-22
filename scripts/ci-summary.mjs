@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
+import {setTimeout} from 'node:timers/promises';
 import {assertDocumentation} from './ci-docs.mjs';
 import {packageMembers} from './ci-package-groups.mjs';
 import {assertReceiptSuites} from './ci-run-receipts.mjs';
@@ -19,7 +20,7 @@ export const packageShards = Object.freeze({
   '@waitron-cloud/ui-smoke': 1,
 });
 
-export function assertSummary(plan, results, jobs) {
+function expectedSummaryJobs(plan, results) {
   assert.equal(results.changes, 'success', 'CI planner must succeed');
   assert.ok(Array.isArray(plan.packages) && Array.isArray(plan.receipts) && typeof plan.typecheck === 'boolean', 'Missing CI plan');
   if (plan.scripts) {
@@ -78,15 +79,60 @@ export function assertSummary(plan, results, jobs) {
   for (const [group,required] of [['typecheck',plan.typecheck],['packages',plan.packages.length>0],['receipts',plan.receipts.length>0]]) {
     assert.equal(results[group], required ? 'success' : 'skipped', `${group} did not match its plan`);
   }
+  return expected;
+}
+
+function assertSummaryJobs(expected, jobs, waiting = null) {
   for (const job of jobs) {
     if (job.name === 'summary' || expected.includes(job.name)) continue;
-    assert.ok(job.status === 'completed' && job.conclusion === 'skipped', `Unexpected executed job: ${job.name}`);
+    if (waiting && job.status !== 'completed') {
+      waiting.push(job.name);
+    } else {
+      assert.ok(job.status === 'completed' && job.conclusion === 'skipped', `Unexpected executed job: ${job.name}`);
+    }
   }
   for (const name of expected) {
     const matches = jobs.filter(job=>job.name===name);
     assert.equal(matches.length, 1, `Missing or duplicate job: ${name}`);
+    if (waiting && matches[0].status !== 'completed') {
+      waiting.push(name);
+      continue;
+    }
     assert.equal(matches[0].status, 'completed', `${name} is unfinished`);
     assert.equal(matches[0].conclusion, 'success', `${name} did not pass`);
+  }
+}
+
+
+export function assertSummary(plan, results, jobs) {
+  assertSummaryJobs(expectedSummaryJobs(plan, results), jobs);
+}
+
+function readCurrentJobs(timeoutMs) {
+  const pages = JSON.parse(execFileSync('gh', ['api','--paginate','--slurp',`repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/jobs?filter=latest&per_page=100`], {encoding:'utf8',timeout:Math.min(30_000, timeoutMs)}));
+  return pages.flatMap(page => page.jobs);
+}
+
+export async function waitForSummary(plan, results, {
+  readJobs = readCurrentJobs,
+  now = () => performance.now(),
+  sleep = setTimeout,
+  timeoutMs = 60_000,
+  pollMs = 2_000,
+} = {}) {
+  const expected = expectedSummaryJobs(plan, results);
+  const deadline = now() + timeoutMs;
+  let waiting = [];
+  for (;;) {
+    const remaining = deadline - now();
+    assert.ok(remaining > 0, `Timed out waiting for job records: ${waiting.join(', ')}`);
+    const jobs = await readJobs(Math.ceil(remaining));
+    assert.ok(now() < deadline, `Timed out reading job records: ${waiting.join(', ') || expected.join(', ')}`);
+    waiting = [];
+    // needs has settled, but each matrix partition must publish its own final record.
+    assertSummaryJobs(expected, jobs, waiting);
+    if (waiting.length === 0) return;
+    await sleep(Math.min(pollMs, deadline - now()));
   }
 }
 
@@ -94,8 +140,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     const plan = JSON.parse(process.env.CI_PLAN);
     const results = Object.fromEntries(Object.entries(JSON.parse(process.env.CI_RESULTS)).map(([name,job])=>[name,job.result]));
-    const pages = JSON.parse(execFileSync('gh', ['api','--paginate','--slurp',`repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/jobs?filter=latest&per_page=100`], {encoding:'utf8',timeout:30_000}));
-    assertSummary(plan,results,pages.flatMap(page=>page.jobs));
+    await waitForSummary(plan, results);
     console.log(plan.reuse ? `same tree as PR head ${plan.reuse.sha}, run ${plan.reuse.runId}` : plan.documentation ? `Passed 1 document check (${plan.documentation.paths.length} paths)` : plan.scripts ? 'Passed root script checks' : `Passed ${plan.packages.length} package jobs and ${plan.receipts.length} receipts`);
   } catch (error) {
     console.error(error.message);
