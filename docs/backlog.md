@@ -2441,24 +2441,28 @@ notifications separately.
   retry exhaustion, cancellation, lock release and refusal to touch an unrelated
   lock holder. Actual CI separately qualifies the root boundary and browser
   cache access. This handling does not establish why the outside download stalled.
-  PR291's first [run 39769929280](https://github.com/waitron-io/waitron-cloud/actions/runs/39769929280)
-  again exhausted both 120-second attempts while fetching fonts from
-  `azure.archive.ubuntu.com`; no browser test ran. Each attempt was stopped,
-  and the second progressed without the earlier package-lock collision. The
-  underlying mirror slowness remains unexplained. Before browser installation,
-  CI replaces the direct Azure Ubuntu archive URI or the runner's
-  `mirror+file:/etc/apt/apt-mirrors.txt` reference with
-  `https://archive.ubuntu.com/ubuntu`. Your release, components, architectures,
-  signing keys and third-party sources stay intact. Ubuntu documents the
-  [primary archive](https://ubuntu.com/project/docs/how-ubuntu-is-made/concepts/package-archive/)
-  and its [signature checks](https://documentation.ubuntu.com/security/software-integrity/archive-verification/).
+  Ubuntu's Azure mirror and primary archive have both exhausted these limits.
+  In [run 39804073424](https://github.com/waitron-io/waitron-cloud/actions/runs/39804073424/attempts/2),
+  portal shard 1 timed out twice fetching the 15 MB `noble/universe` package index
+  from the primary archive. Earlier
+  [run 39787485838](https://github.com/waitron-io/waitron-cloud/actions/runs/39787485838)
+  reached package downloads but timed out fetching fonts and NSS libraries.
+  CI now directs recognised Azure, primary and runner mirror-file archive
+  references to `https://mirrors.kernel.org/ubuntu`. This changes only the URI;
+  your release, components, architectures, signing keys and other sources stay
+  intact. Ubuntu's existing signed release metadata and package hash checks
+  still decide which bytes you can install. No additional signing key, cache,
+  unsigned source or longer deadline is introduced. See
+  [Ubuntu's archive verification](https://documentation.ubuntu.com/security/software-integrity/archive-verification/)
+  and the [mirror operator's archive](https://mirrors.kernel.org/).
   Run `node --test scripts/ci-browser-source.test.mjs scripts/ci-download.test.mjs`
-  to check source preservation and a controlled HTTP mirror that accepts a
-  connection but never returns its dependency. The unchanged source exhausts
-  both attempts; the primary source succeeds. Keep all installer bounds and
-  browser assertions. Actual Actions runs must still prove dependency installation
-  and browser execution on each head; this source change promises no network
-  availability or explanation of the Azure stall.
+  to check source preservation and the workflow against controlled stalled Azure
+  and primary sources. Both must reach the alternative in one attempt. Real
+  Actions qualification must also show two consecutive full runs of the same
+  head and its independent merge run, with one install attempt and every portal
+  and UI-smoke test executed. The public mirror can still fail; the existing
+  supervisor must then refuse the install within its unchanged limits. The
+  observed transfer bottlenecks do not establish the outside servers' cause.
   A separate backup-fixture download remains open: D107's corrected-head
   [run 39776383906](https://github.com/waitron-io/waitron-cloud/actions/runs/39776383906/job/119816424815)
   could not build the verification fixture because Docker Hub returned

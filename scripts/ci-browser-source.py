@@ -1,4 +1,4 @@
-"""Use Ubuntu's primary signed archive for CI browser dependencies."""
+"""Use Ubuntu's signed kernel.org mirror for CI browser dependencies."""
 
 import argparse
 from pathlib import Path
@@ -18,13 +18,13 @@ def main():
             continue
         original = path.read_text()
         # Change the mirror URI only; suites, components and signing keys stay intact.
-        updated = re.sub(r'(?<!\S)https?://azure\.archive\.ubuntu\.com/ubuntu(?=/?(?:\s|$))',
-                         'https://archive.ubuntu.com/ubuntu', original)
+        updated = re.sub(r'(?<!\S)https?://(?:azure\.)?archive\.ubuntu\.com/ubuntu(?=/?(?:\s|$))',
+                         'https://mirrors.kernel.org/ubuntu', original)
         updated = re.sub(r'(?<!\S)mirror\+file:/etc/apt/apt-mirrors\.txt(?=\s|$)',
-                         'https://archive.ubuntu.com/ubuntu', updated)
+                         'https://mirrors.kernel.org/ubuntu', updated)
         if updated != original:
             path.write_text(updated)
-            print(f'Using https://archive.ubuntu.com/ubuntu in {path}', flush=True)
+            print(f'Using https://mirrors.kernel.org/ubuntu in {path}', flush=True)
 
 
 if __name__ == '__main__':
