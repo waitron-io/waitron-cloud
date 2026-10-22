@@ -1,7 +1,8 @@
 # Run Waitron Cloud in production, and let it run itself a little more each time
 
 **2026-10-22 · Item 1 of the [launch platform work](../../backlog.md#launch-platform-work-in-priority-order) ·
-Design from the owner's design session. Not yet approved by the owner.**
+Design from the owner's design session. **Approved by the owner on 2026-10-22** for building and
+rehearsing locally; AWS accounts and spending need a separate go-ahead (section 12).**
 
 This document says how Waitron Cloud is deployed and operated in production. Where a
 sentence records an owner decision it says so, with the owner's words where they were
