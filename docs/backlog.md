@@ -2875,6 +2875,13 @@ notifications separately.
   data. Stale health is shown as unknown and the permission is rechecked before release.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
+  The [D103 threshold proposal](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
+  separates existing local detection from proposed production operator alerts and
+  opted-in venue mail, with worked outage and backup timelines. Owner approval is
+  required before implementation; publication supplies no production alerting or
+  recovery guarantee. D103's release/upgrade and compute proposals remain separate
+  later decisions. D104 owns the paging connection and independent public status page;
+  D102's SES feedback, suppression, alerts and live qualification remain open.
   Optional quiet periods and one still-open reminder are implemented with both timings
   disabled by default. Each incident opening captures its original recipients and fixed
   database deadlines. The portal remains immediate; brief incidents recover silently.
@@ -3177,6 +3184,24 @@ notifications separately.
   separate from upload freshness; production workers still need enforceable resource and
   network isolation, without activating a primary or contacting fiscal/payment services. Define the external-key format extension
   rather than assuming it exists in the inspected manifest v1.
+
+## Account HTTP reset-mail capture
+
+[CI run 39730254198](https://github.com/waitron-io/waitron-cloud/actions/runs/39730254198)
+on documentation-only `ea288eafac4bf7e8fafe5592fb3d81f0afecc7bf` passed 180 of 181
+account HTTP shard-3 tests. Its signup/recovery journey could not find the reset
+message in Mailpit (`packages/account-http/test/account-http.test.ts:50,90`).
+The runtime, fixture and workflow paths are unchanged from main `9701cd2`.
+The local unmodified shard command below passes all 181 tests, including that
+journey. This does not explain the CI failure or prove a fix. Preserve the assertion and deadline.
+If it recurs, capture the worker result, redacted outbox state, SMTP outcome and
+Mailpit listing/visibility boundaries before deciding whether delivery or capture
+failed. Keep recipients, tokens and raw SMTP responses out of diagnostic artifacts.
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node \
+  --test --test-timeout=30000 --test-shard=3/3 'test/*.test.ts'
+```
 
 ## Portal session test startup
 
