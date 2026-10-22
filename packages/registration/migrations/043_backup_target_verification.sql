@@ -26,8 +26,9 @@ BEGIN
  RETURN (value#>>'{}')::numeric BETWEEN minimum AND 9007199254740991;
 END $$;
 
+-- Restore sessions use an empty search path; nested checks resolve in the migration schema.
 CREATE FUNCTION backup_verification_target_shape(value jsonb) RETURNS boolean
-LANGUAGE plpgsql IMMUTABLE AS $$
+LANGUAGE plpgsql IMMUTABLE SET search_path FROM CURRENT AS $$
 DECLARE m jsonb; dependency record; names text[]='{}'; tables text[]='{}';
 BEGIN
  IF NOT backup_verification_keys(value,ARRAY['version','runtime','modules','compositionDigest','migrationDigest','policyDigest','digest'])
@@ -169,7 +170,7 @@ ALTER TABLE backup_recoveries ADD CHECK(
 -- Success needs the complete declared owner coverage. This is structural evidence,
 -- never a substitute for Waitron's own module checks or the trusted child receipt.
 CREATE FUNCTION backup_verification_passed_modules(result jsonb, target jsonb) RETURNS boolean
-LANGUAGE plpgsql IMMUTABLE AS $$
+LANGUAGE plpgsql IMMUTABLE SET search_path FROM CURRENT AS $$
 DECLARE m jsonb; expected jsonb; check_result jsonb; names text[]='{}'; codes text[];
 BEGIN
  IF jsonb_typeof(result->'modules') IS DISTINCT FROM 'array' THEN RETURN false; END IF;

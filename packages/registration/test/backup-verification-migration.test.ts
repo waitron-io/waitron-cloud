@@ -433,3 +433,13 @@ test('concurrent_upgrade_is_once_and_applied_sql_unchanged', async () => {
     await assert.rejects(migrate(p), /Applied migration has changed: 043_backup_target_verification.sql/);
   } finally {await p.end(); await admin.query(`DROP SCHEMA ${name} CASCADE`);}
 });
+
+test('backup policy and evidence checks survive the empty search path used by pg_restore',async()=>{
+ const f=await fixture();try{
+  await policy(f);const e=await evidence(f);await pointAt(f,e.id);
+  await f.c.query("SET LOCAL search_path=''");
+  assert.equal((await f.c.query(`UPDATE ${schema}.backup_verification_policy SET revision=1,target=$1,verifier_image=$2,release_ready=true WHERE id=1`,[target,image])).rowCount,1);
+  assert.equal((await f.c.query(`SELECT ${schema}.backup_verification_target_shape($1) AS valid`,[target])).rows[0].valid,true);
+  assert.equal((await f.c.query(`SELECT current_verification FROM ${schema}.backup_point_qualification WHERE point_id=$1`,[f.point])).rows[0].current_verification,'verified');
+ }finally{await f.close();}
+});
