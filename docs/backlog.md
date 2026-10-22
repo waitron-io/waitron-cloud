@@ -2940,10 +2940,17 @@ notifications separately.
   known UUID serialized to five and closed it. That known-ID denial remains a deliberate
   guess-limit trade-off. Keep request UUIDs out of logs and choose ingress or reissue
   mitigation before changing the five-attempt rule.
-- **Provisioning and placement.** Use Kubernetes for orchestration when needed;
-  cluster provisioning and manifests are deferred until there is a service to deploy
-  and a concrete operational need. Country/provider/cell registry, repeatable resource
-  creation, recovery from partial failures, capacity and customer movement. The local
+- **Provisioning and placement.** The owner approved the
+  [production deployment design](superpowers/specs/2026-10-22-cloud-production-deployment-design.md)
+  for local building and rehearsal. D110's
+  [P1 country-cell plan](superpowers/plans/2026-10-22-cloud-country-cell.md)
+  specifies images, repository-driven Kubernetes deployment and genuine three-node
+  availability checks for sign-in, remote access and backups. The plan is a documentation
+  milestone; implementation and those runtime checks remain unfinished. AWS accounts,
+  spending, live infrastructure and production schema changes need separate authority.
+  Global account separation, the action controller, release waves, hosted venues and
+  regional failover remain later plans. Country/provider/cell registry, repeatable resource
+  creation, recovery from partial failures, capacity and customer movement remain open. The local
   movement state machine now reserves a destination without replacing the source, rejects
   competing/stale operations, retains durable retry results and revokes the old route only
   after the destination manifest was applied and tested. The two-cell proof preserves the
