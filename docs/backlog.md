@@ -2961,6 +2961,16 @@ notifications separately.
   expired storage credentials are refused, recovery restores management access and a fresh
   manifest removes a revoked route. Repeat the drill with the selected deployment database,
   gateway reconciler and provider-native storage before setting an availability promise.
+- **Repair actions and Cloud controller (P4).** The approved production design's
+  action-by-action automation is described in the
+  [implementation plan](superpowers/plans/2026-10-22-cloud-action-controller.md).
+  This is planning only. The catalogue, durable requests, operator approvals,
+  console, notifications and controller are not built. Plan approval and P1's
+  country-cell build remain required before implementation; any new database
+  migration also waits for D79's migration slot. C39 supplies observations without
+  granting action or activation authority. P5 release waves, P6 hosted placement
+  and qualified stop proof, P7 regional failover and all production enablement
+  gates remain separate. No provider operation, spending or live mail is authorised.
 - **Provider integration.** Storage, compute, email, notifications, jobs, keys and
   telemetry, with AWS and Google implementations where needed. The local SeaweedFS
   storage contract now covers venue-scoped access, live key rotation, issued-credential
