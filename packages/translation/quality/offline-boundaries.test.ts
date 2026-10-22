@@ -20,7 +20,11 @@ test('the maintained scorer works without provider keys, network or provider sub
  for(const method of ['spawn','spawnSync','exec','execSync','execFile','execFileSync','fork'] as const)t.mock.method(childProcess,method,denied);
  syncBuiltinESMExports();
  const environment=process.env;
- process.env=new Proxy(environment,{get(target,key){if(typeof key==='string'&&/OPENAI|ANTHROPIC|GEMINI|API_KEY/.test(key))return denied();return Reflect.get(target,key);}});
+ process.env=new Proxy(environment,{
+  get(target,key){if(typeof key==='string'&&/OPENAI|ANTHROPIC|GEMINI|API_KEY/.test(key))return denied();return Reflect.get(target,key);},
+  has(target,key){if(typeof key==='string'&&/OPENAI|ANTHROPIC|GEMINI|API_KEY/.test(key))return denied();return Reflect.has(target,key);},
+  ownKeys:denied
+ });
  try{
   const {loadSet,gradeRun}=await import('./scorer.ts');
   for(const set of ['tuning','blind'] as const){

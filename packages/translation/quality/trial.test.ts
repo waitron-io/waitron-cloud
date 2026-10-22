@@ -123,6 +123,7 @@ test('maintained trials deny default, global and regional calls and flag-only be
    await assert.rejects(trial.runTrial({set:'blind',runs:1,outDir:pathToFileURL(dir+'/'),env:{CLOUD_OPENAI_API_KEY:'synthetic-private',CLOUD_TRANSLATION_LOCAL_PROOF:flag,CLOUD_OPENAI_BASE_URL:baseUrl}}));
    assert.deepEqual(readdirSync(dir),[]);
   }
+  t.mock.restoreAll();
   const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
   try{await assert.rejects(trial.runTrial({set:'blind',runs:1,outDir:pathToFileURL(dir+'/'),env:{CLOUD_OPENAI_API_KEY:'synthetic-private',CLOUD_OPENAI_BASE_URL:fake.baseUrl}}));assert.equal(fake.requests.length,0);}finally{await fake.close();}
   assert.equal(requests,0);
