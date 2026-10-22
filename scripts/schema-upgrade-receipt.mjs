@@ -271,8 +271,8 @@ try{
   Object.assign(backupChecks,await restoredBackups(next,restored.pool,backupProof,backupAfter));
   const beforeRestart=await storedRows(restored.pool,true);
   node(next,['packages/registration/src/migrate-cli.ts'],environment(restored.url));
-  const restarted=await startAccount(next,restored.url);await stop(restarted.handle);
   assert.deepEqual(await storedRows(restored.pool,true),beforeRestart);
+  const restarted=await startAccount(next,restored.url);await stop(restarted.handle);
   await restoredBackups(next,restored.pool,backupProof,backupAfter);
   assert.deepEqual(await backupState(primary.pool),backupAfter);
  }
