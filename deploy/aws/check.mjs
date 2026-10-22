@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, readdir, lstat, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, lstat, realpath, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,10 @@ import { fileURLToPath } from 'node:url';
 const runProcess = promisify(execFile);
 const toolsImage = 'waitron-cloud-aws-tools:task1-parser';
 const inspector = fileURLToPath(new URL('./inspect.py', import.meta.url));
+
+function isSource(name) {
+  return /\.(?:tf|tofu|tfvars|tftest\.hcl|tofutest\.hcl|tf\.json|tofu\.json|tftest\.json|tofutest\.json|tfvars\.json)$/.test(name);
+}
 
 async function copySources(source, target) {
   if ((await lstat(source)).isSymbolicLink()) throw new Error('Source root symlink is forbidden');
@@ -21,20 +25,53 @@ async function copySources(source, target) {
     if (entry.isDirectory()) {
       if (['.aws', '.terraform', '.git', 'node_modules'].includes(entry.name)) continue;
       await copySources(from, to);
-    } else if (/\.(?:tf|tofu|tfvars|tftest\.hcl|tofutest\.hcl|tf\.json|tofu\.json|tftest\.json|tofutest\.json|tfvars\.json)$/.test(entry.name)) {
+    } else if (isSource(entry.name)) {
       if (!stat.isFile() || stat.size > 1024 * 1024) throw new Error(`${entry.name}: unsupported source file`);
       await writeFile(to, await readFile(from), { mode: 0o644 });
     }
   }
 }
 
-export async function checkSources(directory, { execute = runProcess } = {}) {
+async function copyTrackedSources(source, target) {
+  if ((await lstat(source)).isSymbolicLink()) throw new Error('Source root symlink is forbidden');
+  const options = { timeout: 30_000, maxBuffer: 4 * 1024 * 1024, env: { PATH: process.env.PATH, HOME: process.env.HOME } };
+  const git = ['-c', 'core.fsmonitor=false', '-C', source];
+  const { stdout: root } = await runProcess('git', [...git, 'rev-parse', '--show-toplevel'], options);
+  const repository = await realpath(root.trim());
+  if (await realpath(source) !== join(repository, 'deploy/aws')) throw new Error('Tracked source must be the repository deploy/aws directory');
+  const { stdout: index } = await runProcess('git', [...git, 'ls-files', '--stage', '-z', '--full-name', '--', '.'], options);
+  await mkdir(target, { recursive: true });
+  for (const record of index.split('\0').filter(Boolean)) {
+    const tab = record.indexOf('\t');
+    const [mode, , stage] = record.slice(0, tab).split(' ');
+    const path = record.slice(tab + 1);
+    if (!isSource(path) || path.split('/').some((part) => ['.aws', '.terraform', '.git', 'node_modules'].includes(part))) continue;
+    if (stage !== '0') throw new Error('Unresolved Git source conflict');
+    if (!['100644', '100755'].includes(mode)) throw new Error('Indexed source mode or symlink is forbidden');
+    if (!/^deploy\/aws\/[a-zA-Z0-9_./-]+$/.test(path) || path.split('/').some((part) => part === '..' || part === '.')) {
+      throw new Error('Unsupported indexed source path');
+    }
+    let from = repository;
+    for (const part of path.split('/')) {
+      from = join(from, part);
+      if ((await lstat(from)).isSymbolicLink()) throw new Error('Indexed source path symlink is forbidden');
+    }
+    const stat = await lstat(from);
+    if (!stat.isFile() || stat.size > 1024 * 1024) throw new Error('Unsupported indexed source file');
+    const to = join(target, path.slice('deploy/aws/'.length));
+    await mkdir(resolve(to, '..'), { recursive: true });
+    await writeFile(to, await readFile(from), { mode: 0o644 });
+  }
+}
+
+export async function checkSources(directory, { execute = runProcess, trackedOnly = false } = {}) {
   const scratch = await mkdtemp(join(tmpdir(), 'cloud-aws-inspection-'));
   const name = `cloud-aws-inspection-${randomUUID()}`;
   const options = { timeout: 30_000, maxBuffer: 1024 * 1024, env: { PATH: process.env.PATH, HOME: process.env.HOME } };
   let submitted = false;
   try {
-    await copySources(directory, join(scratch, 'source'));
+    if (trackedOnly) await copyTrackedSources(directory, join(scratch, 'source'));
+    else await copySources(directory, join(scratch, 'source'));
     await writeFile(join(scratch, 'inspect.py'), await readFile(inspector), { mode: 0o644 });
     submitted = true;
     await execute('docker', [

@@ -32,12 +32,75 @@ def blocks(document, kind):
 
 
 def reference(value):
+    if value == "aws":
+        return value
     require(isinstance(value, str) and re.fullmatch(r"\$\{aws(?:\.[a-zA-Z_][\w-]*)?\}", value), "unsupported provider binding")
     return value[2:-1]
 
 
 def provider_name(body):
     return "aws" + ("." + literal(body["alias"]) if "alias" in body else "")
+
+
+def provider_map(value):
+    require(isinstance(value, dict), "unsupported provider map")
+    result = {}
+    for key, target in value.items():
+        # Dotted object keys are reference expressions in the pinned HCL parser.
+        address = reference(key) if key.startswith("${") else key
+        require(re.fullmatch(r"aws(?:\.[a-zA-Z_][\w-]*)?", address), "unsupported provider map key")
+        result[address] = reference(target)
+    return result
+
+
+def module_path(body, caller, configs):
+    source = literal(body.get("source"))
+    require(source.startswith(("./", "../")), "module source must be a relative local path")
+    target = (caller / source).resolve()
+    # Only canonical directories parsed inside this source tree can be selected.
+    require(target in configs, "module execution is not qualified: source has no configuration")
+    return target
+
+
+def requirements(documents):
+    required, declared = set(), set()
+    for doc in documents:
+        for terraform in doc.get("terraform", []):
+            for declaration in terraform.get("required_providers", []):
+                if "aws" in declaration:
+                    declared.add("aws")
+                    required.update(reference(x) for x in declaration["aws"].get("configuration_aliases", []))
+        for name, body in blocks(doc, "provider"):
+            required.add(provider_name(body))
+    require("aws" in declared, "undeclared AWS provider source")
+    declared.update(required)
+    for doc in documents:
+        for kind in ("resource", "data"):
+            for _, entries in blocks(doc, kind):
+                for body in entries.values():
+                    if isinstance(body, dict):
+                        address = reference(body["provider"]) if "provider" in body else "aws"
+                        require(address in declared, f"{address}: undeclared resource provider")
+                        required.add(address)
+    return required, declared
+
+
+def module_requirements(directory, configs, ancestors=()):
+    require(directory not in ancestors, "local module cycle is forbidden")
+    documents = configs[directory]
+    required, declared = requirements(documents)
+    for doc in documents:
+        for name, body in blocks(doc, "module"):
+            target = module_path(body, directory, configs)
+            child, child_declared = module_requirements(target, configs, (*ancestors, directory))
+            mapping = provider_map(body.get("providers", {}))
+            for address in child:
+                require(address in mapping, f"{address}: missing module provider binding in {name}")
+            for address, parent in mapping.items():
+                require(address in child_declared, f"{address}: undeclared child provider in {name}")
+                require(parent in declared, f"{parent}: undeclared parent provider in {name}")
+                required.add(parent)
+    return required, declared
 
 
 def parse(path):
@@ -84,11 +147,12 @@ def inspect(directory):
             for kind in ("resource", "data"):
                 for name, entries in blocks(doc, kind):
                     require(name.startswith("aws_"), f"{name}: external or undeclared provider is forbidden")
-            # Unresolved module bindings cannot prove that every provider is mocked.
-            require(not doc.get("module"), "module execution is not qualified yet")
             for name, body in blocks(doc, "provider"):
                 require(name == "aws", "undeclared provider source")
                 provider_name(body)
+    # Check every module, including modules that no test happens to select.
+    for directory in configs:
+        module_requirements(directory, configs)
     for path, test in tests:
         require(set(test) <= {"mock_provider", "run", "variables"}, f"{path.name}: test provider block or unsupported block")
         mocked = set()
@@ -100,33 +164,18 @@ def inspect(directory):
         test_root = path.parent.parent if path.parent.name == "tests" else path.parent
         documents = configs.get(test_root, [])
         require(documents, f"{path.name}: no configuration")
-        required = set()
-        declared = False
-        for doc in documents:
-            for terraform in doc.get("terraform", []):
-                for declaration in terraform.get("required_providers", []):
-                    if "aws" in declaration:
-                        declared = True
-                        required.update(reference(x) for x in declaration["aws"].get("configuration_aliases", []))
-            for name, body in blocks(doc, "provider"):
-                required.add(provider_name(body))
-            for kind in ("resource", "data"):
-                for _, entries in blocks(doc, kind):
-                    for body in entries.values():
-                        if isinstance(body, dict):
-                            required.add(reference(body["provider"]) if "provider" in body else "aws")
-        require(declared, f"{path.name}: undeclared AWS provider source")
         runs = list(blocks(test, "run"))
         require(runs, f"{path.name}: no plan run")
         for name, run in runs:
             require(run.get("command") == "plan", f"{name}: command must be explicit keyword plan")
-            require(not run.get("module"), f"{name}: test module execution is not qualified yet")
-            mapping = run.get("providers", {})
-            require(isinstance(mapping, dict), f"{name}: unsupported provider map")
-            resolved = {}
-            for key, value in mapping.items():
-                require(re.fullmatch(r"aws(?:\.[a-zA-Z_][\w-]*)?", key), f"{name}: unsupported provider map key")
-                resolved[key] = reference(value)
+            selected = test_root
+            if "module" in run:
+                require(isinstance(run["module"], list) and len(run["module"]) == 1, "unsupported test module selection")
+                selected = module_path(run["module"][0], test_root, configs)
+            required, declared = module_requirements(selected, configs)
+            resolved = provider_map(run.get("providers", {}))
+            for address in resolved:
+                require(address in declared, f"{address}: undeclared run provider in {name}")
             for address in required:
                 target = resolved.get(address, address)
                 require(target in mocked, f"{address}: missing mock in run {name}")
