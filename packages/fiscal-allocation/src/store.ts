@@ -572,7 +572,6 @@ export class FiscalAllocationStore {
       const receipt = this.#receipt(row.result),
         scope = allocationScope(receipt);
       await this.#authorize(c, token, csrf, input.venueId, scope, 'read');
-      await this.#authorize(c, token, csrf, input.venueId, scope, 'read');
       return { version: 1, state: 'recorded', receipt };
     });
   }

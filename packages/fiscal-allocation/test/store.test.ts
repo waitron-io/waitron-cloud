@@ -79,6 +79,73 @@ test('two organisations share C names but cannot inspect each other’s venue re
     await s.close();
   }
 });
+test('stored status checks entitlement and custody once before returning the exact receipt', async () => {
+  const s = await storeFixture();
+  try {
+    const v = await s.venue();
+    const receipt = await s.store.reserve(v.session.token, v.session.csrfToken, v.input);
+    const checks: string[] = [];
+    const store = new FiscalAllocationStore(s.f.pool, {
+      ...s.options,
+      entitlement: {
+        async check(c, ...args) {
+          checks.push('entitlement');
+          assert.equal(args[1], v.id);
+          assert.equal(args[2], 'read');
+          return s.options.entitlement!.check(c, ...args);
+        },
+      },
+      custody: {
+        async check(c, ...args) {
+          checks.push('custody');
+          assert.equal(args[1], v.id);
+          assert.deepEqual(args[2], scope);
+          return s.options.custody!.check(c, ...args);
+        },
+      },
+    });
+    assert.deepEqual(
+      await store.status(v.session.token, v.session.csrfToken, {
+        version: 1, venueId: v.id, operationId: v.input.operationId,
+      }),
+      { version: 1, state: 'recorded', receipt },
+    );
+    assert.deepEqual(checks, ['entitlement', 'custody']);
+  } finally {
+    await s.close();
+  }
+});
+for (const denial of ['entitlement', 'custody', 'ownership'] as const) {
+  test(`stored status refuses a receipt after ${denial} authority is withdrawn`, async () => {
+    const s = await storeFixture();
+    try {
+      const v = await s.venue();
+      const receipt = await s.store.reserve(v.session.token, v.session.csrfToken, v.input);
+      let denied = false;
+      const store = new FiscalAllocationStore(s.f.pool, {
+        ...s.options,
+        entitlement: {
+          async check(c, ...args) {
+            const result = await s.options.entitlement!.check(c, ...args);
+            return { ...result, allowed: result.allowed && !denied };
+          },
+        },
+      });
+      const read = () => store.status(v.session.token, v.session.csrfToken, {
+        version: 1, venueId: v.id, operationId: v.input.operationId,
+      });
+      assert.deepEqual(await read(), { version: 1, state: 'recorded', receipt });
+      if (denial === 'entitlement') denied = true;
+      else if (denial === 'custody')
+        await s.f.pool.query('UPDATE fiscal_test_authority SET custody=false WHERE account_id=$1', [v.account]);
+      else
+        await s.f.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1', [v.account]);
+      await assert.rejects(read(), refused(denial === 'ownership' ? 'permission_denied' : `${denial}_unavailable`));
+    } finally {
+      await s.close();
+    }
+  });
+}
 test('two independent authenticated workers allocate one shared namespace and retain exact retries', async () => {
   const s = await storeFixture();
   try {
