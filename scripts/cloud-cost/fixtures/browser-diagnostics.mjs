@@ -5,6 +5,12 @@ const phases = new Set(['options', 'meter', 'launch', 'context', 'login', 'dashb
 
 const steps = new Set(['reload', 'takings', 'overdue-empty', 'requests']);
 
+// Diagnostic inspection must not replace the journey's original refusal.
+function diagnosticValue(error, key) {
+  try { return error && Object.getOwnPropertyDescriptor(error, key)?.value; }
+  catch { return undefined; }
+}
+
 export function parseBrowserDiagnostics(stderr) {
   const browserPhase = /(?:^|\n)cost_browser_phase=(options|meter|launch|context|login|dashboard|reconnect|logout|close|accounting|snapshot)\n/.exec(stderr)?.[1];
   const browserStep = browserPhase === 'reconnect'
@@ -15,9 +21,9 @@ export function parseBrowserDiagnostics(stderr) {
 export async function withBrowserDiagnostics(run, report) {
   try { return await run(); }
   catch (error) {
-    const phase = error && Object.getOwnPropertyDescriptor(error, 'browserPhase')?.value;
+    const phase = diagnosticValue(error, 'browserPhase');
     if (phases.has(phase)) report('cost_browser_phase=' + phase);
-    const step = error && Object.getOwnPropertyDescriptor(error, 'browserStep')?.value;
+    const step = diagnosticValue(error, 'browserStep');
     if (phase === 'reconnect' && steps.has(step)) report('cost_browser_step=' + step);
     throw error;
   }
