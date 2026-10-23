@@ -12,6 +12,12 @@ direction. Its [roadmap](../plans/2026-10-22-cloud-data-protection.md) records t
 documentation milestone; implementation requires separate build authority. Broader D88 hosting/isolation/shared contracts
 and existing recovery/fiscal gates remain separate and open.
 
+**2026-10-23 handover revision:** the [A1018 shared direction](../../waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018)
+replaces this draft's external stop-proof requirement. Cloud agrees the direction;
+Waitron asks the single combined owner design question. Its defaults, build and
+runtime acceptance remain pending. The owner approved gVisor and Spain running
+from Paris on 2026-10-23; those choices do not grant provider or activation authority.
+
 You should be able to start a new venue with its main Waitron server in Cloud, or recover there after its local servers fail. Cloud supplies the place to run it, storage, connectivity and recovery coordination. Waitron decides whether a server may write sales or file fiscal records. **Promotion** enables a standby as the active writer; restoring a database does not confer that authority.
 
 ## Start with the evening you need to recover
@@ -19,8 +25,9 @@ You should be able to start a new venue with its main Waitron server in Cloud, o
 Your venue closes with both local boxes failed. The till still has internet. The owner
 selected **cold recovery**: start Cloud capacity and restore only when needed. You can
 recover from the last usable offsite copy, but changes that never left the boxes are
-unavailable until their disks return. Establish that both boxes and every other
-promotable peer are out of service before Cloud writes.
+unavailable until their disks return. Enumerate both boxes and every other
+promotable peer. Use the explicitly selected recovery path and its shutdown and
+sole-recovery declarations; no hard-stop proof is added to authorised cold restore.
 
 This chooses a recovery shape, not a recovery-time promise. Startup capacity and total
 recovery time remain unmeasured, and Waitron's fiscal preparation can add waiting.
@@ -51,7 +58,8 @@ The owner's country-pack policy names each country's home and permitted backup r
 same-country hosting is not always possible. For Spain, venue data, logs and keys stay
 in AWS Europe (Spain), `eu-south-2`, with **one extra backup copy in another EU region**.
 D101 records approved Paris `eu-west-3`, subject to qualification, with Spain key dependencies and no automatic
-cross-region runtime failover. Menu translation remains disabled until D101’s
+venue activation during cross-region recovery. The approved production direction
+allows Spain to run from Paris, subject to legal/provider and venue recovery gates. Menu translation remains disabled until D101’s
 separate input-eligibility rule is accepted. Any later eligible menu text must be
 minimised and contain no personal data; review/detection alone cannot establish that
 for arbitrary strings.
@@ -92,36 +100,76 @@ Record a durable operation journal in platform PostgreSQL before requesting reso
 
 The conceptual sequence is reserve capacity, allocate disk and Cloud installation identity, deliver scoped secrets, prepare Waitron in a non-writing mode, verify readiness, obtain the Waitron activation result, then publish routes. These are proposed operations, not implemented endpoints. Persist intent before each outside call and its observed outcome afterward. A lost reply means uncertainty: inspect the existing resource and Waitron operation before retrying. Never infer activation failure from a timeout.
 
-Before activation, cancellation can remove only resources proved to belong to that operation, retaining diagnostics without secrets. After possible activation or writes, preserve the disk, journal and generation and reconcile authority. Cleanup must never destroy the only recoverable ledger. A crash after allocation resumes that allocation; a crash after activation recovers its receipt rather than starting another activation. Distinguish provisioned, restored, verified, awaiting fence, activation uncertain, active and routed in status.
+Before activation, cancellation can remove only resources proved to belong to that operation, retaining diagnostics without secrets. After possible activation or writes, preserve the disk, journal and generation and reconcile authority. Cleanup must never destroy the only recoverable ledger. A crash after allocation resumes that allocation; a crash after activation recovers its receipt rather than starting another activation. Distinguish provisioned, restored, verified, awaiting handover evidence or declaration, activation uncertain, active and routed in status.
 
 For a new Cloud-primary venue, there is no predecessor to fence or recovery point to import. Still prove that this is a new venue, bind its Cloud installation to the Waitron-created venue/node, and obtain Waitron's normal initial setup and activation result. Cloud account permission to buy hosting does not bypass local administrator or fiscal setup requirements. The bootstrap exchange for a venue with no existing box is a joint prerequisite, not an assumed reuse of box pairing.
 
-## Recover without creating two writers
+<a id="recover-without-creating-two-writers"></a>
 
-**Fencing** means establishing that the previous workload cannot sell, mutate its ledger or file records, including while isolated from the control plane. Prove it stopped before allowing a new writer. Removing a Kubernetes object, losing a heartbeat, withdrawing a gateway route, revoking Cloud credentials or seeing a disk attached elsewhere does not prove that an isolated old primary cannot write or file. A StatefulSet's desired replica count is not that proof.
+## Recover through controlled handover or an explicit emergency
 
-The exact evidence for planned quiescence, meaning stopped writes and settled in-flight work, host power isolation, restart prevention and physical box shutdown must be agreed with Waitron and the selected infrastructure. Bind it to the old workload, host/boot identity, operation and membership revision, not just a name that can be reused. A planned stop must block sales and new filing, settle or record outstanding external requests under Waitron's rules, flush the final stream state and prove the target has that state. Unknown stop evidence remains **blocked**, including for a Cloud-to-Cloud replacement. No unsafe automatic failover is proposed.
+The owner replaced the universal external stop-proof requirement on 2026-10-23.
+Use [A1018's two scenarios](../../waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018)
+for all four local/Cloud directions. Local to local needs neither Cloud nor internet.
+Cloud supplies resources and connectivity; Waitron owns final-copy checks, signed
+roles, activation and fiscal authority. Both replacements retain M2's own node
+identity and start its fresh fiscal identity, chain and series under module gates.
+
+Controlled M1 durably steps down before acknowledging, bounds admitted work and
+preserves uncertain external outcomes. M2 durably accepts the complete final copy
+and signed indicator before M1 relinquishes filing to that M2. M2 checks and records
+the assignment before work. M1 remains restricted across reboot; lost replies resume
+the same operation, not another candidate. No waiting for AEAT is required.
+
+Emergency M2 starts only after the freshly authenticated authorised person declares
+M1 off, no parallel recovery and acceptance of the last copy's missing-tail risk.
+For hosted M1, record the person's stop in the provider console, exact resource and
+restart prevention. This remains a human declaration, not automatic process-death
+proof. M2 holds all M1-owned predecessor filing chains, even already-copied rows.
+M1 files them on restricted return; only fiscal originals and filing facts return.
+Keep other business changes archived and the fiscal/business reconciliation gap
+visible. No automatic wipe or business replay follows.
+
+A partition can leave an isolated M1 selling until it learns of takeover. Show that
+warning, bind each till to one selected machine and preserve uncertain payment
+identities. Distinct chains do not merge divergent bills, payments, cash or stock.
+Kubernetes deletion, route withdrawal, missing heartbeat, disk attachment and an
+automation permission supply neither final-copy equality nor the human declaration.
 
 | Situation | Proposed recovery shape | Boundary that remains |
 | --- | --- | --- |
-| One local box fails | Cold Cloud recovery from its stream | Establish that the box is stopped; expose actual recoverable time and unavailable tail. |
-| Both local boxes fail | Recover the copied-up offsite stream or independent snapshot | Enumerate both boxes and every other promotable peer; copy-up may lag the local follower. |
-| Cloud host fails | Fence the old workload, then reuse its disk in the same zone if suitable, or restore onto a new disk | Host failure is not proof of stop. No speculative writer restart while isolation is uncertain. |
-| Cloud-primary venue loses internet | Tills lose their primary unless a separately approved local follower can be safely promoted | A mobile-data till or second uplink may still reach Cloud; internet loss is not a Cloud fence. |
+| One local box fails | Owner-selected cold startup/restore, or an explicitly selected A1018 emergency | Retain cold restore's source/key/operation/sole-recovery gates without added hard-stop proof; emergency needs the explicit shutdown declaration and chain holds. |
+| Both local boxes fail | Select a qualified offsite copy and explicit recovery path | Enumerate all peers, expose copy-up lag and unknown tail; no automatic conversion between handover and restore. |
+| Cloud host fails | Controlled move when reachable; otherwise explicitly declared emergency or selected cold restore | A host alarm is no declaration. Reconcile selected M2 and any uncertain prior activation before new allocation. |
+| Cloud-primary venue loses internet | Tills lose their primary unless a separately approved local replacement is activated | A mobile-data till may still reach M1; disclose split-business risk and require the selected scenario. |
 
-The September topology sections 4.1 and 4.3 use **cold recovery**: the stream is stored offsite but no standby application runs. A failure starts a new instance and restores it. Its statement that this prevents split brain by construction needs the explicit stop proof above; scheduling one desired instance cannot establish what an isolated host is doing.
+Cold recovery starts capacity only when needed. Its stored stream or snapshot does
+not prevent concurrent trading by itself. Preserve the owner's separate fresh-chain,
+accepted-data-loss restore choice and existing recovery gates without adding the
+rejected external stop-proof requirement.
 
 A947 section 10 describes a **running follower**, continuously restoring a local read-only database in Cloud. It saves some startup/restore work but adds continuous runtime, disk, key access and freshness monitoring. It must never sell, file, print or run business workers before activation. Stopping follow mode and verifying the copied state remain Waitron work. The owner has selected cold recovery for the initial Cloud offering. A running follower requires a separate future approval and bilateral agreement. Neither shape justifies a seconds-long recovery claim.
 
 For one local box, its stream can go directly to Cloud. For two boxes, A947 proposes main-box stream to the local spare's store, then deletion-aware copy-up to Cloud. Its local spare and Cloud follower have different progress positions. A **generation** is a separately named stream history opened for a writer and authority term. Preserve generation ownership and never move a copied pointer backward. Do not assume two destinations from one Litestream writer; A947's inspected pin permits one. Waitron must qualify copy-up and direct-stream restoration equivalence before Cloud relies on the two-box path.
 
-An optional on-site follower for a Cloud primary can keep an already received copy during an outage, but cannot receive missing Cloud writes without a connection. Local offline writes require a separately approved promotion protocol that fences Cloud and excludes every other candidate. Distinct fiscal identities do not preserve divergent open bills, kitchen work or payment outcomes. Do not promise offline trading or automatic state merging. An old writer's return stays fenced before sales and the first filing pass, with Waitron owning tail reconciliation, its acceptance receipt, guarded wipe and fresh dormant identity. A947's tail proof and activation preparation are dependencies, not completed Cloud features.
+An optional on-site follower for a Cloud primary keeps only its already received
+copy during an outage. Offering it still needs separate approval and qualification
+of the revised handover, fiscal-only return and visible business gap. Do not promise
+automatic offline trading, business merging or recovery time. Returning M1 first
+checks its signed role, then follows controlled relinquishment or emergency
+filing-only ownership; its archive and wipe gates remain mandatory.
 
-AWS EBS disk attachment stays within its Availability Zone, a provider infrastructure location. A cross-zone recovery creates a new disk from a qualified restore source; it cannot reattach the old disk across zones. Reserve and test capacity for the chosen recovery location within the country pack's approved runtime region. The extra-region backup copy does not authorise a runtime move. Disk snapshots alone are not proof of a complete, application-consistent Waitron restore.
+AWS EBS disk attachment stays within its Availability Zone, a provider infrastructure location. A cross-zone recovery creates a new disk from a qualified restore source; it cannot reattach the old disk across zones. Reserve and test capacity for the chosen recovery location within the country pack's approved runtime region. The owner approved Spain running from Paris on 2026-10-23. A regional rebuild still
+requires the selected venue recovery scenario and legal/provider qualification; a
+backup copy alone supplies no activation authority. Disk snapshots alone are not proof of a complete, application-consistent Waitron restore.
 
 ## Agree one shared contract before building
 
-The proposed joint contract home is the **[hosted lifecycle and promotion section](../../waitron-integration-contract.md#hosted-lifecycle-and-promotion-proposed) of Cloud's integration contract**. This design records its required contents, not an approved wire format. Waitron's canonical topology and A947 section 10 must link to that same home when both owners accept a pinned revision. No bilateral acceptance has occurred in this drafting task; do not edit or imply approval from the other lane.
+The proposed joint contract home is the **[hosted lifecycle and promotion section](../../waitron-integration-contract.md#hosted-lifecycle-and-promotion-proposed) of Cloud's integration contract**. This design records its required contents, not an approved wire format. The
+[A1018 section](../../waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018)
+records the revised handover direction and supersedes the external-proof requirement. Waitron's canonical topology and A947 section 10 must link to that same home when both owners accept a pinned revision. Cloud agrees the revised direction only; owner approval, exact formats and runtime
+qualification remain separate. The older A947 pin above is historical input, not
+acceptance of the rejected stop-proof protocol.
 
 | Contract boundary | Required agreement and evidence |
 | --- | --- |
@@ -129,11 +177,11 @@ The proposed joint contract home is the **[hosted lifecycle and promotion sectio
 | Store layout and versions | Pin exact wire/manifest versions, capabilities and compatibility refusals; reconcile `venues/<venue-id>/`, generation names such as `gen-<term>-<node>-<time>`, create-only markers, signed `current.json`, signing purpose/canonical bytes and trusted keys. Agree the meaning of Cloud versus Waitron venue ids in prefixes. |
 | Concurrency and authority | Specify compare-and-swap (CAS), a write accepted only if the prior object version still matches, for the pointer. Reconcile pointer publication with Waitron's activation transaction, membership authority, losing contenders and crash recovery. PostgreSQL plus an object store plus local SQLite is not one atomic transaction. CAS alone does not fence an existing writer. |
 | Follower and progress | Enforce source-store read-only credentials and no business workers. Report source head, uploaded head, copied-up head, follower-applied head, observation times, source identity and generation. Stale or missing evidence is unknown, not healthy; backup observation time is not a guarantee of zero data loss. |
-| Fence and activation | Enumerate all promotable peers, including both local boxes and any Cloud/on-site follower. Bind accepted stop evidence, recovery point and operator confirmations to that set. Require a verifiable Waitron activation receipt with operation, target, membership/authority revision and outcome before routing. Exact receipt format and stop proofs are joint prerequisites. Backup verification is never this receipt. |
+| Handover and activation | Enumerate all promotable peers. Bind the controlled final indicator/copy acceptance/filing assignment or the explicit emergency declaration and predecessor-chain holds to selected M2 and signed membership. Require the Waitron activation outcome before routing; backup verification cannot replace it. Exact formats and all eight scenario/direction cases remain unqualified. |
 | Intent, outcome and retry | Define durable intent, success, refusal and uncertainty on both sides; input fingerprints, concurrency refusal, status lookup, receipt verification and exact retry after lost replies. Reject unsupported versions before side effects. Keep stable names, but move routes only after confirmed activation and target probes. |
 | Return and secrets | Waitron owns frozen-tail transfer and acceptance, external-result reconciliation and fresh identity preparation; Cloud coordinates disk preservation, fresh service credentials and placement. Pin required node-local state and key versions, external-vault compatibility, rotation and recovery when the source is lost. |
 
-Bilateral design acceptance records both repository revisions, named owners and shared refusal/retry vectors, and defines the runtime acceptance cases before adapters are built. Runtime qualification requires real pinned-consumer receipts for the selected service shape. A Cloud-primary-only launch qualifies new venue setup, Cloud host replacement, upgrades, devices and backups; it does not wait for optional local followers or box takeover. One-box recovery additionally qualifies uncertain activation and old-node return; two-box recovery adds both peers and copy-up. A running follower qualifies the shared recovery checks plus its own non-writing and catch-up checks. No unqualified shape may be offered. Reconcile A947, A679 dormant-promotion preparation, W41s activation, signed-witness/fencing work W41s-10b and non-activating verification A850 at their actual landing revisions. Design acceptance does not satisfy a runtime gate; a draft or queued item is not an implemented dependency.
+Bilateral design acceptance records both repository revisions, named owners and shared refusal/retry vectors, and defines the runtime acceptance cases before adapters are built. Runtime qualification requires real pinned-consumer receipts for the selected service shape. A Cloud-primary-only launch qualifies new venue setup, Cloud host replacement, upgrades, devices and backups; it does not wait for optional local followers or box takeover. One-box recovery additionally qualifies uncertain activation and old-node return; two-box recovery adds both peers and copy-up. A running follower qualifies the shared recovery checks plus its own non-writing and catch-up checks. No unqualified shape may be offered. Reconcile A947 amendments under revised A1018, A679 dormant-promotion preparation, W41s activation and non-activating verification A850 at their actual landing revisions. Design acceptance does not satisfy a runtime gate; a draft or queued item is not an implemented dependency.
 
 ## Upgrade the application without rolling back its ledger
 
@@ -176,7 +224,7 @@ active on-premises or hosted server. Cloud passes staff TLS through to Waitron,
 which retains its private key and staff permission checks. A router override for
 that registered name remains optional. A Cloud-only primary has no local server for
 `.local` to discover, and a local follower cannot write without separately approved
-fenced promotion. Hosted trading depends on the internet and Cloud path.
+handover. Hosted trading depends on the internet and Cloud path.
 
 Customers use a separate stable per-venue **public** hostname for menus, bookings,
 online orders and table-QR ordering. Live DNS and public certificates lead to Cloud
@@ -256,10 +304,10 @@ Before pricing, extend D68's scope with representative hosted workloads and conc
 
 | Failure or uncertainty | Required behaviour | Evidence gate before launch |
 | --- | --- | --- |
-| Host/control partition or forced pod deletion | Block another writer until the accepted stop proof exists; preserve disk and journal. | Isolate a still-running old primary and show no replacement writes or filing without proof. |
+| Host/control partition or forced pod deletion | No automatic emergency declaration. Preserve disk and same-M2 operation; controlled copy/filing history must resolve. | Keep M1 live behind a partition, show the emergency warning and disclosed business overlap, then deliver the newer signed role. |
 | Two promoters or lost activation reply | Retain one intent; reconcile Waitron outcome and pointer/membership state; do not activate again blindly. | Concurrent promotion and crashes around local commit, CAS and receipt delivery on both pinned consumers. |
-| Stale two-box copy-up or returning old box | Show recoverable time and every peer; keep return fenced before workers; preserve its tail. | Lag, interrupted copy-up, missing final writes and return with stale membership, including internet isolation. |
-| Disk or zone loss | Restore a qualified source onto a new disk when needed, after old-writer fencing. | Same-zone restart and cross-zone restore with measured capacity, loss window and final activation. |
+| Stale two-box copy-up or returning old box | Show recoverable time and every peer; check role before business/filing; preserve fiscal tail, chain ownership and nonfiscal archive. | Lag, emergency holds on copied outbox rows through reboot/reset, fiscal-only return and no replay or premature wipe. |
+| Disk or zone loss | Restore a qualified source onto a new disk through the explicitly selected scenario or authorised cold restore. | Same-zone restart and cross-zone restore with measured capacity, accepted loss, actor declaration where required and recorded same-M2 activation. |
 | Provision/upgrade worker crashes | Resume the recorded intent; reject stale completion; preserve any possibly written ledger. | Lost allocation replies, duplicate workers, migration failures and crash after first new write/generation. |
 | Stream loss, wrong key or failed snapshot | Use only a qualified fallback; retain the protected copy and key dependencies. | Restore with stream absent, older keys, source absent, failed verifier and interrupted cleanup; no fiscal activation by verification. |
 | Gateway, management or neighbour overload | Keep backups independent; show separate stale/failed states and enforce resource isolation. | Gateway-absent recovery, management outage/expiry, abusive neighbour and concurrent restore without cross-venue authority. |

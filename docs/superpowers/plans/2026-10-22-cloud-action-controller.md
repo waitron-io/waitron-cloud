@@ -10,6 +10,15 @@
 
 **Spec:** [Production deployment design](../specs/2026-10-22-cloud-production-deployment-design.md), especially sections 3, 6, 7, 9 and 12; [seven-plan boundary](2026-10-22-cloud-production-deployment.md). Read both and [documentation ownership](../../documentation-ownership.md) before implementation.
 
+**2026-10-23 handover correction:** the [revised A1018 direction](../../waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018)
+replaces this plan's historical external stop-proof assumptions. The source table
+and writer-admission portions of Tasks 1, 5, 6 and 11 describe the rejected input;
+amend them against the approved two-scenario protocol before implementation. No
+outside proof or country authority may be reintroduced as a local handover dependency.
+Controlled copy/filing evidence, emergency human declaration, predecessor-chain holds
+and same-M2 retries remain Waitron-owned gates. P4 supplies no automatic declaration.
+Owner plan/build approval remains closed; this note is not a replacement build plan.
+
 ## Global constraints
 
 - **Build waits for P1 landing and owner plan/build approval.** [P1’s reviewed plan](https://github.com/waitron-io/waitron-cloud/blob/12bdfca6288946c37b02bdf04711dc8049e0e72e/docs/superpowers/plans/2026-10-22-cloud-country-cell.md) in PR #302 at `12bdfca6288946c37b02bdf04711dc8049e0e72e` is reviewed, unlanded planning, not an available runtime. Reconcile its landed interfaces before coding. This author changes only this plan.
@@ -17,7 +26,7 @@
 - D79 holds migration slot 043 at parked `7939a27`. Allocate no migration number now. Do not create or execute the new migration until the driver records release of that slot and allocates the next name against the actual manifest. P3 and C39 must coordinate their own independent schema work.
 - P1 reserves `deploy/kubernetes/`, `scripts/kubernetes-*` and `.github/workflows/kubernetes.yml`. P4 prescribes no changes there. Its eight roles remain `api, portal, registration-worker, backup-worker, backup-verifier, remote-gateway, remote-reconciler, monitor-worker`; logical images remain `runtime` and `backup-verifier`. Packaging is a coordinated follow-up under existing identities, not a ninth role.
 - Every repair begins `ask-first` except the spec's failed **Cloud** workload restart in place and failed machine replacement initiation. Neither exception admits a hosted writer. Every other promotion or reversion requires an owner-recorded repository change with incident evidence. A console approval applies to one proposal and never edits catalogue policy.
-- A monitor result, notification, dead endpoint, timeout, human approval or expired lease is never stop proof. Unknown/missing proof blocks a new writer and asks. A1018 direction is not an approved wire schema or qualified provider primitive; both candidate profiles remain unqualified.
+- A monitor result, notification, dead endpoint, timeout, ordinary action approval or expired lease supplies neither a controlled final copy nor the authorised emergency declaration. Missing scenario-specific evidence waits. The revised A1018 direction is not owner-approved wire format or runtime qualification; the rejected external-proof profiles are historical.
 - Cold restore is a separately selected and authorised fresh-chain operation with accepted tail loss and its existing recovery-key, operation, source-live and sole-recovery gates. Never turn failed continuation into cold restore. P4 implements neither path.
 - P5 owns release waves and later self-widening; P6 owns hosting/placement and joint writer admission; P7 owns regional failover. Launch expansion requires an owner decision for each exact wave. Owner/console/notification loss freezes discretionary expansion and unresolved actions; it does not stop trading or existing routine service work.
 - [C39](2026-10-22-cloud-monitoring-thresholds.md) remains a plan, not built code. Preserve its bounded signal exactly, customer opt-in and 0/0 quiet/reminder defaults. Its thresholds, daily schedule, cohort and phone acknowledgment decisions stay there. P4 consumes facts through a private authenticated adapter, never a direct monitor execute call.

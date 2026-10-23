@@ -102,11 +102,13 @@ The [Cloud hosting design](superpowers/specs/2026-10-21-cloud-hosted-venue-desig
 records the proposed boundary for a new Cloud-primary venue, a Cloud standby and
 replacement of a failed Cloud host. This section is its shared contract home.
 Cloud owns resources, service credentials, durable operation history and routing.
-Waitron owns initial setup, node identity, activation, fencing and return.
+Waitron owns initial setup, node identity, activation, handover and return.
+For predecessor replacement, the [A1018 direction agreement](#handover-between-local-and-hosted-machines-a1018)
+below replaces the rejected external stop-proof model; owner approval remains pending.
 
 Before implementation, both repositories must accept a pinned contract describing
 identity binding, store and pointer versions, signatures and conditional writes,
-read-only following, peer enumeration, stop evidence, activation outcomes and
+read-only following, peer enumeration, scenario-specific handover evidence, activation outcomes and
 uncertain retries. Agreement approves formats and expected behaviour; executable
 joint receipts qualify the later implementation before enablement. They are
 separate gates. Neither this proposal nor a backup verification result authorises
@@ -1112,53 +1114,166 @@ a test on each side compares its copy with it.
 }
 ```
 
-## Hosted writer retirement: A1018 (direction agreed)
+<a id="hosted-writer-retirement-a1018-direction-agreed"></a>
 
-To replace a hosted writer without creating two servers selling from the same
-history, you need both proof that the old runtime cannot resume and its complete
-final data. This section records Cloud's 2026-10-22 direction agreement; the broader
-[hosted lifecycle proposal](#hosted-lifecycle-and-promotion-proposed) above remains
-unagreed and unimplemented.
+## Handover between local and hosted machines: A1018
 
-Cloud agreed the direction of Waitron's [A1018 proposal at
-`db7cddeb2d38984b284b23e8e391e7ebd7cb9156`](https://github.com/clintongormley/waitron/blob/db7cddeb2d38984b284b23e8e391e7ebd7cb9156/docs/superpowers/specs/2026-10-22-a1018-cloud-stop-proof-design.md)
-on 2026-10-22, against the [production design at
-`35af2d396d916223ff4f319d8f44093685d62da5`](https://github.com/waitron-io/waitron-cloud/blob/35af2d396d916223ff4f319d8f44093685d62da5/docs/superpowers/specs/2026-10-22-cloud-production-deployment-design.md).
-This section is the shared Cloud home. Pin its eventual publication revision from
-Waitron before building against it. The agreement approves the direction, not a wire
-schema, fiscal operation, runtime or provider profile.
+**Cloud direction agreement, 2026-10-23; owner design approval and build authority
+remain pending.** This replaces the rejected 2026-10-22 stop-proof agreement in
+Cloud #300 (`6700d6f2319ff0b62b0ccc27e833487935ad2174`). The shared proposal is
+Waitron's [simple handover design at
+`741cc8d8590b2c178b808657e1ba858348f25078`](https://github.com/clintongormley/waitron/blob/741cc8d8590b2c178b808657e1ba858348f25078/docs/superpowers/specs/2026-10-23-a1018-simple-handover-design.md).
+Cloud accepts its direction and the boundaries below. Waitron owns the one combined
+owner design question, including the proposed policy defaults and both worked
+examples. This is the shared Cloud home; pin its publication revision in Waitron
+before building. No wire format or runtime behaviour is qualified by this agreement.
+The broader [hosted lifecycle](#hosted-lifecycle-and-promotion-proposed) remains
+proposed and unimplemented.
 
-To continue the same history, retire the exact old process and its descendants,
-prevent its future launch or resume outside the venue disk, and independently inspect
-its complete final database, write-ahead log (WAL, changes awaiting incorporation
-into the database) and module-owned state. Bind those receipts to the
-country, venue, installation, operation, authority revision, old/new runtime and
-writer generations, final manifest, issuer trust and selected successor. A quiescence
-statement reports stopped application work; it cannot prove its signer has exited.
-A missing final disk or uncertain stop leaves continuation waiting.
+### One protocol, two scenarios, four directions
 
-One durable country authority across cells and failover regions grants the selected
-successor once. An already admitted process keeps selling through authority loss;
-a restart waits for fresh admission. A private preparation grant permits isolated
-inspection or restore of a copy, with no writable live venue mount or business work.
-It is not a live writer grant. Reconcile a lost activation reply against the same
-runtime and durable operation before routing; never launch another candidate simply
-because an answer was lost. Continuation preserves the logical node and its fiscal
-allocation. Cloud admission supplies no fiscal authority.
+Call your old machine M1 and your selected replacement M2. Both scenarios work
+local to local, local to Cloud, Cloud to Cloud and Cloud to local. Local to local
+needs neither Cloud nor internet. Cloud supplies hosting, storage, connectivity and
+its own resource journal; Waitron owns stepdown, final-copy comparison, signed
+membership, activation, fiscal authority and return. Neither scenario requires an
+outside stop authority, hardware/provider proof or a periodic sale lease.
 
-The candidate mechanisms are a host-owned Linux cgroup v2 supervisor for a reachable
-host and reconciled EC2 instance termination for an unreachable host, each combined
-with externally retained launch denial and post-stop data inspection. A cgroup
-is the kernel's grouping of a process and its descendants. Neither profile
-is qualified. Boot attestation, clone/resume resistance, complete persistence and
-secret-version inventories, trust rotation, wire schemas and all joint failure
-checks in A1018 remain unbuilt and unverified. No provider account, resource or live
-operation is authorised by this agreement.
+**Controlled handover:** M1 durably records its handed-over restriction before
+acknowledging stepdown, closes every business/module writer and bounds admitted
+work and external requests by their existing deadlines. Keep uncertain payment and
+filing outcomes with their original request identities; timeout is not reversal.
+Stop remaining mutators, including backup/checkpoint writers, before capture. M1
+stays stepped down across reboot or a lost reply; it cannot resume by timeout.
 
-Production section 6's automatic restart/replacement exceptions change initiation
-permission, not the evidence needed for a new hosted writer. An explicitly selected,
-authorised cold restore remains a separate fresh-chain recovery with accepted tail
-loss and no A1018 stop-proof requirement. Preserve its existing recovery-key,
-operation, source-live and sole-recovery gates. Record the displaced source as
-unresolved if its stop is unknown; never convert failed continuation into cold restore
-automatically. Owner design approval remains pending through Waitron's A1018 question.
+M2 verifies the complete frozen copy and M1-signed final-state indicator against
+M1's enrolled key and the expected signed membership. M2 durably accepts the copy
+before acknowledging it to M1. Only then may M1 durably relinquish filing to this
+M2 in signed operation status bound to the indicator. M2 verifies and records that
+assignment and its activation outcome before enabling work. M2 keeps its own node
+identity and starts its own fresh fiscal identity, chain and series through the
+existing module, authentication, clock and allocation gates. It files M1's copied
+outbox in M1's recorded fiscal identity, without copying M1's private node key.
+M1 never resumes that queue after relinquishment. Handover does not wait for the
+Spanish tax authority, AEAT, or for the outbox to drain over the internet.
+
+**Emergency handover:** a freshly authenticated authorised person declares that
+M1 is shut down, no parallel recovery is in progress and the selected last copy's
+unknown missing tail is accepted. For hosted M1, the person stops the exact resource
+in the provider console and records its identity, confirming restart is prevented.
+This is a human declaration, not an automatically verified provider fact. An alert,
+missing heartbeat, route change or Cloud action approval cannot supply it.
+
+Persist that declaration and holds on every predecessor filing chain owned by M1,
+including inherited queues and records already copied to M2, before activation.
+Unknown ownership remains held through reboot, claim reset, retry and reconciliation.
+M2 then starts its own fresh chain under the same activation gates and may file that
+new chain. M1 remains the predecessor filing owner. On return it checks the current
+signed role before trading or filing and remains restricted to its assigned filing
+work, with no business side effects. An emergency M1 unable to reach M2 or a till
+on boot waits for an authorised human; a stale chart alone cannot clear that wait.
+
+An isolated, already running M1 may still sell until it learns of the newer role.
+Show the proposal's split-network warning: bills, payments, cash and stock can
+diverge, and M2 may lack the final tail. Distinct fiscal chains avoid continuing
+one writer chain; they do not merge divergent business histories. Each till binds
+to one selected server and never repeats an uncertain payment on another. Preserve
+existing payment recovery checks and A764's unqualified ownership dependency.
+
+### Bind the complete copy and keep local identities separate
+
+The indicator binds operation, venue, M1, selected M2, signed membership revision
+and document digest, consistent snapshot digest, schema versions, enabled modules,
+and every immutable fiscal chain's identity, head, count, outbox, received outcomes
+and uncertain external requests with their original identities. Include committed
+journal changes; a timestamp, single chain head or stream-lag value is insufficient.
+
+The separate node-local manifest names durable role and handover/filing assignments,
+recovery preparations, spent allocation choices, follower positions, required module
+files and secret versions. Classify each item as transferred continuity data,
+source-only data, destination-owned data or rebuildable data. M2 retains its own
+node key, recovery verifier and role state. Source-only private identity stays on
+restricted M1; shared credentials travel through approved secret/module transfer
+paths. A DB copy alone establishes neither inventory completeness nor secret access.
+A947's node-local identity separation and the actual module/file inventory and
+comparison format must be qualified before build.
+
+Compare the frozen payload before destination-local mapping; validate the declared
+mappings separately. Store the indicator, copy acceptance, later relinquishment and
+retry outcomes outside that payload. The captured filing map records ownership at
+capture; signed operation status records the later assignment. Cloud cannot infer
+final-copy equality from storage freshness or a backup verifier. This protocol
+assumes cooperating, uncompromised machines; it does not prove process death or
+resist an unknown old clone, rolled-back disk, copied private identity or root access.
+
+### Map the person and the retry without granting new authority
+
+**Recommendation included in Waitron's owner question:** venue permission
+`node.promote`, exercised by the owner or an authorised manager with fresh passkey
+or password plus enrolled authenticator code. A till PIN is insufficient. Cloud
+account authority must be explicitly bound to that same venue actor and operation;
+matching email, a hosting purchase, organisation ownership or a support grant alone
+does not supply Waitron permission or the emergency declaration. If the binding is
+unavailable, wait. A Cloud operator may execute a separately authorised resource
+stop but cannot declare or activate for a venue without that venue authority.
+
+Source inspection at Cloud `a886559aab6b4427ca3fb62ea8865c6f594ba5a0` found
+organisation-owner service checks in `packages/account-http/src/backups.ts:35` and
+scoped support grants in `packages/registration/src/support-grants.ts:68`. These
+are not a `node.promote` mapping. That bridge, fresh authentication evidence,
+expiry, revocation and replay refusal need a jointly pinned format and tests before
+implementation; no current endpoint is claimed here.
+
+Bind both machines' durable operation state and Cloud's resource journal to the
+same operation, venue/installation mapping, M1, selected M2, expected signed
+membership revision/digest, scenario and input fingerprint. Audit the actor, exact
+declaration, accepted uncertainty, reason, selected copy and time, plus the hosted
+provider resource where applicable. Same id and same inputs return the stored
+outcome; changed inputs conflict. Serialise local competitors without claiming to
+prevent independent promotions across a network split. A lost activation reply
+queries that same M2 and operation, never selects M3 or allocates again by timeout.
+Changing target after possible activation requires explicit resolution first.
+
+If a controlled move crashes before final-copy acceptance, an explicit emergency
+replacement on the same M2 is proposed only when retained history proves M2 never
+accepted the copy or authorised relinquishment. Persist replacement and predecessor
+holds before activation. Accepted or unknown history keeps the original controlled
+operation until its copy and filing assignment are recovered. A lost relinquishment
+reply reads M1's durable record; it never permits both machines to file. This waiting
+trade-off remains part of the combined owner question.
+
+### Return fiscal facts, preserve the business gap
+
+Emergency M1 files its assigned chains on restricted return and transfers immutable
+fiscal originals plus chain, filing and outcome facts, including outcomes for records
+M2 already has. Emergency transfer does not assign filing ownership to M2. Pending
+or uncertain results keep M1 the restricted filing owner and M2's chain holds in
+place. Later frozen batches belong to the same operation; a retry of one batch
+returns identical bytes. Preserve conflicting terminal facts as an open case.
+
+Never replay old orders, payments, cash, drawer, stock, printing or other business
+changes on M2. Keep them in a restricted consistent archive. The proposed visible
+reconciliation list names source, chain/installation, series/number, original ids,
+dates, taxable/tax/gross amounts and retained evidence. Show dated known and unknown
+fiscal-versus-business gaps in cash-up and reports, with acknowledgement, responsible
+person and resolution. A later correction is a new authorised M2 record, not an
+imported payment total. An acknowledgement alone does not resolve the gap.
+
+No wipe before record-level fiscal receipts, per-chain counts/heads, outbox coverage,
+matching transferred fiscal totals, successor health and a verified archive all pass.
+Keep originals and archive while filing or reconciliation remains unresolved; the
+no-automatic-expiry recommendation awaits approval and A664's retention policy.
+A lost disk leaves an explicit unknown missing-tail interval, with the existing
+consultation/month-end operator follow-up, never invented invoices or business rows.
+A947's emergency filing/return rules and prototype controls need amendment before
+implementation; this agreement does not change fiscal code or golden results.
+
+An explicitly selected cold restore remains separate: fresh chain, accepted tail
+loss, existing source, recovery-key, node-recovery-key, operation and sole-recovery
+gates, with no added hard-stop proof. A failed handover never silently becomes an
+emergency or cold restore. P6, P7, D88 and production section 9 use these boundaries;
+automation permission and regional recovery provide none of the missing venue
+facts. All eight scenario/direction combinations and the proposal's adverse controls
+remain UNRUN. Owner design approval, separate build authority, compatible pinned
+consumers and runtime qualification precede enablement; no provider operation,
+spending, live mail or production schema change follows from publication.
