@@ -102,6 +102,10 @@ slices 6–12 still need separate build authority.
 
 **Local implementation:** [Country decisions](../../country-policy.md) now match exact trusted qualified records. The frozen Spain default has no qualified flows. All 73 focused cases pass, including production AI refusal with zero loopback requests; deliberate guard checks and finishing receipts are retained by the driver. No placement integration or persisted binding is implemented.
 
+The Norway/UK/Switzerland cases prove exclusion from the exact qualified list,
+not a geography classifier. The AI case checks that the independent slice 1
+refusal remains; it does not implement a country-to-adapter integration.
+
 **Files:** Create `packages/registration/src/country-policy.ts`, `test/country-policy.test.ts`; export from `src/index.ts`. No new country-pack package or database column.
 
 **Proposed interfaces:** `CountryPolicy` has `country:string`, `revision:number`, `homeRegion:string`, `backupRegions:readonly string[]` and `flows` as a readonly array. Each flow has `serviceId:string`, `supplierId:string`, `accountId:string`, `endpoint:string`, `dataClasses:readonly string[]`, `regions:readonly string[]`, `evidenceId:string`, `qualified:boolean`. `FlowRequest` carries `country:string`, `policyRevision:number`, `serviceId:string`, `supplierId:string`, `accountId:string`, `dataClass:string`, `endpoint:string`, `region:string`; match exact canonical qualified destinations, never an arbitrary URL with a matching region label. `decideCountryFlow(policy:CountryPolicy|undefined, request:FlowRequest): {allowed:true;policyRevision:number;evidenceId:string}|{allowed:false;reason:'unknown_policy'|'stale_policy'|'unqualified_flow'|'destination_denied'}` is pure and never grants credentials. Production defaults contain no qualified flow. Spain's intended home/backup values are fixed above; absence of qualification keeps them unusable.

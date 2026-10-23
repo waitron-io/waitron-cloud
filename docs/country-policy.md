@@ -38,12 +38,18 @@ or fragment. Root URLs include the trailing `/`. Matching does not rewrite URLs,
 follow redirects or infer locations from names. A matching endpoint and a matching
 region must belong to the same evidence record.
 
+Keep qualified records from overlapping. If more than one record matches the
+complete request, the function returns the first record's evidence ID; it does
+not merge evidence or resolve conflicting approvals.
+
 The policy's `homeRegion` and `backupRegions` describe its intended locations;
 they do not automatically permit any service there. Keep Spain logs and keys
 home-only in their respective flow records. Give the Paris encrypted backup and
 EU SES email their own qualified records. Do not treat Norway, the UK or
 Switzerland as EU destinations. Another approved country's policy can name its
 own home; this function does not apply Spain's locations to every country.
+The function does not classify EU membership. Qualification must establish the
+permitted list; the tests prove that unlisted regions are refused.
 
 An allowed result contains only `{allowed:true,policyRevision,evidenceId}`. It
 records the matched configuration, not a new credential or independent proof of
