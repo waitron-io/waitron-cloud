@@ -62,9 +62,11 @@ build authority. This does not approve broader D88 hosting/isolation/shared cont
 spending, deployment, provider resources or contracts. D103's first C39 monitoring
 design is approved for planning only; C41 release/upgrade and C60 compute decisions remain separate.
 D102/D104 hands-on work waits until 3 November. D68 is landed, including
-`b8ff5555c996c5dec1086be49f7d046018bd3187`, but does not price hosting. D79 is clean,
-parked and unpublished at `7939a27`; migration 043 is absent from this tree. No further
-migration item starts until its slot resolves; the first D101 slice is SQL-free.
+`b8ff5555c996c5dec1086be49f7d046018bd3187`, but does not price hosting. D79's local
+backup verification includes migration 043 and the complete same-run recovery proof.
+Snapshots remain unavailable in the delivered deployment and plan enforcement stays
+off until release qualification. Recheck active migration reservations before new
+database work; the first D101 slice is SQL-free.
 
 **D103 / C41 release and upgrade design, published proposal:** the
 [engineering proposal](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md)
@@ -3334,8 +3336,8 @@ notifications separately.
   This is planning only. Separate databases, offline verification of global sign-in,
   data transfer and cutover, and the independent deployment/outage rehearsal are not
   built or proved. The owner must approve the plan before implementation, and every
-  migration task waits for D79's reserved migration 043 slot to resolve. Recheck the
-  actual migration inventory before allocating the plan's later migration names.
+  migration task must recheck active reservations and the actual inventory, including
+  backup-verification migration 043, before allocating later migration names.
   P1 owns the Kubernetes runtime handoff; P4 owns the action controller. Production
   schema changes, provider resources, spending and live mail need separate authority.
 - **Repair actions and Cloud controller (P4).** The approved production design's
@@ -3344,7 +3346,8 @@ notifications separately.
   This is planning only. The catalogue, durable requests, operator approvals,
   console, notifications and controller are not built. Plan approval and P1's
   country-cell build remain required before implementation; any new database
-  migration also waits for D79's migration slot. C39 supplies observations without
+  migration must recheck active reservations and the inventory after migration 043.
+  C39 supplies observations without
   granting action or activation authority. P5 release waves, P6 hosted placement
   and qualified stop proof, P7 regional failover and all production enablement
   gates remain separate. No provider operation, spending or live mail is authorised.
@@ -3411,8 +3414,8 @@ notifications separately.
   [C39 implementation plan](superpowers/plans/2026-10-22-cloud-monitoring-thresholds.md)
   is published for owner plan approval; implementation is unbuilt. The exact daily
   schedule, first monitored group and separate build authority remain gated. New
-  database work waits for D79's migration slot, and production observation and phone
-  delivery still need independent qualification. No production alerting or recovery
+  database work must recheck active reservations and the inventory after migration
+  043. Production observation and phone delivery still need independent qualification. No production alerting or recovery
   guarantee follows. The [C41 release/upgrade proposal](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md)
   is published, unapproved and unbuilt; C60 compute remains separate.
   D104's [incident runbook](incident-response.md) now records
