@@ -447,7 +447,10 @@ for(const delayedObserver of [false,true]) test('a password reset snapshot commi
     assert.equal(derivation.mock.callCount(),1,'management must verify the real password once');
     assert.equal((await factor()).version,1);assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_enrolments')).rows[0].count,'0');
     assert.equal((await pool.query('SELECT consumed_at FROM cloud_factor_recovery_codes')).rows[0].consumed_at,null);
-  } finally {releaseDerivation();derivation.mock.restore();await blocker.query('ROLLBACK');blocker.release();await work?.catch(()=>{});await other.end();}
+  } finally {releaseDerivation();derivation.mock.restore();
+    try {await blocker.query('ROLLBACK');}
+    finally {blocker.release();try {await work?.catch(()=>{});} finally {await other.end();}}
+  }
 });
 
 for(const waitAt of ['session lock','management write'] as const) test(`a TOTP window ending during the removal ${waitAt} preserves every management effect`,async()=>{
