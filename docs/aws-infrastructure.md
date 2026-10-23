@@ -509,8 +509,12 @@ Supply three distinct same-account roles named
 `waitron-<scope>-recovery`. The key administrator can manage key policy; runtime
 roles receive no administration or policy-changing rights. A later authorised
 bootstrap must use the key administrator for key creation and policy updates,
-with AWS's policy-lockout safety check retained. Root composition must keep
-these provider roles separate. The KMS key policy delegates only enumerated use
+with AWS's policy-lockout safety check retained. The custody module binds key
+creation and policy changes to `aws.keys` and `aws.backup_keys`; deployment
+continues to own secret metadata and the replication role. It checks each key
+administrator's actual account and region against the deployment scope. Pass all
+four aliases explicitly when you compose it. The final global/country root
+mappings remain unfinished. The KMS key policy delegates only enumerated use
 operations to IAM policies in the same account. Its `Resource = "*"` means
 [the key to which that policy is attached](https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-default.html),
 not every key. No wildcard Allow action or principal is generated. S3 object
@@ -540,8 +544,16 @@ object versions with matching destination decrypt contexts. It grants no key
 changes, object deletion, database restoration or venue activation. Global has
 no venue storage, country-only roles or S3 replication policy.
 
-The composed plan checks references without a dependency cycle; it does not
-qualify AWS policy enforcement or replication installation order. Before any
+Instantiate `workload-permissions` once per cell for its own identity provider,
+roles and runtime policies. Instantiate `scope-permissions` once per scope for
+recovery and replication; it consumes the completed key, store and database
+references and creates no cell identity. The two-cell fixture checks seven
+runtime policies and eight roles in each country cell, plus two shared policies.
+The same exact action, resource and encryption-context checks cover both policy
+sets. Global keeps only its shared recovery policy.
+
+The composed plan checks these references without a dependency cycle. It does
+not qualify AWS policy enforcement or replication installation order. Before any
 later authorised deployment, qualify source/destination permissions and service
 readiness, then restore both retained objects and the matching application keys.
 P1 must mount the existing runtime contracts through authenticated integration:

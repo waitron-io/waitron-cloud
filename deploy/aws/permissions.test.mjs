@@ -51,8 +51,7 @@ function blocks(kind) {
 const resources = blocks('resource');
 test('runtime permissions declare only per-cell identity and inline scoped policies', () => {
   assert.deepEqual(resources.map(([kind, name]) => `${kind}.${name}`).sort(), [
-    'aws_iam_openid_connect_provider.cell', 'aws_iam_role.workload', 'aws_iam_role_policy.recovery',
-    'aws_iam_role_policy.replication', 'aws_iam_role_policy.runtime',
+    'aws_iam_openid_connect_provider.cell', 'aws_iam_role.workload', 'aws_iam_role_policy.runtime',
   ]);
   assert.deepEqual(blocks('data').map(([kind]) => kind).sort(), ['aws_caller_identity', 'aws_region']);
   const variables = Object.values(parsed).flatMap(doc => doc.variable ?? []).flatMap(block => Object.keys(block).filter(key => key !== '__is_block__').map(key => JSON.parse(key)));
@@ -60,4 +59,9 @@ test('runtime permissions declare only per-cell identity and inline scoped polic
 });
 test('workload names include the scope and cell and cannot collide across cells', () => {
   assert.equal(resources.find(([kind]) => kind === 'aws_iam_role')?.[2].name, '"waitron-${var.scope}-${var.cell_name}-${each.key}"');
+});
+// Each cell owns its own runtime identity. A scope-wide recovery or replication
+// target here would be managed repeatedly when another cell is added.
+test('per-cell resources never own the shared recovery or replication policy', () => {
+  assert.deepEqual(resources.filter(([kind, name]) => kind === 'aws_iam_role_policy' && name !== 'runtime'), []);
 });

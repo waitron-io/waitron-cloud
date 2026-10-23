@@ -1,3 +1,7 @@
+data "aws_caller_identity" "keys" { provider = aws.keys }
+data "aws_caller_identity" "backup_keys" { provider = aws.backup_keys }
+data "aws_region" "keys" { provider = aws.keys }
+data "aws_region" "backup_keys" { provider = aws.backup_keys }
 data "aws_caller_identity" "primary" {}
 data "aws_caller_identity" "backup" { provider = aws.backup }
 data "aws_region" "primary" {}
@@ -10,6 +14,7 @@ locals {
   secret_names           = var.scope == "global" ? toset(["email-key-ring", "sign-in-signing"]) : toset(["backup-master-key", "email-key-ring", "gateway-signing", "wireguard", "installation-signing"])
 }
 resource "aws_kms_key" "primary" {
+  provider                 = aws.keys
   for_each                 = local.purposes
   description              = "Waitron ${var.scope} ${each.key} primary custody"
   enable_key_rotation      = true
@@ -41,7 +46,7 @@ resource "aws_kms_key" "primary" {
   lifecycle { prevent_destroy = true }
 }
 resource "aws_kms_key" "backup" {
-  provider                 = aws.backup
+  provider                 = aws.backup_keys
   for_each                 = local.purposes
   description              = "Waitron ${var.scope} ${each.key} backup custody"
   enable_key_rotation      = true

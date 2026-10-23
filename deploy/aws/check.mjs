@@ -104,7 +104,7 @@ const suites = new Map([
   ['accounts', ['modules/accounts', 'roots/accounts']],
   ['state', ['modules/state', 'roots/state']],
   ...['network', 'cell', 'database', 'storage', 'observability', 'ingress'].map((name) => [name, [`modules/${name}`]]),
-  ['custody', ['modules/custody', 'modules/workload-permissions', 'fixtures/custody']],
+  ['custody', ['modules/custody', 'modules/workload-permissions', 'modules/scope-permissions', 'fixtures/custody']],
   ['dns', ['modules/dns', 'roots/delegation']],
   ['integration', ['roots/global', 'roots/country']],
 ]);

@@ -102,7 +102,7 @@ run "rejects_foreign_authority" {
 }
 run "independent_global_custody" {
   command   = plan
-  providers = { aws = aws.global, aws.backup = aws.global_backup }
+  providers = { aws = aws.global, aws.backup = aws.global_backup, aws.keys = aws.global, aws.backup_keys = aws.global_backup }
   variables {
     scope       = "global"
     region_pair = { primary = "eu-central-1", backup = "eu-west-1" }
@@ -115,11 +115,60 @@ run "independent_global_custody" {
 }
 run "rejects_wrong_primary_provider" {
   command         = plan
-  providers       = { aws = aws.wrong_primary, aws.backup = aws.backup }
+  providers       = { aws = aws.wrong_primary, aws.backup = aws.backup, aws.keys = aws.keys, aws.backup_keys = aws.backup_keys }
   expect_failures = [output.kms]
 }
 run "rejects_crossed_provider_accounts" {
   command         = plan
-  providers       = { aws = aws, aws.backup = aws.wrong_backup }
+  providers       = { aws = aws, aws.backup = aws.wrong_backup, aws.keys = aws.keys, aws.backup_keys = aws.backup_keys }
+  expect_failures = [output.kms]
+}
+
+mock_provider "aws" {
+  alias = "keys"
+  mock_data "aws_caller_identity" { defaults = { account_id = "333333333333" } }
+  mock_data "aws_region" { defaults = { region = "eu-south-2" } }
+  mock_resource "aws_kms_key" { defaults = { arn = "arn:aws:kms:eu-south-2:333333333333:key/44444444-4444-4444-4444-444444444444" } }
+}
+mock_provider "aws" {
+  alias = "backup_keys"
+  mock_data "aws_caller_identity" { defaults = { account_id = "333333333333" } }
+  mock_data "aws_region" { defaults = { region = "eu-west-3" } }
+  mock_resource "aws_kms_key" { defaults = { arn = "arn:aws:kms:eu-west-3:333333333333:key/55555555-5555-5555-5555-555555555555" } }
+}
+
+run "rejects_actual_keys_account_id" {
+  command = plan
+  override_data {
+    target = data.aws_caller_identity.keys
+    values = { account_id = "999999999999" }
+  }
+  expect_failures = [output.kms]
+}
+
+run "rejects_actual_keys_region" {
+  command = plan
+  override_data {
+    target = data.aws_region.keys
+    values = { region = "eu-north-1" }
+  }
+  expect_failures = [output.kms]
+}
+
+run "rejects_actual_backup_keys_account_id" {
+  command = plan
+  override_data {
+    target = data.aws_caller_identity.backup_keys
+    values = { account_id = "999999999999" }
+  }
+  expect_failures = [output.kms]
+}
+
+run "rejects_actual_backup_keys_region" {
+  command = plan
+  override_data {
+    target = data.aws_region.backup_keys
+    values = { region = "eu-north-1" }
+  }
   expect_failures = [output.kms]
 }

@@ -23,7 +23,28 @@ run "composed_custody_references" {
 run "composed_workload_attachments" {
   command = plan
   assert {
-    condition     = length(module.permissions.workload_roles) == 8 && toset(keys(module.permissions.attachment_refs)) == toset(["api", "registration-worker", "backup-worker", "backup-verifier", "remote-gateway", "remote-reconciler", "monitor-worker", "replication-storage", "recovery"])
+    condition     = length(module.permissions.workload_roles) == 8 && toset(keys(merge(module.permissions.attachment_refs, module.scope_permissions.attachment_refs))) == toset(["api", "registration-worker", "backup-worker", "backup-verifier", "remote-gateway", "remote-reconciler", "monitor-worker", "replication-storage", "recovery"])
     error_message = "COMPOSED_ATTACHMENTS: all agreed roles and the nine actual policies must consume the completed scope resources without a cycle"
+  }
+}
+
+mock_provider "aws" {
+  alias = "keys"
+  mock_data "aws_caller_identity" { defaults = { account_id = "333333333333" } }
+  mock_data "aws_region" { defaults = { region = "eu-south-2" } }
+  mock_resource "aws_kms_key" { defaults = { arn = "arn:aws:kms:eu-south-2:333333333333:key/44444444-4444-4444-4444-444444444444" } }
+}
+mock_provider "aws" {
+  alias = "backup_keys"
+  mock_data "aws_caller_identity" { defaults = { account_id = "333333333333" } }
+  mock_data "aws_region" { defaults = { region = "eu-west-3" } }
+  mock_resource "aws_kms_key" { defaults = { arn = "arn:aws:kms:eu-west-3:333333333333:key/55555555-5555-5555-5555-555555555555" } }
+}
+
+run "two_cells_do_not_duplicate_scope_policies" {
+  command = plan
+  assert {
+    condition     = length(module.permissions.attachment_refs) == 7 && length(module.permissions_extra.attachment_refs) == 7 && length(module.permissions.workload_roles) == 8 && length(module.permissions_extra.workload_roles) == 8
+    error_message = "PER_CELL_OWNERSHIP: each cell owns seven runtime policies and eight roles, without shared recovery or replication policies"
   }
 }

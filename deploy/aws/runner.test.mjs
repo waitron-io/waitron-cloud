@@ -22,7 +22,7 @@ async function fixture(t, suite = 'canary') {
   t.after(() => rm(repo, { recursive: true, force: true }));
   await run('git', ['init', '--quiet', repo]);
   const directory = join(repo, 'deploy/aws');
-  const paths = suite === 'canary' ? ['canary'] : ['modules/custody', 'modules/workload-permissions', 'fixtures/custody'];
+  const paths = suite === 'canary' ? ['canary'] : ['modules/custody', 'modules/workload-permissions', 'modules/scope-permissions', 'fixtures/custody'];
   for (const path of paths) {
     await mkdir(join(directory, path, 'tests'), { recursive: true });
     await writeFile(join(directory, path, 'main.tf'), config);
@@ -213,6 +213,7 @@ test('custody suite includes the module, attachments and composed fixture', asyn
     assert.deepEqual(JSON.parse(await readFile(join(snapshot(args), 'suite.json'), 'utf8')), [
       { directory: 'modules/custody', filter: 'tests/custody.tftest.hcl' },
       { directory: 'modules/workload-permissions', filter: 'tests/custody.tftest.hcl' },
+      { directory: 'modules/scope-permissions', filter: 'tests/custody.tftest.hcl' },
       { directory: 'fixtures/custody', filter: 'tests/custody.tftest.hcl' },
     ]);
   }) });

@@ -18,5 +18,5 @@ output "workload_roles" {
   }
 }
 output "attachment_refs" {
-  value = merge({ for role, value in aws_iam_role_policy.runtime : role => value.id }, { for role, value in aws_iam_role_policy.replication : "replication-${role}" => value.id }, { recovery = aws_iam_role_policy.recovery.id })
+  value = { for role, value in aws_iam_role_policy.runtime : role => value.id }
 }

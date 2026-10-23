@@ -67,14 +67,35 @@ test('no_secret_values_in_state: custody creates metadata without reading or gen
   assert.deepEqual(resources.map(([kind, name]) => `${kind}.${name}`).sort(), [
     'aws_iam_role.replication', 'aws_kms_key.backup', 'aws_kms_key.primary', 'aws_secretsmanager_secret.application',
   ]);
-  assert.deepEqual(blocks('data').map(([kind]) => kind).sort(), ['aws_caller_identity', 'aws_caller_identity', 'aws_region', 'aws_region']);
+  assert.deepEqual(blocks('data').map(([kind]) => kind).sort(), ['aws_caller_identity', 'aws_caller_identity', 'aws_caller_identity', 'aws_caller_identity', 'aws_region', 'aws_region', 'aws_region', 'aws_region']);
   assert.equal(Object.values(parsed).flatMap(doc => doc.module ?? []).length, 0);
-  assert.equal(resources.find(([kind, name]) => kind === 'aws_kms_key' && name === 'backup')?.[2].provider, '${aws.backup}');
+  assert.equal(resources.find(([kind, name]) => kind === 'aws_kms_key' && name === 'backup')?.[2].provider, '${aws.backup_keys}');
 });
 test('custody and scoped permissions compose without a cycle and retain every named refusal', async () => {
   const result = await runSuite('custody');
   const summaries = [...result.matchAll(/^(?:Isolated suite aggregate: )?Success! ([0-9]+) passed, 0 failed\.$/gm)].map(match => Number(match[1]));
-  assert.match(result, /Isolated suite aggregate: Success! 12 passed, 0 failed/);
-  assert.match(result, /Isolated suite aggregate: Success! 27 passed, 0 failed/);
-  assert.equal(summaries.at(-1), 2);
+  assert.match(result, /Isolated suite aggregate: Success! 16 passed, 0 failed/);
+  assert.match(result, /Isolated suite aggregate: Success! 22 passed, 0 failed/);
+  assert.match(result, /Isolated suite aggregate: Success! 18 passed, 0 failed/);
+  assert.equal(summaries.at(-1), 3);
 });
+
+// Mock providers skip authentication, so the resource's parsed provider binding
+// is the evidence that key management cannot fall back to deployment authority.
+for (const [name, alias] of [['primary', 'keys'], ['backup', 'backup_keys']]) {
+  test(`${name} key resources use the dedicated key administrator`, () => {
+    assert.equal(resources.find(([kind, key]) => kind === 'aws_kms_key' && key === name)?.[2].provider, `${'${'}aws.${alias}}`);
+  });
+}
+test('application metadata and replication trust use deployment authority', () => {
+  for (const kind of ['aws_secretsmanager_secret', 'aws_iam_role']) {
+    assert.equal(resources.find(([type]) => type === kind)?.[2].provider, undefined);
+  }
+});
+for (const alias of ['keys', 'backup_keys']) {
+  test(`${alias} checks the actual key administrator account and region`, () => {
+    for (const type of ['aws_caller_identity', 'aws_region']) {
+      assert.equal(blocks('data').find(([kind, name]) => kind === type && name === alias)?.[2].provider, `${'${'}aws.${alias}}`);
+    }
+  });
+}

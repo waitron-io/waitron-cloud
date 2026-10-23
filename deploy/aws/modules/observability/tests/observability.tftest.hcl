@@ -425,6 +425,7 @@ run "global_omits_venue_replication" {
 run "scoped_log_key_service_permissions" {
   command = plan
   module { source = "../custody" }
+  providers = { aws = aws, aws.backup = aws.backup, aws.keys = aws.keys, aws.backup_keys = aws.backup_keys }
   variables {
     scope               = "es"
     region_pair         = { primary = "eu-south-2", backup = "eu-west-3" }
@@ -455,6 +456,7 @@ run "scoped_log_key_service_permissions" {
 run "rejects_foreign_custody_cell" {
   command = plan
   module { source = "../custody" }
+  providers = { aws = aws, aws.backup = aws.backup, aws.keys = aws.keys, aws.backup_keys = aws.backup_keys }
   variables {
     scope               = "es"
     region_pair         = { primary = "eu-south-2", backup = "eu-west-3" }
@@ -470,4 +472,17 @@ run "external_budget_threshold" {
     condition     = aws_budgets_budget.monthly.limit_amount == "987.65"
     error_message = "The declared monthly threshold must follow the supplied positive input"
   }
+}
+
+mock_provider "aws" {
+  alias = "keys"
+  mock_data "aws_caller_identity" { defaults = { account_id = "333333333333" } }
+  mock_data "aws_region" { defaults = { region = "eu-south-2" } }
+  mock_resource "aws_kms_key" { defaults = { arn = "arn:aws:kms:eu-south-2:333333333333:key/44444444-4444-4444-4444-444444444444" } }
+}
+mock_provider "aws" {
+  alias = "backup_keys"
+  mock_data "aws_caller_identity" { defaults = { account_id = "333333333333" } }
+  mock_data "aws_region" { defaults = { region = "eu-west-3" } }
+  mock_resource "aws_kms_key" { defaults = { arn = "arn:aws:kms:eu-west-3:333333333333:key/55555555-5555-5555-5555-555555555555" } }
 }

@@ -30,32 +30,11 @@ run "exact_oidc_audience_and_subject" {
     error_message = "EXACT_OIDC: all eight roles require the exact cell provider, audience and service account"
   }
 }
-run "replication_cannot_write_primary" {
-  command = plan
-  assert {
-    condition     = try(jsondecode(aws_iam_role_policy.replication["storage"].policy).Statement[0] == { Sid = "ReadSourceMetadata", Effect = "Allow", Action = ["s3:GetReplicationConfiguration", "s3:ListBucket"], Resource = ["arn:aws:s3:::waitron-es-stream-333333333333-eu-south-2", "arn:aws:s3:::waitron-es-snapshot-333333333333-eu-south-2"] } && one([for s in jsondecode(aws_iam_role_policy.replication["storage"].policy).Statement : s if s.Sid == "WriteCopies"]) == { Sid = "WriteCopies", Effect = "Allow", Action = ["s3:ReplicateObject", "s3:ReplicateTags"], Resource = ["arn:aws:s3:::waitron-es-stream-333333333333-eu-west-3/streams/*", "arn:aws:s3:::waitron-es-snapshot-333333333333-eu-west-3/snapshots/*"] } && one([for s in jsondecode(aws_iam_role_policy.replication["storage"].policy).Statement : s if s.Sid == "DenySourceWrites"]).Effect == "Deny", false)
-    error_message = "REPLICATION_DIRECTION: replication must read only sources and write only the matching cold copies"
-  }
-}
-run "replication_key_contexts" {
-  command = plan
-  assert {
-    condition     = try(one([for s in jsondecode(aws_iam_role_policy.replication["storage"].policy).Statement : s if s.Sid == "DecryptSource"]) == { Sid = "DecryptSource", Effect = "Allow", Action = ["kms:Decrypt"], Resource = var.custody_refs.kms.storage, Condition = { StringEquals = { "kms:ViaService" = "s3.eu-south-2.amazonaws.com" }, StringLike = { "kms:EncryptionContext:aws:s3:arn" = "arn:aws:s3:::waitron-es-snapshot-333333333333-eu-south-2/snapshots/*" } } } && one([for s in jsondecode(aws_iam_role_policy.replication["storage"].policy).Statement : s if s.Sid == "EncryptCopies"]) == { Sid = "EncryptCopies", Effect = "Allow", Action = ["kms:Encrypt"], Resource = var.custody_refs.backup_kms.storage, Condition = { StringEquals = { "kms:ViaService" = "s3.eu-west-3.amazonaws.com" }, StringLike = { "kms:EncryptionContext:aws:s3:arn" = "arn:aws:s3:::waitron-es-snapshot-333333333333-eu-west-3/snapshots/*" } } }, false)
-    error_message = "REPLICATION_KMS: exact directional keys, service regions and snapshot object contexts are required"
-  }
-}
 run "country_cannot_read_global" {
   command = plan
   assert {
     condition     = length(aws_iam_role_policy.runtime) == 7 && alltrue([for policy in values(aws_iam_role_policy.runtime) : alltrue([for statement in jsondecode(policy.policy).Statement : !strcontains(jsonencode(statement), "waitron-global") && !strcontains(jsonencode(statement), var.database_refs.admin_secret_ref) && !strcontains(jsonencode(statement), "iam:") && !strcontains(jsonencode(statement), "sts:")])])
     error_message = "RUNTIME_SCOPE: runtime policies cannot read global/admin secrets, change IAM or assume another role"
-  }
-}
-run "explicit_cold_recovery_authority" {
-  command = plan
-  assert {
-    condition     = try(aws_iam_role_policy.recovery.role == "waitron-es-recovery" && one([for s in jsondecode(aws_iam_role_policy.recovery.policy).Statement : s if s.Sid == "ReadRetainedSecrets"]).Resource == values(var.custody_refs.backup_secret_refs) && !strcontains(aws_iam_role_policy.recovery.policy, "PutSecretValue") && !strcontains(aws_iam_role_policy.recovery.policy, "Delete"), false)
-    error_message = "RECOVERY_AUTHORITY: only the explicitly named recovery role reads the cold retained secrets without writes or deletion"
   }
 }
 run "rejects_broad_subject_or_principal" {
@@ -117,15 +96,8 @@ run "rejects_wildcard_cell" {
 run "no_broad_allow_permissions" {
   command = plan
   assert {
-    condition     = alltrue([for policy in concat(values(aws_iam_role_policy.runtime), values(aws_iam_role_policy.replication), [aws_iam_role_policy.recovery]) : alltrue([for statement in jsondecode(policy.policy).Statement : alltrue([for action in flatten([statement.Action]) : !strcontains(action, "*") && !startswith(action, "iam:") && !startswith(action, "sts:") && !strcontains(action, "DeleteKey") && !strcontains(action, "PutKeyPolicy")]) && alltrue([for ref in flatten([statement.Resource]) : ref != "*" && (can(regex("^arn:aws:(kms|secretsmanager):[a-z0-9-]+:333333333333:", ref)) || can(regex("^arn:aws:s3:::waitron-es-(stream|snapshot)-333333333333-(eu-south-2|eu-west-3)(/(streams|snapshots)/[*])?$", ref)))])])])
+    condition     = alltrue([for policy in values(aws_iam_role_policy.runtime) : alltrue([for statement in jsondecode(policy.policy).Statement : alltrue([for action in flatten([statement.Action]) : !strcontains(action, "*") && !startswith(action, "iam:") && !startswith(action, "sts:") && !strcontains(action, "DeleteKey") && !strcontains(action, "PutKeyPolicy")]) && alltrue([for ref in flatten([statement.Resource]) : ref != "*" && (can(regex("^arn:aws:(kms|secretsmanager):[a-z0-9-]+:333333333333:", ref)) || can(regex("^arn:aws:s3:::waitron-es-(stream|snapshot)-333333333333-(eu-south-2|eu-west-3)(/(streams|snapshots)/[*])?$", ref)))])])])
     error_message = "NO_BROAD_ALLOWS: policies must keep exact actions and account/region/store/prefix boundaries"
-  }
-}
-run "exact_replication_policy" {
-  command = plan
-  assert {
-    condition     = try(length(jsondecode(aws_iam_role_policy.replication["storage"].policy).Statement) == 6 && one([for st in jsondecode(aws_iam_role_policy.replication["storage"].policy).Statement : st if st.Sid == "ReadSourceVersions"]) == { Sid = "ReadSourceVersions", Effect = "Allow", Action = ["s3:GetObjectVersionForReplication", "s3:GetObjectVersionAcl", "s3:GetObjectVersionTagging"], Resource = ["arn:aws:s3:::waitron-es-stream-333333333333-eu-south-2/streams/*", "arn:aws:s3:::waitron-es-snapshot-333333333333-eu-south-2/snapshots/*"] } && one([for st in jsondecode(aws_iam_role_policy.replication["storage"].policy).Statement : st if st.Sid == "DenySourceWrites"]) == { Sid = "DenySourceWrites", Effect = "Deny", Action = ["s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:ReplicateObject", "s3:ReplicateDelete", "s3:ReplicateTags"], Resource = ["arn:aws:s3:::waitron-es-stream-333333333333-eu-south-2/streams/*", "arn:aws:s3:::waitron-es-snapshot-333333333333-eu-south-2/snapshots/*"] }, false)
-    error_message = "EXACT_REPLICATION: source versions are read-only and all source mutation actions remain denied"
   }
 }
 run "runtime_secret_least_privilege" {
@@ -198,7 +170,7 @@ run "independent_global_permissions" {
     database_refs     = { endpoint = "waitron-global.synthetic.invalid", port = 5432, name = "cloud_global", admin_secret_ref = "arn:aws:secretsmanager:eu-central-1:222222222222:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-central-1:222222222222:key/66666666-6666-6666-6666-666666666666", backup_ref = "arn:aws:rds:eu-west-1:222222222222:auto-backup:synthetic" }
   }
   assert {
-    condition     = length(output.workload_roles) == 4 && length(aws_iam_role_policy.runtime) == 3 && length(aws_iam_role_policy.replication) == 0 && length(jsondecode(aws_iam_role_policy.recovery.policy).Statement) == 2
+    condition     = length(output.workload_roles) == 4 && length(aws_iam_role_policy.runtime) == 3
     error_message = "GLOBAL_PERMISSIONS: global must operate independently without venue stores, country roles or replication"
   }
 }
@@ -213,11 +185,4 @@ run "rejects_extra_key_purpose" {
     custody_refs = { kms = { extra = "arn:aws:kms:eu-south-2:333333333333:key/44444444-4444-4444-4444-444444444444", storage = "arn:aws:kms:eu-south-2:333333333333:key/44444444-4444-4444-4444-444444444444", database = "arn:aws:kms:eu-south-2:333333333333:key/66666666-6666-6666-6666-666666666666", secrets = "arn:aws:kms:eu-south-2:333333333333:key/77777777-7777-7777-7777-777777777777", logs = "arn:aws:kms:eu-south-2:333333333333:key/88888888-8888-8888-8888-888888888888" }, backup_kms = { storage = "arn:aws:kms:eu-west-3:333333333333:key/55555555-5555-5555-5555-555555555555", database = "arn:aws:kms:eu-west-3:333333333333:key/66666666-6666-6666-6666-666666666666", secrets = "arn:aws:kms:eu-west-3:333333333333:key/77777777-7777-7777-7777-777777777777", logs = "arn:aws:kms:eu-west-3:333333333333:key/88888888-8888-8888-8888-888888888888" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   expect_failures = [var.custody_refs]
-}
-run "cold_recovery_contexts" {
-  command = plan
-  assert {
-    condition     = try(length(jsondecode(aws_iam_role_policy.recovery.policy).Statement) == 5 && one([for st in jsondecode(aws_iam_role_policy.recovery.policy).Statement : st if st.Sid == "DecryptRetainedSecrets"]) == { Sid = "DecryptRetainedSecrets", Effect = "Allow", Action = ["kms:Decrypt"], Resource = var.custody_refs.backup_kms.secrets, Condition = { StringEquals = { "kms:ViaService" = "secretsmanager.eu-west-3.amazonaws.com", "kms:EncryptionContext:SecretARN" = values(var.custody_refs.backup_secret_refs) } } } && one([for st in jsondecode(aws_iam_role_policy.recovery.policy).Statement : st if st.Sid == "DecryptColdSnapshots"]) == { Sid = "DecryptColdSnapshots", Effect = "Allow", Action = ["kms:Decrypt"], Resource = var.custody_refs.backup_kms.storage, Condition = { StringEquals = { "kms:ViaService" = "s3.eu-west-3.amazonaws.com" }, StringLike = { "kms:EncryptionContext:aws:s3:arn" = "arn:aws:s3:::waitron-es-snapshot-333333333333-eu-west-3/snapshots/*" } } } && one([for st in jsondecode(aws_iam_role_policy.recovery.policy).Statement : st if st.Sid == "ReadColdObjects"]) == { Sid = "ReadColdObjects", Effect = "Allow", Action = ["s3:GetObject", "s3:GetObjectVersion"], Resource = ["arn:aws:s3:::waitron-es-stream-333333333333-eu-west-3/streams/*", "arn:aws:s3:::waitron-es-snapshot-333333333333-eu-west-3/snapshots/*"] }, false)
-    error_message = "COLD_RECOVERY_CONTEXTS: only retained cold secrets and snapshot objects may use their exact regional decrypt contexts"
-  }
 }

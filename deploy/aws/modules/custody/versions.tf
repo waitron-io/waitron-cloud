@@ -4,7 +4,7 @@ terraform {
     aws = {
       source                = "hashicorp/aws"
       version               = "6.42.0"
-      configuration_aliases = [aws.backup]
+      configuration_aliases = [aws.backup, aws.keys, aws.backup_keys]
     }
   }
 }
