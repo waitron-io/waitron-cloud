@@ -100,12 +100,14 @@ slices 6–12 still need separate build authority.
 
 ## Slice 3: Pure versioned country decisions (SQL-free)
 
+**Local implementation:** [Country decisions](../../country-policy.md) now match exact trusted qualified records. The frozen Spain default has no qualified flows. All 73 focused cases pass, including production AI refusal with zero loopback requests; deliberate guard checks and finishing receipts are retained by the driver. No placement integration or persisted binding is implemented.
+
 **Files:** Create `packages/registration/src/country-policy.ts`, `test/country-policy.test.ts`; export from `src/index.ts`. No new country-pack package or database column.
 
 **Proposed interfaces:** `CountryPolicy` has `country:string`, `revision:number`, `homeRegion:string`, `backupRegions:readonly string[]` and `flows` as a readonly array. Each flow has `serviceId:string`, `supplierId:string`, `accountId:string`, `endpoint:string`, `dataClasses:readonly string[]`, `regions:readonly string[]`, `evidenceId:string`, `qualified:boolean`. `FlowRequest` carries `country:string`, `policyRevision:number`, `serviceId:string`, `supplierId:string`, `accountId:string`, `dataClass:string`, `endpoint:string`, `region:string`; match exact canonical qualified destinations, never an arbitrary URL with a matching region label. `decideCountryFlow(policy:CountryPolicy|undefined, request:FlowRequest): {allowed:true;policyRevision:number;evidenceId:string}|{allowed:false;reason:'unknown_policy'|'stale_policy'|'unqualified_flow'|'destination_denied'}` is pure and never grants credentials. Production defaults contain no qualified flow. Spain's intended home/backup values are fixed above; absence of qualification keeps them unusable.
 
-- [ ] Write tests for unknown country, stale revision, unspecified/wrong-account/wrong-supplier endpoint, EU versus EEA confusion (Norway/UK/Switzerland refused), Spain logs/keys home-only, conditional Paris backup and a separately qualified EU SES fixture. An approved non-Spain fixture can use its own home; there is no universal Spain gate. AI stays blocked by slice 1 even if a fixture's country decision allows a region.
-- [ ] Run `pnpm --dir packages/registration exec node --test test/country-policy.test.ts` red, implement the pure decisions, then run green and `pnpm typecheck`. Fixtures labelled qualified are test inputs, not provider evidence.
+- [x] Write tests for unknown country, stale revision, unspecified/wrong-account/wrong-supplier endpoint, EU versus EEA confusion (Norway/UK/Switzerland refused), Spain logs/keys home-only, conditional Paris backup and a separately qualified EU SES fixture. An approved non-Spain fixture can use its own home; there is no universal Spain gate. AI stays blocked by slice 1 even if a fixture's country decision allows a region.
+- [x] Run `pnpm --dir packages/registration exec node --test test/country-policy.test.ts` red, implement the pure decisions, then run green and `pnpm typecheck`. Fixtures labelled qualified are test inputs, not provider evidence.
 
 **Stop:** No placement integration, persisted policy bindings, migration or automatic fallback. This slice can land without D79 resolution or legal/provider answers.
 

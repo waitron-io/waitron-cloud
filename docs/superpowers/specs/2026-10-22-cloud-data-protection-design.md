@@ -6,7 +6,9 @@ You need to know who can see your venue's data, where copies go and what happens
 membership ends before you entrust Cloud with it. This proposal supplies Cloud's half
 of that agreement. It does not approve a contract, establish legal compliance or enable
 hosting. The first outbound AI refusal is implemented locally after separate slice 1 authority
-on 2026-10-22. Other runtime controls proposed below remain **unbuilt**. Source inspection is not executed runtime verification.
+on 2026-10-22. Slice 3 implements [pure country decisions](../../country-policy.md)
+with an empty production flow list; durable runtime enforcement and other controls
+proposed below remain **unbuilt**. Source inspection is not executed runtime verification.
 
 Cloud source references use base **`60c0fbf25618a30977657fe74cce90fc5dbb915b`**.
 The [ownership boundary](../../documentation-ownership.md) keeps application behaviour
