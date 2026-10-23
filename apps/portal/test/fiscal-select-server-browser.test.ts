@@ -20,7 +20,7 @@ const bundle = await build({ stdin: { contents: `
   window.app = new PortalApp(document.querySelector('#portal'));
 `, resolveDir: new URL('..', import.meta.url).pathname }, bundle: true, write: false, format: 'iife', target: 'es2023' });
 
-test('supplied fiscal selectors agree with the untouched request and real server reservation', async t => {
+for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) test(`${locale} ${theme} ${width}: supplied fiscal selectors agree with the untouched request and real server reservation`, async t => {
   const authority = await authorityFixture();
   let fixture: Awaited<ReturnType<typeof startPortalFixture>> | undefined;
   try {
@@ -45,7 +45,7 @@ test('supplied fiscal selectors agree with the untouched request and real server
     await db.pool.query('CREATE TABLE fiscal_test_authority(account_id uuid PRIMARY KEY,entitlement boolean NOT NULL DEFAULT true,custody boolean NOT NULL DEFAULT true,operator_verified boolean NOT NULL DEFAULT true,bases jsonb NOT NULL)');
     await db.pool.query('INSERT INTO fiscal_test_authority(account_id,bases) VALUES($1,$2)', [owner.accountId, JSON.stringify(bases)]);
     const session = await transaction(db.pool, c => createSession(c, owner.accountId));
-    const context = await fixture.browser.newContext({ locale: 'en', viewport: { width: 390, height: 900 } }), page = await context.newPage();
+    const context = await fixture.browser.newContext({ locale, colorScheme: theme, viewport: { width, height: 900 } }), page = await context.newPage();
     page.setDefaultTimeout(6000);
     await context.addCookies([{ name: 'cloud_session', value: session.token, url: fixture.origin, httpOnly: true }, { name: 'cloud_csrf', value: session.csrfToken, url: fixture.origin }]);
     await page.route('**/app.js', route => route.fulfill({ contentType: 'text/javascript', body: bundle.outputFiles[0]!.text }));
@@ -61,7 +61,7 @@ test('supplied fiscal selectors agree with the untouched request and real server
       app.path = '/fiscal-allocations';
       app.draw();
     }, { organisationId: owner.organisationId, input });
-    const c = translations.en;
+    const c = translations[locale];
     const shown = {
       organisationId: await page.getByLabel(c.recoveryOrganisation, { exact: true }).inputValue(),
       venueId: await page.getByLabel(c.fiscalVenue, { exact: true }).inputValue(),
