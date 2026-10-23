@@ -494,3 +494,47 @@ runtime investigations; they cannot certify the current version 2 contract.
 Ordinary recovery keeps its separate fiscal authority requirement.
 Keep snapshots unavailable and deployment enforcement off until the remaining Cloud
 implementation, complete integration proof and release gates pass.
+
+## Check real free and paid clients
+
+You can prove the connection before testing paid services. The client runner creates
+two accounts through HTTPS signup and reads their verification links from its own
+Mailpit. It leaves one account free and sets the other paid with the existing operator
+command. Each account pairs a separate disposable Waitron demo venue through the
+normal manager login and pairing APIs.
+
+Use immutable local image IDs, with the reviewed Cloud source and installed dependencies
+in the first image. The second is the existing Waitron verifier image pinned to
+`ec91a9e34d2daba146f4ee61850ea4136ad5cfb7`. The runner builds that pinned source's
+dashboard without network access and runs its unchanged integration fixture with
+its installed TypeScript loader. It creates no host venue or private key file.
+
+```sh
+export TEST_CLOUD_INTEGRATION_IMAGE=sha256:<your-reviewed-cloud-image-id>
+export TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=sha256:<your-pinned-waitron-image-id>
+export TEST_CLOUD_PROTECTED_CONTAINER_IDS='["<full-container-id-to-preserve>"]'
+node scripts/test-cloud-integration.mjs > /tmp/cloud-client-integration.json
+```
+
+List the existing containers whose running state and start time must remain unchanged.
+Another lane may finish its own temporary containers during the proof. The runner
+checks only your listed protected IDs and removes only resources it created.
+If Docker refuses to remove one resource, cleanup still attempts the others and
+the command refuses to issue a receipt. Preserve the exact remaining ID for
+inspection. A retained network can reserve the stack's subnet even when Docker
+lists no connected containers; arrange recovery of the shared Docker service
+with the owner instead of pruning or restarting other lanes' workloads.
+
+Both venues use `https://waitron.local:3000` with the project's public CA and normal
+certificate verification. The proof also tries an untrusted CA and a wrong hostname;
+both refuse. It observes successful signed pairing, renewal and configuration
+responses, checks the persisted Cloud binding, and restarts each venue without
+changing its local identity or installation. The real free client's snapshot reserve
+returns `403 permission_denied`, with no grant or key. Private connection state stays
+in disposable volumes; the receipt contains only IDs, hashes and fixed outcomes.
+
+This command proves the client journey only. Its receipt has
+`kind: "test-cloud-clients"` and `completeIntegration: false`. You still need the
+same installations' paid snapshot and stream recovery, independent snapshot fallback,
+remote withdrawal, measured resource budgets and complete rollback proof before the
+final integration receipt can pass. Keep deployment plan enforcement off.

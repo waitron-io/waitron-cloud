@@ -829,7 +829,18 @@ implementation or production evidence.
   and test-box deployment remain open; plan enforcement stays off. PR7 now has a
   strict receipt reader with synthetic rejection tests for client/refusal evidence,
   protected container IDs, resource sampling, owned cleanup and rollback identity.
-  No combined producer or genuine PR7 integration receipt exists yet.
+  The [client proof](test-cloud.md#check-real-free-and-paid-clients) now creates both
+  accounts through HTTPS signup and captured Mailpit links, pairs two separate
+  pinned demo venues, observes successful signed renewal/configuration and preserves
+  identity across restart. The genuine free client receives `403 permission_denied`
+  on snapshot reserve, without a grant. Its partial receipt records exact owned
+  cleanup and explicitly refuses to claim complete integration. The combined paid
+  snapshot/stream/remote, resource/rollback and deployment proof remains open.
+  A repeat run reached cleanup but Docker retained an owned bootstrap endpoint on
+  an otherwise empty network. Scoped removal and force-disconnect refuse, and the
+  retained subnet blocks another stack. Cleanup now attempts the other owned
+  resources independently; complete requalification and native fault controls
+  remain open until the shared Docker state is recovered safely.
   The organisation plan store and operator command now persist free/paid metadata,
   advance revisions only on changes and refuse incompatible migration ledgers.
   Real PostgreSQL checks cover concurrent updates, rollback and separate organisations;
