@@ -608,3 +608,51 @@ any separately authorised AWS rehearsal, exercise the
 [CloudTrail key permissions](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/create-kms-key-policy-for-cloudtrail.html)
 and [encrypted budget topic permissions](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-sns-policy.html)
 with the actual regional services.
+
+## Forward public traffic without taking a venue's TLS key
+
+Each cell gets a network load balancer, called an NLB, across its three public
+subnets. Cross-zone balancing lets each entry point forward to healthy nodes in
+another zone. Run the isolated declaration checks with:
+
+```sh
+node deploy/aws/check.mjs --suite ingress
+```
+
+Supply the cell's scope and name, VPC, three public subnet references keyed by
+zone ID, its node security group and the admitted public ports. Spain accepts
+TCP 443 and UDP 51820; global accepts only TCP 443. Other ports, duplicate ports,
+missing zones, duplicate subnet references and crossed scope names refuse.
+The module checks the provider region and available zone IDs. Mocked references
+cannot establish that the supplied subnets and node group actually belong to
+that VPC or those zones; qualify those bindings before deployment.
+
+TCP 443 forwards unchanged to instance targets on TCP 30443. The load balancer
+holds no certificate or private key, so staff TLS still terminates at the
+venue. P1's router owns the distinct Cloud API and customer-domain certificate
+paths. Spain's WireGuard listener forwards UDP 51820 to UDP 31820. Both target
+groups check TCP 30999 every ten seconds, with three successful or failed checks
+to change health. That endpoint must report the actual service readiness;
+an open TCP socket alone does not establish gateway or venue health.
+
+The load balancer has its own security group from creation. Separate rule
+resources own its paths; inline rule lists are omitted so they cannot revoke
+those resources during a later authorised change. The added node rules admit only
+its group on the target ports and readiness port; existing private cell-peer
+paths stay under the cell module. Its outbound rules name only that cell's node
+group. This follows AWS's [NLB security-group reference
+pattern](https://docs.aws.amazon.com/elasticloadbalancing/latest/network/load-balancer-security-groups.html),
+which also supports client-IP preservation. Nodes gain no public administration,
+database or blanket inbound path. Proxy Protocol headers stay disabled, so the
+load balancer does not prepend bytes to staff TLS or WireGuard packets.
+
+P1 accepted these NodePorts and `externalTrafficPolicy: Cluster` in the recorded
+handoff. P1 still owns matching Services, readiness semantics, node target
+registration and a narrowly scoped controller role. P2 returns the load
+balancer's DNS name, hosted-zone identifier, public ports and target-group
+references keyed `https` and, for Spain, `wireguard`. It discovers no Kubernetes
+workload and starts no target. Task 12 must compose those references with the
+same cell's network. Actual health transitions, source-address handling through
+Kubernetes, target binding, traffic continuity during a zone failure and live
+firewall enforcement remain unqualified. P7 owns regional recovery; an ingress
+health signal starts no venue and switches no regional DNS.
