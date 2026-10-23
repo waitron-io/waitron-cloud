@@ -10,6 +10,7 @@ const release = await migrationRelease(36);
 const {migrate, names: migrationNames} = release;
 after(() => release.close());
 import {fixture} from './fixtures/relay-worker.ts';
+import {admitFixtureMessage} from './fixtures/relay-counter-rollover.ts';
 
 const {checkConsumerSchema} = await import(new URL('../../../deploy/local-stack/runtime.mjs', import.meta.url).href);
 const {hasReleaseMigrationCount} = await import(new URL('../../../scripts/database-recovery-migrations.mjs', import.meta.url).href);
@@ -124,5 +125,51 @@ test('release-36 consumer and recovery gates refuse historical future missing an
     await assert.rejects(checkConsumerSchema(f.pool, root), /schema_incompatible/);
     await f.pool.query("UPDATE schema_migrations SET name='036_relay_operator_stop.sql' WHERE name='unknown.sql'");
     await checkConsumerSchema(f.pool, root);
+  } finally {await f.close();}
+});
+
+
+test('migration setup survives a proved counter rollover without retaining a failed admission', async () => {
+  const f = await fixture(release.migrate);
+  try {
+    const v = await f.venue();
+    const messages = new registration.RelayMessages(f.pool, f.issuer, 'http://localhost',
+      {...f.relay, bounds: {...f.relay.bounds, windowSeconds: 1}});
+    const body = {version: 1, messageId: randomUUID(), grantId: v.grant.id, grantRevision: 1,
+      class: 'password_reset', recipient: 'migration@example.test', displayName: 'Ana',
+      locale: 'es-ES', timeZone: 'Europe/Madrid', expiresAt: new Date(Date.now() + 1800000).toISOString(),
+      token: 'a'.repeat(43)};
+    await f.pool.query(`CREATE SEQUENCE fixture_admission_attempt;
+      CREATE FUNCTION fixture_cross_counter_boundary() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF nextval('fixture_admission_attempt')=1 THEN
+          PERFORM pg_sleep(1.1);
+          RAISE NOTICE 'relay counter rollover: %', json_build_object(
+            'counterEndsAt', (SELECT max(ends_at) FROM relay_bounds_windows),
+            'databaseNow', clock_timestamp(), 'messageExpiresAt', NEW.expires_at,
+            'counterRows', (SELECT count(*) FROM relay_bounds_counters),
+            'reservations', (SELECT count(*) FROM relay_reservations));
+        END IF;
+        RETURN NEW;
+      END$$;
+      CREATE TRIGGER fixture_cross_counter_boundary BEFORE INSERT ON relay_messages
+        FOR EACH ROW EXECUTE FUNCTION fixture_cross_counter_boundary()`);
+    const observer = await f.pool.connect();
+    observer.on('notice', notice => console.log(notice.message));
+    observer.release();
+    const rollovers: unknown[] = [];
+    const result = await admitFixtureMessage(
+      () => messages.execute('email-submit', v.proof('email-submit', body)),
+      evidence => {rollovers.push(evidence); console.log('migration rollover evidence', JSON.stringify(evidence));});
+    assert.equal(result.created, true);
+    assert.ok(rollovers.length >= 1, 'the deliberately expired admission is reported');
+    assert.ok(Number((await f.pool.query('SELECT last_value FROM fixture_admission_attempt')).rows[0].last_value) >= 2);
+    assert.equal((await f.pool.query('SELECT count(*) FROM relay_messages')).rows[0].count, '1');
+    assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count, '1');
+    assert.deepEqual((await f.pool.query('SELECT kind,count::text FROM relay_bounds_counters ORDER BY kind')).rows,
+      [{kind: 'grant', count: '1'}, {kind: 'recipient', count: '1'}]);
+    assert.equal((await messages.execute('email-submit', v.proof('email-submit', body))).created, false);
+    assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count, '1');
+    await f.row(body.messageId);
   } finally {await f.close();}
 });
