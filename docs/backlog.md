@@ -1974,12 +1974,16 @@ notifications separately.
   reproduction establishes the timeout mechanisms rather than their precise history.
   Evidence, earlier partial fixes and complete load-run outcomes are retained under
   `~/waitron-campaign-d/receipts/d69/fixture-child-timeouts/`.
-  A separate forced-color package probe also exposed two strict CLI checks in
-  `packages/remote-access/test/operator-cli.test.ts` and `reconciler-cli.test.ts`:
-  Node's warning about conflicting `NO_COLOR` and `FORCE_COLOR` settings changes
-  their expected error output. Running those files directly, without the grouped
-  runner, reproduces both failures. Keep their exact error assertions; establish
-  one consistent color environment before promising forced-color package runs.
+  The remote operator and reconciler test children now use one colorless
+  environment, removing inherited `FORCE_COLOR` and preserving `NO_COLOR`,
+  configuration and other runtime warnings. This also covers continuous
+  reconciler mode. Conflicting parent settings previously added a Node warning
+  to their exact error output. Run `node --test
+  packages/remote-access/test/cli-color.test.ts` for real CLI refusals without a
+  database, including forced color values 0, 1 and 3. Every original CLI assertion,
+  command and deadline stays unchanged; production color handling is unchanged.
+  Local PostgreSQL suites are unavailable while Docker is down until 3 November;
+  GitHub CI qualifies the original database-backed journeys.
   The parser's current-lock inventory check still pins 215 package/snapshot
   records and the original importer counts. A new dependency record needs an
   explicitly reviewed inventory update. The disposable
