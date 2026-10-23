@@ -20,7 +20,7 @@ const bundle = await build({ stdin: { contents: `
   window.app = new PortalApp(document.querySelector('#portal'));
 `, resolveDir: new URL('..', import.meta.url).pathname }, bundle: true, write: false, format: 'iife', target: 'es2023' });
 
-for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) for (const scenario of ['organisation-loading', 'venue-removed'] as const) test(`${scenario}: ${locale} ${theme} ${width}: supplied fiscal selectors agree with the untouched request and real server reservation`, async t => {
+for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) for (const scenario of ['organisation-loading', 'venue-removed'] as const) test(`${scenario}: ${locale} ${theme} ${width}: supplied fiscal selectors agree with the untouched request and real server reservation`, async () => {
   const authority = await authorityFixture();
   let fixture: Awaited<ReturnType<typeof startPortalFixture>> | undefined;
   try {
