@@ -4282,3 +4282,39 @@ inventory and accounting checks and deadlines remain in place. Local Docker-back
 qualification is unavailable while Docker is down. Use GitHub CI for Linux
 qualification; investigate a diagnostic recurrence before claiming or changing
 the cause.
+
+## Cloud cost Mailpit fixture startup
+
+[Merge CI run 40000552513](https://github.com/waitron-io/waitron-cloud/actions/runs/40000552513)
+on `57bc23ad6f61d67c66ae43ec123d5232a4c05f28`, stack-conformance shard 3,
+job 120575313226, fails
+`generatedServiceKeepsItsMutableFilesOffTheScannedHostTree_mailpit` after 4.17 s.
+It stops at fixture startup (`stack-conformance.test.mjs:762`), before the mail,
+storage and host-file assertions. `scripts/cloud-cost/local.mjs` at that revision replaced the
+underlying startup error with `Invalid cloud cost local run`; the historical cause
+remains unknown.
+Both files have the same Git blobs as the preceding main `917e586`, and the
+identical candidate tree passed exact-head cost run 39999259906. That comparison
+does not explain the failure or prove a fix. This is a different case from D141's
+storage-lifetime close refusal. Startup now emits `stack_startup=` before cleanup and attaches the same bounded
+record to its rejection. It names ownership, plan, configuration, runtime files,
+certificate, resource discovery, Compose, container policy, isolation, readiness
+or cancellation handoff. Only fixed error categories, exit codes, signals and
+elapsed time are retained; paths, credentials and raw subprocess output are
+excluded. Cancelled requests and expired deadlines have separate categories.
+Opaque thrown values also fall back to a fixed category so inspecting them cannot
+prevent cleanup. A cleanup failure gets a separate record and cannot replace the original
+startup refusal. Reporting failure cannot prevent cleanup.
+
+Docker-free tests run the actual orchestration, ownership checks, files and
+OpenSSL with a controlled Docker-command boundary. They inject a fault at each
+stage, command timeouts and missing executables, unknown private errors, cleanup
+failure and reporting failure, with a successful start/cleanup control. These
+prove diagnostic handling, not the historical Linux cause. Qualify the genuine
+Mailpit journey on the changed Linux CI head; a passing run alone does not explain
+the earlier refusal. On a diagnostic recurrence, reproduce the named cause and
+fix it test-first.
+Preserve every isolation, storage, accounting and cleanup assertion and deadline.
+Use GitHub CI while local Docker is down; do not rerun the unchanged merge for a
+passing result. The exact job log and source-identity receipt are retained in lane
+G's `receipts/d142/`.
