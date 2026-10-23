@@ -4,6 +4,25 @@ You need a separate Cloud account service to exercise your test server without t
 
 The deployment files and local HTTPS, storage, remote, backup-verifier and free-service fixture proofs are implemented. **The test box is not deployed yet.** Plan enforcement remains off until the final disposable Waitron integration and release checks pass. Address providers stay disabled. Translation stays off pending the pinned joint paging proof and owner trials after 2 November 2026. Outside-home remote access needs a separately approved domain, certificates and deployment.
 
+## Final integration receipt work
+
+The first PR7 component is a strict receipt reader. It rejects missing genuine-client
+and free-plan refusal fields, changed protected container IDs, incomplete resource
+sampling, incomplete cleanup and changed rollback identity. It keeps local translation
+and relay fixtures separate from available Waitron journeys. Its tests use synthetic
+receipts to check those refusals; they supply no genuine integration evidence.
+
+Run the reader tests with:
+
+```sh
+node --test scripts/verify-test-cloud-receipt.test.mjs
+```
+
+The combined receipt producer, two paired disposable Waitron venues, continuous
+recovery and independent snapshot fallback still need implementation and execution.
+There is no completed PR7 receipt to validate yet. Keep plan enforcement off and
+complete image qualification before the test-box deployment.
+
 ## What is reachable
 
 Only the HTTPS proxy publishes to `192.168.10.10:3000`. It forwards to the unpublished account listener and accepts the exact canonical Host and, when present, Origin. It replaces forwarding headers and the account server trusts only its private address, `10.79.0.2`. Ordinary loopback deployment keeps `http://localhost:3000`.

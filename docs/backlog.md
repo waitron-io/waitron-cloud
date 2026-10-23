@@ -826,7 +826,10 @@ implementation or production evidence.
   Waitron's inspected `e2ca1ca487412a2bb7ef1277e48c6adad6068c85` includes paging,
   but the joint translation and owner gates remain. Its email transport has no
   Cloud relay caller. Final disposable Waitron integration, image qualification
-  and test-box deployment remain open; plan enforcement stays off.
+  and test-box deployment remain open; plan enforcement stays off. PR7 now has a
+  strict receipt reader with synthetic rejection tests for client/refusal evidence,
+  protected container IDs, resource sampling, owned cleanup and rollback identity.
+  No combined producer or genuine PR7 integration receipt exists yet.
   The organisation plan store and operator command now persist free/paid metadata,
   advance revisions only on changes and refuse incompatible migration ledgers.
   Real PostgreSQL checks cover concurrent updates, rollback and separate organisations;
