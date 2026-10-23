@@ -656,3 +656,70 @@ same cell's network. Actual health transitions, source-address handling through
 Kubernetes, target binding, traffic continuity during a zone failure and live
 firewall enforcement remain unqualified. P7 owns regional recovery; an ingress
 health signal starts no venue and switches no regional DNS.
+
+## Keep country DNS independent of the parent zone
+
+A country must keep its public names when its workloads move. Spain owns the
+public `es.waitron.io` zone in its own account; the global account owns
+`waitron.io`. The DNS zone stays in the Spain account during a future Paris
+runtime move. These declarations neither move a workload nor switch regional
+records. Check them locally with:
+
+```sh
+node deploy/aws/check.mjs --suite dns
+node --test deploy/aws/dns.test.mjs
+```
+
+Pass `scope` (`global` or `es`), its exact `zone_name`, and the zone choice to
+`modules/dns`. `create_zone` defaults to false: supply `existing_zone_id` to
+reference an existing public zone. Creation requires an explicit true and no
+existing ID. A managed zone refuses destructive replacement and recursive
+record deletion. Referencing an existing zone does not import it into resource
+management. The public-name lookup must return the supplied ID; a mismatched ID
+refuses. Resolve duplicate public zones outside this change before adoption.
+The pinned provider's [zone lookup](https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.42.0/website/docs/d/route53_zone.html.markdown)
+requires a unique match. The module returns `dns = {zone_id, name, name_servers}`.
+
+Publish the country nameservers as an explicit protected handoff to the separate
+`roots/delegation` entry point. This example uses synthetic inputs; keep actual
+IDs and role credentials in protected external configuration:
+
+```hcl
+expected_account_id = "222222222222"
+handoff = {
+  version = 1
+  parent_zone_id = "ZGLOBAL123"
+  child_name = "es.waitron.io"
+  child_name_servers = [
+    "ns-1.awsdns-1.com", "ns-2.awsdns-2.net",
+    "ns-3.awsdns-3.org", "ns-4.awsdns-4.co.uk"
+  ]
+}
+```
+
+Supply the four distinct Route 53 nameservers, including the com, net, org and
+co.uk destinations. The root checks
+the global account, Frankfurt provider region and exact public parent-zone ID.
+It never reads country state or uses country credentials. The only DNS record
+it declares is Spain's NS delegation in that parent, with a 300-second cache
+lifetime and overwrite disabled. Existing delegation needs a separately
+reviewed adoption procedure; no import or registrar operation runs here.
+
+The module and delegation root declare separate, unattached IAM policies. Each
+permits record changes in one exact hosted zone. The module permits A, AAAA,
+CNAME, TXT and CAA records: global at the apex, Spain at its apex and below it.
+It grants no NS or SOA change. Only the separate delegation policy permits NS,
+for exactly `es.waitron.io` in the parent. Name, type and action conditions cover
+every record in a change batch and require those keys to be present, following
+[Route 53 condition rules](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/specifying-conditions-route53.html).
+Attaching a policy to a role is later integration work. These allow statements
+cannot constrain additional grants from other policies; qualify the effective
+role permissions before any authorised deployment.
+
+P1/runtime consumers own stable venue records and customer-domain certificates;
+P4 owns action authority and P7 owns regional recovery. No venue record,
+certificate, `waitron.app` zone or automatic failover is created here. The mocked
+plans check names, references, refusals and policy declarations. They cannot
+prove nameserver ownership from an external handoff, public DNS propagation,
+registrar custody or live IAM enforcement. Verify those separately before any
+provider operation.
