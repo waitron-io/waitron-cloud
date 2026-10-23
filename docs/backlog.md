@@ -1635,6 +1635,17 @@ notifications separately.
   The corrected composition preserves the full two-second observation, the idle
   refusal, early-timer-wake checks and every original deadline. Diagnostic-only
   generated failures now retain their phase and elapsed-stage trace.
+  A controlled hang-child reproduction now distinguishes a child that stops
+  writing but ignores termination from one that keeps writing until forced
+  collection. The original hang fixture kept scheduling uploads after SIGTERM;
+  holding its next upload reproduces the generic cleanup refusal from
+  `39953541488` receipt job `120415065191`. The hang fixture now stops scheduling
+  uploads while remaining alive until the unchanged two-second forced kill.
+  Its regression requires SIGKILL and exact owned-resource collection. A separate
+  still-writing child must refuse interrupted accounting while reporting completed
+  resource collection. Production code, original assertions and deadlines remain
+  unchanged. The historical job has no transfer trace, so attribution to this
+  reproduced overlap remains an inference. Earlier paced failures stay unexplained.
   The same named paced-replay test also failed after 76.1 seconds in
   [run 39829272927](https://github.com/waitron-io/waitron-cloud/actions/runs/39829272927/job/120000877058),
   while qualifying the browser-source repair after Actions recovery. Its image

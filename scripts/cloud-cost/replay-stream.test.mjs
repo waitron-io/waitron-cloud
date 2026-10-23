@@ -446,7 +446,7 @@ test('replayStreamEarlyExitLeavesNoStartupTimerKeepingTheProcessAlive', () => {
 });
 
 // A hung writer must stay alive without introducing a second, interrupted-transfer fault.
-test('hungWriterIsCollectedWithoutAnUnrelatedInterruptedUpload', async t => {
+test('hungWriterIsCollectedWithoutAnUnrelatedInterruptedUpload', { timeout: 10000 }, async t => {
   const f = await fixture(t, 'hang', { holdAfterFirstUpload: true }), trace = [];
   const run = await open(t, { ...f, onDiagnostic: event => trace.push(event) });
   await upload(f);
@@ -457,7 +457,7 @@ test('hungWriterIsCollectedWithoutAnUnrelatedInterruptedUpload', async t => {
 });
 
 // Continuing to write is a separate fault: interrupted accounting must remain refused.
-test('forcedCollectionOfAStillWritingChildCannotQualifyInterruptedAccounting', async t => {
+test('forcedCollectionOfAStillWritingChildCannotQualifyInterruptedAccounting', { timeout: 10000 }, async t => {
   const f = await fixture(t, 'writing-hang', { holdAfterFirstUpload: true });
   const run = await open(t, f);
   await upload(f);
