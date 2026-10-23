@@ -95,7 +95,7 @@ for (const locale of ['en','es'] as const) for (const theme of ['light','dark'] 
      await page.waitForFunction(() => (window as any).app.fiscal.pending);
      current=installations.map(i=>i.organisationId===second ? {...i,canRevoke:false}:i);
      await page.evaluate(async () => {await (window as any).app.installations.load();});
-     assert.deepEqual(await page.evaluate(() => (window as any).app.fiscal.pendingRequest.input),input);
+     assert.deepEqual(await page.evaluate(() => (window as any).app.fiscal.pendingRequest?.input),input);
     } finally {releaseWrite?.();writeGate=undefined;}
     await page.waitForFunction(() => !(window as any).app.fiscal.pending);
     await page.evaluate(async () => {await (window as any).app.installations.load();});
