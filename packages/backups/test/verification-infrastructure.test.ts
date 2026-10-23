@@ -24,9 +24,12 @@ async function database(){
 import {BackupCatalogue,type BackupPoint} from '../src/catalogue.ts';
 import {BackupKeyVault} from '../src/keys.ts';
 import {receipt} from '../src/storage.ts';
-import {BackupWorker,type RestoreVerifier} from '../src/worker.ts';
-import {createContainerWaitronVerifier} from '../src/container-verifier.ts';
 import {buildFixtureImage} from './container-fixture/image.ts';
+import {BackupWorker} from '../src/worker.ts';
+import {createBoundContainerWaitronVerifier,type DataRestoreVerifier} from '../src/container-verifier.ts';
+import {configureVerification} from './fixtures/verification.ts';
+// @ts-expect-error deployment controller is JavaScript
+import {openVerifierController} from '../../../deploy/test-cloud/verifier-controller.mjs';
 
 const owner='outage-'+randomUUID(),image='cloud-verifier-test:'+owner,postgres='cloud-postgres-'+owner;
 const root=fileURLToPath(new URL('../../../',import.meta.url));
@@ -37,7 +40,7 @@ let postgresAttempted=false;
 async function ready(){for(let n=0;n<100;n++){try{docker('exec',postgres,'pg_isready','-h','127.0.0.1','-U','postgres');return;}catch{await delay(100);}}throw Error('PostgreSQL restart timed out');}
 before(async()=>{
  originalUrl=process.env.TEST_DATABASE_URL;
- await buildFixtureImage(image,root);
+ await buildFixtureImage(image,root,120000,'Worker.Dockerfile');
  const listener=createServer();await new Promise<void>(resolve=>listener.listen(0,'127.0.0.1',resolve));const port=(listener.address() as {port:number}).port;await new Promise<void>(resolve=>listener.close(()=>resolve()));
  const password=randomUUID();postgresAttempted=true;
  docker('run','-d','--name',postgres,'-p',`127.0.0.1:${port}:5432`,'-e','POSTGRES_PASSWORD='+password,'postgres:18-alpine');
@@ -74,18 +77,20 @@ async function fixture(){
   const capture=await catalogue.reserveCapture(venue.installationId,randomUUID()),body=Buffer.concat([Buffer.from([n===0?0:4]),bytes]);objects.set(capture.incomingKey,body);
   points.push(await catalogue.publish(venue.installationId,capture.id,{...receipt(body),capturedAt:'2026-09-26T00:00:00.000Z',retention:'daily',sourceNodeId:'00000000-0000-4000-8000-000000000000',modules:{fake:1}}));
  }
- const verify=await createContainerWaitronVerifier({image,owner,memoryMiB:192,scratchMiB:16});
- const worker=(restore:RestoreVerifier=verify)=>new BackupWorker(db.pool,catalogue,restore);
+ const directory=await mkdtemp(join(tmpdir(),'worker-outage-controller-')),imageId=docker('image','inspect','--format','{{.Id}}',image),controller=await openVerifierController({directory,owner,image:imageId});
+ await configureVerification(db.pool,'local.waitron-verifier@'+imageId);
+ const verify=await createBoundContainerWaitronVerifier({image:imageId,owner,controller,memoryMiB:192,scratchMiB:16});
+ const worker=(restore:DataRestoreVerifier=verify)=>new BackupWorker(db.pool,catalogue,restore,controller.scope);
  async function select(index=0){await worker().schedule();await db.pool.query("UPDATE backup_jobs SET available_at=CASE WHEN target_id=$1 THEN clock_timestamp() ELSE clock_timestamp()+interval '1 day' END",[points[index]!.id]);}
  async function state(index=0){return (await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[points[index]!.id])).rows[0].verification;}
  async function audit(){return (await db.pool.query('SELECT point_id,outcome FROM backup_verifications ORDER BY checked_at')).rows;}
- return {db,catalogue,points,verify,worker,select,state,audit};
+ return {db,catalogue,points,verify,worker,select,state,audit,async close(){await db.close();await rm(directory,{recursive:true,force:true});}};
 }
 test('PostgreSQL daemon outage leaves uncertainty unrecorded and lease recovery retries the same snapshot',{timeout:120000},async(t)=>{
  const f=await fixture();let stopped=false;
  try{
   await f.select();const start=Date.now();
-  await assert.rejects(f.worker(async(...args)=>{await f.verify(...args);docker('stop','-t','0',postgres);stopped=true;}).runOnce());
+  await assert.rejects(f.worker(async(...args)=>{const output=await f.verify(...args);docker('stop','-t','0',postgres);stopped=true;return output;}).runOnce());
   docker('start',postgres);await ready();stopped=false;
   assert.equal(await f.state(),'pending');assert.deepEqual(await f.audit(),[]);
   assert.equal((await f.db.pool.query("SELECT status FROM backup_jobs WHERE target_id=$1",[f.points[0]!.id])).rows[0].status,'running');
@@ -94,7 +99,7 @@ test('PostgreSQL daemon outage leaves uncertainty unrecorded and lease recovery 
   assert.deepEqual(await f.audit(),[{point_id:f.points[0]!.id,outcome:'verified'}]);
   assert.equal((await f.db.pool.query('SELECT claim_id FROM backup_jobs WHERE target_id=$1',[f.points[0]!.id])).rows[0].claim_id,null);
   t.diagnostic('PostgreSQL stop/restart and same-snapshot retry: '+(Date.now()-start)+' ms');
- }finally{if(stopped){docker('start',postgres);await ready();}await f.db.close();}
+ }finally{if(stopped){docker('start',postgres);await ready();}await f.close();}
 });
 test('Docker connection outage is retried without a failed-copy claim; malformed archive still fails',{timeout:120000},async()=>{
  const f=await fixture(),oldHost=process.env.DOCKER_HOST,oldContext=process.env.DOCKER_CONTEXT;
@@ -108,5 +113,5 @@ test('Docker connection outage is retried without a failed-copy claim; malformed
   await f.select(1);assert.equal(await f.worker().runOnce(),true);assert.equal(await f.state(1),'failed');
   assert.deepEqual(await f.audit(),[{point_id:f.points[0]!.id,outcome:'verified'},{point_id:f.points[1]!.id,outcome:'failed'}]);
   assert.equal(docker('ps','-aq','--filter','label=cloud.backup-verifier.owner='+owner),'');
- }finally{await f.db.close();}
+ }finally{await f.close();}
 });

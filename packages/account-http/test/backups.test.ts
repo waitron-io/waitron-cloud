@@ -61,11 +61,13 @@ test('bounded cursor pages preserve equal timestamp ordering and never return an
 test('retention protection is distinct from current verification and active recovery',async()=>{
  const old=await point(undefined,'2025-01-01T12:00:00.000Z','failed'),latest=await point(undefined,'2026-01-31T12:00:00.000Z','verified','monthly'),recovering=await point(undefined,'2026-01-01T12:00:00.000Z');
  await db.pool.query("INSERT INTO backup_verifications(id,point_id,digest,verifier,outcome) VALUES($1,$2,$3,'fixture','verified')",[randomUUID(),old,'a'.repeat(64)]);
+ await db.pool.query("UPDATE backup_points SET modules='{\"core\":1}' WHERE id=$1",[old]);
+ const {admitPointFixture}=await import('../../backups/test/fixtures/verification.ts');await admitPointFixture(db.pool,old,'invalid','archive_invalid');
  const account=(await db.pool.query('SELECT id FROM cloud_accounts')).rows[0].id;
  await db.pool.query("INSERT INTO backup_recoveries(id,venue_id,point_id,account_id,target_public_key,mode) VALUES($1,$2,$3,$4,'fixture-key','failure')",[randomUUID(),venues[0]!.venueId,recovering,account]);
  for(const state of ['deleting','deleted_at']){const id=await point();await db.pool.query(`UPDATE backup_points SET ${state}=${state==='deleting'?'true':'clock_timestamp()'} WHERE id=$1`,[id]);}
  const continuous=await point();await db.pool.query("UPDATE backup_points SET kind='continuous' WHERE id=$1",[continuous]);
- const r=await request({venueId:venues[0]!.venueId});assert.equal(r.status,200);const page=await r.json();assert.equal(page.points.length,3);assert.equal(page.defaultPointId,latest);assert.equal(page.continuousRecovery,null);
+ const r=await request({venueId:venues[0]!.venueId});assert.equal(r.status,200);const page=await r.json();assert.equal(page.points.length,3);assert.equal(page.defaultPointId,null);assert.equal(page.continuousRecovery,null);
  assert.equal(page.points.find((p:{id:string})=>p.id===old).protection,'fallback');assert.equal(page.points.find((p:{id:string})=>p.id===old).verification,'failed');assert.equal(page.points.find((p:{id:string})=>p.id===recovering).protection,'recovery');assert.equal(page.points.find((p:{id:string})=>p.id===latest).expiresAt,'2027-01-31T12:00:00.000Z');
  await db.pool.query("UPDATE backup_recoveries SET expires_at=clock_timestamp()-interval '1 second'");
  assert.equal((await (await request({venueId:venues[0]!.venueId})).json()).points.find((p:{id:string})=>p.id===recovering).protection,null);
@@ -98,4 +100,30 @@ test('published retention dates match cleanup across database time zones and day
    assert.equal(await cleanup.cleanupOne(venues[0]!.venueId,new Date(shown)),id);
   }
  }finally{await madrid.end();}
+});
+
+test('default snapshot selection requires current target evidence rather than the retained legacy flag',async()=>{
+ const id=await point(undefined,'2026-01-31T12:00:00.000Z','verified');
+ const response=await request({venueId:venues[0]!.venueId});assert.equal(response.status,200);
+ const body=await response.json();assert(body.points.some((p:{id:string})=>p.id===id));assert.equal(body.defaultPointId,null);
+});
+test('default snapshot selection loses eligibility immediately when release readiness is withdrawn',async()=>{
+ const {recoveryFixture}=await import('../../backups/test/fixtures/recovery-v2.ts'),f=await recoveryFixture(db);
+ const headers={cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken};
+ assert.equal((await (await request({venueId:f.installed.venueId},headers)).json()).defaultPointId,f.point.id);
+ await db.pool.query('UPDATE backup_verification_policy SET release_ready=false');
+ assert.equal((await (await request({venueId:f.installed.venueId},headers)).json()).defaultPointId,null);
+});
+
+test('legacy_rows_never_drive_default_or_healthy: bounded public pages use current qualification',async()=>{
+ const id=await point(undefined,undefined,'verified');
+ const page=await (await request({venueId:venues[0]!.venueId})).json();
+ assert.equal(page.points.find((p:{id:string})=>p.id===id).verification,'pending');
+ await db.pool.query("UPDATE backup_points SET modules='{\"core\":1}' WHERE id=$1",[id]);
+ const {admitPointFixture}=await import('../../backups/test/fixtures/verification.ts');
+ await admitPointFixture(db.pool,id);
+ assert.equal((await (await request({venueId:venues[0]!.venueId})).json()).points[0].verification,'verified');
+ await db.pool.query('UPDATE backup_verification_policy SET release_ready=false');
+ const stale=await (await request({venueId:venues[0]!.venueId})).json();
+ assert.equal(stale.points[0].verification,'pending');assert.equal(stale.defaultPointId,null);
 });

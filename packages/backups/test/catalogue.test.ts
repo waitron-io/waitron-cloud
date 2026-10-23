@@ -1,3 +1,4 @@
+import {verifyPointFixture,verificationOutput} from './fixtures/verification.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -213,39 +214,24 @@ test("publication verifies bytes, is immutable and starts unverified", async () 
 test("successful restore verification protects a point; altered storage fails verification", async () => {
   const old = await capture(a, 50);
   let observed = false;
-  await store.verify(
-    old.point.id,
-    "waitron-test",
-    async (source, keys, point) => {
+  await verifyPointFixture(db.pool,store,old.point.id,async (source,key,request) => {
       assert.deepEqual(await bytes(source), old.bytes);
-      assert.equal(keys.recoveryKey, old.reservation.keys.recoveryKey);
-      assert.equal(point.digest, source.receipt.digest);
-      observed = true;
+      assert.equal(key.secret, old.reservation.keys.recoveryKey);
+      assert.equal(request.archive.sha256, source.receipt.digest);
+      observed = true;return verificationOutput(request);
     },
   );
   assert(observed);
   assert.equal(stages, disposals);
   await store.rotate(a.installationId);
-  await store.verify(old.point.id, "waitron-retry", async (_, keys) =>
-    assert.equal(keys.recoveryKey, old.reservation.keys.recoveryKey),
-  );
+  await verifyPointFixture(db.pool,store,old.point.id,async (_source,key,request)=>{assert.equal(key.secret,old.reservation.keys.recoveryKey);return verificationOutput(request);});
   const bad = await capture(a, 40);
-  await assert.rejects(
-    store.verify(bad.point.id, "waitron-test", async () => {
-      throw Error("incompatible");
-    }),
-    /backup.verification_failed/,
-  );
+  assert.equal(await verifyPointFixture(db.pool,store,bad.point.id,async(_s,_k,r)=>verificationOutput(r,'invalid','archive_invalid')),'failed');
   assert.equal(stages, disposals);
   assert.equal(await store.cleanupOne(a.venueId), bad.point.id);
   assert.equal(await store.cleanupOne(a.venueId), null);
   objects.set("venue-a/" + old.point.objectKey, Buffer.from("altered"));
-  await assert.rejects(
-    store.verify(old.point.id, "waitron-test", async () =>
-      assert.fail("must not reach restore"),
-    ),
-    /backup.verification_failed/,
-  );
+  assert.equal(await verifyPointFixture(db.pool,store,old.point.id,async(source,_k,r)=>{const output=verificationOutput(r,'invalid','archive_size_mismatch');output.result.measuredArchive={sha256:source.receipt.digest,bytes:source.receipt.size};return output;}),'failed');
   const checks = await db.pool.query(
     "SELECT outcome FROM backup_verifications WHERE point_id=$1 ORDER BY checked_at",
     [old.point.id],
@@ -270,7 +256,7 @@ test("verification disposes a stage completed as shutdown arrives without record
   async putStaged(){throw Error('unused');},
   async remove(){throw Error('unused');},
  }));
- await assert.rejects(cancelling.verify(item.point.id,'shutdown',async()=>assert.fail('restore must not start'),undefined,controller.signal),error=>error instanceof Error&&error.name==='AbortError');
+ assert.equal(await verifyPointFixture(db.pool,cancelling,item.point.id,async()=>assert.fail('restore must not start'),controller.signal),'unavailable');
  assert.equal(disposed,1);
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_verifications WHERE point_id=$1',[item.point.id])).rows[0].count,'0');
  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[item.point.id])).rows[0].verification,'pending');
@@ -280,7 +266,7 @@ test("cleanup is resumable, serialised and keeps the last verified snapshot and 
     protectedPoint = await capture(a, 60),
     monthly = await capture(a, 60, "monthly");
   for (const item of [older, protectedPoint])
-    await store.verify(item.point.id, "waitron-test", async () => {});
+    await verifyPointFixture(db.pool,store,item.point.id);
   failDelete = true;
   await assert.rejects(store.cleanupOne(a.venueId), /store offline/);
   assert.equal(
@@ -308,12 +294,12 @@ test("verification releases the venue while restoring and refuses a point delete
   let entered!: () => void, release!: () => void;
   const begun = new Promise<void>((r) => (entered = r)),
     gate = new Promise<void>((r) => (release = r));
-  const verification = store.verify(item.point.id, "slow-worker", async () => {
+  const verification = verifyPointFixture(db.pool,store,item.point.id,async(_s,_k,r) => {
     entered();
-    await gate;
+    await gate;return verificationOutput(r);
   });
   const result = verification.then(
-    () => null,
+    verdict => verdict,
     (e) => e,
   );
   await begun;
@@ -332,7 +318,7 @@ test("verification releases the venue while restoring and refuses a point delete
     release();
     await result;
   }
-  assert.match(String(await result), /backup.unavailable/);
+  assert.equal(await result,'stale');
   assert.equal(stages, disposals);
   assert.equal(
     (
@@ -352,12 +338,8 @@ test("key-vault failure does not change archive verification status", async () =
     new BackupKeyVault(randomBytes(32)),
     storage,
   );
-  await assert.rejects(
-    wrong.verify(item.point.id, "wrong-master", async () =>
-      assert.fail("restore must not run"),
-    ),
-    /backup.key_unavailable/,
-  );
+  assert.equal(await verifyPointFixture(db.pool,wrong,item.point.id,async()=>assert.fail('restore must not run')),'unavailable');
+  assert.equal((await db.pool.query('SELECT reason FROM backup_verification_attempts WHERE point_id=$1',[item.point.id])).rows[0].reason,'secret_unavailable');
   assert.equal(
     (
       await db.pool.query(
@@ -431,10 +413,9 @@ test("test-only storage refuses verification and retention after a venue becomes
     "UPDATE venues SET environment='production' WHERE id=$1",
     [a.venueId],
   );
-  await assert.rejects(
-    store.verify(item.point.id, "worker", async () => {}),
-    /backup.local_integration_only/,
-  );
+  assert.equal(await verifyPointFixture(db.pool,store,item.point.id,async()=>assert.fail('production must not verify')),'stale');
+  assert.equal((await db.pool.query('SELECT count(*) FROM backup_verification_attempts WHERE point_id=$1',[item.point.id])).rows[0].count,'0');
+  assert.equal((await db.pool.query('SELECT count(*) FROM backup_verifications WHERE point_id=$1',[item.point.id])).rows[0].count,'0');
   await assert.rejects(
     store.cleanupOne(a.venueId),
     /backup.local_integration_only/,
@@ -447,4 +428,82 @@ for(const change of ['expire','remove'] as const)test('publication final check r
  }),change==='expire'?/^Error: backup.capture_expired$/:/^Error: backup.unavailable$/);
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_points')).rows[0].count,'0');
  assert.equal(stages,disposals);
+});
+
+test('reprovisioning compares location values independently of property order and preserves ownership',async()=>{
+ const keysBefore=(await db.pool.query('SELECT sealed FROM backup_key_versions WHERE venue_id=$1',[a.venueId])).rows;
+ await store.provision(a.installationId,{region:'local',bucket:'venue-a',endpoint:'https://store.test'});
+ assert.deepEqual((await db.pool.query('SELECT sealed FROM backup_key_versions WHERE venue_id=$1',[a.venueId])).rows,keysBefore);
+ for(const value of [{region:'elsewhere',bucket:'venue-a',endpoint:'https://store.test'},{region:'local',bucket:'another-bucket',endpoint:'https://store.test'},{region:'local',bucket:'venue-a',endpoint:'https://other.test'}])await assert.rejects(store.provision(a.installationId,value),/^Error: backup.conflict$/);
+ await assert.rejects(store.provision(b.installationId,{region:'local',bucket:'venue-a',endpoint:'https://store.test'}),/^Error: backup.conflict$/);
+});
+
+test('legacy_rows_never_drive_default_or_healthy: catalogue reports current qualification only',async()=>{
+ const {venuePoints}=await import('../src/catalogue.ts');
+ const points=async()=>{const c=await db.pool.connect();try{return await venuePoints(c,a.venueId);}finally{c.release();}};
+ const {configureRecoveryVerification}=await import('./fixtures/verification.ts');
+ const old=await capture();
+ await db.pool.query("UPDATE backup_points SET verification='verified' WHERE id=$1",[old.point.id]);
+ assert.equal((await points())[0]?.verification,'pending');
+ await configureRecoveryVerification(db.pool);await verifyPointFixture(db.pool,store,old.point.id);
+ assert.equal((await points())[0]?.verification,'verified');
+ await db.pool.query('UPDATE backup_verification_policy SET revision=revision+1');
+ assert.equal((await points())[0]?.verification,'pending');
+});
+
+test('last_historical_success_survives_refused_or_failed_recheck and newer failures',async()=>{
+ const {configureRecoveryVerification}=await import('./fixtures/verification.ts');
+ const fallback=await capture(a,60),newer=await capture(a,50);
+ await configureRecoveryVerification(db.pool);await verifyPointFixture(db.pool,store,fallback.point.id);
+ await verifyPointFixture(db.pool,store,fallback.point.id,async()=>{throw Error('temporary refusal');});
+ assert.equal(await store.cleanupOne(a.venueId),newer.point.id);
+ assert.equal(await store.cleanupOne(a.venueId),null);
+ await verifyPointFixture(db.pool,store,fallback.point.id,async(_s,_k,r)=>verificationOutput(r,'invalid','archive_invalid'));
+ await db.pool.query('UPDATE backup_verification_policy SET revision=revision+1');
+ assert.equal(await store.cleanupOne(a.venueId),null);
+ assert(objects.has('venue-a/'+fallback.point.objectKey));
+ assert.equal((await db.pool.query("SELECT count(*) FROM backup_verifications WHERE point_id=$1 AND outcome='verified'",[fallback.point.id])).rows[0].count,'1');
+});
+
+async function acknowledgedBlocker(holder:number){
+ const until=Date.now()+5000;
+ do{
+  const row=(await db.pool.query('SELECT pid FROM pg_stat_activity WHERE application_name=$1 AND $2::integer=ANY(pg_blocking_pids(pid))',[db.schema,holder])).rows[0];
+  if(row)return row.pid as number;
+  await new Promise(resolve=>setImmediate(resolve));
+ }while(Date.now()<until);
+ assert.fail('retention/admission did not acknowledge the exact held database lock');
+}
+test('active_recovery_holds_survive: target change and new recovery commit before waiting retention',async()=>{
+ const old=await capture(a,60),fallback=await capture(a,50);
+ await verifyPointFixture(db.pool,store,fallback.point.id);
+ const holder=await db.secondPool.connect();let work:Promise<string|null>|undefined;
+ try{
+  await holder.query('BEGIN');await holder.query('SELECT id FROM backup_verification_policy FOR UPDATE');
+  const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  work=store.cleanupOne(a.venueId);await acknowledgedBlocker(pid);
+  await holder.query('UPDATE backup_verification_policy SET revision=revision+1');
+  const account=(await holder.query('SELECT id FROM cloud_accounts')).rows[0].id;
+  await holder.query("INSERT INTO backup_recoveries(id,venue_id,point_id,account_id,target_public_key,mode) VALUES($1,$2,$3,$4,'held-by-owner','failure')",[randomUUID(),a.venueId,old.point.id,account]);
+  await holder.query('COMMIT');assert.equal(await work,null);
+  assert(objects.has('venue-a/'+old.point.objectKey));assert(objects.has('venue-a/'+fallback.point.objectKey));
+  await db.pool.query("UPDATE backup_recoveries SET status='closed'");
+  assert.equal(await store.cleanupOne(a.venueId),old.point.id);assert.equal(await store.cleanupOne(a.venueId),null);
+ }finally{await holder.query('ROLLBACK');await work?.catch(()=>{});holder.release();}
+});
+test('retention wins an acknowledged venue lock race against result admission',async()=>{
+ const old=await capture(a,60);await capture(a,50);
+ let verifierEntered!:()=>void,releaseVerifier!:()=>void,cleanupEntered!:(pid:number)=>void,releaseCleanup!:()=>void;
+ const verified=new Promise<void>(r=>{verifierEntered=r;}),verifyGate=new Promise<void>(r=>{releaseVerifier=r;});
+ const cleaning=new Promise<number>(r=>{cleanupEntered=r;}),cleanupGate=new Promise<void>(r=>{releaseCleanup=r;});
+ const verification=verifyPointFixture(db.pool,store,old.point.id,async(_s,_k,r)=>{verifierEntered();await verifyGate;return verificationOutput(r);});
+ let cleanup:Promise<string|null>|undefined;
+ try{
+  await verified;
+  cleanup=other.cleanupOne(a.venueId,new Date(),async c=>{const pid=(await c.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;cleanupEntered(pid);await cleanupGate;});
+  const pid=await cleaning;releaseVerifier();await acknowledgedBlocker(pid);releaseCleanup();
+  assert.equal(await cleanup,old.point.id);assert.equal(await verification,'stale');
+  assert.equal((await db.pool.query('SELECT count(*) FROM backup_verifications WHERE point_id=$1',[old.point.id])).rows[0].count,'0');
+  assert(!objects.has('venue-a/'+old.point.objectKey));
+ }finally{releaseVerifier();releaseCleanup();await Promise.allSettled([verification,...cleanup?[cleanup]:[]]);}
 });

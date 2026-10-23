@@ -1,8 +1,21 @@
 import {createWriteStream} from 'node:fs';
+import {spawn} from 'node:child_process';
 import {stat} from 'node:fs/promises';
 import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {createWaitronVerifier} from './waitron-verifier.ts';
+if(process.argv[2]==='--bound'){
+ const child=spawn(process.execPath,['--max-old-space-size=512','--permission','--allow-fs-read=/waitron/apps/server/dist/','--allow-fs-read=/verifier/','--allow-fs-read=/scratch/','--allow-fs-write=/scratch/','/verifier/waitron-data-verify-child.mjs','/waitron/apps/server/dist','/scratch'],{env:{TMPDIR:'/scratch'},stdio:['pipe','pipe','pipe']});
+ let expired=false;
+ // The watchdog has its own event loop so synchronous verifier code cannot block it.
+ const watchdog=setTimeout(()=>{expired=true;child.kill('SIGKILL');},30000);
+ child.on('error',()=>{});
+ child.stdout.pipe(process.stdout);child.stderr.pipe(process.stderr);
+ const upload=pipeline(process.stdin,child.stdin).catch(()=>{});
+ const outcome=await new Promise(resolve=>child.once('close',(code,signal)=>resolve({code,signal})));
+ clearTimeout(watchdog);process.stdin.destroy();await upload;
+ process.exitCode=expired?74:['SIGXCPU','SIGXFSZ','SIGKILL','SIGABRT'].includes(outcome.signal)?73:outcome.code??1;
+}else{
 // The container owns this watchdog even if the orchestration process disappears.
 const deadline=setTimeout(()=>process.exit(74),30000);
 try{
@@ -24,3 +37,5 @@ try{
  // Restore errors may carry secret archive content; only a fixed diagnostic leaves the container.
  console.error(process.exitCode===73?'backup.verifier_resource':'backup.verifier_failed');
 }finally{clearTimeout(deadline);}
+
+}

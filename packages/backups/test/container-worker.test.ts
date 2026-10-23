@@ -12,13 +12,16 @@ import {database} from '../../account-http/test/fixtures.ts';
 import {BackupCatalogue} from '../src/catalogue.ts';
 import {BackupKeyVault} from '../src/keys.ts';
 import {receipt} from '../src/storage.ts';
-import {BackupWorker,type RestoreVerifier} from '../src/worker.ts';
-import {createContainerWaitronVerifier} from '../src/container-verifier.ts';
+import {BackupWorker} from '../src/worker.ts';
+import {createBoundContainerWaitronVerifier,type DataRestoreVerifier} from '../src/container-verifier.ts';
+import {configureVerification} from './fixtures/verification.ts';
+// @ts-expect-error deployment controller is JavaScript
+import {openVerifierController} from '../../../deploy/test-cloud/verifier-controller.mjs';
 
 const owner='worker-'+randomUUID(),image='cloud-verifier-test:'+owner,root=fileURLToPath(new URL('../../../',import.meta.url)),docker=(...args:string[])=>execFileSync('docker',args,{encoding:'utf8',timeout:120000,stdio:['pipe','pipe','pipe']}).trim();
 // Image preparation has the Docker command's own budget before the worker deadline starts.
 before(()=>{
- docker('build','-q','-t',image,'-f',join(root,'packages/backups/test/container-fixture/Dockerfile'),root);
+ docker('build','-q','-t',image,'-f',join(root,'packages/backups/test/container-fixture/Worker.Dockerfile'),root);
 },{timeout:150000});
 after(()=>{const ids=docker('ps','-aq','--filter','label=cloud.backup-verifier.owner='+owner).split(/\s+/).filter(Boolean);if(ids.length)docker('rm','-f',...ids);docker('image','rm',image);});
 
@@ -35,17 +38,19 @@ test('database worker survives resource failures, preserves venue identity and v
    await registration.start(binding);await registration.approveCloud(binding,account.accountId);await registration.approveLocal(binding,randomUUID());const venue=await registration.complete(binding);venues.push(venue);
    await catalogue.provision(venue.installationId,{endpoint:'https://storage.test',bucket:'container-fixture-'+n,region:'local'});
   }
-  const verify=await createContainerWaitronVerifier({image,owner,memoryMiB:192,scratchMiB:16});
+  const imageId=docker('image','inspect','--format','{{.Id}}',image),controller=await openVerifierController({directory:join(scratch,'controller'),owner,image:imageId});
+  await configureVerification(db.pool,'local.waitron-verifier@'+imageId);
+  const verify=await createBoundContainerWaitronVerifier({image:imageId,owner,controller,memoryMiB:192,scratchMiB:16});
   let verifierOutcome='not called',verifierDetails:unknown;
-  const observed:RestoreVerifier=async(...args)=>{try{const result=await verify(...args);verifierOutcome='verified';return result;}catch(error){verifierOutcome=error instanceof Error?error.message:'non-Error refusal';verifierDetails=error instanceof Error?error.cause:undefined;throw error;}};
-  const worker=new BackupWorker(db.pool,catalogue,observed),ids=[];
+  const observed:DataRestoreVerifier=async(...args)=>{try{const result=await verify(...args);verifierOutcome='verified';return result;}catch(error){verifierOutcome=error instanceof Error?error.message:'non-Error refusal';verifierDetails=error instanceof Error?error.cause:undefined;throw error;}};
+  const worker=new BackupWorker(db.pool,catalogue,observed,controller.scope),ids=[];
   for(const [venueIndex,mode,identity] of [[0,1,1],[0,2,2],[1,5,5],[0,0,5],[0,0,0]]){
    const venue=venues[venueIndex!]!,capture=await catalogue.reserveCapture(venue.installationId,randomUUID()),bytes=Buffer.concat([Buffer.from([mode!]),body]);objects.set(capture.incomingKey,bytes);
    const point=await catalogue.publish(venue.installationId,capture.id,{...receipt(bytes),capturedAt:'2026-09-26T00:00:00.000Z',retention:'daily',sourceNodeId:'00000000-0000-4000-8000-'+String(identity).padStart(12,'0'),modules:{fake:1}});ids.push(point.id);
    await worker.schedule();await db.pool.query("UPDATE backup_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE target_id<>$1",[point.id]);
    verifierOutcome='not called';verifierDetails=undefined;assert.equal(await worker.runOnce(),true);
    const row=(await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0];const job=(await db.pool.query('SELECT status,last_error,attempts FROM backup_jobs WHERE target_id=$1',[point.id])).rows[0];
-   assert.equal(row.verification,mode===5||mode===0&&identity===0?'verified':'failed',JSON.stringify({mode,identity,verifierOutcome,verifierDetails,job}));
+   assert.equal(row.verification,mode===5||mode===0&&identity===0?'verified':mode===1||mode===2?'pending':'failed',JSON.stringify({mode,identity,verifierOutcome,verifierDetails,job}));
    assert.equal(docker('ps','-aq','--filter','label=cloud.backup-verifier.owner='+owner),'');
   }
   assert.deepEqual((await db.pool.query('SELECT venue_id,count(*)::int AS count FROM backup_points GROUP BY venue_id ORDER BY count')).rows,[{venue_id:venues[1]!.venueId,count:1},{venue_id:venues[0]!.venueId,count:4}]);

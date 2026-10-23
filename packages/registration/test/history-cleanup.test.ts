@@ -495,3 +495,61 @@ test('tombstone cleanup cannot remove a completed job unless its category is ena
   assert.equal(await count('backup_jobs'), 0);
   assert.equal(await count('backup_points'), 0);
 });
+
+async function evidencePoint(){
+ const {admitPointFixture}=await import('../../backups/test/fixtures/verification.ts');
+ await pool.query("INSERT INTO backup_locations(venue_id,installation_id,endpoint,bucket,region) VALUES($1,$2,'https://store.test','evidence-history','local')",[venueId,installationId]);
+ await pool.query("INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,1,'sealed')",[venueId]);
+ const id=randomUUID();
+ await pool.query('INSERT INTO backup_captures(id,venue_id,installation_id,key_version,created_at,cleaned_at) VALUES($1,$2,$3,1,$4,$4)',[id,venueId,installationId,old]);
+ await pool.query("INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules) VALUES($1,$2,$3,1,'snapshot',$1::uuid::text,$4,17,$5,'daily',$6,'{\"core\":1}')",[id,venueId,installationId,'d'.repeat(64),old,randomUUID()]);
+ const attempt=await admitPointFixture(pool,id);
+ await pool.query('UPDATE backup_points SET deleting=true,deleted_at=$2 WHERE id=$1',[id,old]);
+ await pool.query("UPDATE backup_jobs SET status='completed',last_success_at=$2 WHERE id=$1",[attempt.request.attempt.jobId,old]);
+ return {id,attempt:attempt.id,job:attempt.request.attempt.jobId};
+}
+async function evidenceCounts(id:string){
+ return (await pool.query(`SELECT (SELECT count(*) FROM backup_points WHERE id=$1)::integer AS points,
+ (SELECT count(*) FROM backup_captures WHERE id=$1)::integer AS captures,
+ (SELECT count(*) FROM backup_verifications WHERE point_id=$1)::integer AS history,
+ (SELECT count(*) FROM backup_verification_attempts WHERE point_id=$1)::integer AS evidence,
+ (SELECT count(*) FROM backup_jobs WHERE target_id=$1)::integer AS jobs`,[id])).rows[0];
+}
+const allEvidence={points:1,captures:1,history:1,evidence:1,jobs:1};
+test('history cleanup retains evidence and its job until tombstone and metering policies permit deletion',async()=>{
+ const f=await evidencePoint();
+ const jobs=await cleanup.run(parseHistoryCleanupPolicy({cutoffs:{backupJobs:cutoff}}),{apply:true});
+ assert.equal(jobs.categories.backupJobs?.deleted,0);assert.equal(jobs.categories.backupJobs?.blocked,1);
+ assert.deepEqual(await evidenceCounts(f.id),allEvidence);
+ const both=parseHistoryCleanupPolicy({cutoffs:{backupJobs:cutoff,backupTombstones:cutoff}});
+ await cleanup.run(both,{apply:true});assert.deepEqual(await evidenceCounts(f.id),allEvidence);
+ await new UsageReconciler(pool).runOnce(100);
+ const withoutJobs=await cleanup.run(parseHistoryCleanupPolicy({cutoffs:{backupTombstones:cutoff}}),{apply:true});
+ assert.equal(withoutJobs.categories.backupTombstones?.deleted,0);assert.deepEqual(await evidenceCounts(f.id),allEvidence);
+ const final=await cleanup.run(both,{apply:true});assert.equal(final.categories.backupTombstones?.deleted,1);
+ assert.deepEqual(await evidenceCounts(f.id),{points:0,captures:0,history:0,evidence:0,jobs:0});
+ assert.equal((await pool.query("SELECT count(*)::integer AS n FROM usage_events WHERE source_reference=$1",[f.id])).rows[0].n,3);
+});
+for(const locked of ['backup_verification_attempts','backup_jobs','backup_verifications'] as const)test('history cleanup skips the whole evidence graph while '+locked+' is locked',async()=>{
+ const f=await evidencePoint();await new UsageReconciler(pool).runOnce(100);
+ const c=await pool.connect();await c.query('BEGIN');
+ await c.query(`SELECT id FROM ${locked} WHERE ${locked==='backup_jobs'?'target_id':'point_id'}=$1 FOR UPDATE`,[f.id]);
+ try{
+  await cleanup.run(parseHistoryCleanupPolicy({cutoffs:{backupJobs:cutoff,backupTombstones:cutoff}}),{apply:true});
+  assert.deepEqual(await evidenceCounts(f.id),allEvidence);
+  assert.equal((await pool.query('SELECT current_evidence_id,last_attempt_id FROM backup_points WHERE id=$1',[f.id])).rows[0].current_evidence_id,f.attempt);
+ }finally{await c.query('ROLLBACK');c.release();}
+ const cleaned=await cleanup.run(parseHistoryCleanupPolicy({cutoffs:{backupJobs:cutoff,backupTombstones:cutoff}}),{apply:true});
+ assert.equal(cleaned.categories.backupTombstones?.deleted,1);
+});
+test('active_recovery_holds_survive: history evidence and job are kept until closed recovery history is authorised',async()=>{
+ const f=await evidencePoint();await new UsageReconciler(pool).runOnce(100);
+ await pool.query(`INSERT INTO backup_recoveries(id,venue_id,point_id,account_id,target_public_key,mode,verification_attempt_id,verification_target)
+ VALUES($1,$2,$3,$4,'history-v2-key','failure',$5,(SELECT target FROM backup_verification_policy WHERE id=1))`,[randomUUID(),venueId,f.id,accountId,f.attempt]);
+ const both=parseHistoryCleanupPolicy({cutoffs:{backupJobs:cutoff,backupTombstones:cutoff}});
+ await cleanup.run(both,{apply:true});assert.deepEqual(await evidenceCounts(f.id),allEvidence);
+ await pool.query("UPDATE backup_recoveries SET status='closed',expires_at=$1",[old]);
+ await cleanup.run(both,{apply:true});assert.deepEqual(await evidenceCounts(f.id),allEvidence);
+ await cleanup.run(parseHistoryCleanupPolicy({cutoffs:{backupJobs:cutoff,recoveryHistory:cutoff,backupTombstones:cutoff}}),{apply:true});
+ assert.deepEqual(await evidenceCounts(f.id),{points:0,captures:0,history:0,evidence:0,jobs:0});
+});

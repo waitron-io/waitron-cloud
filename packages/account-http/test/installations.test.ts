@@ -1,3 +1,4 @@
+import {verifyPointFixture,verificationOutput} from '../../backups/test/fixtures/verification.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import {venueOverview} from '../src/venue-overview.ts';
 import {BackupCatalogue} from '../../backups/src/catalogue.ts';
@@ -75,12 +76,13 @@ test('venue overview includes public business context and verified snapshot time
  const objects=new Map<string,Buffer>(),vault=new BackupKeyVault(randomBytes(32));
  const backups=new BackupCatalogue(db.pool,vault,()=>({async read(k){return objects.get(k)!;},async put(k,b){objects.set(k,Buffer.from(b));return receipt(b);},async remove(k){objects.delete(k);}}));
  await backups.provision(id,{endpoint:'https://storage.test',bucket:'venue-snapshots',region:'local'});
+ const {configureRecoveryVerification}=await import('../../backups/test/fixtures/verification.ts');await configureRecoveryVerification(db.pool);
  const dates=[4,3,2,1].map(days=>new Date(Date.now()-days*86400000).toISOString());let secret='';
  for(let n=0;n<4;n++){
   const capture=await backups.reserveCapture(id,randomUUID()),bytes=Buffer.from('archive '+n);secret=capture.keys.recoveryKey;objects.set(capture.incomingKey,bytes);
   const point=await backups.publish(id,capture.id,{...receipt(bytes),capturedAt:dates[n]!,retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}});
-  if(n===0)await backups.verify(point.id,'test-worker',async()=>{});
-  if(n===1)await assert.rejects(backups.verify(point.id,'test-worker',async()=>{throw Error('bad archive');}));
+  if(n===0)await verifyPointFixture(db.pool,backups,point.id);
+  if(n===1)assert.equal(await verifyPointFixture(db.pool,backups,point.id,async(_s,_k,r)=>verificationOutput(r,'invalid','archive_invalid')),'failed');
   if(n===2)await db.pool.query('UPDATE backup_points SET deleting=true WHERE id=$1',[point.id]);
   if(n===3)await db.pool.query('UPDATE backup_points SET deleted_at=clock_timestamp() WHERE id=$1',[point.id]);
  }

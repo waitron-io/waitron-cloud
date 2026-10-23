@@ -99,17 +99,22 @@ async function remoteObservation(service:'public'|'staff',status:'healthy'|'fail
    certificate_not_after=COALESCE(excluded.certificate_not_after,remote_probe_observations.certificate_not_after),
    certificate_fingerprint256=COALESCE(excluded.certificate_fingerprint256,remote_probe_observations.certificate_fingerprint256)`,[venue.installationId,venue.venueId,service,hostname,status,secondsOld,failure,certificateDays]);
 }
+async function checkSnapshot(id:string,invalid=false){
+ const {admitPointFixture}=await import('../../backups/test/fixtures/verification.ts');
+ await db.pool.query("UPDATE backup_points SET modules='{\"core\":1}' WHERE id=$1",[id]);
+ await admitPointFixture(db.pool,id,invalid?'invalid':'passed',invalid?'archive_invalid':'none');
+}
 test('missing-snapshot grace and failed-verification grace use independent durable clocks',async()=>{
  await db.pool.query("UPDATE installation_services SET state='ready' WHERE service='retained_snapshots'");
  await monitor.schedule();await contact(0);await monitor.runOnce();assert.deepEqual(await kinds(),[]);
  await db.pool.query("UPDATE venue_monitors SET snapshot_since=clock_timestamp()-interval '47 hours 59 minutes 59 seconds'");await due();await monitor.runOnce();assert.deepEqual(await kinds(),[]);
  await db.pool.query("UPDATE venue_monitors SET snapshot_since=clock_timestamp()-interval '48 hours 1 second'");await due();await monitor.runOnce();assert.deepEqual(await kinds(),['snapshot_stale']);
- const good=await snapshot('verified',5);await due();await monitor.runOnce();assert.deepEqual(await kinds(),[]);
- const bad=await snapshot('failed');await due();await monitor.runOnce();assert.deepEqual(await kinds(),[]);
+ const good=await snapshot('verified',5);await checkSnapshot(good);await due();await monitor.runOnce();assert.deepEqual(await kinds(),[]);
+ const bad=await snapshot('failed');await checkSnapshot(bad,true);await due();await monitor.runOnce();assert.deepEqual(await kinds(),[]);
  await db.pool.query("UPDATE venue_monitors SET failure_since=clock_timestamp()-interval '299 seconds'");await due();await monitor.runOnce();assert.deepEqual(await kinds(),[]);
  await db.pool.query("UPDATE venue_monitors SET failure_since=clock_timestamp()-interval '301 seconds'");await due();await monitor.runOnce();assert.deepEqual(await kinds(),['verification_failed']);
- await db.pool.query("UPDATE backup_points SET verification='verified' WHERE id=$1",[bad]);await due();await monitor.runOnce();assert.deepEqual(await kinds(),[]);
- await db.pool.query("UPDATE backup_points SET deleting=true WHERE id=$1",[bad]);await db.pool.query("UPDATE backup_points SET captured_at=clock_timestamp()-interval '48 hours 1 second' WHERE id=$1",[good]);await due();await monitor.runOnce();assert.deepEqual(await kinds(),['snapshot_stale']);
+ await db.pool.query("UPDATE backup_points SET verification='verified' WHERE id=$1",[bad]);await checkSnapshot(bad);await due();await monitor.runOnce();assert.deepEqual(await kinds(),[]);
+ await db.pool.query("UPDATE backup_points SET deleting=true WHERE id=$1",[bad]);await db.pool.query("UPDATE backup_points SET captured_at=clock_timestamp()-interval '48 hours 1 second' WHERE id=$1",[good]);await checkSnapshot(good);await due();await monitor.runOnce();assert.deepEqual(await kinds(),['snapshot_stale']);
 });
 test('revocation suppresses an open incident without a recovery notice',async()=>{
  await monitor.schedule();await contact(901);await monitor.runOnce();await deliver();
@@ -348,4 +353,71 @@ test('continuous monitoring skips locked installations and survives a failed obs
   if(!unlocked)await lock.query('ROLLBACK');lock.release();child.kill('SIGTERM');const timer=setTimeout(()=>child.kill('SIGKILL'),3000);try{await exited;}finally{clearTimeout(timer);}
   await db.pool.query('ALTER TABLE email_outbox DROP CONSTRAINT IF EXISTS fixture_fail_alert');
  }
+});
+
+test('only_completed_invalid_alerts: legacy flags cannot recover freshness or open failed-copy incidents',async()=>{
+ await db.pool.query("UPDATE installation_services SET state='ready' WHERE service='retained_snapshots'");
+ await monitor.schedule();await contact(0);await monitor.runOnce();
+ await db.pool.query("UPDATE venue_monitors SET snapshot_since=clock_timestamp()-interval '49 hours'");
+ const id=await snapshot('verified');await due();await monitor.runOnce();
+ assert.deepEqual(await kinds(),['snapshot_stale']);
+ await db.pool.query("UPDATE backup_points SET verification='failed' WHERE id=$1",[id]);
+ await due();await monitor.runOnce();await db.pool.query("UPDATE venue_monitors SET failure_since=clock_timestamp()-interval '301 seconds'");
+ await due();await monitor.runOnce();assert.deepEqual(await kinds(),['snapshot_stale']);
+ await db.pool.query("UPDATE backup_points SET modules='{\"core\":1}' WHERE id=$1",[id]);
+ const {admitPointFixture}=await import('../../backups/test/fixtures/verification.ts');await admitPointFixture(db.pool,id,'invalid','archive_invalid');
+ await due();await monitor.runOnce();await db.pool.query("UPDATE venue_monitors SET failure_since=clock_timestamp()-interval '301 seconds'");
+ await due();await monitor.runOnce();assert.deepEqual(await kinds(),['snapshot_stale','verification_failed']);
+});
+
+for(const change of ['unavailable','policy','superseding-pending','deleted','new-invalid','grace-reset'] as const)test('unavailable_never_sends_failed_copy_mail after '+change,async()=>{
+ const {admitPointFixture}=await import('../../backups/test/fixtures/verification.ts');
+ await db.pool.query("UPDATE installation_services SET state='ready' WHERE service='retained_snapshots'");
+ const id=await snapshot('pending');await db.pool.query("UPDATE backup_points SET modules='{\"core\":1}' WHERE id=$1",[id]);
+ await admitPointFixture(db.pool,id,'invalid','archive_invalid');
+ await monitor.schedule();await contact(0);await monitor.runOnce();
+ await db.pool.query("UPDATE venue_monitors SET failure_since=clock_timestamp()-interval '301 seconds'");await due();await monitor.runOnce();
+ assert.equal((await alerts()).length,1);
+ if(change==='unavailable'){
+  // An inconclusive recheck after a success must not retain a false failed-copy notice.
+  await admitPointFixture(db.pool,id);await admitPointFixture(db.pool,id,'unavailable','deadline');
+ }
+ if(change==='policy'){await admitPointFixture(db.pool,id);await db.pool.query('UPDATE backup_verification_policy SET revision=revision+1');}
+ if(change==='superseding-pending')await snapshot('pending');
+ if(change==='new-invalid'){const newer=await snapshot('pending');await db.pool.query("UPDATE backup_points SET modules='{\"core\":1}' WHERE id=$1",[newer]);await admitPointFixture(db.pool,newer,'invalid','archive_invalid');}
+ if(change==='grace-reset')await db.pool.query('UPDATE venue_monitors SET failure_since=clock_timestamp()');
+ if(change==='deleted')await db.pool.query('UPDATE backup_points SET deleting=true WHERE id=$1',[id]);
+ // Do not run the monitor: delivery must recheck the actual backup, not its old incident row.
+ await deliver();assert.equal(sent.length,0);assert.equal((await alerts())[0].status,'cancelled');
+});
+
+test('unavailable_never_sends_failed_copy_mail: a queued recovery needs a current success',async()=>{
+ const {admitPointFixture}=await import('../../backups/test/fixtures/verification.ts');
+ await db.pool.query("UPDATE installation_services SET state='ready' WHERE service='retained_snapshots'");
+ const id=await snapshot('pending');await db.pool.query("UPDATE backup_points SET modules='{\"core\":1}' WHERE id=$1",[id]);
+ await admitPointFixture(db.pool,id,'invalid','archive_invalid');await monitor.schedule();await contact(0);await monitor.runOnce();
+ await db.pool.query("UPDATE venue_monitors SET failure_since=clock_timestamp()-interval '301 seconds'");await due();await monitor.runOnce();await deliver();assert.equal(sent.length,1);
+ await admitPointFixture(db.pool,id);await due();await monitor.runOnce();assert.equal((await alerts()).length,2);
+ await admitPointFixture(db.pool,id,'unavailable','deadline');await deliver();assert.equal(sent.length,1);assert.equal((await alerts())[1].status,'cancelled');
+});
+
+test('current snapshot evidence is rechecked before a queued stale-snapshot notice is sent',async()=>{
+ const {admitPointFixture}=await import('../../backups/test/fixtures/verification.ts');
+ await db.pool.query("UPDATE installation_services SET state='ready' WHERE service='retained_snapshots'");
+ await monitor.schedule();await contact(0);await monitor.runOnce();
+ await db.pool.query("UPDATE venue_monitors SET snapshot_since=clock_timestamp()-interval '49 hours'");await due();await monitor.runOnce();
+ assert.equal((await alerts()).length,1);
+ const id=await snapshot('pending');await db.pool.query("UPDATE backup_points SET modules='{\"core\":1}' WHERE id=$1",[id]);await admitPointFixture(db.pool,id);
+ await deliver();assert.equal(sent.length,0);assert.equal((await alerts())[0].status,'cancelled');
+});
+
+test('only_completed_invalid_alerts: an inconclusive recheck preserves a completed invalid verdict',async()=>{
+ const {admitPointFixture}=await import('../../backups/test/fixtures/verification.ts');
+ await db.pool.query("UPDATE installation_services SET state='ready' WHERE service='retained_snapshots'");
+ const id=await snapshot('pending');await db.pool.query("UPDATE backup_points SET modules='{\"core\":1}' WHERE id=$1",[id]);
+ await admitPointFixture(db.pool,id,'invalid','archive_invalid');await admitPointFixture(db.pool,id,'unavailable','deadline');
+ await monitor.schedule();await contact(0);await monitor.runOnce();
+ await db.pool.query("UPDATE venue_monitors SET failure_since=clock_timestamp()-interval '301 seconds'");await due();await monitor.runOnce();
+ await deliver();assert.equal(sent.length,1);assert.equal((sent[0] as {issue:string}).issue,'verification_failed');
+ assert.equal((await db.pool.query('SELECT current_verification,last_reason FROM backup_point_qualification WHERE point_id=$1',[id])).rows[0].current_verification,'failed');
 });

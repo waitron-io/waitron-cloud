@@ -1,8 +1,12 @@
+import {verifyPointFixture,configureRecoveryVerification,fixtureTarget} from './fixtures/verification.ts';
 import assert from 'node:assert/strict';
 import {after,before,beforeEach,test} from 'node:test';
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {login} from '@waitron-cloud/identity';
 import {SignupStore,RegistrationStore,OrganisationPlanStore,InstallationStore,createLeaseIssuer,encodeMachine,transaction,type MachineAction,type SignedEnvelope} from '@waitron-cloud/registration';
 import {database} from '../../account-http/test/fixtures.ts';
@@ -11,8 +15,9 @@ import {BackupCatalogue} from '../src/catalogue.ts';
 import {BackupKeyVault} from '../src/keys.ts';
 import {ManagedStreams,type ManagedStreamAuthority} from '../src/managed-streams.ts';
 import {BackupCaptures} from '../src/captures.ts';
-import {BackupRecovery,recoveryPayload} from '../src/recovery.ts';
-import {RecoveryRequests,requestPayload} from '../src/recovery-request.ts';
+import {requestPayloadV2,recoveryPayloadV2} from '../src/recovery-v2.ts';
+import {BackupRecovery} from '../src/recovery.ts';
+import {RecoveryRequests} from '../src/recovery-request.ts';
 import {ReplacementStore,replacementPayload} from '../src/replacement.ts';
 import {receipt} from '../src/storage.ts';
 import {BackupWorker} from '../src/worker.ts';
@@ -52,9 +57,9 @@ async function paid(){await plans.set(a.organisationId,'paid');await catalogue()
 async function snapshot(days=0){
  const reserved=await catalogue().reserveCapture(a.installationId,randomUUID()),bytes=Buffer.from('encrypted archive '+reserved.id);objects.set(reserved.incomingKey,bytes);
  const metadata={...receipt(bytes),capturedAt:new Date(Date.now()-days*86400000).toISOString(),retention:'daily' as const,sourceNodeId:randomUUID(),modules:{core:1}};
- const point=await catalogue().publish(a.installationId,reserved.id,metadata);await catalogue().verify(point.id,'plan-test',async()=>{});return {point,metadata};
+ const point=await catalogue().publish(a.installationId,reserved.id,metadata);await verifyPointFixture(db.pool,catalogue(),point.id);return {point,metadata};
 }
-before(async()=>{db=await database();plans=new OrganisationPlanStore(db.pool);await execute('docker',['build','-q','-t',workerImage,'-f','packages/backups/test/container-fixture/Dockerfile','.'],{cwd:root,timeout:120000});workerImageBuilt=true;},{timeout:150000});
+before(async()=>{db=await database();plans=new OrganisationPlanStore(db.pool);await execute('docker',['build','-q','-t',workerImage,'-f','packages/backups/test/container-fixture/Worker.Dockerfile','.'],{cwd:root,timeout:120000});workerImageBuilt=true;},{timeout:150000});
 after(async()=>{try{if(workerImageBuilt)await execute('docker',['image','rm',workerImage],{timeout:30000});}finally{await db?.close();}});
 beforeEach(async()=>{await resetSchema(db.pool);objects.clear();grants=0;provisions=0;wait=undefined;removeWait=undefined;a=await installed('plan-a');b=await installed('plan-b');});
 
@@ -113,11 +118,13 @@ test('downgrade_preserves_last_verified_snapshot_and_pauses_expiry',async()=>{
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_key_versions')).rows[0].count,'1');
 });
 test('metadata_and_close_survive_downgrade_but_target_read_and_replacement_completion_do_not',async()=>{
+ await configureRecoveryVerification(db.pool);
  await paid();const {point}=await snapshot(),target=generateKeyPairSync('ed25519'),targetKey=target.publicKey.export({type:'spki',format:'der'}).toString('base64url');
  const recovery=new BackupRecovery(db.pool,vault,origin,undefined,mode),id=randomUUID();
+ await requestSnapshot(id,target);
  await recovery.start(a.token,a.csrfToken,{id,pointId:point.id,mode:'failure',targetPublicKey:targetKey,oldServerUnavailable:true,acceptDataLoss:true});
  await plans.set(a.organisationId,'free');assert.equal((await recovery.catalogue(a.token,a.venueId)).points.length,1);assert.equal((await recovery.status(a.token,id)).id,id);
- const bytes=recoveryPayload(origin,id,'read',point.digest,Date.now()),signed={payload:bytes.toString('base64url'),signature:sign(null,bytes,target.privateKey).toString('base64url')};
+ const bytes=recoveryPayloadV2(origin,id,'read',point.digest,fixtureTarget.digest,Date.now()),signed={version:2 as const,target:fixtureTarget,payload:bytes.toString('base64url'),signature:sign(null,bytes,target.privateKey).toString('base64url')};
  await assert.rejects(recovery.target(id,'read',signed),/permission_denied/);
  await assert.rejects(recovery.start(a.token,a.csrfToken,{id,pointId:point.id,mode:'failure',targetPublicKey:targetKey,oldServerUnavailable:true,acceptDataLoss:true}),/permission_denied/);
  await assert.rejects(new ReplacementStore(db.pool,vault,origin,mode).complete(id,a.token,a.csrfToken,{oldInstallationId:a.installationId,oldServerUnavailable:true,confirmReplacement:true}),/permission_denied/);
@@ -187,9 +194,10 @@ async function waitForQuery(pattern:string){
 }
 
 test('replacement_replay_rechecks_policy_and_concurrent_downgrade_cannot_deadlock',async()=>{
+ await configureRecoveryVerification(db.pool);
  await paid();const {point}=await snapshot(),target=generateKeyPairSync('ed25519'),targetKey=target.publicKey.export({type:'spki',format:'der'}).toString('base64url'),id=randomUUID();
- const recovery=new BackupRecovery(db.pool,vault,origin,undefined,mode);await recovery.start(a.token,a.csrfToken,{id,pointId:point.id,mode:'failure',targetPublicKey:targetKey,oldServerUnavailable:true,acceptDataLoss:true});
- const restored=recoveryPayload(origin,id,'restored',point.digest,Date.now());await recovery.target(id,'restored',{payload:restored.toString('base64url'),signature:sign(null,restored,target.privateKey).toString('base64url')});
+ const recovery=new BackupRecovery(db.pool,vault,origin,undefined,mode);await requestSnapshot(id,target);await recovery.start(a.token,a.csrfToken,{id,pointId:point.id,mode:'failure',targetPublicKey:targetKey,oldServerUnavailable:true,acceptDataLoss:true});
+ const restored=recoveryPayloadV2(origin,id,'restored',point.digest,fixtureTarget.digest,Date.now());await recovery.target(id,'restored',{version:2,target:fixtureTarget,payload:restored.toString('base64url'),signature:sign(null,restored,target.privateKey).toString('base64url')});
  const fresh=generateKeyPairSync('ed25519'),proposed={id,localVenueId:a.localVenueId,nodeId:point.sourceNodeId,publicKey:fresh.publicKey.export({type:'spki',format:'der'}).toString('base64url'),peerPublicKey:randomBytes(32).toString('base64')};
  const envelope=(action:'prepare'|'status')=>{const bytes=replacementPayload(origin,action,proposed,Date.now());return {id,payload:bytes.toString('base64url'),signature:sign(null,bytes,target.privateKey).toString('base64url'),keySignature:sign(null,bytes,fresh.privateKey).toString('base64url')};};
  const replacement=new ReplacementStore(db.pool,vault,origin,mode);await replacement.machine('prepare',envelope('prepare'));
@@ -232,17 +240,18 @@ test('fresh_machine_and_account_views_mask_existing_free_configuration',async()=
 });
 
 test('recovery_approval_and_HTTP_provider_wait_use_current_plan',async()=>{
+ await configureRecoveryVerification(db.pool);
  await paid();const {point}=await snapshot(),target=generateKeyPairSync('ed25519'),id=randomUUID(),code='12345678';
- const publicKey=target.publicKey.export({type:'spki',format:'der'}).toString('base64url'),request=requestPayload(origin,id,'start',publicKey,code,Date.now());
- const requests=new RecoveryRequests(db.pool,vault,origin,undefined,mode);await requests.machine('start',{payload:request.toString('base64url'),signature:sign(null,request,target.privateKey).toString('base64url')});
+ const publicKey=target.publicKey.export({type:'spki',format:'der'}).toString('base64url'),request=requestPayloadV2(origin,id,'start',publicKey,code,fixtureTarget.digest,Date.now());
+ const requests=new RecoveryRequests(db.pool,vault,origin,undefined,mode);await requests.machine('start',{version:2,target:fixtureTarget,payload:request.toString('base64url'),signature:sign(null,request,target.privateKey).toString('base64url')});
  const selection={pointId:point.id,oldServerUnavailable:true,acceptDataLoss:true};await plans.set(a.organisationId,'free');
  await assert.rejects(requests.approve(id,code,a.token,a.csrfToken,selection),/permission_denied/);
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_recoveries')).rows[0].count,'0');
  await plans.set(a.organisationId,'paid');await requests.approve(id,code,a.token,a.csrfToken,selection);
  const app=createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},leaseIssuer:issuer,planMode:mode,
   captures:{vault,objects:storage,async grant(){grants++;await plans.set(a.organisationId,'free');return {credentials:{accessKeyId:'a',secretAccessKey:'b',sessionToken:'c'},expiresAt:new Date(Date.now()+900000).toISOString()};}}});
- const bytes=recoveryPayload(origin,id,'read',point.digest,Date.now());
- const response=await app.request(origin+'/api/recovery/read',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,payload:bytes.toString('base64url'),signature:sign(null,bytes,target.privateKey).toString('base64url')})},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as Parameters<typeof app.request>[2]);
+ const bytes=recoveryPayloadV2(origin,id,'read',point.digest,fixtureTarget.digest,Date.now());
+ const response=await app.request(origin+'/api/recovery/read',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,version:2,target:fixtureTarget,payload:bytes.toString('base64url'),signature:sign(null,bytes,target.privateKey).toString('base64url')})},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as Parameters<typeof app.request>[2]);
  assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:'permission_denied'});assert.equal(grants,1);
 });
 
@@ -257,16 +266,24 @@ test('ordinary_mode_keeps_missing_installation_and_local_backup_refusal_order',a
 
 test('worker_CLI_test_mode_pauses_free_expiry_without_contacting_storage',async()=>{
  await paid();const first=await snapshot(90);await snapshot(80);await plans.set(a.organisationId,'free');
- const worker=new BackupWorker(db.pool,catalogue(),async()=>{});await worker.schedule();
+ const worker=new BackupWorker(db.pool,catalogue(),async()=>assert.fail('scheduling cannot verify'),'plan-fixture');await worker.schedule();
  await db.pool.query("UPDATE backup_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'retention'");
  {
   const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+db.schema);
-  const result=await execute(process.execPath,['packages/backups/src/worker-cli.ts','--once'],{cwd:root,timeout:30000,env:{PATH:process.env.PATH,DATABASE_URL:url.href,CLOUD_TEST_SERVICE_PLANS:'1',CLOUD_BACKUP_MASTER_KEY:randomBytes(32).toString('hex'),CLOUD_VERIFIER_IMAGE:workerImage,CLOUD_VERIFIER_OWNER:'plan-'+randomUUID(),CLOUD_BACKUP_ENDPOINT:'https://127.0.0.1:9',CLOUD_BACKUP_REGION:'local',CLOUD_BACKUP_ACCESS_KEY:'test',CLOUD_BACKUP_SECRET_KEY:'test'}});
+  const directory=await mkdtemp(join(tmpdir(),'plan-worker-controller-'));
+  try{const imageId=(await execute('docker',['image','inspect','--format','{{.Id}}',workerImage])).stdout.trim();
+  const result=await execute(process.execPath,['packages/backups/src/worker-cli.ts','--once'],{cwd:root,timeout:30000,env:{PATH:process.env.PATH,DATABASE_URL:url.href,CLOUD_TEST_SERVICE_PLANS:'1',CLOUD_BACKUP_MASTER_KEY:randomBytes(32).toString('hex'),CLOUD_VERIFIER_IMAGE:imageId,CLOUD_VERIFIER_OWNER:'plan-'+randomUUID(),LOCAL_STACK_CONFIG_DIR:directory,CLOUD_BACKUP_ENDPOINT:'https://127.0.0.1:9',CLOUD_BACKUP_REGION:'local',CLOUD_BACKUP_ACCESS_KEY:'test',CLOUD_BACKUP_SECRET_KEY:'test'}});
   assert.equal(JSON.parse(result.stdout).failures,0);
   assert.deepEqual((await db.pool.query('SELECT deleting,deleted_at FROM backup_points WHERE id=$1',[first.point.id])).rows[0],{deleting:false,deleted_at:null});
+  }finally{await rm(directory,{recursive:true,force:true});}
  }
 });
 test('worker_CLI_rejects_malformed_plan_mode_before_mutation',async()=>{
  const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+db.schema);
  await assert.rejects(promisify(execFile)(process.execPath,['packages/backups/src/worker-cli.ts','--retry-failed'],{cwd:new URL('../../../',import.meta.url),timeout:30000,env:{PATH:process.env.PATH,DATABASE_URL:url.href,CLOUD_TEST_SERVICE_PLANS:'true'}}));
 });
+
+async function requestSnapshot(id:string,target:ReturnType<typeof generateKeyPairSync>){
+ const publicKey=target.publicKey.export({type:'spki',format:'der'}).toString('base64url'),bytes=requestPayloadV2(origin,id,'start',publicKey,'12345678',fixtureTarget.digest,Date.now());
+ await new RecoveryRequests(db.pool,vault,origin,undefined,mode).machine('start',{version:2,target:fixtureTarget,payload:bytes.toString('base64url'),signature:sign(null,bytes,target.privateKey).toString('base64url')});
+}

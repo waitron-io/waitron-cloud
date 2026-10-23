@@ -8,6 +8,7 @@ import {RecoveryRequests,verifyRecoveryRequest} from '@waitron-cloud/backups/rec
 import {BackupRecovery} from '@waitron-cloud/backups/recovery';
 import type {CaptureOptions} from '@waitron-cloud/backups/captures';
 import {readSessionCookie} from './cookies.ts';
+import {readRecoveryMachineBody} from './recovery-machine-body.ts';
 import {readAccountBody} from './request.ts';
 import {AccountHttpError} from './errors.ts';
 import type {RateRule} from './rate-limit.ts';
@@ -47,17 +48,21 @@ export async function recoveryResponse(c:Context,options:{recoveryCodeKeys:Recov
    return c.json(await withReplacement(view));
   }
   await consume([{scope:action==='start'?'recovery-start-ip':'recovery-ip',subject:options.ip,limit:action==='start'?10:30,windowSeconds:action==='start'?900:60}]);
-  const body=await readAccountBody(c.req.raw,action==='start'||action==='status'?['payload','signature']:['id','payload','signature']);
-  const proof={payload:body.payload!,signature:body.signature!};
+  const body=await readRecoveryMachineBody(c.req.raw,action!=='start'&&action!=='status');
+  const proof=body;
+  const machineJson=(value:Record<string,unknown>)=>{
+   if(body.version===2&&Buffer.byteLength(JSON.stringify(value))>65536)throw new AccountHttpError(503,'temporarily_unavailable');
+   return c.json(value);
+  };
   if(action==='start'||action==='status'){
    const identity=verifyRecoveryRequest(origin,action,proof);
    await consume([{scope:action==='start'?'recovery-start-key':'recovery-key',subject:identity.publicKey,limit:action==='start'?10:30,windowSeconds:action==='start'?900:60}]);
-   return c.json(await requests.machine(action,proof));
+   return machineJson(await requests.machine(action,proof));
   }
   const identity=await recovery.authenticate(body.id!,action as 'info'|'read'|'restored',proof);
   await consume([{scope:'recovery-key',subject:identity.publicKey,limit:30,windowSeconds:60}]);
-  if(action==='info')return c.json(await recovery.target(body.id!,'info',proof));
-  if(action==='restored'){await recovery.target(body.id!,'restored',proof);return c.json({status:'restored'});}
+  if(action==='info')return machineJson(await recovery.target(body.id!,'info',proof));
+  if(action==='restored'){await recovery.target(body.id!,'restored',proof);return machineJson({...('version' in body&&body.version===2?{version:2 as const}:{}),status:'restored'});}
   const first=await recovery.target(body.id!,'read',proof);
   if('stream' in first){
    const reader=captures.managedStreams?.reader;if(!reader)throw new AccountHttpError(503,'temporarily_unavailable');
@@ -65,14 +70,14 @@ export async function recoveryResponse(c:Context,options:{recoveryCodeKeys:Recov
    const current=await recovery.target(body.id!,'read',proof);
    if(!('stream' in current)||!credentials||Object.keys(credentials).sort().join(',')!=='accessKeyId,secretAccessKey'||!credentials.accessKeyId||!credentials.secretAccessKey)throw new AccountHttpError(503,'temporarily_unavailable');
    const recoveryKit='WAITRON-RECOVERY-KIT-1:'+Buffer.from(JSON.stringify({version:1,venueId:current.stream.localVenueId,bucket:{...current.stream.location,prefix:current.stream.prefix,...credentials},recoveryKey:current.stream.recoveryKey,pointerSignerPublicKey:current.stream.pointerSignerPublicKey})).toString('base64url');
-   return c.json({source:current.source,recoveryKit,operationExpiresAt:current.operationExpiresAt});
+   return machineJson({source:current.source,recoveryKit,operationExpiresAt:current.operationExpiresAt});
   }
   const grant=await captures.grant(first.location,{kind:'restore',bucket:first.location.bucket,scope:first.point.objectKey});
   // Owner cancellation can commit while the provider issues credentials. Recheck before disclosing keys.
   const current=await recovery.target(body.id!,'read',proof),expires=Date.parse(grant.expiresAt);
   if(!Number.isFinite(expires)||expires<=Date.now()||expires>Date.now()+901000||!grant.credentials.accessKeyId||!grant.credentials.secretAccessKey||!grant.credentials.sessionToken)throw new AccountHttpError(503,'temporarily_unavailable');
   if(!('point' in current))throw new AccountHttpError(503,'temporarily_unavailable');
-  return c.json({point:current.point,location:current.location,recoveryKey:current.keys.recoveryKey,operationExpiresAt:current.operationExpiresAt,...grant});
+  return machineJson({...('version' in current&&current.version===2?{version:2 as const,verification:current.verification}:{}),point:current.point,location:current.location,recoveryKey:current.keys.recoveryKey,operationExpiresAt:current.operationExpiresAt,...grant});
  }catch(error){
   const code=error instanceof Error?error.message:'';
   const statuses:Record<string,400|401|403|409|410>={'backup.invalid_proof':401,'backup.revoked':403,'backup.permission_denied':403,'backup.local_integration_only':403,'backup.unavailable':410,'backup.conflict':409,'backup.target_not_fresh':409,'backup.recovery_active':409,'backup.confirmation_required':400,'backup.invalid_input':400,'backup.unverified':400};

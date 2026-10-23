@@ -1,0 +1,68 @@
+{
+  "protocol": "backup-data-restore/v1",
+  "captureId": "capture-1",
+  "pointId": "capture-1",
+  "venueId": "venue-1",
+  "sourceInstallationId": "installation-1",
+  "sourceNodeId": "node-1",
+  "capturedAt": "2026-10-20T08:00:00.000Z",
+  "archive": {
+    "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "bytes": 8388608,
+    "manifestVersion": 1,
+    "environment": "preproduction",
+    "modules": {
+      "orders": 0,
+      "core": 2
+    }
+  },
+  "backupKey": {
+    "version": 1,
+    "reference": "key-1"
+  },
+  "target": {
+    "version": 1,
+    "runtime": {
+      "release": "2026.10.20",
+      "revision": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "modules": [
+      {
+        "name": "core",
+        "packageVersion": "1.2.3",
+        "requires": {},
+        "schema": 2,
+        "migrationTable": "__drizzle_migrations_db",
+        "migrationDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "semanticsVersion": 1,
+        "policyDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      {
+        "name": "orders",
+        "packageVersion": "2.0.0",
+        "requires": {
+          "core": "^1.2.0"
+        },
+        "schema": 0,
+        "migrationTable": "__drizzle_migrations_orders",
+        "migrationDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "semanticsVersion": 1,
+        "policyDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      }
+    ],
+    "compositionDigest": "b4856410cd1eb08bbbbdca82780768cb4ede5c00c7a8bb3a1c17589ad0c4a7a5",
+    "migrationDigest": "185384d2b168dcc542e78692a3649d220c8841ae26bab6cf93c7f1f997ac06c0",
+    "policyDigest": "bd085f106c2acf118ed5d22b2b32b6104ab5d0546f6146a750c3e210025c15d5",
+    "digest": "e7a8e1dc880ec7f846a6f22750dc610ea8159d02393b08d5c4bb08ed181a9e76"
+  },
+  "verifierImage": "registry.example/waitron@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "attempt": {
+    "jobId": "job-1",
+    "number": 1,
+    "claimId": "claim-1",
+    "controllerScope": "controller-1",
+    "childToken": "child-1",
+    "deadline": "2026-10-20T08:00:30.000Z"
+  }
+}

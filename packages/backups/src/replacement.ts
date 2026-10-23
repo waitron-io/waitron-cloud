@@ -1,3 +1,5 @@
+import {lockVerificationPolicy} from './verification-admission.ts';
+import {snapshotBinding} from './recovery.ts';
 import {randomUUID,verify} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
@@ -31,6 +33,7 @@ async function current(client:PoolClient,id:string){
   ((r.source_kind='snapshot' AND p.kind='snapshot' AND p.verification='verified' AND NOT p.deleting AND p.deleted_at IS NULL)
    OR (r.source_kind='continuous' AND r.stream_generation IS NOT NULL)) AS valid
   FROM backup_recoveries r LEFT JOIN backup_points p ON p.id=r.point_id WHERE r.id=$1`,[id])).rows[0];if(!r?.valid)backupFail('unavailable');
+ await snapshotBinding(client,await recovery(client,id),'unavailable');
 }
 function bound(row:Record<string,any>,c:ReplacementClaims){if(row.public_key!==c.publicKey||row.peer_public_key!==c.peerPublicKey||row.local_venue_id!==c.localVenueId||row.node_id!==c.nodeId)backupFail('conflict');}
 function view(r:Record<string,any>,p:Record<string,any>){return p.result??{requestId:r.id,pointId:r.point_id,source:r.source_kind==='continuous'?{kind:'continuous',recoverableAt:r.stream_recoverable_at.toISOString(),sourceNodeId:r.stream_source_node_id}:{kind:'snapshot',pointId:r.point_id},venueId:r.venue_id,oldInstallationId:p.old_installation_id,localVenueId:p.local_venue_id,nodeId:p.node_id,environment:'test',publicKey:p.public_key,peerPublicKey:p.peer_public_key,state:'awaiting_owner',expiresAt:r.expires_at.toISOString(),organisationName:r.organisation_name,legalBusinessName:r.business_name,registration:null};}
@@ -48,6 +51,7 @@ export class ReplacementStore {
   if(token!==undefined){const s=await resolveSession(client,token,{csrfToken:csrf,touch:false});if(s.accountId!==r.account_id)backupFail('permission_denied');}
   await permission(client,r.account_id,r.venue_id);
   await backupPlan(client,r.venue_id,this.planMode);
+  if(r.kind==='snapshot')await lockVerificationPolicy(client);
   // Serialize changes to the current installation without blocking monitor foreign-key checks.
   await client.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[r.venue_id]);
   const old=(await client.query('SELECT * FROM installations WHERE venue_id=$1 AND superseded_by IS NULL FOR UPDATE',[r.venue_id])).rows[0];
@@ -56,14 +60,29 @@ export class ReplacementStore {
   const p=(await client.query('SELECT * FROM installation_replacements WHERE id=$1 FOR UPDATE',[id])).rows[0];
   return {r,old,l,p};
  }
+ async #activeInstallation(client:PoolClient,p:Record<string,any>){
+  if(!(await client.query('SELECT id FROM installations WHERE id=$1 AND revoked_at IS NULL AND superseded_by IS NULL FOR SHARE',[p.result.registration.installationId])).rowCount)backupFail('revoked');
+ }
  async #activeResult(client:PoolClient,p:Record<string,any>){
-  if(!(await client.query('SELECT id FROM installations WHERE id=$1 AND revoked_at IS NULL AND superseded_by IS NULL FOR SHARE',[p.result.registration.installationId])).rowCount)backupFail('revoked');return p.result;
+  await this.#activeInstallation(client,p);
+  await snapshotBinding(client,await recovery(client,p.id),'unavailable');
+  return p.result;
  }
  async machine(action:'prepare'|'status',envelope:ReplacementEnvelope){
   const c=await this.authenticate(action,envelope);
   return transaction(this.pool,async client=>{
+   await client.query('SELECT id FROM backup_recovery_requests WHERE id=$1 FOR UPDATE',[c.id]);
    const prior=(await client.query('SELECT * FROM installation_replacements WHERE id=$1',[c.id])).rows[0];
-   if(prior?.result){bound(prior,c);if(this.planMode!=='existing'){const r=await recovery(client,c.id);await permission(client,r.account_id,r.venue_id);await backupPlan(client,r.venue_id,this.planMode);}const result=await this.#activeResult(client,prior);claims(this.origin,action,envelope);return result;}
+   if(prior?.result){
+    bound(prior,c);const r=await recovery(client,c.id);
+    if(this.planMode!=='existing'){await permission(client,r.account_id,r.venue_id);await backupPlan(client,r.venue_id,this.planMode);}
+    if(r.kind==='snapshot'){
+     await lockVerificationPolicy(client);
+     // Completion also locks the installation before its backup location.
+     await this.#activeInstallation(client,prior);await lockVenue(client,r.venue_id);
+    }
+    const result=await this.#activeResult(client,prior);claims(this.origin,action,envelope);return result;
+   }
    const {r,old,l,p}=await this.#locked(client,c.id);
    if(r.local_venue_id!==c.localVenueId||r.source_node_id!==c.nodeId)backupFail('conflict');
    if(p?.result){bound(p,c);const result=await this.#activeResult(client,p);claims(this.origin,action,envelope);return result;}
@@ -83,7 +102,10 @@ export class ReplacementStore {
   if(!uuid(id))backupFail('unavailable');
   return transaction(this.pool,async client=>{
    const r=await recovery(client,id),s=await resolveSession(client,token,{csrfToken:csrf,touch:false});if(s.accountId!==r.account_id)backupFail('permission_denied');await permission(client,s.accountId,r.venue_id);
-   const p=(await client.query('SELECT * FROM installation_replacements WHERE id=$1',[id])).rows[0];await resolveSession(client,token,{csrfToken:csrf,touch:false});return p?view(r,p):null;
+   if(r.kind==='snapshot'){await lockVerificationPolicy(client);await lockVenue(client,r.venue_id);}
+   const p=(await client.query('SELECT * FROM installation_replacements WHERE id=$1',[id])).rows[0];
+   if(p)await snapshotBinding(client,r,'unavailable');
+   await resolveSession(client,token,{csrfToken:csrf,touch:false});return p?view(r,p):null;
   });
  }
  async complete(id:string,token:string,csrf:string,input:{oldInstallationId:string;oldServerUnavailable:boolean;confirmReplacement:boolean}){

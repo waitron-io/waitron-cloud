@@ -102,3 +102,18 @@ test('owner permission lost after diagnostic reads begin is refused by the final
   if(revoke)await revoke.catch(()=>{});
  }
 });
+
+test('legacy_rows_never_drive_default_or_healthy: diagnostic and overview timestamps lose stale qualification',async()=>{
+ const {recoveryFixture}=await import('../../backups/test/fixtures/recovery-v2.ts');const f=await recoveryFixture(db);
+ let diagnostic=await call({installationId:f.installed.installationId},f.session);assert.equal(diagnostic.status,200);
+ assert.equal((await diagnostic.json()).installation.backups.verifiedSnapshotAt,f.point.capturedAt);
+ await db.pool.query('UPDATE backup_verification_policy SET release_ready=false');
+ diagnostic=await call({installationId:f.installed.installationId},f.session);assert.equal(diagnostic.status,200);
+ assert.deepEqual((await diagnostic.json()).installation.backups,{latestSnapshotAt:f.point.capturedAt,verifiedSnapshotAt:null});
+ const {createLeaseIssuer}=await import('@waitron-cloud/registration'),{generateKeyPairSync}=await import('node:crypto');
+ const leaseIssuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
+ const overviewApp=createAccountApp({pool:db.pool,outbox:db.outbox,leaseIssuer,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});
+ const overview=await overviewApp.request(origin+'/api/account/installations',{headers:{cookie:'__Host-cloud_session='+f.session.token}}, {incoming:{socket:{remoteAddress:'192.0.2.89'}}} as HttpBindings);
+ assert.equal(overview.status,200);const body=await overview.json();
+ assert.equal(body.installations.find((i:{installationId:string})=>i.installationId===f.installed.installationId).overview.verifiedSnapshotAt,null);
+});

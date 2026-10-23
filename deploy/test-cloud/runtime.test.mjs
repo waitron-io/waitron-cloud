@@ -35,3 +35,51 @@ test('test Cloud drops local AI proof settings for every runtime role',async t=>
   if(role==='account')assert.equal(environment.CLOUD_TRANSLATION,'0');
  }
 });
+
+// Returning the base account/storage commands silently leaves the real adapters unused.
+test('dedicated storage and account roles select private service adapters',async t=>{
+ const api=await import('./runtime.mjs');
+ assert.equal(api.testRuntimeCommand('account'),'deploy/test-cloud/account-worker.mjs');
+ assert.equal(api.testRuntimeCommand('storage'),'deploy/test-cloud/storage-worker.mjs');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-services-runtime-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
+ const storage=api.testRuntimeEnvironment('storage',config,{CLOUD_TEST_SERVICE_PLANS:'1'});
+ assert.equal(storage.CLOUD_TEST_SERVICE_PLANS,'1');assert.match(storage.DATABASE_URL,/postgres:5432/);
+ const account=api.testRuntimeEnvironment('account',config,{CLOUD_TEST_SERVICE_PLANS:'1'});
+ assert.equal(account.NODE_EXTRA_CA_CERTS,'/run/local-stack/lan/ca.pem');
+});
+
+// The enabled project must not launch the base worker that continuously publishes zero routes.
+test('test remote runtime selects real reconciliation only in enabled mode and supplies gateway trust',async t=>{
+ const api=await import('./runtime.mjs'),dir=await mkdtemp(join(tmpdir(),'cloud-remote-command-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
+ assert.equal(api.testRuntimeCommand('manifest'),'deploy/test-cloud/remote-worker.mjs');
+ const active=api.testRuntimeEnvironment('manifest',config,{CLOUD_TEST_SERVICE_PLANS:'1'});assert.match(active.DATABASE_URL,/postgres:5432/);
+ assert.equal(api.testRuntimeEnvironment('manifest',config,{}).DATABASE_URL,undefined);
+ assert.equal(api.testRuntimeEnvironment('account',config,{CLOUD_TEST_SERVICE_PLANS:'1'}).CLOUD_STAFF_CERTIFICATES,'1');
+ assert.equal(api.testRuntimeEnvironment('account',config,{}).CLOUD_STAFF_CERTIFICATES,undefined);
+ assert.equal(api.testRuntimeEnvironment('gateway',config,{}).GATEWAY_UPSTREAM_CA,'/run/local-stack/lan/ca.pem');
+});
+
+// A paid capture uses the advertised LAN endpoint; the verifier worker must read the same location.
+test('test backup worker uses canonical storage and normal LAN trust in enabled mode',async t=>{
+ const api=await import('./runtime.mjs'),dir=await mkdtemp(join(tmpdir(),'cloud-backup-command-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
+ const value=api.testRuntimeEnvironment('backup',config,{CLOUD_TEST_SERVICE_PLANS:'1'});
+ assert.equal(value.CLOUD_BACKUP_ENDPOINT,'https://waitron.local:8333');assert.equal(value.CLOUD_BACKUP_CA_FILE,'/run/local-stack/lan/ca.pem');
+ assert.equal(api.testRuntimeEnvironment('backup',config,{}).CLOUD_BACKUP_ENDPOINT,'https://storage:8333');
+});
+
+// Dropping the pinned image while building the child environment makes verification unavailable.
+test('test backup selects the scoped controller and forwards only explicit pinned verifier inputs',async t=>{
+ const api=await import('./runtime.mjs'),dir=await mkdtemp(join(tmpdir(),'cloud-verifier-env-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
+ const value=api.testRuntimeEnvironment('backup',config,{CLOUD_TEST_SERVICE_PLANS:'1',CLOUD_VERIFIER_IMAGE:'sha256:'+'a'.repeat(64),CLOUD_VERIFIER_OWNER:'foreign',CLOUD_VERIFIER_MEMORY_MIB:'4096'});
+ assert.equal(api.testRuntimeCommand('backup'),'deploy/test-cloud/backup-worker.mjs');
+ assert.equal(value.CLOUD_VERIFIER_IMAGE,'sha256:'+'a'.repeat(64));assert.equal(value.CLOUD_VERIFIER_OWNER,undefined);assert.equal(value.CLOUD_VERIFIER_MEMORY_MIB,undefined);
+});
+
+// Only the enabled backup worker may write its separate controller state.
+test('backup runtime supplies a private controller directory independently of read-only config',async t=>{
+ const {testRuntimeEnvironment}=await import('./runtime.mjs'),dir=await mkdtemp(join(tmpdir(),'cloud-controller-runtime-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
+ const enabled=testRuntimeEnvironment('backup',config,{CLOUD_TEST_SERVICE_PLANS:'1'});
+ assert.equal(enabled.CLOUD_VERIFIER_STATE_DIR,'/run/backup-verifier');
+ for(const role of ['account','storage','email','migrate'])assert.equal(testRuntimeEnvironment(role,config,{CLOUD_TEST_SERVICE_PLANS:'1'}).CLOUD_VERIFIER_STATE_DIR,undefined);
+ assert.equal(testRuntimeEnvironment('backup',config,{}).CLOUD_VERIFIER_STATE_DIR,undefined);
+});

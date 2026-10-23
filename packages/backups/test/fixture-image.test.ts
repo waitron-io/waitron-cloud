@@ -118,6 +118,14 @@ test('failed container start still removes its attempted container and built ima
  assert.equal(commands.filter(args=>args[0]==='image'&&args[1]==='rm').length,1);
 });
 
+test('outage fixture builds the bound worker image once before starting PostgreSQL',async(t)=>{
+ const f=await controlledDocker(t,'run-failed');await setupFailure(f.env);
+ const commands=(await f.commands()).map(row=>row.args),builds=commands.filter(args=>args[0]==='build');
+ assert.equal(builds.length,1);
+ assert.equal(builds[0]![builds[0]!.indexOf('-f')+1],join(root,'packages/backups/test/container-fixture/Worker.Dockerfile'));
+ assert(commands.indexOf(builds[0]!)<commands.findIndex(args=>args[0]==='run'));
+});
+
 test('refused container creation preserves its error and still removes the built image',async(t)=>{
  const f=await controlledDocker(t,'run-refused'),output=await setupFailure(f.env);
  const commands=(await f.commands()).map(row=>row.args);

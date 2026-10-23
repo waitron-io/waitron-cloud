@@ -10,6 +10,19 @@
 
 **Spec:** [Approved backup verification contract](../specs/2026-10-18-backup-verification-without-fiscal-authority.md); [PR5](2026-10-17-test-cloud-free-paid.md#pr-5-supply-real-local-backup-and-remote-adapters-for-the-test-project); [documentation ownership](../../documentation-ownership.md).
 
+## Current execution pin
+
+The owner required worker threads to remain denied. The compatible A1004 release
+is now `ec91a9e34d2daba146f4ee61850ea4136ad5cfb7` (Waitron #1968), superseding W
+below for continued execution. Its compiled target digest is
+`2e9a53ebe041b37415b0983563edaa1529714b42f3cd2637987b976667164d10` and runtime
+fingerprint is `a62d25dfd879e6092efd9f6ffac64dd1f08304585d4e0e535535a53e7b818cf6`.
+All 15 owners remain; core is schema 185 and venue-service is schema 66.
+`deploy/backup-verifier/target.json` contains the entire descriptor exported from
+that compiled bundle. The build compares every field. The original W/H receipts
+below remain historical. The private transport, isolation, limits and authority
+rules remain in force.
+
 ## Global Constraints
 
 - Cloud planning base: `a31df0093529f5ebccc6fe3561dbcd194166ce48`. Parked PR5 branch: `feat/test-cloud-service-adapters`, `fecbf8f478e1842fc0cf5596bd205b5cfe25a0b2`; compare `1e854db468e5af3bb9ebc7907d3e395d2a9a8390..fecbf8f`. Its storage/account/remote/controller work is absent from main. Rebase and reconcile before continuing it, preserving all 54 fault receipts and prior runtime receipts in the campaign ledger. Do not duplicate those adapters or claim their receipts prove this new path.
@@ -54,10 +67,10 @@ For each task, stage only its named files and use `git commit -s -m "<message>"`
 **Files:** create `packages/backups/src/verification-protocol.ts`, `verification-target.ts`, `test/verification-protocol.test.ts`, `test/verification-target.test.ts`, `test/fixtures/verification-vector.json`, `deploy/backup-verifier/target.json` (complete public descriptor only).
 **Interfaces:** export Cloud-owned structural `BackupVerificationRequest`, `BackupVerificationResult`, `BackupVerificationTarget`, `BackupVerificationReason` matching W; `readBackupVerificationRequest(raw:string)`, `readBackupVerificationResult(raw:string,request)`, `backupVerificationRequestDigest(request):string`, `validateBackupVerificationTarget(value:unknown)`. `readVerificationTarget(raw:string):BackupVerificationTarget` requires the complete manifest, recomputed digests and configured release; Cloud never invents module semantics.
 
-- [ ] Transcribe the **literal** `VECTOR` from W `apps/server/src/backup-verification-protocol.test.ts`, preserving every value and expected digest `ecac239bf44b948246432671c1f896219d079c9a3a11b1e3a96d7bd6240e786a`. Add `literal_vector_matches_waitron`, independent field mutations, ordering invariance, forged descriptor/result and complete owner/check coverage cases. This example proves encoding interoperability, not runtime authenticity.
-- [ ] Add parser cases for duplicate decoded root/nested/map keys, unknown fields, invalid UTF-8, truncation/trailing bytes/depth >32, `-0`, decimals/exponents/unsafe integers, noncanonical UTC timestamps, invalid module names, duplicate migration tables, missing dependencies, and each bound. Run `pnpm --dir packages/backups exec node --test test/verification-{protocol,target}.test.ts`; expect missing interfaces/assertion failures.
-- [ ] Implement W's exact fixed-position digest array, sorted module-map pairs and target digest algorithm from `backup-verification-protocol.ts`. Mirror its fixed reason/status/check matrix: request ≤65,536 bytes, result ≤32,768, depth ≤32, ≤64 unique modules/maps, ≤16 unique checks/module; IDs ≤128, normal text ≤256, module names ≤64; positive archive bytes ≤536,870,912. Match printable-ASCII, hash, schema-zero and semantics rules exactly; do not use plain `JSON.parse` ahead of duplicate/number validation.
-- [ ] Export the complete descriptor from the pinned bundle into `target.json`; compare structurally with W bundle `currentBackupVerificationTarget()` and owner inventory, including inactive/zero-schema modules. Test tampered release/fingerprint/package/dependency/SQL/policy fields and incomplete maps refused. No schema-count-derived package versions. Rerun green; commit `feat: add bound backup verification protocol and target`.
+- [x] Transcribe the **literal** `VECTOR` from W `apps/server/src/backup-verification-protocol.test.ts`, preserving every value and expected digest `ecac239bf44b948246432671c1f896219d079c9a3a11b1e3a96d7bd6240e786a`. Add `literal_vector_matches_waitron`, independent field mutations, ordering invariance, forged descriptor/result and complete owner/check coverage cases. This example proves encoding interoperability, not runtime authenticity.
+- [x] Add parser cases for duplicate decoded root/nested/map keys, unknown fields, invalid UTF-8, truncation/trailing bytes/depth >32, `-0`, decimals/exponents/unsafe integers, noncanonical UTC timestamps, invalid module names, duplicate migration tables, missing dependencies, and each bound. Run `pnpm --dir packages/backups exec node --test test/verification-{protocol,target}.test.ts`; expect missing interfaces/assertion failures.
+- [x] Implement W's exact fixed-position digest array, sorted module-map pairs and target digest algorithm from `backup-verification-protocol.ts`. Mirror its fixed reason/status/check matrix: request ≤65,536 bytes, result ≤32,768, depth ≤32, ≤64 unique modules/maps, ≤16 unique checks/module; IDs ≤128, normal text ≤256, module names ≤64; positive archive bytes ≤536,870,912. Match printable-ASCII, hash, schema-zero and semantics rules exactly; do not use plain `JSON.parse` ahead of duplicate/number validation.
+- [x] Export the complete descriptor from the pinned bundle into `target.json`; compare structurally with W bundle `currentBackupVerificationTarget()` and owner inventory, including inactive/zero-schema modules. Test tampered release/fingerprint/package/dependency/SQL/policy fields and incomplete maps refused. No schema-count-derived package versions. Rerun green; commit `feat: add bound backup verification protocol and target`.
 
 ### Task 3: Add evidence, target policy and a shared qualification view
 

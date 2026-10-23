@@ -195,6 +195,16 @@ export class EmailWorker {
            WHERE ((d.episode_id IS NOT NULL AND opening.episode_id=d.episode_id) OR (d.episode_id IS NULL AND opening.incident_id=d.incident_id AND opening.revision=d.revision-1)) AND opening.account_id=d.account_id AND opening.state='open' AND opening.notification='transition' AND sent.status='sent'))
           AND m.is_owner AND a.disabled_at IS NULL AND c.email_verified_at IS NOT NULL AND c.email=$7 AND p.enabled
           AND v.environment='test' AND n.revoked_at IS NULL AND n.superseded_by IS NULL
+          AND (i.kind<>'verification_failed' OR COALESCE((
+            SELECT q.current_verification=CASE WHEN i.status='open' THEN 'failed' ELSE 'verified' END
+              AND (i.status<>'open' OR EXISTS(SELECT 1 FROM venue_monitors monitor WHERE monitor.venue_id=v.id
+                AND monitor.failure_point_id=point.id AND monitor.failure_since<=clock_timestamp()-interval '300 seconds'))
+            FROM backup_points point LEFT JOIN backup_point_qualification q ON q.point_id=point.id
+            WHERE point.venue_id=v.id AND point.kind='snapshot' AND NOT point.deleting AND point.deleted_at IS NULL
+            ORDER BY point.captured_at DESC,point.id DESC LIMIT 1),false))
+          AND (i.kind<>'snapshot_stale' OR (EXISTS(SELECT 1 FROM backup_points point
+            JOIN backup_point_qualification q ON q.point_id=point.id WHERE point.venue_id=v.id
+            AND q.current_verification='verified' AND point.captured_at>clock_timestamp()-interval '172800 seconds'))=(i.status='recovered'))
           AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured' AND s.service<>'content_translation'
             AND (i.kind='disconnected' OR (i.kind IN ('snapshot_stale','verification_failed') AND s.service='retained_snapshots')
              OR (i.kind IN ('public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale','public_certificate_expiring','staff_certificate_expiring') AND s.service='remote_access'

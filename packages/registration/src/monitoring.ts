@@ -36,8 +36,8 @@ export class MonitorWorker {
    const snapshots=active&&services.includes('retained_snapshots');
    const contactSince:Date|null=active?(monitor.contact_since??now):null;
    const snapshotSince:Date|null=snapshots?(monitor.snapshot_since??now):null;
-   const latest=snapshots?(await client.query("SELECT id,verification FROM backup_points WHERE venue_id=$1 AND kind='snapshot' AND NOT deleting AND deleted_at IS NULL ORDER BY captured_at DESC,id DESC LIMIT 1",[monitor.venue_id])).rows[0]:undefined;
-   const verified:Date|undefined=snapshots?(await client.query("SELECT max(captured_at) AS captured_at FROM backup_points WHERE venue_id=$1 AND kind='snapshot' AND verification='verified' AND NOT deleting AND deleted_at IS NULL",[monitor.venue_id])).rows[0].captured_at:undefined;
+   const latest=snapshots?(await client.query("SELECT p.id,COALESCE(q.current_verification,'pending') AS verification FROM backup_points p LEFT JOIN backup_point_qualification q ON q.point_id=p.id WHERE p.venue_id=$1 AND p.kind='snapshot' AND NOT p.deleting AND p.deleted_at IS NULL ORDER BY p.captured_at DESC,p.id DESC LIMIT 1",[monitor.venue_id])).rows[0]:undefined;
+   const verified:Date|undefined=snapshots?(await client.query("SELECT max(p.captured_at) AS captured_at FROM backup_points p JOIN backup_point_qualification q ON q.point_id=p.id WHERE p.venue_id=$1 AND q.current_verification='verified'",[monitor.venue_id])).rows[0].captured_at:undefined;
    const failurePoint=latest?.verification==='failed'?latest.id:null;
    const failureSince:Date|null=failurePoint?(monitor.failure_point_id===failurePoint?monitor.failure_since??now:now):null;
    const old=(date:Date,seconds:number)=>now.getTime()-date.getTime()>=seconds*1000;

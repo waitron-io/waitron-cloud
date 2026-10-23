@@ -77,7 +77,12 @@ test('populated release37 upgrades concurrently without changing any old row or 
     await Promise.all([migrate(f.pool), migrate(second)]);
     await migrate(second);
     const after = await oldState(f.pool);
-    assert.deepEqual({ ...after, schema_migrations: before.schema_migrations }, before);
+    const { backup_verification_attempts, backup_verification_policy, ...retained } = after;
+    assert.deepEqual({ ...retained, schema_migrations: before.schema_migrations }, before);
+    assert.deepEqual(backup_verification_attempts, []);
+    assert.deepEqual(backup_verification_policy, [{ value: {
+      id: 1, revision: 0, target: null, verifier_image: null, release_ready: false,
+    } }]);
     assert.deepEqual((await f.pool.query('SELECT service_plan,service_plan_revision FROM organisations')).rows,
       [{service_plan: 'free', service_plan_revision: 0}]);
     assert.equal((await f.pool.query("SELECT count(*)::integer AS n FROM installations i WHERE NOT EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=i.id AND s.service='content_translation' AND s.state='ready')")).rows[0].n, 0);

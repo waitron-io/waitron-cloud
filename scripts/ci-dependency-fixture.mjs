@@ -7,7 +7,8 @@ import {loadWorkspace} from './ci-scope.mjs';
 const schemaInputs = JSON.parse(readFileSync(new URL('./fixtures/ci-schema-inputs.json', import.meta.url), 'utf8'));
 const deploymentInputs = JSON.parse(readFileSync(new URL('./fixtures/ci-deployment-inputs.json', import.meta.url), 'utf8'));
 const inputs = {...deploymentInputs.files, ...schemaInputs.files, ...JSON.parse(readFileSync(new URL('./fixtures/ci-dependency-inputs.json', import.meta.url), 'utf8')),
-  ...JSON.parse(readFileSync(new URL('./fixtures/ci-execution-inputs.json', import.meta.url), 'utf8'))};
+  ...JSON.parse(readFileSync(new URL('./fixtures/ci-execution-inputs.json', import.meta.url), 'utf8')),
+  ...JSON.parse(readFileSync(new URL('./fixtures/ci-local-stack-reader-inputs.json', import.meta.url), 'utf8'))};
 
 export function receiptFixtureWorkspace() {
   return loadWorkspace().filter(pkg => Object.hasOwn(inputs, `${pkg.directory}/package.json`));

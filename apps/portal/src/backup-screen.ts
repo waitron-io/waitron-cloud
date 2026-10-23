@@ -19,6 +19,7 @@ export function backupScreen(app:PortalApp,venueId:string){
   ${selected&&showSnapshot?html`<dl><dt>${c.snapshotCaptured}</dt><dd><time datetime=${selected.capturedAt}>${date(selected.capturedAt)}</time></dd><dt>${c.snapshotCheck}</dt><dd>${states[selected.verification]}</dd>
     <dt>${c.snapshotRetention}</dt><dd>${selected.retention==='daily'?c.snapshotDaily:c.snapshotMonthly}</dd><dt>${c.snapshotExpiry}</dt><dd><time datetime=${selected.expiresAt}>${date(selected.expiresAt)}</time></dd>
     <dt>${c.snapshotIdentifier}</dt><dd>${selected.id}</dd></dl>
+    <p>${selected.verification==='verified'?c.snapshotDataChecked:selected.verification==='failed'?c.snapshotIntegrityFailed:c.snapshotCheckUnavailable}</p>
     ${selected.protection?html`<p>${selected.protection==='recovery'?c.snapshotRecoveryHold:c.snapshotFallback}</p>`:nothing}`:nothing}
   <p class="help">${c.snapshotRetentionHelp}</p>
   <div class="snapshot-actions"><wt-button .disabled=${disabled} @click=${()=>{void b.load();}}>${c.latestSnapshots}</wt-button>

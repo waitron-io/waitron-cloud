@@ -18,6 +18,7 @@ const run = (command, args) => {
     const failure = Error('Generated local gateway fixture failed');
     failure.journeyRefused = error.status === 1 && error.stdout?.length === 0
       && /Error: Invalid cloud cost browser journey/.test(error.stderr?.toString() ?? '');
+    failure.browserPhase = /(?:^|\n)cost_browser_phase=(options|meter|launch|context|login|dashboard|reconnect|logout|close|accounting|snapshot)\n/.exec(error.stderr?.toString() ?? '')?.[1];
     throw failure;
   }
 };
@@ -68,6 +69,7 @@ test('pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_' + fa
     cpSync(new URL('./remote-waitron-smoke.mjs', import.meta.url), join(root, 'measure/remote-waitron-smoke.mjs'));
     cpSync(new URL('../remote-journey.mjs', import.meta.url), join(root, 'measure/remote-journey.mjs'));
     cpSync(new URL('../browser.mjs', import.meta.url), join(root, 'measure/browser.mjs'));
+    cpSync(new URL('./browser-diagnostics.mjs', import.meta.url), join(root, 'measure/browser-diagnostics.mjs'));
     cpSync(realpathSync(join(realpathSync(new URL('../../../packages/ui-smoke/node_modules/playwright', import.meta.url)), '../playwright-core')), join(root, 'measure/node_modules/playwright-core'), { recursive: true });
     mkdirSync(join(root, 'peer'), { mode: 0o700 });
     cpSync(new URL('../../../packages/remote-access/src/', import.meta.url), join(root, 'src'), { recursive: true });

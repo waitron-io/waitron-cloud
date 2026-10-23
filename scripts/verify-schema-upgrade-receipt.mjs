@@ -3,11 +3,11 @@ import {pathToFileURL} from 'node:url';
 export function verifySchemaUpgradeReceipt(value){
  const demand=(ok,field)=>{if(!ok)throw new Error(`schema_upgrade_receipt: ${field}`);};
  const exact=(object,keys)=>{demand(object&&typeof object==='object'&&!Array.isArray(object),'object');demand(JSON.stringify(Object.keys(object).sort())===JSON.stringify([...keys].sort()),'fields');};
- exact(value,['schemaVersion','driver','releases','checks','timings','cleanup','limitations','measuredAt']);
+ exact(value,['schemaVersion','driver','releases','checks','timings','cleanup','limitations','measuredAt',...(value?.schemaVersion===5?['backupVerification']:[])]);
  exact(value.driver,['head','dirty']);exact(value.releases,['old','new']);
  exact(value.timings,['upgradeMs','recoveryMs']);exact(value.cleanup,['containers','volumes','checkouts']);
  demand(typeof value.measuredAt==='string'&&Number.isFinite(Date.parse(value.measuredAt))&&new Date(value.measuredAt).toISOString()===value.measuredAt,'measuredAt');
- demand([1,2,3,4].includes(value?.schemaVersion),'version');
+ demand([1,2,3,4,5].includes(value?.schemaVersion),'version');
  const sha=/^[0-9a-f]{40}$/,digest=/^[0-9a-f]{64}$/;
  demand(sha.test(value.driver?.head)&&value.driver.dirty===false,'driver');
  for(const role of ['old','new']){const release=value.releases?.[role];exact(release,['head','migrations','digest']);demand(sha.test(release?.head)&&digest.test(release?.digest)&&Number.isInteger(release?.migrations)&&release.migrations>0,role);}
@@ -26,6 +26,12 @@ export function verifySchemaUpgradeReceipt(value){
   demand(value.releases.old.migrations===36&&value.releases.new.migrations===37,'monitoring schemas');
   checks.splice(checks.indexOf('pairingUpgraded'),1);
   checks.push('accountStatePreserved','relayStatePreserved','legacyNoRetroactiveMail','deadlinesPreserved','recipientSnapshotPreserved','lateReceiptRecovery','newBackupRestored','restoredMatchingKeys','restoredWrongKeysRefused','restoredMissingKeysRefused','oldBackupUpgradeNoRetroactiveMail');
+ }
+ if(value.schemaVersion===5){
+  demand(value.releases.old.migrations===42&&value.releases.new.migrations===43,'backup verification schemas');
+  checks.splice(checks.indexOf('pairingUpgraded'),1);checks.push('accountStatePreserved','relayStatePreserved','monitoringStatePreserved');
+  const backupChecks=['legacyUnqualified','historyPreserved','keysPreserved','holdsPreserved','freshEvidence','v2Binding','oldBinaryRefused','restartIdempotent','oldSqlUnchanged','restoredEvidence','restoredHistory','restoredKeys','restoredHolds','restoredV2Binding','restoredLegacyUnqualified'];
+  exact(value.backupVerification,backupChecks);for(const key of backupChecks)demand(value.backupVerification[key]===true,key);
  }
  exact(value.checks,checks);for(const key of checks)demand(value.checks[key]===true,key);
  for(const key of ['upgradeMs','recoveryMs'])demand(Number.isFinite(value.timings?.[key])&&value.timings[key]>=0,key);

@@ -22,7 +22,7 @@
     "proof:two-venue-milestone": "node scripts/test-postgres.mjs exec node scripts/cloud-two-venue-milestone-receipt.mjs",
     "proof:local-stack": "node scripts/local-stack-proof.mjs",
     "verify:local-stack": "node scripts/verify-local-stack-receipt.mjs",
-    "test:local-stack": "node --test deploy/local-stack/*.test.mjs deploy/test-cloud/*.test.mjs scripts/test-cloud-deploy.test.mjs scripts/local-stack-compose.test.mjs scripts/local-stack-lifecycle.test.mjs scripts/verify-local-stack-receipt.test.mjs scripts/scheduled-usage-proof.test.mjs scripts/verify-schema-upgrade-receipt.test.mjs scripts/schema-upgrade-fixture.test.mjs",
+    "test:local-stack": "node scripts/test-postgres.mjs exec node --test deploy/local-stack/*.test.mjs deploy/test-cloud/*.test.mjs scripts/test-cloud-deploy.test.mjs scripts/local-stack-compose.test.mjs scripts/local-stack-lifecycle.test.mjs scripts/verify-local-stack-receipt.test.mjs scripts/scheduled-usage-proof.test.mjs scripts/verify-schema-upgrade-receipt.test.mjs scripts/schema-upgrade-fixture.test.mjs scripts/schema-upgrade-backup-fixture.test.mjs scripts/verify-backup-verifier-proof.test.mjs scripts/verify-authorised-recovery-proof.test.mjs scripts/verify-snapshot-verifier-controls.test.mjs scripts/backup-verifier-proof-transport.test.mjs",
     "proof:database-recovery": "node scripts/database-recovery-receipt.mjs",
     "verify:database-recovery": "node scripts/verify-database-recovery-receipt.mjs",
     "test:database-recovery-receipt": "node --check scripts/database-recovery-fixture.mjs && node --check scripts/database-recovery-receipt.mjs && node --test scripts/verify-database-recovery-receipt.test.mjs scripts/database-recovery-migrations.test.mjs",

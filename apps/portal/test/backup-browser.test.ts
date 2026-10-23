@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import axe from 'axe-core';
+import {admitPointFixture} from '../../../packages/backups/test/fixtures/verification.ts';
 import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
 import {startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
@@ -17,8 +18,9 @@ for(const locale of ['en','es'] as const)test(`${locale} owner browses snapshot 
   let verifiedId='';
   for(let n=0;n<52;n++){
    const id=randomUUID();if(n===1)verifiedId=id;await f.db.pool.query('INSERT INTO backup_captures(id,venue_id,installation_id,key_version) VALUES($1,$2,$3,1)',[id,v.venueId,v.installationId]);
-   await f.db.pool.query("INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules,verification) VALUES($1,$2,$3,1,'snapshot',$4,$5,100,clock_timestamp()-($6::text||' days')::interval,'daily',$7,'{}',$8)",[id,v.venueId,v.installationId,'snapshots/'+id,'a'.repeat(64),n,randomUUID(),n===1?'verified':'pending']);
+   await f.db.pool.query("INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules,verification) VALUES($1,$2,$3,1,'snapshot',$4,$5,100,clock_timestamp()-($6::text||' days')::interval,'daily',$7,jsonb_build_object('core',1),$8)",[id,v.venueId,v.installationId,'snapshots/'+id,'a'.repeat(64),n,randomUUID(),n===1?'verified':'pending']);
   }
+  await admitPointFixture(f.db.pool,verifiedId);
   await page.getByRole('button',{name:refresh,exact:true}).click();const choices=page.getByLabel(choose,{exact:true});await choices.waitFor();assert.equal(await choices.locator('option').count(),50);assert.equal(await choices.inputValue(),verifiedId);
   await page.getByText(locale==='en'?'Verified':'Verificada',{exact:true}).waitFor();await choices.selectOption({index:0});await page.getByText(locale==='en'?'Awaiting verification':'Pendiente de verificación',{exact:true}).waitFor();
   await page.getByText(locale==='en'?'To restore a snapshot, open the Cloud recovery link from the replacement server’s setup screen.':'Para restaurar una instantánea, abre el enlace de recuperación de Cloud desde la configuración del servidor de sustitución.',{exact:true}).waitFor();

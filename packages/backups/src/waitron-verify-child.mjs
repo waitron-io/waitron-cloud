@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {createConnection} from 'node:net';
-import {mkdir,readFile,writeFile,rm,stat} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,rm,stat,copyFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {DatabaseSync} from 'node:sqlite';
@@ -31,7 +31,9 @@ assert.equal(new Date(checked.manifest.createdAt).toISOString(),new Date(request
 const trading=checked.secretEntries.find(e=>e.name==='secrets/trading.env');assert(trading);
 assert.equal(parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_TILL_NODE_ID,request.sourceNodeId);
 assert(!checked.secretEntries.some(e=>e.name.includes('cloud-connection')||e.name.includes('cloud-staff')));
-const sideFile=join(root,'integrity.db');await writeFile(sideFile,checked.dumpEntry.bytes,{mode:0o600});
+const sideFile=join(root,'integrity.db');
+if(typeof checked.databasePath==='string')await copyFile(checked.databasePath,sideFile);
+else await writeFile(sideFile,checked.dumpEntry.bytes,{mode:0o600});
 try{const db=new DatabaseSync(sideFile,{readOnly:true});try{assert.deepEqual(db.prepare('PRAGMA integrity_check').all().map(r=>r.integrity_check),['ok']);}finally{db.close();}}finally{await rm(sideFile);}
 const hooks=[];await mkdir(join(root,'venue'),{mode:0o700});
 await writeValidated({...checked,secretEntries:checked.secretEntries.filter(e=>e.name!=='secrets/backup.env')},{...validation,venueDir:join(root,'venue'),log:(_level,code,params)=>{if(code==='restore.hook.done')hooks.push(String(params?.module));}});

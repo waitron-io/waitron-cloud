@@ -1,5 +1,4 @@
 import {retentionExpirySql} from './retention.ts';
-import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { readVenuePlan, type PlanMode, transaction } from "@waitron-cloud/registration";
 import { BackupKeyVault, type BackupKeys } from "./keys.ts";
@@ -10,6 +9,9 @@ import {
 } from "./storage.ts";
 import { bufferObject, type ReplayableObject, type StageOptions } from "./object-transfer.ts";
 import { isBackupCancellation } from "./cancellation.ts";
+import {prepareVerification,admitVerification,recordVerificationUnavailable,lockVerificationPolicy,type VerificationClaim} from './verification-admission.ts';
+import type {DataRestoreVerifier,VerifiedChildOutput} from './container-verifier.ts';
+import type {BackupVerificationReason} from './verification-protocol.ts';
 export type MutationFence = (client:PoolClient)=>Promise<void>;
 interface StreamingObjectStore {
   stage(
@@ -119,7 +121,9 @@ async function active(client: PoolClient, id: string, mode: PlanMode) {
   if (row.environment !== "test") backupFail("local_integration_only");
   return row;
 }
-const pointColumns = `id,venue_id AS "venueId",installation_id AS "installationId",key_version AS "keyVersion",kind,object_key AS "objectKey",digest,size,captured_at AS "capturedAt",retention,source_node_id AS "sourceNodeId",modules,verification,deleting,deleted_at AS "deletedAt"`;
+const metadataColumns = `p.id,p.venue_id AS "venueId",p.installation_id AS "installationId",p.key_version AS "keyVersion",p.kind,p.object_key AS "objectKey",p.digest,p.size,p.captured_at AS "capturedAt",p.retention,p.source_node_id AS "sourceNodeId",p.modules,p.deleting,p.deleted_at AS "deletedAt"`;
+const pointColumns = `${metadataColumns},CASE WHEN p.kind='snapshot' THEN COALESCE(q.current_verification,'pending') ELSE p.verification END AS verification`;
+const qualifiedPoints = `backup_points p LEFT JOIN backup_point_qualification q ON q.point_id=p.id`;
 type StoredPoint = Omit<BackupPoint, "size" | "capturedAt" | "deletedAt"> & {
   size: string | number;
   capturedAt: Date;
@@ -139,18 +143,23 @@ export async function point(
 ): Promise<BackupPoint | undefined> {
   const row = (
     await client.query(
-      `SELECT ${pointColumns} FROM backup_points WHERE id=$1`,
+      `SELECT ${pointColumns} FROM ${qualifiedPoints} WHERE p.id=$1`,
       [id],
     )
   ).rows[0];
   return row ? decodedPoint(row) : undefined;
+}
+// Recovery checks the signed proof before consulting evidence; metadata alone carries no verdict.
+export async function pointMetadata(client:PoolClient,id:string):Promise<Omit<BackupPoint,'verification'>|undefined>{
+  const row=(await client.query<Omit<StoredPoint,'verification'>>(`SELECT ${metadataColumns} FROM backup_points p WHERE p.id=$1`,[id])).rows[0];
+  return row?{...row,size:Number(row.size),capturedAt:row.capturedAt.toISOString(),deletedAt:row.deletedAt?.toISOString()??null}:undefined;
 }
 export async function venuePoints(
   client: PoolClient,
   id: string,
 ): Promise<BackupPoint[]> {
   const rows = await client.query(
-    `SELECT ${pointColumns} FROM backup_points WHERE venue_id=$1 AND deleted_at IS NULL AND NOT deleting ORDER BY captured_at DESC,id DESC`,
+    `SELECT ${pointColumns} FROM ${qualifiedPoints} WHERE p.venue_id=$1 AND p.deleted_at IS NULL AND NOT p.deleting ORDER BY p.captured_at DESC,p.id DESC`,
     [id],
   );
   return rows.rows.map(decodedPoint);
@@ -230,7 +239,7 @@ export class BackupCatalogue {
         ).rows[0];
       if (prior) {
         if (
-          JSON.stringify(location(prior)) !== JSON.stringify(l) ||
+          prior.endpoint !== l.endpoint || prior.bucket !== l.bucket || prior.region !== l.region ||
           prior.installation_id !== installationId
         )
           backupFail("conflict");
@@ -377,93 +386,48 @@ export class BackupCatalogue {
     await this.#objects(published.location).remove("incoming/" + id);
     return published.point;
   }
-  async verify(
-    id: string,
-    verifier: string,
-    restore: (
-      source: ReplayableObject,
-      keys: BackupKeys,
-      point: BackupPoint,
-    ) => Promise<void>,
-    fence?: MutationFence,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    if (!uuid(id) || !verifier || verifier.length > 200)
-      backupFail("unavailable");
-    const prepared = await transaction(this.#pool, async (client) => {
-      const first = await point(client, id);
-      if (!first) backupFail("unavailable");
-      const l = await lockVenue(client, first.venueId),
-        p = (await point(client, id))!;
-      if (p.deleting || p.deletedAt) backupFail("unavailable");
-      await fence?.(client);
-      const keys = await pointKeys(
-        client,
-        this.#vault,
-        p.venueId,
-        p.keyVersion,
-      );
-      return { point: p, location: location(l), keys };
+  async verifyClaim(claim:VerificationClaim,verify:DataRestoreVerifier,signal:AbortSignal=new AbortController().signal) {
+    const prepared=await transaction(this.#pool,async client=>{
+      const attempt=await prepareVerification(client,claim);
+      if(!attempt)return;
+      const row=(await client.query('SELECT endpoint,bucket,region FROM backup_locations WHERE venue_id=$1',[claim.venueId])).rows[0];
+      return {attempt,location:location(row)};
     });
-    let outcome: "verified" | "failed" = "verified";
+    if(!prepared)return 'stale' as const;
+    const {attempt}=prepared;
+    let source:ReplayableObject|undefined,output:VerifiedChildOutput|undefined,reason:BackupVerificationReason|undefined;
     try {
-      let source:ReplayableObject;
-      try{
-        source=await staged(this.#objects(prepared.location),prepared.point.objectKey,signal);
-      }catch(error){
-        if(isBackupCancellation(error,signal))throw error;
-        backupFail("verification_unavailable");
-      }
-      let restored=false;
-      try {
-        if (
-          source.receipt.digest !== prepared.point.digest ||
-          source.receipt.size !== prepared.point.size
-        )
-          backupFail("object_mismatch");
-        await restore(source, prepared.keys, prepared.point);
-        restored=true;
-      } finally {
-        try{await source.dispose();}catch{
-          // Cleanup cannot hide the primary refusal or cancellation already being thrown.
-          if(restored)backupFail("verification_unavailable");
-        }
-      }
-    } catch (error) {
-      if (isBackupCancellation(error, signal)) throw error;
-      // Infrastructure uncertainty must not replace an archive verdict or create a failed-copy alert.
-      if(error instanceof Error && (error.message==="backup.verification_unavailable" ||
-        (error.message.startsWith("backup.verifier_") && !["backup.verifier_failed",
-          "backup.verifier_resource","backup.verifier_timeout"].includes(error.message))))backupFail("verification_unavailable");
-      outcome = "failed";
+      signal.throwIfAborted();
+      let keys:BackupKeys;
+      try {keys=await transaction(this.#pool,client=>pointKeys(client,this.#vault,attempt.point.venueId,attempt.point.keyVersion));}
+      catch {reason='secret_unavailable';throw Error('backup.key_unavailable');}
+      signal.throwIfAborted();
+      const objects=this.#objects(prepared.location);
+      source='stage' in objects?await objects.stage(attempt.point.objectKey,undefined,{signal}):bufferObject(await objects.read(attempt.point.objectKey));
+      signal.throwIfAborted();
+      const stagedReceipt={...source.receipt};
+      output=await verify(source,{version:attempt.point.keyVersion,reference:attempt.request.backupKey.reference,secret:keys.recoveryKey},attempt.request,signal);
+      // Independent stage and child measurements must agree before an archive verdict.
+      const measured=output?.result?.measuredArchive;
+      if(output?.result?.status==='invalid'&&stagedReceipt.size>0&&!measured)throw Error('backup.verifier_output');
+      if(measured&&(measured.sha256!==stagedReceipt.digest||measured.bytes!==stagedReceipt.size))throw Error('backup.verifier_output');
+      const mismatch=stagedReceipt.size!==attempt.point.size?'archive_size_mismatch':stagedReceipt.digest!==attempt.point.digest?'archive_digest_mismatch':undefined;
+      if(output?.result?.status==='invalid'&&(mismatch||['archive_size_mismatch','archive_digest_mismatch'].includes(output.result.reason))&&output.result.reason!==mismatch)throw Error('backup.verifier_output');
+    } catch(error) {
+      if(!reason)reason=isBackupCancellation(error,signal)?'cancelled':error instanceof Error&&error.message==='backup.verifier_timeout'?'deadline':error instanceof Error&&error.message==='backup.verifier_resource'?'resource_limit':error instanceof Error&&error.message==='backup.verifier_cleanup'?'cleanup_uncertain':'unexpected';
+    } finally {
+      // A verdict becomes admissible only after the caller-owned encrypted stage is gone.
+      try {await source?.dispose();}catch {reason='cleanup_uncertain';}
     }
-    await transaction(this.#pool, async (client) => {
-      await lockVenue(client, prepared.point.venueId);
-      await fence?.(client);
-      const current = await point(client, id);
-      if (
-        !current ||
-        current.deleting ||
-        current.deletedAt ||
-        !sameMetadata(current, prepared.point)
-      )
-        backupFail("unavailable");
-      await client.query(
-        "INSERT INTO backup_verifications(id,point_id,digest,verifier,outcome) VALUES($1,$2,$3,$4,$5)",
-        [randomUUID(), id, current.digest, verifier, outcome],
-      );
-      await client.query(
-        "UPDATE backup_points SET verification=$2 WHERE id=$1",
-        [id, outcome],
-      );
-    });
-    if (outcome !== "verified") backupFail("verification_failed");
+    if(!reason&&signal.aborted)reason='cancelled';
+    return transaction(this.#pool,client=>reason?recordVerificationUnavailable(client,attempt,reason):admitVerification(client,attempt,output!));
   }
   async cleanupOne(venueId: string, now = new Date(), fence?: MutationFence): Promise<string | null> {
     if (!uuid(venueId) || !Number.isFinite(now.getTime()))
       backupFail("unavailable");
     const selected = await transaction(this.#pool, async (client) => {
       if (await readVenuePlan(client,venueId,this.#planMode) !== 'paid') return null;
+      await lockVerificationPolicy(client);
       const l = await lockVenue(client, venueId);
       await fence?.(client);
       await expireRecoveries(client, venueId);
@@ -490,7 +454,7 @@ export class BackupCatalogue {
     if(this.#planMode==='test-free-paid') {
       return transaction(this.#pool,async client=>{
         if(await readVenuePlan(client,venueId,this.#planMode)!=='paid')return null;
-        await lockVenue(client,venueId);await fence?.(client);
+        await lockVerificationPolicy(client);await lockVenue(client,venueId);await fence?.(client);
         // Keep policy through deletion so a committed downgrade cannot be followed by expiry.
         await this.#objects(selected.location).remove(selected.key);
         await fence?.(client);
@@ -500,6 +464,7 @@ export class BackupCatalogue {
     }
     await this.#objects(selected.location).remove(selected.key);
     await transaction(this.#pool, async (client) => {
+      await lockVerificationPolicy(client);
       await lockVenue(client, venueId);
       await fence?.(client);
       await client.query(

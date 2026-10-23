@@ -11,6 +11,7 @@ import {BackupCatalogue} from '../src/catalogue.ts';
 import {BackupKeyVault} from '../src/keys.ts';
 import {receipt} from '../src/storage.ts';
 import {BackupWorker} from '../src/worker.ts';
+import {configureVerification,verificationOutput,verifyPointFixture} from './fixtures/verification.ts';
 let db:Awaited<ReturnType<typeof database>>,catalogue:BackupCatalogue,worker:BackupWorker;
 let venue:{installationId:string;venueId:string};
 const vault=new BackupKeyVault(randomBytes(32)),objects=new Map<string,Buffer>();
@@ -18,18 +19,18 @@ let failDelete=false,restores=0,restore:()=>Promise<void>;
 const storage=()=>({async read(key:string){const bytes=objects.get(key);if(!bytes)throw Error('missing');return bytes;},async put(key:string,bytes:Uint8Array){objects.set(key,Buffer.from(bytes));return receipt(bytes);},async remove(key:string){if(failDelete)throw Error('unavailable');objects.delete(key);}});
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
- await resetSchema(db.pool);objects.clear();failDelete=false;restores=0;restore=async()=>{restores++;};
+ await resetSchema(db.pool);await configureVerification(db.pool);objects.clear();failDelete=false;restores=0;restore=async()=>{restores++;};
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('worker@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
  const owner=await signup.complete(mail.token,{password:'A sufficiently long password',organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'}),r=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await r.start(binding);await r.approveCloud(binding,owner.accountId);await r.approveLocal(binding,randomUUID());venue=await r.complete(binding);
  catalogue=new BackupCatalogue(db.pool,vault,storage);await catalogue.provision(venue.installationId,{endpoint:'https://storage.test',bucket:'worker-fixture',region:'local'});
- worker=new BackupWorker(db.pool,catalogue,async()=>restore());
+ worker=new BackupWorker(db.pool,catalogue,async(_s,_k,r)=>{await restore();return verificationOutput(r);},'worker-fixture');
 });
 async function snapshot(days=0){const capture=await catalogue.reserveCapture(venue.installationId,randomUUID()),bytes=Buffer.from('encrypted fixture '+capture.id);objects.set(capture.incomingKey,bytes);return catalogue.publish(venue.installationId,capture.id,{...receipt(bytes),capturedAt:new Date(Date.now()-days*86400000).toISOString(),retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}});}
 async function only(kind:string){await worker.schedule();await db.pool.query("UPDATE backup_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>$1",[kind]);}
 test('scheduling is idempotent and concurrent workers claim verification once',async()=>{
  const point=await snapshot();await Promise.all([worker.schedule(),worker.schedule()]);await only('verify');
- const other=new BackupWorker(db.secondPool,new BackupCatalogue(db.secondPool,vault,storage),async()=>restore());
+ const other=new BackupWorker(db.secondPool,new BackupCatalogue(db.secondPool,vault,storage),async(_s,_k,r)=>{await restore();return verificationOutput(r);},'worker-fixture');
  const results=await Promise.all([worker.runOnce(),other.runOnce()]);assert.equal(results.filter(Boolean).length,1);assert.equal(restores,1);
  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'verified');
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_jobs')).rows[0].count,'3');assert.equal(await other.runOnce(),false);
@@ -41,7 +42,7 @@ test('lease takeover fences a late failed verification after a new worker succee
  try{
   await db.pool.query("UPDATE backup_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE kind='verify'");
   assert.equal((await worker.status()).due,1);
-  const fresh=new BackupWorker(db.secondPool,new BackupCatalogue(db.secondPool,vault,storage),async()=>{});assert.equal(await fresh.runOnce(),true);
+  const fresh=new BackupWorker(db.secondPool,new BackupCatalogue(db.secondPool,vault,storage),async(_s,_k,r)=>verificationOutput(r),'worker-fixture');assert.equal(await fresh.runOnce(),true);
  }finally{release();await old;}
  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'verified');
  assert.deepEqual((await db.pool.query('SELECT outcome FROM backup_verifications')).rows.map(r=>r.outcome),['verified']);
@@ -51,7 +52,7 @@ test('failed verification backs off, survives worker restart and succeeds on ret
  assert.equal(await worker.runOnce(),true);assert.equal(await worker.runOnce(),false);
  let job=(await db.pool.query("SELECT * FROM backup_jobs WHERE kind='verify'")).rows[0];assert.equal(job.attempts,1);assert.equal(Number(job.failures),1);assert(!JSON.stringify(job).includes('private details'));
  await db.pool.query("UPDATE backup_jobs SET available_at=clock_timestamp() WHERE kind='verify'");restore=async()=>{restores++;};
- worker=new BackupWorker(db.secondPool,new BackupCatalogue(db.secondPool,vault,storage),async()=>restore());assert.equal(await worker.runOnce(),true);
+ worker=new BackupWorker(db.secondPool,new BackupCatalogue(db.secondPool,vault,storage),async(_s,_k,r)=>{await restore();return verificationOutput(r);},'worker-fixture');assert.equal(await worker.runOnce(),true);
  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'verified');
  job=(await db.pool.query("SELECT * FROM backup_jobs WHERE kind='verify'")).rows[0];assert.equal(job.attempts,0);assert.equal(Number(job.failures),1);
 });
@@ -69,7 +70,7 @@ test('shutdown cancels a snapshot download without recording a failure or consum
   async putStaged(){throw Error('unused');},
   async remove(){throw Error('unused');},
  }));
- const cancellingWorker=new BackupWorker(db.pool,cancellingCatalogue,async()=>assert.fail('restore must not start')),
+ const cancellingWorker=new BackupWorker(db.pool,cancellingCatalogue,async()=>assert.fail('restore must not start'),'worker-fixture'),
   controller=new AbortController(),running=cancellingWorker.runOnce(controller.signal);
  await started;controller.abort();await running;
  assert.equal(stageSignal?.aborted,true);
@@ -78,14 +79,14 @@ test('shutdown cancels a snapshot download without recording a failure or consum
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_verifications WHERE point_id=$1',[point.id])).rows[0].count,'0');
  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'pending');
 });
-test('shutdown does not erase a real verification failure',async()=>{
+test('shutdown does not turn an unexpected exception into a corruption verdict',async()=>{
  const point=await snapshot();await only('verify');const controller=new AbortController();
- const failingWorker=new BackupWorker(db.pool,catalogue,async()=>{controller.abort();throw Error('corrupt archive');});
+ const failingWorker=new BackupWorker(db.pool,catalogue,async()=>{controller.abort();throw Error('corrupt archive');},'worker-fixture');
  assert.equal(await failingWorker.runOnce(controller.signal),true);
  const job=(await db.pool.query("SELECT status,attempts,failures,last_error FROM backup_jobs WHERE kind='verify' AND target_id=$1",[point.id])).rows[0];
- assert.equal(job.status,'pending');assert.equal(job.attempts,1);assert.equal(job.failures,'1');assert.equal(job.last_error,'verification_failed');
- assert.deepEqual((await db.pool.query('SELECT outcome FROM backup_verifications WHERE point_id=$1',[point.id])).rows.map(row=>row.outcome),['failed']);
- assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'failed');
+ assert.equal(job.status,'pending');assert.equal(job.attempts,1);assert.equal(job.failures,'1');assert.equal(job.last_error,'verification_unavailable');
+ assert.deepEqual((await db.pool.query('SELECT outcome FROM backup_verifications WHERE point_id=$1',[point.id])).rows.map(row=>row.outcome),[]);
+ assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'pending');
 });
 test('abandoned captures expire, cannot be reused and clean orphan objects after restart',async()=>{
  const capture=await catalogue.reserveCapture(venue.installationId,randomUUID());objects.set(capture.incomingKey,Buffer.from('abandoned'));objects.set('snapshots/'+capture.id,Buffer.from('uncommitted'));
@@ -116,7 +117,7 @@ test('each schedule is bounded and later sweeps pick up the remaining snapshots'
  await db.pool.query("UPDATE venues SET environment='production' WHERE id=$1",[venue.venueId]);assert.equal(await worker.runOnce(),false);
 });
 test('retention resumes after delete failure and preserves the verified fallback',async()=>{
- const old=await snapshot(70),fallback=await snapshot(60);await catalogue.verify(fallback.id,'fixture',async()=>{});await only('retention');
+ const old=await snapshot(70),fallback=await snapshot(60);await verifyPointFixture(db.pool,catalogue,fallback.id);await only('retention');
  failDelete=true;assert.equal(await worker.runOnce(),true);assert.equal((await db.pool.query('SELECT deleting FROM backup_points WHERE id=$1',[old.id])).rows[0].deleting,true);
  failDelete=false;await db.pool.query("UPDATE backup_jobs SET available_at=clock_timestamp() WHERE kind='retention'");assert.equal(await worker.runOnce(),true);assert(!objects.has(old.objectKey));assert(objects.has(fallback.objectKey));
 });
@@ -129,23 +130,23 @@ test('the CLI reports and retries durable failures without storage or verifier c
  assert.equal((await run('--retry-failed')).retried,1);
  assert.equal((await run('--status')).counts.failed,0);
 });
-test('an expired verification records failure and backoff when its claim has not been replaced',async()=>{
+test('an expired verification leaves its claim and counters for takeover',async()=>{
  const point=await snapshot();await only('verify');restore=async()=>{await db.secondPool.query("UPDATE backup_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE kind='verify'");};
  assert.equal(await worker.runOnce(),true);
  const job=(await db.pool.query("SELECT *,available_at>clock_timestamp() AS delayed FROM backup_jobs WHERE kind='verify'")).rows[0];
- assert.equal(job.status,'pending');assert.equal(Number(job.failures),1);assert.equal(job.last_error,'operation_failed');assert.equal(job.delayed,true);
- assert.equal(await worker.runOnce(),false);
+ assert.equal(job.status,'running');assert.equal(Number(job.failures),0);assert.equal(job.last_error,null);assert.equal(job.delayed,false);
+ assert.equal(job.attempts,1);assert.equal(Number(job.runs),1);assert.equal((await worker.status()).due,1);
  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'pending');
 });
 
 for(const code of ['backup.verifier_container','backup.verifier_cleanup','backup.verifier_configuration','backup.verifier_input','backup.verifier_output','backup.verifier_future_host_failure']){
  test('infrastructure refusal '+code+' preserves the verified fallback and bounded retries',async()=>{
-  const point=await snapshot(60);await catalogue.verify(point.id,'prior-success',async()=>{});await only('verify');
+  const point=await snapshot(60);await verifyPointFixture(db.pool,catalogue,point.id);await only('verify');
   restore=async()=>{throw Error(code);};
   for(let n=0;n<8;n++){await db.pool.query("UPDATE backup_jobs SET available_at=clock_timestamp() WHERE kind='verify'");assert.equal(await worker.runOnce(),true);}
   const job=(await db.pool.query("SELECT status,attempts,failures,last_error,claim_id,lease_until FROM backup_jobs WHERE kind='verify'")).rows[0];
   assert.deepEqual(job,{status:'failed',attempts:8,failures:'8',last_error:'verification_unavailable',claim_id:null,lease_until:null});
-  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'verified');
+  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'pending');
   assert.deepEqual((await db.pool.query('SELECT outcome FROM backup_verifications WHERE point_id=$1',[point.id])).rows.map(r=>r.outcome),['verified']);
   assert.equal(await catalogue.cleanupOne(venue.venueId),null);
   assert.equal(await worker.retryFailed(),1);restore=async()=>{};assert.equal(await worker.runOnce(),true);
@@ -155,7 +156,7 @@ for(const code of ['backup.verifier_container','backup.verifier_cleanup','backup
 test('storage download outage creates no archive verdict and retries the same point',async()=>{
  const point=await snapshot();await only('verify');
  const offline=new BackupCatalogue(db.pool,vault,()=>({...storage(),async read(){throw Error('private storage host unavailable');}}));
- assert.equal(await new BackupWorker(db.pool,offline,async()=>assert.fail('no download')).runOnce(),true);
+ assert.equal(await new BackupWorker(db.pool,offline,async()=>assert.fail('no download'),'worker-fixture').runOnce(),true);
  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'pending');
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_verifications')).rows[0].count,'0');
  assert.equal((await db.pool.query("SELECT last_error FROM backup_jobs WHERE kind='verify'")).rows[0].last_error,'verification_unavailable');
@@ -166,7 +167,7 @@ test('storage download outage creates no archive verdict and retries the same po
 test('a storage adapter that cannot start records no archive verdict',async()=>{
  const point=await snapshot();await only('verify');
  const unavailable=new BackupCatalogue(db.pool,vault,()=>{throw Error('private provider startup failure');});
- assert.equal(await new BackupWorker(db.pool,unavailable,async()=>assert.fail('no storage')).runOnce(),true);
+ assert.equal(await new BackupWorker(db.pool,unavailable,async()=>assert.fail('no storage'),'worker-fixture').runOnce(),true);
  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'pending');
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_verifications')).rows[0].count,'0');
  assert.equal((await db.pool.query("SELECT last_error FROM backup_jobs WHERE kind='verify'")).rows[0].last_error,'verification_unavailable');
@@ -180,11 +181,17 @@ for(const result of ['cancelled','invalid','success'] as const){
    async stage(key:string){const body=objects.get(key)!;return {receipt:receipt(body),open:()=>Readable.from([body]),async dispose(){disposed++;throw Error('private scratch cleanup failure');}};},
    async putStaged(){throw Error('unused');},async remove(){throw Error('unused');},
   }));
-  const attempt=new BackupWorker(db.pool,failingCleanup,async()=>{if(result==='success')return;if(cancelled)controller.abort();throw Error(cancelled?'backup.verifier_cancelled':'corrupt archive');});
+  const attempt=new BackupWorker(db.pool,failingCleanup,async(_s,_k,r)=>{if(result==='success')return verificationOutput(r);if(cancelled){controller.abort();throw Error('backup.verifier_cancelled');}return verificationOutput(r,'invalid','archive_invalid');},'worker-fixture');
   assert.equal(await attempt.runOnce(controller.signal),true);assert.equal(disposed,1);
   const job=(await db.pool.query("SELECT attempts,last_error,claim_id,lease_until FROM backup_jobs WHERE kind='verify'")).rows[0];
-  assert.deepEqual(job,{attempts:cancelled?0:1,last_error:cancelled?null:result==='invalid'?'verification_failed':'verification_unavailable',claim_id:null,lease_until:null});
-  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,result==='invalid'?'failed':'pending');
-  assert.deepEqual((await db.pool.query('SELECT outcome FROM backup_verifications')).rows.map(row=>row.outcome),result==='invalid'?['failed']:[]);
+  assert.deepEqual(job,{attempts:1,last_error:'verification_unavailable',claim_id:null,lease_until:null});
+  assert.equal((await db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id])).rows[0].verification,'pending');
+  assert.deepEqual((await db.pool.query('SELECT outcome FROM backup_verifications')).rows.map(row=>row.outcome),[]);
  });
 }
+
+test('deployment wrapper serves ordinary-mode status without a module-loading cycle',async()=>{
+ const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+db.schema);
+ const result=await promisify(execFile)(process.execPath,['deploy/test-cloud/backup-worker.mjs','--status'],{cwd:new URL('../../../',import.meta.url),timeout:10000,env:{PATH:process.env.PATH,DATABASE_URL:url.href,CLOUD_TEST_SERVICE_PLANS:'0'}});
+ assert.deepEqual(JSON.parse(result.stdout).counts,{pending:0,running:0,failed:0,completed:0});
+});

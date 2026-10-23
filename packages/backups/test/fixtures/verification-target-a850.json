@@ -1,0 +1,199 @@
+{
+  "version": 1,
+  "runtime": {
+    "release": "waitron-5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa",
+    "revision": "5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa",
+    "fingerprint": "163574c6d3100c2a37db14eb56a111842aa85d27caf70802a2fd43e19126109f"
+  },
+  "modules": [
+    {
+      "name": "adjustments",
+      "packageVersion": "0.0.0",
+      "requires": {
+        "core": "*"
+      },
+      "schema": 7,
+      "migrationTable": "__drizzle_migrations_adjustments",
+      "migrationDigest": "252138f44f22e68a3b7fc49417c5ffc8e210c21f400c8f0ccbe7ddd58736ab1f",
+      "semanticsVersion": 1,
+      "policyDigest": "0ca85cd3a62a44381ce9ef2f7ba60509767d07f5c35442793c8c0d62333c1729"
+    },
+    {
+      "name": "bookings",
+      "packageVersion": "0.0.0",
+      "requires": {
+        "core": "*"
+      },
+      "schema": 2,
+      "migrationTable": "__drizzle_migrations_bookings",
+      "migrationDigest": "f4857cd0e3cbe63d4b03ab98cc6488c86b092d481c7ee8bdf205a710823d5a7c",
+      "semanticsVersion": 1,
+      "policyDigest": "ac8dfeb93374dbce4fb7b57959b2d02f61e0fdf872790c1ee9c5ada5b6ec632e"
+    },
+    {
+      "name": "catalogue",
+      "packageVersion": "0.0.0",
+      "requires": {
+        "core": "*"
+      },
+      "schema": 36,
+      "migrationTable": "__drizzle_migrations_catalogue",
+      "migrationDigest": "23a73df4df710fc11de6ac214b64a68db7515d89cb2acbd63a5e1edc2c110363",
+      "semanticsVersion": 1,
+      "policyDigest": "76583942e4c4036a19a656e59726b764c38067c237bad63f912bc766b1d499a0"
+    },
+    {
+      "name": "core",
+      "packageVersion": "0.0.0",
+      "requires": {},
+      "schema": 184,
+      "migrationTable": "__drizzle_migrations_db",
+      "migrationDigest": "e6eacc769717a4f7d237e8394f217b98287b87b7d528973ee5723f3e8f4bb3a0",
+      "semanticsVersion": 1,
+      "policyDigest": "61e601999aededee078e7b41de16836dd136eafda308aa8c13330877d46ef3f9"
+    },
+    {
+      "name": "credentials",
+      "packageVersion": "0.0.0",
+      "requires": {
+        "core": "*"
+      },
+      "schema": 1,
+      "migrationTable": "__drizzle_migrations_credentials",
+      "migrationDigest": "ca575002fd7f760a5316899c09b45cccec228254145c363e16cba1530ff9f075",
+      "semanticsVersion": 1,
+      "policyDigest": "19e8c3ccba4874c0ec2960238600fae8b9163240e381ce18c17d0403b26922b4"
+    },
+    {
+      "name": "fiscal-none",
+      "packageVersion": "0.0.0",
+      "requires": {
+        "core": "*"
+      },
+      "schema": 0,
+      "migrationTable": "__drizzle_migrations_fiscal_none",
+      "migrationDigest": "e1adbb955d52324c37dd489e523d3f32b51e208ef817d2937d7f92044bde00ca",
+      "semanticsVersion": 1,
+      "policyDigest": "558280358da42e7aa3f818fd2267021d670c7bcc39dd40ee8be19a3d84ab6984"
+    },
+    {
+      "name": "fiscal-verifactu",
+      "packageVersion": "0.0.0",
+      "requires": {
+        "core": "*"
+      },
+      "schema": 10,
+      "migrationTable": "__drizzle_migrations_fiscal",
+      "migrationDigest": "abf3fa476554693cf3a2cfa5c0a2b1d2a2b38201396c16c5df924d4c9e2e12ca",
+      "semanticsVersion": 1,
+      "policyDigest": "f735c57b933dc542aae78280d49515305781dc3d9be268870e1a0d865bd66587"
+    },
+    {
+      "name": "identity",
+      "packageVersion": "0.0.0",
+      "requires": {
+        "core": "*"
+      },
+      "schema": 8,
+      "migrationTable": "__drizzle_migrations_identity",
+      "migrationDigest": "313a7f790284ecb1f6ba0c4205c69b42dc25ad8dc8c8c07e936550df02d779eb",
+      "semanticsVersion": 1,
+      "policyDigest": "f75e62d5f795106dca3e15a600850b1c3583720d7b7c905628741bb8c6b308ff"
+    },
+    {
+      "name": "media",
+      "packageVersion": "0.0.0",
+      "requires": {
+        "catalogue": "*",
+        "core": "*",
+        "venue-service": "*"
+      },
+      "schema": 11,
+      "migrationTable": "__drizzle_migrations_media",
+      "migrationDigest": "568e823dc122ca7a46ba298d459f7b9c5378a1b8c630b33810f705451f2928c8",
+      "semanticsVersion": 1,
+      "policyDigest": "299396127b7a293185db03b50426ac75d76cdbe245f0b15a0c13ef9a5477148b"
+    },
+    {
+      "name": "payments",
+      "packageVersion": "0.0.0",
+      "requires": {
+        "core": "*"
+      },
+      "schema": 10,
+      "migrationTable": "__drizzle_migrations_payments",
+      "migrationDigest": "77c58b8a1aef7a626426107c4f5e4935e7d434aa737d631a22aecb53c4d7c359",
+      "semanticsVersion": 1,
+      "policyDigest": "c8acf120039e8a8b616ca79fdf6a05eff285102d41c15ad503706d7a3281abdf"
+    },
+    {
+      "name": "scheduler",
+      "packageVersion": "0.0.0",
+      "requires": {
+        "core": "*"
+      },
+      "schema": 1,
+      "migrationTable": "__drizzle_migrations_scheduler",
+      "migrationDigest": "6cefd0822ab0230b8efc71f073e845a0c36beff745acf589986a2eb5b8e22950",
+      "semanticsVersion": 1,
+      "policyDigest": "79ccbdee29dabce3eca30760072a4d64b17ab9effea662d9198f71834e4568ae"
+    },
+    {
+      "name": "staffing",
+      "packageVersion": "0.0.0",
+      "requires": {
+        "core": "*",
+        "identity": "*",
+        "venue-service": "*",
+        "workforce": "*"
+      },
+      "schema": 4,
+      "migrationTable": "__drizzle_migrations_staffing",
+      "migrationDigest": "679b5b6eef39237c7f23984e23fb5d1c3cc2f8c0a68546947faaf3a8b7c840f6",
+      "semanticsVersion": 1,
+      "policyDigest": "97c8d962468f7f25f26d497ef17bdc02177146dba42508bf2fc0bad885ec166f"
+    },
+    {
+      "name": "venue-service",
+      "packageVersion": "0.0.0",
+      "requires": {
+        "catalogue": "*",
+        "core": "*"
+      },
+      "schema": 65,
+      "migrationTable": "__drizzle_migrations_venue_service",
+      "migrationDigest": "f0d5ccc397c7145b88fe3cd35fa360d74548019aa62909d8d70c519f3e6206dd",
+      "semanticsVersion": 1,
+      "policyDigest": "886491f999a00ace285a76fa092da76f729dcedea1dcc8065ea020c3a84d3873"
+    },
+    {
+      "name": "workforce",
+      "packageVersion": "0.0.0",
+      "requires": {
+        "core": "*",
+        "identity": "*"
+      },
+      "schema": 10,
+      "migrationTable": "__drizzle_migrations_workforce",
+      "migrationDigest": "5d726500cee36f5e016e614d80f19d6bfe934c716af1ec8b576d132785b1a35e",
+      "semanticsVersion": 1,
+      "policyDigest": "705670c219b6416f257edd36ebf2cdbd15ddc6005830b5eeeb24eb4af69c2591"
+    },
+    {
+      "name": "workforce-es",
+      "packageVersion": "0.0.0",
+      "requires": {
+        "core": "*"
+      },
+      "schema": 1,
+      "migrationTable": "__drizzle_migrations_workforce_es",
+      "migrationDigest": "2778100789a0fa0cc39177fd005b022e8c49a8e97a3a38065924cf00e0611c39",
+      "semanticsVersion": 1,
+      "policyDigest": "7b15af526cf1db94e584673365af5f615830b93dcb88dcbd02a44f2bde1a1f8c"
+    }
+  ],
+  "compositionDigest": "519fdde2da8bb7d1b365ede2dc190a671a164eda5bac203e855a276836072a14",
+  "migrationDigest": "90d24ce8260e99c3a2bb1a356fbacb269611f1699db361a9b518ec74748542ea",
+  "policyDigest": "1ef4524067150927adc411e1bee08f00d87a28eae33f9ec03b145412c255b73f",
+  "digest": "27b6669fe7367c9619bd71fb7ac6ce0edcd97d5a7f3c6e83d953468ed62932c5"
+}

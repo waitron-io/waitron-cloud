@@ -9,6 +9,7 @@ import {
   writeFile,
   rm,
   open,
+  rename,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,7 +50,7 @@ async function binary(root) {
   const cache = join(tmpdir(), "waitron-cloud-test-binaries");
   await mkdir(cache, { recursive: true });
   const archive = join(cache, "seaweed-4.47-" + pin[0]);
-  let bytes;
+  let bytes, downloaded = false;
   try {
     bytes = await readFile(archive);
   } catch (error) {
@@ -59,10 +60,19 @@ async function binary(root) {
     );
     if (!response.ok) throw Error("SeaweedFS download failed");
     bytes = Buffer.from(await response.arrayBuffer());
+    downloaded = true;
   }
   if (createHash("sha256").update(bytes).digest("hex") !== pin[1])
     throw Error("SeaweedFS archive digest mismatch");
-  await writeFile(archive, bytes);
+  // Verified cache files are immutable inputs to concurrent extractors. Publish a
+  // download by rename so another fixture never reads a partly written archive.
+  if (downloaded) {
+    const temporary = archive + "." + randomBytes(16).toString("hex");
+    try {
+      await writeFile(temporary, bytes, { flag: "wx", mode: 0o600 });
+      await rename(temporary, archive);
+    } finally { await rm(temporary, { force: true }); }
+  }
   execFileSync("tar", ["-xzf", archive, "-C", root]);
   return join(root, "weed");
 }
@@ -433,6 +443,10 @@ export async function startBackupStorage(options = {}) {
       admin,
       authority,
       managedStreams,
+      async reloadIdentityFile() {
+        if (!child || child.exitCode !== null || child.signalCode !== null) throw Error("storage process unavailable");
+        child.kill("SIGHUP");
+      },
       agent,
       stop,
       async createCredentials(name, actions) {

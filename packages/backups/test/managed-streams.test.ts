@@ -329,3 +329,19 @@ test("a late observation cannot commit after revocation or configuration replace
     readWait = undefined;
   }
 });
+
+test('fresh signed stream health and ready configuration cannot qualify an archive snapshot',async()=>{
+ const item=await installed('Separate stream health'),key=signer(),desired=input(item,key.publicKey);
+ const stream=new ManagedStreams(db.pool,vault,authority),configured=await stream.configure(item.installationId,item.revision,desired);
+ storePointer(configured,pointer(item.localVenueId,desired.sourceNodeId,key.privateKey,new Date().toISOString()));
+ await stream.observe(item.installationId,configured.configurationRevision);
+ const point=randomUUID();
+ await db.pool.query('INSERT INTO backup_captures(id,venue_id,installation_id,key_version) VALUES($1,$2,$3,1)',[point,item.venueId,item.installationId]);
+ await db.pool.query("INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules,verification) VALUES($1,$2,$3,1,'snapshot',$1::uuid::text,$4,100,clock_timestamp(),'daily',$5,'{\"core\":1}','verified')",[point,item.venueId,item.installationId,'a'.repeat(64),desired.sourceNodeId]);
+ const {transaction}=await import('@waitron-cloud/registration');
+ const recovered=await stream.recovery(item.venueId,configured.configurationRevision);
+ assert.equal(recovered?.sourceNodeId,desired.sourceNodeId);
+ const {venuePoints}=await import('../src/catalogue.ts');
+ assert.equal((await transaction(db.pool,c=>venuePoints(c,item.venueId)))[0]?.verification,'pending');
+ assert.equal((await db.pool.query('SELECT count(*) FROM backup_verification_attempts WHERE point_id=$1',[point])).rows[0].count,'0');
+});

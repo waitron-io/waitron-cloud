@@ -1,3 +1,4 @@
+import {verifyPointFixture,configureRecoveryVerification,fixtureTarget} from './fixtures/verification.ts';
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import {setTimeout as delay} from "node:timers/promises";
@@ -16,15 +17,19 @@ import {
 import { database } from "../../account-http/test/fixtures.ts";
 import { BackupKeyVault } from "../src/keys.ts";
 import { BackupCatalogue } from "../src/catalogue.ts";
-import { BackupRecovery, recoveryPayload } from "../src/recovery.ts";
+import {RecoveryRequests} from "../src/recovery-request.ts";
+import {requestPayloadV2,recoveryPayloadV2} from "../src/recovery-v2.ts";
+import { BackupRecovery, type RecoveryInput } from "../src/recovery.ts";
 import { receipt } from "../src/storage.ts";
 let db: Awaited<ReturnType<typeof database>>;
 before(async () => {
   db = await database();
 });
 after(async () => db?.close());
+const targetKeys=new Map<string,ReturnType<typeof generateKeyPairSync>>();
 const keyPair = () => {
   const key = generateKeyPairSync("ed25519");
+  targetKeys.set(key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),key);
   return {
     key,
     publicKey: key.publicKey
@@ -33,6 +38,7 @@ const keyPair = () => {
   };
 };
 test("owner-authorised replacement is durable, target-bound and does not activate or re-enrol a server", async () => {
+  await configureRecoveryVerification(db.pool);
   const vault = new BackupKeyVault(randomBytes(32)),
     objects = new Map<string, Buffer>(),
     catalogue = new BackupCatalogue(db.pool, vault, () => ({
@@ -49,6 +55,13 @@ test("owner-authorised replacement is durable, target-bound and does not activat
     }));
   const recovery = new BackupRecovery(db.pool, vault, "https://cloud.test"),
     other = new BackupRecovery(db.secondPool, vault, "https://cloud.test");
+  const start=async(store:BackupRecovery,token:string,csrf:string,input:RecoveryInput)=>{
+    if(!(await db.pool.query('SELECT 1 FROM backup_recovery_requests WHERE id=$1 UNION ALL SELECT 1 FROM backup_recoveries WHERE target_public_key=$2',[input.id,input.targetPublicKey])).rowCount){
+      const key=targetKeys.get(input.targetPublicKey)!,bytes=requestPayloadV2('https://cloud.test',input.id,'start',input.targetPublicKey,'12345678',fixtureTarget.digest,Date.now());
+      await new RecoveryRequests(db.pool,vault,'https://cloud.test').machine('start',{version:2,target:fixtureTarget,payload:bytes.toString('base64url'),signature:sign(null,bytes,key.privateKey).toString('base64url')});
+    }
+    return store.start(token,csrf,input);
+  };
   const password = "a long enough recovery password",
     signup = new SignupStore(db.pool, db.outbox),
     owners = [];
@@ -116,37 +129,37 @@ test("owner-authorised replacement is durable, target-bound and does not activat
       acceptDataLoss: true,
     };
   await assert.rejects(
-    recovery.start(owner.token, owner.csrfToken, input),
+    start(recovery,owner.token, owner.csrfToken, input),
     /backup.unverified/,
   );
-  await catalogue.verify(point.id, "waitron-test", async () => {});
+  await verifyPointFixture(db.pool,catalogue,point.id);
   await assert.rejects(
-    recovery.start(stranger.token, stranger.csrfToken, input),
+    start(recovery,stranger.token, stranger.csrfToken, input),
     /backup.permission_denied/,
   );
-  await assert.rejects(recovery.start(owner.token, "wrong", input));
+  await assert.rejects(start(recovery,owner.token, "wrong", input));
   await assert.rejects(
-    recovery.start(owner.token, owner.csrfToken, {
+    start(recovery,owner.token, owner.csrfToken, {
       ...input,
       oldServerUnavailable: false,
     }),
     /backup.confirmation_required/,
   );
   const [one, two] = await Promise.all([
-    recovery.start(owner.token, owner.csrfToken, input),
-    other.start(owner.token, owner.csrfToken, input),
+    start(recovery,owner.token, owner.csrfToken, input),
+    start(other,owner.token, owner.csrfToken, input),
   ]);
   assert.deepEqual(one, two);
   assert.equal(one.status, "pending");
   await assert.rejects(
-    recovery.start(owner.token, owner.csrfToken, {
+    start(recovery,owner.token, owner.csrfToken, {
       ...input,
       targetPublicKey: keyPair().publicKey,
     }),
     /backup.conflict/,
   );
   await assert.rejects(
-    recovery.start(owner.token, owner.csrfToken, {
+    start(recovery,owner.token, owner.csrfToken, {
       ...input,
       id: randomUUID(),
     }),
@@ -183,9 +196,9 @@ test("owner-authorised replacement is durable, target-bound and does not activat
       modules: { core: 1 },
     },
   );
-  await catalogue.verify(secondPoint.id, "worker", async () => {});
+  await verifyPointFixture(db.pool,catalogue,secondPoint.id);
   await assert.rejects(
-    other.start(owner.token, owner.csrfToken, {
+    start(other,owner.token, owner.csrfToken, {
       ...input,
       id: randomUUID(),
       pointId: secondPoint.id,
@@ -197,14 +210,16 @@ test("owner-authorised replacement is durable, target-bound and does not activat
     key = target.key,
     now = Date.now(),
   ) => {
-    const bytes = recoveryPayload(
+    const bytes = recoveryPayloadV2(
       "https://cloud.test",
       input.id,
       action,
       point.digest,
+      fixtureTarget.digest,
       now,
     );
     return {
+      version:2 as const,target:fixtureTarget,
       payload: bytes.toString("base64url"),
       signature: sign(null, bytes, key.privateKey).toString("base64url"),
     };
@@ -288,7 +303,7 @@ test("owner-authorised replacement is durable, target-bound and does not activat
     sourceNodeId: randomUUID(),
     modules: { core: 1 },
   });
-  await catalogue.verify(newer.id, "waitron-test", async () => {});
+  await verifyPointFixture(db.pool,catalogue,newer.id);
   assert.equal(await catalogue.cleanupOne(installed.venueId), null);
   await recovery.close(owner.token, owner.csrfToken, input.id);
   await assert.rejects(
@@ -297,7 +312,7 @@ test("owner-authorised replacement is durable, target-bound and does not activat
   );
   assert.equal(await catalogue.cleanupOne(installed.venueId), point.id);
   await assert.rejects(
-    recovery.start(owner.token, owner.csrfToken, {
+    start(recovery,owner.token, owner.csrfToken, {
       ...input,
       id: randomUUID(),
       pointId: newer.id,
@@ -311,20 +326,22 @@ test("owner-authorised replacement is durable, target-bound and does not activat
     pointId: newer.id,
     targetPublicKey: expiredKey.publicKey,
   };
-  await recovery.start(owner.token, owner.csrfToken, expiredInput);
+  await start(recovery,owner.token, owner.csrfToken, expiredInput);
   await db.pool.query(
     "UPDATE backup_recoveries SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
     [expiredInput.id],
   );
-  const expBytes = recoveryPayload(
+  const expBytes = recoveryPayloadV2(
     "https://cloud.test",
     expiredInput.id,
     "read",
     newer.digest,
+    fixtureTarget.digest,
     Date.now(),
   );
   await assert.rejects(
     recovery.target(expiredInput.id, "read", {
+      version:2,target:fixtureTarget,
       payload: expBytes.toString("base64url"),
       signature: sign(null, expBytes, expiredKey.key.privateKey).toString(
         "base64url",
@@ -338,6 +355,7 @@ test("owner-authorised replacement is durable, target-bound and does not activat
   );
   await assert.rejects(
     recovery.target(expiredInput.id, "read", {
+      version:2,target:fixtureTarget,
       payload: expBytes.toString("base64url"),
       signature: sign(null, expBytes, expiredKey.key.privateKey).toString(
         "base64url",
@@ -363,12 +381,12 @@ test("owner-authorised replacement is durable, target-bound and does not activat
     id: randomUUID(),
     targetPublicKey: keyPair().publicKey,
   };
-  await recovery.start(owner.token, owner.csrfToken, resumed);
+  await start(recovery,owner.token, owner.csrfToken, resumed);
   await db.pool.query(
     "UPDATE backup_recoveries SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
     [resumed.id],
   );
-  await recovery.start(owner.token, owner.csrfToken, {
+  await start(recovery,owner.token, owner.csrfToken, {
     ...resumed,
     id: randomUUID(),
     targetPublicKey: keyPair().publicKey,
@@ -392,7 +410,7 @@ test("owner-authorised replacement is durable, target-bound and does not activat
     /backup.local_integration_only/,
   );
   await assert.rejects(
-    recovery.start(owner.token, owner.csrfToken, {
+    start(recovery,owner.token, owner.csrfToken, {
       ...resumed,
       id: randomUUID(),
       targetPublicKey: keyPair().publicKey,
@@ -405,13 +423,13 @@ test("owner-authorised replacement is durable, target-bound and does not activat
   await recovery.close(owner.token, owner.csrfToken, current);
   const shared = keyPair().publicKey;
   const race = await Promise.allSettled([
-    recovery.start(owner.token, owner.csrfToken, {
+    start(recovery,owner.token, owner.csrfToken, {
       ...input,
       id: randomUUID(),
       pointId: newer.id,
       targetPublicKey: shared,
     }),
-    other.start(owner.token, owner.csrfToken, {
+    start(other,owner.token, owner.csrfToken, {
       ...input,
       id: randomUUID(),
       pointId: secondPoint.id,

@@ -4,7 +4,7 @@ import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {promisify} from 'node:util';
 import {setTimeout as delay} from 'node:timers/promises';
-import type {RestoreVerifier} from './worker.ts';
+import type {LegacyRestoreVerifier} from './waitron-verifier.ts';
 const execute=promisify(execFile),label='cloud.backup-verifier.owner';
 function containerDiagnostic(error:unknown,messages:string[]){
  const detail=error as {code?:unknown;signal?:unknown;killed?:boolean;stderr?:string};
@@ -25,12 +25,12 @@ async function removeContainer(name:string,waitForRemoval=false){
   }
  }
 }
-interface ContainerVerifierOptions {image:string;owner:string;memoryMiB?:number;scratchMiB?:number;}
+interface ContainerVerifierOptions {image:string;owner:string;memoryMiB?:number;scratchMiB?:number;controller?:{reclaim():Promise<void>;create(args:string[]):Promise<string>;remove(id:string):Promise<void>};}
 async function docker(args:string[],missingId?:string){
  try{return (await execute('docker',args,{timeout:10000,maxBuffer:65536})).stdout.trim();}
  catch(error){if(missingId!==undefined&&missingContainer(error,missingId))return '';const detail=error as {code?:unknown;signal?:unknown;killed?:boolean};throw Error('backup.verifier_container',{cause:{operation:args[0],code:detail.code,signal:detail.signal,killed:detail.killed}});}
 }
-export async function createContainerWaitronVerifier(options:ContainerVerifierOptions):Promise<RestoreVerifier>{
+export async function createContainerWaitronVerifier(options:ContainerVerifierOptions):Promise<LegacyRestoreVerifier>{
  const {image,owner}=options,memory=options.memoryMiB??1024,scratch=options.scratchMiB??256;
  if(typeof image!=='string'||typeof owner!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9_.:/@-]{0,255}$/.test(image)||!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/.test(owner)||!Number.isInteger(memory)||memory<128||memory>2048||!Number.isInteger(scratch)||scratch<1||scratch>512)throw Error('backup.verifier_configuration');
  // Image volumes would add writable storage outside the one quota-limited scratch mount.
@@ -47,21 +47,24 @@ export async function createContainerWaitronVerifier(options:ContainerVerifierOp
   if(Number.isFinite(deadline)&&deadline<Date.now())await removeContainer(info.Id,true);
  }
  };
- await reclaim();
+ const reclaimOwned=options.controller?()=>options.controller!.reclaim():reclaim;
+ const removeOwned=options.controller?(id:string)=>options.controller!.remove(id):removeContainer;
+ await reclaimOwned();
  return async(source,keys,point,signal)=>{
   if(signal.aborted)throw Error('backup.verifier_cancelled');
-  await reclaim();
+  await reclaimOwned();
   if(signal.aborted)throw Error('backup.verifier_cancelled');
   const header=JSON.stringify({recoveryKey:keys.recoveryKey,sourceNodeId:point.sourceNodeId,modules:point.modules,capturedAt:point.capturedAt})+'\n';
   if(Buffer.byteLength(header)>65536)throw Error('backup.verifier_input');
-  const name='cloud-verify-'+randomUUID();
-  let created=false,failure:string|undefined,removal:Promise<string>|undefined,attached:Promise<number|null>|undefined,child:ChildProcess|undefined;
-  const stop=(code:string)=>{failure??=code;if(created)removal??=removeContainer(name);removal?.catch(()=>{});child?.kill('SIGKILL');};
+  let name='cloud-verify-'+randomUUID();
+  let created=false,failure:string|undefined,removal:Promise<unknown>|undefined,attached:Promise<number|null>|undefined,child:ChildProcess|undefined;
+  const stop=(code:string)=>{failure??=code;if(created)removal??=removeOwned(name);removal?.catch(()=>{});child?.kill('SIGKILL');};
   const abort=()=>stop('backup.verifier_cancelled');
   signal.addEventListener('abort',abort,{once:true});
   const timer=setTimeout(()=>stop('backup.verifier_timeout'),30000);
   try{
-   await docker(['create','--name',name,'--label',`${label}=${owner}`,'--label',`cloud.backup-verifier.deadline=${Date.now()+60000}`,'--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--user','1000:1000','--pids-limit','64','--cpus','1','--memory',`${memory}m`,'--memory-swap',`${memory}m`,'--ipc','none','--tmpfs',`/scratch:rw,noexec,nosuid,nodev,size=${scratch}m,uid=1000,gid=1000,mode=0700`,'--ulimit','core=0','--log-driver','none','--env','TMPDIR=/scratch','--entrypoint','node','-i',imageInfo.Id,'/verifier/container-entry.mjs']);
+   const createArgs=['--name',name,'--label',`${label}=${owner}`,'--label',`cloud.backup-verifier.deadline=${Date.now()+60000}`,'--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--user','1000:1000','--pids-limit','64','--cpus','1','--memory',`${memory}m`,'--memory-swap',`${memory}m`,'--ipc','none','--tmpfs',`/scratch:rw,noexec,nosuid,nodev,size=${scratch}m,uid=1000,gid=1000,mode=0700`,'--ulimit','core=0','--log-driver','none','--env','TMPDIR=/scratch','--entrypoint','node','-i',imageInfo.Id,'/verifier/container-entry.mjs'];
+   if(options.controller)name=await options.controller.create(createArgs);else await docker(['create',...createArgs]);
    created=true;if(failure||signal.aborted){stop(failure??'backup.verifier_cancelled');throw Error(failure);}
    const attachedChild=spawn('docker',['start','-ai',name],{stdio:['pipe','pipe','pipe']});
    child=attachedChild;
@@ -106,7 +109,9 @@ export async function createContainerWaitronVerifier(options:ContainerVerifierOp
    throw error;
   }finally{
    clearTimeout(timer);signal.removeEventListener('abort',abort);
-   try{await (removal??removeContainer(name));}finally{child?.kill('SIGKILL');await attached;}
+   try{if(created||!options.controller)await (removal??removeOwned(name));}finally{child?.kill('SIGKILL');await attached;}
   }
  };
 }
+
+export {createBoundContainerWaitronVerifier,type DataRestoreVerifier,type VerifiedChildOutput} from './bound-container-verifier.ts';

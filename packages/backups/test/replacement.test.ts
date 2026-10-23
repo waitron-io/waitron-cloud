@@ -1,3 +1,4 @@
+import {verifyPointFixture,configureRecoveryVerification,fixtureTarget} from './fixtures/verification.ts';
 import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
@@ -14,11 +15,13 @@ import {venueOverview} from '../../account-http/src/venue-overview.ts';
 import {createAccountApp} from '../../account-http/src/app.ts';
 import {RemoteAccessStore} from '../../remote-access/src/placement.ts';
 import {receipt} from '../src/storage.ts';
+import {requestPayloadV2,recoveryPayloadV2} from '../src/recovery-v2.ts';
 let db:Awaited<ReturnType<typeof database>>;
 before(async()=>{db=await database();});after(async()=>db?.close());
 const origin='https://cloud.test';
-function target(){const key=generateKeyPairSync('ed25519');return {id:randomUUID(),code:'12345678',publicKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),proof(action:'start'|'status',now=Date.now(),at=origin){const b=requestPayload(at,this.id,action,this.publicKey,this.code,now);return {payload:b.toString('base64url'),signature:sign(null,b,key.privateKey).toString('base64url')};},sign(bytes:Buffer){return sign(null,bytes,key.privateKey).toString('base64url');},recovery(action:'info'|'read'|'restored',digest=''){const b=recoveryPayload(origin,this.id,action,digest,Date.now());return {payload:b.toString('base64url'),signature:sign(null,b,key.privateKey).toString('base64url')};}};}
+function target(version=2){const key=generateKeyPairSync('ed25519');return {id:randomUUID(),code:'12345678',publicKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),proof(action:'start'|'status',now=Date.now(),at=origin){const b=version===2?requestPayloadV2(at,this.id,action,this.publicKey,this.code,fixtureTarget.digest,now):requestPayload(at,this.id,action,this.publicKey,this.code,now);return {...(version===2?{version:2 as const,target:fixtureTarget}:{}),payload:b.toString('base64url'),signature:sign(null,b,key.privateKey).toString('base64url')};},sign(bytes:Buffer){return sign(null,bytes,key.privateKey).toString('base64url');},recovery(action:'info'|'read'|'restored',digest=''){const b=version===2?recoveryPayloadV2(origin,this.id,action,digest,fixtureTarget.digest,Date.now()):recoveryPayload(origin,this.id,action,digest,Date.now());return {...(version===2?{version:2 as const,target:fixtureTarget}:{}),payload:b.toString('base64url'),signature:sign(null,b,key.privateKey).toString('base64url')};}};}
 async function fixture(){
+ await configureRecoveryVerification(db.pool);
  const vault=new BackupKeyVault(randomBytes(32)),objects=new Map<string,Buffer>(),catalogue=new BackupCatalogue(db.pool,vault,()=>({async read(k){return objects.get(k)!;},async put(k,b){objects.set(k,Buffer.from(b));return receipt(b);},async remove(k){objects.delete(k);}}));
  const email=randomUUID()+'@example.test',password='a long enough recovery password',signup=new SignupStore(db.pool,db.outbox);
  await signup.request(email);const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT 1')).rows[0]);assert('token' in mail);
@@ -26,7 +29,7 @@ async function fixture(){
  const installedKey=target(),reg=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:installedKey.publicKey,localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await reg.start(binding);await reg.approveCloud(binding,owner.accountId);await reg.approveLocal(binding,randomUUID());const installed=await reg.complete(binding);
  await catalogue.provision(installed.installationId,{endpoint:'https://store.test',bucket:'recovery-'+randomUUID(),region:'local'});const capture=await catalogue.reserveCapture(installed.installationId,randomUUID()),bytes=Buffer.from('encrypted archive');objects.set(capture.incomingKey,bytes);
- const point=await catalogue.publish(installed.installationId,capture.id,{...receipt(bytes),capturedAt:new Date().toISOString(),retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}});await catalogue.verify(point.id,'test',async()=>{});
+ const point=await catalogue.publish(installed.installationId,capture.id,{...receipt(bytes),capturedAt:new Date().toISOString(),retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}});await verifyPointFixture(db.pool,catalogue,point.id);
  return {installedKey,reg,binding,owner,session,installed,point,capture,vault,objects,catalogue,recovery:new BackupRecovery(db.pool,vault,origin),requests:new RecoveryRequests(db.pool,vault,origin)};
 }
 
@@ -71,7 +74,7 @@ test('restored replacement preserves venue and history, retires old authority, a
 });
 test('a restored continuous operation keeps the existing owner-confirmed replacement path',async()=>{
  const f=await ready(),generation=`gen-2-${f.point.sourceNodeId}-20260925T190000Z`;
- await db.pool.query(`UPDATE backup_recoveries SET source_kind='continuous',point_id=NULL,stream_configuration_revision=2,
+ await db.pool.query(`UPDATE backup_recoveries SET source_kind='continuous',point_id=NULL,verification_target=NULL,verification_attempt_id=NULL,stream_configuration_revision=2,
   stream_generation=$2,stream_recoverable_at=clock_timestamp(),stream_source_node_id=$3 WHERE id=$1`,[f.t.id,generation,f.point.sourceNodeId]);
  const proposal=await f.store.machine('prepare',f.envelope('prepare'));assert.equal(proposal.source.kind,'continuous');assert.equal(proposal.pointId,null);
  const result=await f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f));assert.equal(result.state,'complete');assert.equal(result.registration.venueId,f.installed.venueId);

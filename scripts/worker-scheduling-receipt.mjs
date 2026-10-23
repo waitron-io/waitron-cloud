@@ -58,7 +58,7 @@ async function measure(db,tuned){
     for(;;){const count=await monitor.schedule();maximumScheduleInsert=Math.max(maximumScheduleInsert,count);total+=count;if(!count)return total;}
   });
   sampleMemory();
-  const backup=new BackupWorker(db.pool,{},async()=>{});
+  const backup=new BackupWorker(db.pool,{},async()=>assert.fail('scheduling cannot verify'),'scheduling-receipt');
   const backupScheduling=await timed(async()=>{
     let total=0,previous={verify:0,retention:0,incoming:0};
     for(;;){

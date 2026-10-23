@@ -1,3 +1,4 @@
+import {verifyPointFixture,verificationOutput} from './fixtures/verification.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
@@ -245,20 +246,14 @@ test("a restarted worker and backup catalogue use retained keys after rotation",
 
   const restartedCatalogue = new BackupCatalogue(db.pool, new BackupKeyVault(master), storage);
   let restored = "";
-  await restartedCatalogue.verify(point.id, "managed-key-drill", async (source) => {
+  await verifyPointFixture(db.pool,restartedCatalogue,point.id,async (source,_key,request) => {
     const chunks: Buffer[] = [];
     for await (const chunk of source.open()) chunks.push(Buffer.from(chunk));
-    restored = Buffer.concat(chunks, source.receipt.size).toString();
+    restored = Buffer.concat(chunks, source.receipt.size).toString();return verificationOutput(request);
   });
   assert.equal(restored, `managed key archive ${point.id}`);
-  await assert.rejects(
-    new BackupCatalogue(db.pool, new BackupKeyVault(randomBytes(32)), storage).verify(
-      point.id,
-      "managed-key-drill",
-      async () => assert.fail("wrong master key must not reach restore"),
-    ),
-    /backup.key_unavailable/,
-  );
+  assert.equal(await verifyPointFixture(db.pool,new BackupCatalogue(db.pool,new BackupKeyVault(randomBytes(32)),storage),point.id,async()=>assert.fail('wrong master key must not reach restore')),'unavailable');
+  assert.equal((await db.pool.query('SELECT reason FROM backup_verification_attempts WHERE point_id=$1 ORDER BY created_at DESC LIMIT 1',[point.id])).rows[0].reason,'secret_unavailable');
   assert.deepEqual(
     (await db.pool.query("SELECT outcome FROM backup_verifications WHERE point_id=$1", [point.id])).rows,
     [{ outcome: "verified" }],
@@ -377,4 +372,24 @@ test("backup dependency tables are scanned once rather than once per key version
     emailKeys: { activeKeyId: "first", keys: emailKeys },
   });
   assert.equal(maximumDependencyLoops, 1);
+});
+
+test('unavailable_retains_key_and_usage_dependencies: key validation means unsealing only',async()=>{
+ const {configureRecoveryVerification}=await import('./fixtures/verification.ts');
+ const {UsageReconciler}=await import('@waitron-cloud/registration');
+ const point=await capture();await configureRecoveryVerification(db.pool);await verifyPointFixture(db.pool,catalogue,point.id);
+ const before=(await db.pool.query('SELECT sealed FROM backup_key_versions WHERE venue_id=$1 AND version=1',[venueId])).rows[0].sealed;
+ await catalogue.rotate(installationId);
+ assert.equal(await verifyPointFixture(db.pool,catalogue,point.id,async()=>{throw Error('temporarily unavailable');}),'unavailable');
+ await db.pool.query('UPDATE backup_verification_policy SET revision=revision+1');
+ await new UsageReconciler(db.pool).runOnce(100);
+ const report=await inspectManagedKeyDependencies(db.pool,{backupVault:vault,emailKeys:{activeKeyId:'second',keys:emailKeys}});
+ const key=report.backupKeys.find(k=>k.venueId===venueId&&k.version===1)!;
+ assert.equal(key.validation,'verified');assert.equal(key.active,false);assert.equal(key.retirement,'blocked');
+ assert.deepEqual(key.dependencies,{captures:1,points:1,managedStreams:0});
+ assert.equal((await db.pool.query('SELECT current_verification FROM backup_point_qualification WHERE point_id=$1',[point.id])).rows[0].current_verification,'pending');
+ assert.equal((await db.pool.query('SELECT sealed FROM backup_key_versions WHERE venue_id=$1 AND version=1',[venueId])).rows[0].sealed,before);
+ const usage=(await db.pool.query('SELECT event_type,quantity::text FROM usage_events WHERE source_reference=$1 ORDER BY event_type',[point.id])).rows;
+ assert.deepEqual(usage,[{event_type:'backup.storage_added_bytes',quantity:String(point.size)},{event_type:'backup.upload_bytes',quantity:String(point.size)}]);
+ assert.equal(await catalogue.cleanupOne(venueId,new Date(Date.now()+60*86400000)),null,'an unavailable historical success keeps its bytes and key');
 });
