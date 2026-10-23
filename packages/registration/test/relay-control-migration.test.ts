@@ -3,7 +3,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {setTimeout as delay} from 'node:timers/promises';
 import test, {after} from 'node:test';
-import type {Pool} from 'pg';
+import type {Pool, PoolClient} from 'pg';
 import * as registration from '../src/index.ts';
 import {migrationRelease} from './fixtures/migration-release.ts';
 const release = await migrationRelease(36);
@@ -133,6 +133,16 @@ test('release-36 consumer and recovery gates refuse historical future missing an
 
 test('migration setup survives a proved counter rollover without retaining a failed admission', async () => {
   const f = await fixture(release.migrate);
+  const notices: string[] = [], observed = new Set<PoolClient>();
+  const onNotice = (notice: {message?: string}) => {
+    if (notice.message?.startsWith('relay counter rollover: ')) {
+      notices.push(notice.message); console.log(notice.message);
+    }
+  };
+  const observeClient = (client: PoolClient) => {
+    if (!observed.has(client)) {observed.add(client); client.on('notice', onNotice);}
+  };
+  f.pool.on('connect', observeClient);
   try {
     const v = await f.venue();
     const messages = new registration.RelayMessages(f.pool, f.issuer, 'http://localhost',
@@ -157,8 +167,7 @@ test('migration setup survives a proved counter rollover without retaining a fai
       CREATE TRIGGER fixture_cross_counter_boundary BEFORE INSERT ON relay_messages
         FOR EACH ROW EXECUTE FUNCTION fixture_cross_counter_boundary()`);
     const observer = await f.pool.connect();
-    const notices: string[] = [];
-    observer.on('notice', notice => {if (notice.message) {notices.push(notice.message); console.log(notice.message);}});
+    observeClient(observer);
     observer.release();
     const rollovers: unknown[] = [];
     const held = await f.pool.connect();
@@ -179,7 +188,11 @@ test('migration setup survives a proved counter rollover without retaining a fai
     assert.equal((await messages.execute('email-submit', v.proof('email-submit', body))).created, false);
     assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count, '1');
     assert.deepEqual((await f.pool.query('SELECT kind,count::text FROM relay_bounds_counters ORDER BY kind')).rows,
-      [{kind: 'grant', count: '1'}, {kind: 'recipient', count: '1'}]);
+      [{kind: 'grant', count: '1'}, {kind: 'recipient', count: '1'}], 'replay preserves both abuse counters');
     await f.row(body.messageId);
-  } finally {await f.close();}
+  } finally {
+    f.pool.removeListener('connect', observeClient);
+    for (const client of observed) client.removeListener('notice', onNotice);
+    await f.close();
+  }
 });

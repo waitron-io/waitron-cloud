@@ -57,25 +57,31 @@ jobs:
               original = path.read_text()
               guard = "if(counterEnd.getTime()<=now)throw new RelayBoundsError('relay_unavailable',{cause:{kind:'relay_counter_expired',counterEndsAt:counterEnd.getTime(),observedAt:now}});"
               assert original.count(guard) == 1, 'counter guard changed; review the experiment'
+              test_path = candidate / 'packages/registration/test/relay-control-migration.test.ts'
+              originals = {path: original, test_path: test_path.read_text()}
+              replay = "}else if(!reservation.replay)messageError('relay_unavailable');"
               faults = [
-                  ('without-counter-guard', '', 'the deliberately expired admission is reported'),
-                  ('without-clock-evidence', "if(counterEnd.getTime()<=now)throw new RelayBoundsError('relay_unavailable');", 'relay_unavailable'),
+                  ('without-counter-guard', path, guard, '', 'the deliberately expired admission is reported'),
+                  ('without-clock-evidence', path, guard, "if(counterEnd.getTime()<=now)throw new RelayBoundsError('relay_unavailable');", 'relay_unavailable'),
+                  ('without-pool-observer', test_path, "f.pool.on('connect', observeClient);", '', 'the pool connection used for admission reports the rollover notice'),
+                  ('replay-counter-increment', path, replay, replay + "if(!created)await client.query('UPDATE relay_bounds_counters SET count=count+1');", 'replay preserves both abuse counters'),
               ]
-              for label, replacement, expected in faults:
+              for label, target, old, replacement, expected in faults:
                   try:
-                      path.write_text(original.replace(guard, replacement))
+                      assert originals[target].count(old) == 1, label + ': mutation target changed'
+                      target.write_text(originals[target].replace(old, replacement))
                       result = run(label, candidate)
                       output = result.stdout + result.stderr
                       assert result.returncode != 0 and expected in output, label + ': expected failure missing'
                       if label == 'without-clock-evidence':
                           assert 'admitFixtureMessage' in output and "code: 'relay_unavailable'" in output, 'wrong refusal path'
                   finally:
-                      path.write_text(original)
+                      target.write_text(originals[target])
               restored = run('restored', candidate)
               if restored.returncode:
                   print(restored.stdout + restored.stderr, flush=True)
                   raise SystemExit(1)
-          print('Counter guard and clock evidence faults caught; restored real-PostgreSQL check passes.', flush=True)
+          print('All four guard, evidence, notice and replay faults caught; restored real-PostgreSQL check passes.', flush=True)
           PYTHON
       - uses: actions/upload-artifact@v4
         if: always()

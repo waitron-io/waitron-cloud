@@ -4390,8 +4390,9 @@ Migration setup retries only this proved counter rollback, at most ten times.
 Unexplained unavailability, rate limits and other failures still fail immediately.
 The new check verifies one retained message, reservation and pair of counters,
 no additional debit on replay, and the existing ciphertext-byte invariant. A
-separate Linux check deletes the expiry guard and its clock evidence in disposable
-checkouts and requires both faults to fail before checking the restored code.
+separate Linux check deletes the expiry guard, its clock evidence and the pool
+notice observer, then injects an extra replay counter increment in disposable
+checkouts. It requires all four faults to fail before checking the restored code.
 Original migration assertions, counter policy, authority windows and deadlines
 stay unchanged. The old failure log did not record its exact clock values; this
 reproduction does not invent those missing historical values. Local database
