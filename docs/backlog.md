@@ -1721,8 +1721,12 @@ notifications separately.
   be inspected, including throwing or revoked JavaScript proxies, objects that
   intercept property inspection. Each field is contained separately, so an
   unreadable step does not discard a valid phase. The same fixed labels and
-  original checks apply. Checking meter cleanup by name rather than relying on
-  a hanging test process to reveal a missed close remains a separate follow-up.
+  original checks apply. The launch, reconnect and logout failure tests also
+  inspect the real traffic-meter listener and require it to be closed when the
+  journey refuses. Removing the meter cleanup fails six named assertions;
+  independent test teardown collects the listener and timer without waiting for
+  the meter's ten-minute lifetime. Browser operations remain controlled fixtures,
+  and this check does not establish the historical reconnect failure's cause.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.

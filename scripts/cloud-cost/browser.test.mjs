@@ -1,6 +1,31 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { Server } from 'node:net';
 import { measureRemoteBrowser } from './browser.mjs';
+
+function observeMeterCleanup(t) {
+  const listeners = [], timers = [];
+  const listen = Server.prototype.listen, timeout = globalThis.setTimeout;
+  t.mock.method(Server.prototype, 'listen', function (...args) {
+    listeners.push(this);
+    return Reflect.apply(listen, this, args);
+  });
+  t.mock.method(globalThis, 'setTimeout', function (...args) {
+    const timer = Reflect.apply(timeout, this, args);
+    timers.push(timer);
+    return timer;
+  });
+  // Independent teardown lets a missing journey cleanup fail without leaking
+  // its real listener or waiting for the meter's ten-minute lifetime.
+  t.after(async () => {
+    for (const timer of timers) clearTimeout(timer);
+    await Promise.all(listeners.map(server => new Promise(resolve => server.close(resolve))));
+  });
+  return () => {
+    assert.equal(listeners.length, 1, 'the journey opens one real meter listener');
+    assert.equal(listeners[0].listening, false, 'the failed journey closes its real meter listener');
+  };
+}
 
 // Reading an option before checking its descriptor can execute a private getter and
 // expose its error before the fixed public refusal is established.
@@ -13,7 +38,8 @@ test('browserRefusesPrivateGetterBeforeReading_' + key, async () => {
   assert.equal(reads, 0, 'untrusted accessors never run');
 });
 
-test('browserFailureNamesItsPhaseWithoutExposingThePrivateLaunchError', async () => {
+test('browserFailureNamesItsPhaseWithoutExposingThePrivateLaunchError', async t => {
+  const assertMeterClosed = observeMeterCleanup(t);
   let launches = 0;
   await assert.rejects(() => measureRemoteBrowser({
     chromium: {async launch() {launches++; throw Error('PRIVATE_LAUNCH_CANARY');}},
@@ -26,11 +52,13 @@ test('browserFailureNamesItsPhaseWithoutExposingThePrivateLaunchError', async ()
     return true;
   });
   assert.equal(launches, 1);
+  assertMeterClosed();
 });
 
 // Losing a reconnect marker would hide which unchanged browser operation refused.
 for (const step of ['reload', 'takings', 'overdue-empty', 'requests', 'logout'])
 test('browserReconnectFailureIdentifies_' + step, async t => {
+  const assertMeterClosed = observeMeterCleanup(t);
   const events = new Map();
   let reconnect = false, browserCloses = 0, contextCloses = 0;
   const refuse = () => { throw Error('PRIVATE_RECONNECT_CANARY https://private.example/token'); };
@@ -72,4 +100,5 @@ test('browserReconnectFailureIdentifies_' + step, async t => {
   });
   assert.equal(browserCloses, 1, 'the failing journey still closes its browser');
   assert.equal(contextCloses, 0, 'the successful close phase was never reached');
+  assertMeterClosed();
 });
