@@ -9,6 +9,11 @@ sentence records an owner decision it says so, with the owner's words where they
 given. Everything marked **(our call)** is a recommendation the owner delegated ("I know
 very little about cloud so I'm happy for you to recommend everything") and can overturn.
 
+**Handover revision, 2026-10-23:** the owner rejected the earlier A1018 external
+stop-proof model. Sections 3, 6, 9 and 12 now follow the [revised shared direction](../../waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018).
+Its proposed policy defaults still await the one Waitron-led owner design question;
+publication does not extend the original local build authority to that protocol.
+
 ## 1. Why
 
 No public Cloud service exists yet ([backlog](../../backlog.md): "No public cloud service is
@@ -71,8 +76,8 @@ start."
 - a problem in one country, cell or machine takes down venues elsewhere;
 - a fix is applied by hand and leaves nothing behind, so the same problem costs the same
   next time;
-- two copies of one hosted venue can sell or file fiscal records at the same time
-  (section 9);
+- automation starts a replacement without controlled handover or the explicit
+  emergency declaration, or ignores a predecessor filing hold (section 9);
 - launch is so ambitious it never ships.
 
 ## 3. What this design corrects in the existing proposals
@@ -91,8 +96,10 @@ replaces them:
 | C41 | waves of "min(20, max(1, ceil(10% of the frozen eligible population)), remaining venues)", each meeting "24 continuous healthy hours" | Starting values, not limits: they loosen automatically (section 8). |
 | [Hosting proposal](2026-10-21-cloud-hosted-venue-design.md) | (summary) one shared Cloud for all venues, with country packs choosing storage regions only | Each country runs as its own Cloud under one global layer (section 4). |
 
-The hosting proposal's fencing rule (section 9), the cold recovery choice and D101's data
-rules are kept unchanged.
+The owner's 2026-10-23 handover model replaces the hosting proposal's universal
+external stop-proof rule (section 9). The cold recovery choice and D101's data rules
+remain. Automation status supplies neither the controlled final copy nor the
+authorised person's emergency declaration.
 
 ## 4. The shape: countries, a global layer, cells, machines
 
@@ -155,8 +162,8 @@ D101 design document is a step of the plan, not of this document.
 namespaces alone are not isolation and need security approval. Each hosted venue's server
 runs in its own sandbox (gVisor, which works on ordinary machines) in addition to its own
 namespace, its own disk and its own network rules. The owner's security approval of that
-choice is open (section 12); if it is refused, a stronger sandbox needs different, dearer
-machines.
+choice was given on 2026-10-23; runtime isolation still needs qualification. A change
+to a stronger sandbox would need its own sizing and cost evidence.
 
 **Owner, 2026-10-22:** hosted venues run "one isolated Waitron server per venue … but we can
 have several of these running on individual servers to make hosting cost effective. We
@@ -188,7 +195,10 @@ become less hands on."
     and waits;
   - **act and report**: Cloud does it and tells the owner afterwards.
 - Every action starts as ask first, except restarting a failed workload in place and
-  replacing a failed machine, which AWS and Kubernetes already do safely **(our call)**.
+  replacing a failed machine, as initiation exceptions **(our call)**. These grant no
+  hosted writer or fiscal authority: a replacement still meets section 9's selected
+  handover scenario. Kubernetes/AWS restart alone supplies no final-copy equality
+  or emergency human declaration.
 - **Routine work is not on the list (our call).** What the system already does as a matter
   of course (renewing a certificate, adding a machine when a cell needs capacity, retrying
   a failed backup, updating a gateway's routes) keeps happening by itself. The list covers
@@ -238,16 +248,44 @@ more quickly as we gain experience."
 - C41's rule stands that an upgrade migrates forward and is not rolled back after the venue
   trades on the new version; that comes from Waitron's fiscal rules.
 
-## 9. The rule automation must never break: one writer per venue
+<a id="9-the-rule-automation-must-never-break-one-writer-per-venue"></a>
 
-The [hosting proposal](2026-10-21-cloud-hosted-venue-design.md) requires proof that a hosted
-venue's previous server has stopped before a new one may write ("Prove it stopped before
-allowing a new writer"). Fiscal records are append-only and chained, and two servers selling
-for one venue would fork its chain, which cannot be repaired. So every automatic action that
-starts a venue's server somewhere new (a move, a machine replacement, a failover) first
-obtains that proof, and if it cannot, it does not start the new server and asks instead. This
-stays true whatever an action's status is. A cold restore starts a fresh fiscal chain and
-loses whatever never left the old server, as the owner accepted for on-prem recovery.
+## 9. Replace a venue server through the selected handover scenario
+
+The owner's 2026-10-23 direction replaces universal external stop proof with the
+[A1018 controlled/emergency protocol](../../waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018).
+It works local to local without Cloud or internet and in both local/Cloud directions
+and Cloud to Cloud. Each M2 keeps its own node identity and activates a fresh fiscal
+identity, chain and series through Waitron's existing module gates; it does not
+continue M1's writer chain.
+
+For a controlled move, M1 durably steps down, bounds admitted work and transfers
+complete frozen final state. M2 durably verifies it before M1 relinquishes filing
+to that selected M2. M2 checks the signed assignment and records activation before
+work and routing. Failure or a lost reply resumes the same operation and target;
+unknown copy/filing history waits, without a speculative replacement.
+
+For an emergency, a freshly authenticated authorised person explicitly declares
+M1 shut down, no parallel recovery, and acceptance of the selected copy's unknown
+missing tail. A hosted source needs the person's provider-console stop declaration
+bound to the exact resource and restart prevention. Cloud cannot generate it from
+an alert, timeout or an act-and-report permission. M2 holds every predecessor filing
+chain assigned to M1, including already-copied rows, while using its own new chain.
+M1 files only its assigned chains on restricted return. Only fiscal records and
+filing facts return; other business changes remain archived with a visible gap.
+
+An isolated running M1 can still trade until it learns of the newer signed role.
+The explicit warning discloses bills, payments, cash and stock divergence. Distinct
+chains avoid sharing one writer chain; they cannot merge that business history.
+The two-scenario protocol does not promise clone resistance or provider process-death
+proof. The action list controls initiation only; no automatic failover invents the
+human declaration or bypasses copy, filing, authentication or activation gates.
+
+A separately selected cold restore keeps its existing recovery source, key,
+operation and sole-recovery gates and accepted tail loss, with a fresh chain and
+no added hard-stop proof. Failed handover never silently becomes restore or emergency.
+The revised protocol and its recommended defaults still await owner design approval,
+separate build authority and runtime acceptance through Waitron's combined question.
 
 ## 10. How it is built (our call, all of it)
 
@@ -352,13 +390,17 @@ list, all rehearsed on the LAN test Cloud. Opening AWS accounts, spending money 
 production schema changes wait for a separate go-ahead from the owner once the rehearsal
 works.
 
-**Depends on Waitron.** Hosted venues need the stop proof of section 9, which the hosting
-proposal's joint contract with Waitron has to define; it is on the critical path for
-hosted venues and not for on-prem ones.
+**Depends on Waitron.** P6 needs section 9's revised joint handover contract, owner
+approval and qualified consumers. P7 rebuilds the country platform without inventing
+venue activation authority: each recovered venue explicitly uses controlled handover,
+emergency declaration or separately selected cold restore. Rebuilding infrastructure
+or approving an automation never supplies missing venue evidence or fiscal permission.
 
 **For the owner**
 
-- Security approval of the sandbox choice in section 5.
+- The revised A1018 policy defaults and both worked examples, in the one Waitron-led
+  question. The gVisor sandbox choice and running Spain from Paris were approved on
+  2026-10-23; isolation, recovery, legal and provider qualification still remain.
 - Where account data may live once a country outside the EU joins (the product discussion
   leaves "where cross-country account data may live" open); inside the EU it is Frankfurt.
 
@@ -368,6 +410,6 @@ hosted venues and not for on-prem ones.
   lead times.
 - Cell cap from measurement; the placement score's details; the quiet-hour model.
 - Argo CD or Flux; how the release controller and Cloud's controller divide work.
-- The stop proof's mechanism for each kind of move, with Waitron (the hosting proposal's
-  joint contract).
+- The revised handover's final-copy/local-state inventory, actor binding, per-chain
+  filing ownership and same-M2 retry format, jointly with Waitron before build.
 - Measuring a trading venue's memory and the remote-access traffic, then re-pricing.
