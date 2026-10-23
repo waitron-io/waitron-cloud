@@ -4197,9 +4197,10 @@ traces end in checksum-verified completion. The image-acquisition command is
 byte-identical to base `6c031499cdb19e038994c89a6725998b49ae608f`; the cause of
 the registry timeout remains unknown.
 
-D135 cannot land while this current-head job is red. A separate fixture follow-up
-must reproduce that response through a controlled external Docker command and
-qualify bounded handling of recognised transient registry failures, preserving
-command budgets, terminal refusals, image pins and owned cleanup. Use pure Node
-checks while local Docker is down, then verify every actual CI job on the changed
-head. An unchanged rerun does not prove a repair.
+The separate [image-acquisition repair](https://github.com/waitron-io/waitron-cloud/pull/328)
+landed at `1174f28cd4e98aa18212d6afca89233d3f8fef43`. Its controlled command
+checks cover the recorded transport refusal, bounded retries, terminal refusals
+and owned cleanup within one shared budget. Both exact-head and independent
+merge workflows passed all 214 conformance cases. This qualifies the handling;
+the original registry timeout's network cause remains unknown. D135 retains the
+archive diagnostics and requires fresh qualification on top of that repair.
