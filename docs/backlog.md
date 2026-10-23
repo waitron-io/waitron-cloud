@@ -3929,6 +3929,21 @@ changing any check. The assertions and deadlines remain unchanged.
 
 ## Portal lost-reply test ordering
 
+- **Open: new portal failures after the D132 documentation merge.**
+  [CI39967649257](https://github.com/waitron-io/waitron-cloud/actions/runs/39967649257)
+  at `4e07a98a9dad1073289a76b086073afc36728191`, job120461847149,
+  failed the reused-reset-link message at `apps/portal/test/journey.test.ts:57`,
+  the lost-reset-reply callback at line89 (`Request context disposed`), and the
+  post-reload translation control at
+  `apps/portal/test/translation-consent-browser.test.ts:72`. All27 jobs are final;
+  the strict summary also refuses the three failed tests. The same source tree
+  passed exact-head CI39966740913; matching bytes do not establish a cause.
+  Lane D/watcher must assign a scoped Linux diagnosis with stage/status evidence
+  and deterministic reproduction before a test-first fix. Preserve every session,
+  ownership, reset, consent, cleanup and timeout assertion; no unchanged rerun or
+  larger deadline is a diagnosis. Real local reproduction stays blocked while
+  Docker is down. Evidence is retained in Lane G receipts/d132/.
+
 - **Resolved: reconciliation stalled after the reply was dropped.**
   [CI 36777640375](https://github.com/waitron-io/waitron-cloud/actions/runs/36777640375)
   on `ab5161d4af0fc41aad83c99ce22de80035b2e027` failed both English journeys
