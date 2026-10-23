@@ -20,6 +20,6 @@ export async function downloadConformanceArchive(url,digest,path,{signal,phase})
     if(createHash('sha256').update(bytes).digest('hex')!==digest)throw Error('Fixture archive digest mismatch');
     writeFileSync(path,bytes);
     report('complete');
-  } catch(error) {report('failure',{errorName:error.name});throw error;}
+  } catch(error) {report('failure',{errorName:error?.name??'UnknownError'});throw error;}
   finally {clearInterval(progress);}
 }
