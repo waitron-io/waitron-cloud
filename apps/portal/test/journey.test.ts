@@ -59,7 +59,7 @@ for (const locale of ['en','es'] as const) test(`real ${locale} signup, sessions
     await page.getByRole('button',{name:c.savePassword,exact:true}).click();await page.getByText(c.linkUnavailable).waitFor();
     const storage=await page.evaluate(()=>({local:{...localStorage},session:{...sessionStorage}}));
     assert.deepEqual(storage,{local:{},session:{}});
-  } catch(error) {console.error('Portal journey trace',JSON.stringify(trace?.events));throw error;} finally {await f.close();}
+  } catch(error) {console.error('Portal journey trace',JSON.stringify({browser:trace?.events,server:f.trace}));throw error;} finally {await f.close();}
 });
 
 test('another account can complete signup without changing the existing session; lost completion replies remain recoverable',async()=>{
@@ -95,5 +95,5 @@ test('another account can complete signup without changing the existing session;
     assert.equal(resets,1);assert.equal((await context.request.get(`${f.origin}/api/account/session`)).status(),401);
     const login=await context.request.post(`${f.origin}/api/account/login`,{headers:{origin:f.origin},data:{email:second,password:'A replacement account password'}});
     assert.equal(login.status(),200);
-  } catch(error) {console.error('Portal journey trace',JSON.stringify(trace?.events));throw error;} finally {await f.close();}
+  } catch(error) {console.error('Portal journey trace',JSON.stringify({browser:trace?.events,server:f.trace}));throw error;} finally {await f.close();}
 });

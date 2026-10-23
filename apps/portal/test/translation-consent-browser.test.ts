@@ -79,7 +79,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.reload();await section.getByRole('button',{name:allow,exact:true}).waitFor();
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[owner.accountId]);
   await page.reload();await page.getByRole('heading',{name:/Sol SL/}).waitFor();assert.equal(await section.count(),0);
- }catch(error){console.error('Translation consent browser stages',JSON.stringify({locale,theme,width,events,trace:trace?.events}));throw error;}finally{releaseActivity();await f.close();}
+ }catch(error){console.error('Translation consent browser stages',JSON.stringify({locale,theme,width,events,trace:trace?.events,server:f.trace}));throw error;}finally{releaseActivity();await f.close();}
 });
 
 for(const locale of ['en','es'] as const)test(`${locale}: two venues keep accessible controls and write warnings in the affected venue`,async()=>{
