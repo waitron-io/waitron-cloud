@@ -118,7 +118,7 @@ const closeStages = new Set(['replication-transport', 'restore-transport', 'clea
 const closeReasons = new Set(['request-validation', 'lifetime-completion', 'body-accounting', 'transfer-interrupted',
   'upstream-error', 'upstream-response-interrupted', 'client-error', 'phase-change', 'active-close']);
 const networkErrors = new Set(['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'ERR_STREAM_PREMATURE_CLOSE']);
-const ioEvents = new Set(['request-aborted', 'request-pipeline', 'response-aborted', 'response-error',
+const ioEvents = new Set(['request-pipeline', 'response-aborted', 'response-error',
   'response-headers', 'response-pipeline', 'upstream-error', 'upstream-timeout', 'client-error']);
 const transportOperations = new Set(operations);
 const own = (value, key) => {
@@ -225,7 +225,6 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
         catch { waiter.reject(Error('Invalid cloud cost Litestream audit')); }
       }
     };
-    source.once('aborted', () => remember('transfer-interrupted', undefined, 'request-aborted', name));
     const upstream = request(endpoint, { method: source.method, path: source.url, headers: source.headers }, response => {
       response.once('aborted', () => remember('upstream-response-interrupted', undefined, 'response-aborted', name));
       response.on('error', error => remember('upstream-response-interrupted', error, 'response-error', name));
@@ -245,8 +244,9 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       catch (error) { finish(true, 'transfer-interrupted', error, 'response-pipeline'); response.destroy(); destination.destroy(); }
     });
     connections.add(upstream); upstream.on('close', () => connections.delete(upstream));
-    upstream.setTimeout(30000, () => { remember('transfer-interrupted', undefined, 'upstream-timeout', name); upstream.destroy(); });
-    upstream.on('error', error => { finish(true, 'upstream-error', error, 'upstream-error'); destination.destroy(); });
+    let upstreamTimedOut = false;
+    upstream.setTimeout(30000, () => { upstreamTimedOut = true; upstream.destroy(); });
+    upstream.on('error', error => { finish(true, 'upstream-error', error, upstreamTimedOut ? 'upstream-timeout' : 'upstream-error'); destination.destroy(); });
     if (body) { bytesOut = body.length; upstream.end(body, () => { sent = true; finish(false); }); }
     else {
       const counter = new Transform({ transform(chunk, encoding, next) { bytesOut += chunk.length; next(null, chunk); } });

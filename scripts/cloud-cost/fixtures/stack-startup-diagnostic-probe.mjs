@@ -41,8 +41,14 @@ globalThis.startupProbe={abort:()=>controller.abort(),spawnSync(command,args){
   if(fault==='isolation-command')return error();
   if(fault==='outbound-result')return {...error(),stdout:JSON.stringify({blockedConnections:3,blockedDns:1,localControl:true,secret:'PRIVATE_CANARY'}),stderr:'PRIVATE_CANARY'};
   if(fault==='outbound-runtime')return {...error(),stdout:'PRIVATE_CANARY',stderr:'Error: Cannot find module PRIVATE_CANARY'};
+  const invalidCanary={
+   'outbound-invalid-connections':{blockedConnections:4,blockedDns:2,localControl:true},
+   'outbound-invalid-dns':{blockedConnections:3,blockedDns:3,localControl:true},
+   'outbound-invalid-control':{blockedConnections:3,blockedDns:2,localControl:'PRIVATE_CANARY'},
+  }[fault];
+  if(invalidCanary)return {...error(),stdout:JSON.stringify(invalidCanary)};
   if(fault==='direct-isolation')throw Error('PRIVATE_CANARY');
-  if(args.includes('check')){if(fault==='handoff')controller.abort();return ok(fault==='readiness'?'PRIVATE_CANARY':{postgres:true,s3:true,mailpit:true,fiscal:true,waitron:true,gateway:true});}
+  if(args.includes('check')){if(fault==='readiness-command')return error();if(fault==='handoff')controller.abort();return ok(fault==='readiness'?'PRIVATE_CANARY':{postgres:true,s3:true,mailpit:true,fiscal:true,waitron:true,gateway:true});}
   return ok({blockedConnections:3,blockedDns:2,localControl:true});
  }
  throw Error('Unexpected Docker command');

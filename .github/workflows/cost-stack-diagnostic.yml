@@ -29,7 +29,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Observe both original cases on an independent Linux runner
-        run: pnpm test:cloud-cost:conformance --only stack-conformance.test.mjs --pattern '^genuine(?:LitestreamStorageLifetimesAgreeWithIndependentInventoriesAndBoundCommitTime|NativeBatchListenerRetainsCommittedLostRepliesAndEveryVersionLifetime)$'
+      - name: Observe the original eight-case group on an independent Linux runner
+        run: pnpm test:cloud-cost:conformance --only stack-conformance.test.mjs --pattern '^genuine(?:LitestreamTransport|LitestreamStorage|StorageReplacement|NativeStreamHistories|SdkBulk|NativeVersionHistories|PinnedLitestream|NativeBatchListener)'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

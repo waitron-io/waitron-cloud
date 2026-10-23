@@ -392,8 +392,10 @@ function dockerRead(argv) {
   if (result.status !== 0 || result.error) {
     // Command output may contain credentials; retain only the known probe and bounded result fields.
     const canary = argv[0] === 'exec' && argv[2] === 'node' && argv[3] === '-e' && argv[4] === outboundCanary;
-    const context = { command: canary ? 'outbound-canary' : argv[0] === 'network' ? 'network-inspect' : 'container-inspect',
+    const context = { command: canary ? 'outbound-canary' : argv[0] === 'exec' ? 'readiness-check'
+        : argv[0] === 'network' ? 'network-inspect' : 'container-inspect',
       argv: canary ? ['exec', '<container>', 'node', '-e', '<outbound-canary>']
+        : argv[0] === 'exec' ? ['exec', '<container>', 'node', '<script>', 'check']
         : argv[0] === 'network' ? ['network', 'inspect', '<network>'] : ['inspect', '<containers>'],
       stderr: /Cannot find module|SyntaxError:|ReferenceError:|TypeError:/.test(result.stderr ?? '') ? 'node-runtime'
         : /No such container|is not running/.test(result.stderr ?? '') ? 'container-state'

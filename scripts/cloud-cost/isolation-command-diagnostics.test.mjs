@@ -20,3 +20,26 @@ for (const fault of ['outbound-result', 'outbound-runtime']) test(`failed outbou
   assert.deepEqual(JSON.parse(report.slice(14)), output.diagnostic);
   assert.ok(JSON.stringify(output.diagnostic).length < 512);
 });
+
+test('a readiness command refusal cannot be reported as a container inspection or outbound canary', () => {
+  const result = spawnSync(process.execPath, [new URL('./fixtures/stack-startup-diagnostic-probe.mjs', import.meta.url).pathname, 'readiness-command', 'false'], { encoding: 'utf8', timeout: 15000 });
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.removed, true);
+  assert.equal(output.diagnostic.stage, 'readiness');
+  assert.equal(output.diagnostic.command, 'readiness-check');
+  assert.deepEqual(output.diagnostic.argv, ['exec', '<container>', 'node', '<script>', 'check']);
+  assert.equal(output.diagnostic.canary, undefined);
+  assert.equal((result.stdout + result.stderr).includes('PRIVATE_CANARY'), false);
+});
+
+for (const field of ['connections', 'dns', 'control']) test(`an invalid canary ${field} result stays private and cannot admit the stack`, () => {
+  const result = spawnSync(process.execPath, [new URL('./fixtures/stack-startup-diagnostic-probe.mjs', import.meta.url).pathname, 'outbound-invalid-' + field, 'false'], { encoding: 'utf8', timeout: 15000 });
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.removed, true);
+  assert.equal(output.diagnostic.reason, 'command-exit');
+  assert.equal(output.diagnostic.command, 'outbound-canary');
+  assert.equal(output.diagnostic.canary, undefined);
+  assert.equal((result.stdout + result.stderr).includes('PRIVATE_CANARY'), false);
+});

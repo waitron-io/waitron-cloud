@@ -4346,7 +4346,10 @@ names and unknown diagnostic fields stay private.
 
 Reproduce the newly named event on Linux before changing transport or shutdown
 behavior. The historical cause remains unknown; a passing run alone does not
-explain it. Preserve every storage, accounting and cleanup assertion and deadline.
+explain it. Four independent Linux observations in
+[run 40017505833](https://github.com/waitron-io/waitron-cloud/actions/runs/40017505833)
+passed both original cases without a recurrence. Preserve every storage,
+accounting and cleanup assertion and deadline.
 
 ## Cost-stack isolation command refusal (D152)
 
