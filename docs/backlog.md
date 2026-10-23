@@ -2790,23 +2790,23 @@ notifications separately.
   and an independent merge qualification, each installing in one attempt and
   executing every browser test. The historical primary-archive slowness remains
   unexplained. Every fixture head requires its own CI qualification.
-  **Local storage fixture port collision, still open.** In
+  **Local storage fixture port allocation repaired; original holder unknown.** In
   [run 39929839494](https://github.com/waitron-io/waitron-cloud/actions/runs/39929839494/job/120335229364),
-  `deploy/test-cloud/storage-authority.test.mjs` failed its separate-authority
-  concurrency case before provisioning: SeaweedFS's filer could not bind its
-  loopback port because the address was already in use. The receipt suite ran
-  2,186 cases with one failure; all 2,887 package and 2,653 root cases passed.
-  `scripts/backup-storage-fixture.mjs` is unchanged from base `a886559`.
-  Its `freePort()` helper closes each listener before returning the number, and
-  startup collects seven such numbers before spawning SeaweedFS. A controlled
-  socket probe executing that helper lets an owned listener reclaim its returned
-  port, then observes `EADDRINUSE` on replacement. That demonstrates a handoff
-  gap, not the identity of the original CI holder or a complete diagnosis.
-  Next, capture the allocated port set and socket ownership at startup, reproduce
-  duplicate/allocation-handoff collisions, and qualify a scoped fixture repair.
-  Preserve the authority/concurrency assertions, service deadlines, credential
-  boundaries and cleanup of only owned children/listeners. D101 slice 3 is parked
-  in PR311 pending that investigation; no unchanged rerun establishes a fix.
+  SeaweedFS's filer failed before the separate-authority concurrency case because
+  its loopback address was already in use. The fixture now holds all seven child
+  port reservations together until just before spawning SeaweedFS, preventing the
+  allocator from choosing one port for two services. Partial allocation failure
+  closes every earlier reservation. A child startup failure records the named
+  port allocation and a bounded `lsof` listener snapshot, or an explicit reason
+  that collection was unavailable, before stopping only its own child.
+  Native tests reproduce the earlier release pattern, allocation interruption and
+  an owned competing listener. Authority/concurrency checks and service deadlines
+  are unchanged. Another process can still claim a port during the handoff to the
+  separate child; that collision remains a failure with diagnostics, without a
+  retry or permission to stop its owner. The historical CI socket owner remains
+  unknown. If it recurs, use the allocation and socket snapshot to establish the
+  cause before extending the repair. D101 slice 3 in PR311 requires fresh CI on
+  this changed fixture; a successful unchanged rerun is not a cause diagnosis.
   A separate test-harness route failure is also open. In
   [run 39813909743](https://github.com/waitron-io/waitron-cloud/actions/runs/39813909743/job/119947375548),
   registration shard 2 never ran its tests: pulling `axllent/mailpit:v1.31.1`
