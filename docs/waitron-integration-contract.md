@@ -504,6 +504,126 @@ empty and `.local` independent. Nothing here enables publication, customer
 authentication, payments, writer activation, fiscal or recovery authority, a
 Cloud deployment, or a provider/host operation.
 
+### A951 appliance response, 2026-10-23 (D132)
+
+You need an agreed appliance protocol before a signed configuration can drive the
+helper. **Amendments required:** the proposal supplies the requested separation
+of content, transport and recovery, but its approval and trust-provisioning
+mappings are still explicitly unresolved. The choices agreed below are the
+profile for a revised artifact, not acceptance of this complete edition or
+permission to connect real consumers. No new owner build question is needed.
+
+Reviewed artifact: `waitron-a951-appliance-v1`, `proposal-2026-10-23.1`, at
+[Waitron `c962f4e1c31cc6b325e41bc57ac3dd47306e073b`](https://github.com/clintongormley/waitron/blob/c962f4e1c31cc6b325e41bc57ac3dd47306e073b/docs/superpowers/specs/2026-10-23-a951-appliance-v1-proposal.md).
+Its normative review-content SHA-256 is
+`fede39bb64077167f145c942cc63599526ab48fae0274e4cc0b8a4e6efcca728`, using
+its exact BEGIN/END boundary. Its complete publication SHA-256 is
+`f97dbc1864e37911ecb9d16dd87b436d729fd43bbef220633c3b09cae7c93fb0`.
+Neither is an acceptance digest. Accepted appliance digest: **NONE**; accepted
+Waitron executable consumer: **NONE**; accepted Cloud executable consumer:
+**NONE**; qualified runtime pair: **NONE**.
+
+Full source comparison pins are Cloud
+`1dc34b2e460ffcbf110fd11c9768d68a8704c0e9` and Waitron foundation
+`72aed2e21705c9d02b6beda5ef248410ffc9b73a`. These identify existing code,
+not implementations of the proposed actions. The Cloud machine verifier's
+closed action list does not include any `appliance-*` action. Its 12,000-character
+payload cap, 4,096-code-unit lease/body caps, machine signature and control lease
+remain compatibility constraints; the proposal adds stricter appliance byte
+checks without enlarging those existing limits. The gateway manifest still has
+its own audience, sequence and address model. Do not feed appliance content into
+that verifier or reinterpret an installation revision as a content/grant counter.
+
+#### Appliance checklist: Cloud's item-by-item answer
+
+| Proposal checklist item | Disposition and next action |
+| --- | --- |
+| Exact artifact, bounds, vectors and consumer pins | Return a revised edition after the amendments below. Agree the closed canonical encoding, all seven named POST actions, request/response/grant/trust domains and purpose-separated Ed25519 keys as the proposed profile. Agree its three independent installation/content/grant counters, separate request/report/trust/epoch floors, same-content renewal and certificate-specific projection. Preserve staff-v1 bytes, test-only scope and limits. No complete artifact or executable pair is accepted yet. |
+| Before T1 codec code | Agree the fixed single-endpoint/cell/gateway/placement topology, exact content and binding types, UUID-to-32-hex node conversion when authenticated, SPKI-derived machine identity, local-only private keys and refused moves/replacements. Resolve the actual registration-to-local-node record, Permit approval channel, peer-registry provenance and issuer custody in the mapping amendment below before affected adapters. A matching spelling or machine proof alone is insufficient. |
+| Before T2 state code | Agree HIGH WATER recovery as a closed-state operation that preserves every authenticated surviving maximum and complete trust-key history. Agree permanent retired/revoked-key records, refusal when complete evidence is lost, no missing-file bootstrap, and separate lasting stops and temporary closure. Return the exact helper/safety amendment below; no recovery result or higher counter clears a local stop. Preserve archive exclusions and independent ordinary local CA recovery. |
+| Before T5 reconciliation code | Agree the eight-result request/report caches with independent permanent floors, one durable latest-fetch slot, exact predecessor supersession, signed status results, unknown rather than absent after eviction, and save-before-effect/report order. Use short control/apply locks; no network/helper wait inside them. Add the stated failing/passing/guard-removal cases, including stale replies, stop/reconnect races, recovery-history loss and equal-content CSR preservation. The expanded fixture corpus below must make these obligations executable. |
+| Separate helper and routing agreements | Correct the proposal's blanket statement that helper acceptance remains open. D130 accepted the exact helper engineering profile for isolated T3 implementation after E's matching acceptance and plan amendment. It did not accept the new appliance-to-helper mappings here. D130 also accepted the 83-byte empty manifest; full routing still needs its two returned amendments. Neither acceptance changes silently through this appliance document. |
+| G2 through G7 and processing gates | Keep the actual A947 current-authority mapping and withdrawal rules, G3 staff client policy, G4 independent public-upstream issuer/mTLS/exchange, G5 movement/replacement, G6 parser/diagnostic/privacy and G7 executable/host/device/origin evidence open for their affected paths. Keep A980/D101 processing/access/destination/retention agreements open, including staff metadata. A lifecycle report is no permission to export it. |
+| Allowed present scope | Documentation revisions and already authorised isolated foundation fixtures with explicit injected policy only. Keep real admission closed, production customer routes empty and `.local` independent. D130's separately accepted isolated helper work retains its own scope. No customer adapter, deployment, provider/host operation, publication/pause control, move, replacement or fiscal change is authorised here. Preserve historical spec/plan bodies and record focused amendments through E's driver. |
+
+Agree every numerical bound in the proposal's section 6 as a requirement for the
+revised fixture profile, with no measured runtime claim: 16,384-byte outer
+request; 12,000-character payload; 4,096-code-unit lease/body and 4,096-byte body;
+32,768-byte response, 16,384-byte decoded payload, 4,096-byte content/trust and
+2,048-byte grant; depth 12, 256 members, arrays 16 with the stated exceptions,
+1,024-byte ordinary strings; eight request results, eight report results, one
+pending report, 256 KiB journal and 64 KiB safety. Agree the 5,000/10,000/5,000 ms
+connect/complete-response/request-read deadlines, 60/IP and 30/installation per
+minute limits, local ten/minute burst two and one in flight. These are bounds,
+not a promise that every maximally populated nested object fits; refuse the
+complete escaped envelope when any enclosing cap is exceeded.
+
+Agree 60,000 ms healthy refresh plus 0–10,000 ms jitter; retry base
+`min(60000,5000*2^min(attempt,4))`, 0–1,000 ms jitter, integer Retry-After 5–60
+seconds, maximum total delay 61,000 ms and attempt saturation 16. Agree the
+600,000 ms grant/overlap bounds, 30,000 ms wall uncertainty, 1,000 ms backward
+clock/closure/reserve bounds, 5,000 ms observations, 1,000 ms polling,
+100 ms independent checks and 1,000/2,000/500 ms helper deadlines. Agree section
+3's 86,400,000 ms trust lifetime, 2,592,000,000 ms key validity, eight bundle
+entries, two active keys per purpose and 256 lifetime key-history entries;
+agree section 8's 300,000 ms one-use Permit lifetime. Exhaustion refuses rather
+than evicts safety history. Trusted-time and host performance remain G7 inputs.
+
+#### Required revisions before appliance acceptance
+
+1. **Name the real approval and provisioning consumers.** Add a mapping table
+   for each establish/recover/reconnect approval: the current authenticated local
+   actor check, Cloud venue/installation permission check, trusted transport of
+   the decision, one-use decision storage, exact nonce/expiry binding and
+   revocation/race check at consumption. Cite both full source pins and the
+   relevant function/path, or mark a missing consumer as a named implementation
+   dependency. Registration or a caller-supplied `localApprovalRef` grants no
+   reconnect/recovery permission. Separately name who provisions and updates the
+   origin/root policy and fixed peer registry, how the authenticated registration
+   binds local venue/node/endpoint and how each response/grant/recovery private
+   key is kept separate from the root, machine, lease and certificate keys.
+   Return exact local records and positive/wrong-actor/wrong-binding vectors.
+   Do not invent a new UI or reuse a current endpoint without that agreement.
+2. **Amend helper custody and safety explicitly.** Publish a separately versioned
+   mapping amendment linked to D130's accepted helper digest. Specify the
+   verifier's production of closure-kind/cause records and complete trust
+   history, their root-owned storage and integrity checks, the helper's checks
+   before clearing a temporary closure, and how a latched stop consumes the
+   exact reconnect decision. Define the all-store save/crash reconciliation
+   order and demonstrate that the maximum permitted history plus every other
+   safety field fits each 64 KiB safety cap; otherwise refuse before growing
+   state and return an explicit amended bound for agreement. An intact reboot
+   may revalidate only with complete consistent state, fresh boot-bound
+   grant/time/G2/custody evidence and no latched stop. Damaged state takes the
+   separate recovery path; no counter increase substitutes for either proof.
+3. **Return a complete byte corpus.** Keep the printed B0/C0/Q0 and rejection
+   oracles, but add fully expanded machine, response, nested grant, root Trust,
+   Permit/result, Report and status fixtures with explicit test-only keys,
+   canonical bytes, hashes and signatures. Label synthetic-verifier fixtures
+   separately. Include equal-content renewal without CSR replacement, a signed
+   same-revision conflict, lost/expired fetch supersession, report eviction,
+   history union/reintroduction refusal, total-evidence loss and stop racing
+   reconnect. Both codecs must consume the same corpus at recorded executable
+   commits before a shared adapter is qualified. Templates with substituted
+   symbols and M0's deliberately invalid empty lease do not prove that exchange.
+4. **Carry the current agreement and owner direction forward.** Correct the
+   helper/routing dispositions as above and name the exact amended plan tasks
+   T1/T2/T5. Keep endpoint ID and actual current-authority target distinct. G2
+   reconciliation must use the owner's latest A1018 direction: after takeover,
+   M2 handles all AEAT communication, including returned M1 fiscal records and
+   outcomes. This appliance response implements no filing rule; D133 owns the
+   canonical handover correction after E publishes its revision. Do not take
+   authority or filing permission from the earlier D122 predecessor holds.
+
+The six printed canonical JSON literals, the duplicate-key rejection example,
+both document digests and the fixture clock arithmetic can be checked without
+an appliance implementation. Existing installation-proof and remote-access
+checks exercise their existing consumers only. No proposed codec, signature
+exchange, helper, kernel guard, approval channel or recovery protocol has been
+run or qualified by this response. Lane E returns the revised artifact/digest
+and focused plan/intake amendments; Lane G records its disposition and resulting
+full consumer pins before the affected adapters. Lane D retains deployment/D88.
+
 ## Exchanges to implement
 
 ### Agreed connection journey
