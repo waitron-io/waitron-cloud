@@ -26,6 +26,7 @@ jobs:
           persist-credentials: false
       - name: Exercise stale ownership under bounded CPU contention
         run: |
+          set -o pipefail
           mkdir -p diagnostics
           python3 -u - <<'PY' | tee diagnostics/native-linux.log
           from concurrent.futures import ThreadPoolExecutor, as_completed
