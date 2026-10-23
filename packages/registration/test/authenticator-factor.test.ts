@@ -1,7 +1,7 @@
 import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
-import {createHash, createHmac, randomUUID} from 'node:crypto';
-import {after, before, beforeEach, test} from 'node:test';
+import crypto, {createHash, createHmac, randomUUID} from 'node:crypto';
+import {after, before, beforeEach, mock, test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import {Pool} from 'pg';
 import {createSession, decryptFactorSecret, encryptFactorSecret, endSession, hashSecret, resolveSession, revokeAccountSession} from '@waitron-cloud/identity';
@@ -407,29 +407,50 @@ test('cross-account pending tokens cannot spend the other account attempt or pub
   assert.equal((await pool.query('SELECT attempts FROM cloud_factor_enrolments')).rows[0].attempts,0);
   assert.ok((await pool.query('SELECT secret_envelope FROM cloud_authenticator_factors')).rows.every(r=>!r.secret_envelope));
 });
-test('a password reset snapshot committed during password derivation cannot begin replacement',async()=>{
+for(const delayedObserver of [false,true]) test('a password reset snapshot committed during password derivation cannot begin replacement'+(delayedObserver?' with delayed observation':''),async()=>{
   await active();const a=await authority();await seedCode('A'.repeat(32));
   const resetHash=await hashSecret('reset-during-derivation-password');
   const name=`${schema}_derivation`,other=new Pool({connectionString:process.env.TEST_DATABASE_URL,
     options:`-c search_path=${schema} -c statement_timeout=10000`,application_name:name});
   const blocker=await pool.connect();let work:Promise<void>|undefined;
+  let releaseDerivation!:()=>void;
+  const resumeDerivation=new Promise<void>(resolve=>{releaseDerivation=resolve;});
+  let derivationFinished=false;
+  const original=crypto.scrypt;
+  const derivation=mock.method(crypto,'scrypt',function(...args:unknown[]) {
+    const callback=args.pop() as (...result:unknown[])=>void;
+    return Reflect.apply(original,crypto,[...args,(...result:unknown[])=>{
+      derivationFinished=true;
+      // Hold the real result until the observer and reset finish, so scheduling cannot erase their interleaving.
+      void resumeDerivation.then(()=>callback(...result));
+    }]);
+  } as typeof crypto.scrypt);
   try {
     await blocker.query('BEGIN');await blocker.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[accountId]);
     work=refused(store(keys,policy,other).begin({...a,proof:recovery('A'.repeat(32))}));
-    const {setTimeout:delay}=await import('node:timers/promises');let deriving=false;
+    let deriving=false,observationDelayed=false;
+    const observations:unknown[]=[];const observingAt=performance.now();let previous='';
     for(let i=0;i<200;i++) {
-      const rows=(await admin.query('SELECT state,query,wait_event_type FROM pg_stat_activity WHERE application_name=$1',[name])).rows;
+      const rows=(await admin.query('SELECT pid,state,query,wait_event_type,wait_event,query_start,state_change FROM pg_stat_activity WHERE application_name=$1',[name])).rows;
+      const signature=JSON.stringify(rows);
+      if(signature!==previous) {observations.push({poll:i,elapsedMs:performance.now()-observingAt,rows});previous=signature;}
+      if(delayedObserver && !derivationFinished && !rows.some(r=>r.wait_event_type==='Lock')) {await delay(1);continue;}
+      if(delayedObserver && derivationFinished && !observationDelayed) {await delay(50);observationDelayed=true;continue;}
       if(rows.some(r=>r.state==='idle in transaction' && r.query.includes('SELECT c.account_id, c.password_hash'))) {deriving=true;break;}
       if(rows.some(r=>r.wait_event_type==='Lock')) break;
       await delay(1);
     }
-    assert.ok(deriving,'must observe the password snapshot released while derivation runs, before the account lock');
+    assert.ok(deriving,'must observe the password snapshot released while derivation runs, before the account lock; '+JSON.stringify(observations));
     await blocker.query('UPDATE cloud_credentials SET password_hash=$1 WHERE account_id=$2',[resetHash,accountId]);
     await blocker.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1',[accountId]);
-    await blocker.query('COMMIT');await work;
+    await blocker.query('COMMIT');releaseDerivation();await work;
+    assert.equal(derivation.mock.callCount(),1,'management must verify the real password once');
     assert.equal((await factor()).version,1);assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_enrolments')).rows[0].count,'0');
     assert.equal((await pool.query('SELECT consumed_at FROM cloud_factor_recovery_codes')).rows[0].consumed_at,null);
-  } finally {await blocker.query('ROLLBACK');blocker.release();await work?.catch(()=>{});await other.end();}
+  } finally {releaseDerivation();derivation.mock.restore();
+    try {await blocker.query('ROLLBACK');}
+    finally {blocker.release();try {await work?.catch(()=>{});} finally {await other.end();}}
+  }
 });
 
 for(const waitAt of ['session lock','management write'] as const) test(`a TOTP window ending during the removal ${waitAt} preserves every management effect`,async()=>{
