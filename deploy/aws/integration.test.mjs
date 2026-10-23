@@ -105,7 +105,7 @@ test('AWS shell prepares tools, installs locked dependencies, checks guards and 
       '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--read-only',
       '--memory', '256m', '--cpus', '1', '--pids-limit', '32',
       '--mount', `type=bind,source=${root}/deploy/aws,target=/source,readonly`,
-      'waitron-cloud-aws-tools:1.11.0-aws6.42.0', 'tofu', 'fmt', '-check', '-recursive', '/source'],
+      'waitron-cloud-aws-tools:1.13.2-aws6.70.0', 'tofu', 'fmt', '-check', '-recursive', '/source'],
   ]);
   assert.match(await readFile(join(root, '.aws-check-logs/guards.log'), 'utf8'), /# tests 3\n# pass 3\n# fail 0/);
   assert.match(await readFile(join(root, '.aws-check-logs/suites.log'), 'utf8'), /Success! 2 passed, 0 failed/);

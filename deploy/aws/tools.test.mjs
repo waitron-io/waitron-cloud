@@ -89,8 +89,8 @@ import io
 fetch = runpy.run_path(sys.argv[1])['download']
 class Response(io.BytesIO):
     def geturl(self):
-        return 'https://releases.hashicorp.com/terraform-provider-aws/6.42.0/software.zip'
-url = 'https://releases.hashicorp.com/terraform-provider-aws/6.42.0/software.zip'
+        return 'https://releases.hashicorp.com/terraform-provider-aws/6.70.0/software.zip'
+url = 'https://releases.hashicorp.com/terraform-provider-aws/6.70.0/software.zip'
 ${body}
 `);
 }
@@ -186,12 +186,12 @@ copy = root/'prepare.py'
 shutil.copyfile(sys.argv[1], copy)
 archives = {}
 software = {}
-for name, member, data in [('tofu', 'tofu', b'tofu executable'), ('aws', 'terraform-provider-aws_v6.42.0_x5', b'provider executable')]:
+for name, member, data in [('tofu', 'tofu', b'tofu executable'), ('aws', 'terraform-provider-aws_v6.70.0_x5', b'provider executable')]:
     archive = root/(name+'.zip')
     with zipfile.ZipFile(archive, 'w') as package:
         package.writestr(member, data)
     address = 'https://releases.hashicorp.com/'+name+'.zip'
-    software[name] = {'version': '1.11.0' if name == 'tofu' else '6.42.0', 'platforms': {'arm64': {'url': address, 'sha256': hashlib.sha256(archive.read_bytes()).hexdigest(), 'member': member}}}
+    software[name] = {'version': '1.13.2' if name == 'tofu' else '6.70.0', 'platforms': {'arm64': {'url': address, 'sha256': hashlib.sha256(archive.read_bytes()).hexdigest(), 'member': member}}}
     archives[address] = archive
 (root/'tools-pins.json').write_text(json.dumps(software))
 prepare = runpy.run_path(str(copy))['prepare']
@@ -207,7 +207,7 @@ test('preparation installs the verified tools in the versioned offline mirror', 
 prepare(root/'tools', architecture='aarch64', fetch=fetch)
 assert (root/'tools/bin/tofu').is_file(), 'prepared tool was not installed'
 assert (root/'tools/bin/tofu').read_bytes() == b'tofu executable'
-provider = root/'tools/provider-mirror/registry.opentofu.org/hashicorp/aws/6.42.0/linux_arm64/terraform-provider-aws_v6.42.0_x5'
+provider = root/'tools/provider-mirror/registry.opentofu.org/hashicorp/aws/6.70.0/linux_arm64/terraform-provider-aws_v6.70.0_x5'
 assert provider.read_bytes() == b'provider executable'
 assert stat.S_IMODE(provider.stat().st_mode) == 0o755
 assert requests == ['https://releases.hashicorp.com/tofu.zip', 'https://releases.hashicorp.com/aws.zip']
@@ -282,14 +282,14 @@ test('preparation submits only the fixed software build context to Docker', asyn
   await prepareTools({ execute: async (file, args, options) => {
     calls++;
     assert.equal(file, 'docker');
-    assert.deepEqual(args.slice(0, 4), ['build', '--pull=false', '--tag', 'waitron-cloud-aws-tools:1.11.0-aws6.42.0']);
+    assert.deepEqual(args.slice(0, 4), ['build', '--pull=false', '--tag', 'waitron-cloud-aws-tools:1.13.2-aws6.70.0']);
     assert.equal(args.length, 5);
     context = args[4];
     assert.match(context, /cloud-aws-tool-build-/);
     assert.deepEqual((await readdir(context)).sort(), ['.dockerignore', 'Dockerfile', 'prepare.py', 'test-cli.tfrc', 'tools-pins.json', 'tools-requirements.txt']);
     const pins = JSON.parse(await readFile(join(context, 'tools-pins.json'), 'utf8'));
-    assert.equal(pins.tofu.version, '1.11.0');
-    assert.equal(pins.aws.version, '6.42.0');
+    assert.equal(pins.tofu.version, '1.13.2');
+    assert.equal(pins.aws.version, '6.70.0');
     assert.deepEqual(Object.keys(options.env).sort(), ['HOME', 'PATH']);
     assert.equal(options.timeout, 420_000);
     return { stdout: 'synthetic build completion', stderr: '' };
@@ -326,7 +326,7 @@ test('software build refuses a linked input before submitting a context', async 
 test('preparation CLI completes a pinned local software image', { timeout: 450_000 }, async () => {
   await execute(process.execPath, [fileURLToPath(new URL('./check.mjs', import.meta.url)), '--prepare-tools'],
     { timeout: 440_000, maxBuffer: 4 * 1024 * 1024, env: { PATH: process.env.PATH, HOME: process.env.HOME } });
-  const { stdout } = await execute('docker', ['image', 'inspect', 'waitron-cloud-aws-tools:1.11.0-aws6.42.0'],
+  const { stdout } = await execute('docker', ['image', 'inspect', 'waitron-cloud-aws-tools:1.13.2-aws6.70.0'],
     { timeout: 15_000, env: { PATH: process.env.PATH, HOME: process.env.HOME } });
   const [prepared] = JSON.parse(stdout);
   assert.match(prepared.Id, /^sha256:[a-f0-9]{64}$/);

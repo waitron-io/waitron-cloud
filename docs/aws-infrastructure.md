@@ -7,6 +7,18 @@ network connection and no host credentials or home-directory mount.
 
 Prepare the tools once, then run the canary and source-policy checks:
 
+The 23 October upgrade selects the current stable [OpenTofu release](https://github.com/opentofu/opentofu/releases/tag/v1.13.2)
+and [AWS provider release](https://github.com/hashicorp/terraform-provider-aws/releases/tag/v6.70.0).
+All four Linux archives were checked against the official checksum files. The
+root lockfiles were regenerated from `prepare.py`’s executable-only mirror of those
+same official provider archives, with checksums for both Linux architectures and
+macOS arm64. Use that exact prepared layout when regenerating them. Full-archive
+hashes include a licence file absent from the prepared directory; the default
+OpenTofu registry also returned different package hashes. Check that initialization
+accepts the prepared directory without rewriting a committed lock.
+Native macOS checks require macOS 13 or later and supply interim feedback only;
+qualify the pinned Docker workflow before finishing the infrastructure branch.
+
 ```sh
 node deploy/aws/check.mjs --prepare-tools
 pnpm --dir deploy/aws install --ignore-workspace --frozen-lockfile
@@ -17,7 +29,7 @@ node --test --test-concurrency=1 deploy/aws/*.test.mjs
 Preparation downloads software from PyPI and the official OpenTofu and HashiCorp release
 sites. The base image is fixed by its digest, an identifier for its exact contents.
 The parser and both dependencies have fixed versions and verified download hashes.
-OpenTofu 1.11.0 and AWS provider 6.42.0 use the archive checksums recorded in
+OpenTofu 1.13.2 and AWS provider 6.70.0 use the archive checksums recorded in
 `deploy/aws/tools-pins.json`. Preparation selects Linux ARM64 or AMD64 to match your
 Docker engine and refuses other architectures. It submits only the six named software
 build files to Docker, so ambient files cannot enter the build context.
@@ -25,7 +37,7 @@ build files to Docker, so ambient files cannot enter the build context.
 On success, the command prints:
 
 ```text
-Prepared software image waitron-cloud-aws-tools:1.11.0-aws6.42.0
+Prepared software image waitron-cloud-aws-tools:1.13.2-aws6.70.0
 ```
 
 The image contains an offline provider mirror, a local directory from which OpenTofu can
@@ -470,7 +482,7 @@ country account and region. The handoff returns those names and key references.
 
 Streams retain customer-provided server-side encryption, called SSE-C. Both
 stream buckets explicitly unblock it through `blocked_encryption_types = ["NONE"]`,
-as required by the [pinned provider's encryption configuration](https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.42.0/website/docs/r/s3_bucket_server_side_encryption_configuration.html.markdown).
+as required by the [pinned provider's encryption configuration](https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.70.0/website/docs/r/s3_bucket_server_side_encryption_configuration.html.markdown).
 Their policies require no KMS upload header. AWS documents that [replication
 preserves SSE-C without extra SSE-C permissions](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-config-for-kms-objects.html).
 No customer encryption key enters OpenTofu. The stream's bucket default is S3's
@@ -719,7 +731,7 @@ existing ID. A managed zone refuses destructive replacement and recursive
 record deletion. Referencing an existing zone does not import it into resource
 management. The public-name lookup must return the supplied ID; a mismatched ID
 refuses. Resolve duplicate public zones outside this change before adoption.
-The pinned provider's [zone lookup](https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.42.0/website/docs/d/route53_zone.html.markdown)
+The pinned provider's [zone lookup](https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.70.0/website/docs/d/route53_zone.html.markdown)
 requires a unique match. The module returns `dns = {zone_id, name, name_servers}`.
 
 Publish the country nameservers as an explicit protected handoff to the separate

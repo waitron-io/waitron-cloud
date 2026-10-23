@@ -11,7 +11,7 @@ const run = promisify(execFile);
 const image = `sha256:${'a'.repeat(64)}`;
 const config = `terraform {
   required_providers {
-    aws = { source = "hashicorp/aws", version = "6.42.0" }
+    aws = { source = "hashicorp/aws", version = "6.70.0" }
   }
 }
 locals { candidate = "reviewed" }
@@ -58,7 +58,7 @@ test('missing local tools refuse without a build or download', async (t) => {
     calls.push(args);
     throw new Error('No such image');
   } }), /--prepare-tools/);
-  assert.deepEqual(calls, [['image', 'inspect', 'waitron-cloud-aws-tools:1.11.0-aws6.42.0']]);
+  assert.deepEqual(calls, [['image', 'inspect', 'waitron-cloud-aws-tools:1.13.2-aws6.70.0']]);
 });
 test('suite inspects and executes one immutable tracked candidate with no ambient files', async (t) => {
   const { directory } = await fixture(t);
@@ -119,7 +119,7 @@ test('real offline driver executes a mocked plan and propagates a failed asserti
   const { directory } = await fixture(t);
   await writeFile(join(directory, 'canary/main.tf'), `terraform {
   required_providers {
-    aws = { source = "hashicorp/aws", version = "6.42.0" }
+    aws = { source = "hashicorp/aws", version = "6.70.0" }
   }
 }
 data "aws_region" "current" {}
@@ -162,8 +162,8 @@ test('missing named suite input refuses before parser or OpenTofu runs', async (
 test('runner retains a staged provider lockfile in the inspected snapshot', async (t) => {
   const { repo, directory } = await fixture(t);
   const lock = `provider "registry.opentofu.org/hashicorp/aws" {
-  version = "6.42.0"
-  constraints = "6.42.0"
+  version = "6.70.0"
+  constraints = "6.70.0"
   hashes = [
     "zh:5bcc36226fa5d8a3c37e41ac8cfd2b1eb73e7ae96f8418f6776dcaa16a987198",
     "zh:99564c99a0672b2a8b666ab2040f36a7c6f372fa79ac43a6657a54734e46fff8",
@@ -185,13 +185,13 @@ test('canary CLI runs the checked-in mocked region assertion', async () => {
 });
 
 for (const [label, declaration] of [
-  ['wrong provider', 'provider "example.invalid/untrusted/aws" { version = "6.42.0"\n hashes = ["zh:' + 'a'.repeat(64) + '"] }'],
+  ['wrong provider', 'provider "example.invalid/untrusted/aws" { version = "6.70.0"\n hashes = ["zh:' + 'a'.repeat(64) + '"] }'],
   ['wrong version', 'provider "registry.opentofu.org/hashicorp/aws" { version = "6.41.0"\n hashes = ["zh:' + 'a'.repeat(64) + '"] }'],
-  ['empty checksums', 'provider "registry.opentofu.org/hashicorp/aws" { version = "6.42.0"\n hashes = [] }'],
-  ['wrong constraints', 'provider "registry.opentofu.org/hashicorp/aws" { version = "6.42.0"\n constraints = ">= 6.42.0"\n hashes = ["zh:' + 'a'.repeat(64) + '"] }'],
-  ['unsupported fields', 'provider "registry.opentofu.org/hashicorp/aws" { version = "6.42.0"\n alias = "hidden"\n hashes = ["zh:' + 'a'.repeat(64) + '"] }'],
-  ['malformed checksum', 'provider "registry.opentofu.org/hashicorp/aws" { version = "6.42.0"\n hashes = ["unchecked"] }'],
-  ['multiple providers', 'provider "registry.opentofu.org/hashicorp/aws" { version = "6.42.0"\n hashes = ["zh:' + 'a'.repeat(64) + '"] }\nprovider "registry.opentofu.org/hashicorp/other" { version = "1.0.0" }'],
+  ['empty checksums', 'provider "registry.opentofu.org/hashicorp/aws" { version = "6.70.0"\n hashes = [] }'],
+  ['wrong constraints', 'provider "registry.opentofu.org/hashicorp/aws" { version = "6.70.0"\n constraints = ">= 6.70.0"\n hashes = ["zh:' + 'a'.repeat(64) + '"] }'],
+  ['unsupported fields', 'provider "registry.opentofu.org/hashicorp/aws" { version = "6.70.0"\n alias = "hidden"\n hashes = ["zh:' + 'a'.repeat(64) + '"] }'],
+  ['malformed checksum', 'provider "registry.opentofu.org/hashicorp/aws" { version = "6.70.0"\n hashes = ["unchecked"] }'],
+  ['multiple providers', 'provider "registry.opentofu.org/hashicorp/aws" { version = "6.70.0"\n hashes = ["zh:' + 'a'.repeat(64) + '"] }\nprovider "registry.opentofu.org/hashicorp/other" { version = "1.0.0" }'],
   ['unexpected block', 'run "hidden" { command = apply }'],
 ]) {
   test(`provider lock refuses ${label} before OpenTofu`, async (t) => {

@@ -144,7 +144,7 @@ test('indexed symlink metadata is refused even when its working file became regu
 });
 test('real parser checks the Git candidate while an ambient apply test stays outside it', async (t) => {
   const { aws } = await fixture(t);
-  await writeFile(join(aws, 'canary/main.tf'), `terraform { required_providers { aws = { source = "hashicorp/aws", version = "6.42.0" } } }
+  await writeFile(join(aws, 'canary/main.tf'), `terraform { required_providers { aws = { source = "hashicorp/aws", version = "6.70.0" } } }
 data "aws_region" "current" {}`);
   await writeFile(join(aws, 'canary/tests/canary.tftest.hcl'), 'mock_provider "aws" {}\nrun "candidate" { command = plan }');
   await writeFile(join(aws, 'canary/tests/ambient.tftest.hcl'), 'run "ambient" { command = apply }');

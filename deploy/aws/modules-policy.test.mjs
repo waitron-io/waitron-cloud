@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { checkSources } from './check.mjs';
 
-const versions = 'terraform { required_providers { aws = { source = "hashicorp/aws", version = "6.42.0" } } }';
+const versions = 'terraform { required_providers { aws = { source = "hashicorp/aws", version = "6.70.0" } } }';
 const child = `${versions}\ndata "aws_region" "current" {}`;
 const parent = `${versions}
 provider "aws" { alias = "primary" }
@@ -13,7 +13,7 @@ provider "aws" { alias = "backup" }
 module "child" { source = "../child"
  providers = { aws = aws.primary, aws.backup = aws.backup }
 }`;
-const aliasedChild = child.replace('version = "6.42.0"', 'version = "6.42.0", configuration_aliases = [aws.backup]')
+const aliasedChild = child.replace('version = "6.70.0"', 'version = "6.70.0", configuration_aliases = [aws.backup]')
   + '\ndata "aws_region" "copy" { provider = aws.backup }';
 const checks = `mock_provider "aws" { alias = "primary" }
 mock_provider "aws" { alias = "backup" }

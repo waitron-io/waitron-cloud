@@ -6,7 +6,42 @@
 
 **Architecture:** Keep AWS resources under `deploy/aws/`, behind a versioned, provider-neutral handoff to P1/P3/P7. Separate account administration, state custody, global infrastructure, country infrastructure and DNS delegation into independent roots, so routine country changes never need Organization administration. Primary regions have three independent network paths, management databases spanning availability zones, and one EKS cluster per cell; secondary regions hold recoverable encrypted copies with no running standby.
 
-**Tech stack:** OpenTofu 1.11.0, `hashicorp/aws` 6.42.0, Node 26 built-in tests, Docker for network isolation. Pin these initial versions and provider checksums; upgrades are deliberate changes, not floating CI downloads.
+**Tech stack:** OpenTofu 1.13.2, `hashicorp/aws` 6.70.0, Node 26 built-in tests, Docker for network isolation. Pin these initial versions and provider checksums; upgrades are deliberate changes, not floating CI downloads.
+
+**Deliberate tool upgrade, 2026-10-23 (D124).** The owner requested current stable
+releases. The official [OpenTofu release](https://github.com/opentofu/opentofu/releases/tag/v1.13.2)
+was published on 21 October and the [AWS provider release](https://github.com/hashicorp/terraform-provider-aws/releases/tag/v6.70.0)
+on 22 October (its changelog is dated 21 October). Reviewed all 27 stable OpenTofu
+releases after 1.11.0 through 1.13.2 and all 30 AWS releases after 6.42.0 through
+6.70.0, including the withdrawn 6.57.0 notice. The four Linux archive hashes come
+from the official release checksum files and were verified against downloaded bytes.
+
+OpenTofu's intervening changes fix mocked-provider cleanup, improve provider
+checksums and add instance overrides. The [1.12 changelog](https://github.com/opentofu/opentofu/blob/v1.12.9/CHANGELOG.md)
+and [1.13 changelog](https://github.com/opentofu/opentofu/blob/v1.13.2/CHANGELOG.md)
+identify these changes. Keep every explicit plan, provider-alias and assertion guard;
+no test-only apply or new experiment is enabled. The new macOS minimum is 13.
+WinRM removal and changed `base64gzip` bytes have no consumer in this infrastructure.
+
+Relevant AWS changes include the 6.43 alarm validation correction, S3 standalone
+configuration reconciliation in 6.46, backup-replication deletion fixes in 6.48,
+EKS schema additions and Route53 changes. The 6.68 availability-zone limit concerns
+RDS clusters; this plan uses DB instances. The 6.70 import-ID change concerns
+Route53 Domains delegation-signer records, which this plan does not declare.
+Do not enable new rotation, routing or experimental batched-read behaviour as part
+of the upgrade. AWS 6.52 restores debug request/response bodies; the runner still
+clears ambient logging and credentials and never loads live values for these tests.
+
+Regenerate all five root lockfiles with `tofu providers lock` against the same
+executable-only mirror that `prepare.py` constructs from the checksum-verified
+official HashiCorp archives. Include Linux amd64, Linux arm64 and native macOS
+arm64. Full-archive hashes include a licence file that the prepared directory does
+not contain; a read-only initialization check must accept the prepared layout without
+rewriting the lock. The default OpenTofu registry also returned different distribution
+hashes during this upgrade, so neither alternative lock is used for the pinned image.
+Keep the same exact provider constraints in every module and fixture. Native
+`fmt`, `validate` and mock plans are interim feedback while Docker is unavailable;
+the pinned image and current-head AWS workflow remain required before branch finish.
 
 **Spec:** [Approved production design](../specs/2026-10-22-cloud-production-deployment-design.md), especially sections 3, 4, 9, 10 and 12. Read the [seven-plan order](2026-10-22-cloud-production-deployment.md) alongside this plan; the owner's instruction makes P2 independent of P1's unfinished build.
 
@@ -205,11 +240,11 @@ Checked official documentation on 2026-10-22 for planning syntax and service sem
 - [OpenTofu 1.11 tests, provider mocks and alias maps](https://opentofu.org/docs/v1.11/cli/commands/test/) and [initialisation/backend controls](https://opentofu.org/docs/v1.11/cli/commands/init/): explicitly plan every run; aliases need their own mock binding.
 - [S3 backend locking/encryption](https://opentofu.org/docs/language/settings/backends/s3/): state custody uses encryption, versioning and native lockfiles; authorisation and restore are separate requirements.
 - [AWS NAT resilience](https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateway-basics.html) and [EKS managed node groups](https://docs.aws.amazon.com/eks/latest/userguide/managed-node-groups.html): use AZ-local outbound routes and explicit single-AZ groups.
-- [Pinned AWS provider RDS schema](https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.42.0/website/docs/r/db_instance.html.markdown), [RDS cross-region backups](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_ReplicateBackups.html) and [managed passwords](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html): distinguish Multi-AZ instances from clusters; region-pair listings do not qualify an engine/version/account.
-- [Pinned S3 encryption schema](https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.42.0/website/docs/r/s3_bucket_server_side_encryption_configuration.html.markdown) and [encrypted-object replication](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-config-for-kms-objects.html): preserve SSE-C and select destination KMS protection deliberately.
+- [Pinned AWS provider RDS schema](https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.70.0/website/docs/r/db_instance.html.markdown), [RDS cross-region backups](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_ReplicateBackups.html) and [managed passwords](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html): distinguish Multi-AZ instances from clusters; region-pair listings do not qualify an engine/version/account.
+- [Pinned S3 encryption schema](https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.70.0/website/docs/r/s3_bucket_server_side_encryption_configuration.html.markdown) and [encrypted-object replication](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-config-for-kms-objects.html): preserve SSE-C and select destination KMS protection deliberately.
 - [Pinned HCL parser](https://pypi.org/project/python-hcl2/8.1.4/): parse supported files with a real HCL2 parser without evaluating expressions.
 - [Secrets replication](https://docs.aws.amazon.com/secretsmanager/latest/userguide/replicate-secrets.html) and [KMS regional semantics](https://docs.aws.amazon.com/kms/latest/developerguide/multi-region-keys-overview.html): the selected regional re-encryption design needs secret-population and recovery evidence; do not infer that related KMS keys automatically configure replication policies.
 - [NLB health checks](https://docs.aws.amazon.com/elasticloadbalancing/latest/network/target-group-health-checks.html) and [budget notification policies](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-sns-policy.html): UDP services need a separate non-UDP health check; budget delivery needs explicit SNS/KMS authority.
-- [DNS delegation](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/CreatingNewSubdomain.html) and [account deletion behavior](https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.42.0/website/docs/r/organizations_account.html.markdown): parent NS changes and member-account removal are distinct administrative operations; lifecycle protection is necessary even with account closure disabled.
+- [DNS delegation](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/CreatingNewSubdomain.html) and [account deletion behavior](https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.70.0/website/docs/r/organizations_account.html.markdown): parent NS changes and member-account removal are distinct administrative operations; lifecycle protection is necessary even with account closure disabled.
 
 **Self-review against the approved spec (completed once):** Sections 4/10 map to Tasks 2–12 (separate accounts, DNS, global/country databases, storage and resilient infrastructure). Section 3's automation corrections are preserved without implementing P4/P5. Sections 5/9 map to explicit P1/P6 exclusions: no sandbox approval or one-writer proof is inferred from node replacement. Sections 11/12 map to cold copies and local-only execution. Five review risks have owning negative checks: alias/account confusion (2/12), AZ-local routing/database failure (4/6), broad or malicious grants (7/8/11), unrecoverable retained keys (7/8), and accidental live execution or destructive adoption (1/2/3/11). Remaining assumptions are Ireland for global copies, the proposed P1 roles/ports, provisional infrastructure retention/sizing, and unqualified provider versions/capacity. P3 supplies database users/schema separation; P7 supplies actual failover, outside monitoring and recovery proof. None blocks P2's independent mocked configuration checks.

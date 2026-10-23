@@ -127,10 +127,10 @@ def inspect(directory):
             require(set(lock) == {"provider"} and len(providers) == 1, "provider lock must contain only the AWS provider")
             address, body = providers[0]
             require(address == "registry.opentofu.org/hashicorp/aws", "provider lock source is not pinned AWS")
-            require(literal(body.get("version")) == "6.42.0", "provider lock version is not pinned AWS")
+            require(literal(body.get("version")) == "6.70.0", "provider lock version is not pinned AWS")
             require(set(body) <= {"version", "constraints", "hashes", "__is_block__"}, "provider lock contains unsupported fields")
             if "constraints" in body:
-                require(literal(body["constraints"]) == "6.42.0", "provider lock constraints are not pinned AWS")
+                require(literal(body["constraints"]) == "6.70.0", "provider lock constraints are not pinned AWS")
             hashes = body.get("hashes")
             require(isinstance(hashes, list) and hashes and all(
                 re.fullmatch(r"(?:zh:[a-f0-9]{64}|h1:[A-Za-z0-9+/]{43}=)", literal(value)) for value in hashes
@@ -156,7 +156,7 @@ def inspect(directory):
                         if name == "__is_block__":
                             continue
                         require(name == "aws" and literal(declaration.get("source")) == "hashicorp/aws"
-                                and literal(declaration.get("version")) == "6.42.0", "undeclared or unpinned provider source")
+                                and literal(declaration.get("version")) == "6.70.0", "undeclared or unpinned provider source")
                 for backend in terraform.get("backend", []):
                     require(set(backend) == {'"s3"'} and set(backend['"s3"']) <= {"__is_block__"}, "backend settings are forbidden")
             for kind in ("resource", "data"):

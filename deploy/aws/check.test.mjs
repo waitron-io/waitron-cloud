@@ -7,7 +7,7 @@ import { checkSources } from './check.mjs';
 
 const main = `terraform {
   required_providers {
-    aws = { source = "hashicorp/aws", version = "6.42.0" }
+    aws = { source = "hashicorp/aws", version = "6.70.0" }
   }
 }
 data "aws_region" "current" {}
@@ -95,7 +95,7 @@ test('dynamic provider binding is refused', async (t) => {
   await assert.rejects(checkSources(await fixture(t, { checks })), /provider binding/);
 });
 test('provider declaration aliases require mocks even if no resource selects them', async (t) => {
-  const config = main.replace('version = "6.42.0"', 'version = "6.42.0", configuration_aliases = [aws.backup]');
+  const config = main.replace('version = "6.70.0"', 'version = "6.70.0", configuration_aliases = [aws.backup]');
   await assert.rejects(checkSources(await fixture(t, { config })), /aws.backup.*mock/);
 });
 test('isolated_invocation uses only a disposable read-only source copy', async (t) => {

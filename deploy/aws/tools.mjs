@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const runProcess = promisify(execFile);
-export const toolsImage = 'waitron-cloud-aws-tools:1.11.0-aws6.42.0';
+export const toolsImage = 'waitron-cloud-aws-tools:1.13.2-aws6.70.0';
 
 export async function prepareTools({ execute = runProcess } = {}) {
   const context = await mkdtemp(join(tmpdir(), 'cloud-aws-tool-build-'));
