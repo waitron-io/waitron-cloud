@@ -27,3 +27,49 @@ test('browserFailureNamesItsPhaseWithoutExposingThePrivateLaunchError', async ()
   });
   assert.equal(launches, 1);
 });
+
+// Losing a reconnect marker would hide which unchanged browser operation refused.
+for (const step of ['reload', 'takings', 'overdue-empty', 'requests'])
+test('browserReconnectFailureIdentifies_' + step, async t => {
+  const events = new Map();
+  let reconnect = false, browserCloses = 0, contextCloses = 0;
+  const refuse = () => { throw Error('PRIVATE_RECONNECT_CANARY https://private.example/token'); };
+  const locator = selector => ({
+    locator: child => locator(child), first() { return this; }, or() { return this; },
+    async fill() {}, async click() {}, async isVisible() { return false; },
+    async waitFor() {
+      if (reconnect && (step === 'takings' && selector.includes('takings')
+        || step === 'overdue-empty' && selector.includes('overdue-empty'))) refuse();
+    },
+  });
+  const page = {
+    locator, on() {}, setDefaultTimeout() {}, async goto() {},
+    async reload() {
+      reconnect = true;
+      if (step === 'reload') refuse();
+      if (step === 'requests') {
+        // Keep a real drain input outstanding; only its clock is advanced.
+        events.get('request')({url: () => 'https://staff.generated.example.test/manage/', resourceType: () => 'document'});
+        let now = 0;
+        t.mock.method(Date, 'now', () => now += 4000);
+      }
+    },
+  };
+  const context = {
+    on: (name, listener) => events.set(name, listener), async newPage() { return page; },
+    async newCDPSession() { return {async send() {}, on() {}}; },
+    async close() { contextCloses++; },
+  };
+  const chromium = {async launch() { return {async newContext() { return context; }, async close() {browserCloses++;}}; }};
+  await assert.rejects(() => measureRemoteBrowser({chromium,
+    staffHostname: 'staff.generated.example.test', email: 'generated@example.test', password: 'generated'}), error => {
+    assert.equal(error.browserPhase, 'reconnect');
+    assert.equal(error.browserStep, step);
+    assert.equal(Object.prototype.propertyIsEnumerable.call(error, 'browserStep'), false);
+    assert.equal(error.message, 'Invalid cloud cost browser journey');
+    assert.doesNotMatch(error.stack, /PRIVATE_RECONNECT_CANARY|private\.example/);
+    return true;
+  });
+  assert.equal(browserCloses, 1, 'the failing journey still closes its browser');
+  assert.equal(contextCloses, 0, 'the successful close phase was never reached');
+});

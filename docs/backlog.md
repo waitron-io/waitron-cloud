@@ -1698,8 +1698,23 @@ notifications separately.
   generic refusal. Browser failures now retain a fixed phase through the generated
   child boundary, without printing launch errors, URLs or credentials. The complete
   seven-case journey passes locally; that pass does not identify the historical
-  failure. Capture the phase on recurrence and preserve every accounting, isolation,
-  cache and cleanup check.
+  failure. A later merge cost run
+  [40004973526](https://github.com/waitron-io/waitron-cloud/actions/runs/40004973526/job/120590562266)
+  refuses the successful journey during reconnect after 16,602.897 ms; all six
+  deliberate-fault journeys pass. Setup completed and the same tree passed all
+  seven cases in exact-head run `40003626992`. The historical operation and cause
+  remain unknown; the duration alone does not establish a timeout.
+  Reconnect failures now carry one of four fixed operation labels through the
+  generated child boundary: reload, takings, overdue-empty or requests. Controlled
+  failures exercise each browser operation, and a real child-process check carries
+  only the allowed labels into the parent refusal. Raw browser errors, URLs and
+  credentials stay out of the diagnostic. Run
+  `node --test scripts/cloud-cost/browser.test.mjs scripts/cloud-cost/browser-diagnostics.test.mjs`
+  to check the labels, redaction and unchanged failure cleanup. Every original
+  accounting, isolation, cache and cleanup check and deadline remains intact.
+  Capture an instrumented Linux recurrence before attributing the historical
+  cause. A passing unchanged repeat would not explain it. Local Docker-backed
+  qualification remains unavailable until Docker returns; CI runs the real journey.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.

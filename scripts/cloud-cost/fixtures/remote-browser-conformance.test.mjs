@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { generateKeyPairSync, randomBytes, randomUUID, createHash } from 'node:crypto';
 import {waitForGatewayReady} from '../remote-readiness.mjs';
 import * as journey from '../local.mjs';
+import {parseBrowserDiagnostics} from './browser-diagnostics.mjs';
 import { signManifest } from '../../../packages/remote-access/src/manifest.ts';
 
 const environment = { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' };
@@ -18,7 +19,7 @@ const run = (command, args) => {
     const failure = Error('Generated local gateway fixture failed');
     failure.journeyRefused = error.status === 1 && error.stdout?.length === 0
       && /Error: Invalid cloud cost browser journey/.test(error.stderr?.toString() ?? '');
-    failure.browserPhase = /(?:^|\n)cost_browser_phase=(options|meter|launch|context|login|dashboard|reconnect|logout|close|accounting|snapshot)\n/.exec(error.stderr?.toString() ?? '')?.[1];
+    Object.assign(failure, parseBrowserDiagnostics(error.stderr?.toString() ?? ''));
     throw failure;
   }
 };

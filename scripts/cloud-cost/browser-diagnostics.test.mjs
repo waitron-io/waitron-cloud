@@ -31,3 +31,47 @@ test('browserReporterReturnsTheUnchangedSuccessfulJourney', async () => {
   assert.equal(await helper.withBrowserDiagnostics(async () => result, value => messages.push(value)), result);
   assert.deepEqual(messages, []);
 });
+
+// Omitting a fixed reconnect operation loses it at the generated child boundary.
+for (const step of ['reload', 'takings', 'overdue-empty', 'requests'])
+test('browserReporterCarriesReconnectOperation_' + step, async () => {
+  const refusal = Error('PRIVATE_BROWSER_CANARY');
+  Object.defineProperties(refusal, {browserPhase: {value: 'reconnect'}, browserStep: {value: step}});
+  const messages = [];
+  await assert.rejects(helper.withBrowserDiagnostics(async () => {throw refusal;}, value => messages.push(value)), error => error === refusal);
+  assert.deepEqual(messages, ['cost_browser_phase=reconnect', 'cost_browser_step=' + step]);
+});
+
+test('browserReporterExcludesUnknownAccessorAndOutOfPhaseSteps', async () => {
+  let reads = 0;
+  const messages = [];
+  for (const refusal of [
+    Object.defineProperties(Error('PRIVATE'), {browserPhase: {value: 'reconnect'}, browserStep: {get() {reads++; throw Error('PRIVATE');}}}),
+    Object.assign(Error('PRIVATE'), {browserPhase: 'reconnect', browserStep: 'PRIVATE https://private.example'}),
+    Object.assign(Error('PRIVATE'), {browserPhase: 'login', browserStep: 'reload'}),
+  ]) await assert.rejects(helper.withBrowserDiagnostics(async () => {throw refusal;}, value => messages.push(value)), error => error === refusal);
+  assert.equal(reads, 0);
+  assert.deepEqual(messages, ['cost_browser_phase=reconnect', 'cost_browser_phase=reconnect', 'cost_browser_phase=login']);
+});
+
+// A real child process must carry only the fixed labels into the fixture's refusal.
+test('browserDiagnosticsSurviveTheRealChildBoundary', async () => {
+  assert.equal(typeof helper.parseBrowserDiagnostics, 'function');
+  const {spawnSync} = await import('node:child_process');
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', `
+    import {withBrowserDiagnostics} from './scripts/cloud-cost/fixtures/browser-diagnostics.mjs';
+    const error = Object.defineProperties(Error('PRIVATE_CHILD_CANARY'), {
+      browserPhase: {value: 'reconnect'}, browserStep: {value: 'overdue-empty'}});
+    await withBrowserDiagnostics(async () => {throw error;}, text => process.stderr.write(text + '\\n'));
+  `], {encoding: 'utf8'});
+  assert.equal(child.status, 1);
+  assert.equal(child.stdout, '');
+  assert.deepEqual(helper.parseBrowserDiagnostics(child.stderr), {browserPhase: 'reconnect', browserStep: 'overdue-empty'});
+  for (const text of ['cost_browser_phase=PRIVATE\ncost_browser_step=reload\n',
+    'prefix cost_browser_phase=reconnect\ncost_browser_step=reload\n',
+    'cost_browser_step=reload\n', 'cost_browser_phase=reconnect\ncost_browser_step=PRIVATE\n']) {
+    assert.equal(helper.parseBrowserDiagnostics(text).browserStep, undefined);
+    assert.doesNotMatch(JSON.stringify(helper.parseBrowserDiagnostics(text)), /PRIVATE/);
+  }
+  assert.deepEqual(helper.parseBrowserDiagnostics('cost_browser_phase=login\ncost_browser_step=reload\n'), {browserPhase: 'login', browserStep: undefined});
+});
