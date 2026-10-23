@@ -4,7 +4,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {promisify} from 'node:util';
 
 const execute=promisify(execFile);
-export async function buildFixtureImage(image:string,root:string,budgetMs=120000){
+export async function buildFixtureImage(image:string,root:string,budgetMs=120000,dockerfile:'Dockerfile'|'Worker.Dockerfile'='Dockerfile'){
  if(!Number.isInteger(budgetMs)||budgetMs<1||budgetMs>120000)throw Error('fixture_image.invalid_budget');
  const deadline=performance.now()+budgetMs;
  const remaining=()=>Math.ceil(deadline-performance.now());
@@ -24,5 +24,5 @@ export async function buildFixtureImage(image:string,root:string,budgetMs=120000
   }
  }
  // Acquisition and the single build share the existing two-minute setup budget.
- await docker('build','--pull=false','-q','-t',image,'-f',join(root,'packages/backups/test/container-fixture/Dockerfile'),root);
+ await docker('build','--pull=false','-q','-t',image,'-f',join(root,'packages/backups/test/container-fixture',dockerfile),root);
 }

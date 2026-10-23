@@ -40,12 +40,11 @@ let postgresAttempted=false;
 async function ready(){for(let n=0;n<100;n++){try{docker('exec',postgres,'pg_isready','-h','127.0.0.1','-U','postgres');return;}catch{await delay(100);}}throw Error('PostgreSQL restart timed out');}
 before(async()=>{
  originalUrl=process.env.TEST_DATABASE_URL;
- await buildFixtureImage(image,root);
+ await buildFixtureImage(image,root,120000,'Worker.Dockerfile');
  const listener=createServer();await new Promise<void>(resolve=>listener.listen(0,'127.0.0.1',resolve));const port=(listener.address() as {port:number}).port;await new Promise<void>(resolve=>listener.close(()=>resolve()));
  const password=randomUUID();postgresAttempted=true;
  docker('run','-d','--name',postgres,'-p',`127.0.0.1:${port}:5432`,'-e','POSTGRES_PASSWORD='+password,'postgres:18-alpine');
  await ready();process.env.TEST_DATABASE_URL=`postgres://postgres:${password}@127.0.0.1:${docker('port',postgres,'5432/tcp').split(':').at(-1)}/postgres`;
- docker('build','-q','-t',image,'-f',join(root,'packages/backups/test/container-fixture/Worker.Dockerfile'),root);
  const dir=await mkdtemp(join(tmpdir(),'outage-snapshot-'));
  try{const path=join(dir,'data.db'),db=new DatabaseSync(path);db.exec('CREATE TABLE proof(value TEXT)');db.close();bytes=await readFile(path);}finally{await rm(dir,{recursive:true,force:true});}
 },{timeout:150000});

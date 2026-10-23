@@ -2727,8 +2727,10 @@ notifications separately.
   visible and image cleanup still runs after container-removal failure.
   The readiness probe
   checks TCP because PostgreSQL's temporary initialization server already accepts
-  local sockets. Thirteen controlled acquisition/failure checks and the two unchanged
-  real outage/malformed-archive tests pass with the existing limits. This handles
+  local sockets. Fourteen controlled acquisition/failure checks and the two
+  real outage/malformed-archive tests pass with the existing limits and original
+  behavioral checks. The target-bound worker uses the same acquisition helper
+  with its own Dockerfile, building exactly once before PostgreSQL starts. This handles
   the local fixture failure; it does not fix Docker Hub's response or guarantee
   registry availability. Other backup fixtures still acquire their base inside
   their own build; extend this preparation helper there if acquisition fails.
