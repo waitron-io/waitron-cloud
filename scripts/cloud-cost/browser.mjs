@@ -8,7 +8,7 @@ const need = value => { if (!value) fail(); };
 // asset or background traffic, and neither sample establishes a monthly frequency.
 export async function measureRemoteBrowser(options) {
   let chromium, staffHostname, email, password;
-  let browser, meter, phase = 'options';
+  let browser, meter, step, phase = 'options';
   try {
     const keys = ['chromium', 'staffHostname', 'email', 'password'];
     need(options && Object.getPrototypeOf(options) === Object.prototype
@@ -84,8 +84,14 @@ export async function measureRemoteBrowser(options) {
     await drain(true); result.actions.push('dashboard-read');
     // A reload opens the dashboard from its real session cookie and browser cache.
     phase = 'reconnect';
-    await page.reload(); await page.locator('dashboard-overview-screen [data-test=takings]').waitFor();
-    await page.locator('dashboard-overview-screen [data-test=overdue-empty]').waitFor(); await drain(true);
+    step = 'reload';
+    await page.reload();
+    step = 'takings';
+    await page.locator('dashboard-overview-screen [data-test=takings]').waitFor();
+    step = 'overdue-empty';
+    await page.locator('dashboard-overview-screen [data-test=overdue-empty]').waitFor();
+    step = 'requests';
+    await drain(true);
     result.actions.push('browser-reconnect');
     phase = 'logout';
     await page.locator('[data-test=account-menu] button').first().click();
@@ -107,6 +113,7 @@ export async function measureRemoteBrowser(options) {
   } catch {
     const error = Error('Invalid cloud cost browser journey');
     Object.defineProperty(error, 'browserPhase', { value: phase });
+    if (phase === 'reconnect') Object.defineProperty(error, 'browserStep', { value: step });
     throw error;
   }
   finally { await browser?.close().catch(() => {}); await meter?.close().catch(() => {}); }
