@@ -317,8 +317,9 @@ Those checks require every owner's passed result, refuse a wrong recovery key an
 changed archive bytes, then verify the untouched original again. No activation is
 attempted. These local candidates remain unpublished and unqualified for release.
 The joint scenario now covers the v2 client, owner approval and target delivery.
-Separately authorised ordinary recovery and the remaining same-run refusal controls
-remain open. Earlier independent controls are not relabelled as part of this run.
+The same run now also restores its delivered archive through the separately
+authorised fixture below. Remaining refusal controls still prevent complete
+certification. Earlier independent controls are not relabelled as part of this run.
 
 You can qualify the separately authorised recovery fixture against the same image:
 
@@ -339,12 +340,26 @@ start at 1 and the database holds two fiscal allocations. A wrong node key and a
 valid key without module preparation both refuse and preserve the destination.
 No venue server starts, and generated keys stay inside the disposable container.
 
-This fixture qualification is separate from the scoped worker and Cloud recovery
-scenario. It does not supply a controller receipt or complete the joint gate.
-The joint scenario still needs this authorised source and its exact preparation
-through publication, admission and v2 delivery in one run. Its receipt must also
-distinguish the verifier's non-activation from the separately authorised ordinary
-restore's fiscal activation. The existing incomplete refusal receipt stays unchanged.
+You can check the private delivery handoff, including changed bytes, a wrong
+archive key and a wrong reported digest, with:
+
+```sh
+TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
+  node --test deploy/test-cloud/verifier-authorised-delivery.test.mjs
+```
+
+The joint scenario now uses that same authorised source. Its capture container
+has no network. It waits while Cloud signs the publication, verifies the archive,
+admits the result and delivers the selected point through the pinned compiled
+v2 client. Only those independently delivered bytes and their archive key return
+through a private pipe. The fixture checks them against its capture before it
+prepares ordinary recovery. No fiscal authority enters the verifier or the client.
+
+The receipt keeps the unchanged no-authority `FISCAL_RESTORE` result and adds
+`authorisedRecovery` for the same run, point, attempt, digest and size. That object
+records the separate ordinary fiscal activation, its retained counters and both
+authority refusals. Cloud still reports no restored installation or route movement.
+This milestone does not complete the remaining refusal and release gates.
 
 The current producer writes a version 2 receipt from the scenario's actual committed
 request, result, selected recovery attempt and client assertions. It emits the receipt

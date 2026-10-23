@@ -23,7 +23,7 @@ function equal(value,expected,label){assert.deepEqual(value,expected,label);}
 
 // Incomplete evidence is inspectable, but the default release check never accepts it.
 export function verifyBackupVerifierProof(value,{requireComplete=true}={}){
- exact(value,'version,runId,cloudHead,cloudTree,cloudDirty,waitronTarget,candidateImage,publication,archive,continuous,phases,verification,admission,recovery,cleanup');
+ exact(value,'version,runId,cloudHead,cloudTree,cloudDirty,waitronTarget,candidateImage,publication,archive,continuous,phases,verification,admission,recovery,cleanup'+(Object.hasOwn(value,'authorisedRecovery')?',authorisedRecovery':''));
  equal(value.version,2,'legacy proof cannot certify bound verification');identifier(value.runId);
  assert(commit.test(value.cloudHead)&&commit.test(value.cloudTree)&&typeof value.cloudDirty==='boolean','Cloud source identity required');
  equal(readVerificationTarget(JSON.stringify(value.waitronTarget)),pinned,'complete pinned Waitron target required');
@@ -84,6 +84,20 @@ export function verifyBackupVerifierProof(value,{requireComplete=true}={}){
   equal(recovery.ordinaryRestore==='executed',states.recovery==='executed','ordinary restore phase mismatch');
   if(recovery.ordinaryRestore==='FISCAL_RESTORE')equal(value.phases.find(p=>p.name==='recovery').reason,'FISCAL_RESTORE','fiscal refusal must be explicit');
  }else assert(!['approval','read','placement','recovery'].some(name=>states[name]==='executed'),'executed recovery phases need bound recovery evidence');
+ if(Object.hasOwn(value,'authorisedRecovery')){
+  const authorised=value.authorisedRecovery;
+  exact(authorised,'runId,archiveSha256,archiveBytes,pointId,attemptId,client,ordinaryActivation,routeMoved,cloudReportedRestored,delivery,ordinaryRestore,refusals');
+  assert(admission&&recovery,'authorised recovery requires the same admitted delivery');
+  equal(authorised.runId,value.runId,'authorised recovery cannot borrow another run');
+  equal(authorised.archiveSha256,archive.sha256,'authorised archive mismatch');equal(authorised.archiveBytes,archive.bytes,'authorised archive size mismatch');
+  equal(authorised.pointId,archive.pointId,'authorised point mismatch');equal(authorised.attemptId,admission.attemptId,'authorised attempt mismatch');
+  equal(authorised.client,'pinned-compiled-waitron','authorised recovery requires the real client');
+  equal(authorised.ordinaryActivation,'executed-with-separate-authority','ordinary activation must be distinguished from verification');
+  equal(authorised.routeMoved,false,'authorised fixture grants no route movement');equal(authorised.cloudReportedRestored,false,'authorised fixture cannot report Cloud activation');
+  equal(authorised.delivery,{sha256:archive.sha256,bytes:archive.bytes,source:'private-delivery',matchedCapture:true},'authorised recovery requires exact delivered bytes');
+  equal(authorised.ordinaryRestore,{exit:0,preparationBoundToRecapture:true,retiredCounters:[123,123,123],activeCounters:[1,1,1],allocations:2},'authorised fixture restore invariant failed');
+  equal(authorised.refusals,{wrongNodeKey:{exit:1,code:'promotion.break_glass_invalid',destinationPreserved:true},missingPreparation:{code:'sif.allocation_invalid',reason:'outside_confirmation_missing',destinationPreserved:true}},'separate authority refusals required');
+ }
  exact(value.cleanup,'confirmed,containers,volumes,networks,directories');equal(value.cleanup.confirmed,true,'owned cleanup must be confirmed');
  for(const name of ['containers','volumes','networks','directories'])equal(value.cleanup[name],0,'owned resources remain');
  if(requireComplete)assert(complete,'joint backup verification and recovery proof is incomplete');

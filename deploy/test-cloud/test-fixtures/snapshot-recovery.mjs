@@ -35,7 +35,7 @@ if(phase==='start'){
   assert.equal(archive.managedCloud.pointId,input.pointId);assert.equal(archive.snapshotVerification.target.digest,currentBackupVerificationTarget().digest);
   assert.equal(archive.artifact.length,input.bytes);assert.equal(createHash('sha256').update(archive.artifact).digest('hex'),input.digest);
   assert.equal(await absent('venue/venue.db'),true);assert.equal(await absent('restore-request.json'),true);
-  return{independentDigest:true,prePlacement:true};
+  return{independentDigest:true,prePlacement:true,privateDelivery:{archive:Buffer.from(archive.artifact).toString('base64'),recoveryKey:archive.recoveryKey,digest:input.digest}};
  },input.pointId);
  assert(actions.includes('info'));assert(actions.includes('read'));
  console.log(JSON.stringify({...checked,client:'pinned-compiled-waitron',targetDigest:currentBackupVerificationTarget().digest,actions}));
