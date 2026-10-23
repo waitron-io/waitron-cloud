@@ -25,8 +25,12 @@ fresh-context review of the plan against the spec before any implementer starts.
 P1 and P2 can start now. P3 starts when the migration slot frees, so P4 and P5 run beside it.
 P6's revised [joint handover direction](../../waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018)
 is agreed by Cloud, replacing #300's rejected stop-proof direction. Waitron asks the
-one owner design question; detailed wire formats, build authority and runtime checks
-remain pending. P7 never treats a regional outage as a venue emergency declaration.
+one short revised owner design question. After either takeover M2 alone handles
+AEAT, filing copied and returned old originals in their generating identities; M1
+transfers missing originals, all received outcomes and uncertainties without AEAT
+contact. No emergency predecessor ownership hold blocks M2; temporary per-chain
+apply pauses and unresolved filing-case holds remain. Detailed wire formats, build
+authority and runtime checks remain pending. P7 never treats a regional outage as a venue emergency declaration.
 
 ## Who builds it
 
