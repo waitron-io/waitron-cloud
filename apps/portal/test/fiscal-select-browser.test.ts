@@ -69,6 +69,12 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         assert.equal(await mode.inputValue(), 'initial-setup');
         assert.equal(await mode.locator('option:checked').textContent(), c.fiscalSetup);
       });
+      await page.evaluate(() => { (window as any).app.waiting = true; (window as any).app.draw(); });
+      for (const [selector, expected] of [[organisation, second], [venue, input.venueId], [mode, 'initial-setup']] as const) {
+        assert.equal(await selector.isDisabled(), true);
+        assert.equal(await selector.inputValue(), expected);
+      }
+      await page.evaluate(() => { (window as any).app.waiting = false; (window as any).app.draw(); });
       if (process.env.FISCAL_PORTAL_RECEIPT_DIR) {
         await mkdir(process.env.FISCAL_PORTAL_RECEIPT_DIR, { recursive: true });
         await page.screenshot({ path: `${process.env.FISCAL_PORTAL_RECEIPT_DIR}/${locale}-${theme}-${width}-selectors.png`, fullPage: true });
@@ -83,6 +89,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(await page.evaluate(() => (window as any).app.fiscal.selection.mode), 'recovery');
       await mode.selectOption('initial-setup');
       assert.equal(await mode.inputValue(), 'initial-setup');
+      assert.equal(await page.evaluate(() => (window as any).app.fiscal.selection.mode), 'initial-setup');
       await organisation.selectOption(first);
       assert.equal(await organisation.inputValue(), first);
       assert.equal(await venue.inputValue(), '');
@@ -96,6 +103,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(await page.evaluate(() => (window as any).app.fiscal.selection.venueId), first);
       await venue.selectOption('');
       assert.equal(await venue.inputValue(), '');
+      assert.equal(await page.evaluate(() => (window as any).app.fiscal.venueId), undefined);
+      assert.equal(await page.evaluate(() => (window as any).app.fiscal.selection), undefined);
       assert.equal(await mode.count(), 0);
     } finally { await browser.close(); }
   });
