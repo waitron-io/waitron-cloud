@@ -723,3 +723,47 @@ plans check names, references, refusals and policy declarations. They cannot
 prove nameserver ownership from an external handoff, public DNS propagation,
 registrar custody or live IAM enforcement. Verify those separately before any
 provider operation.
+
+## Bind each deployment root to its own account
+
+A correct region is not enough to identify a deployment. Before a root can hand
+references to a workload, you must supply its expected account and the exact
+role for each provider. The independent `global` and `country` roots check
+those bindings against all four provider identities and regions:
+
+```sh
+node deploy/aws/check.mjs --suite integration
+node --test deploy/aws/provider-bindings.test.mjs
+```
+
+Each root currently runs 27 mocked admission plans. This checkpoint covers
+provider admission only. Module composition and the complete
+`infrastructure_v1` output remain unfinished. The current
+`deployment_admission` output contains only version, scope, country and region
+metadata; do not pass it to P1 as an infrastructure handoff.
+
+For the global root, supply exactly `global`, `global_backup`, `global_keys`
+and `global_backup_keys` in `bindings`. Spain instead takes `country`,
+`country_backup`, `country_keys` and `country_backup_keys`; it needs no global
+account input. Every entry contains `expected_identity` and `role_arn`. All
+four entries in a root name the same account. Deployment aliases assume
+`waitron-<scope>-deployment`; key aliases assume
+`waitron-<scope>-key-administration`, where `<scope>` is `global` or `es`.
+The regions are fixed to Frankfurt/Ireland and Madrid/Paris respectively.
+
+Keep these bindings and live backend settings outside Git. Each provider
+allows only the expected account, and the plans independently check its
+reported account and region. The tests use synthetic identities, not AWS
+credentials. They cannot prove who may assume a role or what its effective
+permissions allow. The new roots contain no workload modules or resources yet.
+
+Each cell has its own workload roles and identity provider. The current
+version 1 handoff has one role reference per service, so one object cannot
+name several cells' different roles. The integration default is an export
+named `infrastructure_v1_by_cell`: each entry will be one complete, unchanged
+version 1 object containing exactly the named cell and its matching roles.
+P1's planned single-object input keeps the same shape: callers select an exact
+cell entry.
+Schema fixtures accept this representation for two cells in either scope.
+The real export, selection checks and resource composition remain unbuilt;
+no new schema or runtime consumer is qualified by that fixture check.
