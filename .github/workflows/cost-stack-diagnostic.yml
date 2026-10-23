@@ -1,0 +1,35 @@
+name: Cost-stack interruption investigation
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/cost-stack-diagnostic.yml'
+permissions:
+  contents: read
+  packages: read
+jobs:
+  linux-recurrence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        observation: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Observe the original eight-case group on an independent Linux runner
+        run: pnpm test:cloud-cost:conformance --only stack-conformance.test.mjs --pattern '^genuine(?:LitestreamTransport|LitestreamStorage|StorageReplacement|NativeStreamHistories|SdkBulk|NativeVersionHistories|PinnedLitestream|NativeBatchListener)'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

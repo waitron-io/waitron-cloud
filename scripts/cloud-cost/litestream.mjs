@@ -118,6 +118,9 @@ const closeStages = new Set(['replication-transport', 'restore-transport', 'clea
 const closeReasons = new Set(['request-validation', 'lifetime-completion', 'body-accounting', 'transfer-interrupted',
   'upstream-error', 'upstream-response-interrupted', 'client-error', 'phase-change', 'active-close']);
 const networkErrors = new Set(['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'ERR_STREAM_PREMATURE_CLOSE']);
+const ioEvents = new Set(['request-pipeline', 'response-aborted', 'response-error',
+  'response-headers', 'response-pipeline', 'upstream-error', 'upstream-timeout', 'client-error']);
+const transportOperations = new Set(operations);
 const own = (value, key) => {
   try { return value && (typeof value === 'object' || typeof value === 'function')
     ? Object.getOwnPropertyDescriptor(value, key)?.value : undefined; }
@@ -142,6 +145,8 @@ export async function withLitestreamCloseDiagnostics({ stage, close, report = li
       if (Number.isSafeInteger(value) && value >= 0) diagnostic[key] = value;
     }
     const code = own(raw, 'code'); if (networkErrors.has(code)) diagnostic.code = code;
+    const ioEvent = own(raw, 'ioEvent'); if (ioEvents.has(ioEvent)) diagnostic.ioEvent = ioEvent;
+    const operation = own(raw, 'operation'); if (transportOperations.has(operation)) diagnostic.operation = operation;
     emit({ ...record, status: 'rejected', error: closeReasons.has(reason) ? 'transport-refused' : 'unclassified',
       ...(Object.keys(diagnostic).length ? { diagnostic } : {}) });
     throw error;
@@ -163,11 +168,11 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   const invocations = new Map(), pending = new Set(), connections = new Set();
   const idleWaiters = new Set();
   let completed = 0;
-  const remember = (reason, error) => {
-    refusal ??= { reason };
+  const remember = (reason, error, ioEvent, operation) => {
+    refusal ??= { reason, ...(ioEvent ? { ioEvent, operation } : {}) };
     if (refusal.reason === reason && !refusal.code && networkErrors.has(own(error, 'code'))) refusal.code = own(error, 'code');
   };
-  const poison = (reason, error) => { remember(reason, error); invalid = true; meter.invalidate(); };
+  const poison = (reason, error, ioEvent) => { remember(reason, error, ioEvent); invalid = true; meter.invalidate(); };
   const size = value => {
     requireThat(value === undefined || typeof value === 'string' && /^(0|[1-9]\d*)$/.test(value));
     const n = Number(value ?? 0); requireThat(Number.isSafeInteger(n)); return n;
@@ -198,11 +203,11 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     } catch { poison('request-validation'); if (id) pending.delete(id.key); source.resume(); destination.writeHead(400); destination.end(); return; }
     let bytesOut = 0, bytesIn = 0, expectedIn = 0, statusCode = null, responseHeaders, sent = false, received = false, settled = false;
     const responseChunks = lifetimes && ['delete-many', 'multipart-create', 'multipart-complete'].includes(name) ? [] : null;
-    const finish = (interrupted, reason = 'transfer-interrupted', error) => {
+    const finish = (interrupted, reason = 'transfer-interrupted', error, ioEvent) => {
       if (settled || !interrupted && (!sent || !received)) return;
       settled = true; pending.delete(id.key); completed++;
       // Lifetime refusal is a consequence of interrupted I/O; retain the original cause without changing invalidation.
-      if (interrupted) remember(reason, error);
+      if (interrupted) remember(reason, error, ioEvent, name);
       let completing = 'lifetime-completion';
       try {
         completeLifetime?.({ statusCode, bytesOut, interrupted, responseHeaders,
@@ -221,11 +226,11 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       }
     };
     const upstream = request(endpoint, { method: source.method, path: source.url, headers: source.headers }, response => {
-      response.once('aborted', () => remember('upstream-response-interrupted'));
-      response.on('error', error => remember('upstream-response-interrupted', error));
+      response.once('aborted', () => remember('upstream-response-interrupted', undefined, 'response-aborted', name));
+      response.on('error', error => remember('upstream-response-interrupted', error, 'response-error', name));
       try { statusCode = response.statusCode; responseHeaders = response.headers;
         expectedIn = source.method === 'HEAD' ? 0 : size(response.headers['content-length']); }
-      catch { finish(true); response.destroy(); destination.destroy(); return; }
+      catch (error) { finish(true, 'transfer-interrupted', error, 'response-headers'); response.destroy(); destination.destroy(); return; }
       destination.writeHead(statusCode, response.headers);
       const counter = new Transform({ transform(chunk, encoding, next) {
         bytesIn += chunk.length;
@@ -235,19 +240,20 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
         }
         next(null, chunk);
       } });
-      try { pipeline(response, counter, destination, error => { received = !error; finish(!!error); }); }
-      catch { finish(true); response.destroy(); destination.destroy(); }
+      try { pipeline(response, counter, destination, error => { received = !error; finish(!!error, 'transfer-interrupted', error, 'response-pipeline'); }); }
+      catch (error) { finish(true, 'transfer-interrupted', error, 'response-pipeline'); response.destroy(); destination.destroy(); }
     });
     connections.add(upstream); upstream.on('close', () => connections.delete(upstream));
-    upstream.setTimeout(30000, () => upstream.destroy());
-    upstream.on('error', error => { finish(true, 'upstream-error', error); destination.destroy(); });
+    let upstreamTimedOut = false;
+    upstream.setTimeout(30000, () => { upstreamTimedOut = true; upstream.destroy(); });
+    upstream.on('error', error => { finish(true, 'upstream-error', error, upstreamTimedOut ? 'upstream-timeout' : 'upstream-error'); destination.destroy(); });
     if (body) { bytesOut = body.length; upstream.end(body, () => { sent = true; finish(false); }); }
     else {
       const counter = new Transform({ transform(chunk, encoding, next) { bytesOut += chunk.length; next(null, chunk); } });
-      pipeline(source, counter, upstream, error => { sent = !error; finish(!!error); });
+      pipeline(source, counter, upstream, error => { sent = !error; finish(!!error, 'transfer-interrupted', error, 'request-pipeline'); });
     }
   });
-  server.on('clientError', (error, socket) => { poison('client-error', error); socket.destroy(); });
+  server.on('clientError', (error, socket) => { poison('client-error', error, 'client-error'); socket.destroy(); });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   return { url: `http://127.0.0.1:${server.address().port}`, whenIdle: async action => {
     requireThat(!invalid && !closing && typeof action === 'function');

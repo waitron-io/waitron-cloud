@@ -23,13 +23,14 @@ export { runLocal } from './run-local.mjs';
 const fail = () => { throw new Error('Invalid cloud cost local run'); };
 const requireThat = value => { if (!value) fail(); };
 const commandFailures = new WeakMap();
-function requireCommand(result) {
+function requireCommand(result, context = {}) {
   if (result.status === 0 && !result.error) return;
   const error = new Error('Invalid cloud cost local run');
   const code = result.error?.code;
   const diagnostic = { reason: ['EACCES', 'EPERM', 'ENOENT', 'ENOSPC', 'EIO', 'ETIMEDOUT', 'ECANCELED'].includes(code) ? code : 'command-exit' };
   if (Number.isSafeInteger(result.status) && result.status >= 0 && result.status <= 255) diagnostic.exitCode = result.status;
   if (['SIGTERM', 'SIGKILL', 'SIGABRT', 'SIGSEGV', 'SIGINT'].includes(result.signal)) diagnostic.signal = result.signal;
+  Object.assign(diagnostic, context);
   commandFailures.set(error, diagnostic);
   throw error;
 }
@@ -388,7 +389,27 @@ const lookup = host => new Promise(resolve => {
 function dockerRead(argv) {
   const result = spawnSync('docker', argv, { env: environment(), encoding: 'utf8',
     timeout: 15000, maxBuffer: 2 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
-  requireCommand(result);
+  if (result.status !== 0 || result.error) {
+    // Command output may contain credentials; retain only the known probe and bounded result fields.
+    const canary = argv[0] === 'exec' && argv[2] === 'node' && argv[3] === '-e' && argv[4] === outboundCanary;
+    const context = { command: canary ? 'outbound-canary' : argv[0] === 'exec' ? 'readiness-check'
+        : argv[0] === 'network' ? 'network-inspect' : 'container-inspect',
+      argv: canary ? ['exec', '<container>', 'node', '-e', '<outbound-canary>']
+        : argv[0] === 'exec' ? ['exec', '<container>', 'node', '<script>', 'check']
+        : argv[0] === 'network' ? ['network', 'inspect', '<network>'] : ['inspect', '<containers>'],
+      stderr: /Cannot find module|SyntaxError:|ReferenceError:|TypeError:/.test(result.stderr ?? '') ? 'node-runtime'
+        : /No such container|is not running/.test(result.stderr ?? '') ? 'container-state'
+        : /Cannot connect to the Docker daemon|Error response from daemon/.test(result.stderr ?? '') ? 'docker-daemon' : 'unclassified' };
+    if (canary) {
+      try {
+        const value = JSON.parse(result.stdout);
+        if (Number.isInteger(value.blockedConnections) && value.blockedConnections >= 0 && value.blockedConnections <= 3
+          && Number.isInteger(value.blockedDns) && value.blockedDns >= 0 && value.blockedDns <= 2 && typeof value.localControl === 'boolean')
+          context.canary = { blockedConnections: value.blockedConnections, blockedDns: value.blockedDns, localControl: value.localControl };
+      } catch { /* Unknown command output stays private. */ }
+    }
+    requireCommand(result, context);
+  }
   return JSON.parse(result.stdout);
 }
 export async function proveDockerIsolation(args) {
