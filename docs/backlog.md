@@ -4174,8 +4174,33 @@ child cleanup. Existing SIGINT and SIGTERM cleanup checks remain intact.
 Linux CI passed all seven remote-browser cases. Its trace records source fetch
 in 1.8 seconds, installation in 23.6 seconds and browser-image acquisition in
 32.8 seconds; no setup command timed out. Expected image-cache misses produce
-a failed inspect record followed by a successful pull. Archive downloads use a
-separate 120-second fetch limit and still lack progress records. Lane D must
+a failed inspect record followed by a successful pull. Archive downloads now report their phase, public URL, HTTP status, elapsed time
+and received bytes, with progress every ten seconds while waiting for headers or
+body data. Completion means the file passed its pinned checksum and was written;
+extraction retains its separate command trace. The 120-second download limit and
+checksum, cancellation and extraction checks stay unchanged. Controlled local HTTP
+checks cover success, refusal, damaged bytes, timeout, cancellation and interrupted
+bodies. These diagnostics exclude the process environment. Lane D must
 investigate a diagnostic recurrence at the named command before claiming a cause
 or changing a deadline. This passing run does not explain or repair the historical
 timeout. Local Docker-backed qualification remains unavailable while Docker is down.
+
+
+### Conformance image acquisition during D135 qualification
+
+[Cost run 39977546909, stack group 2/3](https://github.com/waitron-io/waitron-cloud/actions/runs/39977546909/job/120496895328)
+on `cb333018c1dabeb3a19a1ba10e156a5423b70214` verified both pinned archives
+and built its owned fixture image, then stopped before running a case.
+`docker pull node:26.11.1-slim` failed after 15,139 ms while Docker Hub's token
+endpoint did not return headers. Its trace names `image-acquisition`; both archive
+traces end in checksum-verified completion. The image-acquisition command is
+byte-identical to base `6c031499cdb19e038994c89a6725998b49ae608f`; the cause of
+the registry timeout remains unknown.
+
+The separate [image-acquisition repair](https://github.com/waitron-io/waitron-cloud/pull/328)
+landed at `1174f28cd4e98aa18212d6afca89233d3f8fef43`. Its controlled command
+checks cover the recorded transport refusal, bounded retries, terminal refusals
+and owned cleanup within one shared budget. Both exact-head and independent
+merge workflows passed all 214 conformance cases. This qualifies the handling;
+the original registry timeout's network cause remains unknown. D135 retains the
+archive diagnostics and requires fresh qualification on top of that repair.

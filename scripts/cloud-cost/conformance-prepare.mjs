@@ -7,6 +7,7 @@ import {createRequire} from 'node:module';
 import {createHash,randomUUID} from 'node:crypto';
 import {execFileSync,spawn} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
+import {downloadConformanceArchive} from './conformance-archive.mjs';
 
 const revision='fbadd15785464e59747e697c11048bfbc6e4938f';
 const repository=fileURLToPath(new URL('../..',import.meta.url));
@@ -86,12 +87,7 @@ export async function prepareConformance(selected) {
   };
   const docker=async(...args)=>(await run('docker',args,{encoding:'utf8',stdio:['ignore','pipe','inherit']})).trim();
   const archive=async(url,digest,path)=>{
-    const response=await fetch(url,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(120000)])});
-    if(!response.ok)throw Error('Fixture archive download failed');
-    const bytes=Buffer.from(await response.arrayBuffer());
-    controller.signal.throwIfAborted();
-    if(sha(bytes)!==digest)throw Error('Fixture archive digest mismatch');
-    writeFileSync(path,bytes);
+    await downloadConformanceArchive(url,digest,path,{signal:controller.signal,phase});
     await run('tar',['-xzf',path,'-C',join(path,'..')]);
   };
   const json=(name,value)=>{const path=join(root,name);writeFileSync(path,JSON.stringify(value),{mode:0o600});return path;};
