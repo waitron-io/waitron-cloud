@@ -156,6 +156,12 @@ bundle probe refused synthetic invalid bytes and a missing migration journal.
 The controller accepts the exact bound request in its dormant interface. It
 refuses mismatched cleanup, multiple same-token children, uncertain creation with
 no discoverable child, and malformed private journals.
+An unsuccessful create reply cannot prove that Docker will never create the child.
+With no exact child to remove, the controller retains its intent after the deadline
+and refuses restart. Do not delete that journal to resume work: a late child would
+lose its ownership record. When the exact child appears, restart can remove it and
+accept fresh work. Automatically settling a definitively rejected create remains
+a follow-up; an unresolved outcome can stop verification indefinitely.
 You can exercise the dormant Docker adapter with
 `pnpm --dir packages/backups exec node --test test/bound-container-verifier.test.ts`.
 It requires an immutable image ID and a matching controller scope. It checks the

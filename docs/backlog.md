@@ -1222,6 +1222,11 @@ notifications separately.
   stay unavailable and deployment enforcement stays off. The unavailable backup
   profile now has a private writable controller-state volume separate from its
   read-only configuration. It still receives no Docker socket.
+  An unsuccessful Docker create with no discoverable exact child retains its
+  private intent after expiry and blocks restart. A delayed exact child is reclaimed
+  before fresh work; an outcome that never resolves can stop verification indefinitely.
+  Define and qualify recovery from a definitive daemon rejection before relying on
+  automatic availability. Do not clear uncertain journals merely to resume work.
   Task 9 adds portal wording that separates checked data from activation and treats
   inconclusive checks as pending. The version 5 schema proof targets migrations
   42-to-43 with synthetic legacy history, recovery holds, external backup keys,
