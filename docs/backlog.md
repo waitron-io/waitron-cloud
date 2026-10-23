@@ -1602,6 +1602,14 @@ notifications separately.
   That diagnostic head changed no cost-model files relative to `5b709aa`.
   Its saved log has no underlying worker stage; the later bounded traces and
   separate startup correction do not establish that historical failure's cause.
+  The successful browser journey also refused in
+  [run 39890570428](https://github.com/waitron-io/waitron-cloud/actions/runs/39890570428/job/120209134728),
+  while all six deliberate-fault journeys passed. Its wrapper retained only the
+  generic refusal. Browser failures now retain a fixed phase through the generated
+  child boundary, without printing launch errors, URLs or credentials. The complete
+  seven-case journey passes locally; that pass does not identify the historical
+  failure. Capture the phase on recurrence and preserve every accounting, isolation,
+  cache and cleanup check.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.
@@ -2706,6 +2714,11 @@ notifications separately.
   and UI-smoke test executed. The public mirror can still fail; the existing
   supervisor must then refuse the install within its unchanged limits. The
   observed transfer bottlenecks do not establish the outside servers' cause.
+  [Run 39890570457](https://github.com/waitron-io/waitron-cloud/actions/runs/39890570457/job/120209180867)
+  later failed portal shard 2 before its tests: both bounded attempts could not
+  connect to Princeton at `128.112.18.21:443`. The other browser jobs installed.
+  The single-mirror availability risk remains open; no source, trust setting or
+  download limit changes with the backup-verification correction.
   The rewrite recognises the runner's current lowercase, whitespace-delimited
   URIs. Qualify compact Deb822 URI fields or capitalised hostnames before
   widening that support when a runner changes its source format.

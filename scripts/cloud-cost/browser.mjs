@@ -8,7 +8,7 @@ const need = value => { if (!value) fail(); };
 // asset or background traffic, and neither sample establishes a monthly frequency.
 export async function measureRemoteBrowser(options) {
   let chromium, staffHostname, email, password;
-  let browser, meter;
+  let browser, meter, phase = 'options';
   try {
     const keys = ['chromium', 'staffHostname', 'email', 'password'];
     need(options && Object.getPrototypeOf(options) === Object.prototype
@@ -18,9 +18,12 @@ export async function measureRemoteBrowser(options) {
     need(chromium && typeof chromium.launch === 'function'
       && typeof staffHostname === 'string' && /^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(staffHostname)
       && typeof email === 'string' && email.length > 0 && typeof password === 'string' && password.length > 0);
+    phase = 'meter';
     meter = await openRemoteMeasurement({ target: 'tcp://127.0.0.1:443', audience: 'staff' });
+    phase = 'launch';
     browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-background-networking',
       '--host-resolver-rules=MAP ' + staffHostname + ' 127.0.0.1:' + meter.port + ',MAP * ~NOTFOUND'] });
+    phase = 'context';
     const context = await browser.newContext({ ignoreHTTPSErrors: true, locale: 'en-GB', viewport: { width: 1280, height: 900 } });
     const result = { kind: 'pinned-waitron-browser-gateway', costMeasured: false, actions: [],
       requests: { document: 0, script: 0, stylesheet: 0, image: 0, font: 0, api: 0, eventsource: 0, other: 0 },
@@ -63,6 +66,7 @@ export async function measureRemoteBrowser(options) {
     const cdp = await context.newCDPSession(page); await cdp.send('Network.enable');
     const cached = new Set(); cdp.on('Network.requestServedFromCache', ({requestId}) => { cached.add(requestId); result.cachedRequests = cached.size; });
     page.on('pageerror', () => { result.pageErrors++; });
+    phase = 'login';
     await page.goto('https://' + staffHostname + '/manage/');
     const login = page.locator('dashboard-login-screen');
     await login.locator('wt-input[name=email] input').fill(email);
@@ -74,26 +78,36 @@ export async function measureRemoteBrowser(options) {
     await skip.or(page.locator('[data-test=account-menu]')).first().waitFor();
     if (await skip.isVisible()) await skip.click();
     await page.locator('[data-test=account-menu]').waitFor(); result.actions.push('sign-in');
+    phase = 'dashboard';
     await page.locator('dashboard-overview-screen [data-test=takings]').waitFor();
     await page.locator('dashboard-overview-screen [data-test=overdue-empty]').waitFor();
     await drain(true); result.actions.push('dashboard-read');
     // A reload opens the dashboard from its real session cookie and browser cache.
+    phase = 'reconnect';
     await page.reload(); await page.locator('dashboard-overview-screen [data-test=takings]').waitFor();
     await page.locator('dashboard-overview-screen [data-test=overdue-empty]').waitFor(); await drain(true);
     result.actions.push('browser-reconnect');
+    phase = 'logout';
     await page.locator('[data-test=account-menu] button').first().click();
     await page.locator('[data-test=logout]').click();
     await login.locator('wt-input[name=email] input').waitFor(); result.actions.push('sign-out');
     await drain(true); await page.goto('about:blank'); await drain(true);
+    phase = 'close';
     await context.close(); await browser.close(); browser = undefined;
     await Promise.all(pending);
     result.unfinishedStreamRequests = seen.size;
+    phase = 'accounting';
     need([...seen].every(req => group(req) === 'eventsource')
       && result.completedRequests + result.interruptedStreamRequests + result.unfinishedStreamRequests === Object.values(result.requests).reduce((a,b) => a+b, 0) && result.failedRequests === 0 && result.unexpectedResponses === 0
       && result.pageErrors === 0 && result.outsideRequests === 0);
+    phase = 'snapshot';
     await meter.close(); result.snapshot = meter.snapshot();
     need(result.snapshot.producer.bytesFromGateway > result.completedResponseBodyBytes && result.completedResponseBodyBytes > 0);
     return result;
-  } catch { fail(); }
+  } catch {
+    const error = Error('Invalid cloud cost browser journey');
+    Object.defineProperty(error, 'browserPhase', { value: phase });
+    throw error;
+  }
   finally { await browser?.close().catch(() => {}); await meter?.close().catch(() => {}); }
 }
