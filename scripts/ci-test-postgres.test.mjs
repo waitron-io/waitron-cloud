@@ -10,6 +10,7 @@ const launcher = new URL('./test-postgres.mjs', import.meta.url);
 const postgres = 'postgres:18-alpine';
 const mailpit = 'axllent/mailpit:v1.31.1';
 const transient = 'net/http: request canceled (Client.Timeout exceeded while awaiting headers)';
+const gatewayFailure = 'Error response from daemon: Head "https://registry-1.docker.io/v2/axllent/mailpit/manifests/v1.31.1": received unexpected HTTP status: 502 Bad Gateway';
 
 // Run the actual launcher; only external Docker and the requested package command are controlled.
 async function launch(t, scenario = {}) {
@@ -185,6 +186,37 @@ test('Mailpit image acquisition also recovers before either container starts', a
   assert.ok(result.calls.findIndex(call => call.command === 'run') > result.calls.findLastIndex(call => call.command === 'pull'));
   assert.equal(result.calls.filter(call => call.command === 'rm').length, 2);
 });
+
+for (const image of [postgres, mailpit]) {
+  test(`launcher recovers from a registry 502 for ${image} before creating containers`, async t => {
+    const result = await launch(t, {cached: [], failureImage: image, failures: [gatewayFailure]});
+    assert.equal(result.code, 0);
+    assert.equal(result.calls.filter(call => call.command === 'pull' && call.image === image).length, 2);
+    assert.ok(result.calls.findIndex(call => call.command === 'run') > result.calls.findLastIndex(call => call.command === 'pull'));
+    assert.equal(result.calls.find(call => call.command === 'pnpm')?.database, true);
+    const created = result.calls.filter(call => call.command === 'run').map(call => call.name);
+    assert.deepEqual(result.calls.filter(call => call.command === 'rm').map(call => call.name), created.toReversed());
+  });
+}
+
+test('three registry 502 responses exhaust acquisition before any container starts', async t => {
+  const result = await launch(t, {cached: [postgres], failureImage: mailpit,
+    failures: [gatewayFailure, gatewayFailure, gatewayFailure, gatewayFailure]});
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.filter(call => call.command === 'pull').length, 3);
+  assert.equal(result.failures.length, 1);
+  assert.equal(result.calls.some(call => ['run', 'pnpm', 'rm'].includes(call.command)), false);
+});
+
+for (const status of ['401 Unauthorized', '403 Forbidden', '404 Not Found', '429 Too Many Requests']) {
+  test(`launcher does not retry a registry ${status} response`, async t => {
+    const result = await launch(t, {cached: [postgres], failureImage: mailpit,
+      failures: ['received unexpected HTTP status: ' + status]});
+    assert.equal(result.code, 1);
+    assert.equal(result.calls.filter(call => call.command === 'pull').length, 1);
+    assert.equal(result.calls.some(call => ['run', 'pnpm', 'rm'].includes(call.command)), false);
+  });
+}
 
 test('an unavailable Docker daemon during inspection is not treated as a missing image', async t => {
   const result = await launch(t, {inspectFailure: 'Cannot connect to the Docker daemon'});
