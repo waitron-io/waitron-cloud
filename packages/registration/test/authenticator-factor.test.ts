@@ -413,16 +413,17 @@ for(const delayedObserver of [false,true]) test('a password reset snapshot commi
   const name=`${schema}_derivation`,other=new Pool({connectionString:process.env.TEST_DATABASE_URL,
     options:`-c search_path=${schema} -c statement_timeout=10000`,application_name:name});
   const blocker=await pool.connect();let work:Promise<void>|undefined;
-  const derived=Promise.withResolvers<void>(),original=crypto.scrypt;
+  let markDerived!:()=>void;
+  const derived=new Promise<void>(resolve=>{markDerived=resolve;}),original=crypto.scrypt;
   const derivation=mock.method(crypto,'scrypt',function(...args:unknown[]) {
     const callback=args.pop() as (...result:unknown[])=>void;
-    return Reflect.apply(original,crypto,[...args,(...result:unknown[])=>{derived.resolve();callback(...result);}]);
+    return Reflect.apply(original,crypto,[...args,(...result:unknown[])=>{markDerived();callback(...result);}]);
   } as typeof crypto.scrypt);
   try {
     await blocker.query('BEGIN');await blocker.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[accountId]);
     work=refused(store(keys,policy,other).begin({...a,proof:recovery('A'.repeat(32))}));
-    if(delayedObserver) {await derived.promise;await delay(50);}
-    const {setTimeout:delay}=await import('node:timers/promises');let deriving=false;
+    if(delayedObserver) {await derived;await delay(50);}
+    let deriving=false;
     const observations:unknown[]=[];const observingAt=performance.now();let previous='';
     for(let i=0;i<200;i++) {
       const rows=(await admin.query('SELECT pid,state,query,wait_event_type,wait_event,query_start,state_change FROM pg_stat_activity WHERE application_name=$1',[name])).rows;
