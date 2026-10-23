@@ -1,0 +1,82 @@
+name: Relay counter rollover checks
+on:
+  pull_request:
+    paths:
+      - 'packages/registration/src/relay-bounds.ts'
+      - 'packages/registration/src/relay-messages.ts'
+      - 'packages/registration/test/relay-control-migration.test.ts'
+      - 'packages/registration/test/relay-counter-rollover.test.ts'
+      - 'packages/registration/test/fixtures/relay-counter-rollover.ts'
+      - '.github/workflows/relay-counter-diagnostic.yml'
+permissions:
+  contents: read
+  packages: read
+jobs:
+  linux-counter-rollover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prove counter rollback, retry and deleted-guard refusal
+        run: |
+          mkdir -p diagnostics
+          node scripts/test-postgres.mjs exec python3 -u - <<'PYTHON'
+          from pathlib import Path
+          import json, subprocess, tempfile
+          def run(label, checkout):
+              result = subprocess.run(['node', '--test', '--test-reporter=tap', '--test-timeout=30000',
+                  '--test-name-pattern=migration setup survives a proved counter rollover',
+                  'packages/registration/test/relay-control-migration.test.ts'],
+                  cwd=checkout, capture_output=True, text=True, timeout=45)
+              Path('diagnostics', label + '.log').write_text(result.stdout + result.stderr)
+              print(json.dumps({'case': label, 'exit': result.returncode}), flush=True)
+              return result
+          baseline = run('baseline', Path.cwd())
+          if baseline.returncode:
+              print(baseline.stdout + baseline.stderr, flush=True)
+              raise SystemExit(1)
+          with tempfile.TemporaryDirectory(prefix='relay-counter-') as scratch:
+              candidate = Path(scratch) / 'candidate'
+              subprocess.run(['git', 'clone', '--quiet', '--no-hardlinks', '.', str(candidate)], check=True)
+              subprocess.run(['pnpm', 'install', '--frozen-lockfile', '--offline'], cwd=candidate, check=True)
+              path = candidate / 'packages/registration/src/relay-messages.ts'
+              original = path.read_text()
+              guard = "if(counterEnd.getTime()<=now)throw new RelayBoundsError('relay_unavailable',{cause:{kind:'relay_counter_expired',counterEndsAt:counterEnd.getTime(),observedAt:now}});"
+              assert original.count(guard) == 1, 'counter guard changed; review the experiment'
+              faults = [
+                  ('without-counter-guard', '', 'the deliberately expired admission is reported'),
+                  ('without-clock-evidence', "if(counterEnd.getTime()<=now)throw new RelayBoundsError('relay_unavailable');", 'relay_unavailable'),
+              ]
+              for label, replacement, expected in faults:
+                  try:
+                      path.write_text(original.replace(guard, replacement))
+                      result = run(label, candidate)
+                      assert result.returncode != 0 and expected in result.stdout + result.stderr, label + ': expected failure missing'
+                  finally:
+                      path.write_text(original)
+              restored = run('restored', candidate)
+              if restored.returncode:
+                  print(restored.stdout + restored.stderr, flush=True)
+                  raise SystemExit(1)
+          print('Counter guard and clock evidence faults caught; restored real-PostgreSQL check passes.', flush=True)
+          PYTHON
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: relay-counter-${{ github.event.pull_request.head.sha }}
+          path: diagnostics/
+          retention-days: 14
