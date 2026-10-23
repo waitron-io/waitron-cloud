@@ -4481,15 +4481,27 @@ checks run in GitHub CI while Docker is down locally.
 
 ## Cost-stack isolation command refusal (D152)
 
-The same job refused the later native-batch case during isolation, with command
-exit 1 after 1,043 milliseconds, before its workload. Treat this separately from
-the replication interruption until evidence links them. Failed inspection and
-outbound-probe commands now retain fixed command names, arguments with private
-identifiers and code replaced, a closed stderr category and bounded probe counts
-when available. Raw command output stays private. Controlled command refusals
-verify diagnostic handling and owned cleanup.
+The earlier native-batch case refused during isolation, with command exit 1 after
+1,043 milliseconds. An instrumented recurrence in [D163's exact-merge cost run
+40041135283, job 120712388129](https://github.com/waitron-io/waitron-cloud/actions/runs/40041135283/job/120712388129)
+refused the Litestream body-byte case before its workload: `outbound-canary`,
+exit 1 after 2,924 milliseconds, stderr category `container-state`. That category
+covers both a missing container and one that is not running. Neither record
+identifies the affected service or explains why its state changed.
 
-Use the next Linux diagnostic recurrence to distinguish a failed probe execution
-from an isolation refusal, then reproduce and fix the proved cause test-first.
-Every isolation check and deadline remains unchanged. Local Docker-backed checks
-are unavailable while Docker is down; GitHub CI supplies that qualification.
+A failed outbound command now inspects its previously validated container ID
+before cleanup. The report retains only the service role, a known state, running,
+exit code, out-of-memory, dead and restarting flags. Missing containers and
+unavailable or timed-out inspection have explicit categories. The extra read is
+limited to 1.5 seconds and 8 KiB; an inspection failure preserves the original
+refusal and owned cleanup. Raw errors, identifiers, paths and unknown fields
+stay private. Controlled Docker-free checks exercise these boundaries. A Linux
+case deliberately stops this invocation's storage service before its isolation
+command and checks both refusal and cleanup. Independent Linux observations
+also exercise the original eight-case group.
+
+The historical cause remains unknown. Use the next diagnostic recurrence to
+identify the service and state, reproduce its cause, then fix it test-first.
+Every isolation check and existing deadline remains unchanged. Local
+Docker-backed checks are unavailable while Docker is down; GitHub CI supplies
+that evidence.

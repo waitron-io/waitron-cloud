@@ -43,3 +43,28 @@ for (const field of ['connections', 'dns', 'control']) test(`an invalid canary $
   assert.equal(output.diagnostic.canary, undefined);
   assert.equal((result.stdout + result.stderr).includes('PRIVATE_CANARY'), false);
 });
+
+// Without the fresh read, a cleaned-up stopped container cannot be distinguished from a missing one.
+for (const [fault, expected] of [
+  ['state-exited', {role:'s3',status:'exited',running:false,exitCode:7,oomKilled:true,dead:false,restarting:false}],
+  ['state-missing', {role:'s3',inspection:'missing'}],
+  ['state-timeout', {role:'s3',inspection:'timeout'}],
+  ['state-throws', {role:'s3',inspection:'unavailable'}],
+  ['state-malformed', {role:'s3',inspection:'unavailable'}],
+  ['state-private', {role:'s3',inspection:'unavailable'}],
+]) test(`failed isolation retains fresh bounded container state before cleanup: ${fault}`, () => {
+  const result = spawnSync(process.execPath, [new URL('./fixtures/stack-startup-diagnostic-probe.mjs', import.meta.url).pathname, fault, 'false'], {encoding:'utf8',timeout:15000});
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.diagnostic.stage, 'isolation');
+  assert.equal(output.diagnostic.command, 'outbound-canary');
+  assert.equal(output.diagnostic.reason, 'command-exit');
+  assert.equal(output.diagnostic.exitCode, 1, 'the inspection must preserve the original command failure');
+  assert.deepEqual(output.diagnostic.container, expected);
+  assert.equal(output.removed, true, 'a diagnostic failure must not prevent owned cleanup');
+  assert.ok(output.events.indexOf('state') >= 0);
+  assert.ok(output.events.indexOf('state') < output.events.indexOf('report'));
+  assert.ok(output.events.indexOf('report') < output.events.indexOf('remove'));
+  assert.equal((result.stdout + result.stderr).includes('PRIVATE_CANARY'), false);
+  assert.ok(JSON.stringify(output.diagnostic).length < 512);
+});

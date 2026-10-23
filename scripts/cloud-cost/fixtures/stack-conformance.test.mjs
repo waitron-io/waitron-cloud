@@ -772,3 +772,27 @@ for (const [role, name, directory] of [['mailpit', 'mail.db', false], ['s3', 'st
     assert.deepEqual(scratch, { file: !directory, directory });
   });
 }
+
+
+// A real service exit must refuse admission and retain its state before owned cleanup removes it.
+test('stackReportsStoppedIsolationServiceBeforeRemovingItsResources', async t => {
+  const f = fixture(t), preparedPlan = local.prepareIsolatedStack(f);
+  const probeConfig = join(f.root, 'isolation-state-probe.json');
+  writeFileSync(probeConfig, JSON.stringify({...f, prepared:preparedPlan}), {mode:0o600,flag:'wx'});
+  const output = JSON.parse(execFileSync(process.execPath,
+    [new URL('./stack-isolation-state-probe.mjs', import.meta.url).pathname, probeConfig],
+    {encoding:'utf8',timeout:120000,stdio:['ignore','pipe','pipe']}));
+  assert.equal(output.interrupted, true);
+  assert.equal(output.diagnostic.stage, 'isolation');
+  assert.equal(output.diagnostic.command, 'outbound-canary');
+  assert.equal(output.diagnostic.reason, 'command-exit');
+  assert.equal(output.diagnostic.exitCode, 1);
+  assert.equal(output.diagnostic.stderr, 'container-state');
+  assert.ok(output.diagnostic.container, 'retain fresh container state before cleanup');
+  assert.equal(output.diagnostic.container.role, 's3');
+  assert.equal(output.diagnostic.container.status, 'exited');
+  assert.equal(output.diagnostic.container.running, false);
+  assert.equal(output.diagnostic.container.oomKilled, false);
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '', 'refused startup removes every owned container');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '', 'refused startup removes its owned network');
+});

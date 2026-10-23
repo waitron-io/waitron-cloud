@@ -36,8 +36,19 @@ globalThis.startupProbe={abort:()=>controller.abort(),spawnSync(command,args){
  if(args[0]==='ps'){if(fault==='discovery'&&!created)return error();return ok(created&&!removed?ids.join('\n'):'');}
  if(args[0]==='network'&&args[1]==='ls')return ok(created?networkId:'');
  if(args[0]==='network'&&args[1]==='inspect')return ok([network()]);
+ if(args[0]==='inspect'&&args[1]==='--format'){
+  events.push('state');
+  if(args.at(-1)!==ids[1])throw Error('Wrong diagnostic target');
+  if(fault==='state-missing')return {...error(),stderr:'Error response from daemon: No such container: PRIVATE_CANARY'};
+  if(fault==='state-timeout')return {...error(),error:{code:'ETIMEDOUT'}};
+  if(fault==='state-throws')throw Error('PRIVATE_CANARY');
+  if(fault==='state-malformed')return ok('PRIVATE_CANARY');
+  if(fault==='state-private')return ok({Status:'PRIVATE_CANARY',Running:'PRIVATE_CANARY',ExitCode:999,OOMKilled:'PRIVATE_CANARY',Dead:'PRIVATE_CANARY',Restarting:'PRIVATE_CANARY',Error:'PRIVATE_CANARY'});
+  return ok({Status:'exited',Running:false,ExitCode:7,OOMKilled:true,Dead:false,Restarting:false,Error:'PRIVATE_CANARY',FinishedAt:'PRIVATE_CANARY'});
+ }
  if(args[0]==='inspect')return ok(containers().filter(c=>args.includes(c.Id)).slice(0,fault==='resources'?5:6));
  if(args[0]==='exec'){
+  if(fault.startsWith('state-')&&args[1]===ids[1])return {...error(),stderr:'Error response from daemon: Container PRIVATE_CANARY is not running'};
   if(fault==='isolation-command')return error();
   if(fault==='outbound-result')return {...error(),stdout:JSON.stringify({blockedConnections:3,blockedDns:1,localControl:true,secret:'PRIVATE_CANARY'}),stderr:'PRIVATE_CANARY'};
   if(fault==='outbound-runtime')return {...error(),stdout:'PRIVATE_CANARY',stderr:'Error: Cannot find module PRIVATE_CANARY'};
