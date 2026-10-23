@@ -362,7 +362,8 @@ While your installation list refreshes, fiscal choices and submission now wait
 for it to settle. A missing or no-longer-permitted venue clears an unsent draft;
 a new reservation is refused when its venue is absent from the current list.
 In-flight writes, unresolved replies and issued receipts keep their reconciliation
-evidence. Pre-fix real-server journeys reserved for a different organisation from
+evidence. A definite refusal also clears a draft whose venue became unavailable
+during the request. Pre-fix real-server journeys reserved for a different organisation from
 the one shown during a refresh, and sent a hidden venue after permission removal
 (the server refused it with HTTP 403). Chromium checks cover both cases, no stale
 request or stored reservation, and a subsequent permitted choice whose displayed,
