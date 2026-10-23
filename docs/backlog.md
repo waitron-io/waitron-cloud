@@ -4014,8 +4014,10 @@ result, checks one derivation and restores the interception during cleanup.
 Both immediate and delayed observation retain the password-reset refusal,
 factor, enrolment and recovery-code assertions, 200-poll bound and database
 statement timeout. Product authentication and locking are unchanged. Linux
-PostgreSQL, deliberate-fault checks and whole-branch review still gate landing.
-Local database checks remain unavailable while Docker is down.
+PostgreSQL qualification passes both observation cases, catches removal of the
+result barrier and an account lock moved before derivation, then passes again
+with both faults restored. Local database checks remain unavailable while Docker
+is down.
 
 
 ## Initial services and future candidates
