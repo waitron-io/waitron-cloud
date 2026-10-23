@@ -689,7 +689,7 @@ export async function startIsolatedStack(args) {
     stage = 'cancellation-handoff';
     abort = () => { close().catch(() => {}); };
     signal?.addEventListener('abort', abort, { once: true });
-    if (signal?.aborted) { await close(); fail(); }
+    if (signal?.aborted) fail();
     return { ready, isolation, networkId, containerIds, close };
   } catch (error) {
     const diagnostic = startupDiagnostic(stage, error, started);
