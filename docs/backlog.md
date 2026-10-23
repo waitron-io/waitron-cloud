@@ -348,11 +348,21 @@ signed purpose: Standard, Full and Rectificative. Selection is applied to the
 rendered options so the first option cannot replace a purpose before the options
 exist. Chromium checks cover English and Spanish, both themes and 390/1280 widths,
 new-draft edits and the unchanged signed packet. The real-server key-event journey
-also checks all three displayed purposes. Nearby organisation and venue selectors
-still bind their value before their options; an isolated first-render probe shows
-the first organisation and an empty venue instead of the supplied selections.
-Qualify their live journeys and correct those selectors separately, including the
-mode selector's matching binding, without changing allocation or receipt fields.
+also checks all three displayed purposes. Organisation and venue selections now
+apply to their rendered options too, so your first view matches the supplied draft.
+The pre-fix real-server journey showed the first organisation and an empty venue
+while an untouched submission reserved the supplied second organisation's venue.
+The server derives the organisation from that venue; it receives no organisation
+field. Chromium checks cover the display, untouched request and stored reservation,
+and native checks cover edits, organisation changes and clearing a venue. Initial
+setup already displayed correctly because its mode options are static; both mode
+edits and the submitted mode remain checked. Allocation and receipt fields are
+unchanged. All checks cover English and Spanish, both themes and 390/1280 widths.
+Separate screen-state follow-ups remain: an organisation change can be ignored
+while installation reads are pending, leaving the shown and selected organisations
+different; a venue absent from the current list can remain in the draft. Synthetic
+probes reproduce both retained-state problems before and after this fix. Qualify
+real reload/revocation routes and clear or refuse stale choices separately.
 Duplicate adjacent status authority calls remain a small follow-up; no production defaults are
 selected. Fiscal records, invoice hashes and Waitron's allocation code stay outside
 this Cloud change.
