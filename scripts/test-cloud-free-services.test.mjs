@@ -56,3 +56,10 @@ test('CLI rejects unknown arguments without echoing private input', () => {
   assert.equal(result.status, 1); assert.equal(result.stdout, '');
   assert.equal(result.stderr, 'Free-service proof failed\n');
 });
+test('inherited Node test filters cannot certify a partial suite', () => {
+  const env = {...process.env, NODE_OPTIONS: '--test-skip-pattern=remote'};
+  delete env.NODE_TEST_CONTEXT;
+  const result = spawnSync(process.execPath, ['scripts/test-cloud-free-services.mjs', '--suite', 'deployment-gates'], {encoding: 'utf8', env});
+  assert.equal(result.status, 1); assert.equal(result.stdout, '');
+  assert.equal(result.stderr, 'Free-service proof failed\n');
+});

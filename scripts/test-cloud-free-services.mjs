@@ -9,7 +9,7 @@ const suites = [
   {id: 'account-mail', cwd: '.', files: ['deploy/test-cloud/free-services-mail.test.mjs']},
   {id: 'relay-plans', cwd: '.', files: ['deploy/test-cloud/free-services-relay.test.mjs']},
   {id: 'translation-plans', cwd: 'packages/translation', files: ['test/free-service-plans.test.ts']},
-  {id: 'relay-guards', cwd: 'packages/registration', files: ['test/relay-grants.test.ts', 'test/relay-worker.test.ts', 'test/relay-control.test.ts', 'test/relay-operator-stop.test.ts']},
+  {id: 'relay-guards', cwd: 'packages/registration', files: ['test/relay-grants.test.ts', 'test/relay-worker.test.ts', 'test/relay-control.test.ts', 'test/relay-operator-stop.test.ts', 'test/content-translation-service.test.ts']},
   {id: 'translation-guards', cwd: 'packages/translation', files: ['test/machine.test.ts', 'test/worker.test.ts', 'test/collect-page.test.ts', 'test/consent.test.ts']},
   {id: 'http-guards', cwd: 'packages/account-http', files: ['test/relay-disabled.test.ts', 'test/translation.test.ts', 'test/translation-collect-pages.test.ts', 'test/content-translation-readers.test.ts']},
   {id: 'deployment-gates', cwd: '.', files: ['deploy/test-cloud/runtime.test.mjs', 'deploy/test-cloud/deployment.test.mjs']},
@@ -65,7 +65,7 @@ export async function summariseTestRun(events, expectedFiles = []) {
 
 async function runSuite(suite) {
   return new Promise((resolve, reject) => {
-    const env = {...process.env}; delete env.NODE_TEST_CONTEXT;
+    const env = {...process.env}; delete env.NODE_TEST_CONTEXT; delete env.NODE_OPTIONS;
     const child = spawn(process.execPath, [fileURLToPath(import.meta.url), '--suite', suite.id], {cwd: new URL(`${suite.cwd}/`, pathToFileURL(root)), env, stdio: ['ignore', 'pipe', 'pipe']});
     let output = '', bytes = 0, failed = false;
     const stop = () => {failed = true; child.kill('SIGTERM');};
@@ -98,6 +98,8 @@ async function proof() {
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
+    // Node test filters can omit cases without incrementing the skipped count.
+    assert.equal(process.env.NODE_OPTIONS, undefined, 'Proof requires default Node options');
     if (process.argv.length === 2) process.stdout.write(JSON.stringify(await proof()) + '\n');
     else {
       assert.equal(process.argv.length, 4); assert.equal(process.argv[2], '--suite');

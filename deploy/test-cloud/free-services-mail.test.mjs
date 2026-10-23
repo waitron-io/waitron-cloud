@@ -4,6 +4,13 @@ import {test} from 'node:test';
 import {database} from '../../packages/account-http/test/fixtures.ts';
 import {EmailWorker, SignupStore, PasswordRecoveryStore, OrganisationPlanStore} from '../../packages/registration/src/index.ts';
 import {createTestCaptureMailer} from './capture-mailer.mjs';
+import {mkdtemp, rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {bootstrap} from '../local-stack/bootstrap.mjs';
+import {testRuntimeEnvironment} from './runtime.mjs';
+import {startAccountServer} from '../../packages/account-http/src/server.ts';
+import {request} from 'node:http';
 
 // A plan gate on account mail, a missing outbox handoff or a wrong LAN link breaks this journey.
 test('both plans capture signup and recovery mail without granting venue relay', async () => {
@@ -36,4 +43,33 @@ test('both plans capture signup and recovery mail without granting venue relay',
       assert.equal((await db.pool.query("SELECT count(*)::int AS n FROM email_outbox WHERE status<>'sent'")).rows[0].n, 0);
     }
   } finally {await db.close();}
+});
+
+test('deployment drops provider inputs and exposes neither address lookup nor enabled translation', async () => {
+  const db = await database(), directory = await mkdtemp(join(tmpdir(), 'cloud-free-gates-'));
+  let running;
+  try {
+    const config = await bootstrap(directory);
+    const environment = testRuntimeEnvironment('account', config, {CLOUD_TEST_SERVICE_PLANS: '1', CLOUD_TRANSLATION: '1', CLOUD_ADDRESS_LOOKUP: '1', GOOGLE_MAPS_API_KEY: 'fake-only', GEOAPIFY_API_KEY: 'fake-only'});
+    assert.equal(environment.CLOUD_TRANSLATION, '0');
+    for (const key of ['CLOUD_ADDRESS_LOOKUP', 'GOOGLE_MAPS_API_KEY', 'GEOAPIFY_API_KEY']) assert.equal(environment[key], undefined);
+    running = await startAccountServer({pool: db.pool, outbox: db.outbox, port: 0, translation: environment.CLOUD_TRANSLATION === '1',
+      config: {portalOrigin: 'http://localhost', production: false, rateKey: db.rateKey, trustedProxyIps: []}});
+    const post = (path, browser = true) => new Promise((resolve, reject) => {
+      const req = request({hostname: '127.0.0.1', port: running.server.address().port, path, method: 'POST', timeout: 5000,
+        headers: {host: 'localhost', ...(browser ? {origin: 'http://localhost'} : {}), 'content-type': 'application/json'}}, response => {
+        let body = ''; response.on('data', chunk => body += chunk); response.once('error', reject);
+        response.once('end', () => resolve({status: response.statusCode, body}));
+      });
+      req.once('error', reject); req.once('timeout', () => req.destroy(new Error('fixture request timeout'))); req.end('{}');
+    });
+    for (const action of ['request', 'start', 'status', 'autocomplete', 'validate', 'confirm', 'cancel']) {
+      const response = await post(`/v1/address-lookup/${action}`);
+      assert.equal(response.status, 404);
+    }
+    for (const action of ['submit', 'status', 'collect', 'release']) {
+      const response = await post(`/api/installations/translation-${action}`, false);
+      assert.equal(response.status, 503); assert.deepEqual(JSON.parse(response.body), {error: 'temporarily_unavailable'});
+    }
+  } finally {await running?.close(); await rm(directory, {recursive: true, force: true}); await db.close();}
 });
