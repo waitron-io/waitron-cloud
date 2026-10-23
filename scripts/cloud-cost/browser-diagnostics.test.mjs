@@ -59,7 +59,7 @@ test('browserDiagnosticsSurviveTheRealChildBoundary', async () => {
   assert.equal(typeof helper.parseBrowserDiagnostics, 'function');
   const {spawnSync} = await import('node:child_process');
   const child = spawnSync(process.execPath, ['--input-type=module', '-e', `
-    import {withBrowserDiagnostics} from './scripts/cloud-cost/fixtures/browser-diagnostics.mjs';
+    import {withBrowserDiagnostics} from ${JSON.stringify(new URL('./fixtures/browser-diagnostics.mjs', import.meta.url).href)};
     const error = Object.defineProperties(Error('PRIVATE_CHILD_CANARY'), {
       browserPhase: {value: 'reconnect'}, browserStep: {value: 'overdue-empty'}});
     await withBrowserDiagnostics(async () => {throw error;}, text => process.stderr.write(text + '\\n'));
@@ -69,9 +69,27 @@ test('browserDiagnosticsSurviveTheRealChildBoundary', async () => {
   assert.deepEqual(helper.parseBrowserDiagnostics(child.stderr), {browserPhase: 'reconnect', browserStep: 'overdue-empty'});
   for (const text of ['cost_browser_phase=PRIVATE\ncost_browser_step=reload\n',
     'prefix cost_browser_phase=reconnect\ncost_browser_step=reload\n',
-    'cost_browser_step=reload\n', 'cost_browser_phase=reconnect\ncost_browser_step=PRIVATE\n']) {
+    'cost_browser_step=reload\n', 'cost_browser_phase=reconnect\ncost_browser_step=PRIVATE\n',
+    'cost_browser_phase=reconnect\nnoise cost_browser_step=reload\n']) {
     assert.equal(helper.parseBrowserDiagnostics(text).browserStep, undefined);
     assert.doesNotMatch(JSON.stringify(helper.parseBrowserDiagnostics(text)), /PRIVATE/);
   }
   assert.deepEqual(helper.parseBrowserDiagnostics('cost_browser_phase=login\ncost_browser_step=reload\n'), {browserPhase: 'login', browserStep: undefined});
+});
+
+// Dropping metadata from the command's refusal must lose a real child's labels.
+test('browserFixtureCommandRetainsOnlySafeChildDiagnostics', () => {
+  assert.equal(typeof helper.runBrowserFixture, 'function');
+  for (const step of ['reload', 'takings', 'overdue-empty', 'requests']) {
+    const script = `process.stderr.write('PRIVATE_CHILD_CANARY\\ncost_browser_phase=reconnect\\ncost_browser_step=${step}\\nError: Invalid cloud cost browser journey\\n'); process.exit(1);`;
+    assert.throws(() => helper.runBrowserFixture(process.execPath, ['-e', script], {}), error => {
+      assert.equal(error.message, 'Generated local gateway fixture failed');
+      assert.equal(error.journeyRefused, true);
+      assert.equal(error.browserPhase, 'reconnect');
+      assert.equal(error.browserStep, step);
+      assert.doesNotMatch(error.stack + JSON.stringify(error), /PRIVATE_CHILD_CANARY/);
+      return true;
+    });
+  }
+  assert.equal(helper.runBrowserFixture(process.execPath, ['-e', "process.stdout.write(' completed \\n')"], {}), 'completed');
 });

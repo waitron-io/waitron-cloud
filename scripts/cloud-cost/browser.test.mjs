@@ -29,14 +29,14 @@ test('browserFailureNamesItsPhaseWithoutExposingThePrivateLaunchError', async ()
 });
 
 // Losing a reconnect marker would hide which unchanged browser operation refused.
-for (const step of ['reload', 'takings', 'overdue-empty', 'requests'])
+for (const step of ['reload', 'takings', 'overdue-empty', 'requests', 'logout'])
 test('browserReconnectFailureIdentifies_' + step, async t => {
   const events = new Map();
   let reconnect = false, browserCloses = 0, contextCloses = 0;
   const refuse = () => { throw Error('PRIVATE_RECONNECT_CANARY https://private.example/token'); };
   const locator = selector => ({
     locator: child => locator(child), first() { return this; }, or() { return this; },
-    async fill() {}, async click() {}, async isVisible() { return false; },
+    async fill() {}, async click() { if (step === 'logout' && selector.includes('logout')) refuse(); }, async isVisible() { return false; },
     async waitFor() {
       if (reconnect && (step === 'takings' && selector.includes('takings')
         || step === 'overdue-empty' && selector.includes('overdue-empty'))) refuse();
@@ -63,8 +63,8 @@ test('browserReconnectFailureIdentifies_' + step, async t => {
   const chromium = {async launch() { return {async newContext() { return context; }, async close() {browserCloses++;}}; }};
   await assert.rejects(() => measureRemoteBrowser({chromium,
     staffHostname: 'staff.generated.example.test', email: 'generated@example.test', password: 'generated'}), error => {
-    assert.equal(error.browserPhase, 'reconnect');
-    assert.equal(error.browserStep, step);
+    assert.equal(error.browserPhase, step === 'logout' ? 'logout' : 'reconnect');
+    assert.equal(error.browserStep, step === 'logout' ? undefined : step);
     assert.equal(Object.prototype.propertyIsEnumerable.call(error, 'browserStep'), false);
     assert.equal(error.message, 'Invalid cloud cost browser journey');
     assert.doesNotMatch(error.stack, /PRIVATE_RECONNECT_CANARY|private\.example/);
