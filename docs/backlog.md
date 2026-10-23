@@ -4064,3 +4064,13 @@ One broader macOS workflow check also exhausted its separate one-second attempts
 subsequent exact-main and feature single-case checks passed. Its cause remains
 unattributed. If it recurs, capture its process and step timings before changing
 that separate fixture's bound; this change claims no macOS supervisor fix.
+
+### Installation renewal accepted during owner revocation
+
+PR #316 run `39953541488`, registration shard 5/5, accepted a renewal where
+`installations.test.ts` expected a `revoked` refusal. The cause is not yet known.
+D128 records the waiting statement and its blocking connections before the competing
+renewal, and reports the returned revocation and lease expiry fields on unexpected
+success. Linux PostgreSQL qualification must establish the transaction order before
+changing product locks or the test's ordering. Preserve every refusal, venue, service,
+audit and cleanup check. Local database checks wait while Docker is unavailable.
