@@ -144,6 +144,8 @@ export class PortalApp {
     if(this.fiscal.venueId&&!this.fiscal.pending&&!this.fiscal.uncertain&&!this.fiscal.receipt&&!this.installations.visible.some(i=>i.venueId===this.fiscal.venueId&&i.canRevoke))this.fiscal.open(undefined);
   }
   draw() {
+    // Account can inspect production backups; recovery accepts only its offered test venues.
+    if(this.path==='/recover'&&this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke&&i.environment==='test')){this.backups.close();this.recovery.choose(undefined,undefined);}
     document.documentElement.lang = this.locale;
     const title = this.title(); document.title = `${title} · Waitron Cloud`;
     render(screen(this), this.root);

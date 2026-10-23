@@ -19,9 +19,9 @@ export function pairingScreen(app:PortalApp){
     ${p.view?html`<p>${c.pairConfirm}</p><dl><dt>${c.pairVenue}</dt><dd class="venue-id">${p.view.localVenueId}</dd></dl>
       <p>${p.view.environment==='test'?c.pairTest:c.pairProduction}</p>
       ${p.businesses.length===1?html`<p>${choice?.organisationName}</p><p>${choice?.legalBusinessName}</p>`:
-        html`<label class="business-choice">${c.pairBusiness} *<select name="legalBusinessId" aria-invalid=${p.error==='pairChoice'?'true':'false'} aria-describedby="business-error" .value=${p.selected} ?disabled=${p.pending}
+        html`<label class="business-choice">${c.pairBusiness} *<select name="legalBusinessId" aria-invalid=${p.error==='pairChoice'?'true':'false'} aria-describedby="business-error" ?disabled=${p.pending}
           @change=${(event:Event)=>{p.selected=(event.target as HTMLSelectElement).value;app.draw();}}>
-          <option value="">${c.pairChoice}</option>${p.businesses.map(b=>html`<option value=${b.legalBusinessId}>${b.organisationName} · ${b.legalBusinessName} (${b.countryCode})</option>`)}</select></label><p id="business-error">${p.error==='pairChoice'?c.pairChoice:''}</p>`}`:nothing}
+          <option value="" .selected=${!p.selected}>${c.pairChoice}</option>${p.businesses.map(b=>html`<option value=${b.legalBusinessId} .selected=${b.legalBusinessId===p.selected}>${b.organisationName} · ${b.legalBusinessName} (${b.countryCode})</option>`)}</select></label><p id="business-error">${p.error==='pairChoice'?c.pairChoice:''}</p>`}`:nothing}
     <wt-form-actions>${logout}<wt-button id="submit" variant="primary" .disabled=${p.pending||!!p.waiting} .loading=${p.pending}
       @click=${()=>{void app.submitPairing();}}>${p.view?c.pairApprove:c.pairInspect}</wt-button></wt-form-actions>
     ${p.error==='pairSession'?html`<a href="/login" @click=${(event:MouseEvent)=>app.follow(event,'/login')}>${c.login}</a>`:nothing}`;

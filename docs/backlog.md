@@ -4419,6 +4419,29 @@ stay unchanged. The old failure log did not record its exact clock values; this
 reproduction does not invent those missing historical values. Local database
 checks are unavailable while Docker is down; GitHub CI supplies that evidence.
 
+## Recovery screen scope and supplied choices (D158)
+
+When you return from Account, recovery now clears a backup selection that is not
+one of its offered test venues. Its panel and approval controls independently
+check the same offered choices. Changing organisation, losing permission or
+removing the venue clears the selected source and both confirmations. Account
+can still show production backup metadata.
+
+Recovery's organisation and venue selectors, Account's organisation selector and
+pairing's business selector now select their options after those options exist.
+The supplied choice, displayed choice and subsequent request agree in the
+browser checks. The pairing regression uses a supplied second business; no normal
+journey that preselects that business was established.
+
+The real-server snapshot reproduction showed a production backup panel on return,
+but no snapshot approval button: changing the synthetic venue to production
+invalidated its snapshot qualification. A direct Account approval request was
+refused with HTTP 403 and no recovery row. The permitted test-venue control sent
+and stored its exact chosen snapshot. Capture provisioning and recovery retain
+the existing test-only server guard. These are synthetic retained metadata
+fixtures, not evidence of production backup provisioning. PostgreSQL checks run
+in GitHub CI while Docker is down locally.
+
 ## Cost-stack replication interruption (D152)
 
 [Cost run 40015106057, job 120625121669](https://github.com/waitron-io/waitron-cloud/actions/runs/40015106057/job/120625121669)
