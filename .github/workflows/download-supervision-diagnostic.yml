@@ -1,0 +1,59 @@
+name: Download supervision diagnostics
+on:
+  pull_request:
+    paths:
+      - 'scripts/ci-download*'
+      - 'scripts/fixtures/ci-download-linux.py'
+      - 'scripts/fixtures/ci_download_events.py'
+      - '.github/workflows/download-supervision-diagnostic.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/ci-download*'
+      - 'scripts/fixtures/ci-download-linux.py'
+      - 'scripts/fixtures/ci_download_events.py'
+      - '.github/workflows/download-supervision-diagnostic.yml'
+permissions:
+  contents: read
+jobs:
+  linux-contention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Exercise stale ownership under bounded CPU contention
+        run: |
+          mkdir -p diagnostics
+          python3 -u - <<'PY' | tee diagnostics/native-linux.log
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          import json, os, subprocess, sys, time
+          # Restrict only this job's children, making launch contention repeatable.
+          os.sched_setaffinity(0, {min(os.sched_getaffinity(0))})
+          def run(index):
+              start = time.monotonic()
+              result = subprocess.run([
+                  sys.executable, 'scripts/fixtures/ci-download-linux.py',
+                  'scripts/ci-download.py', 'stale',
+              ], env={**os.environ, 'CI_DOWNLOAD_REPORT_PROGRESS': '1'},
+                  capture_output=True, text=True, timeout=15)
+              return index, time.monotonic() - start, result
+          failures = 0
+          with ThreadPoolExecutor(max_workers=8) as workers:
+              for task in as_completed([workers.submit(run, n) for n in range(32)]):
+                  index, elapsed, result = task.result()
+                  print(json.dumps({'case': index, 'seconds': elapsed, 'exit': result.returncode}))
+                  print(result.stdout, end='')
+                  print(result.stderr, end='')
+                  failures += result.returncode != 0
+          print(json.dumps({'cases': 32, 'failures': failures}))
+          raise SystemExit(bool(failures))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: download-supervision-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
+          path: diagnostics/
+          retention-days: 14

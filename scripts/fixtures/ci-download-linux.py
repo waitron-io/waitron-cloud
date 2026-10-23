@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 
+from ci_download_events import record
 
 def gone(pid):
     try:
@@ -38,13 +39,20 @@ with open(sys.argv[1], 'a+') as lock:
     installer.write_text('''
 import os, pathlib, subprocess, sys, time
 root = pathlib.Path(sys.argv[1])
+sys.path.insert(0, os.environ['FIXTURE_HELPERS'])
+from ci_download_events import record
+record(root, 'installer entered')
 count = root / 'attempts'
 n = int(count.read_text()) + 1 if count.exists() else 1
 count.write_text(str(n))
+record(root, 'attempt counted', attempt=n)
 if n == 1:
     subprocess.Popen([sys.executable, '-c', """
 import fcntl, os, pathlib, signal, sys, time
 root = pathlib.Path(sys.argv[1])
+sys.path.insert(0, os.environ['FIXTURE_HELPERS'])
+from ci_download_events import record
+record(root, 'detached child entered')
 if os.environ['PROBE_MODE']=='term-once':
     count=0
     def terminated(signum,frame):
@@ -55,14 +63,17 @@ if os.environ['PROBE_MODE']=='term-once':
 else:
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
 with (root / 'apt.lock').open('a+') as lock:
+    record(root, 'detached child waiting for lock')
     fcntl.lockf(lock, fcntl.LOCK_EX)
     (root / 'detached.pid').write_text(str(os.getpid()))
+    record(root, 'detached child holding lock')
     while True: time.sleep(0.01)
 """, str(root)], start_new_session=True,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     while not (root / 'detached.pid').exists(): time.sleep(0.01)
     while True: time.sleep(0.01)
 (root / 'installed').write_text('yes')
+record(root, 'installation finished', attempt=n)
 ''')
     detached = None
     try:
@@ -71,9 +82,27 @@ with (root / 'apt.lock').open('a+') as lock:
             wrapper = root / 'supervisor.py'
             wrapper.write_text('''
 import importlib.util, os, signal, sys
+from pathlib import Path
+sys.path.insert(0, os.environ['FIXTURE_HELPERS'])
+from ci_download_events import record
+root = Path(os.environ['FIXTURE_ROOT'])
+record(root, 'supervisor entered')
 spec=importlib.util.spec_from_file_location('supervisor',sys.argv[1])
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 sys.argv=sys.argv[1:]
+launch = module.subprocess.Popen
+def traced_launch(*args, **kwargs):
+    child = launch(*args, **kwargs)
+    record(root, 'supervisor child spawned', child=child.pid)
+    return child
+module.subprocess.Popen = traced_launch
+stop = module.stop_attempt
+def traced_stop(child, grace, adopted=False):
+    record(root, 'attempt cleanup entered', child=child.pid, status=child.poll())
+    confirmed = stop(child, grace, adopted)
+    record(root, 'attempt cleanup finished', child=child.pid, confirmed=confirmed)
+    return confirmed
+module.stop_attempt = traced_stop
 if os.environ['PROBE_MODE']=='stale':
     children=module.owned_children
     injected=False
@@ -118,22 +147,27 @@ raise SystemExit(module.main())
             '--grace', '0.4', '--lock-wait', '0.2', '--retry-delay', '0.01',
             *(['--lock', str(lock)] if mode != 'uncertain' else []),
             '--', sys.executable, str(installer), str(root),
-        ], env={**os.environ, 'PROBE_MODE':mode, 'FOREIGN_PID':str(foreign.pid), 'FIXTURE_ROOT':str(root)},
+        ], env={**os.environ, 'PROBE_MODE':mode, 'FOREIGN_PID':str(foreign.pid), 'FIXTURE_ROOT':str(root),
+                'FIXTURE_HELPERS':str(Path(__file__).resolve().parent)},
             capture_output=True, text=True, timeout=5)
+        progress = (root / 'progress.jsonl').read_text() if (root / 'progress.jsonl').exists() else '(no child reached the first step)'
+        details = result.stdout + result.stderr + '\nFixture process/step progress:\n' + progress
+        if os.environ.get('CI_DOWNLOAD_REPORT_PROGRESS') == '1':
+            print(details, file=sys.stderr, flush=True)
         if mode in ('unavailable','adoption-refused','kernel-refused','kernel-send-refused','preexisting'):
-            assert result.returncode == 1, result.stdout + result.stderr
+            assert result.returncode == 1, details
             assert not (root / 'attempts').exists(), 'unconfirmed ownership started an installer'
             if mode == 'preexisting':
                 assert not gone(int((root / 'inherited.pid').read_text())), 'a pre-existing child was stopped'
         elif mode == 'uncertain':
             detached = int((root / 'detached.pid').read_text())
-            assert result.returncode == 1, result.stdout + result.stderr
+            assert result.returncode == 1, details
             assert (root / 'attempts').read_text() == '1'
             assert not (root / 'installed').exists()
             assert 'cleanup is unconfirmed' in result.stdout
         else:
             detached = int((root / 'detached.pid').read_text())
-            assert result.returncode == 0, result.stdout + result.stderr
+            assert result.returncode == 0, details
             assert (root / 'attempts').read_text() == '2'
             assert (root / 'installed').read_text() == 'yes'
             assert gone(detached), 'the detached lock holder survived supervision'
@@ -153,6 +187,12 @@ raise SystemExit(module.main())
             print(json.dumps({'attempts':1, 'cleanupUnconfirmed':True, 'unrelatedAlive':True}))
         else:
             print(json.dumps({'attempts': 2, 'detachedGone': True, 'unrelatedAlive': True}))
+    except BaseException:
+        progress = root / 'progress.jsonl'
+        print('Fixture process/step progress before cleanup:\n' +
+              (progress.read_text() if progress.exists() else '(no child reached the first step)'),
+              file=sys.stderr, flush=True)
+        raise
     finally:
         if detached is None and (root / 'detached.pid').exists():
             detached = int((root / 'detached.pid').read_text())

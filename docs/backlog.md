@@ -4019,3 +4019,13 @@ Waitron retains the SQLite storage change, safe promotion and rejoin behaviour,
 on-prem mirrors, fiscal filing recovery, offline log growth, local credentials,
 box image networking and the end-to-end selling proof. These cloud entries do not
 declare those core prerequisites implemented.
+
+## Linux download-supervision fixture timing (D126)
+
+PR312 run39944688693 failed the stale-process Linux fixture after both 0.3-second
+installer attempts exceeded their deadlines. The cause was not captured. The fixture
+now retains process IDs, monotonic times and the last reached installer/cleanup step
+before its temporary directory is removed. A bounded native-Linux CI diagnostic runs
+32 stale-ownership cases with eight workers sharing one CPU; every existing ownership,
+foreign-lock and cleanup assertion remains. Investigation and a proved fix are pending;
+no production download or test deadline has changed. Docker is unavailable locally.
