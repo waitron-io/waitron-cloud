@@ -62,6 +62,7 @@ test('default continuity diagnostics reach stderr before the next operation star
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', source], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, '');
+  assert.ok(result.stderr.trim(), 'missing continuity diagnostic on stderr');
   const record = JSON.parse(result.stderr);
   assert.equal(record.stage, 'dump-start');
   assert.equal(record.continuity, 'old-backup');
