@@ -38,3 +38,11 @@ output "deployment_admission" {
     error_message = "The actual global_backup_keys provider must use its exact primary or cold-copy region"
   }
 }
+
+output "primary_topology" {
+  value = {
+    network                           = module.network.network
+    cells                             = { for name, cell in module.cell : name => cell.cell }
+    database_client_security_group_id = aws_security_group.database_clients.id
+  }
+}

@@ -268,3 +268,27 @@ run "no_ssh_ingress" {
     error_message = "Internal rules must retain service TCP, DNS and service UDP, and ICMP discovery without SSH"
   }
 }
+
+run "database_clients_are_actual_nodes" {
+  command = plan
+  variables { database_client_security_group_id = "sg-00000000000000009" }
+  override_resource {
+    target = aws_security_group.node
+    values = { id = "sg-00000000000000003" }
+  }
+  assert {
+    condition     = one(aws_launch_template.node.network_interfaces).security_groups == toset(["sg-00000000000000003", "sg-00000000000000009"])
+    error_message = "DATABASE_CLIENT_MEMBERSHIP: every launched node must carry both its cell peer group and the explicit database-client group"
+  }
+}
+
+run "rejects_malformed_database_client_group" {
+  command = plan
+  variables { database_client_security_group_id = "0.0.0.0/0" }
+  expect_failures = [var.database_client_security_group_id]
+}
+run "rejects_empty_database_client_group" {
+  command = plan
+  variables { database_client_security_group_id = "" }
+  expect_failures = [var.database_client_security_group_id]
+}

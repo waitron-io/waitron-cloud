@@ -99,7 +99,7 @@ resource "aws_launch_template" "node" {
   }
   network_interfaces {
     associate_public_ip_address = false
-    security_groups             = [aws_security_group.node.id]
+    security_groups             = concat([aws_security_group.node.id], var.database_client_security_group_id == null ? [] : [var.database_client_security_group_id])
   }
 }
 resource "aws_eks_node_group" "zone" {

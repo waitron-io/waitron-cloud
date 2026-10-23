@@ -38,3 +38,12 @@ variable "capacity" {
     error_message = "Each zone group must remain fixed at one node until growth is separately qualified"
   }
 }
+
+variable "database_client_security_group_id" {
+  type    = string
+  default = null
+  validation {
+    condition     = var.database_client_security_group_id == null ? true : can(regex("^sg-[0-9a-f]{17}$", var.database_client_security_group_id))
+    error_message = "Supply an exact database-client security group ID or omit it for a standalone cell"
+  }
+}

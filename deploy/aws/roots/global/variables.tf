@@ -42,3 +42,13 @@ variable "bindings" {
     error_message = "Bind deployment and key administration to their distinct exact same-account roles"
   }
 }
+
+variable "compute" {
+  type     = object({ kubernetes_version = string, operator_role_arns = set(string) })
+  nullable = false
+  # Check the external account before network dependencies defer child reads.
+  validation {
+    condition     = !can(regex("^[0-9]{12}$", try(var.bindings["global"].expected_identity, ""))) || alltrue([for role in var.compute.operator_role_arns : try(split(":", role)[4], "") == try(var.bindings["global"].expected_identity, "")])
+    error_message = "Operator roles must belong to the explicitly bound deployment account"
+  }
+}

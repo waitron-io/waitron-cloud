@@ -748,11 +748,20 @@ node deploy/aws/check.mjs --suite integration
 node --test deploy/aws/provider-bindings.test.mjs
 ```
 
-Each root currently runs 27 mocked admission plans. This checkpoint covers
-provider admission only. Module composition and the complete
-`infrastructure_v1` output remain unfinished. The current
-`deployment_admission` output contains only version, scope, country and region
-metadata; do not pass it to P1 as an infrastructure handoff.
+Each root runs 29 mocked plans: the 27 original admission cases, a two-cell
+network case and a refusal for an operator role from another account. You also need explicit `compute` inputs: a Kubernetes
+version and operator role ARNs from the externally bound account. This account
+check runs before network dependencies defer the cell module's identity reads.
+The roots declare their primary network,
+its cells and a database-client security group. Each cell waits for all network
+routes and associations, then attaches that group to its node launch template
+alongside the cell's own peer group. The database module still needs to consume
+the client group before this grants database access.
+
+`primary_topology` exposes these provisional network and cell references.
+`deployment_admission` contains version, scope, country and region metadata.
+Neither output is the complete P1 infrastructure handoff. Database, storage,
+permissions, evidence, ingress and DNS composition remain unfinished.
 
 For the global root, supply exactly `global`, `global_backup`, `global_keys`
 and `global_backup_keys` in `bindings`. Spain instead takes `country`,
@@ -767,7 +776,25 @@ Keep these bindings and live backend settings outside Git. Each provider
 allows only the expected account, and the plans independently check its
 reported account and region. The tests use synthetic identities, not AWS
 credentials. They cannot prove who may assume a role or what its effective
-permissions allow. The new roots contain no workload modules or resources yet.
+permissions allow.
+
+OpenTofu 1.11 reuses mocked computed IDs across resource instances and cannot
+override one instance. The root tests therefore supply distinct subnet references
+at the network module's output boundary; the admission cases also replace cell
+outputs. The two-cell case plans the actual cell resources against those distinct
+subnets. Run the unmodified network suite separately:
+
+```sh
+node deploy/aws/check.mjs --suite network
+node deploy/aws/check.mjs --suite cell
+node --test deploy/aws/topology.test.mjs
+```
+
+The parsed root declarations check provider maps, each cell's subnet selection,
+the complete-network dependency and the client-group attachment. The cell suite
+checks the actual launch template, retaining its standalone peer-group checks.
+These checks cover the connections between modules; they do not prove the entire
+resource graph together in one mocked plan or qualify a live deployment.
 
 Each cell has its own workload roles and identity provider. The current
 version 1 handoff has one role reference per service, so one object cannot
@@ -777,5 +804,5 @@ version 1 object containing exactly the named cell and its matching roles.
 P1's planned single-object input keeps the same shape: callers select an exact
 cell entry.
 Schema fixtures accept this representation for two cells in either scope.
-The real export, selection checks and resource composition remain unbuilt;
-no new schema or runtime consumer is qualified by that fixture check.
+The real export, selection checks and remaining resource composition are
+unfinished; no new schema or runtime consumer is qualified by that fixture check.
