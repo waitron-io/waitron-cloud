@@ -56,14 +56,18 @@ test('capture authority accepts an old live lease only while its issuer remains 
  app=createAccountApp({pool:db.pool,outbox:db.outbox,config:config(),leaseIssuer:next,captures:captureOptions});
  assert.equal((await request('backup-reserve',proof('backup-reserve',randomUUID()))).status,401);
 });
-test('refuses browser origin, forged/wrong action, expired lease, cross-venue capture and arbitrary reserve body',async()=>{
+test('refuses browser origin, forged/wrong action, expired lease, cross-venue capture and arbitrary reserve body',async(t)=>{
  const capture=randomUUID();assert.equal((await request('backup-reserve',proof('backup-reserve',capture),{origin})).status,403);
  assert.equal((await request('backup-reserve',{...proof('backup-reserve'),signature:'a'.repeat(86)})).status,401);
  assert.equal((await request('backup-reserve',proof('backup-publish'))).status,401);
  assert.equal((await request('backup-reserve',proof('backup-reserve',capture,{bucket:'attacker'}))).status,400);
  assert.equal((await request('backup-reserve',proof('backup-reserve',capture))).status,200);
  const second=await renew(otherId);assert.equal((await request('backup-reserve',proof('backup-reserve',capture,{},otherId,second))).status,409);
- const values=JSON.parse(Buffer.from(lease.payload,'base64url').toString());const old=issuer.issue({origin,leaseId:values[3],installationId:id,venueId:values[5],environment:'test',publicKey:values[7],issuedAt:Date.now()-3600000,expiresAt:Date.now()-1});
+ const values=JSON.parse(Buffer.from(lease.payload,'base64url').toString());
+ // Advance only synchronous lease construction; the request must use the real clock.
+ const now=Date.now();let tick=now;
+ const clock=t.mock.method(Date,'now',()=>{const value=tick;tick+=2;return value;});let old:SignedEnvelope;
+ try{const issuedAt=Date.now()-3600000;old=issuer.issue({origin,leaseId:values[3],installationId:id,venueId:values[5],environment:'test',publicKey:values[7],issuedAt,expiresAt:issuedAt+3599999});}finally{clock.mock.restore();}
  assert.equal((await request('backup-reserve',proof('backup-reserve',randomUUID(),{},id,old))).status,401);
 });
 test('revocation committed during provider request prevents credentials returning',async()=>{

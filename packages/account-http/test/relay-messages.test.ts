@@ -40,9 +40,13 @@ test('parallel same-ID admissions debit once and a changed body conflicts',async
  const changed=await submit(a,{...a.body,recipient:'bea@example.test'});assert.equal(changed.status,409,changed.text);
  assert.equal(await count('relay_reservations'),before+1);
 });
-test('wrong key, action, origin, lease and operation identity cannot admit work',async()=>{
+test('wrong key, action, origin, lease and operation identity cannot admit work',async(t)=>{
  const a=await f.venue(),b=await f.venue(),n=await count('relay_reservations');
- for(const proof of [a.proof('email-status'),a.proof('email-submit',a.body,{installationId:b.installationId}),a.proof('email-submit',a.body,{origin:'https://wrong.example.test'}),a.proof('email-submit',a.body,{lease:JSON.stringify(b.lease)}),a.proof('email-submit',a.body,{lease:JSON.stringify(f.issuer.issue({...a.leaseInput,issuedAt:Date.now()-3600000,expiresAt:Date.now()-1}))}),a.proof('email-submit',a.body,{issuedAt:Date.now()-120000})]){
+ // Advance only synchronous lease construction; the request must use the real clock.
+ const now=Date.now();let tick=now;
+ const clock=t.mock.method(Date,'now',()=>{const value=tick;tick+=2;return value;});let expired:ReturnType<typeof f.issuer.issue>;
+ try{const issuedAt=Date.now()-3600000;expired=f.issuer.issue({...a.leaseInput,issuedAt,expiresAt:issuedAt+3599999});}finally{clock.mock.restore();}
+ for(const proof of [a.proof('email-status'),a.proof('email-submit',a.body,{installationId:b.installationId}),a.proof('email-submit',a.body,{origin:'https://wrong.example.test'}),a.proof('email-submit',a.body,{lease:JSON.stringify(b.lease)}),a.proof('email-submit',a.body,{lease:JSON.stringify(expired)}),a.proof('email-submit',a.body,{issuedAt:Date.now()-120000})]){
   const r=await f.request('submit',proof);assert.equal(r.status,401,r.text);
  }
  const mismatch=await f.request('submit',a.proof('email-submit',a.body,{operationId:randomUUID()}));assert.equal(mismatch.status,400,mismatch.text);
