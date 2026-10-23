@@ -39,6 +39,8 @@ globalThis.startupProbe={abort:()=>controller.abort(),spawnSync(command,args){
  if(args[0]==='inspect')return ok(containers().filter(c=>args.includes(c.Id)).slice(0,fault==='resources'?5:6));
  if(args[0]==='exec'){
   if(fault==='isolation-command')return error();
+  if(fault==='outbound-result')return {...error(),stdout:JSON.stringify({blockedConnections:3,blockedDns:1,localControl:true,secret:'PRIVATE_CANARY'}),stderr:'PRIVATE_CANARY'};
+  if(fault==='outbound-runtime')return {...error(),stdout:'PRIVATE_CANARY',stderr:'Error: Cannot find module PRIVATE_CANARY'};
   if(fault==='direct-isolation')throw Error('PRIVATE_CANARY');
   if(args.includes('check')){if(fault==='handoff')controller.abort();return ok(fault==='readiness'?'PRIVATE_CANARY':{postgres:true,s3:true,mailpit:true,fiscal:true,waitron:true,gateway:true});}
   return ok({blockedConnections:3,blockedDns:2,localControl:true});

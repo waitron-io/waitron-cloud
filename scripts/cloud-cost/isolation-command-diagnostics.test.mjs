@@ -1,0 +1,22 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+
+// Dropping the failed canary's result hides whether isolation or its execution refused.
+for (const fault of ['outbound-result', 'outbound-runtime']) test(`failed outbound command retains only safe context: ${fault}`, () => {
+  const result = spawnSync(process.execPath, [new URL('./fixtures/stack-startup-diagnostic-probe.mjs', import.meta.url).pathname, fault, 'false'], { encoding: 'utf8', timeout: 15000 });
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.removed, true);
+  assert.equal(output.diagnostic.stage, 'isolation');
+  assert.equal(output.diagnostic.reason, 'command-exit');
+  assert.equal(output.diagnostic.command, 'outbound-canary');
+  assert.deepEqual(output.diagnostic.argv, ['exec', '<container>', 'node', '-e', '<outbound-canary>']);
+  assert.equal(output.diagnostic.stderr, fault === 'outbound-runtime' ? 'node-runtime' : 'unclassified');
+  if (fault === 'outbound-result') assert.deepEqual(output.diagnostic.canary, { blockedConnections: 3, blockedDns: 1, localControl: true });
+  else assert.equal(output.diagnostic.canary, undefined);
+  assert.equal((result.stdout + result.stderr).includes('PRIVATE_CANARY'), false);
+  const report = result.stderr.split('\n').find(line => line.startsWith('stack_startup='));
+  assert.deepEqual(JSON.parse(report.slice(14)), output.diagnostic);
+  assert.ok(JSON.stringify(output.diagnostic).length < 512);
+});

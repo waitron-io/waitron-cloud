@@ -4332,3 +4332,33 @@ Preserve every isolation, storage, accounting and cleanup assertion and deadline
 Use GitHub CI while local Docker is down; do not rerun the unchanged merge for a
 passing result. The exact job log and source-identity receipt are retained in lane
 G's `receipts/d142/`.
+
+## Cost-stack replication interruption (D152)
+
+[Cost run 40015106057, job 120625121669](https://github.com/waitron-io/waitron-cloud/actions/runs/40015106057/job/120625121669)
+refused the Litestream storage-lifetime case at replication transport close with
+`transfer-interrupted`, after 21 completed attempts and no remaining requests or
+connections. Those final counts do not identify the earlier failed I/O event.
+The transport now retains the first event category, known network code and
+operation category through cleanup. Controlled HTTP checks interrupt request and
+response bodies and verify that accounting still refuses. Paths, headers, object
+names and unknown diagnostic fields stay private.
+
+Reproduce the newly named event on Linux before changing transport or shutdown
+behavior. The historical cause remains unknown; a passing run alone does not
+explain it. Preserve every storage, accounting and cleanup assertion and deadline.
+
+## Cost-stack isolation command refusal (D152)
+
+The same job refused the later native-batch case during isolation, with command
+exit 1 after 1,043 milliseconds, before its workload. Treat this separately from
+the replication interruption until evidence links them. Failed inspection and
+outbound-probe commands now retain fixed command names, arguments with private
+identifiers and code replaced, a closed stderr category and bounded probe counts
+when available. Raw command output stays private. Controlled command refusals
+verify diagnostic handling and owned cleanup.
+
+Use the next Linux diagnostic recurrence to distinguish a failed probe execution
+from an isolation refusal, then reproduce and fix the proved cause test-first.
+Every isolation check and deadline remains unchanged. Local Docker-backed checks
+are unavailable while Docker is down; GitHub CI supplies that qualification.
