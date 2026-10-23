@@ -1273,7 +1273,17 @@ notifications separately.
   The optional `authorisedRecovery` evidence binds this separate fiscal activation
   to the same run, archive, point and verification attempt. It preserves the
   unchanged no-authority refusal and records no Cloud activation or route movement.
-  Remaining same-run refusal controls and complete certification are still due.
+  The same run now executes wrong-key, damaged-archive, malformed-output, timeout,
+  full-scratch, cancellation, forced-crash and uncertain-cleanup controls in fresh
+  exact-image children, then verifies the untouched archive again. Each outcome
+  binds the admitted source request, captured bytes, unique child, claim and token;
+  a refused child publishes no accepted verdict. All owned children are removed.
+  Bounded compressed transport preserves the enlarged receipt through the test
+  runner's output chunks. The real OOM control, supported owner/runtime outcome
+  coverage and final placement/recovery certification remain due. A local image
+  export also failed because Docker could not find a parent snapshot; a build
+  without cached-layer reuse exported successfully. The cache failure's cause
+  remains unverified.
   A source release does not establish
   a published verifier image or qualify any snapshot. Snapshots
   remain unavailable on this test deployment, and enforcement stays off until the

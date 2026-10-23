@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {verifierControlsFixture} from './test-fixtures/backup-verifier-controls.mjs';
 import test from 'node:test';
 import {readFile,mkdtemp,rm} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -13,7 +14,7 @@ const verify=(...args)=>{assert.equal(typeof implementation.verifyBackupVerifier
 export function jointReceipt(){
  const request={...vector,target,archive:{...vector.archive,modules:Object.fromEntries(target.modules.map(m=>[m.name,m.schema]))},verifierImage:'local.waitron-verifier@sha256:'+'2'.repeat(64)};
  const requestDigest=backupVerificationRequestDigest(request);
- return {
+ const value={
   version:2,runId:'joint-run-1',cloudHead:'a'.repeat(40),cloudTree:'b'.repeat(40),cloudDirty:false,
   waitronTarget:structuredClone(target),candidateImage:'sha256:'+'2'.repeat(64),publication:'unqualified',
   archive:{kind:'genuine-waitron',captureId:'capture-1',pointId:'capture-1',sourceNodeId:'node-1',sha256:'1'.repeat(64),bytes:8388608,modules:{...request.archive.modules}},
@@ -35,6 +36,7 @@ export function jointReceipt(){
   recovery:{protocolVersion:2,pointId:'capture-1',attemptId:'attempt-1',targetDigest:target.digest,readDigest:'1'.repeat(64),readBytes:8388608,client:'pinned-compiled-waitron',placement:'executed',ordinaryRestore:'executed',activation:'not_attempted',routeMoved:false},
   cleanup:{confirmed:true,containers:0,volumes:0,networks:0,directories:0},
  };
+ value.verifierControls=verifierControlsFixture(value);return value;
 }
 test('accepts one complete bound local scenario without calling its image published',()=>{const r=jointReceipt();assert.equal(verify(r),r);});
 for(const [name,change] of [

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {deflateSync,inflateSync} from 'node:zlib';
 import {spawn,execFileSync} from 'node:child_process';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
@@ -53,14 +54,26 @@ try{
 }
 }
 
+// A bounded compressed line stays below the test runner's 64 KiB stdout chunk boundary.
+export function jointProofLine(value){
+ const payload=deflateSync(Buffer.from(JSON.stringify(value))).toString('base64');
+ assert(payload.length<=16384,'joint proof exceeds its output line bound');
+ return 'CLOUD_BACKUP_JOINT_ZLIB='+payload;
+}
 export function readJointProofRun(output){
- const matches=[...output.matchAll(/^# CLOUD_BACKUP_JOINT=(.*)$/gm)];
- assert.equal(matches.length,1,'proof needs one same-run receipt');
+ const plain=[...output.matchAll(/^# CLOUD_BACKUP_JOINT=(.*)$/gm)],compressed=[...output.matchAll(/^# CLOUD_BACKUP_JOINT_ZLIB=(.*)$/gm)];
+ assert.equal(plain.length+compressed.length,1,'proof needs one same-run receipt');
+ let raw=plain[0]?.[1];
+ if(compressed.length){
+  const payload=compressed[0][1];assert(payload.length>0&&payload.length<=16384&&/^[A-Za-z0-9+/]*={0,2}$/.test(payload),'bounded compressed proof required');
+  const data=Buffer.from(payload,'base64');assert.equal(data.toString('base64'),payload,'canonical compressed proof required');
+  raw=new TextDecoder('utf-8',{fatal:true}).decode(inflateSync(data,{maxOutputLength:2*1024*1024}));
+ }
  for(const [name,want] of Object.entries({tests:1,pass:1,fail:0,cancelled:0,skipped:0})){
   const counts=[...output.matchAll(new RegExp('^# '+name+' (\\d+)$','gm'))];
   assert.equal(counts.length,1,'proof needs an executed scenario');assert.equal(Number(counts[0][1]),want,'proof needs an executed scenario');
  }
- return verifyBackupVerifierProof(JSON.parse(matches[0][1]),{requireComplete:false});
+ return verifyBackupVerifierProof(JSON.parse(raw),{requireComplete:false});
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){

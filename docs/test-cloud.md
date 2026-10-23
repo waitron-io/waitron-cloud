@@ -361,6 +361,27 @@ records the separate ordinary fiscal activation, its retained counters and both
 authority refusals. Cloud still reports no restored installation or route movement.
 This milestone does not complete the remaining refusal and release gates.
 
+The same joint run also opens fresh verifier children for wrong-key, damaged-archive,
+malformed-output, live timeout, full scratch, cancellation, forced-crash and uncertain-cleanup
+controls. Each child uses the same immutable image and captured archive binding. A final
+child verifies the untouched archive again. The receipt's `verifierControls` section binds
+these outcomes to the admitted source request and records the distinct child IDs, claim
+IDs, tokens and confirmed removal. A refused child supplies no accepted verdict. The
+scratch control fills the existing 256 MiB filesystem to `ENOSPC`; it does not raise a
+limit. The OOM control and final placement/recovery certification remain open.
+
+You can run these controls separately against a genuine disposable capture:
+
+```sh
+TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
+  node --test deploy/test-cloud/verifier-same-run-controls.test.mjs
+```
+
+The test runner splits large output lines. The joint scenario therefore sends its
+redacted receipt in one compressed line, capped at 16 KiB. The producer limits the
+decoded receipt to 2 MiB, rejects duplicate records and still requires one executed,
+passing scenario with no skips. The saved JSON remains the readable receipt.
+
 The current producer writes a version 2 receipt from the scenario's actual committed
 request, result, selected recovery attempt and client assertions. It emits the receipt
 only after confirming removal of its containers, networks, volumes and scratch.
