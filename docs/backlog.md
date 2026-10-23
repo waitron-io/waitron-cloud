@@ -4451,14 +4451,15 @@ The supplied choice, displayed choice and subsequent request agree in the
 browser checks. The pairing regression uses a supplied second business; no normal
 journey that preselects that business was established.
 
-The real-server snapshot reproduction showed a production backup panel on return,
-but no snapshot approval button: changing the synthetic venue to production
-invalidated its snapshot qualification. A direct Account approval request was
-refused with HTTP 403 and no recovery row. The permitted test-venue control sent
-and stored its exact chosen snapshot. Capture provisioning and recovery retain
-the existing test-only server guard. These are synthetic retained metadata
-fixtures, not evidence of production backup provisioning. PostgreSQL checks run
-in GitHub CI while Docker is down locally.
+The real-server reproduction showed a production backup panel on return. With
+continuous data, Approve sent that unoffered venue ID, but the server refused it
+with HTTP 403 and stored no recovery row. Snapshot approval stayed hidden because
+the production environment invalidated its qualification. Direct Account API
+approval was also refused for both sources. The permitted test-venue snapshot
+control sent and stored its exact chosen source. Capture provisioning and
+recovery retain the existing test-only server guard. These are synthetic retained
+metadata fixtures, not evidence of production backup provisioning. PostgreSQL
+checks run in GitHub CI while Docker is down locally.
 
 ## Cost-stack isolation command refusal (D152)
 

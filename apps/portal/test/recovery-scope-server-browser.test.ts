@@ -65,7 +65,7 @@ for (const locale of ['en', 'es'] as const) for (const source of ['snapshot', 'c
         const sent = {requestId: target.id, code: target.code, ...(source === 'snapshot' ? {source: 'snapshot', pointId: point.id} : {source: 'continuous', venueId: venue.venueId}), oldServerUnavailable: 'true', acceptDataLoss: 'true'};
         const response = await context.request.post(f.origin + '/api/account/recovery/approve', {data: sent, headers: {origin: f.origin, 'x-csrf-token': session.csrfToken}});
         approvals.push({sent, status: response.status()});
-        assert.equal(response.status(), 403, await response.text());
+        assert.equal(response.status(), 403); assert.deepEqual(await response.json(), {error: 'local_integration_only'});
       } else {
         await page.goBack(); await page.getByRole('heading', {name: c.recoveryTitle, exact: true}).waitFor();
       }
@@ -76,7 +76,7 @@ for (const locale of ['en', 'es'] as const) for (const source of ['snapshot', 'c
       await page.getByRole('checkbox', {name: c.recoveryStopped, exact: true}).check(); await page.getByRole('checkbox', {name: c.recoveryAcceptLoss, exact: true}).check();
       const replied = page.waitForResponse(r => r.url().endsWith('/api/account/recovery/approve'));
       await approve.click(); assert.equal((await replied).status(), journey === 'test-venue' ? 200 : 403);
-      if (journey === 'test-venue') await page.getByText(c.recoveryApprovedSnapshot, {exact: true}).waitFor();
+      if (journey === 'test-venue') await page.getByText(source === 'snapshot' ? c.recoveryApprovedSnapshot : c.recoveryApprovedContinuous, {exact: true}).waitFor();
     }
     const rows = (await f.db.pool.query('SELECT venue_id,point_id,source_kind FROM backup_recoveries WHERE id=$1', [target.id])).rows;
     console.log('RECOVERY_SCOPE_JOURNEY', JSON.stringify({locale, source, journey, environment: journey === 'test-venue' ? 'test' : 'production', offered, exposed, approvals, stored: rows}));
