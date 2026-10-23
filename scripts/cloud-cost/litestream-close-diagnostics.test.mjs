@@ -115,3 +115,78 @@ for (const origin of ['lifetime-completion', 'body-accounting']) {
     assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
   });
 }
+
+for (const tracker of [false, true]) {
+  test(`upstream refusal keeps its network cause with lifetime tracking ${tracker}`, async t => {
+    const backend = createServer(); backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
+    const port = backend.address().port; await new Promise(resolve => backend.close(resolve));
+    const meter = createMeter({ phase: 'workload', clock: () => 0 });
+    const front = await stream.createLitestreamTransport({ target: `http://127.0.0.1:${port}`, meter, phase: 'workload',
+      ...(tracker ? { lifetimes: { begin: () => event => { if (event.interrupted) throw Error('PRIVATE lifetime payload'); } } } : {}) });
+    t.after(() => front.close().catch(() => {}));
+    await send(front.url, { headers }).catch(() => {});
+    const records = [];
+    await assert.rejects(observe('replication-transport', () => front.close(), records));
+    assert.equal(records.at(-1).diagnostic.reason, 'upstream-error');
+    assert.equal(records.at(-1).diagnostic.code, 'ECONNREFUSED');
+    assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+  });
+}
+
+test('an upstream response reset is never attributed to the client parser', async t => {
+  const { transport, meter } = await fixture(t, (req, res) => {
+    req.resume(); res.writeHead(200, { 'content-length': 100 }); res.write('x');
+    setImmediate(() => res.destroy());
+  });
+  await send(transport.url, { headers }).catch(() => {});
+  const records = [];
+  await assert.rejects(observe('restore-transport', () => transport.close(), records));
+  assert.equal(records.at(-1).diagnostic.reason, 'upstream-response-interrupted');
+  assert.equal(records.at(-1).diagnostic.code, 'ECONNRESET');
+  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+});
+
+test('an arbitrary error code cannot escape through the diagnostic record', async () => {
+  const records = [], error = Object.assign(Error('PRIVATE'), { litestreamCloseDiagnostic: {
+    reason: 'upstream-error', code: 'PRIVATE network secret', pending: 0, completed: 1, connections: 0 } });
+  await assert.rejects(observe('restore-transport', async () => { throw error; }, records), e => e === error);
+  assert.equal(JSON.stringify(records).includes('PRIVATE'), false);
+});
+
+test('reporter failures cannot prevent close or replace its original outcome', async () => {
+  assert.equal(typeof stream.withLitestreamCloseDiagnostics, 'function');
+  const refusal = Error('close refused'); let calls = 0;
+  for (const throws of [false, true]) {
+    const close = async () => { calls++; if (throws) throw refusal; return 42; };
+    const result = stream.withLitestreamCloseDiagnostics({ stage: 'restore-transport', close, report: () => { throw Error('report failed'); } });
+    if (throws) await assert.rejects(result, e => e === refusal);
+    else assert.equal(await result, 42);
+  }
+  assert.equal(calls, 2);
+});
+
+test('a rejection with a hostile property trap still preserves the original outcome', async () => {
+  const refusal = new Proxy({}, { getOwnPropertyDescriptor() { throw Error('PRIVATE'); } }), records = [];
+  await assert.rejects(observe('restore-transport', async () => { throw refusal; }, records), e => e === refusal);
+  assert.equal(JSON.stringify(records).includes('PRIVATE'), false);
+});
+
+test('malformed HTTP is classified separately from a valid request with invalid audit headers', async t => {
+  const { connect } = await import('node:net');
+  const { transport } = await fixture(t), target = new URL(transport.url);
+  const socket = connect(Number(target.port), target.hostname); socket.on('error', () => {});
+  await once(socket, 'connect'); const closed = once(socket, 'close');
+  socket.write('PRIVATE_INVALID_METHOD / HTTP/1.1\r\n\r\n'); await closed;
+  const records = [];
+  await assert.rejects(observe('replication-transport', () => transport.close(), records));
+  assert.equal(records.at(-1).diagnostic.reason, 'client-error');
+  assert.equal(JSON.stringify(records).includes('PRIVATE'), false);
+});
+
+test('a refused phase change stays the first cause during subsequent close', async t => {
+  const { transport } = await fixture(t), records = [];
+  assert.throws(() => transport.setPhase('PRIVATE_PHASE'), /Invalid cloud cost Litestream audit/);
+  await assert.rejects(observe('restore-transport', () => transport.close(), records));
+  assert.equal(records.at(-1).diagnostic.reason, 'phase-change');
+  assert.equal(JSON.stringify(records).includes('PRIVATE'), false);
+});

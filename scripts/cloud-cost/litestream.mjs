@@ -116,19 +116,23 @@ export function createLitestreamRequestAudit({ phase, allowBulkDeletes = false }
 const closeStages = new Set(['replication-transport', 'restore-transport', 'cleanup-replication-transport',
   'cleanup-restore-transport', 'cleanup-replication-proxy', 'cleanup-restore-proxy', 'cleanup-admin-proxy']);
 const closeReasons = new Set(['request-validation', 'lifetime-completion', 'body-accounting', 'transfer-interrupted',
-  'upstream-error', 'client-error', 'phase-change', 'active-close']);
+  'upstream-error', 'upstream-response-interrupted', 'client-error', 'phase-change', 'active-close']);
 const networkErrors = new Set(['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'ERR_STREAM_PREMATURE_CLOSE']);
-const own = (value, key) => value && (typeof value === 'object' || typeof value === 'function')
-  ? Object.getOwnPropertyDescriptor(value, key)?.value : undefined;
+const own = (value, key) => {
+  try { return value && (typeof value === 'object' || typeof value === 'function')
+    ? Object.getOwnPropertyDescriptor(value, key)?.value : undefined; }
+  catch { return undefined; }
+};
 
 // Error text and request metadata can contain credentials; publish only closed categories and counts.
 export async function withLitestreamCloseDiagnostics({ stage, close, report = line => console.error(line) }) {
   requireThat(closeStages.has(stage) && typeof close === 'function' && typeof report === 'function');
   const record = { kind: 'litestream-close', stage };
-  report(JSON.stringify({ ...record, status: 'started' }));
+  const emit = record => { try { report(JSON.stringify(record)); } catch { /* Diagnostics cannot change cleanup or its outcome. */ } };
+  emit({ ...record, status: 'started' });
   try {
     const result = await close();
-    report(JSON.stringify({ ...record, status: 'fulfilled' })); return result;
+    emit({ ...record, status: 'fulfilled' }); return result;
   } catch (error) {
     const raw = own(error, 'litestreamCloseDiagnostic'), reason = own(raw, 'reason');
     const diagnostic = {};
@@ -138,8 +142,8 @@ export async function withLitestreamCloseDiagnostics({ stage, close, report = li
       if (Number.isSafeInteger(value) && value >= 0) diagnostic[key] = value;
     }
     const code = own(raw, 'code'); if (networkErrors.has(code)) diagnostic.code = code;
-    report(JSON.stringify({ ...record, status: 'rejected', error: closeReasons.has(reason) ? 'transport-refused' : 'unclassified',
-      ...(Object.keys(diagnostic).length ? { diagnostic } : {}) }));
+    emit({ ...record, status: 'rejected', error: closeReasons.has(reason) ? 'transport-refused' : 'unclassified',
+      ...(Object.keys(diagnostic).length ? { diagnostic } : {}) });
     throw error;
   }
 }
@@ -159,10 +163,11 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   const invocations = new Map(), pending = new Set(), connections = new Set();
   const idleWaiters = new Set();
   let completed = 0;
-  const poison = (reason, error) => {
-    refusal ??= { reason, ...(networkErrors.has(own(error, 'code')) ? { code: own(error, 'code') } : {}) };
-    invalid = true; meter.invalidate();
+  const remember = (reason, error) => {
+    refusal ??= { reason };
+    if (refusal.reason === reason && !refusal.code && networkErrors.has(own(error, 'code'))) refusal.code = own(error, 'code');
   };
+  const poison = (reason, error) => { remember(reason, error); invalid = true; meter.invalidate(); };
   const size = value => {
     requireThat(value === undefined || typeof value === 'string' && /^(0|[1-9]\d*)$/.test(value));
     const n = Number(value ?? 0); requireThat(Number.isSafeInteger(n)); return n;
@@ -196,6 +201,8 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     const finish = (interrupted, reason = 'transfer-interrupted', error) => {
       if (settled || !interrupted && (!sent || !received)) return;
       settled = true; pending.delete(id.key); completed++;
+      // Lifetime refusal is a consequence of interrupted I/O; retain the original cause without changing invalidation.
+      if (interrupted) remember(reason, error);
       let completing = 'lifetime-completion';
       try {
         completeLifetime?.({ statusCode, bytesOut, interrupted, responseHeaders,
@@ -214,6 +221,8 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       }
     };
     const upstream = request(endpoint, { method: source.method, path: source.url, headers: source.headers }, response => {
+      response.once('aborted', () => remember('upstream-response-interrupted'));
+      response.on('error', error => remember('upstream-response-interrupted', error));
       try { statusCode = response.statusCode; responseHeaders = response.headers;
         expectedIn = source.method === 'HEAD' ? 0 : size(response.headers['content-length']); }
       catch { finish(true); response.destroy(); destination.destroy(); return; }

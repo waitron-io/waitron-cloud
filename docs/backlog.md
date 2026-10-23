@@ -4225,9 +4225,15 @@ reports its stage and started, fulfilled or rejected outcome. A rejected transpo
 also reports its first refusal category and remaining request/connection counts;
 known network codes are retained. Error messages, paths, headers, object names,
 credentials and unknown fields are excluded. The original rejection still fails
-the close, and repeated cleanup reports the same refusal. Controlled HTTP tests
-cover malformed requests, an unfinished transfer and rejected lifetime or byte
-accounting. All existing storage, inventory and accounting checks and deadlines
-remain in place. Local Docker-backed qualification is unavailable while Docker is
-down. Linux CI must qualify the instrumented case; investigate a diagnostic
-recurrence before claiming or changing the cause.
+the close, and repeated cleanup reports the same refusal. Counters are sampled
+after socket shutdown; they do not prove that a request was stuck. Controlled HTTP
+tests cover invalid audit headers, malformed HTTP, refused connections, an
+interrupted upstream response, an unfinished transfer and rejected lifetime or
+byte accounting. The network cause is retained before a lifetime tracker refuses
+the interrupted transfer. Reporting failures cannot prevent cleanup or replace
+its outcome. The smoke script's main and cleanup wiring is exercised with external
+workload dependencies replaced at module boundaries. All existing storage,
+inventory and accounting checks and deadlines remain in place. Local Docker-backed
+qualification is unavailable while Docker is down. Use GitHub CI for Linux
+qualification; investigate a diagnostic recurrence before claiming or changing
+the cause.
