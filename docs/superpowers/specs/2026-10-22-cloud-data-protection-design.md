@@ -1,6 +1,6 @@
 # Protect venue data when Cloud handles it
 
-**D101 · 2026-10-22 · Owner-approved engineering design; roadmap approved and slice 1 authorised. Other runtime controls remain unbuilt.**
+**D101 · 2026-10-22, authority updated 2026-10-23 · Owner-approved engineering design; roadmap approved and local slices 1–5 authorised. Other runtime controls remain unbuilt.**
 
 You need to know who can see your venue's data, where copies go and what happens when
 membership ends before you entrust Cloud with it. This proposal supplies Cloud's half
@@ -16,7 +16,12 @@ The owner approved the complete D101/D88 data-protection engineering design from
 PR283 (`9701cd2359d69f0a3e8960b761754cf492aac745`) on 2026-10-22 around 08:30
 for build planning only. The [implementation roadmap](../plans/2026-10-22-cloud-data-protection.md)
 records the reviewed roadmap. The owner subsequently approved it and authorised slice 1
-only; later slices require separate build authority.
+initially. On 2026-10-23 around 08:15 the owner authorised local slices 2–5,
+SQL-free slices 2/3 first and then 4/5 using the next actually available migration
+slot after reconciliation with Lane G. Slices 6–12 remain unauthorised. Slice 2
+publishes the [register](../../cloud-data-processing-register.md) and
+[draft annexes](../../cloud-processing-annexes.md), with all supplier evidence
+unqualified and all six lawyer questions open.
 Broader D88 hosting/isolation and shared contracts remain unapproved; no deployment,
 spending, provider resources or contract execution is authorised.
 
@@ -341,14 +346,14 @@ These are approved engineering acceptance cases, not executed tests. The linked
 ## 9. Conditional delivery and the one owner decision now
 
 1. **Design approval recorded:** the owner approved the complete D101/D88 data-protection engineering design from PR283 on 2026-10-22 around 08:30 for build planning only. O1 is answered, including the 24-hour maximum, conditional Paris destination and exit/retry/concurrency rules. Broader D88 hosting/isolation and shared contracts are not approved.
-2. **Roadmap approved, slice 1 authorised:** the [roadmap](../plans/2026-10-22-cloud-data-protection.md) records the reviewed slices. Only slice 1 has separate build authority. Complete lawyer-reviewed annexes, shared A980/Waitron contracts and supplier/location evidence before affected flows can be enabled. All six section 10 questions remain open; AI additionally requires separate privacy review and owner acceptance of eligibility examples and limits.
-3. **Slice 1 implemented locally:** the outbound AI boundary refuses production calls; only explicit synthetic loopback proof is available. Later authorised work covers country-policy controls, support/KMS authority, export/90-day/purge and incident handoffs, with refusal/concurrency evidence. Reuse actual landed interfaces; D79 is clean, parked and unpublished at `7939a27`, and its migration 043 is not on this tree. No further migration item starts until its slot resolves; the first planned slice is SQL-free.
+2. **Roadmap approved, local slices 1–5 authorised:** the [roadmap](../plans/2026-10-22-cloud-data-protection.md) records the reviewed slices. Slice 1 was authorised on 2026-10-22; local slices 2–5 were authorised on 2026-10-23, slices 2/3 first and 4/5 subject to the actual migration slot. Slices 6–12 remain unauthorised. Complete lawyer-reviewed annexes, shared A980/Waitron contracts and supplier/location evidence before affected flows can be enabled. All six section 10 questions remain open; AI additionally requires separate privacy review and owner acceptance of eligibility examples and limits.
+3. **Slice 1 implemented locally:** the outbound AI boundary refuses production calls; only explicit synthetic loopback proof is available. Later authorised work covers country-policy controls, support/KMS authority, export/90-day/purge and incident handoffs, with refusal/concurrency evidence. Reuse actual landed interfaces; D79 migration 043 and PR5/6 are landed; PR7 final local integration/release qualification remains incomplete. Reconcile Lane G's actual migration reservations before schema work; slices 1–3 are SQL-free.
 4. **Before enablement:** satisfy the [launch evidence gate](../../launch-evidence.md#pass-the-production-evidence-gate), legal/provider/location and KMS deletion-waiting policy, D102 email evidence and applicable D88/A951/fiscal/isolation contracts. D68 is landed, but hosting/recovery costs and reliability still need measurement. D103's first C39 monitoring design is approved for planning only; release/compute remain separate. D102/D104 hands-on work waits until 3 November.
 
 **O1, answered:** full data-protection engineering design approved for build planning
 only on 2026-10-22 around 08:30. No repeat owner question. AI eligibility, all six lawyer
 questions, KMS deletion-waiting policy, provider qualification and runtime proof remain
-open. Approval authorises only slice 1 locally, without spending, deployment or contracts.
+open. Local build authority now covers slices 1–5, without spending, deployment or contracts. Slices 6–12 remain unauthorised.
 
 ## 10. Questions for the lawyer, not engineering guesses
 

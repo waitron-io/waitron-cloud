@@ -56,6 +56,15 @@ validity, durable submission, explicit transport selection and local status scre
 Its caller implementation must add a link back to this contract and a joint receipt;
 Cloud's contract alone does not implement the on-prem half.
 
+## Cloud processing records
+
+The [Cloud purpose and supplier register](cloud-data-processing-register.md) owns
+stable service/evidence IDs, Cloud-own account/security purposes and explicitly
+unqualified supplier records. The [draft processing annexes](cloud-processing-annexes.md)
+carry the five D101 agreement groups for legal completion. Use A980 section 2 as
+the single application map; these documents do not duplicate its fields or approve
+a supplier. All six D101 lawyer questions remain open.
+
 ## Backup and recovery design reconciliation
 
 Read existing Waitron decisions before treating a Cloud question as new. The following
