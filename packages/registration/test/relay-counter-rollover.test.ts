@@ -4,7 +4,7 @@ import {RelayBoundsError} from '../src/relay-bounds.ts';
 import {admitFixtureMessage} from './fixtures/relay-counter-rollover.ts';
 
 function expired(counterEndsAt = 1000, observedAt = 1001) {
-  return Object.assign(new RelayBoundsError('relay_unavailable'),
+  return new RelayBoundsError('relay_unavailable',
     {cause: {kind: 'relay_counter_expired', counterEndsAt, observedAt}});
 }
 
@@ -12,7 +12,7 @@ test('fixture retries a proved rollover and reports only the bounded clock evide
   let attempts = 0;
   const reports: unknown[] = [];
   const error = expired();
-  Object.assign(error.cause, {recipient: 'private@example.test', token: 'private-token'});
+  Object.assign(error.cause as object, {recipient: 'private@example.test', token: 'private-token'});
   assert.equal(await admitFixtureMessage(async () => {
     if (++attempts === 1) throw error;
     return 'admitted';

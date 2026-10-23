@@ -65,7 +65,10 @@ jobs:
                   try:
                       path.write_text(original.replace(guard, replacement))
                       result = run(label, candidate)
-                      assert result.returncode != 0 and expected in result.stdout + result.stderr, label + ': expected failure missing'
+                      output = result.stdout + result.stderr
+                      assert result.returncode != 0 and expected in output, label + ': expected failure missing'
+                      if label == 'without-clock-evidence':
+                          assert 'admitFixtureMessage' in output and "code: 'relay_unavailable'" in output, 'wrong refusal path'
                   finally:
                       path.write_text(original)
               restored = run('restored', candidate)

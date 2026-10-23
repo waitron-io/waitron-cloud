@@ -157,13 +157,19 @@ test('migration setup survives a proved counter rollover without retaining a fai
       CREATE TRIGGER fixture_cross_counter_boundary BEFORE INSERT ON relay_messages
         FOR EACH ROW EXECUTE FUNCTION fixture_cross_counter_boundary()`);
     const observer = await f.pool.connect();
-    observer.on('notice', notice => console.log(notice.message));
+    const notices: string[] = [];
+    observer.on('notice', notice => {if (notice.message) {notices.push(notice.message); console.log(notice.message);}});
     observer.release();
     const rollovers: unknown[] = [];
-    const result = await admitFixtureMessage(
-      () => messages.execute('email-submit', v.proof('email-submit', body)),
-      evidence => {rollovers.push(evidence); console.log('migration rollover evidence', JSON.stringify(evidence));});
+    const held = await f.pool.connect();
+    let result: Awaited<ReturnType<typeof messages.execute>>;
+    try {
+      result = await admitFixtureMessage(
+        () => messages.execute('email-submit', v.proof('email-submit', body)),
+        evidence => {rollovers.push(evidence); console.log('migration rollover evidence', JSON.stringify(evidence));});
+    } finally {held.release();}
     assert.equal(result.created, true);
+    assert.equal(notices.length, 1, 'the pool connection used for admission reports the rollover notice');
     assert.ok(rollovers.length >= 1, 'the deliberately expired admission is reported');
     assert.ok(Number((await f.pool.query('SELECT last_value FROM fixture_admission_attempt')).rows[0].last_value) >= 2);
     assert.equal((await f.pool.query('SELECT count(*) FROM relay_messages')).rows[0].count, '1');
@@ -172,6 +178,8 @@ test('migration setup survives a proved counter rollover without retaining a fai
       [{kind: 'grant', count: '1'}, {kind: 'recipient', count: '1'}]);
     assert.equal((await messages.execute('email-submit', v.proof('email-submit', body))).created, false);
     assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count, '1');
+    assert.deepEqual((await f.pool.query('SELECT kind,count::text FROM relay_bounds_counters ORDER BY kind')).rows,
+      [{kind: 'grant', count: '1'}, {kind: 'recipient', count: '1'}]);
     await f.row(body.messageId);
   } finally {await f.close();}
 });
