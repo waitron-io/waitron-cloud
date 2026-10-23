@@ -99,7 +99,7 @@ export function verifyBackupVerifierProof(value,{requireComplete=true}={}){
   equal(authorised.ordinaryRestore,{exit:0,preparationBoundToRecapture:true,retiredCounters:[123,123,123],activeCounters:[1,1,1],allocations:2},'authorised fixture restore invariant failed');
   equal(authorised.refusals,{wrongNodeKey:{exit:1,code:'promotion.break_glass_invalid',destinationPreserved:true},missingPreparation:{code:'sif.allocation_invalid',reason:'outside_confirmation_missing',destinationPreserved:true}},'separate authority refusals required');
  }
- if(value.phases.find(p=>p.name==='refusals').checks.some(check=>['wrong-key','malformed-output','timeout','scratch','cancel','crash','uncertain-cleanup'].includes(check)))assert(Object.hasOwn(value,'verifierControls'),'verifier refusals require same-run evidence');
+ if(value.phases.find(p=>p.name==='refusals').checks.some(check=>['wrong-key','malformed-output','timeout','oom','scratch','cancel','crash','uncertain-cleanup'].includes(check)))assert(Object.hasOwn(value,'verifierControls'),'verifier refusals require same-run evidence');
  if(Object.hasOwn(value,'verifierControls'))verifySnapshotVerifierControls(value.verifierControls,value);
  exact(value.cleanup,'confirmed,containers,volumes,networks,directories');equal(value.cleanup.confirmed,true,'owned cleanup must be confirmed');
  for(const name of ['containers','volumes','networks','directories'])equal(value.cleanup[name],0,'owned resources remain');

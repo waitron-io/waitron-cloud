@@ -362,13 +362,18 @@ authority refusals. Cloud still reports no restored installation or route moveme
 This milestone does not complete the remaining refusal and release gates.
 
 The same joint run also opens fresh verifier children for wrong-key, damaged-archive,
-malformed-output, live timeout, full scratch, cancellation, forced-crash and uncertain-cleanup
-controls. Each child uses the same immutable image and captured archive binding. A final
+malformed-output, live timeout, full scratch, cancellation, forced-crash, uncertain-cleanup,
+real memory exhaustion and unsupported-format controls. Each child uses the same immutable image and captured archive binding. A final
 child verifies the untouched archive again. The receipt's `verifierControls` section binds
 these outcomes to the admitted source request and records the distinct child IDs, claim
 IDs, tokens and confirmed removal. A refused child supplies no accepted verdict. The
 scratch control fills the existing 256 MiB filesystem to `ENOSPC`; it does not raise a
-limit. The OOM control and final placement/recovery certification remain open.
+limit. The memory control makes the kernel kill its verifier at the unchanged 1,024 MiB
+limit, including swap, and records Docker’s `OOMKilled` flag and exit 137 before removal.
+The unsupported-format control changes only the declared format version to 2; the pinned
+runtime returns `unsupported` with `archive_format_unsupported` for the same captured bytes.
+The final child still verifies the untouched archive. Final placement/recovery certification
+remains open. These controls do not claim to exercise a module’s `needs_authority` outcome.
 
 You can run these controls separately against a genuine disposable capture:
 

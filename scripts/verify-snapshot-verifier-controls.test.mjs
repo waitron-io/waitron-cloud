@@ -56,3 +56,29 @@ test('claimed verifier refusals require their same-run evidence',()=>{
  const r=controlledReceipt();delete r.verifierControls;
  assert.throws(()=>verifyBackupVerifierProof(r,{requireComplete:false}),/verifier refusals require same-run evidence/);
 });
+
+for(const [name,change] of [
+ ['missing OOM control',r=>r.verifierControls.cases=r.verifierControls.cases.filter(c=>c.name!=='oom')],
+ ['missing OOM runtime',r=>delete r.verifierControls.cases.find(c=>c.name==='oom').runtime],
+ ['no OOM event',r=>r.verifierControls.cases.find(c=>c.name==='oom').runtime.oomKilled=false],
+ ['increased memory limit',r=>r.verifierControls.cases.find(c=>c.name==='oom').runtime.memoryBytes=2147483648],
+ ['increased swap limit',r=>r.verifierControls.cases.find(c=>c.name==='oom').runtime.memorySwapBytes=2147483648],
+ ['normal child exit',r=>r.verifierControls.cases.find(c=>c.name==='oom').runtime.exitCode=0],
+ ['secret in runtime',r=>r.verifierControls.cases.find(c=>c.name==='oom').runtime.recoveryKey='private'],
+])test('rejects unproved memory refusal: '+name,()=>{
+ const r=controlledReceipt();change(r);assert.throws(()=>verifyBackupVerifierProof(r,{requireComplete:false}));
+});
+test('an OOM refusal alone requires same-run child evidence',()=>{
+ const r=controlledReceipt();delete r.verifierControls;
+ const phase=r.phases.find(p=>p.name==='refusals');phase.state='unavailable';phase.checks=['oom'];phase.reason='other-controls-incomplete';
+ assert.throws(()=>verifyBackupVerifierProof(r,{requireComplete:false}),/verifier refusals require same-run evidence/);
+});
+
+for(const [name,change] of [
+ ['false unsupported format',r=>r.verifierControls.cases.find(c=>c.name==='unsupported-format').request.archive.manifestVersion=1],
+ ['unsupported archive digest changed',r=>{const c=r.verifierControls.cases.find(c=>c.name==='unsupported-format');c.request.archive.sha256='8'.repeat(64);rebind(c);}],
+ ['unsupported key reference changed',r=>{const c=r.verifierControls.cases.find(c=>c.name==='unsupported-format');c.request.backupKey.reference='other-key';rebind(c);}],
+ ['unsupported archive version other than control',r=>{const c=r.verifierControls.cases.find(c=>c.name==='unsupported-format');c.request.archive.manifestVersion=3;rebind(c);}],
+])test('rejects unbound unsupported outcome: '+name,()=>{
+ const r=controlledReceipt();change(r);assert.throws(()=>verifyBackupVerifierProof(r,{requireComplete:false}));
+});

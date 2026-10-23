@@ -22,7 +22,12 @@ test('same-run controls retain archive identity, bound outcomes and exact child 
  const archive=Buffer.from(captured.archive,'base64'),object=bufferObject(archive),target=JSON.parse(await readFile(new URL('../backup-verifier/target.json',import.meta.url),'utf8')),vector=JSON.parse(await readFile(new URL('../../packages/backups/test/fixtures/verification-vector.json',import.meta.url),'utf8'));
  const request={...vector,target,sourceNodeId:captured.metadata.sourceNodeId,capturedAt:captured.metadata.manifest.createdAt,archive:{...vector.archive,sha256:object.receipt.digest,bytes:object.receipt.size,modules:captured.metadata.manifest.modules},verifierImage:'local.waitron-verifier@'+image};
  const actual=await implementation.snapshotVerifierControls({directory,image,owner,runId,request,archive:captured.archive,recoveryKey});
- assert.deepEqual(actual.cases.map(c=>c.name),['wrong-key','archive-integrity','malformed-output','timeout','scratch','cancel','crash','uncertain-cleanup','later-valid']);
+ const unsupported=actual.cases.find(c=>c.name==='unsupported-format');assert(unsupported,'real unsupported-format control is required');
+ assert.equal(unsupported.result.status,'unsupported');assert.equal(unsupported.result.reason,'archive_format_unsupported');assert.equal(unsupported.request.archive.manifestVersion,2);
+ const oom=actual.cases.find(c=>c.name==='oom');assert(oom,'real same-run OOM control is required');
+ assert.equal(oom.error,'backup.verifier_resource');assert.equal(oom.result,null);assert.equal(oom.receipt,null);
+ assert.deepEqual(oom.runtime,{oomKilled:true,memoryBytes:1073741824,memorySwapBytes:1073741824,exitCode:137});
+ assert.deepEqual(actual.cases.map(c=>c.name),['wrong-key','archive-integrity','malformed-output','timeout','scratch','cancel','crash','uncertain-cleanup','oom','unsupported-format','later-valid']);
  assert.equal(actual.runId,runId);assert.equal(actual.archiveSha256,object.receipt.digest);assert.equal(actual.archiveBytes,object.receipt.size);
  assert.equal(actual.cases[0].result.status,'unavailable');assert.equal(actual.cases[0].result.reason,'decryption_unavailable');
  assert.equal(actual.cases[1].result.status,'invalid');assert.equal(actual.cases[1].result.reason,'archive_digest_mismatch');

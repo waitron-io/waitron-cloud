@@ -1279,8 +1279,13 @@ notifications separately.
   binds the admitted source request, captured bytes, unique child, claim and token;
   a refused child publishes no accepted verdict. All owned children are removed.
   Bounded compressed transport preserves the enlarged receipt through the test
-  runner's output chunks. The real OOM control, supported owner/runtime outcome
-  coverage and final placement/recovery certification remain due. A local image
+  runner's output chunks. The same run now also makes the kernel kill an exact
+  verifier child at its unchanged 1 GiB memory/swap limit. Its receipt requires
+  Docker's OOM flag, exit 137 and confirmed removal. A format-2 request over the
+  same captured bytes returns the pinned runtime's genuine unsupported-format
+  outcome; the untouched archive still verifies afterward. These controls do not
+  exercise a module's needs-authority outcome. Final placement/recovery
+  certification and the remaining receipt/release checks remain due. A local image
   export also failed because Docker could not find a parent snapshot; a build
   without cached-layer reuse exported successfully. The cache failure's cause
   remains unverified.
