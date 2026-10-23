@@ -39,6 +39,12 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     await page.getByRole('button', { name: c.fiscalInspect, exact: true }).click();
     const attribution = locale === 'en' ? 'Recovery key · replacement-node · restore-event' : 'Clave de recuperación · replacement-node · restore-event';
     await page.getByText(attribution, { exact: true }).first().waitFor({ timeout: 4000 });
+    for (const [index, purpose] of ['standard', 'full', 'rectificative'].entries()) {
+      const selector = page.getByLabel(c.fiscalPurpose + ' ' + (index + 1), { exact: true });
+      assert.equal(await selector.isDisabled(), true);
+      assert.equal(await selector.inputValue(), purpose);
+      assert.equal(await selector.locator('option:checked').textContent(), [c.fiscalStandard, c.fiscalFull, c.fiscalRectificative][index]);
+    }
     assert.equal(await page.getByLabel(c.fiscalPacket, { exact: true }).inputValue(), encodeReceipt(consumed));
     assert(!(await page.locator('body').innerText()).includes('[object Object]'));
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));

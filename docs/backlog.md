@@ -343,10 +343,16 @@ The page retains status checking and exact-request resends; temporary continuity
 failures still suggest a later retry. Controller checks and real-server Chromium
 journeys cover both themes at 390 and 1280 pixels. The exhaustion browser response
 is synthetic; the untrusted-paper response comes from the real signed-evidence check.
-The retained receipt's disabled draft purpose selectors display Standard for
-all three bases in the D72 key-event browser captures, while the signed receipt
-list correctly displays Standard, Full and Rectificative. Qualify and correct
-that draft display separately without changing signed bases or purposes.
+When you inspect a retained receipt, its disabled draft selectors now show each
+signed purpose: Standard, Full and Rectificative. Selection is applied to the
+rendered options so the first option cannot replace a purpose before the options
+exist. Chromium checks cover English and Spanish, both themes and 390/1280 widths,
+new-draft edits and the unchanged signed packet. The real-server key-event journey
+also checks all three displayed purposes. Nearby organisation and venue selectors
+still bind their value before their options; an isolated first-render probe shows
+the first organisation and an empty venue instead of the supplied selections.
+Qualify their live journeys and correct those selectors separately, including the
+mode selector's matching binding, without changing allocation or receipt fields.
 Duplicate adjacent status authority calls remain a small follow-up; no production defaults are
 selected. Fiscal records, invoice hashes and Waitron's allocation code stay outside
 this Cloud change.
