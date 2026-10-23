@@ -38,6 +38,15 @@ if (command === 'image' && args[1] === 'inspect') {
   if (!data.cached.includes(args[2])) fail('Error: No such image: ' + args[2]);
 } else if (command === 'pull') {
   data.calls.push({command, image: args[1]});
+  if (data.cancelSignal) process.kill(process.ppid, data.cancelSignal);
+  if (data.cancelSignal && !data.failures.length) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+  if (data.stubbornPull) {
+    process.on('SIGTERM', () => {});
+    save();
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 6000);
+    data.calls.push({command: 'pull-survived'});
+    fail('Pull survived its termination deadline');
+  }
   if (data.hangPull) {save(); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000);}
   acquire(args[1]);
 } else if (command === 'run') {
@@ -78,10 +87,42 @@ Object.defineProperty(performance, 'now', {value: () => {
   return 118000 + original() - started;
 }});
 `);
+  const probe = join(root, 'probe.mjs');
+  const invocations = join(root, 'invocations.jsonl');
+  await writeFile(invocations, '');
+  await writeFile(probe, `
+import childProcess from 'node:child_process';
+import {appendFileSync} from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
+const execute = childProcess.execFileSync;
+childProcess.execFileSync = (command, args, options) => {
+  appendFileSync(process.env.LAUNCHER_INVOCATIONS, JSON.stringify({command, args}) + '\\n');
+  try { return execute(command, args, options); }
+  catch (error) {
+    if (String(error.stderr).includes('CONTROLLED_EARLY_TIMEOUT')) {
+      error.code = 'ETIMEDOUT';
+      error.stderr = '';
+    }
+    throw error;
+  }
+};
+syncBuiltinESMExports();
+const phase = ${JSON.stringify(scenario.budgetPhase ?? null)};
+if (phase) {
+  let reads = 0;
+  Object.defineProperty(performance, 'now', {value: () => {
+    reads++;
+    if (reads <= 3) return 0;
+    if (reads === 4) return phase === 'before' ? 119000 : 118999;
+    return 120000;
+  }});
+}
+`);
   const clockArgs = scenario.shortBudget ? ['--import', clock] : [];
+  if (scenario.budgetPhase || scenario.failures?.includes('CONTROLLED_EARLY_TIMEOUT')) clockArgs.push('--import', probe);
   const child = spawn(process.execPath, [...clockArgs, launcher.pathname, 'exec', 'node', 'controlled-test'], {
     env: {...process.env, PATH: `${root}:${process.env.PATH}`, LAUNCHER_STATE: state,
-      LAUNCHER_PORT: String(server.address().port)}, stdio: ['ignore', 'pipe', 'pipe'],
+      LAUNCHER_INVOCATIONS: invocations, LAUNCHER_PORT: String(server.address().port)}, stdio: ['ignore', 'pipe', 'pipe'],
   });
   t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); });
   let output = '';
@@ -90,7 +131,8 @@ Object.defineProperty(performance, 'now', {value: () => {
     child.once('error', reject);
     child.once('close', (code, signal) => resolve({code, signal}));
   });
-  return {...status, output, ...JSON.parse(await readFile(state, 'utf8'))};
+  return {...status, output, ...JSON.parse(await readFile(state, 'utf8')),
+    invocations: (await readFile(invocations, 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line))};
 }
 
 // Removing the acquisition retry must prevent the requested package command from running.
@@ -165,3 +207,79 @@ test('a hanging pull is killed within the remaining shared image-acquisition bud
   assert.equal(result.calls.filter(call => call.command === 'pull').length, 1);
   assert.equal(result.calls.some(call => ['run', 'pnpm', 'rm'].includes(call.command)), false);
 });
+
+// Removing any one recognised response must stop recovery before the package command.
+for (const failure of ['i/o timeout', 'context deadline exceeded', 'connection reset by peer', 'unexpected EOF']) {
+  test(`launcher retries a Docker connection failure: ${failure}`, async t => {
+    const result = await launch(t, {cached: [mailpit], failures: [failure]});
+    assert.equal(result.code, 0);
+    assert.equal(result.calls.filter(call => call.command === 'pull').length, 2);
+    assert.equal(result.calls.find(call => call.command === 'pnpm')?.database, true);
+  });
+}
+
+// This early injected error isolates classification; a real launcher timeout spends the whole budget.
+test('an early ETIMEDOUT is retryable while the image still has time left', async t => {
+  const result = await launch(t, {cached: [mailpit], failures: ['CONTROLLED_EARLY_TIMEOUT']});
+  assert.equal(result.code, 0);
+  assert.equal(result.calls.filter(call => call.command === 'pull').length, 2);
+  assert.equal(result.calls.find(call => call.command === 'pnpm')?.database, true);
+});
+
+// Deleting the first guard must announce a wait that the remaining budget cannot afford.
+test('launcher refuses a retry wait that would spend the remaining image budget', async t => {
+  const result = await launch(t, {cached: [mailpit], failures: [transient], budgetPhase: 'before'});
+  assert.equal(result.code, 1);
+  assert.doesNotMatch(result.output, /retrying/);
+  assert.equal(result.invocations.filter(call => call.args[0] === 'pull').length, 1);
+  assert.equal(result.calls.some(call => ['run', 'pnpm', 'rm'].includes(call.command)), false);
+});
+
+// Deleting the second guard must attempt another Docker command after an overdue wait.
+test('launcher rechecks the image deadline after a retry wait', async t => {
+  const result = await launch(t, {cached: [mailpit], failures: [transient], budgetPhase: 'after'});
+  assert.equal(result.code, 1);
+  assert.match(result.output, /retrying/);
+  assert.equal(result.invocations.filter(call => call.args[0] === 'pull').length, 1);
+  assert.equal(result.calls.some(call => ['run', 'pnpm', 'rm'].includes(call.command)), false);
+});
+
+// Replacing SIGKILL with SIGTERM must allow this resistant client to reach its failure marker.
+test('launcher forcibly ends a pull client that ignores graceful termination', {timeout: 20000}, async t => {
+  const result = await launch(t, {cached: [mailpit], stubbornPull: true, shortBudget: true});
+  assert.equal(result.code, 1);
+  assert.match(result.output, /ETIMEDOUT/);
+  assert.equal(result.calls.some(call => call.command === 'pull-survived'), false);
+  assert.equal(result.calls.filter(call => call.command === 'pull').length, 1);
+  assert.equal(result.calls.some(call => ['run', 'pnpm', 'rm'].includes(call.command)), false);
+});
+
+for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
+  // Losing the signal handler must lose the exit status or leave owned containers unremoved.
+  test(`${signal} during a successful synchronous pull cleans up every container before exit`, async t => {
+    const result = await launch(t, {cached: [mailpit], cancelSignal: signal});
+    assert.equal(result.code, code);
+    assert.equal(result.signal, null);
+    const created = result.calls.filter(call => call.command === 'run').map(call => call.name);
+    assert.ok(created.length > 0);
+    assert.deepEqual(result.calls.filter(call => call.command === 'rm').map(call => call.name), created.toReversed());
+    assert.equal(result.calls.some(call => call.command === 'pnpm'), false);
+  });
+
+  test(`${signal} during acquisition stops at the retry wait without starting containers`, async t => {
+    const result = await launch(t, {cached: [mailpit], failures: [transient], cancelSignal: signal});
+    assert.equal(result.code, code);
+    assert.equal(result.signal, null);
+    assert.equal(result.calls.filter(call => call.command === 'pull').length, 1);
+    assert.equal(result.calls.some(call => ['run', 'pnpm', 'rm'].includes(call.command)), false);
+  });
+
+  test(`${signal} during a hanging pull stops at the acquisition deadline without containers`, {timeout: 20000}, async t => {
+    const result = await launch(t, {cached: [mailpit], cancelSignal: signal, hangPull: true, shortBudget: true});
+    assert.equal(result.code, 1);
+    assert.equal(result.signal, null);
+    assert.match(result.output, /ETIMEDOUT/);
+    assert.equal(result.calls.filter(call => call.command === 'pull').length, 1);
+    assert.equal(result.calls.some(call => ['run', 'pnpm', 'rm'].includes(call.command)), false);
+  });
+}
