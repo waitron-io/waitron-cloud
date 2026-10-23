@@ -92,6 +92,30 @@ test('HTTP signup and recovery through Mailpit preserve accounts, cookies and se
   assert.equal((await request('/login', {email, password: newPassword})).status, 200);
   assert.equal((await db.pool.query('SELECT count(*) FROM cloud_accounts')).rows[0].count, '1');
 });
+test('a forced reset-mail miss reports real queue and SMTP outcomes without private values', async () => {
+  const {email} = await account();
+  const capture = createMailCapture({pool: db.pool, inbox: process.env.MAILPIT_TEST_URL!,
+    mailer: createLocalAccountMailer({port: Number(process.env.MAILPIT_TEST_SMTP_PORT)})});
+  const worker = new EmailWorker(db.pool, db.outbox, capture.mailer);
+  assert.equal((await request('/password-reset/request', {email})).status, 202);
+  assert.equal(await capture.runOnce(worker), true);
+  const missingRecipient = `missing-${randomUUID()}@example.test`;
+  await assert.rejects(capture.tokenFromMail(missingRecipient, 'Reset your Waitron Cloud password'), error => {
+    assert.ok(error instanceof assert.AssertionError);
+    assert.ok(!error.message.includes(email) && !error.message.includes(missingRecipient));
+    assert.ok(error.message.startsWith('Mail capture: '));
+    const diagnostic = JSON.parse(error.message.slice('Mail capture: '.length));
+    assert.equal(diagnostic.worker[0].result, 'handled');
+    assert.deepEqual(diagnostic.smtp.map((event: {kind: string; result: string}) => [event.kind, event.result]), [['password_reset', 'accepted']]);
+    assert.deepEqual(diagnostic.outbox, [{kind: 'password_reset', status: 'sent', attempts: 1, failures: 0,
+      lastError: null, transport: 'none', hasMessageId: false}]);
+    assert.equal(diagnostic.inbox.status, 200);
+    assert.ok(diagnostic.inbox.subjectMatches >= 1);
+    assert.equal(diagnostic.inbox.recipientMatches, 0);
+    assert.equal(diagnostic.inbox.combinedMatches, 0);
+    return true;
+  });
+});
 test('every mutation rejects missing, null and foreign Origin before changing state', async () => {
   const paths = ['/signup/request', '/signup/complete', '/login', '/session/activity', '/logout', '/password-reset/request', '/password-reset/complete'];
   for (const path of paths) for (const badOrigin of [undefined, 'null', 'https://elsewhere.example.test']) {
