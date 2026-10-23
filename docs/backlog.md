@@ -4109,14 +4109,18 @@ is established by this evidence.
 PR #318 cost run `39959775169`, remote-browser job `120435513011`, stopped
 before any test after a setup command reached its 300-second limit. Its log
 contains no command or phase, so the historical cause remains unknown.
-Setup now reports each external command's phase, arguments, process ID, elapsed
+Setup now reports each supervised command's phase, arguments, process ID, elapsed
 milliseconds and outcome to standard error. The command limit, checks, public
 source revision and process-group cleanup stay unchanged; the environment is
 excluded from diagnostics. Controlled timeout and nonzero-exit tests exercise the
 real supervisor, retain the original five-minute deadline and verify scratch and
 child cleanup. Existing SIGINT and SIGTERM cleanup checks remain intact.
 
-Lane D must inspect the Linux setup trace and investigate any recurrence at the
-named command before claiming a cause or changing a deadline. A successful later
-remote-browser run alone does not explain or repair the historical timeout.
-Local Docker-backed qualification remains unavailable while Docker is down.
+Linux CI passed all seven remote-browser cases. Its trace records source fetch
+in 1.8 seconds, installation in 23.6 seconds and browser-image acquisition in
+32.8 seconds; no setup command timed out. Expected image-cache misses produce
+a failed inspect record followed by a successful pull. Archive downloads use a
+separate 120-second fetch limit and still lack progress records. Lane D must
+investigate a diagnostic recurrence at the named command before claiming a cause
+or changing a deadline. This passing run does not explain or repair the historical
+timeout. Local Docker-backed qualification remains unavailable while Docker is down.
