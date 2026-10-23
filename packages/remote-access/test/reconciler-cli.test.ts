@@ -10,6 +10,7 @@ import {crypto as acmeCrypto} from 'acme-client';
 import {database} from '../../account-http/test/fixtures.ts';
 import {RemoteAccessStore} from '../src/placement.ts';
 import {verifyManifest} from '../src/manifest.ts';
+import {cliEnvironment} from './fixtures/cli-environment.ts';
 
 let db:Awaited<ReturnType<typeof database>>,root:string,databaseUrl:string,subnet=50;
 const peerKey=()=>randomBytes(32).toString('base64');
@@ -24,7 +25,7 @@ async function fixture(){
  const configFile=join(root,`${cellId}.config.json`);await writeFile(configFile,JSON.stringify({routes:[{cellId,output,signingKeyFile}],certificates:[],acme:{directoryUrl:'https://acme.example.test/directory',email:'local@example.test',accountKeyFile,dnsModule}}),{mode:0o600});
  return {cellId,signing,output,configFile};
 }
-function run(...args:string[]){return spawnSync(process.execPath,['src/reconciler-cli.ts',...args],{cwd:new URL('..',import.meta.url),encoding:'utf8',env:{...process.env,DATABASE_URL:databaseUrl}});}
+function run(...args:string[]){return spawnSync(process.execPath,['src/reconciler-cli.ts',...args],{cwd:new URL('..',import.meta.url),encoding:'utf8',env:cliEnvironment({DATABASE_URL:databaseUrl})});}
 
 test('trusted CLI arguments, once and status are strict and redact configuration failures',async()=>{
  const missing=run();assert.equal(missing.status,1);assert.equal(missing.stdout,'');assert.equal(missing.stderr,'Remote configuration reconciler failed; check its trusted configuration and database migrations\n');
@@ -43,7 +44,7 @@ test('a missing exact route mapping fails only that target with a redacted code'
 });
 
 test('continuous mode exits cleanly on SIGTERM',async()=>{
- const value=await fixture(),child=spawn(process.execPath,['src/reconciler-cli.ts',value.configFile],{cwd:new URL('..',import.meta.url),env:{...process.env,DATABASE_URL:databaseUrl},stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',value=>output+=value);child.stderr.on('data',value=>output+=value);
+ const value=await fixture(),child=spawn(process.execPath,['src/reconciler-cli.ts',value.configFile],{cwd:new URL('..',import.meta.url),env:cliEnvironment({DATABASE_URL:databaseUrl}),stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',value=>output+=value);child.stderr.on('data',value=>output+=value);
  let ready=false;for(let attempt=0;attempt<50;attempt++){if((await db.pool.query("SELECT 1 FROM remote_configuration_jobs WHERE kind='route' AND target_id=$1",[value.cellId])).rowCount){ready=true;break;}if(child.exitCode!==null)break;await delay(100);}
  assert.equal(ready,true,output);child.kill('SIGTERM');const code=await new Promise(resolve=>child.once('exit',resolve));assert.equal(code,0,output);
 });
@@ -58,7 +59,7 @@ test('database staff mode is explicit and cannot coexist with a staff file mappi
 test('reconciler refuses a malformed test plan flag before scheduling or publishing',async()=>{
  const value=await fixture();
  for(const flag of ['true','2','']){
-  const result=spawnSync(process.execPath,['src/reconciler-cli.ts',value.configFile,'--once'],{cwd:new URL('..',import.meta.url),encoding:'utf8',env:{...process.env,DATABASE_URL:databaseUrl,CLOUD_TEST_SERVICE_PLANS:flag}});
+  const result=spawnSync(process.execPath,['src/reconciler-cli.ts',value.configFile,'--once'],{cwd:new URL('..',import.meta.url),encoding:'utf8',env:cliEnvironment({DATABASE_URL:databaseUrl,CLOUD_TEST_SERVICE_PLANS:flag})});
   assert.equal(result.status,1);assert.equal(result.stdout,'');assert.equal(result.stderr,'Remote configuration reconciler failed; check its trusted configuration and database migrations\n');
  }
  assert.equal((await db.pool.query('SELECT count(*)::integer AS n FROM remote_configuration_jobs WHERE target_id=$1',[value.cellId])).rows[0].n,0);

@@ -8,6 +8,7 @@ import {after,before,test} from 'node:test';
 import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
 import {database} from '../../account-http/test/fixtures.ts';
 import {RemoteAccessStore} from '../src/placement.ts';
+import {cliEnvironment} from './fixtures/cli-environment.ts';
 
 const peerKey=()=>randomBytes(32).toString('base64');
 let db:Awaited<ReturnType<typeof database>>,store:RemoteAccessStore,root:string,databaseUrl:string;
@@ -28,7 +29,7 @@ async function installation(){
 
 async function operator(command:string,value:unknown,planFlag?:string){
  const file=join(root,randomUUID()+'.json');await writeFile(file,JSON.stringify(value),{mode:0o600});
- return spawnSync(process.execPath,['src/operator-cli.ts',command,file],{cwd:new URL('..',import.meta.url),encoding:'utf8',env:{...process.env,DATABASE_URL:databaseUrl,...(planFlag===undefined?{}:{CLOUD_TEST_SERVICE_PLANS:planFlag})}});
+ return spawnSync(process.execPath,['src/operator-cli.ts',command,file],{cwd:new URL('..',import.meta.url),encoding:'utf8',env:cliEnvironment({DATABASE_URL:databaseUrl,...(planFlag===undefined?{}:{CLOUD_TEST_SERVICE_PLANS:planFlag})})});
 }
 
 test('trusted commands fail closed and replay the durable completed move after a lost reply',async()=>{
