@@ -4001,6 +4001,15 @@ changing any check. The assertions and deadlines remain unchanged.
   was explicitly continued before interception was disabled. Temporary Ubuntu
   workflows, control switches and protocol tracing are removed.
 
+## Password derivation observation on Linux (D129)
+
+The password-reset-during-derivation case failed before reaching its final
+permission and state checks in run 39953541488. The first investigation adds
+backend state and query transitions to the existing observation failure and
+repeats that same case on Linux. Its assertions, 200-poll bound and database
+statement timeout are unchanged. The cause and repair remain open.
+
+
 ## Initial services and future candidates
 
 | Service | Design work still needed |
@@ -4237,11 +4246,3 @@ inventory and accounting checks and deadlines remain in place. Local Docker-back
 qualification is unavailable while Docker is down. Use GitHub CI for Linux
 qualification; investigate a diagnostic recurrence before claiming or changing
 the cause.
-
-## Password derivation observation on Linux (D129)
-
-The password-reset-during-derivation case failed before reaching its final
-permission and state checks in run 39953541488. The first investigation adds
-backend state and query transitions to the existing observation failure and
-repeats that same case on Linux. Its assertions, 200-poll bound and database
-statement timeout are unchanged. The cause and repair remain open.
