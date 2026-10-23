@@ -83,6 +83,7 @@ export async function startBackupStorage(options = {}) {
     } catch (error) {
       // A separate process cannot inherit these reservations. Retry only the
       // child's explicit port-handoff refusal, after its own cleanup completed.
+      if (typeof error?.message !== "string") throw error;
       const refused = /Port allocation failed: port (\d+) .*is not available on 127\.0\.0\.1 and cannot be used/.exec(error.message);
       const bound = /listen tcp 127\.0\.0\.1:(\d+): bind: address already in use/.exec(error.message);
       const port = Number((refused ?? bound)?.[1]);

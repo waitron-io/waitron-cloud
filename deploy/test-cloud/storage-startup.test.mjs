@@ -279,3 +279,87 @@ test('a bind error for an unallocated port does not qualify for the fixture retr
   await assert.rejects(async () => { storage = await startBackupStorage(); }, /SeaweedFS exited: Volume server listener error:listen tcp 127\.0\.0\.1:1: bind: address already in use/);
   assert.equal(children.length, 1, 'an auxiliary or unknown port failure must remain visible');
 });
+
+test('startup preserves thrown values that have no error message', {timeout:90000}, async t => {
+  const childProcess = await import('node:child_process');
+  const {syncBuiltinESMExports} = await import('node:module');
+  const spawn = childProcess.default.spawn;
+  let failure, calls = 0;
+  t.mock.method(childProcess.default, 'spawn', function (binary, args, options) {
+    if (args[0] === 'mini') { calls++; throw failure; }
+    return spawn(binary, args, options);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  for (failure of [{code:'EPROBE', detail:'plain spawn rejection'}, null, 'plain rejection']) {
+    await assert.rejects(startBackupStorage(), error => error === failure);
+  }
+  assert.equal(calls, 3, 'unclassified rejections must never retry');
+});
+
+test('a port-shaped upstream error is not treated as a child exit', {timeout:90000}, async t => {
+  const childProcess = await import('node:child_process');
+  const {syncBuiltinESMExports} = await import('node:module');
+  const spawn = childProcess.default.spawn;
+  let first, calls = 0;
+  t.mock.method(childProcess.default, 'spawn', function (binary, args, options) {
+    if (args[0] === 'mini') {
+      calls++;
+      const port = Number(args.find(arg => arg.startsWith('-filer.port=')).split('=')[1]);
+      const error = Object.assign(new Error(`listen tcp 127.0.0.1:${port}: bind: address already in use`), {storageStartup:{ports:{filer:port}}});
+      first ??= error;
+      throw error;
+    }
+    return spawn(binary, args, options);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  await assert.rejects(startBackupStorage(), error => error === first);
+  assert.equal(calls, 1, 'port-shaped text without a child exit must remain the original error');
+});
+
+test('a retry waits for failed fixture cleanup to finish before creating its next directory', {timeout:90000}, async t => {
+  const childProcess = await import('node:child_process');
+  const fs = await import('node:fs/promises');
+  const {dirname} = await import('node:path');
+  const {syncBuiltinESMExports} = await import('node:module');
+  const spawn = childProcess.default.spawn, remove = fs.default.rm, temporary = fs.default.mkdtemp;
+  let firstRoot, owner, storage, directories = 0, cleanupCompleted = false, cleanupAtSecondStart;
+  let reachedCleanup, releaseCleanup;
+  const cleanupEntered = new Promise(resolve => reachedCleanup = resolve);
+  const cleanupAllowed = new Promise(resolve => releaseCleanup = resolve);
+  t.mock.method(fs.default, 'mkdtemp', async function (prefix, ...args) {
+    if (String(prefix).endsWith('cloud-backup-storage-') && ++directories === 2) cleanupAtSecondStart = cleanupCompleted;
+    return Reflect.apply(temporary, this, [prefix, ...args]);
+  });
+  t.mock.method(fs.default, 'rm', async function (path, ...args) {
+    if (path === firstRoot) {
+      reachedCleanup(); await cleanupAllowed;
+      const result = await Reflect.apply(remove, this, [path, ...args]);
+      cleanupCompleted = true; return result;
+    }
+    return Reflect.apply(remove, this, [path, ...args]);
+  });
+  t.mock.method(childProcess.default, 'spawn', function (binary, args, options) {
+    if (args[0] === 'mini' && !firstRoot) {
+      firstRoot = dirname(args.find(arg => arg.startsWith('-dir=')).slice(5));
+      const port = Number(args.find(arg => arg.startsWith('-filer.port=')).split('=')[1]);
+      owner = new Server(); owner.listen(port, '127.0.0.1');
+    }
+    return spawn(binary, args, options);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  t.after(() => releaseCleanup());
+  t.after(() => owner?.listening ? new Promise(resolve => owner.close(resolve)) : undefined);
+  t.after(() => storage?.stop());
+  const starting = startBackupStorage().then(value => { storage = value; return value; });
+  starting.catch(() => {});
+  try {
+    await Promise.race([cleanupEntered, starting.then(() => { throw new Error('failed fixture cleanup was not observed'); })]);
+  } finally { releaseCleanup(); }
+  await starting;
+  assert.equal(cleanupAtSecondStart, true, 'the failed directory must be removed before the next attempt begins');
+  assert.equal(directories, 2);
+  assert.equal(owner.listening, true);
+});
