@@ -4419,6 +4419,24 @@ stay unchanged. The old failure log did not record its exact clock values; this
 reproduction does not invent those missing historical values. Local database
 checks are unavailable while Docker is down; GitHub CI supplies that evidence.
 
+## Cost-stack replication interruption (D152)
+
+[Cost run 40015106057, job 120625121669](https://github.com/waitron-io/waitron-cloud/actions/runs/40015106057/job/120625121669)
+refused the Litestream storage-lifetime case at replication transport close with
+`transfer-interrupted`, after 21 completed attempts and no remaining requests or
+connections. Those final counts do not identify the earlier failed I/O event.
+The transport now retains the first event category, known network code and
+operation category through cleanup. Controlled HTTP checks interrupt request and
+response bodies and verify that accounting still refuses. Paths, headers, object
+names and unknown diagnostic fields stay private.
+
+Reproduce the newly named event on Linux before changing transport or shutdown
+behavior. The historical cause remains unknown; a passing run alone does not
+explain it. Four independent Linux observations in
+[run 40017505833](https://github.com/waitron-io/waitron-cloud/actions/runs/40017505833)
+passed both original cases without a recurrence. Preserve every storage,
+accounting and cleanup assertion and deadline.
+
 ## Recovery screen scope and supplied choices (D158)
 
 When you return from Account, recovery now clears a backup selection that is not
@@ -4441,24 +4459,6 @@ and stored its exact chosen snapshot. Capture provisioning and recovery retain
 the existing test-only server guard. These are synthetic retained metadata
 fixtures, not evidence of production backup provisioning. PostgreSQL checks run
 in GitHub CI while Docker is down locally.
-
-## Cost-stack replication interruption (D152)
-
-[Cost run 40015106057, job 120625121669](https://github.com/waitron-io/waitron-cloud/actions/runs/40015106057/job/120625121669)
-refused the Litestream storage-lifetime case at replication transport close with
-`transfer-interrupted`, after 21 completed attempts and no remaining requests or
-connections. Those final counts do not identify the earlier failed I/O event.
-The transport now retains the first event category, known network code and
-operation category through cleanup. Controlled HTTP checks interrupt request and
-response bodies and verify that accounting still refuses. Paths, headers, object
-names and unknown diagnostic fields stay private.
-
-Reproduce the newly named event on Linux before changing transport or shutdown
-behavior. The historical cause remains unknown; a passing run alone does not
-explain it. Four independent Linux observations in
-[run 40017505833](https://github.com/waitron-io/waitron-cloud/actions/runs/40017505833)
-passed both original cases without a recurrence. Preserve every storage,
-accounting and cleanup assertion and deadline.
 
 ## Cost-stack isolation command refusal (D152)
 
