@@ -65,7 +65,7 @@ export class PortalApp {
     this.usage = new UsageController(() => this.draw());
     this.diagnostics = new DiagnosticController(() => this.draw());
     this.remote = new RemoteController(() => this.draw());
-    this.fiscal = new FiscalAllocationController(() => this.draw());
+    this.fiscal = new FiscalAllocationController(() => {this.#clearUnavailableFiscalDraft();this.draw();});
     this.recovery = new RecoveryController(() => this.draw());
     this.recovery.open(this.link.recoveryId);
     this.backups = new BackupController(() => {
@@ -79,6 +79,7 @@ export class PortalApp {
       if(this.session?.state.kind==='authenticated'&&this.usage.organisationId&&!this.usage.loaded)void this.usage.load();
       if(this.remote.installationId&&!this.installations.visible.some(i=>i.installationId===this.remote.installationId&&i.canRevoke&&!i.revokedAt))this.remote.close();
       if(this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke)){this.backups.close();this.recovery.choose(undefined,undefined);}
+      this.#clearUnavailableFiscalDraft();
       this.draw();
     });
     this.pairing = new PairingController(() => this.draw());
@@ -137,6 +138,10 @@ export class PortalApp {
     if (this.path === '/connect') return Math.max(this.pairing.waiting, Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)));
     const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt,this.alerts.retryAt,this.translationConsent.retryAt,this.remote.retryAt,this.usage.retryAt,this.diagnostics.retryAt,this.authenticator.retryAt) : Math.max(this.cooldownOperation === this.operation ? this.cooldownUntil : 0, this.path === '/login' ? this.authenticator.retryAt : 0);
     return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+  }
+  #clearUnavailableFiscalDraft() {
+    // Keep in-flight writes, unresolved replies and issued receipts available for reconciliation.
+    if(this.fiscal.venueId&&!this.fiscal.pending&&!this.fiscal.uncertain&&!this.fiscal.receipt&&!this.installations.visible.some(i=>i.venueId===this.fiscal.venueId&&i.canRevoke))this.fiscal.open(undefined);
   }
   draw() {
     document.documentElement.lang = this.locale;
