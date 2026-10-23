@@ -22,6 +22,7 @@ resource "aws_s3_bucket_replication_configuration" "cold" {
     destination {
       bucket        = "arn:aws:s3:::${aws_s3_bucket.backup[each.key].bucket}"
       storage_class = "STANDARD"
+      metrics { status = "Enabled" }
       dynamic "encryption_configuration" {
         for_each = each.key == "snapshot" ? [1] : []
         content { replica_kms_key_id = var.kms.backup }

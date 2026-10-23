@@ -552,3 +552,59 @@ handoff still lacks STS session-token fields; extend that contract before
 issuing temporary credentials rather than creating long-lived IAM access keys.
 RDS manages its separate administrator secret; P7 must restore or reissue
 credentials during recovery instead of assuming that secret is replicated.
+
+## Retain infrastructure evidence and expose signals
+
+You need local evidence before you can investigate a failed service. The
+observability module declares primary-region destinations for EKS control-plane
+logs, Container Insights performance records, PostgreSQL logs and VPC flow
+metadata. It creates no application request-body logger or secret-value reader.
+The VPC destination receives only the named network metadata fields. These
+configuration checks do not establish that upstream audit payloads redact every
+sensitive value. Qualify those payloads before collecting production records.
+
+Operational destinations use your scope's regional log key and retain 30 days by
+default. A regional CloudTrail records management events, validates log files and
+delivers them to a private, versioned, encrypted audit bucket. Its lifecycle
+expires current objects after 90 days and retains noncurrent versions for 90 days
+after replacement; deletion in a versioned bucket is not an exact 90-day physical
+purge. These defaults still need D101 and legal review. Operational retention must
+be a supported CloudWatch duration of at most 365 days; audit retention must be
+whole days from 1 through 365. Zero, which would keep CloudWatch logs indefinitely,
+is refused.
+
+The custody module remains the sole owner of key policies. Supply the same exact
+cell names through its `observability_cells` input and the observability module's
+resource input. Its primary log key admits only the named regional log-group
+contexts, audit trail, budget and infrastructure alarms. Operational services gain
+no permissions on the cold keys or other key purposes. The flow-log delivery role
+can write only its own streams; its broader log-group discovery permission is
+read-only and restricted to the primary region. CloudTrail's bucket delivery and
+SNS publishing policies require the named service sources in this account.
+
+The operator SNS topic is an encrypted notification destination. It has no
+subscription or customer email address. A monthly AWS Budget takes your positive
+USD threshold as an external input and sends actual and forecast notifications
+when that threshold is exceeded. This is no cost estimate or spending stop.
+Named alarms observe database free space below 1 GiB, at least 80 database
+connections, failed EKS nodes and failed S3 replication operations. They send only
+to that topic, take no repair action and leave missing metrics unknown. Review
+those engineering thresholds against measured capacity before deployment.
+
+[Failed replication metrics](https://docs.aws.amazon.com/AmazonS3/latest/userguide/repl-metrics.html)
+belong to the source region and identify the exact source bucket, destination and
+`cold` rule. The existing replication declarations now enable these metrics
+without Replication Time Control or an availability promise. Metrics can incur
+separate charges during a later authorised deployment. Node signals use
+[Container Insights' failed-node count](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Container-Insights-metrics-EKS.html);
+the collector must be installed before it emits that metric.
+
+Root composition remains Task 12's work: connect the admitted network and stores,
+create log groups before EKS/RDS delivery, enable PostgreSQL exports, pass matching
+cell names to custody and qualify collector permissions with P1. The module's
+mocked plans establish declarations and refusal checks. They do not prove live
+service delivery, mail, paging, legal retention or monitoring availability. Before
+any separately authorised AWS rehearsal, exercise the
+[CloudTrail key permissions](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/create-kms-key-policy-for-cloudtrail.html)
+and [encrypted budget topic permissions](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-sns-policy.html)
+with the actual regional services.

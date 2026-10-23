@@ -19,3 +19,12 @@ variable "authorities" {
     error_message = "Supply three distinct exact scope roles for deployment, key administration and recovery"
   }
 }
+
+variable "observability_cells" {
+  type    = set(string)
+  default = []
+  validation {
+    condition     = !contains(["global", "es"], var.scope) || alltrue([for name in var.observability_cells : can(regex("^waitron-${var.scope}-[0-9]{2}$", name))])
+    error_message = "Log key contexts require exact cell names in this scope"
+  }
+}
