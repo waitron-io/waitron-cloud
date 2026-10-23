@@ -9,7 +9,7 @@ export interface RelayBoundsConfig {
 }
 export class RelayBoundsError extends Error {
  readonly code:'rate_limited'|'relay_unavailable';
- constructor(code:RelayBoundsError['code']){super(code);this.code=code;}
+ constructor(code:RelayBoundsError['code'],options?:ErrorOptions){super(code,options);this.code=code;}
 }
 function fail(code:RelayBoundsError['code']='relay_unavailable'):never{throw new RelayBoundsError(code);}
 function exact(v:unknown,fields:string[]):v is Record<string,unknown>{return !!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).sort().join(',')===fields.sort().join(',');}

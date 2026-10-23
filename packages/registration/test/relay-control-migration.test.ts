@@ -30,8 +30,10 @@ async function removeControl(pool: Pool) {
 }
 async function populate(f: Awaited<ReturnType<typeof fixture>>) {
   const v = await f.venue();
-  const queued = await v.submit(), delayed = await v.submit(), claimed = await v.submit(), sending = await v.submit();
-  const terminal = await v.submit();
+  const submit = () => admitFixtureMessage(() => v.submit(),
+    evidence => console.log('migration rollover evidence', JSON.stringify(evidence)));
+  const queued = await submit(), delayed = await submit(), claimed = await submit(), sending = await submit();
+  const terminal = await submit();
   await f.pool.query("UPDATE relay_messages SET available_at=clock_timestamp()+interval '5 minutes' WHERE message_id=$1", [delayed.messageId]);
   await f.pool.query("UPDATE relay_messages SET claim_id=gen_random_uuid(),lease_until=clock_timestamp()+interval '1 minute' WHERE message_id=$1", [claimed.messageId]);
   await f.pool.query("UPDATE relay_messages SET state='sending',claim_id=gen_random_uuid(),lease_until=clock_timestamp()+interval '1 minute',attempts=1 WHERE message_id=$1", [sending.messageId]);
