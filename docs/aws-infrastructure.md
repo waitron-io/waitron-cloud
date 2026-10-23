@@ -110,9 +110,39 @@ before using `--all` as a check of the whole infrastructure layer.
 It does not report the unfinished infrastructure as verified. Missing local tools produce
 the `--prepare-tools` setup instruction without downloading anything.
 
-The separate dependency install supplies Ajv, the JSON Schema validator used by the
-contract tests. It leaves the application workspace dependencies unchanged. Its version
-and dependency checksums are pinned in `deploy/aws/pnpm-lock.yaml`.
+The separate dependency install supplies Ajv for contract validation and YAML for
+workflow checks. It leaves the application workspace dependencies unchanged. Their
+versions and dependency checksums are pinned in `deploy/aws/pnpm-lock.yaml`.
+
+## Keep a check for each published revision
+
+A passing local plan covers one checkout. The
+[AWS infrastructure workflow](../.github/workflows/aws-infrastructure.yml) checks the
+exact pull-request head and every push to `main`, including documentation changes.
+An updated pull request cancels its older check; each main push keeps its own result.
+The job has repository read permission and retains no checkout credential. It receives
+no AWS secret or identity-token permission.
+
+The job prepares the pinned software image, installs the separate locked dependencies,
+runs the Node guards and all isolated mocked plans, then checks formatting in an offline,
+read-only container. A 30-minute job limit bounds the whole sequence alongside the
+runner's existing per-command limits. It retains command output, assertion counts and
+failure diagnostics for 14 days in an artifact named for the checked commit and attempt.
+Logging preserves a failed command's exit status, so later commands cannot mask it.
+
+When Docker is unavailable, you can still check the workflow wiring:
+
+```sh
+pnpm --dir deploy/aws install --ignore-workspace --frozen-lockfile
+node --test deploy/aws/integration.test.mjs
+```
+
+These tests parse the workflow and execute its shell with controlled substitutes at
+the Node, pnpm and Docker process boundaries. They exercise each stage's failure and
+check retained output without starting Docker. The mocked OpenTofu plans, real image
+preparation and hosted workflow still need their own successful execution before you
+can treat a revision as qualified. Root composition and the complete runtime handoff
+remain unfinished.
 
 ## Pass infrastructure references to the runtime
 

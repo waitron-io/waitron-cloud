@@ -11,6 +11,10 @@ importers:
       ajv:
         specifier: 8.17.1
         version: 8.17.1
+    devDependencies:
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
 
 packages:
 
@@ -30,6 +34,11 @@ packages:
     resolution: {integrity: sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==}
     engines: {node: '>=0.10.0'}
 
+  yaml@2.9.1:
+    resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
 snapshots:
 
   ajv@8.17.1:
@@ -46,3 +55,5 @@ snapshots:
   json-schema-traverse@1.0.0: {}
 
   require-from-string@2.0.2: {}
+
+  yaml@2.9.1: {}
