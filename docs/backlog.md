@@ -3938,11 +3938,15 @@ changing any check. The assertions and deadlines remain unchanged.
   `apps/portal/test/translation-consent-browser.test.ts:72`. All27 jobs are final;
   the strict summary also refuses the three failed tests. The same source tree
   passed exact-head CI39966740913; matching bytes do not establish a cause.
-  Lane D/watcher must assign a scoped Linux diagnosis with stage/status evidence
-  and deterministic reproduction before a test-first fix. Preserve every session,
-  ownership, reset, consent, cleanup and timeout assertion; no unchanged rerun or
-  larger deadline is a diagnosis. Real local reproduction stays blocked while
-  Docker is down. Evidence is retained in Lane G receipts/d132/.
+  D134 adds bounded browser/server request traces: static endpoint, method,
+  status, elapsed time and server connection-pool counts, excluding request bodies,
+  cookies and reset links. The first 52 real Linux journeys passed in
+  [diagnostic run 39973004321](https://github.com/waitron-io/waitron-cloud/actions/runs/39973004321).
+  That does not explain the historical failures. Capture a diagnostic recurrence,
+  reproduce its named stage, then fix the proved cause test-first. Every original
+  session, ownership, reset, consent, cleanup and timeout assertion remains.
+  No product fix or longer deadline is claimed; local real-fixture reproduction
+  stays unavailable while Docker is down. Lane G owns the remaining diagnosis.
 
 - **Resolved: reconciliation stalled after the reply was dropped.**
   [CI 36777640375](https://github.com/waitron-io/waitron-cloud/actions/runs/36777640375)
