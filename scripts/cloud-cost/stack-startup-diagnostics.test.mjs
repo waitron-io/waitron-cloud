@@ -14,6 +14,7 @@ for (const [fault, stage, reason] of [
   ['config', 'configuration', 'invalid-json'],
   ['runtime', 'runtime-files', 'EEXIST'],
   ['certificate', 'certificate', 'command-exit'],
+  ['missing-certificate', 'certificate', 'ENOENT'],
   ['discovery', 'preexisting-resources', 'command-exit'],
   ['compose', 'compose-up', 'command-exit'],
   ['resources', 'created-resources', 'validation'],
@@ -51,6 +52,7 @@ test('cleanup failure cannot replace the original startup failure', () => {
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.ok(output.diagnostic, 'startup must retain its bounded failure diagnostic');
+  assert.ok(output.diagnostic, 'reporting must preserve the startup diagnostic');
   assert.equal(output.diagnostic.stage, 'compose-up');
   assert.equal(output.diagnostic.reason, 'command-exit');
   const records = result.stderr.split('\n').filter(l => l.startsWith('stack_startup=')).map(l => JSON.parse(l.slice(14)));
@@ -70,6 +72,7 @@ test('a reporting exception cannot hide failure or stop cleanup', () => {
   const result = run('reporting');
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
+  assert.ok(output.diagnostic, 'reporting must preserve the startup diagnostic');
   assert.equal(output.diagnostic.stage, 'compose-up');
   assert.equal(output.removed, true);
   assert.equal((result.stdout + result.stderr).includes('PRIVATE_CANARY'), false);

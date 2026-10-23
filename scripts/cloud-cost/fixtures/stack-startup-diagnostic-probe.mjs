@@ -45,7 +45,7 @@ globalThis.startupProbe={spawnSync(command,args){
 registerHooks({resolve(specifier,context,next){if(specifier==='node:child_process'&&context.parentURL?.endsWith('/local.mjs'))
  return {url:'data:text/javascript,'+encodeURIComponent(`import {spawn as actualSpawn} from 'node:child_process';
  export const spawnSync=(...args)=>globalThis.startupProbe.spawnSync(...args);
- export const spawn=(command,args,options)=>actualSpawn(${JSON.stringify(fault==='certificate'?process.execPath:'/usr/bin/openssl')},${fault==='certificate'?JSON.stringify(['-e',"process.stderr.write('PRIVATE_CANARY');process.exit(7)"]):'args'},options);`),shortCircuit:true};return next(specifier,context);}});
+ export const spawn=(command,args,options)=>actualSpawn(${JSON.stringify(fault==='missing-certificate'?'/nonexistent-cloud-cost-openssl':fault==='certificate'?process.execPath:'/usr/bin/openssl')},${fault==='certificate'?JSON.stringify(['-e',"process.stderr.write('PRIVATE_CANARY');process.exit(7)"]):'args'},options);`),shortCircuit:true};return next(specifier,context);}});
 try{
  const local=await import('../local.mjs');const args={source,root,codeRoot,stateRoot,journal,image};
  const prepared=local.prepareIsolatedStack(args);project=prepared.project;plan=JSON.parse(readFileSync(prepared.file));

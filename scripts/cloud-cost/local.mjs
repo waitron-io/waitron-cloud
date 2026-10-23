@@ -296,16 +296,16 @@ async function runPrivateProcess(command, argv, { signal, cwd, ownership, timeou
     requireThat(!signal?.aborted);
     if (ownership) record(ownership, { kind: 'process', state: 'intent' });
     child = spawn(command, argv, { env: environment(), cwd, stdio: ['ignore', 'ignore', 'ignore'] });
-    let spawnError = false;
+    let spawnError;
     closed = new Promise(resolve => {
-      child.once('error', () => { spawnError = true; }); child.once('close', code => resolve(code));
+      child.once('error', error => { spawnError = error; }); child.once('close', code => resolve(code));
     });
     if (ownership) record(ownership, { kind: 'process', state: 'started', pid: child.pid });
     signal?.addEventListener('abort', abort, { once: true });
     deadline = setTimeout(abort, timeoutMs);
     if (signal?.aborted) abort();
     const exitCode = await closed;
-    requireCommand({ status: exitCode, error: spawnError || aborted ? { code: aborted ? 'ETIMEDOUT' : undefined } : undefined, signal: child.signalCode });
+    requireCommand({ status: exitCode, error: aborted ? { code: 'ETIMEDOUT' } : spawnError, signal: child.signalCode });
     return { exitCode };
   } catch (error) { if (commandFailures.has(error)) throw error; fail(); }
   finally {
