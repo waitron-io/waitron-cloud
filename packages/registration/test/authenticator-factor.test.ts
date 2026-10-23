@@ -417,13 +417,16 @@ test('a password reset snapshot committed during password derivation cannot begi
     await blocker.query('BEGIN');await blocker.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[accountId]);
     work=refused(store(keys,policy,other).begin({...a,proof:recovery('A'.repeat(32))}));
     const {setTimeout:delay}=await import('node:timers/promises');let deriving=false;
+    const observations:unknown[]=[];const observingAt=performance.now();let previous='';
     for(let i=0;i<200;i++) {
-      const rows=(await admin.query('SELECT state,query,wait_event_type FROM pg_stat_activity WHERE application_name=$1',[name])).rows;
+      const rows=(await admin.query('SELECT pid,state,query,wait_event_type,wait_event,query_start,state_change FROM pg_stat_activity WHERE application_name=$1',[name])).rows;
+      const signature=JSON.stringify(rows);
+      if(signature!==previous) {observations.push({poll:i,elapsedMs:performance.now()-observingAt,rows});previous=signature;}
       if(rows.some(r=>r.state==='idle in transaction' && r.query.includes('SELECT c.account_id, c.password_hash'))) {deriving=true;break;}
       if(rows.some(r=>r.wait_event_type==='Lock')) break;
       await delay(1);
     }
-    assert.ok(deriving,'must observe the password snapshot released while derivation runs, before the account lock');
+    assert.ok(deriving,'must observe the password snapshot released while derivation runs, before the account lock; '+JSON.stringify(observations));
     await blocker.query('UPDATE cloud_credentials SET password_hash=$1 WHERE account_id=$2',[resetHash,accountId]);
     await blocker.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1',[accountId]);
     await blocker.query('COMMIT');await work;
