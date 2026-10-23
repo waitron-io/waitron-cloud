@@ -18,7 +18,7 @@ import { StorageAuthority } from "../packages/backups/src/storage.ts";
 const require = createRequire(
   new URL("../packages/backups/package.json", import.meta.url),
 );
-const { S3Client, CreateBucketCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, CreateBucketCommand, HeadBucketCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const {
   STSClient,
   AssumeRoleWithWebIdentityCommand,
@@ -77,6 +77,24 @@ async function binary(root) {
   return join(root, "weed");
 }
 export async function startBackupStorage(options = {}) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await startBackupStorageAttempt(options);
+    } catch (error) {
+      // A separate process cannot inherit these reservations. Retry only the
+      // child's explicit port-handoff refusal, after its own cleanup completed.
+      if (typeof error?.message !== "string") throw error;
+      const refused = /Port allocation failed: port (\d+) .*is not available on 127\.0\.0\.1 and cannot be used/.exec(error.message);
+      const bound = /listen tcp 127\.0\.0\.1:(\d+): bind: address already in use/.exec(error.message);
+      const port = Number((refused ?? bound)?.[1]);
+      if (attempt >= 1 || options.retryPortCollision === false ||
+          !error.message.startsWith("SeaweedFS exited: ") ||
+          !Object.values(error.storageStartup?.ports ?? {}).includes(port)) throw error;
+      console.error("Storage fixture port handoff failed; retrying once:", error);
+    }
+  }
+}
+async function startBackupStorageAttempt(options) {
   const tokenDuration = options.tokenDuration ?? "15m";
   if (!/^\d+[smh]$/.test(tokenDuration))
     throw Error("Invalid local storage token duration");
@@ -328,10 +346,20 @@ export async function startBackupStorage(options = {}) {
     let ready = false;
     for (let n = 0; n < 120; n++) {
       try {
-        await adminClient.send(
-          new CreateBucketCommand({ Bucket: "readiness-probe" }),
-          { abortSignal: AbortSignal.timeout(1000) },
-        );
+        try {
+          await adminClient.send(
+            new CreateBucketCommand({ Bucket: "readiness-probe" }),
+            { abortSignal: AbortSignal.timeout(1000) },
+          );
+        } catch (error) {
+          if (error.name !== "BucketAlreadyOwnedByYou") throw error;
+          // Creation may commit after its reply times out. Verify the owned
+          // bucket is accessible before treating that retry as readiness.
+          await adminClient.send(
+            new HeadBucketCommand({ Bucket: "readiness-probe" }),
+            { abortSignal: AbortSignal.timeout(1000) },
+          );
+        }
         ready = true;
         break;
       } catch (error) {

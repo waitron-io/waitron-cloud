@@ -2803,11 +2803,12 @@ notifications separately.
   Native tests reproduce the earlier release pattern, allocation interruption and
   an owned competing listener. Authority/concurrency checks and service deadlines
   are unchanged. Another process can still claim a port during the handoff to the
-  separate child; that collision remains a failure with diagnostics, without a
-  retry or permission to stop its owner. The historical CI socket owner remains
-  unknown. If it recurs, use the allocation and socket snapshot to establish the
-  cause before extending the repair. D101 slice 3 in PR311 requires fresh CI on
-  this changed fixture; a successful unchanged rerun is not a cause diagnosis.
+  separate child. The [parallel fixture repair](#parallel-storage-cache-fixture-failure-on-main)
+  now retries an explicit refusal of an allocated port once, preserving its
+  diagnostics and leaving the competing owner alone. The historical CI socket
+  owner remains unknown. D101 slice 3 landed in PR311 after fresh head and merge
+  CI; every later fixture change still requires its own qualification. A
+  successful unchanged rerun is not a cause diagnosis.
   A separate test-harness route failure is also open. In
   [run 39813909743](https://github.com/waitron-io/waitron-cloud/actions/runs/39813909743/job/119947375548),
   registration shard 2 never ran its tests: pulling `axllent/mailpit:v1.31.1`
@@ -3781,6 +3782,62 @@ notifications separately.
   separate from upload freshness; production workers still need enforceable resource and
   network isolation, without activating a primary or contacting fiscal/payment services. Define the external-key format extension
   rather than assuming it exists in the inspected manifest v1.
+
+
+## Parallel storage-cache fixture failure on main
+
+Main [run 39943355021](https://github.com/waitron-io/waitron-cloud/actions/runs/39943355021)
+rejected one of two fixtures in `deploy/test-cloud/storage-cache.test.mjs`.
+The test now prints each rejected error and its socket diagnostics before stopping
+the successful fixture. The read-only archive and two-success checks are unchanged.
+The original rejection had no error detail, so its exact cause remains unknown.
+
+A separate native Linux investigation reproduced a readiness failure in
+[run 39945355111](https://github.com/waitron-io/waitron-cloud/actions/runs/39945355111).
+With sixteen concurrent fixtures, a bucket creation can succeed after the caller
+stops waiting for its reply. Every subsequent creation then returns
+`BucketAlreadyOwnedByYou`, and the old readiness loop eventually refuses a working
+store. Socket evidence identifies each store as the owner of all seven allocated
+ports; this reproduced failure is not an observed port collision.
+
+The fixture now checks that the owned readiness bucket is accessible before
+accepting that response. Other errors still retry within the existing limits;
+a failed accessibility check still blocks startup. A deterministic real-store test
+discards a successful creation reply and verifies recovery, and a second test
+checks refusal when access fails. Existing assertions and deadlines remain intact.
+All sixteen focused native cache/startup cases pass, along with the four
+adjacent storage-authority cases. Local Docker and PostgreSQL checks
+stay unavailable until 3 November; qualification uses GitHub CI.
+
+The next Linux qualification at readiness-only head `59e1749` exposed a second
+failure: SeaweedFS refused its assigned filer port after Node released the
+reservation. No listener was present when the later socket snapshot ran; the
+competing socket's owner remains unknown. The fixture now retries that explicit
+child port-allocation refusal once with a fresh directory and seven new
+reservations, after cleaning up its failed child. It prints the first failure's
+evidence, stops after a second collision, and never stops a competing listener.
+The same handoff can fail after SeaweedFS's initial port check; Linux combined
+[run 39946986371](https://github.com/waitron-io/waitron-cloud/actions/runs/39946986371)
+records a volume listener's bind refusal. Both observed forms qualify only when
+the reported port belongs to the fixture's seven-port allocation. An unrelated
+child exit or an unallocated port does not qualify. Deterministic child tests
+prove recovery, both refusal forms and the two-attempt limit. The existing first-failure diagnostic
+test explicitly disables retries while retaining all its assertions.
+
+The combined repair passes all nine independent dense Linux samples in
+[run 39947812288](https://github.com/waitron-io/waitron-cloud/actions/runs/39947812288):
+126 checks across three runners, including sixteen simultaneous fixtures per
+sample. The temporary stress workflow and case are removed after qualification;
+the deterministic regressions remain. A 479-second Claude run-it review identified
+three low-severity gaps, now covered: thrown values without a message preserve
+their identity, a port-shaped upstream error does not impersonate a child exit,
+and a controlled cleanup barrier must finish before the retry creates its next
+directory. Ten deliberate guard faults were caught
+in a disposable checkout and the original files restored before the final checks.
+
+Remaining: retain the diagnostics to attribute any recurrence of the original
+read-only-cache rejection. Do not treat this demonstrated readiness repair as
+proof of that historical failure's cause.
 
 ## CI PostgreSQL image pull
 
