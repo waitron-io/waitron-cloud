@@ -95,33 +95,33 @@ async function waitForInstallationLock(blockerPid:number){
   }
   throw new Error('revocation did not reach the held installation lock');
 }
-test('installation lock observation excludes revocation waiting on its session',async()=>{
+test('installation lock observation excludes revocation waiting on its session',async t=>{
   const blocker=await db.pool.connect();let revoke:Promise<unknown>|undefined;
-  try{
-    await blocker.query('BEGIN');
-    await blocker.query('SELECT 1 FROM installations WHERE id=$1 FOR UPDATE',[a.installationId]);
-    const blockerPid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
-    await blocker.query('SAVEPOINT session_barrier');
-    await blocker.query('SELECT 1 FROM cloud_sessions FOR UPDATE');
-    revoke=other.revokeWithSession(session.token,session.csrfToken,a.installationId);void revoke.catch(()=>{});
-    const earlier=await waitForLock();
-    assert.ok(earlier.some(row=>row.query.includes('FROM cloud_sessions')),'revocation must first wait on its held session');
-    assert.equal((await installationWaiters(blockerPid)).rowCount,0,'a session wait must not admit the competing renewal');
-    await blocker.query('ROLLBACK TO SAVEPOINT session_barrier');
-    const waiting=await waitForInstallationLock(blockerPid);
-    assert.ok(waiting.every(row=>row.blockers.includes(blockerPid)),'the held installation must block the observed request');
-    const otherPid=(await db.pool.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
-    assert.equal((await installationWaiters(otherPid)).rowCount,0,'a different connection cannot stand in for the installation holder');
-  }finally{
-    await blocker.query('ROLLBACK');blocker.release();await revoke;
-  }
+  t.after(async()=>{
+    try{await blocker.query('ROLLBACK');}finally{blocker.release();}
+    await revoke;
+  });
+  await blocker.query('BEGIN');
+  await blocker.query('SELECT 1 FROM installations WHERE id=$1 FOR UPDATE',[a.installationId]);
+  const blockerPid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  await blocker.query('SAVEPOINT session_barrier');
+  await blocker.query('SELECT 1 FROM cloud_sessions FOR UPDATE');
+  revoke=other.revokeWithSession(session.token,session.csrfToken,a.installationId);void revoke.catch(()=>{});
+  const earlier=await waitForLock();
+  assert.ok(earlier.some(row=>row.query.includes('FROM cloud_sessions')),'revocation must first wait on its held session');
+  assert.equal((await installationWaiters(blockerPid)).rowCount,0,'a session wait must not admit the competing renewal');
+  await blocker.query('ROLLBACK TO SAVEPOINT session_barrier');
+  const waiting=await waitForInstallationLock(blockerPid);
+  assert.ok(waiting.every(row=>row.blockers.includes(blockerPid)),'the held installation must block the observed request');
+  const otherPid=(await db.pool.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  assert.equal((await installationWaiters(otherPid)).rowCount,0,'a different connection cannot stand in for the installation holder');
 });
 test('owner revocation serializes with renewal, persists and preserves the other venue and services',async t=>{
   const proof=request();await store.execute('renew',proof);
   const blocker=await db.pool.connect();await blocker.query('BEGIN');await blocker.query('SELECT 1 FROM installations WHERE id=$1 FOR UPDATE',[a.installationId]);
   const revoke=other.revokeWithSession(session.token,session.csrfToken,a.installationId);
   const blockerPid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
-  // A session or membership wait does not establish which request reaches the installation first.
+  // A session wait does not establish which request reaches the installation first.
   t.diagnostic(JSON.stringify({step:'before competing renewal',waiting:await waitForInstallationLock(blockerPid)}));
   const pending=assert.rejects(store.execute('renew',request()).then(result=>{
     t.diagnostic(JSON.stringify({step:'renewal accepted',revokedAt:result.revokedAt,leaseExpiresAt:result.leaseExpiresAt}));return result;
