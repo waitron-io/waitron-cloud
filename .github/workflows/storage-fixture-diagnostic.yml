@@ -7,6 +7,7 @@ on:
       - 'scripts/backup-storage-fixture.mjs'
       - 'deploy/test-cloud/storage-cache.test.mjs'
       - 'deploy/test-cloud/storage-startup.test.mjs'
+      - 'deploy/test-cloud/storage-parallel-diagnostic.test.mjs'
 permissions:
   contents: read
   packages: read
@@ -37,6 +38,6 @@ jobs:
           failed=0
           for sample in 1 2 3; do
             echo "Independent startup sample $sample"
-            node --test --test-concurrency=2 deploy/test-cloud/storage-cache.test.mjs deploy/test-cloud/storage-startup.test.mjs || failed=1
+            node --test --test-concurrency=3 deploy/test-cloud/storage-cache.test.mjs deploy/test-cloud/storage-startup.test.mjs deploy/test-cloud/storage-parallel-diagnostic.test.mjs || failed=1
           done
           exit "$failed"
