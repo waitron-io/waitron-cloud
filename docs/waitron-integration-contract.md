@@ -1566,3 +1566,67 @@ facts. All eight scenario/direction combinations and the proposal's adverse cont
 remain UNRUN. Owner design approval, separate build authority, compatible pinned
 consumers and runtime qualification precede enablement; no provider operation,
 spending, live mail or production schema change follows from publication.
+
+### A951 routing revision 2 response, 2026-10-23 (D136)
+
+You can implement the shared request parser in isolated T4 fixtures against this
+accepted revision. **Cloud accepts the complete routing engineering artifact**
+`waitron-a951-routing-v1`, edition `proposal-2026-10-23.2`, at
+[Waitron `4fbb76eafd7d426905d7e7561f85e807438fcbdc`](https://github.com/clintongormley/waitron/blob/4fbb76eafd7d426905d7e7561f85e807438fcbdc/docs/superpowers/specs/2026-10-23-a951-routing-v1-revision2.md),
+with full-document acceptance SHA-256
+`974c4e98eb7d583d82ad1c573f9dcec01c63b2cc4f6630d38aeda22775d198d0`.
+This supersedes D130's pending routing disposition and D132's reference to its
+outstanding routing corrections. It accepts requirements and future test
+expectations, without claiming an implemented parser or a qualified connection.
+
+The returned artifact makes D130's two technical corrections. Its other changes
+record provenance, matching helper acceptance and remaining gates. The original
+manifest, four literal request/response fences, grammar, bounds and unrelated
+adverse vectors remain unchanged. The complete edition, including its closed
+contexts and every numerical limit, is accepted for this scope.
+
+| D130 requirement | Accepted revision 2 answer |
+| --- | --- |
+| Suspend-aware local clocks and boot binding | Both closed contexts add `boot:H`, identifying that side's boot with 32 lowercase hexadecimal characters. The retained `verifiedAtMonoMs` and `expiresAtMonoMs` fields and every request deadline use local boot elapsed milliseconds including suspension. Dispatch rechecks that side's current boot, live connections, listener/process custody, bindings, authority, trust and every lifetime. An unknown clock, changed boot or expired deadline closes the affected connection without handler or new upstream calls. No retry, read, observation or suspend resets a deadline; clocks are never compared across hosts. |
+| Explicit boot and expiry controls | Accept box boot `22222222222222222222222222222222`, gateway boot `33333333333333333333333333333333` and changed boot `44444444444444444444444444444444`. Separate controls cover each side's boot change and suspend from `now=1500` to expiry at `now=2000`, with zero handler/upstream calls and closure. The original equality-at-expiry refusal remains. These are synthetic test expectations. |
+| Literal delivery boundaries and forwarding | Accept one read `concat(P, 0x78)` versus two reads `[P, 0x78]`, and one read `concat(P, P)` versus two reads `[P, P]`. Every split has the same first-request verdict, including suffix arrival before dispatch. The isolated gateway emits exactly the displayed `P_box` once; the isolated box handler runs once with no further hop. Suffixes become neither a second request nor upstream bytes, and are discarded without retaining an unbounded chunk. Production's exact empty manifest yields `ROUTE_DENIED` with zero handler/upstream calls. |
+
+The accepted manifest remains the exact 83 ASCII bytes in D130, without a final
+newline: revision `proposal-2026-10-23.1`, SHA-256
+`271fefd892b2c0f10ffab42f8e4a832a163b244733285f08d5a0ea1dfab1b012`.
+The routing artifact's new edition does not change those manifest bytes or admit
+nonempty routes. The injected availability fixture remains separate from
+production policy and grants no customer product permission.
+
+Lane E's [matching acceptance and focused plan amendment](https://github.com/clintongormley/waitron/blob/4fbb76eafd7d426905d7e7561f85e807438fcbdc/docs/superpowers/plans/2026-10-22-a951-connection.md#focused-d130d132-amendment-2026-10-23)
+record the unchanged helper `waitron-a951-helper-v1`, edition
+`proposal-2026-10-23.1`, SHA-256
+`da433f66a7dcb835e99eeb4a7e5c6f01f2bc9c69db369c44a5131247a4ab008f`,
+solely for isolated T3. Its independent verifier/supervisor, caller lifetime,
+framed EOF, saved evidence, independent counters/floors, owned network matrix,
+boot/deadline and scoped withdrawal requirements are carried into that plan.
+This satisfies D130's matching acceptance and plan-recording condition; actual
+host containment and listener custody still need G7 execution evidence.
+
+Comparison sources remain Cloud `c0d0e800529ec6c1557fce9a4d68b9b43b7447dc`
+and Waitron foundation `72aed2e21705c9d02b6beda5ef248410ffc9b73a`.
+The existing Cloud manifest, renderer and public gate are byte-identical at the
+D136 review base `6c031499cdb19e038994c89a6725998b49ae608f`; they do not
+implement this raw parser or its independent upstream context. Accepted executable
+Waitron consumer: **NONE**; accepted executable Cloud consumer: **NONE**;
+qualified runtime pair: **NONE**. Record E's matching routing acceptance and this
+exact edition/digest in its intake before isolated T4 code. Before connecting
+consumers, record both resulting full implementation commits, accepted artifacts
+and allowed path in both repositories, then qualify that pair. Source comparison
+pins cannot substitute for those receipts.
+
+No revised appliance edition was published at the reviewed Waitron pin. D132's
+four appliance amendments remain open, with accepted appliance digest **NONE**:
+actual approval/provisioning consumers, a separately versioned helper safety/custody
+mapping, the complete signed-byte corpus and current agreement/A1018 references.
+G2/A947 authority, G3 staff policy, G4 independent upstream trust/transport,
+G5 moves, G6/T13 diagnostics and flow-scoped A980/D101 processing, and G7
+host/device/runtime qualification retain their affected-path gates. Keep real
+admission disabled, production customer routes empty and `.local` independent.
+This agreement authorises no deployment, provider/host operation, publication,
+pause, customer authentication, payment, writer, fiscal or recovery action.
