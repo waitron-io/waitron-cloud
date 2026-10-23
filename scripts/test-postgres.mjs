@@ -28,9 +28,9 @@ async function ensureTestImage(image) {
     } catch (error) {
       const pause = attempt * 1000;
       const transient = error.code === 'ETIMEDOUT'
-        || /Client\.Timeout|i\/o timeout|TLS handshake timeout|context deadline exceeded|connection reset by peer|unexpected EOF/i.test(String(error.stderr));
+        || /Client\.Timeout|i\/o timeout|TLS handshake timeout|context deadline exceeded|connection reset by peer|unexpected EOF|received unexpected HTTP status: 502 Bad Gateway/i.test(String(error.stderr));
       if (!transient || attempt >= 3 || remaining() <= pause) throw error;
-      console.error(`Test image pull timed out or lost its connection; retrying ${image} (${attempt + 1}/3)`);
+      console.error(`Test image pull failed temporarily; retrying ${image} (${attempt + 1}/3)`);
       await delay(pause);
       if (remaining() <= 0) throw error;
     }
