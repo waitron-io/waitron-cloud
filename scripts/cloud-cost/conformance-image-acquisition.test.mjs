@@ -44,6 +44,7 @@ try {console.log('PREPARED');} finally {fixture.cleanup();}
     const data=JSON.parse(await readFile(state,'utf8'));
     if(data.pid){try{process.kill(data.pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}}
     if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await new Promise(resolve=>child.once('close',resolve));}
+    if(existsSync(join(root,'scratch')))await rm(await readFile(join(root,'scratch'),'utf8'),{recursive:true,force:true});
     await rm(root,{recursive:true,force:true});
   });
   let output='',interrupted=false;for(const stream of [child.stdout,child.stderr])stream.on('data',bytes=>{
