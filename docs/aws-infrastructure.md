@@ -421,3 +421,51 @@ reconnection and transaction retries; these mocked plans make no promise of zero
 interruption. P7 owns the separately authorised regional recovery procedure and
 new credentials for a restored database. An administrator-secret reference in the
 primary region alone does not establish regional recovery access.
+
+## Keep venue storage encrypted and its retained versions recoverable
+
+Spain has separate stream and snapshot buckets in Spain, with matching cold-copy
+buckets in Paris. Global has no venue storage; its root must omit this module.
+Check the declarations locally:
+
+```sh
+node deploy/aws/check.mjs --suite storage
+```
+
+Supply the Spain/Paris region pair, one storage key reference per region and the
+country account's `waitron-es-storage-replication` role reference. The module
+refuses other regions, foreign accounts, wildcard references and prefixes other
+than the adapters' existing `streams/` and `snapshots/`. Bucket names include the
+country account and region. The handoff returns those names and key references.
+
+Streams retain customer-provided server-side encryption, called SSE-C. Both
+stream buckets explicitly unblock it through `blocked_encryption_types = ["NONE"]`,
+as required by the [pinned provider's encryption configuration](https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.42.0/website/docs/r/s3_bucket_server_side_encryption_configuration.html.markdown).
+Their policies require no KMS upload header. AWS documents that [replication
+preserves SSE-C without extra SSE-C permissions](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-config-for-kms-objects.html).
+No customer encryption key enters OpenTofu. The stream's bucket default is S3's
+AES256 encryption; callers still supply their customer key for stream requests.
+
+Snapshots default to the named regional KMS key. Their policies allow uploads
+without encryption headers, which use that default, and deny explicit other
+algorithms, keys or customer-key encryption. Bucket keys stay disabled so later
+permissions can restrict encryption contexts to object prefixes. Snapshot
+replication explicitly includes KMS-encrypted objects and names the Paris key.
+Both copy rules select only their own adapter prefix, use S3 Standard storage
+and leave delete-marker replication disabled.
+
+All four buckets block public access, deny insecure connections and foreign
+accounts, retain versions and refuse ordinary OpenTofu bucket deletion. The only bucket
+age rule aborts incomplete multipart uploads after seven days. Completed and
+noncurrent versions have no expiration or storage-class transition. The existing
+catalogue selects daily snapshots for 30 days, monthly snapshots for 12 calendar
+months and protects the last verified snapshot; bucket age alone cannot make
+that decision. These declarations enable neither Object Lock nor automatic
+venue deletion. D101 owns the exit policy, P1 owns worker wiring and P3 owns the
+country catalogue schema.
+
+Task 8 must attach narrowly scoped replication and workload permissions after
+the bucket and key references exist. This module's policies only deny access;
+they grant none. The local plans establish configuration bindings, not live
+replication, key recoverability or restore success. P7's separately authorised
+recovery rehearsal must establish those, including retained application keys.
