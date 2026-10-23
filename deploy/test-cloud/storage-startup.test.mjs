@@ -102,3 +102,54 @@ test('storage reservations close promptly when another client connects', {timeou
   t.after(() => storage.stop());
   assert.equal(prompt, true, 'an accepted connection must not keep a temporary reservation open');
 });
+
+// A lost creation reply must not turn the next owned-bucket response into a permanent startup failure.
+test('storage startup recovers when the readiness bucket is created but its reply is lost', {timeout:90000}, async t => {
+  const {createRequire} = await import('node:module');
+  const require = createRequire(new URL('../../packages/backups/package.json', import.meta.url));
+  const {S3Client} = require('@aws-sdk/client-s3');
+  const send = S3Client.prototype.send;
+  let lostReply = false, ownedBucketResponse = false;
+  t.mock.method(S3Client.prototype, 'send', async function (command, ...args) {
+    let response;
+    try { response = await Reflect.apply(send, this, [command, ...args]); }
+    catch (error) {
+      if (command.constructor.name === 'CreateBucketCommand' && command.input.Bucket === 'readiness-probe' && error.name === 'BucketAlreadyOwnedByYou') ownedBucketResponse = true;
+      throw error;
+    }
+    if (command.constructor.name === 'CreateBucketCommand' && command.input.Bucket === 'readiness-probe' && !lostReply) {
+      lostReply = true;
+      throw Object.assign(new Error('readiness creation reply lost after commit'), {name:'TimeoutError'});
+    }
+    return response;
+  });
+  const storage = await startBackupStorage();
+  t.after(() => storage.stop());
+  assert.equal(lostReply, true, 'the real store must create the bucket before its reply is discarded');
+  assert.equal(ownedBucketResponse, true, 'the real duplicate response must exercise recovery');
+  await storage.bucket('ready-after-lost-reply');
+});
+
+test('an owned readiness bucket still refuses startup when its accessibility check fails', {timeout:90000}, async t => {
+  const {createRequire} = await import('node:module');
+  const require = createRequire(new URL('../../packages/backups/package.json', import.meta.url));
+  const {S3Client} = require('@aws-sdk/client-s3');
+  const send = S3Client.prototype.send;
+  let lostReply = false;
+  t.mock.method(S3Client.prototype, 'send', async function (command, ...args) {
+    if (command.constructor.name === 'HeadBucketCommand' && command.input.Bucket === 'readiness-probe') {
+      throw Object.assign(new Error('readiness bucket is inaccessible'), {name:'AccessDenied'});
+    }
+    const response = await Reflect.apply(send, this, [command, ...args]);
+    if (command.constructor.name === 'CreateBucketCommand' && command.input.Bucket === 'readiness-probe' && !lostReply) {
+      lostReply = true;
+      throw Object.assign(new Error('readiness creation reply lost after commit'), {name:'TimeoutError'});
+    }
+    return response;
+  });
+  // Register cleanup even if a broken guard returns an unexpected success.
+  let storage;
+  t.after(() => storage?.stop());
+  await assert.rejects(async () => { storage = await startBackupStorage(); }, {name:'AccessDenied', message:'readiness bucket is inaccessible'});
+  assert.equal(lostReply, true);
+});

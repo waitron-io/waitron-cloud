@@ -3785,22 +3785,31 @@ notifications separately.
 
 ## Parallel storage-cache fixture failure on main
 
-Main CI [39943355021](https://github.com/waitron-io/waitron-cloud/actions/runs/39943355021)
-for merge `ca5d2a996b93d16c55ccb79b8c3d2228792b5090` fails
-`deploy/test-cloud/storage-cache.test.mjs:19`: only one of two parallel fixtures
-starts from a verified read-only cached archive. The assertion hides the rejected
-fixture's reason; the CI root cause is unknown. The test and
-`scripts/backup-storage-fixture.mjs` are byte-identical at base `b16f3ca`, green
-PR head `0827fca` and merge `ca5d2a9`. The existing focused native macOS run
-`node --test deploy/test-cloud/storage-cache.test.mjs` passes both cases; it does
-not reproduce or explain the Linux failure. No unchanged CI rerun was requested.
+Main [run 39943355021](https://github.com/waitron-io/waitron-cloud/actions/runs/39943355021)
+rejected one of two fixtures in `deploy/test-cloud/storage-cache.test.mjs`.
+The test now prints each rejected error and its socket diagnostics before stopping
+the successful fixture. The read-only archive and two-success checks are unchanged.
+The original rejection had no error detail, so its exact cause remains unknown.
 
-Next: the campaign watcher assigns a scoped fixture investigation. Preserve the
-read-only archive and two-success assertions, capture each rejected startup error
-and its existing storageStartup diagnostics before cleanup, then reproduce the
-specific failing boundary under parallel native Linux execution before fixing it.
-Keep this separate from A951 and do not assume the earlier port-collision cause.
-The summary correctly fails with the receipt job.
+A separate native Linux investigation reproduced a readiness failure in
+[run 39945355111](https://github.com/waitron-io/waitron-cloud/actions/runs/39945355111).
+With sixteen concurrent fixtures, a bucket creation can succeed after the caller
+stops waiting for its reply. Every subsequent creation then returns
+`BucketAlreadyOwnedByYou`, and the old readiness loop eventually refuses a working
+store. Socket evidence identifies each store as the owner of all seven allocated
+ports; this reproduced failure is not an observed port collision.
+
+The fixture now checks that the owned readiness bucket is accessible before
+accepting that response. Other errors still retry within the existing limits;
+a failed accessibility check still blocks startup. A deterministic real-store test
+discards a successful creation reply and verifies recovery, and a second test
+checks refusal when access fails. Existing assertions and deadlines remain intact.
+The focused native cache/startup cases pass. Local Docker and PostgreSQL checks
+stay unavailable until 3 November; qualification uses GitHub CI.
+
+Remaining: retain the diagnostics to attribute any recurrence of the original
+read-only-cache rejection. Do not treat this demonstrated readiness repair as
+proof of that historical failure's cause.
 
 ## CI PostgreSQL image pull
 
