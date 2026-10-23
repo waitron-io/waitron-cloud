@@ -262,6 +262,110 @@ live DNS/certificate
 and deployment evidence, and the existing recovery/fiscal gates remain open. No
 pricing, retention, security product policy or implementation approval is supplied.
 
+### A951 Cut A contract review, 2026-10-23
+
+The owner approved Waitron's complete A951 plan and all five build cuts on
+23 October, as recorded in its
+[build intake](https://github.com/clintongormley/waitron/blob/9a016bb85ae0dab7d334b6fd52929f49d3cf042f/docs/developers/cloud-connection.md#a951-build-intake).
+That approval permits the planned Waitron build. It does not fill the protocol
+agreements below or authorise Cloud deployment, providers or customer services.
+Read this dated review ahead of the older proposal's approval wording.
+
+Lane G owns this Cloud response; Lane E owns the Waitron intake and client.
+Lane D retains D88 and the Cloud gateway's deployment work. The source reviewed is
+Cloud `b16f3ca630019f693d7db999aadc0167c0ef9027` and Waitron
+`9a016bb85ae0dab7d334b6fd52929f49d3cf042f`. These are source pins, not a
+qualified pair of running consumers. No A951 wire/helper/parser artifact is
+accepted by this review. Its disposition is **amendments required**, with the
+existing staff-v1 compatibility facts reaffirmed separately below.
+
+Keep the owner's two interfaces: staff TLS ends at Waitron; customer TLS ends at
+Cloud for filtering and continues through independently authenticated encrypted
+transport. Keep `.local` independent. The connection enables no customer product.
+Use the owner-revised A1018 controlled/emergency handover proposal for authority
+coordination; the rejected external stop-proof design supplies no adapter here.
+This review does not change handover or fiscal rules.
+
+#### What each scoped agreement still needs
+
+| Gate and consumer | Cloud response and concrete amendment |
+| --- | --- |
+| G1, T1 appliance codec | Return a separate, versioned appliance artifact with exact request actions and signed bytes, response trust anchors and rotation, installation/venue/endpoint/cell bindings, configuration revision, content revision and transport-grant sequence. Define equal-content grant renewal, same-revision changed-content rejection, certificate-intent invalidation, report/replay results and authenticated establishment/recovery epochs. Supply literal positive and rejection vectors and byte/duration bounds. Do not rename a gateway sequence into any of the three appliance counters. |
+| G1, T3 local helper | Lane E owns the local process boundary. Return its exact authenticated framing, caller/socket ownership, fixed operations and owned-resource namespace, allowed source/destination address and service-port matrix, IPv4/IPv6 refusal or support, clock/skew/expiry rules and removal read-back. Cloud's generated peer `/32` alone does not define these rules. Unknown or unaccepted operations keep real admission closed. |
+| G2, actual authority adapter | Obtain the actual A947 consumer pin and a current endpoint/writer result with freshness and withdrawal semantics from its Waitron owner. Installation control state, gateway authority, membership, a probe and `cloudPrimary()` cannot stand in for that result. Reconcile the revised A1018 model and D88 cold recovery without creating activation or fiscal authority in the network layer. |
+| G3, T7/T8 staff client | Preserve the existing test-only v1 bindings below. Return explicit response-byte and request-time bounds, polling minimum/cap/jitter, retry-hint bounds, pending/reconciliation deadline, renewal margin/jitter and key-rotation policy before the adapter. The historical 5-second to 5-minute polling suggestion is not an accepted default. Cloud's issuer retry schedule is not the appliance's polling contract. |
+| G4, T10 customer upstream | Return an independent issuer/purpose and gateway/box identity contract, trust distribution and bounded rotation overlap, submit/status actions and signed bytes, response bounds, renewal/revocation and closure of established connections. The present public gate verifies the staff hostname and has no independent mutual-TLS exchange. Do not add a public-upstream purpose to staff v1. |
+| G5, T11 move/replacement | Return an appliance-facing operation/predecessor contract, stage/readiness/conditional-commit/cancel/status results, lost-answer recovery, old-route/peer withdrawal and connection-drain/expiry bounds. Bind fresh replacement secrets and authenticated recovery epochs to the actual Waitron authority result. Cloud's existing database placement operations are implementation evidence, not this joint appliance protocol. |
+| G6, T4 shared parser | Return a versioned customer-route schema and exact canonical bytes/digest for an empty production manifest. Include shared raw-request normalization vectors, SNI/Host/authority rules, allowed forwarding headers and authenticated gateway/venue/endpoint/epoch context. Pin duplicate headers/query keys, malformed/double encodings, separators, traversal, absolute-form targets, port spellings, upgrades and method overrides. A fixture availability route is not a production customer route. |
+| G6, T13 diagnostics | Return a closed field schema with per-field, message and collection bounds, redaction, readiness observations and export destinations. Keep active, reachable, DNS-ready and installed-certificate-ready independent. Obtain flow-scoped A980/D101 acceptance before real metadata processing, including staff transport metadata. No bodies, cookies, credentials, QR/session secrets or invented retention periods. |
+| G7, enablement | Supply executable gateway/box pins, accepted helper/host rules, images and applicable DNS/issuer/device/origin receipts before opening the corresponding path. Source inspection and synthetic fixtures do not qualify a real installation. |
+
+Lane G and Lane E must record the resulting artifact digests, both consumer pins
+and allowed scope before the affected adapter starts. Unaccepted artifacts have
+no acceptance digest; a hash of this review cannot substitute for one. Internal
+foundation fixtures may continue under the approved plan with explicit injected
+policy, no real admission and no customer routes. This is not another owner build
+question. Resolve technical contract amendments between the named owners; escalate
+only a concrete product or security choice left to the owner.
+
+#### Existing staff-v1 compatibility facts
+
+Use the existing [staff certificate exchange](#staff-certificate-exchange-version-1)
+without changing its purpose or `revision`: that field is the **installation
+configuration revision**, not appliance content or grant sequence. The exact
+machine encoding is the JSON array
+`["waitron-cloud-machine-v1",origin,action,installationId,operationId,issuedAt,lease,body]`.
+`payload` and `signature` are canonical unpadded base64url; the Ed25519 signature
+covers the encoded array bytes. `lease` and `body` are strings; the live control
+lease binds origin, installation, venue, environment and machine public key.
+Use the stored installation key and configured trusted HTTPS origin. A request
+proof allows 60 seconds of clock difference; a control lease lasts at most one
+hour. Neither is a transport grant or writer permission.
+
+The two existing actions are `staff-certificate-submit` and
+`staff-certificate-status`, at the POST paths in the staff-v1 section. Submit
+retains its operation UUID and exact body bytes on a lost reply. Status uses a
+fresh operation UUID to read that submission. A changed submit intent uses a new
+UUID and the current predecessor request ID. Compare installation, request,
+hostname, configuration revision and SHA-256 of CSR PEM bytes before installation.
+There is no historical request-ID ledger or new `failed` wire state. Pending
+includes work parked after eight issuer failures; operator status distinguishes it.
+
+| Existing bound at the Cloud source pin | Value and unit |
+| --- | --- |
+| Outer JSON request / read deadline | 16,384 bytes / 5,000 milliseconds. |
+| Encoded machine payload / signature | At most 12,000 base64url characters / exactly 86 base64url characters decoding to 64 signature bytes. |
+| Signed lease string / signed body string | At most 4,096 JavaScript string code units each. These are not UTF-8 byte limits. |
+| CSR | At most 4,096 string code units; valid signature, RSA at least 2,048 bits and exactly the authorised CN and DNS SAN. It must also fit the complete signed body. |
+| Published certificate chain | At most 16,384 bytes. This is not a bound on the full JSON response after escaping. |
+| HTTP rate rules | 60 requests per IP per 60 seconds, then 30 per authenticated installation per 60 seconds. |
+| Ready-chain renewal eligibility | Outside the last `min(30 days, certificate lifetime / 3)` and matching hostname/key. This server eligibility rule does not define the client's renewal schedule. |
+
+G3 remains open for the client limits listed above. Keep the opt-in flag and
+installation issuer requirement, and refuse production installations. Treat
+400/401/403/408/409/413/415/429/503 by their actual cause; oversized requests do not
+become valid after lease renewal. Issuance never proves local install or TLS reload.
+
+At the Cloud pin above, inspect
+[installation-proof.ts](../packages/registration/src/installation-proof.ts),
+[staff-exchange.ts](../packages/remote-access/src/staff-exchange.ts),
+[staff-certificates.ts](../packages/account-http/src/staff-certificates.ts),
+[request.ts](../packages/account-http/src/request.ts) and
+[renewal.ts](../packages/remote-access/src/renewal.ts).
+The existing [manifest](../packages/remote-access/src/manifest.ts),
+[gateway renderer](../packages/remote-access/src/config.ts),
+[public gate](../packages/remote-access/src/public-gate.ts) and
+[placement operations](../packages/remote-access/src/placement.ts) explain the
+remaining mismatches. The gateway manifest's audience is
+`waitron-cloud-gateway`; its one sequence and ten-minute maximum lifetime do not
+establish an appliance message or an accepted appliance expiry policy.
+
+This review runs the existing pure manifest, CSR, renewal and public-gate tests,
+plus machine-proof vectors. It does not run PostgreSQL, the A951 client/helper,
+shared-parser interoperability, mutual TLS or physical-device qualification.
+Docker is unavailable locally until 3 November; no deployment or provider action
+is performed. Record any later executable qualification independently.
+
 ## Exchanges to implement
 
 ### Agreed connection journey
