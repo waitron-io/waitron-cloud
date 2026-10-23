@@ -3823,6 +3823,13 @@ child exit or an unallocated port does not qualify. Deterministic child tests
 prove recovery, both refusal forms and the two-attempt limit. The existing first-failure diagnostic
 test explicitly disables retries while retaining all its assertions.
 
+The combined repair passes all nine independent dense Linux samples in
+[run 39947812288](https://github.com/waitron-io/waitron-cloud/actions/runs/39947812288):
+126 checks across three runners, including sixteen simultaneous fixtures per
+sample. The temporary stress workflow and case are removed after qualification;
+the deterministic regressions remain. Seven deliberate guard faults were caught
+in a disposable checkout and the original files restored before the final checks.
+
 Remaining: retain the diagnostics to attribute any recurrence of the original
 read-only-cache rejection. Do not treat this demonstrated readiness repair as
 proof of that historical failure's cause.
