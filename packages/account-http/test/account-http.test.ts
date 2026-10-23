@@ -6,6 +6,7 @@ import type { HttpBindings } from '@hono/node-server';
 import { EmailWorker, PasswordRecoveryStore, createLocalAccountMailer, SignupStore, type PasswordScreeningProvider } from '@waitron-cloud/registration';
 import { createAccountApp } from '../src/app.ts';
 import { database } from './fixtures.ts';
+import {createMailCapture} from './mail-capture.ts';
 let db: Awaited<ReturnType<typeof database>>;
 let app: ReturnType<typeof createAccountApp>;
 const origin = 'https://cloud.example.test';
@@ -43,14 +44,6 @@ async function account() {
   await db.pool.query('DELETE FROM email_outbox');
   return {email, ...result};
 }
-async function tokenFromMail(email: string, subject: string) {
-  const inbox = process.env.MAILPIT_TEST_URL!;
-  const list = await (await fetch(`${inbox}/api/v1/messages`)).json() as {messages: {ID: string; Subject: string; To: {Address: string}[]}[]};
-  const found = list.messages.find(message => message.Subject === subject && message.To.some(to => to.Address === email));
-  assert.ok(found);
-  const mail = await (await fetch(`${inbox}/api/v1/message/${found.ID}`)).json() as {Text: string};
-  const token = mail.Text.match(/token=([A-Za-z0-9_-]{43})/)?.[1]; assert.ok(token); return token;
-}
 function protectedHeaders(response: Response) {
   assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
@@ -59,10 +52,12 @@ function protectedHeaders(response: Response) {
 }
 test('HTTP signup and recovery through Mailpit preserve accounts, cookies and session revocation', async () => {
   const email = `journey-${randomUUID()}@example.test`;
-  const worker = new EmailWorker(db.pool, db.outbox, createLocalAccountMailer({port: Number(process.env.MAILPIT_TEST_SMTP_PORT)}));
+  const capture = createMailCapture({pool: db.pool, inbox: process.env.MAILPIT_TEST_URL!,
+    mailer: createLocalAccountMailer({port: Number(process.env.MAILPIT_TEST_SMTP_PORT)})});
+  const worker = new EmailWorker(db.pool, db.outbox, capture.mailer);
   const requested = await request('/signup/request', {email}); assert.equal(requested.status, 202);
   assert.deepEqual(await requested.json(), {status: 'accepted'}); protectedHeaders(requested);
-  await worker.runOnce(); const token = await tokenFromMail(email, 'Verify your Waitron Cloud email');
+  await capture.runOnce(worker); const token = await capture.tokenFromMail(email, 'Verify your Waitron Cloud email');
   assert.equal((await request(`/signup/complete?token=${token}`)).status, 400);
   const signup = await request('/signup/complete', {token, ...details});
   assert.equal(signup.status, 201); assert.equal(signup.headers.has('set-cookie'), false);
@@ -87,7 +82,7 @@ test('HTTP signup and recovery through Mailpit preserve accounts, cookies and se
   assert.equal(activity.status, 200);
   assert.ok((await db.pool.query('SELECT last_seen_at FROM cloud_sessions')).rows[0].last_seen_at.getTime() > oldSeen);
   const resetRequest = await request('/password-reset/request', {email}); assert.equal(resetRequest.status, 202);
-  await worker.runOnce(); const resetToken = await tokenFromMail(email, 'Reset your Waitron Cloud password');
+  await capture.runOnce(worker); const resetToken = await capture.tokenFromMail(email, 'Reset your Waitron Cloud password');
   const newPassword = 'A different long café password';
   const reset = await request('/password-reset/complete', {token: resetToken, password: newPassword});
   assert.equal(reset.status, 200); assert.equal(reset.headers.has('set-cookie'), false);
@@ -96,6 +91,30 @@ test('HTTP signup and recovery through Mailpit preserve accounts, cookies and se
   assert.equal((await request('/login', {email, password})).status, 401);
   assert.equal((await request('/login', {email, password: newPassword})).status, 200);
   assert.equal((await db.pool.query('SELECT count(*) FROM cloud_accounts')).rows[0].count, '1');
+});
+test('a forced reset-mail miss reports real queue and SMTP outcomes without private values', async () => {
+  const {email} = await account();
+  const capture = createMailCapture({pool: db.pool, inbox: process.env.MAILPIT_TEST_URL!,
+    mailer: createLocalAccountMailer({port: Number(process.env.MAILPIT_TEST_SMTP_PORT)})});
+  const worker = new EmailWorker(db.pool, db.outbox, capture.mailer);
+  assert.equal((await request('/password-reset/request', {email})).status, 202);
+  assert.equal(await capture.runOnce(worker), true);
+  const missingRecipient = `missing-${randomUUID()}@example.test`;
+  await assert.rejects(capture.tokenFromMail(missingRecipient, 'Reset your Waitron Cloud password'), error => {
+    assert.ok(error instanceof assert.AssertionError);
+    assert.ok(!error.message.includes(email) && !error.message.includes(missingRecipient));
+    assert.ok(error.message.startsWith('Mail capture: '));
+    const diagnostic = JSON.parse(error.message.slice('Mail capture: '.length));
+    assert.equal(diagnostic.worker[0].result, 'handled');
+    assert.deepEqual(diagnostic.smtp.map((event: {kind: string; result: string}) => [event.kind, event.result]), [['password_reset', 'accepted']]);
+    assert.deepEqual(diagnostic.outbox, [{kind: 'password_reset', status: 'sent', attempts: 1, failures: 0,
+      lastError: null, transport: 'none', hasMessageId: false}]);
+    assert.equal(diagnostic.inbox.status, 200);
+    assert.ok(diagnostic.inbox.subjectMatches >= 1);
+    assert.equal(diagnostic.inbox.recipientMatches, 0);
+    assert.equal(diagnostic.inbox.combinedMatches, 0);
+    return true;
+  });
 });
 test('every mutation rejects missing, null and foreign Origin before changing state', async () => {
   const paths = ['/signup/request', '/signup/complete', '/login', '/session/activity', '/logout', '/password-reset/request', '/password-reset/complete'];
