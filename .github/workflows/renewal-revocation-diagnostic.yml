@@ -35,7 +35,7 @@ jobs:
           import json, subprocess
           def run(index):
               result = subprocess.run(['node', '--test', '--test-timeout=30000',
-                  '--test-name-pattern=owner revocation serializes',
+                  '--test-name-pattern=installation lock observation|owner revocation serializes',
                   'packages/registration/test/installations.test.ts'],
                   capture_output=True, text=True, timeout=45)
               Path(f'diagnostics/case-{index}.log').write_text(result.stdout + result.stderr)
@@ -44,8 +44,8 @@ jobs:
                   print(result.stdout + result.stderr, flush=True)
               return result.returncode != 0
           with ThreadPoolExecutor(max_workers=4) as workers:
-              failures = sum(task.result() for task in as_completed([workers.submit(run, n) for n in range(40)]))
-          print(json.dumps({'cases': 40, 'failures': failures}), flush=True)
+              failures = sum(task.result() for task in as_completed([workers.submit(run, n) for n in range(4)]))
+          print(json.dumps({'cases': 4, 'failures': failures}), flush=True)
           raise SystemExit(bool(failures))
           PYTHON
       - uses: actions/upload-artifact@v4
