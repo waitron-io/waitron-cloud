@@ -18,7 +18,7 @@ original scope.
 
 The `serviceId` identifies one flow purpose. Keep it stable when an implementation
 changes. The `evidenceId` identifies the qualification record for that purpose and
-supplier surface. A later country policy must also match the exact supplier,
+supplier surface. The [slice 3 country function](country-policy.md) matches the exact supplier,
 account, endpoint, data class, region and policy revision. An ID alone grants no
 access. Changed supplier scope needs a new reviewed evidence version; do not turn
 an unqualified row into a general permission.

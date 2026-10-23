@@ -52,8 +52,11 @@ unauthorised. Slice 2 publishes the [purpose/supplier register](cloud-data-proce
 and [five draft agreement annexes](cloud-processing-annexes.md): stable IDs,
 separate Cloud-own purposes, explicitly unqualified supplier evidence and all six
 open lawyer questions. These are unsigned drafting records, not legal or provider
-qualification. The outbound AI refusal and explicit synthetic loopback transport are implemented locally;
-remaining runtime controls are **unbuilt**. One venue approval permits at most **24 hours**
+qualification. Slice 3 adds the SQL-free [country decision function](country-policy.md):
+exact qualified destination matching, positive policy revisions and evidence-only results.
+The production Spain default has no qualified flows. Durable placement/credential
+bindings remain unbuilt. The outbound AI refusal and explicit synthetic loopback
+transport are implemented locally; remaining runtime controls are **unbuilt**. One venue approval permits at most **24 hours**
 of support access, shorter where practical and fresh approval to extend. **Paris
 `eu-west-3`** is the approved extra encrypted backup destination, subject to service,
 contract and recovery qualification; Spain data/logs/keys remain in `eu-south-2`.
@@ -1034,7 +1037,7 @@ notifications separately.
 | --- | --- |
 | Customer model | Support an organisation with several legal businesses and tax identities across countries from the outset. A venue belongs to one organisation at a time. Focus signup on one owner with one venue or several venues in the same city; defer the ownership-transfer workflow. |
 | Cloud staff access | The disabled-by-default [temporary support grant core](temporary-support-grants.md) now records a current owner's approval for a named, separately eligible platform account, exact configured actions, an optional venue, explicit expiry and early revocation. Transactional enforcement rechecks expiry, the original approver and platform eligibility around protected database work, while fixed audit events omit reason and request data. No route or production action is configured. The [D101 roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md) records the approved engineering design and local authority for slices 1–5 (support is in later unauthorised slices): per-session approval with a 24-hour maximum, fresh approval to extend, every-action audit and narrow emergency conditions. Implementation of platform roles, action catalogues, approver policy, expiry and active-session cancellation remains unbuilt; legal qualification and runtime proof remain open. Possible on-prem SSH support still requires explicit server approval, a limited period and active-session termination on expiry or revocation. |
-| Residency | The owner selected country-pack home/permitted backup regions. Spain venue data, logs and keys use `eu-south-2`, with the extra encrypted copy in Paris `eu-west-3`, subject to qualification; EU SES is a separate email exception. [D101](superpowers/specs/2026-10-22-cloud-data-protection-design.md) has a [published roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md), local build authority for slices 1–5, and the slice 2 register/draft annexes. Runtime country enforcement is unbuilt; actual data-flow evidence, legal/provider qualification and separate AI eligibility acceptance remain open; region availability is not a residency promise. See the [launch evidence boundary](launch-evidence.md). |
+| Residency | The owner selected country-pack home/permitted backup regions. Spain venue data, logs and keys use `eu-south-2`, with the extra encrypted copy in Paris `eu-west-3`, subject to qualification; EU SES is a separate email exception. [D101](superpowers/specs/2026-10-22-cloud-data-protection-design.md) has a [published roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md), local build authority for slices 1–5, and the slice 2 register/draft annexes. Pure country decisions are implemented in [slice 3](country-policy.md), with every production flow denied. Durable runtime country enforcement is unbuilt; actual data-flow evidence, legal/provider qualification and separate AI eligibility acceptance remain open; region availability is not a residency promise. See the [launch evidence boundary](launch-evidence.md). |
 | Cells | Venues are independently placed, with a shared gateway per cell and stable customer-facing addresses on movement. The local two-cell workflow now stages a revision-bound destination, cancels a failed apply without replacing the source, requires a tested destination manifest sequence before commit, preserves hostnames/certificates and publishes newer source/destination manifests. Two 2026-09-26 Docker runs reconnected the fresh destination peer in 1,321 ms and 1,486 ms; the second receipt names clean head `e4f9356`, while the other venue stayed source-only. These are not production targets. Define group size, availability-zone layout and recovery-time objective; repeat movement with the selected gateway deployment, provider network, DNS/certificate reconciler and appliance automation. Keep backups and portal recovery independent of gateway machines. |
 | Provider support | AWS is the first provider and `eu-south-2` is the verified regional candidate. Select the exact RDS, S3, compute, ingress, DNS, certificate, key and monitoring configuration in the real account; the owner selected SES in an EU region, with D102 account/region and live-delivery qualification still open. Keep Google Cloud Madrid (`europe-southwest1`) as a future target that must pass the same service-by-service gate. Decide separately whether cross-provider failover is wanted. |
 | Product packages | Remote access and backups are the initial paid services. Address lookup and transactional account email are planned free services for open-source Waitron with a Cloud login and per-user limits; mobile notifications remain a candidate. Define their release scope, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |
@@ -2787,6 +2790,24 @@ notifications separately.
   and an independent merge qualification, each installing in one attempt and
   executing every browser test. The historical primary-archive slowness remains
   unexplained. Every fixture head requires its own CI qualification.
+  **Local storage fixture port allocation repaired; original holder unknown.** In
+  [run 39929839494](https://github.com/waitron-io/waitron-cloud/actions/runs/39929839494/job/120335229364),
+  SeaweedFS's filer failed before the separate-authority concurrency case because
+  its loopback address was already in use. The fixture now holds all seven child
+  port reservations together until just before spawning SeaweedFS, preventing the
+  allocator from choosing one port for two services. Reservations drop incoming
+  connections so a peer cannot hold their release open. Partial allocation failure
+  closes every earlier reservation. A child startup failure records the named
+  port allocation and a bounded `lsof` listener snapshot, or an explicit reason
+  that collection was unavailable, before stopping only its own child.
+  Native tests reproduce the earlier release pattern, allocation interruption and
+  an owned competing listener. Authority/concurrency checks and service deadlines
+  are unchanged. Another process can still claim a port during the handoff to the
+  separate child; that collision remains a failure with diagnostics, without a
+  retry or permission to stop its owner. The historical CI socket owner remains
+  unknown. If it recurs, use the allocation and socket snapshot to establish the
+  cause before extending the repair. D101 slice 3 in PR311 requires fresh CI on
+  this changed fixture; a successful unchanged rerun is not a cause diagnosis.
   A separate test-harness route failure is also open. In
   [run 39813909743](https://github.com/waitron-io/waitron-cloud/actions/runs/39813909743/job/119947375548),
   registration shard 2 never ran its tests: pulling `axllent/mailpit:v1.31.1`

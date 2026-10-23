@@ -81,9 +81,16 @@ export async function startBackupStorage(options = {}) {
   if (!/^\d+[smh]$/.test(tokenDuration))
     throw Error("Invalid local storage token duration");
   const root = await mkdtemp(join(tmpdir(), "cloud-backup-storage-"));
-  let oidc, child, log, adminClient;
+  let oidc, child, log, adminClient, allocatedPorts;
   const managed = new Map();
+  const portReservations = [];
+  async function releasePorts() {
+    await Promise.all(portReservations.splice(0).map(server =>
+      server.listening ? new Promise(resolve => server.close(resolve)) : undefined,
+    ));
+  }
   async function stop() {
+    await releasePorts();
     adminClient?.destroy();
     if (child && child.exitCode === null && child.signalCode === null) {
       child.kill("SIGTERM");
@@ -265,9 +272,21 @@ export async function startBackupStorage(options = {}) {
     });
     await writeIdentities();
     const ports = [];
-    for (let i = 0; i < 7; i++) ports.push(await freePort());
+    // Keep every listener open while choosing the batch so the kernel cannot
+    // assign one port to two SeaweedFS services. Reject connections so releasing
+    // the reservations cannot wait for a peer before handing them to the child.
+    for (let i = 0; i < 7; i++) {
+      const reservation = netServer(socket => socket.destroy());
+      portReservations.push(reservation);
+      await new Promise((resolve, reject) => {
+        reservation.once("error", reject);
+        reservation.listen(0, "127.0.0.1", resolve);
+      });
+      ports.push(reservation.address().port);
+    }
     const [s3, master, masterGrpc, volume, volumeGrpc, filer, filerGrpc] =
       ports;
+    allocatedPorts = { s3, master, masterGrpc, volume, volumeGrpc, filer, filerGrpc };
     const endpoint = "https://127.0.0.1:" + s3;
     await mkdir(join(root, "data"));
     log = await open(join(root, "store.log"), "w");
@@ -292,6 +311,7 @@ export async function startBackupStorage(options = {}) {
       "-s3.port.iceberg=0",
       "-s3.port.lance=0",
     ];
+    await releasePorts();
     child = spawn(bin, args, {
       env: { PATH: process.env.PATH, HOME: root, TMPDIR: root },
       stdio: ["ignore", log.fd, log.fd],
@@ -487,6 +507,22 @@ export async function startBackupStorage(options = {}) {
       assumeExpired: (scope) => assume(scope, scope.kind, Date.now() - 120000),
     };
   } catch (error) {
+    if (allocatedPorts && child) {
+      let socketOwners;
+      try {
+        socketOwners = {
+          source: "lsof",
+          output: execFileSync("lsof", [
+            "-nP", "-a", "-iTCP:" + Object.values(allocatedPorts).join(","),
+            "-sTCP:LISTEN", "-Fpcn",
+          ], { encoding: "utf8", timeout: 2000, maxBuffer: 65536, stdio: ["ignore", "pipe", "pipe"] }),
+        };
+      } catch (diagnosticError) {
+        socketOwners = { source: "unavailable", reason: diagnosticError.code ?? "exit_" + diagnosticError.status };
+      }
+      // Observe listeners before owned-child cleanup. Never stop a competing owner.
+      error.storageStartup = { ports: allocatedPorts, socketOwners };
+    }
     await stop();
     throw error;
   }

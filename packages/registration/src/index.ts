@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { resolveSession } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
+export {decideCountryFlow,spainCountryPolicy,type CountryPolicy,type CountryFlow,type FlowRequest,type CountryFlowDecision} from './country-policy.ts';
 export { SignupStore, SignupError, type SignupEmail, type SignupMailer, type SignupDetails, type SignupResult } from './signup.ts';
 export { PasswordRecoveryStore, PasswordRecoveryError, type PasswordRecoveryMailer } from './password-recovery.ts';
 export { EmailOutbox, EmailWorker, emailDeliveryStatus, type EmailKind, type EmailDeliveryStatus } from './email-outbox.ts';
