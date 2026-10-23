@@ -6,15 +6,16 @@ import axe from 'axe-core';
 import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
 import {startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
+import {portalTrace} from './portal-trace.ts';
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: owners allow and stop translation, reconcile lost replies and retain their choice`,async()=>{
- const f=await startPortalFixture();let releaseActivity=()=>{};const events:string[]=[];try{
+ const f=await startPortalFixture();let releaseActivity=()=>{};const events:string[]=[];let trace:ReturnType<typeof portalTrace>|undefined;try{
   const email='owner@example.test',password='A long enough venue owner password';
   const signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email);
   const mail=f.db.outbox.open((await f.db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert.ok('token' in mail);
   const owner=await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
   const r=new RegistrationStore(f.db.pool),b={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
   await r.start(b);await r.approveCloud(b,owner.accountId);await r.approveLocal(b,randomUUID());const installed=await r.complete(b);
-  const context=await f.browser.newContext({locale,colorScheme:theme,viewport:{width,height:900}}),page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
+  const context=await f.browser.newContext({locale,colorScheme:theme,viewport:{width,height:900}}),page=await context.newPage();page.setDefaultTimeout(5000);trace=portalTrace(page);const c=translations[locale];
 
   const record=(entry:string)=>{events.push(entry);if(events.length>20)events.shift();};
   page.on('request',request=>{const path=new URL(request.url()).pathname;if(path==='/api/account/translation-consent'||path==='/api/account/session/activity')record(`request ${request.method()} ${path}`);});
@@ -69,7 +70,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   assert.equal(await section.getByRole('button',{name:allow,exact:true}).isEnabled(),false);releaseWrite();
   await section.getByText(allowed,{exact:true}).waitFor();
   const saved=(await f.db.pool.query('SELECT venue_id,consent_version,withdrawn_at FROM translation_consents')).rows[0];assert.equal(saved.venue_id,installed.venueId);assert.equal(saved.consent_version,'providers-2026-10-14');assert.equal(saved.withdrawn_at,null);
-  await page.reload();await section.getByRole('button',{name:stop,exact:true}).waitFor();
+  trace!.stage('reload saved consent');await page.reload();await section.getByRole('button',{name:stop,exact:true}).waitFor();
   f.loseAccountReply('/translation-consent','body');await section.getByRole('button',{name:stop,exact:true}).click();
   await section.getByText(locale==='en'?'We could not confirm your choice. Try again.':'No hemos podido confirmar tu elección. Vuelve a intentarlo.',{exact:true}).waitFor();
   assert.ok((await f.db.pool.query('SELECT withdrawn_at FROM translation_consents')).rows[0].withdrawn_at);
@@ -78,7 +79,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.reload();await section.getByRole('button',{name:allow,exact:true}).waitFor();
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[owner.accountId]);
   await page.reload();await page.getByRole('heading',{name:/Sol SL/}).waitFor();assert.equal(await section.count(),0);
- }catch(error){console.error('Translation consent browser stages',JSON.stringify({locale,theme,width,events}));throw error;}finally{releaseActivity();await f.close();}
+ }catch(error){console.error('Translation consent browser stages',JSON.stringify({locale,theme,width,events,trace:trace?.events,server:f.trace}));throw error;}finally{releaseActivity();await f.close();}
 });
 
 for(const locale of ['en','es'] as const)test(`${locale}: two venues keep accessible controls and write warnings in the affected venue`,async()=>{

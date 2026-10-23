@@ -43,11 +43,20 @@ export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?
       config: {portalOrigin: origin, production: false, rateKey: db.rateKey, trustedProxyIps: []},
       portalAssets: await loadPortalAssets(new URL('../dist', import.meta.url).pathname)});
     translations?.attach(running.server);
+    const trace:object[]=[];const traceStarted=performance.now();
+    const tracedPaths=new Set(['/api/account/session','/api/account/session/activity','/api/account/login','/api/account/password-reset/complete','/api/account/translation-consent']);
+    let requestId=0;
+    running.server.on('request',(request,response)=>{
+      const path=request.url?.split('?')[0];if(!path||!tracedPaths.has(path))return;
+      const id=++requestId,started=performance.now();
+      const record=(phase:string)=>{trace.push({id,path,method:request.method,phase,status:response.headersSent?response.statusCode:undefined,ms:Math.round(performance.now()-traceStarted),elapsed:Math.round(performance.now()-started),pool:{total:db.pool.totalCount,idle:db.pool.idleCount,waiting:db.pool.waitingCount}});if(trace.length>100)trace.shift();};
+      record('request');response.on('finish',()=>record('finish'));response.on('close',()=>record('close'));
+    });
     browser = await chromium.launch({headless: true});
     const worker = new EmailWorker(db.pool, db.outbox, createLocalAccountMailer({
       port: Number(process.env.MAILPIT_TEST_SMTP_PORT), portalOrigin: origin,
     }));
-    return {origin, browser, db, issuer,translation:translations,
+    return {origin, browser, db, issuer,trace,translation:translations,
       loseRecoveryReply(action: 'approve' | 'replace') {
         // Drop the socket after the handler commits, so reconciliation uses ordinary browser networking.
         return new Promise<{status: number; body: string}>(resolve => {

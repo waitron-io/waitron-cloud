@@ -3929,6 +3929,27 @@ changing any check. The assertions and deadlines remain unchanged.
 
 ## Portal lost-reply test ordering
 
+- **Open: new portal failures after the D132 documentation merge.**
+  [CI39967649257](https://github.com/waitron-io/waitron-cloud/actions/runs/39967649257)
+  at `4e07a98a9dad1073289a76b086073afc36728191`, job120461847149,
+  failed the reused-reset-link message at `apps/portal/test/journey.test.ts:57`,
+  the lost-reset-reply callback at line89 (`Request context disposed`), and the
+  post-reload translation control at
+  `apps/portal/test/translation-consent-browser.test.ts:72`. All27 jobs are final;
+  the strict summary also refuses the three failed tests. The same source tree
+  passed exact-head CI39966740913; matching bytes do not establish a cause.
+  D134 adds bounded browser/server request traces: static endpoint, method,
+  status, elapsed time and server connection-pool counts, excluding request bodies,
+  cookies and reset links. All 104 real Linux test cases passed across
+  [the initial trace run](https://github.com/waitron-io/waitron-cloud/actions/runs/39973004321)
+  and [the browser/server trace run](https://github.com/waitron-io/waitron-cloud/actions/runs/39973503708).
+  The temporary repeat workflow is removed; normal CI retains these traces.
+  That does not explain the historical failures. Capture a diagnostic recurrence,
+  reproduce its named stage, then fix the proved cause test-first. Every original
+  session, ownership, reset, consent, cleanup and timeout assertion remains.
+  No product fix or longer deadline is claimed; local real-fixture reproduction
+  stays unavailable while Docker is down. Lane G owns the remaining diagnosis.
+
 - **Resolved: reconciliation stalled after the reply was dropped.**
   [CI 36777640375](https://github.com/waitron-io/waitron-cloud/actions/runs/36777640375)
   on `ab5161d4af0fc41aad83c99ce22de80035b2e027` failed both English journeys

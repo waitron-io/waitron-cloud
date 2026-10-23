@@ -3,10 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { startPortalFixture, mailFor } from './fixtures.ts';
 import { translations } from '../src/locale.ts';
+import {portalTrace} from './portal-trace.ts';
 for (const locale of ['en','es'] as const) test(`real ${locale} signup, sessions and recovery through the worker and Mailpit`, async () => {
   const f=await startPortalFixture();
+  let trace: ReturnType<typeof portalTrace>|undefined;
   try {
-    const context=await f.browser.newContext({locale});const page=await context.newPage();page.setDefaultTimeout(5000);
+    const context=await f.browser.newContext({locale});const page=await context.newPage();page.setDefaultTimeout(5000);trace=portalTrace(page);
     const c=translations[locale];const email=`portal-${randomUUID()}@example.test`;const password='A real café account password';
     const urls:string[]=[];page.on('request',r=>urls.push(r.url()+' '+(r.headers()['referer']??'')));
     await page.goto(`${f.origin}/signup`);await page.getByLabel(c.email).fill(email);
@@ -53,17 +55,18 @@ for (const locale of ['en','es'] as const) test(`real ${locale} signup, sessions
     await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
     await page.getByText(c.credentials).waitFor();await page.locator('input[name=password]').fill(replacement);
     await page.getByRole('button',{name:c.login,exact:true}).click();await page.getByText(c.accountIntro).waitFor();
-    await page.goto(resetLink);await page.locator('input[name=password]').fill(replacement);
+    trace!.stage('reuse reset link');await page.goto(resetLink);await page.locator('input[name=password]').fill(replacement);
     await page.getByRole('button',{name:c.savePassword,exact:true}).click();await page.getByText(c.linkUnavailable).waitFor();
     const storage=await page.evaluate(()=>({local:{...localStorage},session:{...sessionStorage}}));
     assert.deepEqual(storage,{local:{},session:{}});
-  } finally {await f.close();}
+  } catch(error) {console.error('Portal journey trace',JSON.stringify({browser:trace?.events,server:f.trace}));throw error;} finally {await f.close();}
 });
 
 test('another account can complete signup without changing the existing session; lost completion replies remain recoverable',async()=>{
   const f=await startPortalFixture();
+  let trace: ReturnType<typeof portalTrace>|undefined;
   try {
-    const context=await f.browser.newContext();const page=await context.newPage();page.setDefaultTimeout(5000);
+    const context=await f.browser.newContext();const page=await context.newPage();page.setDefaultTimeout(5000);trace=portalTrace(page);
     const first=`first-${randomUUID()}@example.test`, second=`second-${randomUUID()}@example.test`;
     const password='A complete account password';
     const {SignupStore}=await import('@waitron-cloud/registration');const signup=new SignupStore(f.db.pool,f.db.outbox);
@@ -86,11 +89,11 @@ test('another account can complete signup without changing the existing session;
     await page.getByRole('link',{name:'Forgot your password?',exact:true}).click();await page.getByLabel('Email').fill(second);
     await page.getByRole('button',{name:'Send reset link',exact:true}).click();await page.getByRole('heading',{name:'Check your email'}).waitFor();await f.drainMail();
     const reset=(await mailFor(second,'Reset your Waitron Cloud password')).match(/http:\/\/[^\s]+\/reset-password#[^\s]+/)?.[0];assert.ok(reset);
-    let resets=0;await page.route('**/password-reset/complete',async route=>{resets++;const committed=await route.fetch();assert.equal(committed.status(),200);await route.abort('failed');});
+    trace!.stage('lost reset completion');let resets=0;await page.route('**/password-reset/complete',async route=>{resets++;trace!.stage('reset interception fetching');const committed=await route.fetch();trace!.stage('reset interception returned '+committed.status());assert.equal(committed.status(),200);await route.abort('failed');trace!.stage('reset interception aborted');});
     await page.goto(reset);await page.locator('input[name=password]').fill('A replacement account password');
     await page.getByRole('button',{name:'Save new password',exact:true}).click();await page.getByText(translations.en.uncertain).waitFor();
     assert.equal(resets,1);assert.equal((await context.request.get(`${f.origin}/api/account/session`)).status(),401);
     const login=await context.request.post(`${f.origin}/api/account/login`,{headers:{origin:f.origin},data:{email:second,password:'A replacement account password'}});
     assert.equal(login.status(),200);
-  } finally {await f.close();}
+  } catch(error) {console.error('Portal journey trace',JSON.stringify({browser:trace?.events,server:f.trace}));throw error;} finally {await f.close();}
 });
