@@ -1715,6 +1715,9 @@ notifications separately.
   Capture an instrumented Linux recurrence before attributing the historical
   cause. A passing unchanged repeat would not explain it. Local Docker-backed
   qualification remains unavailable until Docker returns; CI runs the real journey.
+  Separate follow-ups remain for containing hostile thrown proxies in the
+  reporter and checking meter cleanup by name rather than relying on a hanging
+  test process to reveal a missed close.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.
