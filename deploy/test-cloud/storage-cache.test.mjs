@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {inspect} from 'node:util';
 import {chmod,copyFile,mkdtemp,mkdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -15,6 +16,7 @@ test('parallel storage fixtures consume a verified read-only cached archive with
  process.env.TMPDIR=root;
  const results=await Promise.allSettled([startBackupStorage(),startBackupStorage()]);
  if(original===undefined)delete process.env.TMPDIR;else process.env.TMPDIR=original;
+ for(const [index,result] of results.entries())if(result.status==='rejected')t.diagnostic('storage startup '+index+' rejected: '+inspect(result.reason,{depth:8}));
  for(const result of results)if(result.status==='fulfilled')await result.value.stop();
  assert.equal(results.filter(r=>r.status==='fulfilled').length,2,'both fixtures must use the existing read-only archive');
 });
@@ -30,6 +32,7 @@ test('concurrent cold-cache downloads publish a complete archive before either f
  globalThis.fetch=async url=>{assert.equal(url,'https://github.com/seaweedfs/seaweedfs/releases/download/4.47/'+name+'.tar.gz');requests++;if(requests===2)release();await bothDownloads;return new Response(bytes);};
  let results;try{results=await Promise.allSettled([startBackupStorage(),startBackupStorage()]);}
  finally{globalThis.fetch=fetchOriginal;if(original===undefined)delete process.env.TMPDIR;else process.env.TMPDIR=original;}
+ for(const [index,result] of results.entries())if(result.status==='rejected')t.diagnostic('storage startup '+index+' rejected: '+inspect(result.reason,{depth:8}));
  for(const result of results)if(result.status==='fulfilled')await result.value.stop();
  assert.equal(results.filter(r=>r.status==='fulfilled').length,2,'both downloaded archives must extract and start the real store');assert.equal(requests,2);
  assert.equal(createHash('sha256').update(await readFile(join(root,'waitron-cloud-test-binaries',archive))).digest('hex'),digest);

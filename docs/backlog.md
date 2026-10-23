@@ -3782,6 +3782,26 @@ notifications separately.
   network isolation, without activating a primary or contacting fiscal/payment services. Define the external-key format extension
   rather than assuming it exists in the inspected manifest v1.
 
+
+## Parallel storage-cache fixture failure on main
+
+Main CI [39943355021](https://github.com/waitron-io/waitron-cloud/actions/runs/39943355021)
+for merge `ca5d2a996b93d16c55ccb79b8c3d2228792b5090` fails
+`deploy/test-cloud/storage-cache.test.mjs:19`: only one of two parallel fixtures
+starts from a verified read-only cached archive. The assertion hides the rejected
+fixture's reason; the CI root cause is unknown. The test and
+`scripts/backup-storage-fixture.mjs` are byte-identical at base `b16f3ca`, green
+PR head `0827fca` and merge `ca5d2a9`. The existing focused native macOS run
+`node --test deploy/test-cloud/storage-cache.test.mjs` passes both cases; it does
+not reproduce or explain the Linux failure. No unchanged CI rerun was requested.
+
+Next: the campaign watcher assigns a scoped fixture investigation. Preserve the
+read-only archive and two-success assertions, capture each rejected startup error
+and its existing storageStartup diagnostics before cleanup, then reproduce the
+specific failing boundary under parallel native Linux execution before fixing it.
+Keep this separate from A951 and do not assume the earlier port-collision cause.
+The summary correctly fails with the receipt job.
+
 ## CI PostgreSQL image pull
 
 D104's documentation-only [run 39733028534](https://github.com/waitron-io/waitron-cloud/actions/runs/39733028534/job/119672295764)

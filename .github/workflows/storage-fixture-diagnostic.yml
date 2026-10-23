@@ -1,0 +1,42 @@
+name: Storage fixture diagnostic
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/storage-fixture-diagnostic.yml'
+      - 'scripts/backup-storage-fixture.mjs'
+      - 'deploy/test-cloud/storage-cache.test.mjs'
+      - 'deploy/test-cloud/storage-startup.test.mjs'
+permissions:
+  contents: read
+  packages: read
+jobs:
+  parallel-starts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Observe three independent parallel startup batches
+        shell: bash
+        run: |
+          failed=0
+          for sample in 1 2 3; do
+            echo "Independent startup sample $sample"
+            node --test --test-concurrency=2 deploy/test-cloud/storage-cache.test.mjs deploy/test-cloud/storage-startup.test.mjs || failed=1
+          done
+          exit "$failed"
