@@ -1045,11 +1045,11 @@ notifications separately.
   `false-availability` case in `remote-waitron-conformance.test.mjs`, after the
   unchanged 30-second readiness deadline. The same case passes locally through
   `node scripts/test-postgres.mjs exec node scripts/cloud-cost/conformance.mjs --only remote-waitron-conformance.test.mjs --pattern false-availability`.
-  The readiness probe now retains a fixed transport, TLS, HTTP, response-shape or
+  Both gateway and browser readiness probes now retain a fixed transport, TLS, HTTP, response-shape or
   command phase without printing response bodies, keys or raw errors. Capture that
   phase on recurrence before choosing a fix. This diagnostic change does not
   identify or fix the historical failure. The two-second request timeout,
-  30-second startup deadline and all seven original journey checks remain.
+  30-second startup deadline and all original gateway and browser journey checks remain.
 
 - **LAN test Cloud with free and paid organisations.** The
   [test deployment design](superpowers/specs/2026-10-17-test-cloud-free-paid-design.md)
