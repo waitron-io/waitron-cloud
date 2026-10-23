@@ -2791,8 +2791,12 @@ notifications separately.
   The rewrite recognises the runner's current lowercase, whitespace-delimited
   URIs. Qualify compact Deb822 URI fields or capitalised hostnames before
   widening that support when a runner changes its source format.
-  D109's retrospective review also leaves explicit follow-ups for the source
-  helper: report a changed runner layout when no recognised URI is found.
+  When the source helper rewrites no archive URI, it now warns on stderr and
+  continues: your sources may already be prepared or the runner layout may have
+  changed. A warning keeps an unfamiliar but usable runner eligible; the existing
+  signed-package checks and bounded install still decide whether CI can proceed.
+  Empty, unfamiliar and already prepared source inventories retain their bytes
+  and successful exit status; a real rewrite reports its mirror without the warning.
   Source preparation now reads every selected file as UTF-8 before writing any
   source, so an unreadable vendor file refuses without rewriting earlier files.
   A real-command invalid-byte regression preserves both files byte for byte;

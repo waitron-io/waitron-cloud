@@ -3,6 +3,7 @@
 import argparse
 from pathlib import Path
 import re
+import sys
 
 
 def main():
@@ -22,6 +23,7 @@ def main():
                 sources.append((path, source.read()))
         except (OSError, UnicodeError):
             parser.exit(1, f'Cannot read APT source as UTF-8: {path}\n')
+    changed = False
     # Read every input before writing so an unreadable vendor file leaves sources intact.
     for path, original in sources:
         # Change the mirror URI only; suites, components and signing keys stay intact.
@@ -33,6 +35,10 @@ def main():
             with path.open('w', encoding='utf-8', newline='') as source:
                 source.write(updated)
             print(f'Using https://mirror.math.princeton.edu/pub/ubuntu in {path}', flush=True)
+            changed = True
+    if not changed:
+        print('Warning: no Ubuntu archive URI was rewritten; sources may already be '
+              'prepared or the runner layout may have changed.', file=sys.stderr, flush=True)
 
 
 if __name__ == '__main__':

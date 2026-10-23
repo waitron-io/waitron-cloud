@@ -81,3 +81,40 @@ test('archive and mirror-file URIs must start at a whitespace boundary', async t
     + '\tdeb\thttps://mirror.math.princeton.edu/pub/ubuntu noble main\n'
     + '\tdeb\thttps://mirror.math.princeton.edu/pub/ubuntu noble main\n');
 });
+
+// Dropping the warning would hide changed runner layouts and empty source inventories.
+test('source preparation warns without refusing or modifying sources when nothing is rewritten', async t => {
+  for (const [name, original] of [
+    ['empty inventory', null],
+    ['unrecognised archive', 'deb [signed-by=/keys/ubuntu.gpg] https://new-mirror.example/ubuntu noble main\r\n'],
+    ['already prepared', 'deb https://mirror.math.princeton.edu/pub/ubuntu noble main\n'],
+  ]) {
+    await t.test(name, async t => {
+      const root = await mkdtemp(join(tmpdir(), 'cloud-browser-source-'));
+      t.after(() => rm(root, {recursive: true, force: true}));
+      if (original !== null) await writeFile(join(root, 'sources.list'), original);
+      const result = spawnSync('python3', ['scripts/ci-browser-source.py', '--apt-root', root], {encoding: 'utf8'});
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stderr, /Warning: no Ubuntu archive URI was rewritten/);
+      assert.match(result.stderr, /already.*prepared.*runner layout.*changed/);
+      assert.equal(result.stdout, '', 'no source was changed');
+      if (original !== null) assert.equal(await readFile(join(root, 'sources.list'), 'utf8'), original);
+    });
+  }
+});
+
+// An unconditional warning would report a layout problem even after a successful rewrite.
+test('rewritten sources report the mirror without a no-rewrite warning', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'cloud-browser-source-'));
+  t.after(() => rm(root, {recursive: true, force: true}));
+  await mkdir(join(root, 'sources.list.d'));
+  await writeFile(join(root, 'sources.list'), 'deb https://vendor.example/ubuntu noble main\n');
+  await writeFile(join(root, 'sources.list.d/ubuntu.sources'), 'URIs: http://archive.ubuntu.com/ubuntu\n');
+  const result = spawnSync('python3', ['scripts/ci-browser-source.py', '--apt-root', root], {encoding: 'utf8'});
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(result.stderr, '');
+  assert.match(result.stdout, /Using https:\/\/mirror.math.princeton.edu\/pub\/ubuntu/);
+  assert.equal(await readFile(join(root, 'sources.list'), 'utf8'), 'deb https://vendor.example/ubuntu noble main\n');
+  assert.equal(await readFile(join(root, 'sources.list.d/ubuntu.sources'), 'utf8'),
+    'URIs: https://mirror.math.princeton.edu/pub/ubuntu\n');
+});
