@@ -28,11 +28,12 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
   try {
     const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}}); page.setDefaultTimeout(4000);
     const approvals: unknown[] = [];
+    let installationGate: Promise<void> | undefined, releaseInstallations: (() => void) | undefined, installationRead: (() => void) | undefined;
     await page.route('https://portal.test/recover', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
-    await page.route('**/api/account/**', route => {
+    await page.route('**/api/account/**', async route => {
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith('/session') || path.endsWith('/session/activity')) return route.fulfill({json: {accountId: 'owner', expiresAt: new Date(Date.now() + 3600000).toISOString()}});
-      if (path.endsWith('/installations')) return route.fulfill({json: {installations}});
+      if (path.endsWith('/installations')) {installationRead?.(); await installationGate; return route.fulfill({json: {installations}});}
       if (path.endsWith('/backups/list')) return route.fulfill({json: {venueId: route.request().postDataJSON().venueId, points: [{id: point, capturedAt: '2026-10-23T10:00:00.000Z', verification: 'verified', retention: 'daily', expiresAt: '2026-11-23T10:00:00.000Z', protection: 'fallback'}], nextCursor: null, defaultPointId: point, continuousRecovery: null}});
       if (path.endsWith('/recovery/approve')) approvals.push(route.request().postDataJSON());
       return route.fulfill({status: 503, json: {error: 'unavailable'}});
@@ -62,6 +63,18 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       const shown = await page.locator('#venue-organisation').inputValue(), name = await page.locator('#venue-organisation option:checked').textContent();
       await page.goBack(); await page.getByLabel(c.recoveryVenue, {exact: true}).waitFor();
       assert.equal(shown, second); assert.equal(name, 'Z second organisation');
+    });
+    await t.test('refreshing installations disables the organisation choice until the list settles', async () => {
+      const entered = new Promise<void>(resolve => {installationRead = resolve;});
+      installationGate = new Promise<void>(resolve => {releaseInstallations = resolve;});
+      try {
+        await page.getByRole('button', {name: c.refreshStatus, exact: true}).click(); await entered;
+        assert.equal(await organisation.isDisabled(), true);
+        await page.evaluate(first => (window as any).app.installations.selectOrganisation(first), first);
+        assert.equal(await organisation.inputValue(), second);
+        assert.equal(await page.evaluate(() => (window as any).app.installations.selectedOrganisation), second);
+      } finally {releaseInstallations?.(); installationGate = undefined; installationRead = undefined; await page.waitForFunction(() => !(window as any).app.installations.pending);}
+      assert.equal(await organisation.isEnabled(), true); assert.equal(await organisation.inputValue(), second);
     });
     await t.test('production backups from Account are cleared before returning to recovery', async () => {
       await page.getByRole('link', {name: c.account, exact: true}).click();

@@ -13,7 +13,7 @@ import {admitPointFixture} from '../../../packages/backups/test/fixtures/verific
 import {startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 
-// Removing recovery-screen admission must expose the real approval and persisted venue here.
+// Approval requests and persisted sources must agree with the offered recovery venue.
 for (const locale of ['en', 'es'] as const) for (const source of ['snapshot', 'continuous'] as const) for (const journey of ['return-from-account', 'account-api', 'test-venue'] as const) test(`${locale} recovery scope ${source}: ${journey}`, async () => {
   const vault = new BackupKeyVault(randomBytes(32)), data = new Map<string, Buffer>();
   const objects = () => ({async read(k: string) {return data.get(k)!;}, async put(k: string, b: Uint8Array) {data.set(k, Buffer.from(b)); return receipt(b);}, async remove(k: string) {data.delete(k);}});
