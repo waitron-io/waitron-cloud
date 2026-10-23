@@ -82,7 +82,7 @@ test('reports cannot configure services, advance desired revision, roll back hea
   await assert.rejects(store.execute('report',request(a,'report',lease,{revision:1,observedAt:Date.now()+120000,services})),/invalid_proof/);
   await assert.rejects(store.execute('report',request(a,'report',lease,{revision:1,observedAt,services:[{service:'remote_access',health:'failed',failure:'private detail'}]})),/invalid_proof/);
 });
-async function installationWaiters(blockerPid:number){
+async function installationWaiters(_blockerPid:number){
   return db.pool.query("SELECT pid,state,query,wait_event,pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[db.schema]);
 }
 test('installation lock observation excludes revocation waiting on its session',async()=>{
