@@ -464,8 +464,91 @@ that decision. These declarations enable neither Object Lock nor automatic
 venue deletion. D101 owns the exit policy, P1 owns worker wiring and P3 owns the
 country catalogue schema.
 
-Task 8 must attach narrowly scoped replication and workload permissions after
-the bucket and key references exist. This module's policies only deny access;
-they grant none. The local plans establish configuration bindings, not live
-replication, key recoverability or restore success. P7's separately authorised
-recovery rehearsal must establish those, including retained application keys.
+The custody fixture now attaches scoped replication and workload policies after
+the bucket, database and key references exist. Bucket policies themselves only
+deny access; the separate role policies supply the grants. The local plans
+establish configuration bindings, not live replication, key recoverability or
+restore success. P7's separately authorised recovery rehearsal must establish
+those, including retained application keys.
+
+
+## Keep application keys separate from infrastructure permissions
+
+An encrypted S3 copy cannot recover an application key that you never copied.
+The custody module therefore declares four separate KMS keys in each region:
+storage, database, secrets and logs. KMS protects provider encryption; application
+keys remain separate secret values. Check the base keys, scoped permissions and
+composed database/storage fixture together:
+
+```sh
+node deploy/aws/check.mjs --suite custody
+```
+
+Global declares email-key-ring and sign-in-signing secret shells in Frankfurt,
+with Ireland replicas. Spain declares backup-master-key, email-key-ring,
+installation-signing, gateway-signing and wireguard shells in Spain, with Paris
+replicas. Each replica names the destination region's secrets key.
+[Secrets Manager keeps the same secret name and suffix across regions](https://docs.aws.amazon.com/secretsmanager/latest/userguide/replicate-secrets.html),
+so the recovery handoff changes only the ARN's region. An ARN is a resource
+reference, not its contents. The declarations never generate, read or write
+secret values, and the shells are empty until a separately authorised procedure
+populates them.
+
+All symmetric KMS keys rotate and use a 30-day deletion window. Keys and secret
+shells refuse ordinary OpenTofu destruction, and secret shells keep a 30-day
+recovery window without overwriting existing replicas. These declarations do
+not prevent an authorised administrator from changing policy or deleting data.
+Before enabling recovery, retain every master-key version and email-key-ring
+entry still needed by snapshots or encrypted email. Do not rely on unlabelled
+Secrets Manager versions as an archive, or remove an old KMS key while retained
+provider backups still depend on it. Empty shell replicas prove no retained key
+bytes; population, retention and restore need their own live receipts.
+
+Supply three distinct same-account roles named
+`waitron-<scope>-deployment`, `waitron-<scope>-key-administration` and
+`waitron-<scope>-recovery`. The key administrator can manage key policy; runtime
+roles receive no administration or policy-changing rights. A later authorised
+bootstrap must use the key administrator for key creation and policy updates,
+with AWS's policy-lockout safety check retained. Root composition must keep
+these provider roles separate. The KMS key policy delegates only enumerated use
+operations to IAM policies in the same account. Its `Resource = "*"` means
+[the key to which that policy is attached](https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-default.html),
+not every key. No wildcard Allow action or principal is generated. S3 object
+resources end in `streams/*` or `snapshots/*` because permissions apply to the
+objects under those exact adapter prefixes.
+
+Each cell gets its own signed EKS identity provider and roles. Trust requires
+[the exact audience and service-account subject](https://docs.aws.amazon.com/eks/latest/userguide/associate-service-account-role.html),
+using `sts.amazonaws.com`, the agreed country/global namespace and the role's
+identically named service account. Role names include both scope and cell.
+Unknown roles, wildcard accounts, escaped namespaces and crossed country
+references refuse. Portal has no AWS grants. Other roles read only their named
+application secrets through the primary secrets key. The backup worker can read,
+write and delete current snapshot objects for catalogue retention; the verifier
+can only read them. Neither receives permanent object-version deletion or the
+RDS administrator secret. P3 owns restricted database users and their runtime
+credentials; these declarations do not make the RDS administrator an application
+user.
+
+S3's replication shell trusts only the source account's exact source buckets.
+Its attached policy reads source metadata and versions, writes only the matching
+cold prefixes and explicitly denies source writes. KMS permissions name the
+source-decrypt and destination-encrypt keys, regional S3 services and snapshot
+object contexts. The separate recovery policy attaches to the supplied recovery
+role, never a machine role. It reads cold application secrets and retained
+object versions with matching destination decrypt contexts. It grants no key
+changes, object deletion, database restoration or venue activation. Global has
+no venue storage, country-only roles or S3 replication policy.
+
+The composed plan checks references without a dependency cycle; it does not
+qualify AWS policy enforcement or replication installation order. Before any
+later authorised deployment, qualify source/destination permissions and service
+readiness, then restore both retained objects and the matching application keys.
+P1 must mount the existing runtime contracts through authenticated integration:
+a KMS reference cannot replace the 64 hexadecimal characters expected in
+`CLOUD_BACKUP_MASTER_KEY`, and an email-key-ring reference cannot replace
+`CLOUD_EMAIL_KEYS` and `CLOUD_EMAIL_ACTIVE_KEY_ID`. The managed-stream credential
+handoff still lacks STS session-token fields; extend that contract before
+issuing temporary credentials rather than creating long-lived IAM access keys.
+RDS manages its separate administrator secret; P7 must restore or reissue
+credentials during recovery instead of assuming that secret is replicated.
