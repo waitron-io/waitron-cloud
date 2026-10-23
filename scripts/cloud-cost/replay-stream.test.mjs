@@ -18,7 +18,7 @@ const module = await import('./replay-stream.mjs').catch(error => {
 const bad = { message: 'Invalid cloud cost replay stream' };
 
 // The child performs real HTTP/SQLite I/O; the separate storage endpoint inventories its bytes.
-async function fixture(t, mode = 'normal', { holdAfterFirstUpload = false } = {}) {
+async function fixture(t, mode = 'normal', { holdAfterStop = false } = {}) {
   const parent = realpathSync(mkdtempSync(join(tmpdir(), 'cost-replay-stream-')));
   const source = join(parent, 'source'), root = join(parent, 'owned');
   for (const path of [source, root]) mkdirSync(path, { mode: 0o700 });
@@ -38,7 +38,7 @@ async function fixture(t, mode = 'normal', { holdAfterFirstUpload = false } = {}
     req.on('data', chunk => parts.push(chunk)); req.on('end', () => {
       if (req.method === 'PUT') {
         stored = Buffer.concat(parts); uploaded++;
-        if (holdAfterFirstUpload && uploaded > 1) {
+        if (holdAfterStop && req.headers['x-fixture-after-stop'] === 'yes') {
           heldResponse();
         } else if (['held-upload','held-fast-stop','held-invalid'].includes(mode) && uploaded === 2) {
           releaseUpload = () => mode === 'held-invalid' ? res.destroy() : res.end(); heldResponse();
@@ -72,10 +72,11 @@ if (process.argv[2] === 'version') { process.stdout.write(mode === 'version' ? '
 console.log('PRIVATE_CHILD_STDOUT_CANARY'); console.error('PRIVATE_CHILD_STDERR_CANARY');
 if (process.env.PRIVATE_STREAM_ENV) process.exit(73);
 const c = JSON.parse(readFileSync(process.argv[process.argv.indexOf('-config') + 1], 'utf8')).dbs[0];
-let serial = Promise.resolve(), stopping = false;
+let serial = Promise.resolve(), stopping = false, terminationRequested = false;
 const send = (method, bytes) => new Promise((resolve, reject) => {
   const r = request(c.replica.endpoint + '/' + c.replica.bucket + '/stream.ltx', { method, agent: false, headers: {
     'content-length': bytes.length, 'amz-sdk-invocation-id': randomUUID(), 'amz-sdk-request': 'attempt=1; max=1',
+    'x-fixture-after-stop': terminationRequested ? 'yes' : 'no',
   } }, res => { const chunks=[]; res.on('data', b=>chunks.push(b)); res.on('end',()=>resolve(Buffer.concat(chunks))); });
   r.on('error', reject); r.end(bytes);
 });
@@ -97,8 +98,9 @@ if (mode === 'read-before-upload') {
 }
 upload(); const timer=setInterval(upload,50);
 process.once('SIGTERM',()=>{
+  terminationRequested = true;
   if(mode === 'writing-hang') return;
-  if(mode === 'hang') { stopping = true; return; }
+  if(mode === 'hang') { process.kill(process.pid, 'SIGSTOP'); return; }
   if(mode === 'held-fast-stop') process.exit(0);
   stopping=true; clearInterval(timer); serial.then(()=>process.exit(mode === 'stop' ? 23 : 0));
 });
@@ -447,9 +449,9 @@ test('replayStreamEarlyExitLeavesNoStartupTimerKeepingTheProcessAlive', () => {
 
 // A hung writer must stay alive without introducing a second, interrupted-transfer fault.
 test('hungWriterIsCollectedWithoutAnUnrelatedInterruptedUpload', { timeout: 10000 }, async t => {
-  const f = await fixture(t, 'hang', { holdAfterFirstUpload: true }), trace = [];
+  const f = await fixture(t, 'hang', { holdAfterStop: true }), trace = [];
   const run = await open(t, { ...f, onDiagnostic: event => trace.push(event) });
-  await upload(f);
+  await upload(f); await wait(150);
   await assert.rejects(run.finish({ expectedSales: 1 }), bad);
   await run.close(); clean(f);
   assert.ok(trace.some(event => event.kind === 'native' && event.operation === 'replicate'
@@ -458,10 +460,11 @@ test('hungWriterIsCollectedWithoutAnUnrelatedInterruptedUpload', { timeout: 1000
 
 // Continuing to write is a separate fault: interrupted accounting must remain refused.
 test('forcedCollectionOfAStillWritingChildCannotQualifyInterruptedAccounting', { timeout: 10000 }, async t => {
-  const f = await fixture(t, 'writing-hang', { holdAfterFirstUpload: true });
+  const f = await fixture(t, 'writing-hang', { holdAfterStop: true });
   const run = await open(t, f);
-  await upload(f);
-  await assert.rejects(run.finish({ expectedSales: 1 }), bad);
+  await upload(f); await wait(150);
+  const refused = assert.rejects(run.finish({ expectedSales: 1 }), bad);
+  await f.heldUpload; await refused;
   await assert.rejects(run.close(), bad);
   assert.deepEqual(await run.closeResources(), { measurementValid: false });
   clean(f);

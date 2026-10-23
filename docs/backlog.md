@@ -1639,9 +1639,10 @@ notifications separately.
   writing but ignores termination from one that keeps writing until forced
   collection. The original hang fixture kept scheduling uploads after SIGTERM;
   holding its next upload reproduces the generic cleanup refusal from
-  `39953541488` receipt job `120415065191`. The hang fixture now stops scheduling
-  uploads while remaining alive until the unchanged two-second forced kill.
-  Its regression requires SIGKILL and exact owned-resource collection. A separate
+  `39953541488` receipt job `120415065191`. The hang fixture now suspends itself
+  on SIGTERM until the unchanged two-second forced kill.
+  Its delayed regression holds uploads only after SIGTERM and requires SIGKILL
+  and exact owned-resource collection. A separate
   still-writing child must refuse interrupted accounting while reporting completed
   resource collection. Production code, original assertions and deadlines remain
   unchanged. The historical job has no transfer trace, so attribution to this
