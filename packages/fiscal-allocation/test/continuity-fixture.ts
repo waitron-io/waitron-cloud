@@ -21,35 +21,53 @@ export async function retain(name: string, value: unknown) {
 }
 export async function authorityFixture() {
   const directory = await mkdtemp(join(tmpdir(), 'cloud-fiscal-continuity-'));
-  let process: ChildProcess;
+  let process: ChildProcess | undefined;
   let url = '';
   let trust: ReceiptTrust;
   let publicKey = '',
     keyId = '';
   async function start() {
-    process = spawn(
-      'node',
-      [new URL('./continuity-authority.ts', import.meta.url).pathname, directory],
-      { stdio: ['ignore', 'pipe', 'inherit'] },
-    );
-    const lines = createInterface({ input: process.stdout! });
-    const ready = await Promise.race([
-      once(lines, 'line'),
-      once(process, 'exit').then(() => {
-        throw Error('authority exited before ready');
-      }),
-    ]);
-    const info = JSON.parse(String(ready[0]));
-    lines.close();
-    url = info.url;
-    publicKey = info.publicKey;
-    keyId = info.keyId;
-    trust = { issuer: 'fixture-registry', keys: new Map([[keyId, publicKey]]) };
+    try {
+      process = spawn(
+        'node',
+        [new URL('./continuity-authority.ts', import.meta.url).pathname, directory],
+        { stdio: ['ignore', 'pipe', 'inherit'] },
+      );
+      const lines = createInterface({ input: process.stdout! });
+      const pending = new AbortController();
+      try {
+        const ready = await Promise.race([
+          once(lines, 'line', { signal: pending.signal }),
+          once(process, 'exit', { signal: pending.signal }).then(() => {
+            throw Error('authority exited before ready');
+          }),
+        ]);
+        const info = JSON.parse(String(ready[0]));
+        url = info.url;
+        publicKey = info.publicKey;
+        keyId = info.keyId;
+        trust = { issuer: 'fixture-registry', keys: new Map([[keyId, publicKey]]) };
+      } finally {
+        pending.abort();
+        lines.close();
+      }
+    } catch (error) {
+      await close();
+      throw error;
+    }
   }
   async function stop() {
+    if (!process?.pid || process.exitCode !== null || process.signalCode !== null) return;
     const exited = once(process, 'exit');
     process.kill('SIGTERM');
     await exited;
+  }
+  async function close() {
+    try {
+      await stop();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }
   await start();
   async function request(action: string, body: unknown) {
@@ -98,10 +116,7 @@ export async function authorityFixture() {
       await stop();
       await start();
     },
-    async close() {
-      await stop();
-      await rm(directory, { recursive: true, force: true });
-    },
+    close,
   };
 }
 

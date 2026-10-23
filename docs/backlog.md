@@ -2944,8 +2944,10 @@ notifications separately.
   HTTP listeners and pool objects with database operations replaced. Normal
   teardown also closes multiple HTTP listeners. The PostgreSQL package suites
   verify the unchanged fiscal behaviour in CI; local database checks remain
-  unavailable while Docker is down. The authority helper's own directory
-  cleanup before startup completes remains a separate follow-up.
+  unavailable while Docker is down. The authority helper now stops its child
+  and removes its temporary directory before rejecting failed startup or restart.
+  Docker-free checks force a synchronous spawn refusal, a missing executable,
+  early child exit and malformed ready output, preserving the startup error.
   Keep the package's original test deadline and any build step. Appending the
   concurrency option to the package script leaves it after the files and does
   not limit this runner. The fixture's default lock capacity for a full local
