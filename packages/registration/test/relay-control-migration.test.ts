@@ -138,7 +138,7 @@ test('migration setup survives a proved counter rollover without retaining a fai
     const body = {version: 1, messageId: randomUUID(), grantId: v.grant.id, grantRevision: 1,
       class: 'password_reset', recipient: 'migration@example.test', displayName: 'Ana',
       locale: 'es-ES', timeZone: 'Europe/Madrid', expiresAt: new Date(Date.now() + 1800000).toISOString(),
-      token: 'a'.repeat(43)};
+      token: Buffer.alloc(32, 1).toString('base64url')};
     await f.pool.query(`CREATE SEQUENCE fixture_admission_attempt;
       CREATE FUNCTION fixture_cross_counter_boundary() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN
