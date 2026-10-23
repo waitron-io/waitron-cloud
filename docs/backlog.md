@@ -3913,9 +3913,15 @@ message in Mailpit (`packages/account-http/test/account-http.test.ts:50,90`).
 The runtime, fixture and workflow paths are unchanged from main `9701cd2`.
 The local unmodified shard command below passes all 181 tests, including that
 journey. This does not explain the CI failure or prove a fix. Preserve the assertion and deadline.
-If it recurs, capture the worker result, redacted outbox state, SMTP outcome and
-Mailpit listing/visibility boundaries before deciding whether delivery or capture
-failed. Keep recipients, tokens and raw SMTP responses out of diagnostic artifacts.
+The journey now records each worker result and SMTP handoff outcome. A missing
+message or token adds queue states, attempt and failure counts, delivery codes and
+Mailpit status and match counts to its assertion. Only known states and counts
+leave the helper; recipients, tokens, message IDs, payloads and raw errors stay out.
+`node --test packages/account-http/test/mail-capture.test.ts` forces misses and
+checks the four boundaries, redaction, SMTP rejection and unavailable queue reads.
+The original assertions, single lookup and deadline remain unchanged. Capture a
+recurrence on Linux before deciding whether delivery or capture caused the
+historical failure; these diagnostics do not explain it.
 
 ```sh
 node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node \
