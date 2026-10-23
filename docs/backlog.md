@@ -1040,6 +1040,17 @@ notifications separately.
 
 ## Platform work to scope
 
+- **Remote fixture startup failure still needs attribution.** Merge conformance run
+  `39906100584` on `a0404ad26282fadd30676266dd23c3ba439e1c4e` failed only the
+  `false-availability` case in `remote-waitron-conformance.test.mjs`, after the
+  unchanged 30-second readiness deadline. The same case passes locally through
+  `node scripts/test-postgres.mjs exec node scripts/cloud-cost/conformance.mjs --only remote-waitron-conformance.test.mjs --pattern false-availability`.
+  Both gateway and browser readiness probes now retain a fixed transport, TLS, HTTP, response-shape or
+  command phase without printing response bodies, keys or raw errors. Capture that
+  phase on recurrence before choosing a fix. This diagnostic change does not
+  identify or fix the historical failure. The two-second request timeout,
+  30-second startup deadline and all original gateway and browser journey checks remain.
+
 - **LAN test Cloud with free and paid organisations.** The
   [test deployment design](superpowers/specs/2026-10-17-test-cloud-free-paid-design.md)
   and [implementation plan](superpowers/plans/2026-10-17-test-cloud-free-paid.md)

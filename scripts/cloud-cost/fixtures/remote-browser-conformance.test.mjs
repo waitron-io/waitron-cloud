@@ -6,7 +6,7 @@ import { mkdtempSync, realpathSync, mkdirSync, writeFileSync, readFileSync, cpSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generateKeyPairSync, randomBytes, randomUUID, createHash } from 'node:crypto';
-import { setTimeout as delay } from 'node:timers/promises';
+import {waitForGatewayReady} from '../remote-readiness.mjs';
 import * as journey from '../local.mjs';
 import { signManifest } from '../../../packages/remote-access/src/manifest.ts';
 
@@ -28,11 +28,6 @@ const keyPair = () => {
   return { privateKey: key.privateKey.export({ format: 'der', type: 'pkcs8' }).subarray(-32).toString('base64'),
     publicKey: key.publicKey.export({ format: 'der', type: 'spki' }).subarray(-32).toString('base64') };
 };
-async function wait(check) {
-  const deadline = Date.now() + 30000;
-  while (Date.now() < deadline) { try { if (await check()) return; } catch {} await delay(100); }
-  throw Error('Generated local gateway readiness failed');
-}
 const wire = id => {
   const fields = docker('exec', id, 'wg', 'show', 'wg-cloud', 'transfer').split(/\s+/);
   assert.equal(fields.length, 3);
@@ -68,6 +63,7 @@ test('pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_' + fa
     cpSync(new URL('./remote-browser-smoke.mjs', import.meta.url), join(root, 'measure/remote-browser-smoke.mjs'));
     cpSync(new URL('./remote-waitron-smoke.mjs', import.meta.url), join(root, 'measure/remote-waitron-smoke.mjs'));
     cpSync(new URL('../remote-journey.mjs', import.meta.url), join(root, 'measure/remote-journey.mjs'));
+    cpSync(new URL('../remote-readiness.mjs', import.meta.url), join(root, 'measure/remote-readiness.mjs'));
     cpSync(new URL('../browser.mjs', import.meta.url), join(root, 'measure/browser.mjs'));
     cpSync(new URL('./browser-diagnostics.mjs', import.meta.url), join(root, 'measure/browser-diagnostics.mjs'));
     cpSync(realpathSync(join(realpathSync(new URL('../../../packages/ui-smoke/node_modules/playwright', import.meta.url)), '../playwright-core')), join(root, 'measure/node_modules/playwright-core'), { recursive: true });
@@ -122,7 +118,7 @@ test('pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_' + fa
     };
     if (fault in extra) secret('peer/dashboard/index.html', readFileSync(join(root,'peer/dashboard/index.html'),'utf8') + extra[fault]);
     const peer = start(['-v', join(root, 'src') + ':/app/src:ro', '-v', join(root, 'peer') + ':/input:ro', image, 'node', '/input/backend.mjs']);
-    await wait(() => JSON.parse(docker('exec', gateway, 'node', '/measure/remote-waitron-smoke.mjs', 'ready')).ready);
+    await waitForGatewayReady(() => JSON.parse(docker('exec', gateway, 'node', '/measure/remote-waitron-smoke.mjs', 'ready')));
     assert.equal(docker('network', 'inspect', networkId, '--format', '{{.Internal}}'), 'true');
     // Effective mounts contain no source database or staff private key on the gateway.
     for (const id of containers) {
