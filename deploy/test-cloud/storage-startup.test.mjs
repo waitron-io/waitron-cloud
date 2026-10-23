@@ -61,7 +61,7 @@ test('a child port collision reports the allocation and current socket owners wi
   syncBuiltinESMExports();
   t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
   t.after(() => owner?.listening ? new Promise(resolve => owner.close(resolve)) : undefined);
-  await assert.rejects(startBackupStorage(), error => {
+  await assert.rejects(startBackupStorage({retryPortCollision:false}), error => {
     assert.match(error.message, /SeaweedFS exited:/);
     assert.equal(error.storageStartup?.ports?.filer, allocated, 'failure must identify the allocated filer port');
     assert.equal(Object.keys(error.storageStartup.ports).length, 7);
@@ -152,4 +152,54 @@ test('an owned readiness bucket still refuses startup when its accessibility che
   t.after(() => storage?.stop());
   await assert.rejects(async () => { storage = await startBackupStorage(); }, {name:'AccessDenied', message:'readiness bucket is inaccessible'});
   assert.equal(lostReply, true);
+});
+
+test('a transient child port collision retries once with fresh ports and leaves the competing owner alone', {timeout:90000}, async t => {
+  const childProcess = await import('node:child_process');
+  const {syncBuiltinESMExports} = await import('node:module');
+  const spawn = childProcess.default.spawn;
+  const children = [], ports = [];
+  let owner, storage;
+  t.mock.method(childProcess.default, 'spawn', function (binary, args, options) {
+    if (args[0] === 'mini') {
+      ports.push(Number(args.find(arg => arg.startsWith('-filer.port=')).split('=')[1]));
+      if (ports.length === 1) { owner = new Server(); owner.listen(ports[0], '127.0.0.1'); }
+      const child = spawn(binary, args, options); children.push(child); return child;
+    }
+    return spawn(binary, args, options);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  t.after(() => owner?.listening ? new Promise(resolve => owner.close(resolve)) : undefined);
+  t.after(() => storage?.stop());
+  storage = await startBackupStorage();
+  assert.equal(ports.length, 2, 'one failed handoff must cause one new start');
+  assert.notEqual(ports[0], ports[1], 'the retry must allocate a new filer port');
+  assert.equal(owner.listening, true, 'retry cleanup must leave the competing listener alone');
+  assert.ok(children[0].exitCode !== null || children[0].signalCode !== null, 'the failed child must have exited');
+  await storage.bucket('ready-after-port-handoff');
+});
+
+test('two port-collision failures stop after the one permitted retry and keep both competing listeners', {timeout:90000}, async t => {
+  const childProcess = await import('node:child_process');
+  const {syncBuiltinESMExports} = await import('node:module');
+  const spawn = childProcess.default.spawn;
+  const owners = [], children = [];
+  let storage;
+  t.mock.method(childProcess.default, 'spawn', function (binary, args, options) {
+    if (args[0] === 'mini') {
+      const port = Number(args.find(arg => arg.startsWith('-filer.port=')).split('=')[1]);
+      const owner = new Server(); owner.listen(port, '127.0.0.1'); owners.push(owner);
+      const child = spawn(binary, args, options); children.push(child); return child;
+    }
+    return spawn(binary, args, options);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  t.after(() => Promise.all(owners.filter(owner => owner.listening).map(owner => new Promise(resolve => owner.close(resolve)))));
+  t.after(() => storage?.stop());
+  await assert.rejects(async () => { storage = await startBackupStorage(); }, /SeaweedFS exited:/);
+  assert.equal(children.length, 2, 'there must be no third attempt');
+  assert.equal(owners.filter(owner => owner.listening).length, 2, 'neither competing listener belongs to the fixture');
+  assert.ok(children.every(child => child.exitCode !== null || child.signalCode !== null), 'both failed children must have exited');
 });

@@ -3804,8 +3804,19 @@ accepting that response. Other errors still retry within the existing limits;
 a failed accessibility check still blocks startup. A deterministic real-store test
 discards a successful creation reply and verifies recovery, and a second test
 checks refusal when access fails. Existing assertions and deadlines remain intact.
-The focused native cache/startup cases pass. Local Docker and PostgreSQL checks
+All ten focused native cache/startup cases pass. Local Docker and PostgreSQL checks
 stay unavailable until 3 November; qualification uses GitHub CI.
+
+The next Linux qualification at readiness-only head `59e1749` exposed a second
+failure: SeaweedFS refused its assigned filer port after Node released the
+reservation. No listener was present when the later socket snapshot ran; the
+competing socket's owner remains unknown. The fixture now retries that explicit
+child port-allocation refusal once with a fresh directory and seven new
+reservations, after cleaning up its failed child. It prints the first failure's
+evidence, stops after a second collision, and never stops a competing listener.
+Other failures do not qualify for this retry. Deterministic real-child tests
+prove recovery and the two-attempt limit. The existing first-failure diagnostic
+test explicitly disables retries while retaining all its assertions.
 
 Remaining: retain the diagnostics to attribute any recurrence of the original
 read-only-cache rejection. Do not treat this demonstrated readiness repair as

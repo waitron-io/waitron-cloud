@@ -77,6 +77,20 @@ async function binary(root) {
   return join(root, "weed");
 }
 export async function startBackupStorage(options = {}) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await startBackupStorageAttempt(options);
+    } catch (error) {
+      // A separate process cannot inherit these reservations. Retry only the
+      // child's explicit port-handoff refusal, after its own cleanup completed.
+      if (attempt >= 1 || options.retryPortCollision === false ||
+          !error.storageStartup || !error.message.startsWith("SeaweedFS exited: ") ||
+          !/Port allocation failed: port \d+ .*is not available on 127\.0\.0\.1 and cannot be used/.test(error.message)) throw error;
+      console.error("Storage fixture port handoff failed; retrying once:", error);
+    }
+  }
+}
+async function startBackupStorageAttempt(options) {
   const tokenDuration = options.tokenDuration ?? "15m";
   if (!/^\d+[smh]$/.test(tokenDuration))
     throw Error("Invalid local storage token duration");
