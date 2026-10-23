@@ -127,13 +127,16 @@ for(const [name,sql,status] of [
  }finally{await f.close();}
 });
 
-test('stopped replay preserves foreign missing stale-lease and forged-proof refusals',async()=>{
+test('stopped replay preserves foreign missing stale-lease and forged-proof refusals',async(t)=>{
  const f=await relayFixture();try{
   const v=await f.venue(),other=await f.venue(),api=await live(f,'proofs');assert.equal((await submit(api,v)).status,202);await command(f,'--stop');const before=await snapshot(f);
   for(const action of ['status','cancel']){
    const foreign=await read(api,other,action,v.body.messageId),missing=await read(api,other,action,randomUUID());assert.equal(foreign.status,403);assert.deepEqual(foreign.body,missing.body);
   }
-  const expired=f.issuer.issue({...v.leaseInput,issuedAt:Date.now()-3600000,expiresAt:Date.now()-1});
+  // Advance only synchronous lease construction; the request must use the real clock.
+  const now=Date.now();let tick=now;
+  const clock=t.mock.method(Date,'now',()=>{const value=tick;tick+=2;return value;});let expired:ReturnType<typeof f.issuer.issue>;
+  try{const issuedAt=Date.now()-3600000;expired=f.issuer.issue({...v.leaseInput,issuedAt,expiresAt:issuedAt+3599999});}finally{clock.mock.restore();}
   for(const proof of [v.proof('email-submit',v.body,{lease:JSON.stringify(expired)}),v.proof('email-submit',v.body,{installationId:other.installationId}),v.proof('email-submit',v.body,{origin:'https://wrong.example.test'}),v.proof('email-submit',v.body,{issuedAt:Date.now()-120000})])assert.equal((await api.request('submit',proof)).status,401);
   assert.equal((await submit(api,v,{...v.body,grantId:other.grant.id})).status,403);assert.deepEqual(await snapshot(f),before);
  }finally{await f.close();}

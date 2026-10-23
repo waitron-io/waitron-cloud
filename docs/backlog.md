@@ -415,13 +415,16 @@ that clock control and passes after the same correction, retaining key-removal,
 expiry and revocation checks. Both corrections leave production code, existing
 assertions and individual deadlines unchanged. CI did not record its clock values,
 so the exact historical timing remains unproved.
-Separately qualify expired-lease fixtures that subtract an hour from one clock
-read and one millisecond from a later read. A two-millisecond advancing-clock
-experiment reproduces the same issuer refusal in the staff test's revision/revocation
-case. The same construction appears in `relay-messages.test.ts`,
-`relay-operator-stop.test.ts` and `captures.test.ts`; those sites remain untested
-under that clock control. Preserve their expiry, permission and HTTP checks when
-correcting them.
+A two-millisecond advancing-clock experiment also reproduces the issuer refusal
+in expired leases built from separate clock readings. The `relay-messages.test.ts`,
+`relay-operator-stop.test.ts` and `captures.test.ts` fixtures now derive both times
+from one reading. Each existing HTTP refusal test advances the clock during
+synchronous lease construction and restores it before making requests, preserving
+all expiry, permission, HTTP assertions and deadlines. A Docker-free probe executes
+the three actual construction blocks with the real issuer and verifies that each
+signed lease lasts 3,599,999 ms and is expired. PostgreSQL and HTTP journeys are
+qualified by CI while local Docker is unavailable. The staff revision/revocation
+fixture remains a separate follow-up; the historical CI clock values remain unknown.
 
 ## Translate all: approved design, implementation still open
 
