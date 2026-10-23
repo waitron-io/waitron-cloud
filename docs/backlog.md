@@ -4184,3 +4184,22 @@ bodies. These diagnostics exclude the process environment. Lane D must
 investigate a diagnostic recurrence at the named command before claiming a cause
 or changing a deadline. This passing run does not explain or repair the historical
 timeout. Local Docker-backed qualification remains unavailable while Docker is down.
+
+
+### Conformance image acquisition during D135 qualification
+
+[Cost run 39977546909, stack group 2/3](https://github.com/waitron-io/waitron-cloud/actions/runs/39977546909/job/120496895328)
+on `cb333018c1dabeb3a19a1ba10e156a5423b70214` verified both pinned archives
+and built its owned fixture image, then stopped before running a case.
+`docker pull node:26.11.1-slim` failed after 15,139 ms while Docker Hub's token
+endpoint did not return headers. Its trace names `image-acquisition`; both archive
+traces end in checksum-verified completion. The image-acquisition command is
+byte-identical to base `6c031499cdb19e038994c89a6725998b49ae608f`; the cause of
+the registry timeout remains unknown.
+
+D135 cannot land while this current-head job is red. A separate fixture follow-up
+must reproduce that response through a controlled external Docker command and
+qualify bounded handling of recognised transient registry failures, preserving
+command budgets, terminal refusals, image pins and owned cleanup. Use pure Node
+checks while local Docker is down, then verify every actual CI job on the changed
+head. An unchanged rerun does not prove a repair.
