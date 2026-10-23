@@ -8,7 +8,7 @@ import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { openReplay } from '/code/cost-waitron-adapter.mjs';
-import { createLitestreamRequestAudit, createLitestreamTransport } from '/code/litestream.mjs';
+import { createLitestreamRequestAudit, createLitestreamTransport, withLitestreamCloseDiagnostics } from '/code/litestream.mjs';
 
 import { createMeter, createMeteringProxy, classifyStorageOperation, instrumentStorageClient, correlatedStorageAttempt } from '/code/meter.mjs';
 const require = createRequire('/app/packages/backups/package.json');
@@ -126,7 +126,10 @@ async function smoke() {
     stage = 'stop'; const ended = await stop(replicator); if (ended.invalid || ended.code !== 0) fail();
     stage = 'audit-end'; replication.audit.end(); restore.audit.end();
     await delay(20);
-    stage = 'transport-close'; await replication.transport?.close(); await restore.transport?.close();
+    stage = 'replication-transport-close';
+    await withLitestreamCloseDiagnostics({ stage: 'replication-transport', close: () => replication.transport?.close() });
+    stage = 'restore-transport-close';
+    await withLitestreamCloseDiagnostics({ stage: 'restore-transport', close: () => restore.transport?.close() });
     const result = { version, injectedFailures, restoredSales, integrity, sales: replay.counts(), fiscal: await replay.verify(),
       replication: replication.audit.snapshot(), restore: restore.audit.snapshot(), observed: replication.meter.snapshot() };
     if (replication.transport) result.transport = { replication: replication.transport.snapshot(), restore: restore.transport.snapshot() };
@@ -153,8 +156,14 @@ async function smoke() {
     for (const child of children) child.kill('SIGKILL');
     if (children.size) await Promise.all([...children].map(child => once(child, 'close')));
     for (const client of clients) client.destroy();
-    const transports = await Promise.allSettled([replication?.transport?.close(), restore?.transport?.close()]);
-    const closed = await Promise.allSettled([replication?.proxy.close(), restore?.proxy.close(), adminProxy.close()]);
+    const close = (stage, operation) => withLitestreamCloseDiagnostics({ stage, close: operation });
+    const transports = await Promise.allSettled([
+      close('cleanup-replication-transport', () => replication?.transport?.close()),
+      close('cleanup-restore-transport', () => restore?.transport?.close())]);
+    const closed = await Promise.allSettled([
+      close('cleanup-replication-proxy', () => replication?.proxy.close()),
+      close('cleanup-restore-proxy', () => restore?.proxy.close()),
+      close('cleanup-admin-proxy', () => adminProxy.close())]);
     fault.closeAllConnections(); await new Promise(resolve => fault.close(resolve));
     await replay.close(); rmSync(stateRoot, { recursive: true, force: true });
     if ([...transports, ...closed].some(result => result.status === 'rejected')) fail();

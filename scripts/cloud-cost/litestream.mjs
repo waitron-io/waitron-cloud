@@ -113,6 +113,37 @@ export function createLitestreamRequestAudit({ phase, allowBulkDeletes = false }
   return { write, observe, end, snapshot };
 }
 
+const closeStages = new Set(['replication-transport', 'restore-transport', 'cleanup-replication-transport',
+  'cleanup-restore-transport', 'cleanup-replication-proxy', 'cleanup-restore-proxy', 'cleanup-admin-proxy']);
+const closeReasons = new Set(['request-validation', 'lifetime-completion', 'body-accounting', 'transfer-interrupted',
+  'upstream-error', 'client-error', 'phase-change', 'active-close']);
+const networkErrors = new Set(['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'ERR_STREAM_PREMATURE_CLOSE']);
+const own = (value, key) => value && (typeof value === 'object' || typeof value === 'function')
+  ? Object.getOwnPropertyDescriptor(value, key)?.value : undefined;
+
+// Error text and request metadata can contain credentials; publish only closed categories and counts.
+export async function withLitestreamCloseDiagnostics({ stage, close, report = line => console.error(line) }) {
+  requireThat(closeStages.has(stage) && typeof close === 'function' && typeof report === 'function');
+  const record = { kind: 'litestream-close', stage };
+  report(JSON.stringify({ ...record, status: 'started' }));
+  try {
+    const result = await close();
+    report(JSON.stringify({ ...record, status: 'fulfilled' })); return result;
+  } catch (error) {
+    const raw = own(error, 'litestreamCloseDiagnostic'), reason = own(raw, 'reason');
+    const diagnostic = {};
+    if (closeReasons.has(reason)) diagnostic.reason = reason;
+    for (const key of ['pending', 'completed', 'connections']) {
+      const value = own(raw, key);
+      if (Number.isSafeInteger(value) && value >= 0) diagnostic[key] = value;
+    }
+    const code = own(raw, 'code'); if (networkErrors.has(code)) diagnostic.code = code;
+    report(JSON.stringify({ ...record, status: 'rejected', error: closeReasons.has(reason) ? 'transport-refused' : 'unclassified',
+      ...(Object.keys(diagnostic).length ? { diagnostic } : {}) }));
+    throw error;
+  }
+}
+
 // This first-hop counter shares no byte events with the downstream storage observer.
 // It measures transferred HTTP bodies, not application consumption or TCP/TLS overhead.
 export async function createLitestreamTransport({ target, meter, phase, lifetimes, allowBulkDeletes = false }) {
@@ -124,11 +155,14 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     requireThat(phases.includes(phase) && typeof meter?.observeAttempt === 'function' && typeof meter?.invalidate === 'function');
     requireThat(lifetimes === undefined || typeof lifetimes?.begin === 'function');
   } catch { fail(); }
-  let invalid = false, closing, currentPhase = phase;
+  let invalid = false, closing, refusal, currentPhase = phase;
   const invocations = new Map(), pending = new Set(), connections = new Set();
   const idleWaiters = new Set();
   let completed = 0;
-  const poison = () => { invalid = true; meter.invalidate(); };
+  const poison = (reason, error) => {
+    refusal ??= { reason, ...(networkErrors.has(own(error, 'code')) ? { code: own(error, 'code') } : {}) };
+    invalid = true; meter.invalidate();
+  };
   const size = value => {
     requireThat(value === undefined || typeof value === 'string' && /^(0|[1-9]\d*)$/.test(value));
     const n = Number(value ?? 0); requireThat(Number.isSafeInteger(n)); return n;
@@ -156,21 +190,23 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
         completeLifetime = lifetimes.begin({ method: source.method, path: source.url, headers: source.headers, body });
         requireThat(typeof completeLifetime === 'function');
       }
-    } catch { poison(); if (id) pending.delete(id.key); source.resume(); destination.writeHead(400); destination.end(); return; }
+    } catch { poison('request-validation'); if (id) pending.delete(id.key); source.resume(); destination.writeHead(400); destination.end(); return; }
     let bytesOut = 0, bytesIn = 0, expectedIn = 0, statusCode = null, responseHeaders, sent = false, received = false, settled = false;
     const responseChunks = lifetimes && ['delete-many', 'multipart-create', 'multipart-complete'].includes(name) ? [] : null;
-    const finish = interrupted => {
+    const finish = (interrupted, reason = 'transfer-interrupted', error) => {
       if (settled || !interrupted && (!sent || !received)) return;
       settled = true; pending.delete(id.key); completed++;
+      let completing = 'lifetime-completion';
       try {
         completeLifetime?.({ statusCode, bytesOut, interrupted, responseHeaders,
           responseBody: responseChunks ? Buffer.concat(responseChunks) : undefined });
+        completing = 'body-accounting';
         const outcome = interrupted ? 'transport-error' : statusCode >= 500 ? 'server-error' : statusCode >= 300 ? 'client-error' : 'success';
         meter.observeAttempt({ token: id.key, phase: currentPhase, operation: name, retryOrdinal: id.ordinal, channel: 'producer', outcome,
           statusCode, errorCode: null, sameAccount: null, bytesIn, bytesOut,
           attemptedBytesIn: Math.max(bytesIn, expectedIn), attemptedBytesOut: Math.max(bytesOut, expectedOut) });
-      } catch { poison(); }
-      if (interrupted) poison();
+      } catch { poison(completing); }
+      if (interrupted) poison(reason, error);
       if (pending.size === 0) for (const waiter of idleWaiters) {
         idleWaiters.delete(waiter);
         try { requireThat(!invalid && !closing); waiter.resolve(waiter.action()); }
@@ -195,14 +231,14 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     });
     connections.add(upstream); upstream.on('close', () => connections.delete(upstream));
     upstream.setTimeout(30000, () => upstream.destroy());
-    upstream.on('error', () => { finish(true); destination.destroy(); });
+    upstream.on('error', error => { finish(true, 'upstream-error', error); destination.destroy(); });
     if (body) { bytesOut = body.length; upstream.end(body, () => { sent = true; finish(false); }); }
     else {
       const counter = new Transform({ transform(chunk, encoding, next) { bytesOut += chunk.length; next(null, chunk); } });
       pipeline(source, counter, upstream, error => { sent = !error; finish(!!error); });
     }
   });
-  server.on('clientError', (error, socket) => { poison(); socket.destroy(); });
+  server.on('clientError', (error, socket) => { poison('client-error', error); socket.destroy(); });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   return { url: `http://127.0.0.1:${server.address().port}`, whenIdle: async action => {
     requireThat(!invalid && !closing && typeof action === 'function');
@@ -213,7 +249,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       // Both independent counters must see one phase for the entire transfer.
       requireThat(!invalid && !closing && pending.size === 0 && phases.includes(next));
       currentPhase = next;
-    } catch { poison(); fail(); }
+    } catch { poison('phase-change'); fail(); }
   }, snapshot: () => {
     requireThat(!invalid && pending.size === 0 && completed > 0); return meter.snapshot();
   }, close: () => {
@@ -221,11 +257,16 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       for (const waiter of idleWaiters) waiter.reject(Error('Invalid cloud cost Litestream audit'));
       idleWaiters.clear();
       // Invalidate active transfers before asynchronous socket-close events can report an empty checkpoint.
-      if (pending.size > 0) poison();
+      if (pending.size > 0) poison('active-close');
       const ended = [...connections].map(connection => new Promise(resolve => connection.once('close', resolve)));
       for (const connection of connections) connection.destroy();
       await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); });
-      await Promise.all(ended); requireThat(!invalid && pending.size === 0);
+      await Promise.all(ended);
+      if (invalid || pending.size !== 0) {
+        const error = Error('Invalid cloud cost Litestream audit');
+        error.litestreamCloseDiagnostic = { ...refusal, pending: pending.size, completed, connections: connections.size };
+        throw error;
+      }
     })();
     return closing;
   } };

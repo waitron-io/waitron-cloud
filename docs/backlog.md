@@ -4210,3 +4210,24 @@ and owned cleanup within one shared budget. Both exact-head and independent
 merge workflows passed all 214 conformance cases. This qualifies the handling;
 the original registry timeout's network cause remains unknown. D135 retains the
 archive diagnostics and requires fresh qualification on top of that repair.
+
+
+### Litestream conformance transport-close refusal (D141)
+
+[Merge cost run 39987879658, stack group 2/3](https://github.com/waitron-io/waitron-cloud/actions/runs/39987879658/job/120531832768)
+failed the storage-lifetime case after 12.4 seconds with only
+`Synthetic Litestream phase: transport-close`. The original error was discarded;
+cleanup could replace it with another generic failure. The historical cause is
+unknown. A later passing run does not explain that refusal.
+
+Each replication, restore and cleanup transport or metering-proxy close now
+reports its stage and started, fulfilled or rejected outcome. A rejected transport
+also reports its first refusal category and remaining request/connection counts;
+known network codes are retained. Error messages, paths, headers, object names,
+credentials and unknown fields are excluded. The original rejection still fails
+the close, and repeated cleanup reports the same refusal. Controlled HTTP tests
+cover malformed requests, an unfinished transfer and rejected lifetime or byte
+accounting. All existing storage, inventory and accounting checks and deadlines
+remain in place. Local Docker-backed qualification is unavailable while Docker is
+down. Linux CI must qualify the instrumented case; investigate a diagnostic
+recurrence before claiming or changing the cause.
