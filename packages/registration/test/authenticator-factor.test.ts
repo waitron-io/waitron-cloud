@@ -413,11 +413,17 @@ for(const delayedObserver of [false,true]) test('a password reset snapshot commi
   const name=`${schema}_derivation`,other=new Pool({connectionString:process.env.TEST_DATABASE_URL,
     options:`-c search_path=${schema} -c statement_timeout=10000`,application_name:name});
   const blocker=await pool.connect();let work:Promise<void>|undefined;
+  let releaseDerivation!:()=>void;
+  const resumeDerivation=new Promise<void>(resolve=>{releaseDerivation=resolve;});
   let markDerived!:()=>void;
   const derived=new Promise<void>(resolve=>{markDerived=resolve;}),original=crypto.scrypt;
   const derivation=mock.method(crypto,'scrypt',function(...args:unknown[]) {
     const callback=args.pop() as (...result:unknown[])=>void;
-    return Reflect.apply(original,crypto,[...args,(...result:unknown[])=>{markDerived();callback(...result);}]);
+    return Reflect.apply(original,crypto,[...args,(...result:unknown[])=>{
+      markDerived();
+      // Hold the real result until the observer and reset finish, so scheduling cannot erase their interleaving.
+      void resumeDerivation.then(()=>callback(...result));
+    }]);
   } as typeof crypto.scrypt);
   try {
     await blocker.query('BEGIN');await blocker.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[accountId]);
@@ -436,10 +442,11 @@ for(const delayedObserver of [false,true]) test('a password reset snapshot commi
     assert.ok(deriving,'must observe the password snapshot released while derivation runs, before the account lock; '+JSON.stringify(observations));
     await blocker.query('UPDATE cloud_credentials SET password_hash=$1 WHERE account_id=$2',[resetHash,accountId]);
     await blocker.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1',[accountId]);
-    await blocker.query('COMMIT');await work;
+    await blocker.query('COMMIT');releaseDerivation();await work;
+    assert.equal(derivation.mock.callCount(),1,'management must verify the real password once');
     assert.equal((await factor()).version,1);assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_enrolments')).rows[0].count,'0');
     assert.equal((await pool.query('SELECT consumed_at FROM cloud_factor_recovery_codes')).rows[0].consumed_at,null);
-  } finally {await blocker.query('ROLLBACK');blocker.release();await work?.catch(()=>{});derivation.mock.restore();await other.end();}
+  } finally {releaseDerivation();await blocker.query('ROLLBACK');blocker.release();await work?.catch(()=>{});derivation.mock.restore();await other.end();}
 });
 
 for(const waitAt of ['session lock','management write'] as const) test(`a TOTP window ending during the removal ${waitAt} preserves every management effect`,async()=>{

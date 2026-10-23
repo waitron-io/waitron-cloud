@@ -4004,10 +4004,18 @@ changing any check. The assertions and deadlines remain unchanged.
 ## Password derivation observation on Linux (D129)
 
 The password-reset-during-derivation case failed before reaching its final
-permission and state checks in run 39953541488. The first investigation adds
-backend state and query transitions to the existing observation failure and
-repeats that same case on Linux. Its assertions, 200-poll bound and database
-statement timeout are unchanged. The cause and repair remain open.
+permission and state checks in run 39953541488. Its historical cause remains
+unattributed. Twelve instrumented Linux repetitions passed the original case;
+twelve delayed-observer repetitions reproduced the assertion after the real
+password derivation had finished and the connection reached its account lock.
+The test now holds the real derivation result until the observer sees the
+credential snapshot and the competing reset commits. It forwards the actual
+result, checks one derivation and restores the interception during cleanup.
+Both immediate and delayed observation retain the password-reset refusal,
+factor, enrolment and recovery-code assertions, 200-poll bound and database
+statement timeout. Product authentication and locking are unchanged. Linux
+PostgreSQL, deliberate-fault checks and whole-branch review still gate landing.
+Local database checks remain unavailable while Docker is down.
 
 
 ## Initial services and future candidates
