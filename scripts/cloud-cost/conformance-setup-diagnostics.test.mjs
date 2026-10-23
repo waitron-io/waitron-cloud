@@ -29,7 +29,7 @@ grandchild.once('message',()=>writeFileSync(${JSON.stringify(marker)},JSON.strin
   child.stdout.on('data',bytes=>output+=bytes);child.stderr.on('data',bytes=>output+=bytes);
   const closed=new Promise(resolve=>child.once('close',(code,signal)=>resolve({code,signal})));
   try {
-    const result=await Promise.race([closed,delay(6000).then(()=>null)]);
+    const result=await Promise.race([closed,delay(6000,undefined,{ref:false}).then(()=>null)]);
     assert.notEqual(result,null,'the unchanged command deadline must settle setup');
     assert.equal(existsSync(marker),true,'exercise the real command supervisor with a controlled external git process');
     owned=JSON.parse(readFileSync(marker));
@@ -59,9 +59,9 @@ grandchild.once('message',()=>writeFileSync(${JSON.stringify(marker)},JSON.strin
     }
   } finally {
     if(!owned&&existsSync(marker))owned=JSON.parse(readFileSync(marker));
-    if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await closed;
     if(owned){for(const pid of [owned.pid,owned.grandchild].filter(Boolean)){try{process.kill(pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}}
       if(existsSync(owned.scratch))rmSync(owned.scratch,{recursive:true,force:true});}
+    if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await closed;
     rmSync(root,{recursive:true,force:true});
   }
 });
