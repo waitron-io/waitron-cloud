@@ -3,7 +3,7 @@ import {registerHooks} from 'node:module';
 import {mkdtempSync,realpathSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-const fault=process.argv[2], cleanupFailure=process.argv[3]==='true';
+const fault=process.argv[2], cleanupFailure=process.argv[3];
 const events=[], originalError=console.error;
 console.error=(...args)=>{events.push('report');originalError(...args);};
 const parent=realpathSync(mkdtempSync(join(tmpdir(),'cloud-startup-probe-')));
@@ -17,6 +17,7 @@ writeFileSync(join(stateRoot,'replay-config.json'),JSON.stringify({initial:{},co
  senders:{fiscal:'disabled',mail:'capture',acme:'disabled',dns:'disabled'}}}),{mode:0o600});
 let created=false,removed=false,project,plan;
 const controller=new AbortController();
+if(fault==='pre-cancelled')controller.abort();
 if(fault==='reporting')console.error=()=>{throw Error('PRIVATE_CANARY');};
 const roles=['postgres','s3','mailpit','waitron','fiscal','gateway'];
 const networkId='c'.repeat(64), ids=roles.map((_,i)=>(i+1).toString().repeat(64));
@@ -26,17 +27,19 @@ const containers=()=>roles.map((role,i)=>({Id:ids[i],Name:'/'+plan.services[role
  NetworkSettings:{Networks:{[project]:{NetworkID:networkId}},Ports:{}},Mounts:[]}));
 const network=()=>({Id:networkId,Name:project,Internal:fault!=='isolation',Driver:'bridge',Labels:{'io.waitron.cloud-cost.owner':token}});
 const error=()=>({status:1,stdout:'PRIVATE_CANARY',stderr:'postgresql://private:PRIVATE_CANARY@host/private',error:undefined,signal:null});
-globalThis.startupProbe={spawnSync(command,args){
+globalThis.startupProbe={abort:()=>controller.abort(),spawnSync(command,args){
  if(command!=='docker')throw Error('Unexpected external command');
  const ok=value=>({status:0,stdout:typeof value==='string'?value:JSON.stringify(value),stderr:'',signal:null});
- if(args[0]==='compose'){created=true;if(['compose','reporting','timeout','missing-docker','unclassified'].includes(fault)){if(fault==='unclassified')throw Error('PRIVATE_CANARY');const result=error();if(fault==='timeout'||fault==='missing-docker'){result.status=null;result.error={code:fault==='timeout'?'ETIMEDOUT':'ENOENT',message:'PRIVATE_CANARY'};}return result;}return ok('');}
- if(args[0]==='rm'){events.push('remove');if(cleanupFailure)return error();removed=true;return ok('');}
+ if(args[0]==='compose'){created=true;if(['compose','reporting','timeout','missing-docker','unclassified','revoked','hostile-message'].includes(fault)){if(fault==='unclassified')throw Error('PRIVATE_CANARY');if(fault==='revoked'){const value=Proxy.revocable({},{});value.revoke();throw value.proxy;}if(fault==='hostile-message')throw Object.defineProperty(Error(), 'message', {get(){throw Error('PRIVATE_CANARY');}});const result=error();if(fault==='timeout'||fault==='missing-docker'){result.status=null;result.error={code:fault==='timeout'?'ETIMEDOUT':'ENOENT',message:'PRIVATE_CANARY'};}return result;}return ok('');}
+ if(args[0]==='rm'){events.push('remove');if(cleanupFailure==='revoked'){const value=Proxy.revocable({},{});value.revoke();throw value.proxy;}if(cleanupFailure==='true')return error();removed=true;return ok('');}
  if(args[0]==='network'&&args[1]==='rm'){created=false;return ok('');}
  if(args[0]==='ps'){if(fault==='discovery'&&!created)return error();return ok(created&&!removed?ids.join('\n'):'');}
  if(args[0]==='network'&&args[1]==='ls')return ok(created?networkId:'');
  if(args[0]==='network'&&args[1]==='inspect')return ok([network()]);
  if(args[0]==='inspect')return ok(containers().filter(c=>args.includes(c.Id)).slice(0,fault==='resources'?5:6));
  if(args[0]==='exec'){
+  if(fault==='isolation-command')return error();
+  if(fault==='direct-isolation')throw Error('PRIVATE_CANARY');
   if(args.includes('check')){if(fault==='handoff')controller.abort();return ok(fault==='readiness'?'PRIVATE_CANARY':{postgres:true,s3:true,mailpit:true,fiscal:true,waitron:true,gateway:true});}
   return ok({blockedConnections:3,blockedDns:2,localControl:true});
  }
@@ -45,7 +48,7 @@ globalThis.startupProbe={spawnSync(command,args){
 registerHooks({resolve(specifier,context,next){if(specifier==='node:child_process'&&context.parentURL?.endsWith('/local.mjs'))
  return {url:'data:text/javascript,'+encodeURIComponent(`import {spawn as actualSpawn} from 'node:child_process';
  export const spawnSync=(...args)=>globalThis.startupProbe.spawnSync(...args);
- export const spawn=(command,args,options)=>actualSpawn(${JSON.stringify(fault==='missing-certificate'?'/nonexistent-cloud-cost-openssl':fault==='certificate'?process.execPath:'/usr/bin/openssl')},${fault==='certificate'?JSON.stringify(['-e',"process.stderr.write('PRIVATE_CANARY');process.exit(7)"]):'args'},options);`),shortCircuit:true};return next(specifier,context);}});
+ export const spawn=(command,args,options)=>{const child=actualSpawn(${JSON.stringify(fault==='missing-certificate'?'/nonexistent-cloud-cost-openssl':['certificate','certificate-cancelled'].includes(fault)?process.execPath:'/usr/bin/openssl')},${fault==='certificate-cancelled'?JSON.stringify(['-e','setInterval(()=>{},1000)']):fault==='certificate'?JSON.stringify(['-e',"process.stderr.write('PRIVATE_CANARY');process.exit(7)"]):'args'},options);${fault==='certificate-cancelled'?'setImmediate(()=>globalThis.startupProbe.abort());':''}return child;};`),shortCircuit:true};return next(specifier,context);}});
 try{
  const local=await import('../local.mjs');const args={source,root,codeRoot,stateRoot,journal,image};
  const prepared=local.prepareIsolatedStack(args);project=prepared.project;plan=JSON.parse(readFileSync(prepared.file));
@@ -53,6 +56,6 @@ try{
  if(fault==='plan')writeFileSync(prepared.file,'{}');
  if(fault==='config')writeFileSync(join(stateRoot,'replay-config.json'),'PRIVATE_CANARY');
  if(fault==='runtime')writeFileSync(join(codeRoot,'cost-stack-runtime.mjs'),'PRIVATE_CANARY');
- try{const stack=await local.startIsolatedStack({...args,prepared,signal:controller.signal});await stack.close();console.log(JSON.stringify({ready:Object.values(stack.ready).every(Boolean),removed}));}
+ try{if(fault==='direct-isolation'){await local.proveDockerIsolation({...args,networkId,containerIds:ids});throw Error('expected refusal');}const stack=await local.startIsolatedStack({...args,prepared,signal:controller.signal});await stack.close();console.log(JSON.stringify({ready:Object.values(stack.ready).every(Boolean),removed}));}
  catch(error){console.log(JSON.stringify({message:error.message,diagnostic:error.diagnostic,removed,events}));}
 }finally{rmSync(parent,{recursive:true,force:true});}

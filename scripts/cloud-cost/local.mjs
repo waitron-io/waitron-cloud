@@ -27,19 +27,24 @@ function requireCommand(result) {
   if (result.status === 0 && !result.error) return;
   const error = new Error('Invalid cloud cost local run');
   const code = result.error?.code;
-  const diagnostic = { reason: ['EACCES', 'EPERM', 'ENOENT', 'ENOSPC', 'EIO', 'ETIMEDOUT'].includes(code) ? code : 'command-exit' };
+  const diagnostic = { reason: ['EACCES', 'EPERM', 'ENOENT', 'ENOSPC', 'EIO', 'ETIMEDOUT', 'ECANCELED'].includes(code) ? code : 'command-exit' };
   if (Number.isSafeInteger(result.status) && result.status >= 0 && result.status <= 255) diagnostic.exitCode = result.status;
   if (['SIGTERM', 'SIGKILL', 'SIGABRT', 'SIGSEGV', 'SIGINT'].includes(result.signal)) diagnostic.signal = result.signal;
   commandFailures.set(error, diagnostic);
   throw error;
 }
 function startupDiagnostic(stage, error, started) {
-  const code = Object.getOwnPropertyDescriptor(error ?? {}, 'code')?.value;
-  const reason = ['EACCES', 'EPERM', 'ENOENT', 'EEXIST', 'ENOSPC', 'EIO', 'ETIMEDOUT'].includes(code) ? code
-    : error instanceof SyntaxError ? 'invalid-json'
-    : error instanceof Error && ['Invalid cloud cost local run', 'Invalid cloud cost evidence', 'Invalid cloud cost replay configuration'].includes(error.message) ? 'validation' : 'unclassified';
-  // Private paths, endpoint credentials and subprocess output never enter the public record.
-  return { stage, reason, ...commandFailures.get(error), elapsedMs: Math.max(0, Math.round(performance.now() - started)) };
+  const diagnostic = { stage, reason: 'unclassified', elapsedMs: Math.max(0, Math.round(performance.now() - started)) };
+  // Even inspecting a thrown value can throw; diagnostics must not interrupt owned cleanup.
+  try {
+    const code = Object.getOwnPropertyDescriptor(error ?? {}, 'code')?.value;
+    diagnostic.reason = ['EACCES', 'EPERM', 'ENOENT', 'EEXIST', 'ENOSPC', 'EIO', 'ETIMEDOUT', 'ECANCELED'].includes(code) ? code
+      : error instanceof SyntaxError ? 'invalid-json'
+      : error instanceof Error && ['Invalid cloud cost local run', 'Invalid cloud cost evidence', 'Invalid cloud cost replay configuration'].includes(error.message) ? 'validation' : 'unclassified';
+    // Private paths, endpoint credentials and subprocess output never enter the public record.
+    Object.assign(diagnostic, commandFailures.get(error));
+  } catch { /* The fixed fallback also contains hostile cleanup exceptions. */ }
+  return diagnostic;
 }
 function reportStartupFailure(diagnostic) {
   try { console.error('stack_startup=' + JSON.stringify(diagnostic)); }
@@ -305,7 +310,7 @@ async function runPrivateProcess(command, argv, { signal, cwd, ownership, timeou
     deadline = setTimeout(abort, timeoutMs);
     if (signal?.aborted) abort();
     const exitCode = await closed;
-    requireCommand({ status: exitCode, error: aborted ? { code: 'ETIMEDOUT' } : spawnError, signal: child.signalCode });
+    requireCommand({ status: exitCode, error: aborted ? { code: signal?.aborted ? 'ECANCELED' : 'ETIMEDOUT' } : spawnError, signal: child.signalCode });
     return { exitCode };
   } catch (error) { if (commandFailures.has(error)) throw error; fail(); }
   finally {
@@ -588,7 +593,10 @@ export async function startIsolatedStack(args) {
   try {
     const { root, journal, codeRoot, stateRoot, image, prepared, signal } = args;
     const value = owned(args);
-    requireThat(!signal?.aborted);
+    if (signal?.aborted) {
+      stage = 'cancellation';
+      requireCommand({ status: null, error: { code: 'ECANCELED' } });
+    }
     stage = 'plan';
     requireThat(prepared && inside(root, prepared.file)); canonicalFile(prepared.file);
     const entry = value.localResources?.find(v => v.kind === 'compose-plan' && v.state === 'ready'

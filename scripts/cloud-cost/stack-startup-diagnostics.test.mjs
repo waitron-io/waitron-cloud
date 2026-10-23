@@ -25,6 +25,11 @@ for (const [fault, stage, reason] of [
   ['timeout', 'compose-up', 'ETIMEDOUT'],
   ['missing-docker', 'compose-up', 'ENOENT'],
   ['unclassified', 'compose-up', 'unclassified'],
+  ['revoked', 'compose-up', 'unclassified'],
+  ['hostile-message', 'compose-up', 'unclassified'],
+  ['isolation-command', 'isolation', 'command-exit'],
+  ['certificate-cancelled', 'certificate', 'ECANCELED'],
+  ['pre-cancelled', 'cancellation', 'ECANCELED'],
 ]) test(`startup retains a safe reason before cleanup: ${fault}`, () => {
   const result = run(fault);
   assert.equal(result.status, 0, result.stderr);
@@ -41,7 +46,7 @@ for (const [fault, stage, reason] of [
   const records = result.stderr.split('\n').filter(l => l.startsWith('stack_startup=')).map(l => JSON.parse(l.slice(14)));
   assert.equal(records[0].stage, stage);
   assert.equal(records[0].reason, reason);
-  if (['compose','resources','policy','isolation','readiness','handoff','timeout','missing-docker','unclassified'].includes(fault)) {
+  if (['compose','resources','policy','isolation','readiness','handoff','timeout','missing-docker','unclassified','revoked','hostile-message','isolation-command'].includes(fault)) {
     assert.equal(output.removed, true);
     assert.ok(output.events.indexOf('report') < output.events.indexOf('remove'), 'retain failure before cleanup');
   }
@@ -75,5 +80,23 @@ test('a reporting exception cannot hide failure or stop cleanup', () => {
   assert.ok(output.diagnostic, 'reporting must preserve the startup diagnostic');
   assert.equal(output.diagnostic.stage, 'compose-up');
   assert.equal(output.removed, true);
+  assert.equal((result.stdout + result.stderr).includes('PRIVATE_CANARY'), false);
+});
+
+test('a hostile cleanup rejection cannot hide the first failure', () => {
+  const result = run('compose', 'revoked');
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.ok(output.diagnostic, 'retain the first diagnostic even if cleanup throws an opaque value');
+  assert.equal(output.diagnostic.stage, 'compose-up');
+  assert.equal(output.diagnostic.cleanupFailed, true);
+  const records = result.stderr.split('\n').filter(l => l.startsWith('stack_startup=')).map(l => JSON.parse(l.slice(14)));
+  assert.equal(records[1].stage, 'cleanup'); assert.equal(records[1].reason, 'unclassified');
+  assert.equal((result.stdout + result.stderr).includes('PRIVATE_CANARY'), false);
+});
+test('the direct isolation boundary still excludes unexpected private exceptions', () => {
+  const result = run('direct-isolation');
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).message, 'Invalid cloud cost local run');
   assert.equal((result.stdout + result.stderr).includes('PRIVATE_CANARY'), false);
 });

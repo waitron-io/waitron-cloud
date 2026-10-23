@@ -4290,7 +4290,7 @@ on `57bc23ad6f61d67c66ae43ec123d5232a4c05f28`, stack-conformance shard 3,
 job 120575313226, fails
 `generatedServiceKeepsItsMutableFilesOffTheScannedHostTree_mailpit` after 4.17 s.
 It stops at fixture startup (`stack-conformance.test.mjs:762`), before the mail,
-storage and host-file assertions. `scripts/cloud-cost/local.mjs:659` replaces the
+storage and host-file assertions. `scripts/cloud-cost/local.mjs` at that revision replaced the
 underlying startup error with `Invalid cloud cost local run`; the historical cause
 remains unknown.
 Both files have the same Git blobs as the preceding main `917e586`, and the
@@ -4301,7 +4301,9 @@ record to its rejection. It names ownership, plan, configuration, runtime files,
 certificate, resource discovery, Compose, container policy, isolation, readiness
 or cancellation handoff. Only fixed error categories, exit codes, signals and
 elapsed time are retained; paths, credentials and raw subprocess output are
-excluded. A cleanup failure gets a separate record and cannot replace the original
+excluded. Cancelled requests and expired deadlines have separate categories.
+Opaque thrown values also fall back to a fixed category so inspecting them cannot
+prevent cleanup. A cleanup failure gets a separate record and cannot replace the original
 startup refusal. Reporting failure cannot prevent cleanup.
 
 Docker-free tests run the actual orchestration, ownership checks, files and
