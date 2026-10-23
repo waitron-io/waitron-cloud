@@ -13,6 +13,12 @@ import time
 
 from ci_download_events import record
 
+# The first attempt needs two Python bootstraps (0.4s each) and a 0.2s holder
+# handshake before it can exercise descendant cleanup under CPU contention.
+attempt_timeout = 1.0
+# Two (0.2s lock + 1s attempt + 0.4s cleanup) bounds, 0.01s retry and
+# 1.5s supervisor startup/scheduling/I/O total 4.71s inside this 5s deadline.
+supervisor_timeout = 5
 def gone(pid):
     try:
         os.kill(pid, 0)
@@ -143,13 +149,13 @@ raise SystemExit(module.main())
 ''')
             supervisor = [sys.executable, '-I', str(wrapper), sys.argv[1]]
         result = subprocess.run([
-            *supervisor, '--timeout', '0.3', '--attempts', '2',
+            *supervisor, '--timeout', str(attempt_timeout), '--attempts', '2',
             '--grace', '0.4', '--lock-wait', '0.2', '--retry-delay', '0.01',
             *(['--lock', str(lock)] if mode != 'uncertain' else []),
             '--', sys.executable, str(installer), str(root),
         ], env={**os.environ, 'PROBE_MODE':mode, 'FOREIGN_PID':str(foreign.pid), 'FIXTURE_ROOT':str(root),
                 'FIXTURE_HELPERS':str(Path(__file__).resolve().parent)},
-            capture_output=True, text=True, timeout=5)
+            capture_output=True, text=True, timeout=supervisor_timeout)
         progress = (root / 'progress.jsonl').read_text() if (root / 'progress.jsonl').exists() else '(no child reached the first step)'
         details = result.stdout + result.stderr + '\nFixture process/step progress:\n' + progress
         if os.environ.get('CI_DOWNLOAD_REPORT_PROGRESS') == '1':

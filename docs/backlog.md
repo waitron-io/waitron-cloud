@@ -4026,6 +4026,16 @@ PR312 run39944688693 failed the stale-process Linux fixture after both 0.3-secon
 installer attempts exceeded their deadlines. The cause was not captured. The fixture
 now retains process IDs, monotonic times and the last reached installer/cleanup step
 before its temporary directory is removed. A bounded native-Linux CI diagnostic runs
-32 stale-ownership cases with eight workers sharing one CPU; every existing ownership,
-foreign-lock and cleanup assertion remains. Investigation and a proved fix are pending;
-no production download or test deadline has changed. Docker is unavailable locally.
+32 stale-ownership cases with eight workers sharing one CPU. The first instrumented
+Linux run failed all32: each installer needed0.20–0.25seconds to enter, and the
+0.3-second first attempt ended before its detached child reached its lock checkpoint.
+That controlled result proves the setup budget could expire before the intended
+ownership exercise; the historical run did not capture its exact stalled phase.
+The test now gives the first attempt two0.4-second Python startups and a0.2-second
+holder handshake, totalling one second. Its existing five-second outer bound covers
+`2 × (0.2 + 1.0 + 0.4) + 0.01 + 1.5 = 4.71` seconds: lock, attempt and cleanup for
+each attempt, retry, then supervisor startup/scheduling/I/O. The15-second Node case
+also covers fixture/foreign-child setup, verification and the final two-second
+cleanup. Every ownership, foreign-lock, retry-count and cleanup assertion remains;
+production download limits are unchanged. Exact-head Linux qualification and review
+are pending. Docker is unavailable locally.
