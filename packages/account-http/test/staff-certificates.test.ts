@@ -37,9 +37,13 @@ test('replacement requires the current predecessor and a stale retry cannot rest
  assert.equal((await f.request(status,a.proof(status,{version:1,requestId:id},randomUUID(),a.lease))).status,409);
  assert.equal((await f.db.pool.query('SELECT request_id FROM staff_certificate_exchange WHERE installation_id=$1',[a.installationId])).rows[0].request_id,next);
 });
-test('current revision, live lease and revocation are checked again on reads and retries',async()=>{
+test('current revision, live lease and revocation are checked again on reads and retries',async(t)=>{
  const a=await f.venue(),id=randomUUID();assert.equal((await f.request(submit,a.proof(submit,a.body,id,a.lease))).status,200);
- const claims=JSON.parse(Buffer.from(a.lease.payload,'base64url').toString());const expired=f.issuer.issue({origin:f.origin,leaseId:claims[3],installationId:a.installationId,venueId:a.venueId,environment:'test',publicKey:claims[7],issuedAt:Date.now()-3600000,expiresAt:Date.now()-1});
+ const claims=JSON.parse(Buffer.from(a.lease.payload,'base64url').toString());
+ // Advance only synchronous lease construction; the request must use the real clock.
+ const now=Date.now();let tick=now;
+ const clock=t.mock.method(Date,'now',()=>{const value=tick;tick+=2;return value;});let expired:SignedEnvelope;
+ try{const issuedAt=Date.now()-3600000;expired=f.issuer.issue({origin:f.origin,leaseId:claims[3],installationId:a.installationId,venueId:a.venueId,environment:'test',publicKey:claims[7],issuedAt,expiresAt:issuedAt+3599999});}finally{clock.mock.restore();}
  assert.equal((await f.request(status,a.proof(status,{version:1,requestId:id},randomUUID(),expired))).status,401);
  await f.db.pool.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[a.installationId]);
  assert.equal((await f.request(status,a.proof(status,{version:1,requestId:id},randomUUID(),a.lease))).status,409);

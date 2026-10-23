@@ -428,10 +428,12 @@ in expired leases built from separate clock readings. The `relay-messages.test.t
 from one reading. Each existing HTTP refusal test advances the clock during
 synchronous lease construction and restores it before making requests, preserving
 all expiry, permission, HTTP assertions and deadlines. A Docker-free probe executes
-the three actual construction blocks with the real issuer and verifies that each
-signed lease lasts 3,599,999 ms and is expired. PostgreSQL and HTTP journeys are
-qualified by CI while local Docker is unavailable. The staff revision/revocation
-fixture remains a separate follow-up; the historical CI clock values remain unknown.
+the four actual construction blocks with the real issuer and verifies that each
+signed lease lasts 3,599,999 ms and is expired. The staff revision/revocation
+fixture also uses one timestamp under the same clock control, retaining every
+HTTP, revision and revocation assertion. PostgreSQL and HTTP journeys are
+qualified by CI while local Docker is unavailable. The historical CI clock values
+remain unknown.
 
 ## Translate all: approved design, implementation still open
 
