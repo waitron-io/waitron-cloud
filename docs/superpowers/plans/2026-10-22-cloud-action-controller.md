@@ -13,7 +13,7 @@
 **2026-10-23 handover correction:** the [revised A1018 direction](../../waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018)
 replaces this plan's historical external stop-proof assumptions. The source table
 and writer-admission portions of Tasks 1, 5, 6 and 11 describe the rejected input;
-amend them against the approved two-scenario protocol before implementation. No
+amend them against the owner-directed two-scenario protocol before implementation. No
 outside proof or country authority may be reintroduced as a local handover dependency.
 Controlled copy/filing evidence, emergency human declaration, predecessor-chain holds
 and same-M2 retries remain Waitron-owned gates. P4 supplies no automatic declaration.
