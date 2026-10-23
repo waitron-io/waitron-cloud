@@ -415,12 +415,12 @@ for(const delayedObserver of [false,true]) test('a password reset snapshot commi
   const blocker=await pool.connect();let work:Promise<void>|undefined;
   let releaseDerivation!:()=>void;
   const resumeDerivation=new Promise<void>(resolve=>{releaseDerivation=resolve;});
-  let markDerived!:()=>void;
-  const derived=new Promise<void>(resolve=>{markDerived=resolve;}),original=crypto.scrypt;
+  let derivationFinished=false;
+  const original=crypto.scrypt;
   const derivation=mock.method(crypto,'scrypt',function(...args:unknown[]) {
     const callback=args.pop() as (...result:unknown[])=>void;
     return Reflect.apply(original,crypto,[...args,(...result:unknown[])=>{
-      markDerived();
+      derivationFinished=true;
       // Hold the real result until the observer and reset finish, so scheduling cannot erase their interleaving.
       void resumeDerivation.then(()=>callback(...result));
     }]);
@@ -428,13 +428,14 @@ for(const delayedObserver of [false,true]) test('a password reset snapshot commi
   try {
     await blocker.query('BEGIN');await blocker.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[accountId]);
     work=refused(store(keys,policy,other).begin({...a,proof:recovery('A'.repeat(32))}));
-    if(delayedObserver) {await derived;await delay(50);}
-    let deriving=false;
+    let deriving=false,observationDelayed=false;
     const observations:unknown[]=[];const observingAt=performance.now();let previous='';
     for(let i=0;i<200;i++) {
       const rows=(await admin.query('SELECT pid,state,query,wait_event_type,wait_event,query_start,state_change FROM pg_stat_activity WHERE application_name=$1',[name])).rows;
       const signature=JSON.stringify(rows);
       if(signature!==previous) {observations.push({poll:i,elapsedMs:performance.now()-observingAt,rows});previous=signature;}
+      if(delayedObserver && !derivationFinished && !rows.some(r=>r.wait_event_type==='Lock')) {await delay(1);continue;}
+      if(delayedObserver && derivationFinished && !observationDelayed) {await delay(50);observationDelayed=true;continue;}
       if(rows.some(r=>r.state==='idle in transaction' && r.query.includes('SELECT c.account_id, c.password_hash'))) {deriving=true;break;}
       if(rows.some(r=>r.wait_event_type==='Lock')) break;
       await delay(1);
@@ -446,7 +447,7 @@ for(const delayedObserver of [false,true]) test('a password reset snapshot commi
     assert.equal(derivation.mock.callCount(),1,'management must verify the real password once');
     assert.equal((await factor()).version,1);assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_enrolments')).rows[0].count,'0');
     assert.equal((await pool.query('SELECT consumed_at FROM cloud_factor_recovery_codes')).rows[0].consumed_at,null);
-  } finally {releaseDerivation();await blocker.query('ROLLBACK');blocker.release();await work?.catch(()=>{});derivation.mock.restore();await other.end();}
+  } finally {releaseDerivation();derivation.mock.restore();await blocker.query('ROLLBACK');blocker.release();await work?.catch(()=>{});await other.end();}
 });
 
 for(const waitAt of ['session lock','management write'] as const) test(`a TOTP window ending during the removal ${waitAt} preserves every management effect`,async()=>{
