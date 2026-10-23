@@ -47,27 +47,34 @@ export async function prepareConformance(selected) {
   // Never pass provider, venue or user-specific configuration into the public build.
   const environment={PATH:process.env.PATH,LANG:'C',TZ:'UTC',CI:'true',
     ...(process.env.NODE_AUTH_TOKEN?{NODE_AUTH_TOKEN:process.env.NODE_AUTH_TOKEN}:{})};
+  let phase='revision';
   const run=(command,args,{encoding,timeout=300000,...options}={})=>{
     controller.signal.throwIfAborted();
     return new Promise((resolve,reject)=>{
       const child=spawn(command,args,{env:environment,stdio:'inherit',...options,detached:true});
       const output=[];let failure,forceTimer;
+      const started=performance.now(),commandPhase=phase;
+      const report=(event,details={})=>console.error('conformance_setup='+JSON.stringify({
+        event,phase:commandPhase,command,args,pid:child.pid??null,
+        elapsedMs:Math.round(performance.now()-started),timeoutMs:timeout,...details}));
+      report('start');
       // This process group belongs to this one setup command and its descendants.
       const stop=signal=>{
         if(!child.pid)return;
         try {process.kill(-child.pid,signal);} catch(error) {if(error.code!=='ESRCH')throw error;}
       };
       const abort=()=>{
-        failure=Error('Conformance setup interrupted');stop('SIGTERM');
+        failure=Error('Conformance setup interrupted');report('interrupted');stop('SIGTERM');
         forceTimer=setTimeout(()=>stop('SIGKILL'),1000);
       };
       controller.signal.addEventListener('abort',abort,{once:true});
       child.stdout?.on('data',bytes=>output.push(bytes));
-      child.on('error',error=>{failure=error;});
-      const timer=setTimeout(()=>{failure=Error('Conformance setup timed out');stop('SIGKILL');},timeout);
+      child.on('error',error=>{failure=error;report('spawn-error',{errorCode:error.code});});
+      const timer=setTimeout(()=>{failure=Error('Conformance setup timed out');report('timeout');stop('SIGKILL');},timeout);
       child.once('close',(code,signal)=>{
         if(controller.signal.aborted)stop('SIGKILL');
         clearTimeout(timer);clearTimeout(forceTimer);controller.signal.removeEventListener('abort',abort);
+        report(failure?'closed':code===0&&!signal?'complete':'failure',{code,signal});
         if(failure||code!==0||signal)reject(failure??Error('Conformance setup command failed: '+command));
         else resolve(encoding?Buffer.concat(output).toString(encoding):Buffer.concat(output));
       });
@@ -90,10 +97,15 @@ export async function prepareConformance(selected) {
     let code, stackCode, runtime, migrations;
     if(needsRuntime) {
       const source=join(root,'public-source');
+      phase='source-init';
       await run('git',['init','--quiet',source]);
+      phase='source-fetch';
       await run('git',['-C',source,'fetch','--quiet','--depth=1','https://github.com/clintongormley/waitron.git',revision]);
+      phase='source-checkout';
       await run('git',['-C',source,'checkout','--quiet','--detach','FETCH_HEAD']);
+      phase='source-verify';
       if((await run('git',['-C',source,'rev-parse','HEAD'],{encoding:'utf8',stdio:'pipe'})).trim()!==revision) throw Error('Unexpected public source');
+      phase='source-install';
       await run('pnpm',['install','--frozen-lockfile'],{cwd:source});
       const {build}=await import(join(source,'node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js'));
       code=join(root,'runtime');mkdirSync(code,{mode:0o700});runtime=join(code,'runtime.mjs');
@@ -127,6 +139,7 @@ export async function prepareConformance(selected) {
       env.COST_SYNTHETIC_CONFIG=json('synthetic.json',{codeRoot:code,stateParent});
       env.COST_OWNER_FIXTURE=json('owner.json',{revision,runtime,runtimeSha256:sha(readFileSync(runtime)),migrations});
       if(selected.includes('remote-browser-conformance.test.mjs')) {
+        phase='dashboard-build';
         await run('pnpm',['--dir','apps/dashboard','build'],{cwd:source});
         env.COST_BROWSER_FIXTURE=json('browser.json',{revision,runtime,runtimeSha256:sha(readFileSync(runtime)),migrations,assets:join(source,'apps/dashboard/dist')});
       }
@@ -135,16 +148,19 @@ export async function prepareConformance(selected) {
     let image;
     if(imageNeeded) {
       const context=join(root,'image');mkdirSync(context);
+      phase='image-architecture';
       const architecture=await docker('info','--format','{{.Architecture}}');
       const platform=/^(aarch64|arm64)$/.test(architecture)?'linux-arm64':/^(x86_64|amd64)$/.test(architecture)?'linux-x64':null;
       if(!platform)throw Error('Unsupported Docker architecture');
       const streamPin=platform==='linux-arm64'
         ?['litestream-0.5.17-linux-arm64.tar.gz','f8ca4a050095c1efbda2c4365172e61bf9d955ea0d9ac42f448b52e51819baa5']
         :['litestream-0.5.17-linux-x86_64.tar.gz','cfb371176d164437ae869f8351cfde49bd1804ae71c61923f75c9cba9c9c006d'];
+      phase='litestream-archive';
       await archive('https://github.com/benbjohnson/litestream/releases/download/v0.5.17/'+streamPin[0],streamPin[1],join(context,streamPin[0]));
       const litestreamBinary=join(context,'litestream');
       const pin=platform==='linux-arm64'?['linux_arm64.tar.gz','ba5c9def9ff98f78becdf309a50a9f906922f6383a7c4c772d01ede3cc012e16']:
         ['linux_amd64.tar.gz','31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d'];
+      phase='storage-archive';
       await archive('https://github.com/seaweedfs/seaweedfs/releases/download/4.47/'+pin[0],pin[1],join(context,'weed.tar.gz'));
       // Bundle the repository's locked SDK, without fetching credentials or a provider endpoint.
       const {build}=createRequire(new URL('../../packages/ui-smoke/package.json',import.meta.url))('esbuild');
@@ -156,13 +172,16 @@ export async function prepareConformance(selected) {
       writeFileSync(join(context,'.dockerignore'),'*\n!Dockerfile\n!weed\n!sdk/\n!sdk/**\n');
       const tag='waitron-cloud-cost-conformance:'+randomUUID();
       ownedImageTag=tag;
+      phase='fixture-image-build';
       await run('docker',['build','--build-arg','FIXTURE_UID='+process.getuid(),'--build-arg','FIXTURE_GID='+process.getgid(),'-t',tag,context]);
+      phase='fixture-image-inspect';
       image=await docker('image','inspect',tag,'--format','{{.Id}}');
       env.COST_STACK_FIXTURE=json('stack.json',{codeCache:stackCode??code,image,litestreamBinary});
     }
-    const ensureImage=async name=>{try {await docker('image','inspect',name);} catch {await run('docker',['pull',name]);}};
+    const ensureImage=async name=>{phase='image-acquisition';try {await docker('image','inspect',name);} catch {await run('docker',['pull',name]);}};
     if(selected.some(name=>/^(foreground|isolated-replay|paced-replay|stack|remote)/.test(name)))await ensureImage('node:26.11.1-slim');
     if(selected.some(name=>/^remote/.test(name))) {
+      phase='gateway-image';
       try {await docker('image','inspect','waitron-cloud-local-remote:dev');} catch {
         await run('docker',['build','-f','deploy/local-remote/Dockerfile','-t','waitron-cloud-local-remote:dev','.'],{cwd:repository});
       }

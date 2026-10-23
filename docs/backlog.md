@@ -4103,3 +4103,20 @@ the main test's call to its ordering helper remains open; the 40 cases verify th
 observed wait with that call present. Local database checks remain unavailable
 while Docker is down. No deployed vulnerability or fix for the historical refusal
 is established by this evidence.
+
+### Cost conformance setup timeout (D131)
+
+PR #318 cost run `39959775169`, remote-browser job `120435513011`, stopped
+before any test after a setup command reached its 300-second limit. Its log
+contains no command or phase, so the historical cause remains unknown.
+Setup now reports each external command's phase, arguments, process ID, elapsed
+milliseconds and outcome to standard error. The command limit, checks, public
+source revision and process-group cleanup stay unchanged; the environment is
+excluded from diagnostics. Controlled timeout and nonzero-exit tests exercise the
+real supervisor, retain the original five-minute deadline and verify scratch and
+child cleanup. Existing SIGINT and SIGTERM cleanup checks remain intact.
+
+Lane D must inspect the Linux setup trace and investigate any recurrence at the
+named command before claiming a cause or changing a deadline. A successful later
+remote-browser run alone does not explain or repair the historical timeout.
+Local Docker-backed qualification remains unavailable while Docker is down.
