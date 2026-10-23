@@ -31,6 +31,7 @@ if(args[0]==='image'&&args[1]==='inspect') {
   const driver=join(root,'driver.mjs');
   await writeFile(driver,`import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
 const original=fs.mkdtempSync;fs.mkdtempSync=(...args)=>{const path=original(...args);fs.writeFileSync(${JSON.stringify(join(root,'scratch'))},path);return path;};syncBuiltinESMExports();
+${scenario.interrupt?`const timers=await import('node:timers/promises');const timer=timers.default.setTimeout;timers.default.setTimeout=(ms,...args)=>timer(ms===1000?30000:ms,...args);syncBuiltinESMExports();`:''}
 ${scenario.shortTimeout?"const timer=globalThis.setTimeout;globalThis.setTimeout=(fn,ms,...args)=>timer(fn,ms>290000?1500:ms,...args);":''}
 ${scenario.expiredBudget?`const now=performance.now.bind(performance);Object.defineProperty(performance,'now',{value:()=>now()+(JSON.parse(fs.readFileSync(${JSON.stringify(state)})).calls.some(args=>args[0]==='pull')?301000:0)});`:''}
 ${scenario.expireDuringBackoff?`const now=performance.now.bind(performance);let firstPull;Object.defineProperty(performance,'now',{value:()=>{const elapsed=now();if(JSON.parse(fs.readFileSync(${JSON.stringify(state)})).calls.some(args=>args[0]==='pull'))firstPull??=elapsed;return elapsed+(firstPull!==undefined&&elapsed-firstPull>500?301000:0);}});`:''}
@@ -71,6 +72,7 @@ test('cached image prepares without any registry request',async t=>{
 });
 
 for(const refusal of ['denied: requested access to the resource is denied',
+  'invalid reference format',
   'unauthorized: authentication required; Client.Timeout',
   'manifest unknown: manifest unknown; unexpected EOF',
   'toomanyrequests: rate limit exceeded; i/o timeout']) {
