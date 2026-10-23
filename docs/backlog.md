@@ -2682,7 +2682,31 @@ notifications separately.
   intact; it does not explain the original termination. Capture the failing
   HTTP stage and registry response if it recurs, then evaluate bounded recovery
   while preserving signature verification. A later successful run is recovery
-  evidence, not a code fix. Package-only changes omit the two-venue milestone receipt when both immutable
+  evidence, not a code fix. The same error class recurred in merge run
+  [40022323542, backups partition 2](https://github.com/waitron-io/waitron-cloud/actions/runs/40022323542/job/120649947311):
+  pnpm 11.19.0 refused the switch to 9.15.0 after signature verification of
+  `@pnpm/linux-x64@9.15.0` terminated. No backup tests ran in that job. Retain
+  verification and capture the missing HTTP stage before choosing a repair;
+  neither the underlying cause nor a connection to portal changes is established.
+  D154 adds a read-only observer to each pnpm setup in the standard and cost
+  workflows. It records fixed package-metadata endpoints, HTTP status, interrupted
+  metadata transfers, child exit or signal, and the final process exit. Each Node
+  thread has separate limits for normal, failure and child records. It
+  omits URL credentials, hosts other than the public npm label, queries, headers,
+  bodies, command arguments and raw error messages. Process and worker identities
+  distinguish parallel verification requests. A controlled cut-off response
+  reproduces `terminated` with HTTP 200 and `UND_ERR_SOCKET`; invalid gzip can
+  also produce `terminated` after a completed wire transfer, so these diagnostics
+  do not by themselves expose every body-decoding failure or explain the old run.
+  Tarball downloads are outside this observer's metadata allowlist.
+  The exact locked 11.19.0 bootstrap completes its verified 9.15.0 switch in a
+  fresh native probe. Linux qualification runs the controlled failure checks and
+  observes the unchanged setup action; a later successful setup is recovery
+  evidence only. Keep the current verified installer while awaiting a traced
+  recurrence. Do not copy Waitron's bounded setup script unchanged: it replaces
+  this self-update with `npm install`. Any later bounded recovery must retain
+  signature verification, pinned versions and existing deadlines.
+  Package-only changes omit the two-venue milestone receipt when both immutable
   revisions retain its audited regular-file inputs, test command and CI wiring.
   These tests exercise validators and receipt composition; their guarded CLI
   blocks do not launch backend proofs when imported. Changed, missing or linked
