@@ -358,11 +358,15 @@ and native checks cover edits, organisation changes and clearing a venue. Initia
 setup already displayed correctly because its mode options are static; both mode
 edits and the submitted mode remain checked. Allocation and receipt fields are
 unchanged. All checks cover English and Spanish, both themes and 390/1280 widths.
-Separate screen-state follow-ups remain: an organisation change can be ignored
-while installation reads are pending, leaving the shown and selected organisations
-different; a venue absent from the current list can remain in the draft. Synthetic
-probes reproduce both retained-state problems before and after this fix. Qualify
-real reload/revocation routes and clear or refuse stale choices separately.
+While your installation list refreshes, fiscal choices and submission now wait
+for it to settle. A missing or no-longer-permitted venue clears an unsent draft;
+a new reservation is refused when its venue is absent from the current list.
+In-flight writes, unresolved replies and issued receipts keep their reconciliation
+evidence. Pre-fix real-server journeys reserved for a different organisation from
+the one shown during a refresh, and sent a hidden venue after permission removal
+(the server refused it with HTTP 403). Chromium checks cover both cases, no stale
+request or stored reservation, and a subsequent permitted choice whose displayed,
+sent and stored venue agree, in English and Spanish, both themes and 390/1280 widths.
 Duplicate adjacent status authority calls remain a small follow-up; no production defaults are
 selected. Fiscal records, invoice hashes and Waitron's allocation code stay outside
 this Cloud change.

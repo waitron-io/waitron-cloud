@@ -79,6 +79,8 @@ export class PortalApp {
       if(this.session?.state.kind==='authenticated'&&this.usage.organisationId&&!this.usage.loaded)void this.usage.load();
       if(this.remote.installationId&&!this.installations.visible.some(i=>i.installationId===this.remote.installationId&&i.canRevoke&&!i.revokedAt))this.remote.close();
       if(this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke)){this.backups.close();this.recovery.choose(undefined,undefined);}
+      // Keep in-flight writes, unresolved replies and issued receipts available for reconciliation.
+      if(this.fiscal.venueId&&!this.fiscal.pending&&!this.fiscal.uncertain&&!this.fiscal.receipt&&!this.installations.visible.some(i=>i.venueId===this.fiscal.venueId&&i.canRevoke))this.fiscal.open(undefined);
       this.draw();
     });
     this.pairing = new PairingController(() => this.draw());

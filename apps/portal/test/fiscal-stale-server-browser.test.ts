@@ -40,7 +40,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await registration.start(input); await registration.approveCloud(input, owner.accountId); await registration.approveLocal(input, randomUUID());
       return registration.complete(input);
     };
-    await register(otherOrganisation, otherBusiness);
+    const otherVenue = await register(otherOrganisation, otherBusiness);
     const venue = await register(owner.organisationId, owner.legalBusinessId);
     await db.pool.query('CREATE TABLE fiscal_test_authority(account_id uuid PRIMARY KEY,entitlement boolean NOT NULL DEFAULT true,custody boolean NOT NULL DEFAULT true,operator_verified boolean NOT NULL DEFAULT true,bases jsonb NOT NULL)');
     await db.pool.query('INSERT INTO fiscal_test_authority(account_id,bases) VALUES($1,$2)', [owner.accountId, JSON.stringify(bases)]);
@@ -118,6 +118,23 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     }
     assert.deepEqual(requests, [], 'no stale venue may be submitted');
     assert.deepEqual(stored, [], 'no stale selection may create a reservation');
+    await organisation.selectOption(otherOrganisation);
+    await venueSelect.selectOption(otherVenue.venueId);
+    await page.waitForFunction(() => !(window as any).app.fiscal.pending);
+    const nextInput = {...input,operationId:randomUUID(),venueId:otherVenue.venueId};
+    await page.evaluate(input => {const app=(window as any).app;app.fiscal.choose(input);app.draw();},nextInput);
+    const nextResponsePromise=page.waitForResponse(r=>r.url().endsWith('/api/account/fiscal-allocations/reserve'));
+    await reserveButton.click();
+    const nextResponse=await nextResponsePromise;
+    const nextStored=(await db.pool.query('SELECT a.initial_receipt,v.organisation_id FROM fiscal_registry_allocations a JOIN venues v ON v.id=a.venue_id')).rows;
+    const nextShown={organisationId:await organisation.inputValue(),venueId:await venueSelect.inputValue()};
+    console.log('FISCAL_SETTLED_JOURNEY',JSON.stringify({scenario,shown:nextShown,sent:requests,status:nextResponse.status(),stored:nextStored.map(row=>({organisationId:row.organisation_id,venueId:row.initial_receipt.payload.venueId}))}));
+    assert.equal(nextResponse.status(),200);
+    assert.deepEqual(nextShown,{organisationId:otherOrganisation,venueId:otherVenue.venueId});
+    assert.deepEqual(requests,[nextInput]);
+    assert.equal(nextStored.length,1);
+    assert.equal(nextStored[0].organisation_id,otherOrganisation);
+    assert.equal(nextStored[0].initial_receipt.payload.venueId,otherVenue.venueId);
     await context.close();
   } finally { await fixture?.close(); await authority.close(); }
 });
