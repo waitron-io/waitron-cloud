@@ -2,7 +2,7 @@
 
 You need a separate Cloud account service to exercise your test server without touching its existing venue. The test deployment uses its own Compose project, database, storage and private configuration. Its canonical address is `https://waitron.local:3000`.
 
-The deployment files and local HTTPS, storage and remote proofs are implemented. **The test box is not deployed yet.** Plan enforcement remains off until the scoped backup verifier, free-service checks and disposable Waitron integration proof pass. Address providers stay disabled. Translation stays off pending the pinned joint paging proof and owner trials after 2 November 2026. Outside-home remote access needs a separately approved domain, certificates and deployment.
+The deployment files and local HTTPS, storage, remote, backup-verifier and free-service fixture proofs are implemented. **The test box is not deployed yet.** Plan enforcement remains off until the final disposable Waitron integration and release checks pass. Address providers stay disabled. Translation stays off pending the pinned joint paging proof and owner trials after 2 November 2026. Outside-home remote access needs a separately approved domain, certificates and deployment.
 
 ## What is reachable
 
@@ -11,6 +11,20 @@ Only the HTTPS proxy publishes to `192.168.10.10:3000`. It forwards to the unpub
 PostgreSQL uses loopback port 55432. This project's Mailpit uses loopback ports 1125 and 8125, leaving Waitron's 1025/8025 alone. Storage 8333 and gateway 8443/UDP 51820 also remain on loopback until their separate adapter proofs pass. The account backend keeps `10.79.0.3`, so replacing it preserves the proxy's destination without a proxy restart. The private Docker network is `10.79.0.0/24`; preflight refuses overlapping existing networks. All container memory limits, including dormant profiles, sum to 1,824 MiB. That limit is not a measurement of test-box headroom.
 
 The explicit test email worker uses the existing account-mail templates and outbox. Its SMTP destination is fixed to loopback inside this project's Mailpit network namespace. The ordinary local and production mailers keep their origin restrictions.
+
+## Check free services locally
+
+You can check free-service eligibility without enabling a provider or deploying to the box. From a clean, committed checkout, run:
+
+```sh
+node scripts/test-postgres.mjs exec node scripts/test-cloud-free-services.mjs > /tmp/cloud-free-services.json
+```
+
+The command owns a temporary PostgreSQL and Mailpit pair and removes them afterward. It runs seven groups of checks in separate processes, one file at a time, and emits a receipt containing the Cloud commit, tree and test counts. Run without `NODE_OPTIONS`: Node filters can silently omit cases, so the proof refuses that environment override. A missing file result, failure, cancellation, skip or unexpected child output refuses the receipt. Only fixed labels and counts enter it; account addresses, message links, tokens, translation content and database credentials stay out. The validator checks the receipt's structure and completeness; keep the original run as its evidence.
+
+Both plans receive Cloud signup and password-recovery mail. Paid status creates no venue email grant: the separate relay fixture needs explicit consent and an installation-bound challenge over HTTPS with its own trusted test CA. It captures delivery in Mailpit, then checks that revocation cancels queued mail before handoff. The translation fixture uses a fake loopback provider and checks that plan changes preserve an existing job's retry, collection and release after consent and readiness are withdrawn. Existing tests also cover false origin evidence, expired grants, ownership changes, stopped relay, missing consent, exhausted allowance, foreign jobs, invalid cursors and the complete 16,777,216-byte page bound.
+
+These are Cloud fixture results. They leave deployed translation off, address providers disabled and normal relay startup unavailable. Waitron commit `e2ca1ca487412a2bb7ef1277e48c6adad6068c85` has a paged translation reader, but this proof does not qualify that client or satisfy the separate joint and owner gates. Its email transport still selects SMTP, local capture or unconfigured delivery; this proof supplies no Cloud relay caller. The receipt marks both Waitron journeys `not-qualified`. Final integration, image qualification and test-box deployment remain separate work.
 
 ## Build and transfer an image
 

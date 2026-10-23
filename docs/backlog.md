@@ -1045,6 +1045,16 @@ notifications separately.
   and [implementation plan](superpowers/plans/2026-10-17-test-cloud-free-paid.md)
   describe a separate Cloud Compose project on the owner's test box, with an
   operator-set pretend plan and service checks enabled only for this test deployment.
+  The [free-service fixture proof](test-cloud.md#check-free-services-locally) now
+  checks account mail under both plans, separately consented relay capture with
+  test-CA origin evidence and revocation, and fake-provider translation across
+  plan changes. Its bounded runner requires every selected file to execute and
+  refuses missing, failed, cancelled or skipped results. The redacted receipt
+  binds the Cloud commit and tree; it qualifies neither Waitron client journey.
+  Waitron's inspected `e2ca1ca487412a2bb7ef1277e48c6adad6068c85` includes paging,
+  but the joint translation and owner gates remain. Its email transport has no
+  Cloud relay caller. Final disposable Waitron integration, image qualification
+  and test-box deployment remain open; plan enforcement stays off.
   The organisation plan store and operator command now persist free/paid metadata,
   advance revisions only on changes and refuse incompatible migration ledgers.
   Real PostgreSQL checks cover concurrent updates, rollback and separate organisations;
