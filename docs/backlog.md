@@ -2783,9 +2783,13 @@ notifications separately.
   URIs. Qualify compact Deb822 URI fields or capitalised hostnames before
   widening that support when a runner changes its source format.
   D109's retrospective review also leaves explicit follow-ups for the source
-  helper: report a changed runner layout when no recognised URI is found; refuse
-  or handle a non-UTF-8 vendor file before partially rewriting other sources;
-  and add a deliberate-fault check for the leading whitespace boundary. ARM
+  helper: report a changed runner layout when no recognised URI is found.
+  Source preparation now reads every selected file as UTF-8 before writing any
+  source, so an unreadable vendor file refuses without rewriting earlier files.
+  A real-command invalid-byte regression preserves both files byte for byte;
+  deliberate faults also prove each URI's leading whitespace boundary. All 17
+  focused source/download checks pass. This preflight does not make subsequent
+  write failures atomic or qualify new source formats. ARM
   runner sources remain unqualified; check their archive location before adding
   that architecture. The current workflow uses x64 runners. D117 preserves line
   endings, closing the review's separate newline-format note.

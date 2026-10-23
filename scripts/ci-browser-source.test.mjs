@@ -47,3 +47,37 @@ test('browser source preparation changes only recognised Ubuntu archive URIs and
     for (const [path, before, after = before] of cases) assert.equal(await readFile(join(root, path), 'utf8'), after, path);
   }
 });
+
+// Reading a later vendor file must fail before any earlier source is rewritten.
+test('invalid UTF-8 in a later source refuses preparation without changing any source', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'cloud-browser-source-'));
+  t.after(() => rm(root, {recursive: true, force: true}));
+  await mkdir(join(root, 'sources.list.d'));
+  const original = Buffer.from('# café\r\ndeb https://archive.ubuntu.com/ubuntu noble main\r\n');
+  const vendor = Buffer.from([0x23, 0x20, 0xff, 0x0a]);
+  await writeFile(join(root, 'sources.list'), original);
+  await writeFile(join(root, 'sources.list.d/vendor.sources'), vendor);
+  const result = spawnSync('python3', ['scripts/ci-browser-source.py', '--apt-root', root], {encoding: 'utf8'});
+  assert.notEqual(result.status, 0, 'unreadable input must refuse preparation');
+  assert.deepEqual(await readFile(join(root, 'sources.list')), original);
+  assert.deepEqual(await readFile(join(root, 'sources.list.d/vendor.sources')), vendor);
+  assert.match(result.stderr, /vendor\.sources/);
+});
+
+// Removing either URI's leading boundary would rewrite an unrelated transport.
+test('archive and mirror-file URIs must start at a whitespace boundary', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'cloud-browser-source-'));
+  t.after(() => rm(root, {recursive: true, force: true}));
+  const original = 'deb tor+http://archive.ubuntu.com/ubuntu noble main\n'
+    + 'deb vendor+mirror+file:/etc/apt/apt-mirrors.txt noble main\n'
+    + '\tdeb\thttps://archive.ubuntu.com/ubuntu noble main\n'
+    + '\tdeb\tmirror+file:/etc/apt/apt-mirrors.txt noble main\n';
+  await writeFile(join(root, 'sources.list'), original);
+  const result = spawnSync('python3', ['scripts/ci-browser-source.py', '--apt-root', root], {encoding: 'utf8'});
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(await readFile(join(root, 'sources.list'), 'utf8'),
+    'deb tor+http://archive.ubuntu.com/ubuntu noble main\n'
+    + 'deb vendor+mirror+file:/etc/apt/apt-mirrors.txt noble main\n'
+    + '\tdeb\thttps://mirror.math.princeton.edu/pub/ubuntu noble main\n'
+    + '\tdeb\thttps://mirror.math.princeton.edu/pub/ubuntu noble main\n');
+});
