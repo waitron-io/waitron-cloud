@@ -37,12 +37,13 @@ for (const locale of ['en','es'] as const) for (const theme of ['light','dark'] 
    const writes: unknown[] = [];
    let releaseWrite: (() => void) | undefined;
    let writeGate: Promise<void> | undefined;
+   let writeStatus: number | undefined;
    await page.route('https://portal.test/fiscal-allocations', route => route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
    await page.route('**/api/account/**', async route => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/session') || path.endsWith('/session/activity')) return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString()}});
     if (path.endsWith('/installations')) { reached?.(); await readGate; return route.fulfill({json:{installations:current}}); }
-    if (path.endsWith('/reserve')) { writes.push(route.request().postDataJSON()); if(writeGate){await writeGate;return route.abort();} }
+    if (path.endsWith('/reserve')) { writes.push(route.request().postDataJSON()); if(writeGate){await writeGate;return writeStatus ? route.fulfill({status:writeStatus,json:{error:writeStatus===403?'forbidden':'binding_conflict'}}):route.abort();} }
     return route.fulfill({status:503,json:{error:'continuity_unavailable'}});
    });
    await page.goto('https://portal.test/fiscal-allocations');
@@ -111,6 +112,29 @@ for (const locale of ['en','es'] as const) for (const theme of ['light','dark'] 
     await page.evaluate(() => {const app=(window as any).app;app.fiscal.start('preproduction',true);app.draw();});
     assert.equal(await reserveButton.isDisabled(),true);
     assert.equal(writes.length,1);
+   });
+   for(const status of [403,409]) await t.test(`${status}: a definite refusal clears a draft whose venue disappeared during the write`,async () => {
+    await page.evaluate(() => (window as any).app.fiscal.fence());
+    current=installations;
+    await page.evaluate(async () => {await (window as any).app.installations.load();});
+    await mount();
+    writeStatus=status;
+    writeGate=new Promise<void>(resolve=>{releaseWrite=resolve;});
+    try {
+     await reserveButton.click();
+     await page.waitForFunction(() => (window as any).app.fiscal.pending);
+     current=installations.map(i=>i.organisationId===second ? {...i,canRevoke:false}:i);
+     await page.evaluate(async () => {await (window as any).app.installations.load();});
+     assert.deepEqual(await page.evaluate(() => (window as any).app.fiscal.pendingRequest?.input),input);
+    } finally {releaseWrite?.();writeGate=undefined;}
+    await page.waitForFunction(() => !(window as any).app.fiscal.pending);
+    assert.equal(await venue.inputValue(),'');
+    assert.equal(await page.evaluate(() => (window as any).app.fiscal.venueId),undefined);
+    assert.equal(await page.evaluate(() => (window as any).app.fiscal.selection),undefined);
+    assert.equal(await page.locator('wt-input').count(),0);
+    assert.equal(await page.getByRole('button',{name:c.fiscalImport,exact:true}).count(),0);
+    assert.equal(await reserveButton.count(),0);
+    writeStatus=undefined;
    });
   } finally {await browser.close();}
  });
