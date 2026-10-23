@@ -16,16 +16,20 @@ Recheck the provider sources when you select or change a service.
 ## Read the D101 decisions as policy, not runtime evidence
 
 D101 slice 1 now implements the outbound AI refusal and an explicit synthetic-only
-loopback transport. The owner approved the roadmap and authorised this slice alone.
-That local proof supplies no privacy eligibility, supplier approval or deployment
-evidence; all other D101 runtime controls still need separate build authority.
+loopback transport. The owner initially authorised this slice alone, then authorised local slices
+2–5 on 2026-10-23. The [slice 2 register](cloud-data-processing-register.md) and
+[draft annexes](cloud-processing-annexes.md) publish unqualified evidence and
+unsigned instructions. Other runtime controls remain unbuilt; slices 6–12 remain
+unauthorised. No local proof supplies privacy eligibility, supplier approval or
+deployment evidence.
 
 The [D101 data-protection design](superpowers/specs/2026-10-22-cloud-data-protection-design.md)
 and reconciled [D88 hosting proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md)
 record policy and proposed hosting, with source inspection at Cloud `60c0fbf` on
 2026-10-22. The owner approved the D101 design, then its
 [implementation roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md),
-and authorised only the first local slice. Broader D88 hosting/isolation/shared contracts
+and authorised local slices 1–5, with SQL-free slices 2/3 first and later schema
+work using an actually available migration slot after reconciliation with Lane G. Broader D88 hosting/isolation/shared contracts
 remain unapproved. They use
 [A980 section 2](https://github.com/clintongormley/waitron/blob/96a1129e385447e9b9a6dc545673009953a2c551/docs/superpowers/specs/2026-10-22-a980-data-protection-design.md#2-the-data-map)
 as the single application data map; Cloud builds no second application rights tool.
@@ -43,8 +47,9 @@ open. AI additionally requires separately accepted privacy-reviewed input eligib
 examples and limits. Only the local AI refusal and explicit synthetic transport are implemented; other
 D101 runtime controls remain unbuilt.
 No production build starts from this documentation. D68 is landed, but hosting and
-recovery costs remain unmeasured. D79 is parked unpublished at `7939a27`; its changes
-and migration 043 are not on this base and supply no launch evidence here.
+recovery costs remain unmeasured. D79 PR5/6 and migration 043 are landed; PR7
+final local integration/release qualification remains incomplete.
+Its local receipts do not qualify a production deployment.
 
 ## Read the local evidence narrowly
 

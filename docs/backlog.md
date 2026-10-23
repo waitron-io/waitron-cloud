@@ -45,8 +45,14 @@ and [implementation roadmap](superpowers/plans/2026-10-22-cloud-data-protection.
 use [A980 section 2](https://github.com/clintongormley/waitron/blob/96a1129e385447e9b9a6dc545673009953a2c551/docs/superpowers/specs/2026-10-22-a980-data-protection-design.md#2-the-data-map)
 as the single application map. Planning covers the service/supplier register and
 annexes, country/credential/outbound controls, support/KMS, exit/purge and handoffs;
-the owner approved the roadmap and authorised only slice 1 on 2026-10-22. The
-outbound AI refusal and explicit synthetic loopback transport are implemented locally;
+the owner approved the roadmap and authorised slice 1 on 2026-10-22. On
+2026-10-23 the owner authorised local slices 2–5, with SQL-free slices 2/3 first
+and slices 4/5 taking an actually available migration slot. Slices 6–12 remain
+unauthorised. Slice 2 publishes the [purpose/supplier register](cloud-data-processing-register.md)
+and [five draft agreement annexes](cloud-processing-annexes.md): stable IDs,
+separate Cloud-own purposes, explicitly unqualified supplier evidence and all six
+open lawyer questions. These are unsigned drafting records, not legal or provider
+qualification. The outbound AI refusal and explicit synthetic loopback transport are implemented locally;
 remaining runtime controls are **unbuilt**. One venue approval permits at most **24 hours**
 of support access, shorter where practical and fresh approval to extend. **Paris
 `eu-west-3`** is the approved extra encrypted backup destination, subject to service,
@@ -57,8 +63,8 @@ row changes. O1 is answered. AI stays disabled until separately privacy-reviewed
 eligibility rules, positive/refusal examples and documented limits receive owner
 acceptance. All six lawyer questions, KMS deletion-waiting policy, exact provider/entity/
 access-location evidence, D102 email qualification and runtime proof remain open.
-The published plan records the reviewed roadmap; slices after 1 still require separate
-build authority. This does not approve broader D88 hosting/isolation/shared contracts,
+The published plan records the reviewed roadmap; local build authority for slices
+2–5 leaves every legal, provider, shared-contract and enablement gate in place. This does not approve broader D88 hosting/isolation/shared contracts,
 spending, deployment, provider resources or contracts. D103's first C39 monitoring
 design is approved for planning only; C41 release/upgrade and C60 compute decisions remain separate.
 D102/D104 hands-on work waits until 3 November. D68 is landed, including
@@ -66,7 +72,7 @@ D102/D104 hands-on work waits until 3 November. D68 is landed, including
 backup verification includes migration 043 and the complete same-run recovery proof.
 Snapshots remain unavailable in the delivered deployment and plan enforcement stays
 off until release qualification. Recheck active migration reservations before new
-database work; the first D101 slice is SQL-free.
+database work; D101 slices 1–3 are SQL-free.
 
 **D103 / C41 release and upgrade design, published proposal:** the
 [engineering proposal](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md)
@@ -95,9 +101,10 @@ order. Remote access matters most because Waitron's customer-facing features wai
    production schema changes need a separate go-ahead (its section 12). Its section 3 replaces
    the statements in C39, C41 and the hosting proposal that put the owner's approval on every
    step. The build is [seven plans](superpowers/plans/2026-10-22-cloud-production-deployment.md),
-   each written when its turn comes: P1 and P2 can start now; P3 waits for the migration slot;
-   P6 waits for the owner's sandbox approval and the stop-proof contract with Waitron (Waitron
-   A1018); P7 waits for P2, P3 and the lawyer's answer on running Spain from Paris.
+   each written when its turn comes: P1 and P2 can start now; P3 waits for the migration slot.
+   The owner approved gVisor for P6 and running Spain from Paris for P7 on
+   2026-10-23. P6 still waits for P1/P4 and the accepted Waitron handover contract
+   (A1018); P7 still waits for P2/P3. Neither answer grants live/provider authority.
 2. **Production monitoring, alerting and the status page.** No real venue should depend on a
    Cloud nobody is watching. Built for test installations only: venue contact, snapshot age,
    backup verification and remote-route checks, plus opt-in alert emails to venue owners
@@ -1026,8 +1033,8 @@ notifications separately.
 | Decision | Next step |
 | --- | --- |
 | Customer model | Support an organisation with several legal businesses and tax identities across countries from the outset. A venue belongs to one organisation at a time. Focus signup on one owner with one venue or several venues in the same city; defer the ownership-transfer workflow. |
-| Cloud staff access | The disabled-by-default [temporary support grant core](temporary-support-grants.md) now records a current owner's approval for a named, separately eligible platform account, exact configured actions, an optional venue, explicit expiry and early revocation. Transactional enforcement rechecks expiry, the original approver and platform eligibility around protected database work, while fixed audit events omit reason and request data. No route or production action is configured. The [D101 roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md) records the approved engineering design for planning only: per-session approval with a 24-hour maximum, fresh approval to extend, every-action audit and narrow emergency conditions. Implementation of platform roles, action catalogues, approver policy, expiry and active-session cancellation remains unbuilt; legal qualification and runtime proof remain open. Possible on-prem SSH support still requires explicit server approval, a limited period and active-session termination on expiry or revocation. |
-| Residency | The owner selected country-pack home/permitted backup regions. Spain venue data, logs and keys use `eu-south-2`, with the extra encrypted copy in Paris `eu-west-3`, subject to qualification; EU SES is a separate email exception. [D101](superpowers/specs/2026-10-22-cloud-data-protection-design.md) is approved for build planning only, with a [published roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md). Enforcement is unbuilt; actual data-flow evidence, legal/provider qualification and separate AI eligibility acceptance remain open; region availability is not a residency promise. See the [launch evidence boundary](launch-evidence.md). |
+| Cloud staff access | The disabled-by-default [temporary support grant core](temporary-support-grants.md) now records a current owner's approval for a named, separately eligible platform account, exact configured actions, an optional venue, explicit expiry and early revocation. Transactional enforcement rechecks expiry, the original approver and platform eligibility around protected database work, while fixed audit events omit reason and request data. No route or production action is configured. The [D101 roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md) records the approved engineering design and local authority for slices 1–5 (support is in later unauthorised slices): per-session approval with a 24-hour maximum, fresh approval to extend, every-action audit and narrow emergency conditions. Implementation of platform roles, action catalogues, approver policy, expiry and active-session cancellation remains unbuilt; legal qualification and runtime proof remain open. Possible on-prem SSH support still requires explicit server approval, a limited period and active-session termination on expiry or revocation. |
+| Residency | The owner selected country-pack home/permitted backup regions. Spain venue data, logs and keys use `eu-south-2`, with the extra encrypted copy in Paris `eu-west-3`, subject to qualification; EU SES is a separate email exception. [D101](superpowers/specs/2026-10-22-cloud-data-protection-design.md) has a [published roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md), local build authority for slices 1–5, and the slice 2 register/draft annexes. Runtime country enforcement is unbuilt; actual data-flow evidence, legal/provider qualification and separate AI eligibility acceptance remain open; region availability is not a residency promise. See the [launch evidence boundary](launch-evidence.md). |
 | Cells | Venues are independently placed, with a shared gateway per cell and stable customer-facing addresses on movement. The local two-cell workflow now stages a revision-bound destination, cancels a failed apply without replacing the source, requires a tested destination manifest sequence before commit, preserves hostnames/certificates and publishes newer source/destination manifests. Two 2026-09-26 Docker runs reconnected the fresh destination peer in 1,321 ms and 1,486 ms; the second receipt names clean head `e4f9356`, while the other venue stayed source-only. These are not production targets. Define group size, availability-zone layout and recovery-time objective; repeat movement with the selected gateway deployment, provider network, DNS/certificate reconciler and appliance automation. Keep backups and portal recovery independent of gateway machines. |
 | Provider support | AWS is the first provider and `eu-south-2` is the verified regional candidate. Select the exact RDS, S3, compute, ingress, DNS, certificate, key and monitoring configuration in the real account; the owner selected SES in an EU region, with D102 account/region and live-delivery qualification still open. Keep Google Cloud Madrid (`europe-southwest1`) as a future target that must pass the same service-by-service gate. Decide separately whether cross-provider failover is wanted. |
 | Product packages | Remote access and backups are the initial paid services. Address lookup and transactional account email are planned free services for open-source Waitron with a Cloud login and per-user limits; mobile notifications remain a candidate. Define their release scope, bundles, usage limits, trial terms and cancellation behaviour after modelling operating costs. |

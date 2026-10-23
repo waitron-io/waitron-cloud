@@ -8,7 +8,7 @@
 
 **Tech stack:** Node >=26, TypeScript, pnpm 9.15.0, Node's test runner, PostgreSQL 18 disposable test fixtures; existing S3/STS adapters. AWS KMS integration is new work, not an existing interface.
 
-**Spec:** [D101](../specs/2026-10-22-cloud-data-protection-design.md), approved from PR283, `9701cd2359d69f0a3e8960b761754cf492aac745`, on 2026-10-22 around 08:30 **for build planning only**. O1 is answered. The reviewed roadmap landed in PR286. On 2026-10-22 around 12:25, the owner approved the roadmap and authorised slice 1 only. This branch implements its local refusal boundary; later slices remain unbuilt and need separate build authority.
+**Spec:** [D101](../specs/2026-10-22-cloud-data-protection-design.md), approved from PR283, `9701cd2359d69f0a3e8960b761754cf492aac745`, on 2026-10-22 around 08:30 **for build planning only**. O1 is answered. The reviewed roadmap landed in PR286. On 2026-10-22 around 12:25, the owner approved the roadmap and authorised slice 1 only. Slice 1 implements its local refusal boundary. On 2026-10-23 around 08:15, the owner authorised local slices 2–5: SQL-free slices 2/3 first, then 4/5 in order using an actually available migration slot. Slices 6–12 remain unauthorised. Slice 2 publishes the [register](../../cloud-data-processing-register.md) and [draft annexes](../../cloud-processing-annexes.md); later runtime controls remain unbuilt. All legal/provider/shared-contract and enablement gates remain.
 
 ## Global constraints and stop boundaries
 
@@ -17,7 +17,7 @@
 - AI outbound stays disabled until a separate privacy-reviewed eligibility rule, positive/refusal examples, documented limits and owner acceptance, plus supplier/location qualification. Neither detection, venue review, `store: false` nor D101 approval satisfies that gate.
 - Exit states are `active`, `exit preparing`, `read-only until deadline`, `purging`, `purged`. Deadline is fixed once at effective service end plus **90 × 24 hours**, using the database UTC clock. Earlier verified delete supersedes the ordinary recovery period after exception review.
 - Preserve immutable fiscal rows, existing security assertions, cold-recovery scope, Waitron authority and D88's isolation/fencing/A951 gates. Never use cancellation, restore or cleanup to roll back a ledger.
-- D79 is clean, parked and unpublished at `7939a27`; migration 043 is absent from this tree. **No further migration item may start until its slot resolves.** Allocate no number here. SQL-free slices 1–3 do not reserve or apply a migration. Every later schema change uses the next actually available slot only after driver reconciliation.
+- D79 migration 043 landed in PR307; PR6 landed in PR308 with its scoped follow-up PR309. PR7 final local integration/release qualification remains incomplete. Reconcile Lane G P3/P4/C39 and all current migration reservations before allocating any new schema work. Allocate no number in this roadmap. SQL-free slices 1–3 do not reserve or apply a migration. Every later schema change uses the next actually available slot only after driver reconciliation.
 - All six D101 section 10 lawyer questions remain open, including support instructions, Cloud-purpose roles, supplier process, billing/security exceptions, shared-backup expiry and KMS deletion waiting. Legal periods or permissions are not inferred here.
 - No provider calls/resources, spending, deployment, contracts, cross-repository edits or customer enablement are authorised. Shared/Waitron agreements remain deferred prerequisites, not APIs to invent. D102/D104 hands-on work waits until **3 November**. D103's first C39 monitoring design is approved for planning only; release/compute decisions remain separate.
 - Plans stay here; campaign queues, instructions and receipts stay outside the repository. The primary driver owns review, finishing and landing. A later executor reads the TDD skill before writing tests or code, observes each expected failure, implements minimally, then verifies. Commits use `git commit -s` and normal hooks; this milestone changes documentation only.
@@ -60,9 +60,10 @@ Each slice ends with its focused tests, typecheck for code changes, and updated 
 ## Slice 1: Deny outbound AI, retain synthetic local proof (SQL-free)
 
 **Authority update, 2026-10-22:** the owner approved this roadmap and authorised
-slice 1 only. The implementation keeps production requests denied; synthetic
-loopback proof does not close privacy, supplier or release gates. Later slices
-still need their own prerequisites and authority.
+slice 1 initially. The owner later authorised local slices 2–5 on 2026-10-23.
+The implementation keeps production requests denied; synthetic loopback proof does
+not close privacy, supplier or release gates. Every slice retains its prerequisites;
+slices 6–12 still need separate build authority.
 
 **Landable result:** No production AI request can leave through supported Cloud service or maintained trial entry points. Local fake-provider tests still exercise the real parsing, billing, retry and cancellation transport. No migration, production SQL change, policy allow rule, personal-data detector, new HTTP status, or supplier enablement.
 
@@ -257,4 +258,4 @@ still need their own prerequisites and authority.
 | 11 provenance / limits | Actual-seam table and pinned approved design; source inspection never labelled runtime evidence. |
 | Review focus 1–5 | Named red assertions in 1; 4–5/9; 6–7; 4/9–10; 7–10 respectively. |
 
-Self-review checks the approved spec against this map, confirms existing seams and command entry points, and distinguishes proposed interfaces from landed ones. Slices 1–3 can be SQL-free; no later schema task begins before D79's slot is resolved. Later adapters stop at missing shared/provider/legal prerequisites instead of inventing protocols. Publication records this reviewed planning milestone; execution still requires separate build authority.
+Self-review checks the approved spec against this map, confirms existing seams and command entry points, and distinguishes proposed interfaces from landed ones. Slices 1–3 are SQL-free; later schema tasks need an actually available reconciled slot. Later adapters stop at missing shared/provider/legal prerequisites instead of inventing protocols. Local slices 1–5 have build authority; slices 6–12 remain unauthorised. Publication enables no service.
