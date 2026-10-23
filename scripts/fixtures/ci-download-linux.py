@@ -11,9 +11,10 @@ import sys
 import tempfile
 import time
 
-from ci_download_events import record
+sys.dont_write_bytecode = True
+from ci_download_events import failure_details
 
-# The first attempt needs two Python bootstraps (0.4s each) and a 0.2s holder
+# The first attempt allows two Python bootstraps (0.4s each) and a 0.2s holder
 # handshake before it can exercise descendant cleanup under CPU contention.
 attempt_timeout = 1.0
 # Two (0.2s lock + 1s attempt + 0.4s cleanup) bounds, 0.01s retry and
@@ -89,6 +90,7 @@ record(root, 'installation finished', attempt=n)
             wrapper.write_text('''
 import importlib.util, os, signal, sys
 from pathlib import Path
+sys.dont_write_bytecode = True
 sys.path.insert(0, os.environ['FIXTURE_HELPERS'])
 from ci_download_events import record
 root = Path(os.environ['FIXTURE_ROOT'])
@@ -154,7 +156,7 @@ raise SystemExit(module.main())
             *(['--lock', str(lock)] if mode != 'uncertain' else []),
             '--', sys.executable, str(installer), str(root),
         ], env={**os.environ, 'PROBE_MODE':mode, 'FOREIGN_PID':str(foreign.pid), 'FIXTURE_ROOT':str(root),
-                'FIXTURE_HELPERS':str(Path(__file__).resolve().parent)},
+                'FIXTURE_HELPERS':str(Path(__file__).resolve().parent), 'PYTHONDONTWRITEBYTECODE':'1'},
             capture_output=True, text=True, timeout=supervisor_timeout)
         progress = (root / 'progress.jsonl').read_text() if (root / 'progress.jsonl').exists() else '(no child reached the first step)'
         details = result.stdout + result.stderr + '\nFixture process/step progress:\n' + progress
@@ -193,11 +195,8 @@ raise SystemExit(module.main())
             print(json.dumps({'attempts':1, 'cleanupUnconfirmed':True, 'unrelatedAlive':True}))
         else:
             print(json.dumps({'attempts': 2, 'detachedGone': True, 'unrelatedAlive': True}))
-    except BaseException:
-        progress = root / 'progress.jsonl'
-        print('Fixture process/step progress before cleanup:\n' +
-              (progress.read_text() if progress.exists() else '(no child reached the first step)'),
-              file=sys.stderr, flush=True)
+    except BaseException as error:
+        print(failure_details(root, error), file=sys.stderr, flush=True)
         raise
     finally:
         if detached is None and (root / 'detached.pid').exists():

@@ -33,13 +33,20 @@ jobs:
           import json, os, subprocess, sys, time
           # Restrict only this job's children, making launch contention repeatable.
           os.sched_setaffinity(0, {min(os.sched_getaffinity(0))})
+          print(json.dumps({'affinity_cpus': sorted(os.sched_getaffinity(0))}))
           def run(index):
               start = time.monotonic()
-              result = subprocess.run([
-                  sys.executable, 'scripts/fixtures/ci-download-linux.py',
-                  'scripts/ci-download.py', 'stale',
-              ], env={**os.environ, 'CI_DOWNLOAD_REPORT_PROGRESS': '1'},
-                  capture_output=True, text=True, timeout=15)
+              try:
+                  result = subprocess.run([
+                      sys.executable, 'scripts/fixtures/ci-download-linux.py',
+                      'scripts/ci-download.py', 'stale',
+                  ], env={**os.environ, 'CI_DOWNLOAD_REPORT_PROGRESS': '1'},
+                      capture_output=True, text=True, timeout=15)
+              except subprocess.TimeoutExpired as error:
+                  def text(value):
+                      return value.decode('utf-8', errors='replace') if isinstance(value, bytes) else value or ''
+                  result = subprocess.CompletedProcess(error.cmd, 124,
+                      stdout=text(error.stdout), stderr=text(error.stderr) + '\nCase exceeded 15 seconds\n')
               return index, time.monotonic() - start, result
           failures = 0
           with ThreadPoolExecutor(max_workers=8) as workers:
