@@ -106,7 +106,7 @@ TEST_CLOUD_STORAGE_PROOF_IMAGE=<local-image> node --test \
 
 This proof sends signed requests through the trusted HTTPS proxy. Free snapshot and stream requests return `403 permission_denied`; paid requests receive distinct scoped credentials. It tests a normal downgrade and one committed while storage is stopped. After restart, old writers fail at storage, the neighbouring paid writer still works, and explicit upgrade returns a fresh writer with the original recovery key, reader and retained data. It also checks normal TLS trust from a host client. Generated fixture keys stay inside the disposable private volume, and cleanup removes only this proof's project.
 
-The backup worker selects the same canonical storage endpoint and LAN CA in explicit test plan mode. Its dedicated controller is implemented, but genuine paid snapshot verification remains blocked at the fiscal restore boundary described below. These storage checks do not prove complete Waitron integration, LAN publication or test-box readiness. Keep plan enforcement off until the complete integration proof passes.
+The backup worker selects the same canonical storage endpoint and LAN CA in explicit test plan mode. Its dedicated controller verifies a genuine paid snapshot in the joint local proof below. Ordinary recovery still needs separate fiscal authority. These storage checks do not prove LAN publication or test-box readiness. Keep plan enforcement off until the release gates pass.
 
 ## Local remote authority
 
@@ -359,7 +359,10 @@ The receipt keeps the unchanged no-authority `FISCAL_RESTORE` result and adds
 `authorisedRecovery` for the same run, point, attempt, digest and size. That object
 records the separate ordinary fiscal activation, its retained counters and both
 authority refusals. Cloud still reports no restored installation or route movement.
-This milestone does not complete the remaining refusal and release gates.
+The placement and recovery phases cover that separately authorised operation; the
+primary client's recorded placement stays `not-run` and its activation stays
+`not_attempted`. Neither successful verification nor receipt certification grants
+the primary client fiscal authority.
 
 The same joint run also opens fresh verifier children for wrong-key, damaged-archive,
 malformed-output, live timeout, full scratch, cancellation, forced-crash, uncertain-cleanup,
@@ -372,8 +375,8 @@ limit. The memory control makes the kernel kill its verifier at the unchanged 1,
 limit, including swap, and records Docker’s `OOMKilled` flag and exit 137 before removal.
 The unsupported-format control changes only the declared format version to 2; the pinned
 runtime returns `unsupported` with `archive_format_unsupported` for the same captured bytes.
-The final child still verifies the untouched archive. Final placement/recovery certification
-remains open. These controls do not claim to exercise a module’s `needs_authority` outcome.
+The final child still verifies the untouched archive. These controls do not claim
+to exercise a module's `needs_authority` outcome.
 
 You can run these controls separately against a genuine disposable capture:
 
@@ -398,8 +401,10 @@ TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
   node scripts/backup-verifier-proof.mjs /tmp/cloud-backup-verifier-proof.json
 ```
 
-This command currently saves **incomplete** evidence and exits with status 1.
-The receipt records the ordinary fiscal refusal and unexecuted gates explicitly.
+With the authorised disposable fixture, this command saves the complete local
+receipt and exits with status 0. The receipt retains the primary fiscal refusal
+alongside the separate successful recovery. A missing phase, failed scenario or
+absent authority still refuses certification.
 `scripts/verify-backup-verifier-proof.mjs` requires one run's genuine capture, signed publication, complete bound
 module output, committed admission, v2 recovery and separately authorised ordinary
 restore. It also checks continuous-source absence, named refusal assertions and
@@ -409,8 +414,9 @@ confirmed owned cleanup. You can validate a completed receipt with:
 node scripts/verify-backup-verifier-proof.mjs /tmp/cloud-backup-verifier-proof.json
 ```
 
-An explicit `FISCAL_RESTORE` refusal can be recorded as incomplete evidence, but
-the command still refuses to certify the full proof. Local images remain
+An explicit `FISCAL_RESTORE` refusal alone remains incomplete. Complete certification
+also requires the same delivered archive's separately authorised restore and its
+unchanged authority-denial checks. Local images remain
 `unqualified` for publication. The historical two-venue producer and its original
 resource and security assertions remain in `runLegacyBackupVerifierProof` for older
 runtime investigations; they cannot certify the current version 2 contract.

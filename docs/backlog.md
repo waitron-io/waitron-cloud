@@ -1237,8 +1237,9 @@ notifications separately.
   incomplete module coverage, substituted image/request/attempt evidence,
   continuous-source presence, uncertain cleanup and publication claims for a local
   candidate. It keeps ordinary fiscal refusal distinct from a complete proof.
-  The receipt producer and genuine joint orchestration now record incomplete
-  version 2 evidence; the full recovery gate remains unfinished.
+  The receipt producer and genuine joint orchestration record version 2 evidence
+  for one complete local run, retaining the primary fiscal refusal alongside
+  separately authorised ordinary recovery.
   Waitron A1004 is now pinned at `ec91a9e34d2daba146f4ee61850ea4136ad5cfb7`.
   The build compares the complete compiled target, including all 15 owners and
   the newer core/venue-service schemas. The older target is refused. Genuine
@@ -1257,9 +1258,9 @@ notifications separately.
   Ordinary restore reaches the unchanged fiscal-authority refusal, reports no
   restored state and replaces no installation. Continuous objects and pointers
   are checked absent at all nine boundaries. The version 2 producer emits actual
-  bound evidence only after confirmed cleanup; both producer and strict validator
-  refuse to certify this incomplete proof. Remaining same-run controls and the
-  final release gate are still due. Historical two-venue resource and
+  bound evidence only after confirmed cleanup. Both producer and strict validator
+  certify the complete local scenario only with its separately authorised recovery
+  and all same-run controls. The final release gate remains due. Historical two-venue resource and
   security assertions remain available without qualifying the newer contract.
   The same genuine run now refuses an alternate runtime target before any remote
   read and a damaged downloaded copy before staging, preserving recovery state.
@@ -1284,8 +1285,10 @@ notifications separately.
   Docker's OOM flag, exit 137 and confirmed removal. A format-2 request over the
   same captured bytes returns the pinned runtime's genuine unsupported-format
   outcome; the untouched archive still verifies afterward. These controls do not
-  exercise a module's needs-authority outcome. Final placement/recovery
-  certification and the remaining receipt/release checks remain due. A local image
+  exercise a module's needs-authority outcome. Placement and recovery certification
+  use the same delivered bytes' separately authorised restore, while the primary
+  client remains refused with no activation or route movement. Remaining
+  receipt/release checks remain due. A local image
   export also failed because Docker could not find a parent snapshot; a build
   without cached-layer reuse exported successfully. The cache failure's cause
   remains unverified.

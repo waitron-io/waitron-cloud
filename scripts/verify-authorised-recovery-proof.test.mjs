@@ -14,6 +14,32 @@ function authorisedReceipt(){
  };
  return r;
 }
+function completeAuthorisedReceipt(){
+ const r=authorisedReceipt();
+ r.recovery.placement='not-run';
+ const phase=r.phases.find(p=>p.name==='recovery');
+ phase.state='executed';phase.checks=['ordinary-restore','separate-authority','no-activation','no-route-movement'];phase.reason=null;
+ return r;
+}
+test('certifies separately authorised delivery and restore while retaining the primary fiscal refusal',()=>{
+ const r=completeAuthorisedReceipt();
+ assert.equal(verifyBackupVerifierProof(r),r);
+ assert.equal(r.recovery.ordinaryRestore,'FISCAL_RESTORE');
+ assert.equal(r.recovery.placement,'not-run');
+ assert.equal(r.recovery.activation,'not_attempted');
+ assert.equal(r.authorisedRecovery.ordinaryActivation,'executed-with-separate-authority');
+});
+for(const [name,change] of [
+ ['missing separate authority',r=>delete r.authorisedRecovery],
+ ['unperformed primary restore',r=>r.recovery.ordinaryRestore='not-run'],
+ ['primary placement despite fiscal refusal',r=>r.recovery.placement='executed'],
+ ['missing primary no-activation check',r=>r.phases.find(p=>p.name==='recovery').checks.splice(2,1)],
+ ['unbound delivered archive',r=>r.authorisedRecovery.delivery.matchedCapture=false],
+ ['failed authorised restore',r=>r.authorisedRecovery.ordinaryRestore.exit=1],
+ ['missing authorised key denial',r=>delete r.authorisedRecovery.refusals.wrongNodeKey],
+])test('cannot certify separate recovery with '+name,()=>{
+ const r=completeAuthorisedReceipt();change(r);assert.throws(()=>verifyBackupVerifierProof(r,{requireComplete:false}));
+});
 test('retains same-run separately authorised recovery without replacing the no-authority refusal',()=>{
  const r=authorisedReceipt();assert.equal(verifyBackupVerifierProof(r,{requireComplete:false}),r);assert.throws(()=>verifyBackupVerifierProof(r),/incomplete/);
 });

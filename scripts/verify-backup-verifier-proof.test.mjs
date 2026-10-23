@@ -110,8 +110,11 @@ for(const [name,output,reason] of [
  ['a missing pass count',()=>transcript(jointReceipt()).replace('# pass 1\n',''),/executed scenario/],
  ['a duplicated count',()=>transcript(jointReceipt())+'# skipped 0\n',/executed scenario/],
 ])test('proof producer refuses '+name,()=>assert.throws(()=>parseRun(output()),reason));
-test('proof producer CLI retains incomplete evidence and exits with a refusal',{skip:!process.env.TEST_CLOUD_SNAPSHOT_PROOF_IMAGE||!process.env.TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE,timeout:240000},async t=>{
+test('proof producer CLI certifies separate recovery and retains the primary fiscal refusal',{skip:!process.env.TEST_CLOUD_SNAPSHOT_PROOF_IMAGE||!process.env.TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE,timeout:240000},async t=>{
  const directory=await mkdtemp(join(tmpdir(),'cloud-joint-producer-test-')),path=join(directory,'proof.json');t.after(()=>rm(directory,{recursive:true,force:true}));
- await assert.rejects(promisify(execFile)(process.execPath,['scripts/backup-verifier-proof.mjs',path],{cwd:new URL('../',import.meta.url),env:process.env,timeout:220000,maxBuffer:2*1024*1024}),error=>error.code===1&&error.stderr.includes('Saved incomplete joint evidence'));
- const receipt=JSON.parse(await readFile(path,'utf8'));assert.equal(receipt.version,2);assert.equal(receipt.recovery.ordinaryRestore,'FISCAL_RESTORE');assert.equal(verify(receipt,{requireComplete:false}),receipt);assert.throws(()=>verify(receipt),/incomplete/);
+ const result=await promisify(execFile)(process.execPath,['scripts/backup-verifier-proof.mjs',path],{cwd:new URL('../',import.meta.url),env:process.env,timeout:220000,maxBuffer:2*1024*1024});
+ assert.match(result.stdout,/Verified complete joint backup proof/);
+ const receipt=JSON.parse(await readFile(path,'utf8'));assert.equal(receipt.version,2);assert.equal(receipt.recovery.ordinaryRestore,'FISCAL_RESTORE');assert.equal(verify(receipt,{requireComplete:false}),receipt);assert.equal(verify(receipt),receipt);
+ assert.equal(receipt.recovery.activation,'not_attempted');assert.equal(receipt.recovery.routeMoved,false);
+ assert.equal(receipt.authorisedRecovery.ordinaryActivation,'executed-with-separate-authority');
 });

@@ -395,9 +395,12 @@ source. Worker threads remain denied. The same local scenario now uses the actua
 pinned compiled v2 client for owner approval, target delivery and independent
 archive checks before staging. Ordinary restore refuses absent fiscal authority;
 it reports no restored state or replacement and leaves no first-start marker.
-The version 2 receipt records this incomplete outcome after confirmed cleanup.
-Separately authorised ordinary recovery, remaining same-run controls and
-published-image qualification remain open. Keep the
+The same scenario returns the independently delivered archive to the existing
+authorised disposable Waitron fixture, which completes ordinary recovery with
+separate fiscal authority. The complete version 2 receipt retains both that
+success and the primary client's unchanged refusal. All eleven same-run verifier
+controls and confirmed cleanup are required before certification. This local proof
+does not qualify a published image or permit Cloud activation. Keep the
 affected snapshots unavailable until the implementation and evidence gates pass;
 fiscal activation authority remains unchanged.
 

@@ -80,10 +80,13 @@ export function verifyBackupVerifierProof(value,{requireComplete=true}={}){
   equal(recovery.pointId,archive.pointId,'recovery point mismatch');equal(recovery.attemptId,admission.attemptId,'selected attempt mismatch');equal(recovery.targetDigest,pinned.digest,'recovery target mismatch');
   equal(recovery.readDigest,archive.sha256,'independent read digest mismatch');equal(recovery.readBytes,archive.bytes,'independent read size mismatch');equal(recovery.client,'pinned-compiled-waitron','actual pinned client required');
   equal(recovery.activation,'not_attempted','verification grants no activation');equal(recovery.routeMoved,false,'verification grants no route movement');
-  equal(recovery.placement,states.placement==='executed'?'executed':'not-run','placement disposition mismatch');
+  // The primary client remains refused; only the bound ordinary fixture can complete its separate recovery.
+  const separate=states.recovery==='executed'&&Object.hasOwn(value,'authorisedRecovery')&&recovery.ordinaryRestore==='FISCAL_RESTORE';
+  if(separate&&states.placement==='executed')equal(recovery.placement,'not-run','primary fiscal refusal cannot place data');
+  else equal(recovery.placement,states.placement==='executed'?'executed':'not-run','placement disposition mismatch');
   assert(['executed','FISCAL_RESTORE','not-run'].includes(recovery.ordinaryRestore),'ordinary restore disposition required');
-  equal(recovery.ordinaryRestore==='executed',states.recovery==='executed','ordinary restore phase mismatch');
-  if(recovery.ordinaryRestore==='FISCAL_RESTORE')equal(value.phases.find(p=>p.name==='recovery').reason,'FISCAL_RESTORE','fiscal refusal must be explicit');
+  equal(recovery.ordinaryRestore==='executed'||separate,states.recovery==='executed','ordinary restore phase mismatch');
+  if(recovery.ordinaryRestore==='FISCAL_RESTORE'&&states.recovery!=='executed')equal(value.phases.find(p=>p.name==='recovery').reason,'FISCAL_RESTORE','fiscal refusal must be explicit');
  }else assert(!['approval','read','placement','recovery'].some(name=>states[name]==='executed'),'executed recovery phases need bound recovery evidence');
  if(Object.hasOwn(value,'authorisedRecovery')){
   const authorised=value.authorisedRecovery;
