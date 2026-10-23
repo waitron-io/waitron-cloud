@@ -104,3 +104,41 @@ export async function authorityFixture() {
     },
   };
 }
+
+export function continuityTrace(
+  name: 'old-backup' | 'replacement-writer' | 'expired-witness',
+  emit: (line: string) => void = line => { process.stderr.write(line + '\n'); },
+) {
+  const started = performance.now();
+  let verifiedAt: number | undefined;
+  let verifiedAge: number | undefined;
+  return (stage: string, details: {
+    observedAt?: string;
+    waiting?: boolean;
+    result?: { code?: unknown; receipt?: unknown };
+  } = {}) => {
+    // Diagnostics must never replace the assertion or expose a receipt or provider error.
+    try {
+      const now = performance.now();
+      if (stage === 'witness-verified') {
+        verifiedAt = now;
+        const age = Date.now() - Date.parse(details.observedAt ?? '');
+        verifiedAge = Number.isFinite(age) ? age : undefined;
+      }
+      const sinceVerifiedMs = verifiedAt === undefined ? undefined : now - verifiedAt;
+      const code = details.result?.code;
+      emit(JSON.stringify({
+        continuity: name, stage, elapsedMs: now - started,
+        sinceVerifiedMs,
+        witnessAgeMs: verifiedAge === undefined ? undefined : verifiedAge + (sinceVerifiedMs ?? 0),
+        waiting: details.waiting,
+        ...(details.result ? {
+          code: code === undefined ? 'none' :
+            ['history_uncertain', 'continuity_unavailable', 'allocation_unavailable',
+              'binding_conflict', 'invalid_input', 'unexpected_error'].includes(String(code)) ? code : 'unknown',
+          receipt: !!details.result.receipt,
+        } : {}),
+      }));
+    } catch {}
+  };
+}

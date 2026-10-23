@@ -11,7 +11,7 @@ import { fixture } from '../../registration/test/fixtures/relay-worker.ts';
 import { transaction } from '../../registration/src/transaction.ts';
 import { requireCurrentHistory, fenceWriter, projectHistory } from '../src/continuity.ts';
 import { scope, reserve } from './fixtures.ts';
-import { authorityFixture, retain } from './continuity-fixture.ts';
+import { authorityFixture, retain, continuityTrace } from './continuity-fixture.ts';
 
 const refused = (code: string) => (error: { code?: string }) => {
   assert.equal(error.code, code);
@@ -44,7 +44,10 @@ async function seeded() {
   };
 }
 test('a restored old PostgreSQL backup cannot reissue C000042 and complete reconciliation permits C000043', async () => {
+  const mark = continuityTrace('old-backup');
+  mark('seed-start');
   const s = await seeded();
+  mark('seed-complete');
   const directory = await mkdtemp(join(tmpdir(), 'fiscal-pg-backup-'));
   const target = 'fiscal_restore_' + randomUUID().replaceAll('-', '');
   const admin = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
@@ -59,6 +62,7 @@ test('a restored old PostgreSQL backup cannot reissue C000042 and complete recon
       .find((line) => line.includes(':' + new URL(process.env.TEST_DATABASE_URL!).port + '->5432'))
       ?.split(' ')[0];
     assert.ok(container, 'find only this wrapper-owned database');
+    mark('dump-start');
     const dump = execFileSync('docker', [
       'exec',
       container,
@@ -71,19 +75,24 @@ test('a restored old PostgreSQL backup cannot reissue C000042 and complete recon
       '-n',
       s.f.schema,
     ]);
+    mark('dump-complete');
     const { writeFile } = await import('node:fs/promises');
     await writeFile(file, dump);
-    await s.a.worker('reserve', {
+    mark('first-reserve-start');
+    const initialReserve = await s.a.worker('reserve', {
       input: s.input,
       accountId: s.accountId,
       grant: s.grant,
     });
+    mark('first-reserve-result', { result: initialReserve });
+    mark('restore-start');
     await admin.query(`CREATE DATABASE ${target}`);
     execFileSync(
       'docker',
       ['exec', '-i', container, 'pg_restore', '-U', 'postgres', '-d', target, '--exit-on-error'],
       { input: dump },
     );
+    mark('restore-complete');
     const connection = new URL(process.env.TEST_DATABASE_URL!);
     connection.pathname = '/' + target;
     restored = new Pool({
@@ -95,12 +104,14 @@ test('a restored old PostgreSQL backup cannot reissue C000042 and complete recon
         .c_high_water,
       41,
     );
+    mark('old-candidate-start');
     const result = await s.a.worker('reserve-candidate', {
       input: { ...s.input, operationId: randomUUID() },
       accountId: s.accountId,
       grant: s.grant,
       identity: 'C000042',
     });
+    mark('old-candidate-result', { result });
     assert.equal(result.code, 'history_uncertain');
     const history = await requireCurrentHistory(s.authority, scope, s.grant);
     await transaction(restored, (c) => projectHistory(c, history));
@@ -112,11 +123,13 @@ test('a restored old PostgreSQL backup cannot reissue C000042 and complete recon
       ).rows[0].installation_identity,
       'C000042',
     );
+    mark('next-reserve-start');
     const next = await s.a.worker('reserve', {
       input: { ...s.input, operationId: randomUUID() },
       accountId: s.accountId,
       grant: s.grant,
     });
+    mark('next-reserve-result', { result: next });
     assert.equal(next.receipt.payload.allocation.installationIdentity, 'C000043');
     await transaction(restored, async (c) =>
       projectHistory(c, await requireCurrentHistory(s.authority, scope, s.grant)),
@@ -144,11 +157,13 @@ test('a restored old PostgreSQL backup cannot reissue C000042 and complete recon
       ).rows,
     });
   } finally {
+    mark('cleanup-start');
     await restored?.end();
     await admin.query(`DROP DATABASE IF EXISTS ${target}`);
     await admin.end();
     await rm(directory, { recursive: true, force: true });
     await s.close();
+    mark('cleanup-complete');
   }
 });
 for (const fault of [
@@ -239,26 +254,35 @@ test('expired and substituted writer grants cannot append or reconcile as curren
   }
 });
 test('old worker loses its append race after a separately started replacement fences it', async () => {
+  const mark = continuityTrace('replacement-writer');
+  mark('seed-start');
   const s = await seeded();
+  mark('seed-complete');
   try {
+    mark('replacement-fence-start');
     const replacement = await s.a.worker('fence', {});
+    mark('replacement-fence-result', { result: replacement });
     assert.notEqual(replacement.grant.fence, s.grant.fence);
+    mark('old-worker-start');
     const old = await s.a.worker('raw-reserve', {
       input: s.input,
       accountId: s.accountId,
       grant: s.grant,
       expectedSequence: '41',
     });
+    mark('old-worker-result', { result: old });
     assert.equal(old.code, 'history_uncertain');
     await assert.rejects(
       requireCurrentHistory(s.authority, scope, s.grant),
       refused('history_uncertain'),
     );
+    mark('replacement-worker-start');
     const success = await s.a.worker('reserve', {
       input: s.input,
       accountId: s.accountId,
       grant: replacement.grant,
     });
+    mark('replacement-worker-result', { result: success });
     assert.equal(success.receipt.payload.allocation.installationIdentity, 'C000042');
     await retain('task2-writer-replacement-proof', {
       oldGrant: s.grant,
@@ -393,8 +417,11 @@ test('a challenged current prefix must belong to the complete newer journal', as
   }
 });
 test('a verified history that expires during a PostgreSQL lock wait cannot project', async () => {
+  const mark = continuityTrace('expired-witness');
+  mark('seed-start');
   const s = await seeded(),
     held = await s.f.pool.connect();
+  mark('seed-complete');
   try {
     const a = s.a.adapter();
     const shorter = {
@@ -406,11 +433,19 @@ test('a verified history that expires during a PostgreSQL lock wait cannot proje
     };
     await held.query('BEGIN');
     await held.query('LOCK TABLE fiscal_registry_scopes IN ACCESS EXCLUSIVE MODE');
+    mark('verification-start');
     const history = await requireCurrentHistory(shorter, scope, s.grant);
-    const outcome = transaction(s.f.pool, (c) => projectHistory(c, history)).then(
-      () => ({ code: 'passed' }),
-      (e) => ({ code: e.code }),
-    );
+    mark('witness-verified', { observedAt: history.witness.observedAt });
+    const acquired = () => mark('projection-client-acquired');
+    s.f.pool.on('acquire', acquired);
+    mark('projection-request');
+    const outcome = transaction(s.f.pool, (c) => {
+      mark('projection-start');
+      return projectHistory(c, history);
+    }).then(
+      () => { mark('projection-complete'); return { code: 'passed' }; },
+      (e) => { mark('projection-refused', { result: e }); return { code: e.code }; },
+    ).finally(() => s.f.pool.removeListener('acquire', acquired));
     let waiting = false;
     for (let i = 0; i < 100 && !waiting; i++) {
       await held.query('SELECT pg_stat_clear_snapshot()');
@@ -422,9 +457,13 @@ test('a verified history that expires during a PostgreSQL lock wait cannot proje
       ).rows[0].yes;
       if (!waiting) await delay(10);
     }
+    mark('lock-observation', { waiting });
     assert.equal(waiting, true, 'projection reached the held database lock');
+    mark('expiry-wait-start');
     await delay(175);
+    mark('lock-release-start');
     await held.query('ROLLBACK');
+    mark('lock-release-complete');
     assert.equal((await outcome).code, 'history_uncertain');
   } finally {
     await held.query('ROLLBACK');

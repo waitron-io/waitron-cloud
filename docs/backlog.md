@@ -371,16 +371,23 @@ projection waiting on the held PostgreSQL lock. The same fiscal tree passed all
 and observed the lock after 15 ms, then refused projection after 192 ms. These
 passes do not explain the original failures. The machine also ran concurrent
 review mutations; resource pressure is an assumption, not an established cause.
-Before changing either check, capture the worker's returned code before receipt
-access and the witness-verification, projection, lock and refusal times. Keep the
-writer/witness policies, lock observation, identity and refusal assertions intact.
+The fixture now emits elapsed timing stages before and after dump, restore and
+worker calls, including the returned refusal code and receipt presence before
+receipt access. The short-witness case records verification, client acquisition,
+projection, lock observation, release and refusal, with the elapsed age since
+verification and the estimated witness age. Diagnostics omit raw errors, receipt
+contents and identifiers; an output failure cannot replace the original assertion.
+You can run the six diagnostic checks without PostgreSQL using
+`node --test packages/fiscal-allocation/test/continuity-trace.test.ts`. They also
+exercise a real fenced-worker refusal and expiry before any database query.
+The writer/witness policies, lock observation, identity and refusal assertions stay intact.
 Do not overlap a large review mutation batch with full package qualification.
 A later local full fiscal run also reached the old-backup case's 30-second
 deadline and missed the same lock observation. A diagnostic-only run completed
 that backup case in 5,238 ms, observed the lock after 25 ms and refused expired
-history after 206 ms. These passes do not resolve the failures. Keep the dump,
-restore and worker-result stages when that case fails again; preserve both
-the 30-second deadline and the 150 ms witness policy.
+history after 206 ms. These passes do not resolve the failures. Use the emitted dump,
+restore and worker-result stages on recurrence; both
+the 30-second deadline and the 150 ms witness policy remain unchanged.
 The two cases are `a restored old PostgreSQL backup cannot reissue C000042 and
 complete reconciliation permits C000043` and `a verified history that expires
 during a PostgreSQL lock wait cannot project`, both in
@@ -392,7 +399,7 @@ fiscal sources match the preceding main tree. An isolated diagnostic run observe
 the lock and passed; a separate 200 ms pause before projection reproduced the
 assertion after the witness had expired and projection returned `history_uncertain`.
 This establishes an early-expiry mechanism, not the precise cause of the original
-failure. Retain verification, client-acquisition, projection and lock-observation
+failure. Read the emitted verification, client-acquisition, projection and lock-observation
 ages on recurrence. Evidence is under
 `~/waitron-campaign-d/receipts/d69/registration-shard-budget/fiscal-*.log`.
 The 150 ms policy, lock assertion and 30-second deadline remain unchanged.
