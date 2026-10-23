@@ -2915,11 +2915,14 @@ notifications separately.
   so its precise cause remains unproved. No bootstrap assertion or limit changes.
   Retain startup and request timestamps on recurrence. Local receipts are under
   `~/waitron-campaign-d/receipts/d69/nested-predecessor-readers/`.
-  A failed fiscal HTTP
-  fixture setup also left its local continuity-authority child open after the
-  last test; the run printed its final failures after that recorded child was
-  stopped. Make fixture construction close acquired resources on setup failure
-  in `packages/fiscal-allocation/test/store-fixture.ts` and its HTTP wrapper.
+  Fiscal store and HTTP fixture construction now close acquired resources when
+  a later setup step fails. Docker-free checks force authority startup, table,
+  venue, listener and machine setup failures, using real authority children,
+  HTTP listeners and pool objects with database operations replaced. Normal
+  teardown also closes multiple HTTP listeners. The PostgreSQL package suites
+  verify the unchanged fiscal behaviour in CI; local database checks remain
+  unavailable while Docker is down. The authority helper's own directory
+  cleanup before startup completes remains a separate follow-up.
   Keep the package's original test deadline and any build step. Appending the
   concurrency option to the package script leaves it after the files and does
   not limit this runner. The fixture's default lock capacity for a full local
