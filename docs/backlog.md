@@ -1698,8 +1698,26 @@ notifications separately.
   generic refusal. Browser failures now retain a fixed phase through the generated
   child boundary, without printing launch errors, URLs or credentials. The complete
   seven-case journey passes locally; that pass does not identify the historical
-  failure. Capture the phase on recurrence and preserve every accounting, isolation,
-  cache and cleanup check.
+  failure. A later merge cost run
+  [40004973526](https://github.com/waitron-io/waitron-cloud/actions/runs/40004973526/job/120590562266)
+  refuses the successful journey during reconnect after 16,602.897 ms; all six
+  deliberate-fault journeys pass. Setup completed and the same tree passed all
+  seven cases in exact-head run `40003626992`. The historical operation and cause
+  remain unknown; the duration alone does not establish a timeout.
+  Reconnect failures now carry one of four fixed operation labels through the
+  generated child boundary: reload, takings, overdue-empty or requests. Controlled
+  failures exercise each browser operation, and a real child-process check carries
+  only the allowed labels into the parent refusal. Raw browser errors, URLs and
+  credentials stay out of the diagnostic. Run
+  `node --test scripts/cloud-cost/browser.test.mjs scripts/cloud-cost/browser-diagnostics.test.mjs`
+  to check the labels, redaction and unchanged failure cleanup. Every original
+  accounting, isolation, cache and cleanup check and deadline remains intact.
+  Capture an instrumented Linux recurrence before attributing the historical
+  cause. A passing unchanged repeat would not explain it. Local Docker-backed
+  qualification remains unavailable until Docker returns; CI runs the real journey.
+  Separate follow-ups remain for containing hostile thrown proxies in the
+  reporter and checking meter cleanup by name rather than relying on a hanging
+  test process to reveal a missed close.
   Ownership validation remains strict. Generated gateway fixtures explicitly
   retain the file-access capability needed for their host-owned private mounts;
   production gateways and private-data replay permissions are unchanged.
@@ -4375,6 +4393,28 @@ Preserve every isolation, storage, accounting and cleanup assertion and deadline
 Use GitHub CI while local Docker is down; do not rerun the unchanged merge for a
 passing result. The exact job log and source-identity receipt are retained in lane
 G's `receipts/d142/`.
+
+## Relay migration setup across a counter rollover (D155)
+
+The release-35 populated-upgrade test assumed every setup admission would finish
+inside its counter window. A deterministic PostgreSQL check holds the first
+message insert past that window and reproduces the final counter-expiry refusal
+with the database clock, counter end, message expiry and row counts recorded.
+The relay still rolls back that admission. Its internal error now carries only
+the counter end and observed clock, with a fixed cause name; the public response
+remains `503 relay_unavailable` with `Retry-After: 1`.
+
+Migration setup retries only this proved counter rollback, at most ten times.
+Unexplained unavailability, rate limits and other failures still fail immediately.
+The new check verifies one retained message, reservation and pair of counters,
+no additional debit on replay, and the existing ciphertext-byte invariant. A
+separate Linux check deletes the expiry guard, its clock evidence and the pool
+notice observer, then injects an extra replay counter increment in disposable
+checkouts. It requires all four faults to fail before checking the restored code.
+Original migration assertions, counter policy, authority windows and deadlines
+stay unchanged. The old failure log did not record its exact clock values; this
+reproduction does not invent those missing historical values. Local database
+checks are unavailable while Docker is down; GitHub CI supplies that evidence.
 
 ## Cost-stack replication interruption (D152)
 

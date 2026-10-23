@@ -3,13 +3,14 @@ import {createHash, randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {setTimeout as delay} from 'node:timers/promises';
 import test, {after} from 'node:test';
-import type {Pool} from 'pg';
+import type {Pool, PoolClient} from 'pg';
 import * as registration from '../src/index.ts';
 import {migrationRelease} from './fixtures/migration-release.ts';
 const release = await migrationRelease(36);
 const {migrate, names: migrationNames} = release;
 after(() => release.close());
 import {fixture} from './fixtures/relay-worker.ts';
+import {admitFixtureMessage} from './fixtures/relay-counter-rollover.ts';
 
 const {checkConsumerSchema} = await import(new URL('../../../deploy/local-stack/runtime.mjs', import.meta.url).href);
 const {hasReleaseMigrationCount} = await import(new URL('../../../scripts/database-recovery-migrations.mjs', import.meta.url).href);
@@ -29,8 +30,10 @@ async function removeControl(pool: Pool) {
 }
 async function populate(f: Awaited<ReturnType<typeof fixture>>) {
   const v = await f.venue();
-  const queued = await v.submit(), delayed = await v.submit(), claimed = await v.submit(), sending = await v.submit();
-  const terminal = await v.submit();
+  const submit = () => admitFixtureMessage(() => v.submit(),
+    evidence => console.log('migration rollover evidence', JSON.stringify(evidence)));
+  const queued = await submit(), delayed = await submit(), claimed = await submit(), sending = await submit();
+  const terminal = await submit();
   await f.pool.query("UPDATE relay_messages SET available_at=clock_timestamp()+interval '5 minutes' WHERE message_id=$1", [delayed.messageId]);
   await f.pool.query("UPDATE relay_messages SET claim_id=gen_random_uuid(),lease_until=clock_timestamp()+interval '1 minute' WHERE message_id=$1", [claimed.messageId]);
   await f.pool.query("UPDATE relay_messages SET state='sending',claim_id=gen_random_uuid(),lease_until=clock_timestamp()+interval '1 minute',attempts=1 WHERE message_id=$1", [sending.messageId]);
@@ -125,4 +128,71 @@ test('release-36 consumer and recovery gates refuse historical future missing an
     await f.pool.query("UPDATE schema_migrations SET name='036_relay_operator_stop.sql' WHERE name='unknown.sql'");
     await checkConsumerSchema(f.pool, root);
   } finally {await f.close();}
+});
+
+
+test('migration setup survives a proved counter rollover without retaining a failed admission', async () => {
+  const f = await fixture(release.migrate);
+  const notices: string[] = [], observed = new Set<PoolClient>();
+  const onNotice = (notice: {message?: string}) => {
+    if (notice.message?.startsWith('relay counter rollover: ')) {
+      notices.push(notice.message); console.log(notice.message);
+    }
+  };
+  const observeClient = (client: PoolClient) => {
+    if (!observed.has(client)) {observed.add(client); client.on('notice', onNotice);}
+  };
+  f.pool.on('connect', observeClient);
+  try {
+    const v = await f.venue();
+    const messages = new registration.RelayMessages(f.pool, f.issuer, 'http://localhost',
+      {...f.relay, bounds: {...f.relay.bounds, windowSeconds: 1}});
+    const body = {version: 1, messageId: randomUUID(), grantId: v.grant.id, grantRevision: 1,
+      class: 'password_reset', recipient: 'migration@example.test', displayName: 'Ana',
+      locale: 'es-ES', timeZone: 'Europe/Madrid', expiresAt: new Date(Date.now() + 1800000).toISOString(),
+      token: Buffer.alloc(32, 1).toString('base64url')};
+    await f.pool.query(`CREATE SEQUENCE fixture_admission_attempt;
+      CREATE FUNCTION fixture_cross_counter_boundary() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF nextval('fixture_admission_attempt')=1 THEN
+          PERFORM pg_sleep(1.1);
+          RAISE NOTICE 'relay counter rollover: %', json_build_object(
+            'counterEndsAt', (SELECT max(ends_at) FROM relay_bounds_windows),
+            'databaseNow', clock_timestamp(), 'messageExpiresAt', NEW.expires_at,
+            'counterRows', (SELECT count(*) FROM relay_bounds_counters),
+            'reservations', (SELECT count(*) FROM relay_reservations));
+        END IF;
+        RETURN NEW;
+      END$$;
+      CREATE TRIGGER fixture_cross_counter_boundary BEFORE INSERT ON relay_messages
+        FOR EACH ROW EXECUTE FUNCTION fixture_cross_counter_boundary()`);
+    const observer = await f.pool.connect();
+    observeClient(observer);
+    observer.release();
+    const rollovers: unknown[] = [];
+    const held = await f.pool.connect();
+    let result: Awaited<ReturnType<typeof messages.execute>>;
+    try {
+      result = await admitFixtureMessage(
+        () => messages.execute('email-submit', v.proof('email-submit', body)),
+        evidence => {rollovers.push(evidence); console.log('migration rollover evidence', JSON.stringify(evidence));});
+    } finally {held.release();}
+    assert.equal(result.created, true);
+    assert.equal(notices.length, 1, 'the pool connection used for admission reports the rollover notice');
+    assert.ok(rollovers.length >= 1, 'the deliberately expired admission is reported');
+    assert.ok(Number((await f.pool.query('SELECT last_value FROM fixture_admission_attempt')).rows[0].last_value) >= 2);
+    assert.equal((await f.pool.query('SELECT count(*) FROM relay_messages')).rows[0].count, '1');
+    assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count, '1');
+    assert.deepEqual((await f.pool.query('SELECT kind,count::text FROM relay_bounds_counters ORDER BY kind')).rows,
+      [{kind: 'grant', count: '1'}, {kind: 'recipient', count: '1'}]);
+    assert.equal((await messages.execute('email-submit', v.proof('email-submit', body))).created, false);
+    assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count, '1');
+    assert.deepEqual((await f.pool.query('SELECT kind,count::text FROM relay_bounds_counters ORDER BY kind')).rows,
+      [{kind: 'grant', count: '1'}, {kind: 'recipient', count: '1'}], 'replay preserves both abuse counters');
+    await f.row(body.messageId);
+  } finally {
+    f.pool.removeListener('connect', observeClient);
+    for (const client of observed) client.removeListener('notice', onNotice);
+    await f.close();
+  }
 });

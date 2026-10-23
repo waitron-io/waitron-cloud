@@ -1,27 +1,17 @@
 // Explicit local integration: pinned Waitron routes, generated venue and real gateway.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { mkdtempSync, realpathSync, mkdirSync, writeFileSync, readFileSync, cpSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generateKeyPairSync, randomBytes, randomUUID, createHash } from 'node:crypto';
 import {waitForGatewayReady} from '../remote-readiness.mjs';
 import * as journey from '../local.mjs';
+import {runBrowserFixture} from './browser-diagnostics.mjs';
 import { signManifest } from '../../../packages/remote-access/src/manifest.ts';
 
 const environment = { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' };
-const run = (command, args) => {
-  try { return execFileSync(command, args, { env: environment, encoding: 'utf8', timeout: 30000,
-    maxBuffer: 1048576, stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
-  catch (error) {
-    const failure = Error('Generated local gateway fixture failed');
-    failure.journeyRefused = error.status === 1 && error.stdout?.length === 0
-      && /Error: Invalid cloud cost browser journey/.test(error.stderr?.toString() ?? '');
-    failure.browserPhase = /(?:^|\n)cost_browser_phase=(options|meter|launch|context|login|dashboard|reconnect|logout|close|accounting|snapshot)\n/.exec(error.stderr?.toString() ?? '')?.[1];
-    throw failure;
-  }
-};
+const run = (command, args) => runBrowserFixture(command, args, environment);
 const docker = (...args) => run('docker', args);
 const keyPair = () => {
   const key = generateKeyPairSync('x25519');

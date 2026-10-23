@@ -75,7 +75,7 @@ export class RelayMessages {
     // The INSERT's byte trigger may wait after every earlier check; acquire no new locks.
     await recheck();
     if(expiry<=now)messageError('invalid_message');
-    if(counterEnd.getTime()<=now)throw new RelayBoundsError('relay_unavailable');
+    if(counterEnd.getTime()<=now)throw new RelayBoundsError('relay_unavailable',{cause:{kind:'relay_counter_expired',counterEndsAt:counterEnd.getTime(),observedAt:now}});
     created=true;
    }else if(!reservation.replay)messageError('relay_unavailable');
    if(row.state==='queued'&&(row.expires_at.getTime()<=now||action==='email-cancel')){
