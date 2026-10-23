@@ -83,9 +83,12 @@ export async function startBackupStorage(options = {}) {
     } catch (error) {
       // A separate process cannot inherit these reservations. Retry only the
       // child's explicit port-handoff refusal, after its own cleanup completed.
+      const refused = /Port allocation failed: port (\d+) .*is not available on 127\.0\.0\.1 and cannot be used/.exec(error.message);
+      const bound = /listen tcp 127\.0\.0\.1:(\d+): bind: address already in use/.exec(error.message);
+      const port = Number((refused ?? bound)?.[1]);
       if (attempt >= 1 || options.retryPortCollision === false ||
-          !error.storageStartup || !error.message.startsWith("SeaweedFS exited: ") ||
-          !/Port allocation failed: port \d+ .*is not available on 127\.0\.0\.1 and cannot be used/.test(error.message)) throw error;
+          !error.message.startsWith("SeaweedFS exited: ") ||
+          !Object.values(error.storageStartup?.ports ?? {}).includes(port)) throw error;
       console.error("Storage fixture port handoff failed; retrying once:", error);
     }
   }

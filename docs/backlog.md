@@ -3804,7 +3804,8 @@ accepting that response. Other errors still retry within the existing limits;
 a failed accessibility check still blocks startup. A deterministic real-store test
 discards a successful creation reply and verifies recovery, and a second test
 checks refusal when access fails. Existing assertions and deadlines remain intact.
-All ten focused native cache/startup cases pass. Local Docker and PostgreSQL checks
+All thirteen focused native cache/startup cases pass, along with the four
+adjacent storage-authority cases. Local Docker and PostgreSQL checks
 stay unavailable until 3 November; qualification uses GitHub CI.
 
 The next Linux qualification at readiness-only head `59e1749` exposed a second
@@ -3814,8 +3815,12 @@ competing socket's owner remains unknown. The fixture now retries that explicit
 child port-allocation refusal once with a fresh directory and seven new
 reservations, after cleaning up its failed child. It prints the first failure's
 evidence, stops after a second collision, and never stops a competing listener.
-Other failures do not qualify for this retry. Deterministic real-child tests
-prove recovery and the two-attempt limit. The existing first-failure diagnostic
+The same handoff can fail after SeaweedFS's initial port check; Linux combined
+[run 39946986371](https://github.com/waitron-io/waitron-cloud/actions/runs/39946986371)
+records a volume listener's bind refusal. Both observed forms qualify only when
+the reported port belongs to the fixture's seven-port allocation. An unrelated
+child exit or an unallocated port does not qualify. Deterministic child tests
+prove recovery, both refusal forms and the two-attempt limit. The existing first-failure diagnostic
 test explicitly disables retries while retaining all its assertions.
 
 Remaining: retain the diagnostics to attribute any recurrence of the original

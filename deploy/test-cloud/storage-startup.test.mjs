@@ -50,17 +50,19 @@ test('a child port collision reports the allocation and current socket owners wi
   const {syncBuiltinESMExports} = await import('node:module');
   const originalSpawn = childProcess.default.spawn;
   let owner, allocated;
+  const owners = [];
   t.mock.method(childProcess.default, 'spawn', function (binary, args, options) {
     if (args[0] === 'mini') {
       allocated = Number(args.find(arg => arg.startsWith('-filer.port=')).split('=')[1]);
       owner = new Server();
+      owners.push(owner);
       owner.listen(allocated, '127.0.0.1');
     }
     return originalSpawn(binary, args, options);
   });
   syncBuiltinESMExports();
   t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
-  t.after(() => owner?.listening ? new Promise(resolve => owner.close(resolve)) : undefined);
+  t.after(() => Promise.all(owners.filter(server => server.listening).map(server => new Promise(resolve => server.close(resolve)))));
   await assert.rejects(startBackupStorage({retryPortCollision:false}), error => {
     assert.match(error.message, /SeaweedFS exited:/);
     assert.equal(error.storageStartup?.ports?.filer, allocated, 'failure must identify the allocated filer port');
@@ -72,6 +74,7 @@ test('a child port collision reports the allocation and current socket owners wi
     return true;
   });
   assert.equal(owner.listening, true, 'fixture cleanup must leave the competing listener alone');
+  assert.equal(owners.length, 1, 'the first-failure diagnostic fixture must not retry');
 });
 
 // A connection accepted by a temporary reservation must not block its release.
@@ -202,4 +205,77 @@ test('two port-collision failures stop after the one permitted retry and keep bo
   assert.equal(children.length, 2, 'there must be no third attempt');
   assert.equal(owners.filter(owner => owner.listening).length, 2, 'neither competing listener belongs to the fixture');
   assert.ok(children.every(child => child.exitCode !== null || child.signalCode !== null), 'both failed children must have exited');
+});
+
+test('an unrelated child startup failure is reported without retrying it', {timeout:90000}, async t => {
+  const childProcess = await import('node:child_process');
+  const {syncBuiltinESMExports} = await import('node:module');
+  const spawn = childProcess.default.spawn;
+  const children = [];
+  let storage;
+  t.mock.method(childProcess.default, 'spawn', function (binary, args, options) {
+    if (args[0] === 'mini') {
+      const child = spawn(process.execPath, ['-e', 'process.stderr.write("unrelated storage startup failure");process.exit(1)'], options);
+      children.push(child); return child;
+    }
+    return spawn(binary, args, options);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  t.after(() => storage?.stop());
+  await assert.rejects(async () => { storage = await startBackupStorage(); }, /SeaweedFS exited: unrelated storage startup failure/);
+  assert.equal(children.length, 1, 'only an explicit port-allocation refusal may retry');
+  assert.ok(children[0].exitCode !== null || children[0].signalCode !== null);
+});
+
+test('a port lost after child preflight also retries only the allocated port', {timeout:90000}, async t => {
+  const childProcess = await import('node:child_process');
+  const {syncBuiltinESMExports} = await import('node:module');
+  const spawn = childProcess.default.spawn;
+  const children = [];
+  let owner, storage, collidedPort;
+  t.mock.method(childProcess.default, 'spawn', function (binary, args, options) {
+    if (args[0] === 'mini') {
+      let child;
+      if (children.length === 0) {
+        collidedPort = Number(args.find(arg => arg.startsWith('-volume.port=')).split('=')[1]);
+        owner = new Server(); owner.listen(collidedPort, '127.0.0.1');
+        // Reproduce SeaweedFS's observed late-bind diagnostic with a real OS bind refusal.
+        const source = `require('node:net').createServer().on('error', error => { if(error.code !== 'EADDRINUSE') throw error; process.stderr.write('Volume server listener error:listen tcp 127.0.0.1:${collidedPort}: bind: address already in use\\n'); process.exit(72); }).listen(${collidedPort},'127.0.0.1');`;
+        child = spawn(process.execPath, ['-e', source], options);
+      } else child = spawn(binary, args, options);
+      children.push(child); return child;
+    }
+    return spawn(binary, args, options);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  t.after(() => owner?.listening ? new Promise(resolve => owner.close(resolve)) : undefined);
+  t.after(() => storage?.stop());
+  storage = await startBackupStorage();
+  assert.equal(children.length, 2);
+  assert.equal(children[0].exitCode, 72, 'the first child must encounter the real occupied socket');
+  assert.equal(owner.listening, true);
+  await storage.bucket('ready-after-late-bind');
+});
+
+test('a bind error for an unallocated port does not qualify for the fixture retry', {timeout:90000}, async t => {
+  const childProcess = await import('node:child_process');
+  const {syncBuiltinESMExports} = await import('node:module');
+  const spawn = childProcess.default.spawn;
+  const children = [];
+  let storage;
+  t.mock.method(childProcess.default, 'spawn', function (binary, args, options) {
+    if (args[0] === 'mini') {
+      assert.ok(!args.some(arg => /^-(s3|master|volume|filer)\.port(\.grpc)?=1$/.test(arg)));
+      const child = spawn(process.execPath, ['-e', 'process.stderr.write("Volume server listener error:listen tcp 127.0.0.1:1: bind: address already in use");process.exit(1)'], options);
+      children.push(child); return child;
+    }
+    return spawn(binary, args, options);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  t.after(() => storage?.stop());
+  await assert.rejects(async () => { storage = await startBackupStorage(); }, /SeaweedFS exited: Volume server listener error:listen tcp 127\.0\.0\.1:1: bind: address already in use/);
+  assert.equal(children.length, 1, 'an auxiliary or unknown port failure must remain visible');
 });
