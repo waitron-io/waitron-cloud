@@ -361,9 +361,8 @@ unchanged. All checks cover English and Spanish, both themes and 390/1280 widths
 Separate screen-state follow-ups remain: an organisation change can be ignored
 while installation reads are pending, leaving the shown and selected organisations
 different; a venue absent from the current list can remain in the draft. Synthetic
-probes reproduce both retained-state problems before and after this fix. A first
-view with an absent venue changes from a blank selection to Choose a venue;
-qualify real reload/revocation routes and clear or refuse stale choices separately.
+probes reproduce both retained-state problems before and after this fix. Qualify
+real reload/revocation routes and clear or refuse stale choices separately.
 Duplicate adjacent status authority calls remain a small follow-up; no production defaults are
 selected. Fiscal records, invoice hashes and Waitron's allocation code stay outside
 this Cloud change.
