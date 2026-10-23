@@ -1374,11 +1374,13 @@ a test on each side compares its copy with it.
 
 ## Handover between local and hosted machines: A1018
 
-**Cloud direction agreement, 2026-10-23; owner design approval and build authority
-remain pending.** This replaces the rejected 2026-10-22 stop-proof agreement in
-Cloud #300 (`6700d6f2319ff0b62b0ccc27e833487935ad2174`). The shared proposal is
+**Cloud direction agreement, 2026-10-23, including the owner’s 15:37 correction;
+full owner design approval and build authority remain pending.** This supersedes
+#312’s emergency M1 filing assignment and #300’s rejected external stop proof
+(`6700d6f2319ff0b62b0ccc27e833487935ad2174`). The shared proposal is
 Waitron's [simple handover design at
-`741cc8d8590b2c178b808657e1ba858348f25078`](https://github.com/clintongormley/waitron/blob/741cc8d8590b2c178b808657e1ba858348f25078/docs/superpowers/specs/2026-10-23-a1018-simple-handover-design.md).
+`d9252ac34f2b7e946e1154dd5af1a443c2c39ad4`](https://github.com/clintongormley/waitron/blob/d9252ac34f2b7e946e1154dd5af1a443c2c39ad4/docs/superpowers/specs/2026-10-23-a1018-simple-handover-design.md),
+SHA-256 `5fabaad0ff946f410c68fd71f46cffa497c3f562ae7f8776c71f61de96265aa3`.
 Cloud accepts its direction and the boundaries below. Waitron owns the one combined
 owner design question, including the proposed policy defaults and both worked
 examples. This is the shared Cloud home; pin its publication revision in Waitron
@@ -1410,8 +1412,9 @@ assignment and its activation outcome before enabling work. M2 keeps its own nod
 identity and starts its own fresh fiscal identity, chain and series through the
 existing module, authentication, clock and allocation gates. It files M1's copied
 outbox in M1's recorded fiscal identity, without copying M1's private node key.
-M1 never resumes that queue after relinquishment. Handover does not wait for the
-Spanish tax authority, AEAT, or for the outbox to drain over the internet.
+M1 starts no new communication with the Spanish tax authority, AEAT, while stepped
+down and never resumes it after takeover. Handover does not wait for AEAT or for
+the outbox to drain over the internet.
 
 **Emergency handover:** a freshly authenticated authorised person declares that
 M1 is shut down, no parallel recovery is in progress and the selected last copy's
@@ -1420,14 +1423,16 @@ in the provider console and records its identity, confirming restart is prevente
 This is a human declaration, not an automatically verified provider fact. An alert,
 missing heartbeat, route change or Cloud action approval cannot supply it.
 
-Persist that declaration and holds on every predecessor filing chain owned by M1,
-including inherited queues and records already copied to M2, before activation.
-Unknown ownership remains held through reboot, claim reset, retry and reconciliation.
-M2 then starts its own fresh chain under the same activation gates and may file that
-new chain. M1 remains the predecessor filing owner. On return it checks the current
-signed role before trading or filing and remains restricted to its assigned filing
-work, with no business side effects. An emergency M1 unable to reach M2 or a till
-on boot waits for an authorised human; a stale chart alone cannot clear that wait.
+Persist the declaration, M1’s restricted role and M2’s sole responsibility for all
+AEAT communication before activation. M2 starts its own fresh chain under the same
+activation gates and files unfiled old originals already in its copy, including
+queues inherited from earlier nodes, in each record’s unchanged generating fiscal
+identity. New sales use M2’s identity. No emergency predecessor ownership hold
+prohibits M2 from filing copied records; missing originals remain an explicit gap.
+On return M1 checks the current signed role before any business or fiscal worker
+starts. It neither files nor consults AEAT; it transfers fiscal originals and received
+evidence to M2. An emergency M1 unable to reach M2 or a till on boot waits for an
+authorised human; a stale chart alone cannot clear that wait.
 
 An isolated, already running M1 may still sell until it learns of the newer role.
 Show the proposal's split-network warning: bills, payments, cash and stock can
@@ -1491,21 +1496,33 @@ queries that same M2 and operation, never selects M3 or allocates again by timeo
 Changing target after possible activation requires explicit resolution first.
 
 If a controlled move crashes before final-copy acceptance, an explicit emergency
-replacement on the same M2 is proposed only when retained history proves M2 never
-accepted the copy or authorised relinquishment. Persist replacement and predecessor
-holds before activation. Accepted or unknown history keeps the original controlled
+replacement on the same M2 is proposed only when retained history proves no final-copy
+acceptance, no authorised relinquishment and no possible activation. Persist the
+replacement, continued M1 restriction and sole M2 AEAT assignment before activation.
+Accepted or unknown history keeps the original controlled
 operation until its copy and filing assignment are recovered. A lost relinquishment
 reply reads M1's durable record; it never permits both machines to file. This waiting
 trade-off remains part of the combined owner question.
 
 ### Return fiscal facts, preserve the business gap
 
-Emergency M1 files its assigned chains on restricted return and transfers immutable
-fiscal originals plus chain, filing and outcome facts, including outcomes for records
-M2 already has. Emergency transfer does not assign filing ownership to M2. Pending
-or uncertain results keep M1 the restricted filing owner and M2's chain holds in
-place. Later frozen batches belong to the same operation; a retry of one batch
-returns identical bytes. Preserve conflicting terminal facts as an open case.
+After either takeover M2 alone handles all AEAT communication. Returning M1 never
+files, consults or otherwise contacts AEAT, even for an uncertain earlier submission.
+It freezes and transfers missing immutable fiscal originals, required chain/filing
+state, every received AEAT outcome including those for originals M2 already holds,
+and unanswered request identities. A transfer filtered only to missing originals
+would discard evidence. M2 files copied and later-returned old originals unchanged
+in their generating fiscal identities; new sales use its own fresh identity.
+
+Apply known results before deciding what remains to send. M2 uses existing recovery,
+duplicate-handling and filing-case paths for uncertain sends, including a record M1
+may already have sent. A duplicate response alone does not prove acceptance. Keep
+conflicting terminal facts as an open case rather than letting the last arrival win.
+Preserve the temporary per-chain filing pause while a return batch applies and
+domain holds for unresolved filing cases; neither is a continuing predecessor
+ownership hold. Source restriction and M2’s assignment persist through reboot,
+claim reset, retry and reconciliation. Later evidence uses another frozen batch in
+the same operation; a retry of one batch returns identical bytes.
 
 Never replay old orders, payments, cash, drawer, stock, printing or other business
 changes on M2. Keep them in a restricted consistent archive. The proposed visible
@@ -1521,8 +1538,24 @@ Keep originals and archive while filing or reconciliation remains unresolved; th
 no-automatic-expiry recommendation awaits approval and A664's retention policy.
 A lost disk leaves an explicit unknown missing-tail interval, with the existing
 consultation/month-end operator follow-up, never invented invoices or business rows.
-A947's emergency filing/return rules and prototype controls need amendment before
-implementation; this agreement does not change fiscal code or golden results.
+A947’s broader ledger-tail transfer/return rules and prototype controls need explicit
+amendment for fiscal-only transfer before implementation; this agreement changes no
+fiscal code or golden results. The relay direction follows [A947 §7.1](https://github.com/clintongormley/waitron/blob/d9252ac34f2b7e946e1154dd5af1a443c2c39ad4/docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md#71-the-tail-and-the-fix-for-the-failed-prototype-scenario)
+and [asesor Q2](https://github.com/clintongormley/waitron/blob/d9252ac34f2b7e946e1154dd5af1a443c2c39ad4/docs/compliance/asesor-questions.md#q2-may-a-node-other-than-the-till-transmit-the-tills-records-to-aeat),
+which requires the generating installation’s identity. This is source agreement,
+not a new legal or runtime conclusion. E’s authorised A1034 must test old-tail
+continuation after M2’s new chain starts, interleaving and an old-server-filed record
+resent by M2 against AEAT’s test service; those checks remain unrun in this agreement.
+
+In the revised Harbour Kitchen examples, controlled M2 files M1’s copied outbox
+after relinquishment when AEAT is reachable. In the emergency, invoice `A-0CNNW/218`
+is absent from M2’s 21:39 copy. Until M1 returns it, show an unknown interval, never
+invented amounts. Returning M1 transfers invoice 218 and received outcomes without
+AEAT contact. M2 reconciles those facts and files it if unfiled, preserving M1’s
+identity. Only then can the list show its €100.00 taxable, €10.00 tax and €110.00
+gross business gap; its cash payment and bill are not replayed. A missing disk leaves
+that interval unknown. The remaining policy defaults and both revised examples
+await E’s single short owner design question.
 
 An explicitly selected cold restore remains separate: fresh chain, accepted tail
 loss, existing source, recovery-key, node-recovery-key, operation and sole-recovery

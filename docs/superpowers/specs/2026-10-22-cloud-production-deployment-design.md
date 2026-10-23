@@ -11,7 +11,9 @@ very little about cloud so I'm happy for you to recommend everything") and can o
 
 **Handover revision, 2026-10-23:** the owner rejected the earlier A1018 external
 stop-proof model. Sections 3, 6, 9 and 12 now follow the [revised shared direction](../../waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018).
-Its proposed policy defaults still await the one Waitron-led owner design question;
+The owner’s 15:37 correction assigns all AEAT communication to M2 after either
+takeover; returning M1 transfers fiscal originals and outcomes without AEAT contact.
+The full revised design and retained defaults await one short Waitron-led question;
 publication does not extend the original local build authority to that protocol.
 
 ## 1. Why
@@ -77,7 +79,8 @@ start."
 - a fix is applied by hand and leaves nothing behind, so the same problem costs the same
   next time;
 - automation starts a replacement without controlled handover or the explicit
-  emergency declaration, or ignores a predecessor filing hold (section 9);
+  emergency declaration, bypasses source restrictions or assigns AEAT communication
+  to M1 after takeover (section 9);
 - launch is so ambitious it never ships.
 
 ## 3. What this design corrects in the existing proposals
@@ -269,10 +272,14 @@ For an emergency, a freshly authenticated authorised person explicitly declares
 M1 shut down, no parallel recovery, and acceptance of the selected copy's unknown
 missing tail. A hosted source needs the person's provider-console stop declaration
 bound to the exact resource and restart prevention. Cloud cannot generate it from
-an alert, timeout or an act-and-report permission. M2 holds every predecessor filing
-chain assigned to M1, including already-copied rows, while using its own new chain.
-M1 files only its assigned chains on restricted return. Only fiscal records and
-filing facts return; other business changes remain archived with a visible gap.
+an alert, timeout or an act-and-report permission. Persist M1’s restricted role
+and M2’s sole AEAT responsibility before activation. After either takeover M2 files
+unfiled copied and later-returned old originals in their generating identities and
+new sales in its own identity. Returning M1 contacts no AEAT service; it transfers
+missing fiscal originals, all received outcomes including those for copied records,
+and unanswered request facts. No emergency predecessor ownership hold prohibits M2
+filing. Keep temporary per-chain pauses during return-batch application and domain
+filing-case holds. Other business changes remain archived with a visible gap.
 
 An isolated running M1 can still trade until it learns of the newer signed role.
 The explicit warning discloses bills, payments, cash and stock divergence. Distinct

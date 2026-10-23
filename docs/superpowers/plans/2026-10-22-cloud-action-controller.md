@@ -15,8 +15,12 @@ replaces this plan's historical external stop-proof assumptions. The source tabl
 and writer-admission portions of Tasks 1, 5, 6 and 11 describe the rejected input;
 amend them against the owner-directed two-scenario protocol before implementation. No
 outside proof or country authority may be reintroduced as a local handover dependency.
-Controlled copy/filing evidence, emergency human declaration, predecessor-chain holds
-and same-M2 retries remain Waitron-owned gates. P4 supplies no automatic declaration.
+Controlled copy/filing evidence, emergency human declaration, source restrictions,
+sole M2 AEAT assignment after either takeover and same-M2 retries remain Waitron-owned
+gates. M1 returns missing fiscal originals, all received outcomes and uncertainties
+without contacting AEAT. Remove the emergency predecessor ownership hold; retain
+temporary per-chain apply pauses and unresolved filing-case holds. P4 supplies no
+automatic declaration.
 Owner plan/build approval remains closed; this note is not a replacement build plan.
 
 ## Global constraints

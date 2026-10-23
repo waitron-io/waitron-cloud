@@ -13,8 +13,10 @@ documentation milestone; implementation requires separate build authority. Broad
 and existing recovery/fiscal gates remain separate and open.
 
 **2026-10-23 handover revision:** the [A1018 shared direction](../../waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018)
-replaces this draft's external stop-proof requirement. Cloud agrees the direction;
-Waitron asks the single combined owner design question. Its defaults, build and
+replaces this draft's external stop-proof requirement. Cloud agrees the direction.
+The owner’s 15:37 correction makes M2 solely responsible for AEAT after either
+takeover, including returned M1 originals and outcomes; M1 never contacts AEAT.
+Waitron asks one short revised owner design question. Retained defaults, build and
 runtime acceptance remain pending. The owner approved gVisor and Spain running
 from Paris on 2026-10-23; those choices do not grant provider or activation authority.
 
@@ -125,8 +127,13 @@ Emergency M2 starts only after the freshly authenticated authorised person decla
 M1 off, no parallel recovery and acceptance of the last copy's missing-tail risk.
 For hosted M1, record the person's stop in the provider console, exact resource and
 restart prevention. This remains a human declaration, not automatic process-death
-proof. M2 holds all M1-owned predecessor filing chains, even already-copied rows.
-M1 files them on restricted return; only fiscal originals and filing facts return.
+proof. Persist M1’s restriction and M2’s sole AEAT assignment before activation.
+After either takeover M2 files unfiled copied and later-returned originals in their
+unchanged generating identities, and new sales in its own identity. Returning M1
+contacts no AEAT service. It transfers missing fiscal originals, all received
+outcomes including those for copied records, and unanswered request facts.
+No emergency predecessor ownership hold prohibits M2 filing. Temporary per-chain
+apply pauses and unresolved filing-case holds remain.
 Keep other business changes archived and the fiscal/business reconciliation gap
 visible. No automatic wipe or business replay follows.
 
@@ -138,7 +145,7 @@ automation permission supply neither final-copy equality nor the human declarati
 
 | Situation | Proposed recovery shape | Boundary that remains |
 | --- | --- | --- |
-| One local box fails | Owner-selected cold startup/restore, or an explicitly selected A1018 emergency | Retain cold restore's source/key/operation/sole-recovery gates without added hard-stop proof; emergency needs the explicit shutdown declaration and chain holds. |
+| One local box fails | Owner-selected cold startup/restore, or an explicitly selected A1018 emergency | Retain cold restore's source/key/operation/sole-recovery gates without added hard-stop proof; emergency needs the explicit shutdown declaration, source restriction and sole M2 AEAT assignment. |
 | Both local boxes fail | Select a qualified offsite copy and explicit recovery path | Enumerate all peers, expose copy-up lag and unknown tail; no automatic conversion between handover and restore. |
 | Cloud host fails | Controlled move when reachable; otherwise explicitly declared emergency or selected cold restore | A host alarm is no declaration. Reconcile selected M2 and any uncertain prior activation before new allocation. |
 | Cloud-primary venue loses internet | Tills lose their primary unless a separately approved local replacement is activated | A mobile-data till may still reach M1; disclose split-business risk and require the selected scenario. |
@@ -156,8 +163,9 @@ An optional on-site follower for a Cloud primary keeps only its already received
 copy during an outage. Offering it still needs separate approval and qualification
 of the revised handover, fiscal-only return and visible business gap. Do not promise
 automatic offline trading, business merging or recovery time. Returning M1 first
-checks its signed role, then follows controlled relinquishment or emergency
-filing-only ownership; its archive and wipe gates remain mandatory.
+checks its signed role and remains restricted from business work and all AEAT
+communication. It transfers missing fiscal originals, all received outcomes and
+uncertainties to M2; its archive and wipe gates remain mandatory.
 
 AWS EBS disk attachment stays within its Availability Zone, a provider infrastructure location. A cross-zone recovery creates a new disk from a qualified restore source; it cannot reattach the old disk across zones. Reserve and test capacity for the chosen recovery location within the country pack's approved runtime region. The owner approved Spain running from Paris on 2026-10-23. A regional rebuild still
 requires the selected venue recovery scenario and legal/provider qualification; a
@@ -177,7 +185,7 @@ acceptance of the rejected stop-proof protocol.
 | Store layout and versions | Pin exact wire/manifest versions, capabilities and compatibility refusals; reconcile `venues/<venue-id>/`, generation names such as `gen-<term>-<node>-<time>`, create-only markers, signed `current.json`, signing purpose/canonical bytes and trusted keys. Agree the meaning of Cloud versus Waitron venue ids in prefixes. |
 | Concurrency and authority | Specify compare-and-swap (CAS), a write accepted only if the prior object version still matches, for the pointer. Reconcile pointer publication with Waitron's activation transaction, membership authority, losing contenders and crash recovery. PostgreSQL plus an object store plus local SQLite is not one atomic transaction. CAS alone does not fence an existing writer. |
 | Follower and progress | Enforce source-store read-only credentials and no business workers. Report source head, uploaded head, copied-up head, follower-applied head, observation times, source identity and generation. Stale or missing evidence is unknown, not healthy; backup observation time is not a guarantee of zero data loss. |
-| Handover and activation | Enumerate all promotable peers. Bind the controlled final indicator/copy acceptance/filing assignment or the explicit emergency declaration and predecessor-chain holds to selected M2 and signed membership. Require the Waitron activation outcome before routing; backup verification cannot replace it. Exact formats and all eight scenario/direction cases remain unqualified. |
+| Handover and activation | Enumerate all promotable peers. Bind the controlled final indicator/copy acceptance/filing assignment or the explicit emergency declaration, source restriction and sole M2 AEAT assignment to selected M2 and signed membership. Require the Waitron activation outcome before routing; backup verification cannot replace it. Exact formats and all eight scenario/direction cases remain unqualified. |
 | Intent, outcome and retry | Define durable intent, success, refusal and uncertainty on both sides; input fingerprints, concurrency refusal, status lookup, receipt verification and exact retry after lost replies. Reject unsupported versions before side effects. Keep stable names, but move routes only after confirmed activation and target probes. |
 | Return and secrets | Waitron owns frozen-tail transfer and acceptance, external-result reconciliation and fresh identity preparation; Cloud coordinates disk preservation, fresh service credentials and placement. Pin required node-local state and key versions, external-vault compatibility, rotation and recovery when the source is lost. |
 
