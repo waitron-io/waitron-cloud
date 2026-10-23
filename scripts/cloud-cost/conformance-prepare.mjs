@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {createHash,randomUUID} from 'node:crypto';
 import {execFileSync,spawn} from 'node:child_process';
+import {setTimeout as delay} from 'node:timers/promises';
 
 const revision='fbadd15785464e59747e697c11048bfbc6e4938f';
 const repository=fileURLToPath(new URL('../..',import.meta.url));
@@ -48,11 +49,11 @@ export async function prepareConformance(selected) {
   const environment={PATH:process.env.PATH,LANG:'C',TZ:'UTC',CI:'true',
     ...(process.env.NODE_AUTH_TOKEN?{NODE_AUTH_TOKEN:process.env.NODE_AUTH_TOKEN}:{})};
   let phase='revision';
-  const run=(command,args,{encoding,timeout=300000,...options}={})=>{
+  const run=(command,args,{encoding,timeout=300000,captureStderr=false,...options}={})=>{
     controller.signal.throwIfAborted();
     return new Promise((resolve,reject)=>{
       const child=spawn(command,args,{env:environment,stdio:'inherit',...options,detached:true});
-      const output=[];let failure,forceTimer;
+      const output=[];let failure,forceTimer,stderr='';
       const started=performance.now(),commandPhase=phase;
       const report=(event,details={})=>console.error('conformance_setup='+JSON.stringify({
         event,phase:commandPhase,command,args,pid:child.pid??null,
@@ -69,13 +70,16 @@ export async function prepareConformance(selected) {
       };
       controller.signal.addEventListener('abort',abort,{once:true});
       child.stdout?.on('data',bytes=>output.push(bytes));
+      if(captureStderr)child.stderr?.on('data',bytes=>{
+        process.stderr.write(bytes);stderr=(stderr+bytes.toString()).slice(-16384);
+      });
       child.on('error',error=>{failure=error;report('spawn-error',{errorCode:error.code});});
       const timer=setTimeout(()=>{failure=Error('Conformance setup timed out');report('timeout');stop('SIGKILL');},timeout);
       child.once('close',(code,signal)=>{
         if(controller.signal.aborted)stop('SIGKILL');
         clearTimeout(timer);clearTimeout(forceTimer);controller.signal.removeEventListener('abort',abort);
         report(failure?'closed':code===0&&!signal?'complete':'failure',{code,signal});
-        if(failure||code!==0||signal)reject(failure??Error('Conformance setup command failed: '+command));
+        if(failure||code!==0||signal)reject(Object.assign(failure??Error('Conformance setup command failed: '+command),{stderr}));
         else resolve(encoding?Buffer.concat(output).toString(encoding):Buffer.concat(output));
       });
     });
@@ -178,7 +182,29 @@ export async function prepareConformance(selected) {
       image=await docker('image','inspect',tag,'--format','{{.Id}}');
       env.COST_STACK_FIXTURE=json('stack.json',{codeCache:stackCode??code,image,litestreamBinary});
     }
-    const ensureImage=async name=>{phase='image-acquisition';try {await docker('image','inspect',name);} catch {await run('docker',['pull',name]);}};
+    const ensureImage=async name=>{
+      phase='image-acquisition';
+      // Cache inspection, all pull attempts and backoff share the existing five-minute budget.
+      const deadline=performance.now()+300000;
+      const remaining=()=>Math.ceil(deadline-performance.now());
+      const command=async args=>{
+        if(remaining()<=0)throw Error('Conformance image acquisition timed out');
+        await run('docker',args,{timeout:remaining(),captureStderr:true,stdio:['ignore','inherit','pipe']});
+      };
+      try {await command(['image','inspect',name]);return;} catch(error) {
+        if(controller.signal.aborted||!/No such (?:image|object):/i.test(error.stderr))throw error;
+      }
+      for(let attempt=1;;attempt++) {
+        try {await command(['pull',name]);return;} catch(error) {
+          const pause=attempt*1000;
+          const terminal=/denied|unauthorized|authentication required|manifest unknown|not found|toomanyrequests|rate limit/i.test(error.stderr);
+          const transient=/Client\.Timeout|i\/o timeout|TLS handshake timeout|context deadline exceeded|connection reset by peer|unexpected EOF/i.test(error.stderr);
+          if(controller.signal.aborted||terminal||!transient||attempt>=3||remaining()<=pause)throw error;
+          console.error('Conformance image pull lost its connection; retrying '+name+' ('+(attempt+1)+'/3)');
+          await delay(pause,undefined,{signal:controller.signal});
+        }
+      }
+    };
     if(selected.some(name=>/^(foreground|isolated-replay|paced-replay|stack|remote)/.test(name)))await ensureImage('node:26.11.1-slim');
     if(selected.some(name=>/^remote/.test(name))) {
       phase='gateway-image';
