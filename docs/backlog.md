@@ -108,6 +108,14 @@ order. Remote access matters most because Waitron's customer-facing features wai
    The owner approved gVisor for P6 and running Spain from Paris for P7 on
    2026-10-23. P6 still waits for P1/P4 and the accepted Waitron handover contract
    (A1018); P7 still waits for P2/P3. Neither answer grants live/provider authority.
+   Cloud agrees the [revised A1018 direction](waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018)
+   at Waitron `741cc8d8590b2c178b808657e1ba858348f25078`: controlled final-copy
+   handover or explicit emergency declaration, fresh target chain, per-chain filing
+   ownership and fiscal-only return with a visible business gap. This supersedes
+   #300's rejected external stop proof. Waitron owns the one combined owner design
+   question; formats, actor bridge, A947 amendments, build authority and all eight
+   scenario/direction runtime checks remain open. Country rebuild and action status
+   supply no venue declaration or activation authority.
 2. **Production monitoring, alerting and the status page.** No real venue should depend on a
    Cloud nobody is watching. Built for test installations only: venue contact, snapshot age,
    backup verification and remote-route checks, plus opt-in alert emails to venue owners
@@ -3398,8 +3406,10 @@ notifications separately.
   migration must recheck active reservations and the inventory after migration 043.
   C39 supplies observations without
   granting action or activation authority. P5 release waves, P6 hosted placement
-  and qualified stop proof, P7 regional failover and all production enablement
-  gates remain separate. No provider operation, spending or live mail is authorised.
+  and revised A1018 handover, P7 regional failover and all production enablement
+  gates remain separate. P4's historical external-proof writer-admission tasks
+  require amendment against the revised shared contract before build. No provider
+  operation, spending or live mail is authorised.
 - **Provider integration.** Storage, compute, email, notifications, jobs, keys and
   telemetry, with AWS and Google implementations where needed. The local SeaweedFS
   storage contract now covers venue-scoped access, live key rotation, issued-credential
@@ -3948,7 +3958,7 @@ changing any check. The assertions and deadlines remain unchanged.
 | Remote access (initial) | The local two-venue gateway, operator/setup flow, signed route/certificate reconciler and opt-in test-only staff CSR exchange are implemented; see [the proof and limits](local-remote-access.md) and [2026-09-30 traffic receipt](receipts/public-gateway-limits-2026-09-30.json). The upstream public allowlist is only `GET /public/availability`; challenge handlers are local. D88's [public access/A951 proposal](waitron-integration-contract.md#public-access-and-a951-proposed) adds a joint exact-route manifest and lasting appliance lifecycle for the later Cloud step. The [D123 scoped review](waitron-integration-contract.md#a951-cut-a-contract-review-2026-10-23) returns concrete contract amendments and existing staff-v1 limits; the Waitron build is approved, but no appliance/helper/parser artifact or real admission is accepted. A951 implementation/pin, durable client, stale-result checks, atomic install/reload, live DNS/ACME, production key storage and deployment remain open. Qualify `.local` device trust/offline access and any selected certified staff path; router overrides are optional. Separate public termination from staff passthrough and enforce host/method/path/tenant/session isolation at gateway and application. Run the shared acceptance matrix before enablement. Per-venue fairness, automated-client handling, production traffic/carrier false positives, multi-gateway coordination and cell recovery target remain open; existing shared quotas can refuse legitimate callers. |
 | Backups (initial) | Guided continuous and verified-snapshot recovery are implemented for local test venues. The two-venue proof restores an exact Litestream database head after interruption and restores a verified snapshot after deleting its continuous source. Production still needs provider credential lifecycle, retention and monitoring checks, planned final-write handover and safe Waitron activation. |
 | SQLite snapshots (initial backup service) | Retain daily snapshots for 30 days and monthly snapshots for 12 months, with longer paid retention for selected snapshots. Each must remain restorable if continuous backup data disappears. Protect the last verified snapshot from automatic expiry while subscribed; verify a newer copy before replacing it and show stale backup health. Define schedule details, consistency, extended-retention terms and prices, and independent storage/deletion controls. Explicit verified-snapshot selection and restoration with continuous data absent are proved locally; run the same flow against the selected production provider. |
-| Failover to cloud | The [Cloud hosting proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md) uses owner-selected cold startup/restore, fenced activation, devices and return to the venue. A running follower is future and unapproved. The access extension never routes to a merely restored standby or enables a competing `.local` writer. Full owner design approval, joint contract and runtime/provider gates remain open; the cold choice is answered. |
+| Failover to cloud | The [Cloud hosting proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md) uses owner-selected cold startup/restore with its existing source/key/operation/sole-recovery gates and no added hard-stop proof. Explicit A1018 handover uses controlled copy/filing evidence or an emergency human declaration and predecessor-chain holds, with fiscal-only return and a visible business gap. A running follower is future and unapproved. The access extension never routes to a merely restored standby or enables a competing `.local` writer. Full owner design approval, joint contract and runtime/provider gates remain open; the cold choice is answered. |
 | Hosted Waitron | The [Cloud hosting proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md) covers dedicated venue runtimes, country/cell placement, storage, upgrades, Cloud-only recovery and separate public/staff access. The [conditional outline](superpowers/plans/2026-10-21-cloud-hosted-venue-design.md) includes public/A951 qualification for the Cloud step soon after go-live. A Cloud-only primary needs its actual certified active-server path; `.local` cannot provide offline service. Owner design approval, joint acceptance, isolation, hardware, sizing, costs and launch gates remain open; no hosting implementation is supplied. |
 | Bookings and public pages | D88 proposes stable per-venue public names for menus, bookings, online orders and table-QR ordering in the later Cloud step. Pin exact Waitron routes/assets and authorization/session/CSRF/replay checks before implementation. Serialize mutations through authoritative Waitron; when the box is unreachable accept no offsite queue, and reconcile lost replies before retry. Qualify QR expiry/revocation/non-authority and privacy. Customer checkout remains intended; payment-provider/webhook scope is separately agreed and distinct from blocking physical terminal ports. No independent booking store or synchronization product is approved. |
 | Invoice archive | Define the archived objects and access grants, including owner-approved AEAT/advisor access, retention, download and customer exit. Have hosting/archive questions reviewed for the launch country. |
@@ -3979,9 +3989,11 @@ The [ownership map](documentation-ownership.md) records what remains in Waitron.
   provider provisioning, the paid lifecycle and the hosted trial remain open.
 - **Cloud-only redundancy.** Choose the failure and recovery model for a hosted
   primary. The [Cloud hosting proposal](superpowers/specs/2026-10-21-cloud-hosted-venue-design.md)
-  uses the owner-selected cold recovery shape and requires proof that the old writer
-  has stopped. A running follower needs separate future approval. Full hosting design
-  approval and implementation remain pending. The old managed-Postgres framing
+  uses the owner-selected cold recovery shape and the revised A1018 controlled or
+  explicit emergency handover where selected. The external stop-proof requirement
+  is superseded; human shutdown declarations do not prove an isolated M1 stopped.
+  A running follower needs separate future approval. Full hosting design approval,
+  the revised protocol's owner approval and implementation remain pending. The old managed-Postgres framing
   is historical; Waitron targets SQLite and Litestream.
 - **Production object-store proof.** The executable local SeaweedFS 4.47 contract admits
   exactly one writer in eight-way create-only and compare-and-swap races, refuses stale
