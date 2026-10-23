@@ -127,7 +127,7 @@ The disposable Mac project keeps generated fixture keys in its private volume. T
 
 On 18 October 2026, the passing renewal proof observed route withdrawal in 1,162 milliseconds, including its operator-command time. An earlier clean repeat measured 4,655 milliseconds. The first run observed 1,868 milliseconds but failed during cleanup. These are local fixture observations, not a promised deadline or test-box measurements. The initial renewal check failed because the running proxy retained its old certificate; the passing check observes a different trusted certificate on a new TLS connection. A first proof also failed cleanup after listing peer IDs twice; its leftover owned network and volumes were removed before the clean repeat.
 
-The gateway ports remain on loopback. This proof does not connect the quarantined box venue or provide public remote access. The separate backup-verifier boundary, free-service proof and genuine disposable Waitron integration remain before deployment activation.
+The gateway ports remain on loopback. This proof does not connect the quarantined box venue or provide public remote access. The complete local backup proof below supplies the disposable Waitron integration. Release qualification, the test box capacity proof and deployment approval still precede deployment activation.
 
 ## Backup verifier boundary
 
@@ -145,7 +145,7 @@ Waitron A850's interface landed in
 [#1939](https://github.com/clintongormley/waitron/pull/1939) at
 `5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa`. The
 [Cloud implementation plan](superpowers/plans/2026-10-21-cloud-backup-verification.md)
-covers the remaining result validation, catalogue and recovery integration.
+covers result validation, catalogue and recovery integration.
 The interface's source release does not qualify a Cloud image or snapshot.
 You can exercise the dormant native runner with
 `pnpm --dir packages/backups exec node --test test/bound-waitron-verifier.test.ts test/verification-transport.test.ts test/verify-process.test.ts`.
@@ -236,12 +236,12 @@ synthetic and cannot qualify a genuine archive or release image. The earlier rec
 versions keep their original release pairs and assertions. The actual restore also
 checks the new validation functions under PostgreSQL’s empty restore search path;
 their nested helpers resolve in the schema where the migration created them.
-The genuine joint proof and reviewed release remain unfinished. Keep snapshots
+The complete genuine joint proof is described below; release remains unqualified. Keep snapshots
 unavailable and plan enforcement off.
 You can exercise these rules with
 `node scripts/test-postgres.mjs exec node --test packages/backups/test/worker-admission.test.ts packages/backups/test/worker.test.ts`.
-The synthetic fixtures test admission and isolation; the complete genuine
-capture-to-recovery proof remains a later release gate.
+The synthetic fixtures test admission and isolation; they cannot replace the genuine
+capture-to-recovery proof below or qualify a published image.
 The unavailable backup profile now mounts its own writable
 `test-backup-verifier-state` volume at `/run/backup-verifier`. Configuration remains
 read-only at `/run/local-stack`; only the enabled backup runtime receives

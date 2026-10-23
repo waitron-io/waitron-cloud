@@ -1218,7 +1218,7 @@ notifications separately.
   in the backups package passes all 757 tests. The original resource failures
   remain unexplained. Capture Docker stages, host deadline and CPU-limit timing
   if they recur; keep the limits and assertions intact.
-  The genuine joint proof is unfinished. Snapshots
+  The genuine joint proof is described below. Snapshots
   stay unavailable and deployment enforcement stays off. The unavailable backup
   profile now has a private writable controller-state volume separate from its
   read-only configuration. It still receives no Docker socket.
@@ -1229,8 +1229,8 @@ notifications separately.
   passes on `ee927ed9ac4486f4d9166e0c95ac661eab674bf5`, including interrupted
   rollback, old-binary refusal and cleanup. It exposed helper lookup failure during
   `pg_restore`; unlanded migration 043 now retains its schema search path. All 42
-  shipped migrations remain unchanged. The genuine joint proof and reviewed release
-  remain open; earlier receipt versions and fiscal authority rules remain unchanged.
+  shipped migrations remain unchanged. The genuine joint proof is described below;
+  release remains unqualified. Earlier receipt versions and fiscal authority rules remain unchanged.
   The PR5 adapters are reconciled with current main, preserving their earlier
   storage, account, remote and controller behavior and historical test evidence.
   Task 10's new version 2 receipt validator refuses missing genuine phases,
