@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {execFileSync, spawn} from 'node:child_process';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {run} from 'node:test';
+import {resolve} from 'node:path';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const suites = [
@@ -35,22 +36,30 @@ export function validateFreeServiceReceipt(value) {
   return true;
 }
 
-export async function summariseTestRun(events) {
+export async function summariseTestRun(events, expectedFiles = []) {
   let result;
+  const files = new Map();
   for await (const event of events) {
     // Nested-runner warnings and private test output must not become successful evidence.
     if (event.type === 'test:stdout' || event.type === 'test:stderr') throw new Error('Unexpected test output');
     if (event.type !== 'test:summary') continue;
-    if (event.data.file !== undefined) continue;
-    assert.equal(result, undefined, 'Duplicate test summary');
     assert.equal(event.data.success, true, 'Failed suite');
     const {tests, passed, failed, cancelled, skipped, todo} = event.data.counts;
     assert.ok(Number.isSafeInteger(tests) && tests > 0);
     assert.equal(passed, tests);
     for (const count of [failed, cancelled, skipped, todo]) assert.equal(count, 0);
-    result = {tests, passed, failed, cancelled, skipped, todo};
+    if (event.data.file !== undefined) {
+      const file = resolve(event.data.file);
+      assert.ok(expectedFiles.map(path => resolve(path)).includes(file) && !files.has(file), 'Unexpected file summary');
+      files.set(file, tests);
+    } else {
+      assert.equal(result, undefined, 'Duplicate test summary');
+      result = {tests, passed, failed, cancelled, skipped, todo};
+    }
   }
   assert.ok(result, 'Missing final test summary');
+  assert.equal(files.size, expectedFiles.length, 'Missing file execution');
+  if (expectedFiles.length) assert.equal([...files.values()].reduce((sum, count) => sum + count, 0), result.tests);
   return result;
 }
 
@@ -97,8 +106,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const stop = () => controller.abort();
       process.once('SIGTERM', stop); process.once('SIGINT', stop);
       try {
-        process.stdout.write(JSON.stringify(await summariseTestRun(run({files: suite.files, concurrency: 1, timeout: 120000, execArgv: [], signal: controller.signal}))) + '\n');
-      } finally {process.removeListener('SIGTERM', stop); process.removeListener('SIGINT', stop);}
+        process.stdout.write(JSON.stringify(await summariseTestRun(run({files: suite.files, concurrency: 1, timeout: 120000, execArgv: [], signal: controller.signal}), suite.files)) + '\n');
+      } finally {controller.abort(); process.removeListener('SIGTERM', stop); process.removeListener('SIGINT', stop);}
     }
   } catch {process.stderr.write('Free-service proof failed\n'); process.exitCode = 1;}
 }

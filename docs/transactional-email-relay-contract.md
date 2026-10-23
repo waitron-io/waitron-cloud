@@ -29,6 +29,15 @@ the existing transport; its historical provider research needs a separate decisi
 Keep Cloud account recovery and service alerts separate from this new relay. They
 have different authority and liveness checks and must not consume an on-prem grant.
 
+The [test Cloud free-service proof](test-cloud.md#check-free-services-locally)
+now exercises both free and pretend-paid organisations with PostgreSQL and Mailpit.
+It checks that account mail needs no venue relay grant, while local relay capture
+requires separate consent and fixture-bound HTTPS origin evidence. Revocation
+cancels queued relay mail before handoff. These local checks do not enable normal
+relay startup or provide a Waitron relay transport. Waitron's inspected commit
+`e2ca1ca487412a2bb7ef1277e48c6adad6068c85` still selects SMTP, local capture or
+unconfigured delivery in `apps/server/src/email-delivery.ts`.
+
 ## Authority belongs to an installation and a consenting account
 
 Propose a versioned `transactional_email` grant issued through an authenticated Cloud

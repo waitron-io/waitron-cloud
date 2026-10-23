@@ -38,11 +38,18 @@ test('suite summaries require a final passing runner result and reject hidden st
   const summary = {type: 'test:summary', data: {success: true, counts: {tests: 2, passed: 2, failed: 0, cancelled: 0, skipped: 0, todo: 0}}};
   async function* events(values) {yield* values;}
   assert.deepEqual(await api.summariseTestRun(events([summary])), {tests: 2, passed: 2, failed: 0, cancelled: 0, skipped: 0, todo: 0});
-  assert.deepEqual(await api.summariseTestRun(events([{...summary, data: {...summary.data, file: 'a.test.mjs'}}, summary])), {tests: 2, passed: 2, failed: 0, cancelled: 0, skipped: 0, todo: 0});
+  assert.deepEqual(await api.summariseTestRun(events([{...summary, data: {...summary.data, file: '/a.test.mjs'}}, summary]), ['/a.test.mjs']), {tests: 2, passed: 2, failed: 0, cancelled: 0, skipped: 0, todo: 0});
   for (const values of [[], [{...summary, data: {...summary.data, success: false}}], [summary, summary],
     [{type: 'test:stderr', data: {message: 'private'}}, summary], [{type: 'test:stdout', data: {message: 'private'}}, summary]]) {
     await assert.rejects(api.summariseTestRun(events(values)));
   }
+});
+test('a file wrapper cannot replace missing or empty test execution', async () => {
+  const summary = {type: 'test:summary', data: {success: true, counts: {tests: 1, passed: 1, failed: 0, cancelled: 0, skipped: 0, todo: 0}}};
+  async function* events(values) {yield* values;}
+  await assert.rejects(api.summariseTestRun(events([summary]), ['/missing.test.mjs']));
+  await assert.rejects(api.summariseTestRun(events([{...summary, data: {...summary.data, file: '/other.test.mjs'}}, summary]), ['/expected.test.mjs']));
+  await assert.rejects(api.summariseTestRun(events([{...summary, data: {...summary.data, file: '/empty.test.mjs', counts: {...summary.data.counts, tests: 0, passed: 0}}}, summary]), ['/empty.test.mjs']));
 });
 test('CLI rejects unknown arguments without echoing private input', () => {
   const result = spawnSync(process.execPath, ['scripts/test-cloud-free-services.mjs', '--token=private-value'], {encoding: 'utf8'});

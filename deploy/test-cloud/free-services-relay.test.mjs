@@ -55,6 +55,8 @@ test('both plans need fixture-bound TLS origin evidence and explicit relay conse
       const approval = {installationId: venue.installationId, expectedRevision: 0, consent: true, consentVersion: 'local-v1', managementOrigin, expiresAt: new Date(Date.now() + 1800000).toISOString()};
       assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM relay_grants WHERE organisation_id=$1', [venue.organisationId])).rows[0].n, 0);
       await assert.rejects(new RelayGrantStore(db.pool).approve(session.token, session.csrfToken, approval), error => error.code === 'relay_disabled');
+      await assert.rejects(store.approve(session.token, session.csrfToken, {...approval, consent: false}), error => error.code === 'invalid_input');
+      await assert.rejects(store.approve(session.token, session.csrfToken, {...approval, managementOrigin: 'https://foreign.example.test'}), error => error.code === 'origin_unverified');
       const grant = await store.approve(session.token, session.csrfToken, approval);
       assert.equal((await db.pool.query("SELECT count(*)::int AS n FROM installation_services WHERE installation_id=$1 AND service='remote_access' AND state='ready'", [venue.installationId])).rows[0].n, 0);
       const recipient = `${randomUUID()}@example.test`;
