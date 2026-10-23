@@ -368,6 +368,142 @@ shared-parser interoperability, mutual TLS or physical-device qualification.
 Docker is unavailable locally until 3 November; no deployment or provider action
 is performed. Record any later executable qualification independently.
 
+### A951 helper and routing response, 2026-10-23 (D130)
+
+The local helper proposal now answers the process and network boundary requested
+by D123. **Cloud accepts its engineering profile for T3 implementation with
+isolated fixtures.** Record Lane E's matching acceptance and the focused T3 plan
+amendment before that implementation. The complete routing proposal needs the
+two amendments below; its empty manifest bytes are accepted separately. These
+are technical contract decisions under the existing A951 build approval, with
+no new owner build question. This later response supersedes D123 only for these
+two submitted artifacts; its staff-v1 and other gate dispositions remain.
+
+| Review material | Exact source and disposition |
+| --- | --- |
+| `waitron-a951-helper-v1`, `proposal-2026-10-23.1` | [Waitron `fc54735435bc88b5fe7ba376c074fe8010c63401`](https://github.com/clintongormley/waitron/blob/fc54735435bc88b5fe7ba376c074fe8010c63401/docs/superpowers/specs/2026-10-23-a951-local-helper-v1-proposal.md); SHA-256 `da433f66a7dcb835e99eeb4a7e5c6f01f2bc9c69db369c44a5131247a4ab008f`. Accepted for the local contract and fixture scope below. |
+| `waitron-a951-routing-v1`, `proposal-2026-10-23.1` | [Waitron `2974b9a2fe5b8bb17fa744b84384226fcbba8a35`](https://github.com/clintongormley/waitron/blob/2974b9a2fe5b8bb17fa744b84384226fcbba8a35/docs/superpowers/specs/2026-10-23-a951-routing-v1-proposal.md); review SHA-256 `4f7c9d2e2648d9cc6e27fc858e724095501e1e9b70e1fb3591ab5dd52c80df7a`. Amendments required; this full proposal has no acceptance digest. |
+| Empty production manifest, routing edition above | Accept the exact 83 ASCII bytes displayed in that proposal, with no final newline, and SHA-256 `271fefd892b2c0f10ffab42f8e4a832a163b244733285f08d5a0ea1dfab1b012`. This accepts no nonempty route schema or customer product. |
+
+The full comparison pins are Cloud
+`c0d0e800529ec6c1557fce9a4d68b9b43b7447dc` and Waitron's existing foundation
+`72aed2e21705c9d02b6beda5ef248410ffc9b73a`. They identify actual source baselines,
+not running helper/parser consumers. Neither contains an implementation of these
+proposed artifacts. Before connecting implementations, record both resulting
+consumer commits, the accepted artifact edition/digest and the allowed path in
+Cloud's contract and Waitron's intake. Do not label the source comparison as an
+interoperability receipt.
+
+#### Helper checklist: accepted local choices
+
+The following accepts every proposed helper topology and numerical choice as a
+requirement to implement and test, not as measured host behaviour. All literal
+identities, times, addresses, JSON responses and positive/adverse vectors in the
+pinned proposal remain synthetic fixture values. They allocate no real host
+identity, address, port, resource or authority.
+
+| Checklist item | Cloud answer |
+| --- | --- |
+| Independent verifier, supervisor and caller trust | Yes. Keep application UID 991, verifier 992, separate staff/public workers 993/994 and the root helper with only `CAP_NET_ADMIN`; groups 9510/9512, socket and directory modes, fixed mounts and private state locations remain exactly as proposed. Accept the host network namespace, separate PID/mount namespaces, read-only image, private temporary filesystem and no user-namespace remapping. Authenticate service membership and process lifetime as well as peer credentials. The supervisor owns the socket and worker custody; the application cannot activate. The helper is trusted host-network code, not a sandbox against a malicious privileged helper. |
+| Framing, operations and local records | Yes. Accept one `U32BE` length-prefixed UTF-8 request/response, mandatory request EOF, no ancillary input or second frame, exact closed schemas and the five fixed operations. Accept `H` as 32 lowercase hex characters, `D` as 64, `I` as 1–64 restricted ASCII characters, positive safe integers through `9007199254740991`, and the proposed timestamp rules. Accept all listed response enums/codes and literal vectors. No arbitrary command, path, PID, interface, route table or key input is added. |
+| Byte, count and request-time bounds | Yes: request 1–16,384 bytes; response 1–8,192; 1,000 ms complete-request deadline; 2,000 ms effect/read-back; 500 ms response write. Accept two ordinary slots plus one removal slot, one serialized ordinary effect turn, ten ordinary requests/second with burst ten, depth six, 64 total members, arrays of 16 and strings of 1,024 bytes subject to narrower field limits. Removal uses the independent safety path. |
+| State, generation and replay bounds | Yes: one candidate/peer/interface; 16 recorded network objects; eight cached complete replay results; 256 KiB journal and 64 KiB safety record. Accept the persisted random 128-bit ownership nonce, explicit first generation 1 and exactly-one generation advances naming verified predecessor removal. Keep each caller's durable high-water mark independently of cache eviction. Equal replay cannot renew time; unresolved effects block new ordinary mutations. An exhausted safe-integer counter cannot wrap or manufacture a new generation. |
+| Owned namespace and network matrix | Yes to the proposed reserved interface, two nftables tables, routing table 51851, rule priority 31851 and route protocol 242. A reservation is not proof the resource is free or owned. Accept the exact IPv4 matrix: fixed outer UDP 51821 to gateway 51820; gateway TCP source ports 1024–65535 to staff 9443, independent public upstream 9444 or isolated probe 9445; only exact tracked reverse responses. No default/LAN/cross-venue/box-initiated route, NAT or global forwarding change is authorised. Accept MTU 1280, IPv6/mapped-family refusal, fragment/ICMP/unlisted-protocol refusal, tunnel-only listeners and both-family physical-port guards at the proposed hook priority -150. Foreign binds/addresses/rules must cause refusal without disturbing them. G7 must prove containment and path usability. |
+| Clocks, scope floors and withdrawal | Yes to 600,000 ms maximum transport lifetime, 30,000 ms trusted wall-clock uncertainty subtracted from expiry, boot elapsed time including suspension, 5,000 ms authority/path observations and polling at most 1,000 ms apart. Accept independent 100 ms checks, supervisor plan observation within 100 ms and a 500 ms exact-plan acknowledgement bound. Kernel permission ends at least 1,000 ms before the effective deadline. Accept the 1,000 ms closure bound from acceptance of a complete authenticated withdrawal, and closure on a backward wall-clock movement exceeding 1,000 ms. Replays never extend deadlines. Keep the three appliance counters, local generations, per-caller sequences and each scope's stop/withdrawal floors distinct. |
+| Proof mapping and recovery | Yes to immutable local references and independent verifier checking; no to treating their spelling or fixture digests as external proof. G1 must still define authenticated configuration, grant and establishment/recovery mappings; G2 must supply current A947 authority. Missing or unreadable established state, stale clocks, unaccepted gates and unknown custody remain closed. Only a separately accepted reconnect/recovery decision can clear a durable stop. G5 replacement remains closed; a changed candidate first needs verified retirement. |
+| Removal and fault evidence | Yes to separate `observed_blocked`, `verified_removed`, `unknown` and `may_have_applied` outcomes, per-scope network state and separate listener-custody receipts. Removing `both` also removes probe; scoped removal preserves independently authorised scopes. A process exit, closed socket, command success or network rule is not listener closure. Custody remains unknown until its implementation is accepted and qualified. G7 must exercise helper/verifier/supervisor death and stall, suspend/reboot, expired clocks, partial persistence/effects, lost replies, resource collisions and concurrent foreign changes, removal during activation, and established-connection closure within the proposed bounds. |
+
+The helper's local records do not accept an appliance wire format, gateway peer
+registry provenance, issuer, machine-key encoding or A947 authority mapping.
+Map real identities through those accepted adapters; never reinterpret their
+bytes to fit `I` or replace a machine public key with a caller-chosen label.
+The fixture address range is not Cloud's current address allocation.
+
+For example, the helper's literal clock vector gives transport deadline
+`100000 + (1590000 - 1000000 - 30000) = 660000` boot milliseconds. The earlier
+5,000 ms authority/path limit gives 105000, so kernel permission ends at 104000
+after the 1,000 ms closure reserve. This is arithmetic on a fixture, not a
+measured kernel expiry receipt.
+
+#### Routing checklist: agreed profile and two required amendments
+
+Accept the empty-manifest literal comparison, closed extension rule and all
+proposed parsing/forwarding choices as the profile for the revised artifact:
+HTTP/1.1 only; original decrypted request bytes; identity-preserving target
+validation; duplicate-header rejection before stripping; no body, credentials,
+method override, upgrade, redirect, fallback or request reuse. Staff TLS remains
+outside this parser. A fixture permission cannot be selected by a production
+setting, request or environment variable.
+
+Accept the proposed bounds explicitly: 5,000 ms TLS handshake, 5,000 ms complete
+headers, 11,000 ms total socket lifetime shortened by binding expiry; 2,048-byte
+request line, 1,024-byte target and header line, 8,192-byte complete header block,
+32 header occurrences, method length 1–16 and header-name length 1–64. Accept at
+most four unique ASCII-ordered query pairs, key length 1–32, value length 1–64,
+and optional User-Agent length 1–256. Accept the specified ASCII alphabets,
+refusal precedence, empty 400 response, exact authority mappings, two forwarded
+headers and separate side-specific contexts. Every remaining literal fixture
+number/identity and positive/adverse vector is accepted as a future test oracle,
+subject to these two corrections:
+
+1. **Use the helper's suspend-aware time basis for local contexts and request
+   deadlines.** Retain `verifiedAtMonoMs` and `expiresAtMonoMs` as field names,
+   but define their values as boot elapsed milliseconds including suspension.
+   Add `boot:H` to both closed local context schemas. At dispatch, compare it
+   with that side's current boot, check current connection/listener/generation
+   and all deadlines again, and refuse if the clock cannot be trusted. These
+   are local clock domains; never compare gateway and box boot IDs or elapsed
+   numbers across hosts. Use fixture box boot `22222222222222222222222222222222`
+   and gateway boot `33333333333333333333333333333333`. Add boot-change and
+   suspend-across-expiry vectors: no handler/upstream call and closure after
+   expiry. Keep the existing `now=2000` refusal at expiry. No timeout restarts
+   after a suspend, retry, partial read or re-observation.
+2. **Make the read-boundary vectors literal and unambiguous.** Replace the three
+   concatenation-table rows with explicit byte constructions. One read
+   `concat(P, 0x78)` and two reads `[P, 0x78]` have the same first-P verdict,
+   including when the second read arrives before dispatch. One read
+   `concat(P, P)` and two reads `[P, P]` never produce a second request. In the
+   isolated fixture the handler runs once and the newly constructed upstream
+   request is exactly the displayed positive upstream request; production
+   calls no handler and returns `ROUTE_DENIED`. Discard suffixes without
+   retaining an unbounded input chunk; do not forward their bytes.
+
+Return a revised full routing artifact and its new digest with those schemas
+and vectors before shared-parser implementation. The accepted empty manifest
+bytes/digest need no change. Lane E records the response and revised artifact in
+its intake; Lane G checks the returned corrections. G6/T13 diagnostic fields,
+exports and flow-scoped A980/D101 acceptance remain separate requirements.
+
+#### Current consumers and permitted next work
+
+At the Cloud comparison pin, [the gateway manifest](../packages/remote-access/src/manifest.ts)
+has one sequence, a `waitron-cloud-gateway` audience and one route port; its
+addresses are restricted to `10.77.*`. [The renderer](../packages/remote-access/src/config.ts)
+passes staff TLS through and forwards public HTTP through a loopback gate.
+[That gate](../packages/remote-access/src/public-gate.ts) handles normalised Node
+HTTP objects, issues a challenge cookie, admits `/public/availability` and uses
+the staff hostname for upstream TLS. It supplies no independent mutual-TLS
+customer context. These consumers are not implementations of either new profile.
+Do not feed the new empty manifest into the old gateway verifier, map its one
+sequence into an appliance counter or open port 9444 through the old staff route.
+
+Eight existing manifest, renewal and public-gate cases pass with
+`node --test packages/remote-access/test/manifest.test.ts
+packages/remote-access/test/renewal.test.ts
+packages/remote-access/test/public-gate.test.ts`. They verify existing consumers;
+no proposed helper, kernel rules, raw parser or mutual-TLS interoperability was
+run. Literal source hashes, manifest bytes and fixture arithmetic were checked
+separately. Local Docker remains unavailable until 3 November.
+
+The allowed next work is Lane E's recorded helper acceptance, focused T3 plan
+amendment and isolated helper implementation, plus the two routing corrections.
+G1 appliance proofs, G2/A947 authority, G3 client policy, G4 independent upstream,
+G5 moves, G6 diagnostics/privacy and G7 executable/host/device receipts remain
+required for their affected paths. Keep real admission closed, production routes
+empty and `.local` independent. Nothing here enables publication, customer
+authentication, payments, writer activation, fiscal or recovery authority, a
+Cloud deployment, or a provider/host operation.
+
 ## Exchanges to implement
 
 ### Agreed connection journey
