@@ -22,6 +22,29 @@ export { runLocal } from './run-local.mjs';
 
 const fail = () => { throw new Error('Invalid cloud cost local run'); };
 const requireThat = value => { if (!value) fail(); };
+const commandFailures = new WeakMap();
+function requireCommand(result) {
+  if (result.status === 0 && !result.error) return;
+  const error = new Error('Invalid cloud cost local run');
+  const code = result.error?.code;
+  const diagnostic = { reason: ['EACCES', 'EPERM', 'ENOENT', 'ENOSPC', 'EIO', 'ETIMEDOUT'].includes(code) ? code : 'command-exit' };
+  if (Number.isSafeInteger(result.status) && result.status >= 0 && result.status <= 255) diagnostic.exitCode = result.status;
+  if (['SIGTERM', 'SIGKILL', 'SIGABRT', 'SIGSEGV', 'SIGINT'].includes(result.signal)) diagnostic.signal = result.signal;
+  commandFailures.set(error, diagnostic);
+  throw error;
+}
+function startupDiagnostic(stage, error, started) {
+  const code = Object.getOwnPropertyDescriptor(error ?? {}, 'code')?.value;
+  const reason = ['EACCES', 'EPERM', 'ENOENT', 'EEXIST', 'ENOSPC', 'EIO', 'ETIMEDOUT'].includes(code) ? code
+    : error instanceof SyntaxError ? 'invalid-json'
+    : error instanceof Error && ['Invalid cloud cost local run', 'Invalid cloud cost evidence', 'Invalid cloud cost replay configuration'].includes(error.message) ? 'validation' : 'unclassified';
+  // Private paths, endpoint credentials and subprocess output never enter the public record.
+  return { stage, reason, ...commandFailures.get(error), elapsedMs: Math.max(0, Math.round(performance.now() - started)) };
+}
+function reportStartupFailure(diagnostic) {
+  try { console.error('stack_startup=' + JSON.stringify(diagnostic)); }
+  catch { /* Reporting cannot prevent owned-resource cleanup. */ }
+}
 const inside = (root, path) => { const r = relative(root, path); return r !== '' && r !== '..' && !r.startsWith('../') && !isAbsolute(r); };
 const environment = () => ({ PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' });
 function owned(args) {
@@ -282,9 +305,9 @@ async function runPrivateProcess(command, argv, { signal, cwd, ownership, timeou
     deadline = setTimeout(abort, timeoutMs);
     if (signal?.aborted) abort();
     const exitCode = await closed;
-    requireThat(exitCode === 0 && !spawnError && !aborted);
+    requireCommand({ status: exitCode, error: spawnError || aborted ? { code: aborted ? 'ETIMEDOUT' : undefined } : undefined, signal: child.signalCode });
     return { exitCode };
-  } catch { fail(); }
+  } catch (error) { if (commandFailures.has(error)) throw error; fail(); }
   finally {
     signal?.removeEventListener('abort', abort); clearTimeout(timer); clearTimeout(deadline);
     if (child && child.exitCode === null && child.signalCode === null && child.pid) child.kill('SIGKILL');
@@ -360,7 +383,7 @@ const lookup = host => new Promise(resolve => {
 function dockerRead(argv) {
   const result = spawnSync('docker', argv, { env: environment(), encoding: 'utf8',
     timeout: 15000, maxBuffer: 2 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
-  requireThat(result.status === 0 && !result.error);
+  requireCommand(result);
   return JSON.parse(result.stdout);
 }
 export async function proveDockerIsolation(args) {
@@ -385,7 +408,7 @@ export async function proveDockerIsolation(args) {
     validateIsolationInspect({ ...args, network: dockerRead(['network', 'inspect', args.networkId])[0],
       containers: dockerRead(['inspect', ...args.containerIds]) });
     return { ...validated, blockedConnections, blockedDns, localControl: true };
-  } catch { fail(); }
+  } catch (error) { if (commandFailures.has(error)) throw error; fail(); }
 }
 
 export function prepareIsolatedStack(args) {
@@ -421,7 +444,7 @@ export function prepareIsolatedStack(args) {
 function dockerCommand(argv, timeout = 15000) {
   const result = spawnSync('docker', argv, { env: environment(), encoding: 'utf8', timeout,
     maxBuffer: 2 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
-  requireThat(result.status === 0 && !result.error);
+  requireCommand(result);
   return result.stdout.trim();
 }
 
@@ -560,11 +583,13 @@ export async function prepareIsolatedPrivateCopy({ source, database, root, journ
 }
 
 export async function startIsolatedStack(args) {
-  let close, abort;
+  let close, abort, stage = 'ownership';
+  const started = performance.now();
   try {
     const { root, journal, codeRoot, stateRoot, image, prepared, signal } = args;
     const value = owned(args);
     requireThat(!signal?.aborted);
+    stage = 'plan';
     requireThat(prepared && inside(root, prepared.file)); canonicalFile(prepared.file);
     const entry = value.localResources?.find(v => v.kind === 'compose-plan' && v.state === 'ready'
       && v.path === prepared.file && v.project === prepared.project);
@@ -572,6 +597,7 @@ export async function startIsolatedStack(args) {
     const plan = JSON.parse(readFileSync(prepared.file, 'utf8'));
     requireThat(plan.name === prepared.project && Object.values(plan.services).every(v => v.image === image
       && v.volumes[0].source === codeRoot && v.volumes[1].source === stateRoot));
+    stage = 'configuration';
     const configFile = join(stateRoot, 'replay-config.json');
     requireThat((canonicalFile(configFile).mode & 0o777) === 0o600);
     const { validateReplayConfig } = await import('./waitron-adapter.mjs');
@@ -587,8 +613,10 @@ export async function startIsolatedStack(args) {
     }
     for (const name of ['gateway-key.pem', 'gateway-cert.pem', 'gateway.pem'])
       requireThat(!existsSync(join(stateRoot, name)));
+    stage = 'runtime-files';
     for (const [from, to] of [['stack-runtime.mjs', 'cost-stack-runtime.mjs'], ['waitron-adapter.mjs', 'cost-waitron-adapter.mjs'], ['meter.mjs', 'meter.mjs']])
       copyFileSync(new URL(from, import.meta.url), join(codeRoot, to), constants.COPYFILE_EXCL);
+    stage = 'certificate';
     await runPrivate('/usr/bin/openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
       '-subj', '/CN=gateway', '-addext', 'subjectAltName=DNS:gateway', '-keyout', join(stateRoot, 'gateway-key.pem'),
       '-out', join(stateRoot, 'gateway-cert.pem')], { ownership: args, timeoutMs: 10000, signal });
@@ -608,6 +636,7 @@ export async function startIsolatedStack(args) {
       return { containers, networks: networkRows };
     };
     // Matching labels alone do not establish that this invocation created a resource.
+    stage = 'preexisting-resources';
     const before = discover();
     requireThat(before.containers.length === 0 && before.networks.length === 0);
     let closed = false;
@@ -630,17 +659,22 @@ export async function startIsolatedStack(args) {
       closed = true;
     };
     // Intent precedes Compose so a lost create reply can be reconciled by exact labels and names.
+    stage = 'compose-up';
     record(args, { kind: 'stack', state: 'intent', project });
     dockerCommand(['compose', '-f', prepared.file, 'up', '--detach', '--no-build', '--pull', 'never'], 120000);
+    stage = 'created-resources';
     const current = discover();
     requireThat(current.containers.length === 6 && current.networks.length === 1);
     for (const c of current.containers) record(args, { kind: 'container', state: 'started', id: c.Id });
     record(args, { kind: 'network', state: 'started', id: current.networks[0].Id });
     const networkId = current.networks[0].Id, containerIds = current.containers.map(c => c.Id);
+    stage = 'container-policy';
     for (const c of current.containers) requireThat(c.HostConfig.ReadonlyRootfs === true
       && c.HostConfig.CapDrop?.includes('ALL') && c.HostConfig.LogConfig.Type === 'none'
       && c.Config.Image === image && c.Config.User === `${process.getuid()}:${process.getgid()}`);
+    stage = 'isolation';
     const isolation = await proveDockerIsolation({ ...args, networkId, containerIds });
+    stage = 'readiness';
     const waitron = current.containers.find(c => c.Config.Labels['io.waitron.cloud-cost.role'] === 'waitron');
     let ready;
     const deadline = Date.now() + 60000;
@@ -652,11 +686,21 @@ export async function startIsolatedStack(args) {
       await new Promise(resolve => setTimeout(resolve, 250));
     }
     requireThat(Object.values(ready).every(v => v));
+    stage = 'cancellation-handoff';
     abort = () => { close().catch(() => {}); };
     signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted) { await close(); fail(); }
     return { ready, isolation, networkId, containerIds, close };
-  } catch { await close?.(); fail(); }
+  } catch (error) {
+    const diagnostic = startupDiagnostic(stage, error, started);
+    reportStartupFailure(diagnostic);
+    try { await close?.(); }
+    catch (cleanupError) {
+      diagnostic.cleanupFailed = true;
+      reportStartupFailure(startupDiagnostic('cleanup', cleanupError, started));
+    }
+    throw Object.assign(new Error(`Invalid cloud cost local run (startup=${diagnostic.stage}, reason=${diagnostic.reason})`), { diagnostic });
+  }
 }
 
 // This stage consumes one recorded worker; shared stack resources remain with their creator.
