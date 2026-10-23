@@ -2795,7 +2795,8 @@ notifications separately.
   SeaweedFS's filer failed before the separate-authority concurrency case because
   its loopback address was already in use. The fixture now holds all seven child
   port reservations together until just before spawning SeaweedFS, preventing the
-  allocator from choosing one port for two services. Partial allocation failure
+  allocator from choosing one port for two services. Reservations drop incoming
+  connections so a peer cannot hold their release open. Partial allocation failure
   closes every earlier reservation. A child startup failure records the named
   port allocation and a bounded `lsof` listener snapshot, or an explicit reason
   that collection was unavailable, before stopping only its own child.

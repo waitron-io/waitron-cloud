@@ -73,3 +73,32 @@ test('a child port collision reports the allocation and current socket owners wi
   });
   assert.equal(owner.listening, true, 'fixture cleanup must leave the competing listener alone');
 });
+
+// A connection accepted by a temporary reservation must not block its release.
+test('storage reservations close promptly when another client connects', {timeout:90000}, async t => {
+  const {connect} = await import('node:net');
+  const listen = Server.prototype.listen;
+  let allocations = 0, client, released, connected;
+  const connectionObserved = new Promise(resolve => connected = resolve);
+  const releaseObserved = new Promise(resolve => released = resolve);
+  t.mock.method(Server.prototype, 'listen', function (...args) {
+    if (this.constructor === Server && args[0] === 0 && ++allocations === 2) {
+      const ready = args.pop();
+      this.once('close', () => released(true));
+      args.push(() => {
+        client = connect(this.address().port, '127.0.0.1');
+        client.on('error', () => {});
+        client.once('connect', () => { connected(); setTimeout(ready, 10); });
+      });
+    }
+    return Reflect.apply(listen, this, args);
+  });
+  t.after(() => client?.destroy());
+  const starting = startBackupStorage();
+  await Promise.race([connectionObserved, starting]);
+  const prompt = await Promise.race([releaseObserved, new Promise(resolve => setTimeout(() => resolve(false), 1500))]);
+  client?.destroy();
+  const storage = await starting;
+  t.after(() => storage.stop());
+  assert.equal(prompt, true, 'an accepted connection must not keep a temporary reservation open');
+});

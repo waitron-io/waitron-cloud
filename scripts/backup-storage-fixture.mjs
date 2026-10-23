@@ -273,9 +273,10 @@ export async function startBackupStorage(options = {}) {
     await writeIdentities();
     const ports = [];
     // Keep every listener open while choosing the batch so the kernel cannot
-    // assign one port to two SeaweedFS services. The child needs them released.
+    // assign one port to two SeaweedFS services. Reject connections so releasing
+    // the reservations cannot wait for a peer before handing them to the child.
     for (let i = 0; i < 7; i++) {
-      const reservation = netServer();
+      const reservation = netServer(socket => socket.destroy());
       portReservations.push(reservation);
       await new Promise((resolve, reject) => {
         reservation.once("error", reject);
