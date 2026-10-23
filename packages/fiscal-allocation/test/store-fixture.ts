@@ -7,33 +7,43 @@ import type { ContinuityAuthority, RegistryOptions } from '../src/policy.ts';
 
 export async function storeFixture() {
   const f = await fixture();
-  const a = await authorityFixture();
-  await f.pool.query(`CREATE TABLE fiscal_test_authority(account_id uuid PRIMARY KEY,
-    entitlement boolean NOT NULL DEFAULT true, custody boolean NOT NULL DEFAULT true,
-    operator_verified boolean NOT NULL DEFAULT true, bases jsonb NOT NULL)`);
-  async function venue() {
-    const v = await f.venue();
-    const id = (
-      await f.pool.query('SELECT venue_id FROM installations WHERE id=$1', [v.installation])
-    ).rows[0].venue_id;
-    await f.pool.query('INSERT INTO fiscal_test_authority(account_id,bases) VALUES($1,$2)', [
-      v.account,
-      JSON.stringify(bases),
-    ]);
-    return { ...v, id, input: { ...reserve(), venueId: id, operationId: randomUUID() } };
-  }
-  const options = testOptions(a.adapter());
-  return {
-    f,
-    a,
-    options,
-    venue,
-    store: new FiscalAllocationStore(f.pool, options),
-    async close() {
-      await a.close();
+  let a: Awaited<ReturnType<typeof authorityFixture>> | undefined;
+  async function close() {
+    try {
+      await a?.close();
+    } finally {
       await f.close();
-    },
-  };
+    }
+  }
+  try {
+    a = await authorityFixture();
+    await f.pool.query(`CREATE TABLE fiscal_test_authority(account_id uuid PRIMARY KEY,
+      entitlement boolean NOT NULL DEFAULT true, custody boolean NOT NULL DEFAULT true,
+      operator_verified boolean NOT NULL DEFAULT true, bases jsonb NOT NULL)`);
+    async function venue() {
+      const v = await f.venue();
+      const id = (
+        await f.pool.query('SELECT venue_id FROM installations WHERE id=$1', [v.installation])
+      ).rows[0].venue_id;
+      await f.pool.query('INSERT INTO fiscal_test_authority(account_id,bases) VALUES($1,$2)', [
+        v.account,
+        JSON.stringify(bases),
+      ]);
+      return { ...v, id, input: { ...reserve(), venueId: id, operationId: randomUUID() } };
+    }
+    const options = testOptions(a.adapter());
+    return {
+      f,
+      a,
+      options,
+      venue,
+      store: new FiscalAllocationStore(f.pool, options),
+      close,
+    };
+  } catch (error) {
+    await close();
+    throw error;
+  }
 }
 
 export async function blocked(pool: import('pg').Pool) {
