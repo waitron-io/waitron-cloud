@@ -124,9 +124,11 @@ test('duplicate concurrent results admit one history entry and one job transitio
 });
 test('policy change invalidates existing qualification immediately and schedules recheck',async()=>{
  const f=await seed();await admit(f);const before=await state(f);
+ const due=async()=>(await pool.query('SELECT available_at<=clock_timestamp() AS due FROM backup_jobs WHERE id=$1',[f.job])).rows[0].due;
+ assert.equal(await due(),false);
  assert.equal(await transaction(pool,c=>admission.setVerificationPolicy(c,target,image,true)),2);const s=await state(f);
  assert.equal(s.qualification.current_verification,'pending');assert.deepEqual(s.history,before.history);assert.deepEqual(s.evidence,before.evidence);
- assert(s.job.available_at<=new Date());assert.equal(s.job.status,'pending');
+ assert.equal(await due(),true);assert.equal(s.job.status,'pending');
 });
 
 async function blocked(waiter:number,blocker:number){
