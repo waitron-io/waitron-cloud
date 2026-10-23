@@ -93,3 +93,42 @@ test('browserFixtureCommandRetainsOnlySafeChildDiagnostics', () => {
   }
   assert.equal(helper.runBrowserFixture(process.execPath, ['-e', "process.stdout.write(' completed \\n')"], {}), 'completed');
 });
+
+// A descriptor trap must not replace the original refusal or expose its own error.
+for (const property of ['browserPhase', 'browserStep'])
+test('browserReporterPreservesRefusalWhenInspectionThrows_' + property, async () => {
+  const refusal = new Proxy(Object.assign(Error('PRIVATE_ORIGINAL'), {
+    browserPhase: 'reconnect', browserStep: 'reload',
+  }), {
+    getOwnPropertyDescriptor(target, key) {
+      if (key === property) throw Error('PRIVATE_DESCRIPTOR_TRAP');
+      return Reflect.getOwnPropertyDescriptor(target, key);
+    },
+  });
+  const messages = [];
+  await assert.rejects(helper.withBrowserDiagnostics(async () => {throw refusal;}, value => messages.push(value)), error => error === refusal);
+  assert.deepEqual(messages, property === 'browserPhase' ? [] : ['cost_browser_phase=reconnect']);
+});
+
+test('browserReporterPreservesARevokedProxyRefusal', async () => {
+  const {proxy: refusal, revoke} = Proxy.revocable(Error('PRIVATE_ORIGINAL'), {});
+  revoke();
+  const messages = [];
+  // Node's rejects helper itself reads a property of the rejected value.
+  const result = await helper.withBrowserDiagnostics(async () => {throw refusal;}, value => messages.push(value))
+    .then(() => ({rejected: false}), error => ({rejected: true, error}));
+  assert.equal(result.rejected, true);
+  assert.equal(result.error, refusal);
+  assert.deepEqual(messages, []);
+});
+
+test('browserReporterPreservesRefusalWhenAProxyReturnsAnInvalidDescriptor', async () => {
+  const refusal = new Proxy(Object.defineProperty(Error('PRIVATE_ORIGINAL'), 'browserPhase', {
+    value: 'reconnect', configurable: false,
+  }), {
+    getOwnPropertyDescriptor() {return {value: 'PRIVATE_DESCRIPTOR', configurable: true};},
+  });
+  const messages = [];
+  await assert.rejects(helper.withBrowserDiagnostics(async () => {throw refusal;}, value => messages.push(value)), error => error === refusal);
+  assert.deepEqual(messages, []);
+});
