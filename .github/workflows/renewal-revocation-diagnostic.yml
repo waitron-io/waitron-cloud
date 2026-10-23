@@ -32,7 +32,7 @@ jobs:
           node scripts/test-postgres.mjs exec python3 -u - <<'PYTHON'
           from concurrent.futures import ThreadPoolExecutor, as_completed
           from pathlib import Path
-          import json, subprocess
+          import json, subprocess, tempfile
           def run(index):
               result = subprocess.run(['node', '--test', '--test-timeout=30000',
                   '--test-name-pattern=installation lock observation|owner revocation serializes',
@@ -44,9 +44,49 @@ jobs:
                   print(result.stdout + result.stderr, flush=True)
               return result.returncode != 0
           with ThreadPoolExecutor(max_workers=4) as workers:
-              failures = sum(task.result() for task in as_completed([workers.submit(run, n) for n in range(4)]))
-          print(json.dumps({'cases': 4, 'failures': failures}), flush=True)
-          raise SystemExit(bool(failures))
+              failures = sum(task.result() for task in as_completed([workers.submit(run, n) for n in range(40)]))
+          print(json.dumps({'cases': 40, 'failures': failures}), flush=True)
+          if failures:
+              raise SystemExit(1)
+          with tempfile.TemporaryDirectory(prefix='cloud-renewal-guards-') as scratch:
+              candidate = Path(scratch) / 'candidate'
+              subprocess.run(['git', 'worktree', 'add', '--detach', str(candidate), 'HEAD'], check=True)
+              try:
+                  subprocess.run(['pnpm', 'install', '--frozen-lockfile', '--offline'], cwd=candidate, check=True)
+                  test_path = candidate / 'packages/registration/test/installations.test.ts'
+                  product_path = candidate / 'packages/registration/src/installations.ts'
+                  tests = test_path.read_text()
+                  product = product_path.read_text()
+                  faults = [
+                      ('statement', test_path,
+                       "AND query LIKE 'SELECT i.*,v.environment,v.organisation_id FROM installations i%FOR UPDATE OF i'", '',
+                       'installation lock observation', 'a session wait must not admit the competing renewal'),
+                      ('holder', test_path, 'AND $2::integer=ANY(pg_blocking_pids(pid))', 'AND $2::integer IS NOT NULL',
+                       'installation lock observation', 'a different connection cannot stand in for the installation holder'),
+                      ('revoked', product_path, "return fail('revoked');", ';',
+                       'owner revocation serializes', 'Missing expected rejection'),
+                  ]
+                  for name, path, before, after, pattern, expected in faults:
+                      original = path.read_text()
+                      assert original.count(before) == 1, name
+                      path.write_text(original.replace(before, after))
+                      result = subprocess.run(['node', '--test', '--test-timeout=30000',
+                          f'--test-name-pattern={pattern}', 'packages/registration/test/installations.test.ts'],
+                          cwd=candidate, capture_output=True, text=True, timeout=45)
+                      output = result.stdout + result.stderr
+                      Path(f'diagnostics/fault-{name}.log').write_text(output)
+                      path.write_text(original)
+                      assert result.returncode != 0 and expected in output, (name, result.returncode, output)
+                      print(json.dumps({'fault': name, 'caught': True}), flush=True)
+                  assert test_path.read_text() == tests and product_path.read_text() == product
+                  restored = subprocess.run(['node', '--test', '--test-timeout=30000',
+                      'packages/registration/test/installations.test.ts'], cwd=candidate,
+                      capture_output=True, text=True, timeout=90)
+                  Path('diagnostics/restored.log').write_text(restored.stdout + restored.stderr)
+                  print(json.dumps({'restored_file_exit': restored.returncode}), flush=True)
+                  assert restored.returncode == 0, restored.stdout + restored.stderr
+              finally:
+                  subprocess.run(['git', 'worktree', 'remove', '--force', str(candidate)], check=True)
           PYTHON
       - uses: actions/upload-artifact@v4
         if: always()

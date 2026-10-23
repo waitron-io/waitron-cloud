@@ -4068,9 +4068,14 @@ that separate fixture's bound; this change claims no macOS supervisor fix.
 ### Installation renewal accepted during owner revocation
 
 PR #316 run `39953541488`, registration shard 5/5, accepted a renewal where
-`installations.test.ts` expected a `revoked` refusal. The cause is not yet known.
-D128 records the waiting statement and its blocking connections before the competing
-renewal, and reports the returned revocation and lease expiry fields on unexpected
-success. Linux PostgreSQL qualification must establish the transaction order before
-changing product locks or the test's ordering. Preserve every refusal, venue, service,
-audit and cleanup check. Local database checks wait while Docker is unavailable.
+`installations.test.ts` expected a `revoked` refusal. The historical cause remains
+unattributed. Forty instrumented Linux cases observed the correct installation wait
+and passed. A forced earlier session wait exposed a test-observer defect in four
+of four Linux cases: any lock wait could release the competing renewal. The test
+now waits for the installation-lock statement blocked by its own held connection.
+The regression rejects both the earlier session wait and an unrelated holder, then
+observes the real installation wait. Existing security, venue, service and audit
+checks remain unchanged; production locking is unchanged. Linux PostgreSQL and
+guard-removal results must qualify the correction before landing. Local database
+checks remain unavailable while Docker is down. No deployed vulnerability or fix
+for the historical refusal is established by this evidence.
