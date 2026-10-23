@@ -90,11 +90,23 @@ stops the suite. Each command has a 90-second deadline; each suite container has
 five-minute deadline and limits of 1 GiB memory, two CPUs, 128 processes and 512 MiB of
 temporary storage. The source inspector has its separate smaller limits.
 
+The runner also restricts each child to at most two CPU cores, because a CPU
+quota alone leaves the host's larger core count visible to runtime worker pools.
+Suites with more than six independent plan cases run in groups of at most six,
+each in a fresh OpenTofu process. Expected-refusal plans can retain provider
+processes until OpenTofu exits; grouping releases them within the existing
+process and memory limits. Every group keeps the original shared mocks and
+variables, must report every selected case passing, and stops the suite on a
+failure or incomplete count. The runner restores the original temporary test
+file and prints a clearly labelled aggregate only after all groups pass. Keep
+cases independent; a reference to a run in a different group cannot carry state
+between processes.
+
 You can select only `canary`, `accounts`, `state`, `network`, `cell`, `database`, `storage`,
 `custody`, `observability`, `ingress`, `dns` or `integration`. Each name selects fixed module
 and root paths; the CLI accepts no custom command or directory. `--all` runs those suites
-in order and refuses a missing test file. The canary, account and state suites are implemented,
-so `--all` currently reports those results, then fails on the missing network suite.
+in order and refuses a missing test file. Build and qualify each remaining suite
+before using `--all` as a check of the whole infrastructure layer.
 It does not report the unfinished infrastructure as verified. Missing local tools produce
 the `--prepare-tools` setup instruction without downloading anything.
 
@@ -360,3 +372,52 @@ placement, private API access, metadata enforcement, operator permissions or con
 during a zone failure. P1's local cluster rehearsal and a separately authorised live
 provider rehearsal must qualify those behaviours. Task 12 must keep cell creation
 dependent on the complete network, including its routes and associations.
+
+## Keep management data separate and recoverable
+
+Losing a data centre must not leave the global layer or Spain with only one
+database machine. The database module describes one private PostgreSQL instance
+with a standby in another availability zone, AWS's Multi-AZ instance deployment.
+Global uses `cloud_global`; Spain uses `cloud_es`. Each account has its own
+database, private subnet group and encryption keys. Cells share only their scope's
+database. You can check the declarations without contacting AWS:
+
+```sh
+node deploy/aws/check.mjs --suite database
+```
+
+Pass the scope's VPC, three database subnets keyed by zone ID, and its service
+security group. The database firewall admits only that service group on TCP port
+5432. The PostgreSQL parameter group requires TLS, which encrypts connections.
+Supply an explicit engine version, matching parameter family and instance class.
+The fixture uses PostgreSQL `17.6`, `postgres17` and `db.t3.small`; these are
+configuration examples, not a claim that AWS offers them in either region.
+Storage uses encrypted gp3 disks, starts at 20 GiB and may grow to at most 100 GiB.
+
+RDS creates and manages the administrator password in Secrets Manager using the
+primary encryption key. OpenTofu publishes the secret's reference, never its
+value. This module creates no application users, tables or migrations. P3 owns
+the separate schemas and restricted application users; P1 and P3 must connect
+applications with those users rather than the administrator secret.
+
+Primary and destination automated backups retain seven days by default. Spain
+copies snapshots and transaction logs to Paris; global copies them from Frankfurt
+to Ireland. The destination provider must use the same account and its own
+regional key. The destination contains backups only, with no running database or
+cluster. AWS documents this mechanism for [Multi-AZ instances and these regional
+pairs](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_ReplicateBackups.html).
+The local checks establish configuration bindings; restore success, backup lag,
+key access and engine availability still need a separately authorised rehearsal.
+
+Deletion protection, a required final snapshot, retained automated backups and
+OpenTofu lifecycle guards protect the declared database and cold-copy resources
+from ordinary destructive changes. Before a later authorised retirement, inventory
+existing final snapshot names and verify retained copies and keys. Reusing the
+same final snapshot name can prevent deletion; removing a resource's configuration
+also removes its lifecycle guard. No retirement or restore runs here.
+
+A Multi-AZ failover can interrupt existing connections. P1 and P3 must rehearse
+reconnection and transaction retries; these mocked plans make no promise of zero
+interruption. P7 owns the separately authorised regional recovery procedure and
+new credentials for a restored database. An administrator-secret reference in the
+primary region alone does not establish regional recovery access.
