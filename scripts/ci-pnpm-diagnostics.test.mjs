@@ -159,3 +159,88 @@ test('installer worker threads have distinct identities even when they share a p
   assert.deepEqual(starts.map(row => row.thread).sort(), [0, 1]);
   assert.ok(starts.every(row => Number.isSafeInteger(row.time)));
 });
+
+test('setup observes both published macOS metadata endpoints', async () => {
+  await registry(async base => {
+    const result = await child(`
+      for (const name of ['macos-arm64', 'macos-x64']) {
+        try {await (await fetch(${JSON.stringify(base)} + '/@pnpm%2f' + name + '?broken')).text();} catch {}
+      }`);
+    assert.equal(result.code, 0);
+    assert.deepEqual(result.records.filter(row => row.event === 'http-error').map(row => row.endpoint),
+      ['/@pnpm/macos-arm64', '/@pnpm/macos-x64']);
+  });
+});
+
+test('malformed diagnostic events cannot change the installer outcome', async () => {
+  const result = await child(`
+    import {channel} from 'node:diagnostics_channel';
+    const request = {path: '/pnpm', origin: 'https://registry.npmjs.org'};
+    channel('undici:request:create').publish({request});
+    for (const event of ['undici:request:create', 'undici:request:headers', 'undici:request:trailers', 'undici:request:error', 'child_process']) {
+      channel(event).publish(null);
+      channel(event).publish({});
+    }
+    channel('undici:request:headers').publish({request});
+    console.log('installer continued');`);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /installer continued/);
+});
+
+test('setup labels only the canonical public registry as npm', async () => {
+  const result = await child(`
+    import {channel} from 'node:diagnostics_channel';
+    for (const origin of ['https://registry.npmjs.org', 'https://registry.npmjs.org.private-secret.invalid', 'https://user:secret@registry.npmjs.org']) {
+      channel('undici:request:create').publish({request: {path: '/pnpm', origin}});
+    }`);
+  assert.equal(result.code, 0);
+  assert.deepEqual(result.records.filter(row => row.event === 'http-start').map(row => row.registry), ['npm', 'other', 'other']);
+  assert.doesNotMatch(result.stderr, /secret/);
+});
+
+test('an HTTP refusal remains visible after successful requests exhaust the normal budget', async () => {
+  await registry(async base => {
+    const result = await child(`
+      for (let i = 0; i < 20; i++) await (await fetch(${JSON.stringify(base + '/pnpm')})).text();
+      await (await fetch(${JSON.stringify(base + '/@pnpm%2fexe?unavailable')})).text();`);
+    assert.equal(result.code, 0);
+    assert.ok(result.records.some(row => row.event === 'http-status' && row.status === 503 && row.id === 21));
+  });
+});
+
+test('the parent limits child lifecycle records separately from process exit', async () => {
+  const result = await child(`
+    import {spawn} from 'node:child_process';
+    for (let i = 0; i < 12; i++) {
+      const worker = spawn(process.execPath, ['-e', ''], {env: {...process.env, NODE_OPTIONS: ''}});
+      await new Promise(resolve => worker.once('close', resolve));
+    }`);
+  assert.equal(result.code, 0);
+  assert.equal(result.records.filter(row => row.event === 'child-exit').length, 8);
+  assert.ok(result.records.some(row => row.event === 'process-exit' && row.code === 0));
+  assert.equal(result.records.length, 10);
+});
+
+test('a closed diagnostic destination cannot fail setup or its exit handler', async () => {
+  const result = await child(`
+    import {closeSync} from 'node:fs';
+    import {channel} from 'node:diagnostics_channel';
+    closeSync(2);
+    channel('undici:request:create').publish({request: {path: '/pnpm', origin: 'https://registry.npmjs.org'}});
+    console.log('setup continued');`);
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /setup continued/);
+});
+
+test('a cyclic error cause remains bounded and does not hide its first code', async () => {
+  const result = await child(`
+    import {channel} from 'node:diagnostics_channel';
+    const request = {path: '/pnpm', origin: 'https://registry.npmjs.org'};
+    const error = new Error('not logged'); error.code = 'UND_ERR_SOCKET'; error.cause = error;
+    channel('undici:request:create').publish({request});
+    channel('undici:request:error').publish({request, error});`);
+  assert.equal(result.code, 0);
+  let cause = result.records.find(row => row.event === 'http-error')?.error;
+  for (let i = 0; i < 4; i++) {assert.equal(cause?.code, 'UND_ERR_SOCKET'); cause = cause.cause;}
+  assert.equal(cause, undefined);
+});

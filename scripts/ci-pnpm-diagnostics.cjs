@@ -16,7 +16,7 @@ function endpoint(path) {
   try {
     const name = decodeURIComponent(path.split('?')[0]);
     if (['/pnpm', '/@pnpm/exe', '/-/npm/v1/keys'].includes(name)) return name;
-    if (/^\/@pnpm\/(?:linux|linuxstatic|darwin|win|freebsd)-(?:x64|arm64|arm|ia32)(?:-musl)?$/.test(name)) return name;
+    if (/^\/@pnpm\/(?:linux|linuxstatic|macos|win|freebsd)-(?:x64|arm64|arm|ia32)(?:-musl)?$/.test(name)) return name;
   } catch { /* An unknown request remains outside the diagnostic's allowlist. */ }
 }
 function safeError(error, depth = 0) {
@@ -25,28 +25,34 @@ function safeError(error, depth = 0) {
   if (depth < 3 && error?.cause) record.cause = safeError(error.cause, depth + 1);
   return record;
 }
-channel('undici:request:create').subscribe(({request}) => {
+function observe(name, listener) {
+  channel(name).subscribe(message => {
+    try {listener(message);}
+    catch { /* An unexpected event shape must not fail the installer. */ }
+  });
+}
+observe('undici:request:create', ({request}) => {
   const path = endpoint(request.path);
   if (!path) return;
   const record = {id: ++sequence, endpoint: path, registry: request.origin === 'https://registry.npmjs.org' ? 'npm' : 'other'};
   requests.set(request, record);
   report({event: 'http-start', ...record});
 });
-channel('undici:request:headers').subscribe(({request, response}) => {
+observe('undici:request:headers', ({request, response}) => {
   const record = requests.get(request);
   if (!record) return;
   record.status = response.statusCode;
   report({event: response.statusCode >= 400 ? 'http-status' : 'http-headers', ...record}, response.statusCode >= 400 ? 'failure' : 'ordinary');
 });
-channel('undici:request:trailers').subscribe(({request}) => {
+observe('undici:request:trailers', ({request}) => {
   const record = requests.get(request);
   if (record) report({event: 'http-transfer-complete', ...record});
 });
-channel('undici:request:error').subscribe(({request, error}) => {
+observe('undici:request:error', ({request, error}) => {
   const record = requests.get(request);
   if (record) report({event: 'http-error', ...record, error: safeError(error)}, 'failure');
 });
-channel('child_process').subscribe(({process: child}) => {
+observe('child_process', ({process: child}) => {
   // errorMonitor observes an error without handling it or suppressing Node's normal failure.
   child.once(errorMonitor, error => report({event: 'child-error', childPid: child.pid ?? null, error: safeError(error)}, 'child'));
   child.once('exit', (code, signal) => report({event: 'child-exit', childPid: child.pid, code, signal}, 'child'));

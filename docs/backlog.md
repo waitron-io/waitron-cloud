@@ -2689,15 +2689,16 @@ notifications separately.
   verification and capture the missing HTTP stage before choosing a repair;
   neither the underlying cause nor a connection to portal changes is established.
   D154 adds a read-only observer to each pnpm setup in the standard and cost
-  workflows. It records fixed package
-  endpoints, HTTP status, interrupted transfers, child exit or signal, and the
-  final process exit, with separate limits for normal and failure records. It
+  workflows. It records fixed package-metadata endpoints, HTTP status, interrupted
+  metadata transfers, child exit or signal, and the final process exit. Each Node
+  thread has separate limits for normal, failure and child records. It
   omits URL credentials, hosts other than the public npm label, queries, headers,
   bodies, command arguments and raw error messages. Process and worker identities
   distinguish parallel verification requests. A controlled cut-off response
   reproduces `terminated` with HTTP 200 and `UND_ERR_SOCKET`; invalid gzip can
   also produce `terminated` after a completed wire transfer, so these diagnostics
   do not by themselves expose every body-decoding failure or explain the old run.
+  Tarball downloads are outside this observer's metadata allowlist.
   The exact locked 11.19.0 bootstrap completes its verified 9.15.0 switch in a
   fresh native probe. Linux qualification runs the controlled failure checks and
   observes the unchanged setup action; a later successful setup is recovery
