@@ -189,7 +189,7 @@ export async function prepareConformance(selected) {
       const remaining=()=>Math.ceil(deadline-performance.now());
       const command=async args=>{
         if(remaining()<=0)throw Error('Conformance image acquisition timed out');
-        await run('docker',args,{timeout:remaining(),captureStderr:true,stdio:['ignore','inherit','pipe']});
+        await run('docker',args,{timeout:remaining(),captureStderr:true,stdio:['ignore',args[0]==='pull'?'inherit':'ignore','pipe']});
       };
       try {await command(['image','inspect',name]);return;} catch(error) {
         if(controller.signal.aborted||!/No such (?:image|object):/i.test(error.stderr))throw error;
@@ -201,7 +201,10 @@ export async function prepareConformance(selected) {
           const transient=/Client\.Timeout|i\/o timeout|TLS handshake timeout|context deadline exceeded|connection reset by peer|unexpected EOF/i.test(error.stderr);
           if(controller.signal.aborted||terminal||!transient||attempt>=3||remaining()<=pause)throw error;
           console.error('Conformance image pull lost its connection; retrying '+name+' ('+(attempt+1)+'/3)');
-          await delay(pause,undefined,{signal:controller.signal});
+          try {await delay(pause,undefined,{signal:controller.signal});} catch(interruption) {
+            if(controller.signal.aborted)throw Error('Conformance setup interrupted',{cause:interruption});
+            throw interruption;
+          }
         }
       }
     };

@@ -4124,8 +4124,8 @@ stops at inspection. Container creation and image builds are not retried.
 
 Inspection, all pulls and both retry pauses share the existing 300-second image
 acquisition budget: inspect time + pull times + 1 second + 2 seconds must fit
-inside 300 seconds; each command receives only the remaining time. Pauses are
-skipped when they cannot fit, interruption cancels a pause, and the existing
+inside 300 seconds; each command receives only the remaining time. Retries are
+not started when their pause cannot fit, interruption cancels a pause, and the existing
 command supervisor kills a stalled child. Cached images avoid another registry
 request. A BuildKit base image is not assumed to exist in Docker's runnable-image
 cache; the separate Node runner still uses an explicit cache inspection.

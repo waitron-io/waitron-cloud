@@ -21,6 +21,7 @@ const fail=message=>{console.error(message);process.exit(1);};
 if(args[0]==='image'&&args[1]==='inspect') {
   if(data.inspectFailure)fail(data.inspectFailure);
   if(!data.cached)fail('Error: No such image: '+args[2]);
+  console.log('INSPECT_JSON_DETAILS');
 } else if(args[0]==='pull') {
   if(data.hang){data.pid=process.pid;writeFileSync(path,JSON.stringify(data));setInterval(()=>{},1000);}
   else {
@@ -70,6 +71,7 @@ test('cached image prepares without any registry request',async t=>{
   const result=await prepare(t,{cached:true});
   assert.equal(result.code,0,result.output);
   assert.deepEqual(result.calls,[['image','inspect','node:26.11.1-slim']]);
+  assert.equal(result.output.includes('INSPECT_JSON_DETAILS'),false,'discard cache metadata while retaining pull progress');
 });
 
 for(const refusal of ['denied: requested access to the resource is denied',
@@ -127,6 +129,7 @@ for(const signal of ['SIGINT','SIGTERM'])test('interruption during image retry b
   assert.equal(result.code,1,result.output);
   assert.equal(result.calls.filter(args=>args[0]==='pull').length,1);
   assert.equal(result.output.includes('PREPARED'),false);
+  assert.match(result.output,/Conformance setup interrupted/);
 });
 
 // A deadline that expires while waiting must not authorize a second external process.
