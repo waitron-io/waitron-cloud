@@ -3940,7 +3940,7 @@ changing any check. The assertions and deadlines remain unchanged.
   passed exact-head CI39966740913; matching bytes do not establish a cause.
   D134 adds bounded browser/server request traces: static endpoint, method,
   status, elapsed time and server connection-pool counts, excluding request bodies,
-  cookies and reset links. All 104 real Linux journeys passed across
+  cookies and reset links. All 104 real Linux test cases passed across
   [the initial trace run](https://github.com/waitron-io/waitron-cloud/actions/runs/39973004321)
   and [the browser/server trace run](https://github.com/waitron-io/waitron-cloud/actions/runs/39973503708).
   The temporary repeat workflow is removed; normal CI retains these traces.
