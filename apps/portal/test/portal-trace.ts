@@ -13,3 +13,25 @@ export function portalTrace(page:Page) {
  page.on('pageerror',()=>record({event:'pageerror'}));
  return {events,stage:(stage:string)=>record({stage})};
 }
+
+export async function waitForInitialSession(page:Page,origin:string,report:(details:string)=>void) {
+ const trace=portalTrace(page);
+ let stage='initial navigation';
+ try {
+  trace.stage(stage);await page.goto(`${origin}/account`);
+  stage='initial signed-in screen';trace.stage(stage);
+  await page.getByText('You are signed in to Waitron Cloud.').waitFor();
+ } catch(error) {
+  // A broken page must not make failure reporting wait indefinitely or expose its content.
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  const snapshot=await Promise.race([
+   page.evaluate(()=>{
+    const heading=document.querySelector('h1')?.textContent?.trim();
+    return {heading:heading===undefined?'absent':['Your account','Sign in','Tu cuenta','Inicia sesión'].includes(heading)?heading:'other',clock:new Date().toISOString()};
+   }).catch(()=>({unavailable:true})),
+   new Promise<{unavailable:true}>(resolve=>{timer=setTimeout(()=>resolve({unavailable:true}),250);}),
+  ]).finally(()=>clearTimeout(timer));
+  try {report(JSON.stringify({stage,browser:trace.events,snapshot}));} catch {}
+  throw error;
+ }
+}
