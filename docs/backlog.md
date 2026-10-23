@@ -89,16 +89,15 @@ venue using a paid service. Each area gets its own design session with the owner
 order. Remote access matters most because Waitron's customer-facing features wait on it
 (Waitron A951, A1013, A508, A509, A1012).
 
-1. **Production deployment.** Nothing reaches a real venue until Cloud runs somewhere:
-   "No public cloud service is deployed". Decided: AWS in Spain (`eu-south-2`), with Paris
-   (`eu-west-3`) as the extra encrypted backup copy. The
-   [C41 release and upgrade proposal](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md)
-   is unapproved, and C60 (compute and sizing) has no document. Missing: infrastructure
-   described in code (the repository has none), a pipeline that deploys (the only workflows
-   are `ci.yml`, `cloud-cost.yml` and `ui-release.yml`), the production domain and its DNS,
-   production secret custody (D101 proposes AWS KMS), backups of Cloud's own database on the
-   provider, and spending alerts on the AWS account. First session: the owner's decision on
-   C41, then C60, then the infrastructure.
+1. **Production deployment — DESIGNED AND APPROVED (2026-10-22).** The
+   [design](superpowers/specs/2026-10-22-cloud-production-deployment-design.md) was approved by
+   the owner for building and rehearsing locally; opening AWS accounts, spending money and
+   production schema changes need a separate go-ahead (its section 12). Its section 3 replaces
+   the statements in C39, C41 and the hosting proposal that put the owner's approval on every
+   step. The build is [seven plans](superpowers/plans/2026-10-22-cloud-production-deployment.md),
+   each written when its turn comes: P1 and P2 can start now; P3 waits for the migration slot;
+   P6 waits for the owner's sandbox approval and the stop-proof contract with Waitron (Waitron
+   A1018); P7 waits for P2, P3 and the lawyer's answer on running Spain from Paris.
 2. **Production monitoring, alerting and the status page.** No real venue should depend on a
    Cloud nobody is watching. Built for test installations only: venue contact, snapshot age,
    backup verification and remote-route checks, plus opt-in alert emails to venue owners
