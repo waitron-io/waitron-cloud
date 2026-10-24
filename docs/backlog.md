@@ -2033,6 +2033,12 @@ notifications separately.
   Committed checking reads saved Git blobs and remains read-only through the same
   linked directory. This checks the directory before writing; it does not protect
   against another process replacing the directory during generation.
+  Generation also refuses a live policy with multiple hard links before writing.
+  A real temporary Git repository reproduces the earlier overwrite of an outside
+  alias; the regression preserves both names' contents, staged inputs and working
+  tree on refusal. Ordinary generation still succeeds, and committed checking
+  remains read-only with a hard-linked, dirty live policy. These checks inspect
+  the output before writing; concurrent replacement remains outside this guarantee.
   An independent subprocess check corrupts only the generated audit digest after
   valid staged inputs have passed. The final validation refuses that output without
   changing the existing policy, staged inputs or working tree. Removing that final
