@@ -30,7 +30,6 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             if (endpoint.endsWith('/passkeys/registration/options')) return route.fulfill({status: 403, json: {error: 'credentials_invalid'}});
             if (endpoint.endsWith('/passkeys/authentication/options')) return route.fulfill({status: 503, json: {error: 'unavailable'}});
             if (endpoint.endsWith('/passkeys')) return route.fulfill({json: {passkeys: []}});
-            if (endpoint.endsWith('/sessions')) return route.fulfill({json: {sessions: []}});
             if (endpoint.endsWith('/installations')) return route.fulfill({json: {installations: []}});
             return route.fulfill({status: 503, json: {error: 'unavailable'}});
           });
