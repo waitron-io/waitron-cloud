@@ -289,6 +289,9 @@ committed writes with lost replies, session expiry, retry delays and account iso
 Sign-in retry delays leave signup and password recovery usable. English/Spanish
 browser tests cover both request and completion forms, retained sign-in deadlines
 after navigation, and recovery's own visible retry countdown and expiry.
+Recovery shows a failed session check as unavailable and lets you retry.
+English/Spanish browser checks cover HTTP and network failures, the pending
+message and retry to sign-in without exposing recovery controls.
 Next, configure live mail delivery and the deployment/account-security controls below. Pairing
 remains a separate exchange requiring both Cloud and local administrator proof.
 
