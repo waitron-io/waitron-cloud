@@ -346,6 +346,10 @@ error and retained states. On-prem venues need no managed backup to use the jour
 Adding or removing a fiscal series clears stale series-field errors while keeping
 feedback on other fields. English/Spanish browser checks retain valid series codes
 and purposes and confirm that Reserve still flags empty series before sending.
+Fiscal drafts name a missing Standard series and mark every repeated code.
+Correcting series clears stale feedback. English/Spanish browser checks cover
+both refusals together, leave unrelated codes unmarked and submit corrected drafts
+with existing case-sensitive codes and normalized taxpayer/software fields.
 The no-request checks also rely on the controller's validation; a focused test
 that isolates the screen's own refusal remains a client-validation follow-up.
 Browser validation checks structure; local recovery must verify cryptographic
