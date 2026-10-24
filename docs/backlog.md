@@ -3684,6 +3684,8 @@ notifications separately.
   installation. It reports redacted access, service, monitoring, remote-check and backup
   evidence without account, provider, hostname, configuration, credential or raw-error
   data. Stale health is shown as unknown and the permission is rechecked before release.
+  If a diagnostic download fails, you see its error beside the venue you chose. Starting
+  another download clears that warning; changing accounts clears its venue association.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
   The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
