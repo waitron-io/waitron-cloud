@@ -63,3 +63,32 @@ for(const mismatch of [
   controller.open(requestId);controller.account('owner');await controller.load();controller.code='12345678';await controller.inspect();await controller.approve();
   assert.equal(controller.error,'unavailable');assert.equal(controller.view?.state,'awaiting_cloud');assert.equal(controller.view?.localVenueId,view.localVenueId);assert.equal(controller.selected,business.legalBusinessId);
 });
+
+for(const [code,expected] of [[' 12345678','12345678'],['12345678 ','12345678'],[' 12345678 ','12345678'],['\t01234567\n','01234567']] as const)for(const approve of [false,true])
+test(`${approve?'approval':'inspection'} trims outer whitespace from ${JSON.stringify(code)}`,async()=>{
+  const calls:{path:string;body?:Record<string,unknown>}[]=[];
+  const controller=new PairingController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+    calls.push({path,body});
+    return {ok:true,value:(path.endsWith('businesses')?{businesses:[business]}:path.endsWith('approve')?{...view,...business,state:'awaiting_local'}:view) as T};
+  });
+  controller.open(requestId);controller.account('owner');await controller.load();
+  if(approve){controller.code='12345678';await controller.inspect();}
+  controller.code=code;await (approve?controller.approve():controller.inspect());
+  assert.equal(controller.error,undefined);assert.equal(controller.codeError,false);
+  assert.equal(controller.code,expected);
+  assert.deepEqual(calls.at(-1),{path:approve?'/pairing/approve':'/pairing/inspect',body:approve
+    ?{requestId,code:expected,organisationId:business.organisationId,legalBusinessId:business.legalBusinessId}
+    :{requestId,code:expected}});
+  assert.equal(controller.view?.state,approve?'awaiting_local':'awaiting_cloud');
+});
+for(const code of ['1234 5678','1234\t5678','1234567','123456789','        ','１２３４５６７８'])for(const approve of [false,true])
+test(`${approve?'approval':'inspection'} still refuses malformed code ${JSON.stringify(code)} locally`,async()=>{
+  const calls:string[]=[];
+  const controller=new PairingController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{
+    calls.push(path);return {ok:true,value:(path.endsWith('businesses')?{businesses:[business]}:view) as T};
+  });
+  controller.open(requestId);controller.account('owner');await controller.load();
+  if(approve){controller.code='12345678';await controller.inspect();}
+  const before=calls.length;controller.code=code;await (approve?controller.approve():controller.inspect());
+  assert.equal(controller.error,'pairCodeError');assert.equal(controller.codeError,true);assert.equal(calls.length,before);
+});
