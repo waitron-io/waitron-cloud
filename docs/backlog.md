@@ -2691,9 +2691,10 @@ notifications separately.
   declarations. A workspace inventory check refuses an unaccounted compiler
   command or configuration. Individual package commands remain available. Measure
   the full CI job before attributing any billed saving; the new behavioral checks
-  also take time. The disposable real-tree review confirms backend test files
-  still fail compilation when broken. Add that test-directory probe to the
-  automated controls, which currently inject backend source errors only. Missing
+  also take time. The automated controls now inject a real type error into every backend test
+  directory and a newly added backend package. They require a compiler diagnostic
+  for each file, then pass after correcting all injected errors. Excluding those
+  test directories in a disposable copy makes the new check fail. Missing
   package compiler scripts and the equivalent `--project` spelling already fail
   the inventory or trace checks, but need clearer test diagnostics. Bootstrap setup now gives npm
   registry requests 15 seconds with one retry after one second, so a stalled
