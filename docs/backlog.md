@@ -3906,6 +3906,11 @@ notifications separately.
   that continuous-stream bytes and account identity mail are excluded. Byte totals
   that round to 1024 use the next unit, up to TiB, in both languages, including negative
   totals; larger-than-safe integers keep their exact byte display.
+  Your usage dates name the month in English and Spanish and keep their original
+  machine-readable timestamps. A total of one byte, including a negative total,
+  uses the singular unit; other byte and count formatting keeps its existing rules.
+  Native formatter and stubbed browser checks cover these displays in both languages,
+  light and dark, at phone and desktop widths.
   `node --test apps/portal/test/usage-format.test.ts` covers these boundaries. Your
   installation, probe and alert-outcome counts use your language's number grouping
   without losing integer precision, including values larger than JavaScript's exact

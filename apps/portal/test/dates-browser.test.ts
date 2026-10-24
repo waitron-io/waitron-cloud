@@ -63,3 +63,33 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await assertTimes(2);
  }finally{await browser.close();}
 });
+
+const latest='2026-11-10T10:06:10.000Z';
+const usageSummary={version:1,organisationId:venue,storage:{currentBytes:'1',addedBytes:'2',removedBytes:'0'},transfer:{uploadedBytes:'1024',restoredBytes:'1536'},operations:{installationCompleted:'1',monitoringProbes:'0'},messages:{sent:'0',failed:'0',expired:'0',cancelled:'0'},measuredThrough:stamp,latestEventAt:latest};
+for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: usage dates name the month and keep their machine-readable instant`,async()=>{
+ const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage({locale,colorScheme:theme,timezoneId:'Europe/Madrid',viewport:{width,height:900}});page.setDefaultTimeout(3000);
+  await page.clock.install({time:new Date('2026-11-11T12:00:00Z')});
+  await page.route('https://portal.test/**',route=>{
+   const path=new URL(route.request().url()).pathname;
+   if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:expiry}});
+   if(path.endsWith('/installations'))return route.fulfill({json:{installations:[installation]}});
+   if(path.endsWith('/usage/read'))return route.fulfill({json:usageSummary});
+   if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'unavailable'}});
+   return route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'});
+  });
+  await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.waitForFunction(()=>(window as any).app.usage.loaded);
+  const c=translations[locale],usage=page.getByRole('region',{name:c.usageTitle,exact:true});
+  const measured=usage.locator('p').filter({hasText:c.usageMeasuredThrough}).locator('time'),activity=usage.locator('p').filter({hasText:c.usageLatestEvent}).locator('time');
+  assert.equal(await measured.getAttribute('datetime'),stamp);
+  assert.equal(await activity.getAttribute('datetime'),latest);
+  assert.match((await measured.textContent())!,locale==='en'?/^November 10, 2026(?: at|,) 10:05:09 AM$/:/^10 de noviembre de 2026(?: a las|,) 10:05:09$/);
+  assert.match((await activity.textContent())!,locale==='en'?/^November 10, 2026(?: at|,) 11:06:10 AM$/:/^10 de noviembre de 2026(?: a las|,) 11:06:10$/);
+  assert.deepEqual(await usage.getByRole('region',{name:c.usageStorage,exact:true}).locator('dd').allTextContents(),['1 byte','2 bytes','0 bytes']);
+  assert.deepEqual(await usage.getByRole('region',{name:c.usageTransfer,exact:true}).locator('dd').allTextContents(),['1 KiB',locale==='en'?'1.5 KiB':'1,5 KiB']);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  if(process.env.DATES_RECEIPT_DIR){await mkdir(process.env.DATES_RECEIPT_DIR,{recursive:true});await usage.screenshot({path:`${process.env.DATES_RECEIPT_DIR}/${locale}-${theme}-${width}-usage.png`});}
+ }finally{await browser.close();}
+});
