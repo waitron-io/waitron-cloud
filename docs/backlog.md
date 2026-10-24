@@ -935,6 +935,9 @@ approved contract; the partial runtime above does not complete joint proof or re
   source with a point on the displayed page. Changing it clears both confirmations;
   only a verified snapshot can be approved. Controller and stubbed-browser checks
   cover pagination, the displayed data-loss time and the approved snapshot identifier.
+  A malformed recovery code now marks the code field and shows its guidance below
+  the field, alongside the existing alert. English/Spanish browser checks cover both
+  themes and widths, no request for malformed codes, and trimmed leading-zero codes.
   Production activation remains separate work.
   Use Cloud-managed recovery keys by default for the stream and managed snapshots:
   an authorised owner must not need the original server or a separately saved backup
