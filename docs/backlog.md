@@ -336,6 +336,9 @@ complete signed manual packet, pages retained receipts and imports existing sign
 paper history. Local real-server/browser tests cover English and Spanish, light
 and dark, 390 and 1280 pixels, with accessibility checks in ready, uncertain,
 error and retained states. On-prem venues need no managed backup to use the journey.
+Adding or removing a fiscal series clears stale series-field errors while keeping
+feedback on other fields. English/Spanish browser checks retain valid series codes
+and purposes and confirm that Reserve still flags empty series before sending.
 Browser validation checks structure; local recovery must verify cryptographic
 trust and authority before activation. Cloud now preserves the exact person or recovery-key event operator through
 reserve validation, consumption approval, signed manual packets and retained
