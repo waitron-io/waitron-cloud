@@ -63,7 +63,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   });
   await t.test('a successful retry clears the read error and a failed write names only its venue',async()=>{
    readStatus=200;
-   await group(1).getByRole('button',{name:c.refreshStatus,exact:true}).click();
+   await group(1).getByRole('button',{name:c.translationConsentRefresh,exact:true}).click();
    await page.waitForFunction(()=>(window as any).app.translationConsent.loaded);
    assert.equal(await readAlerts.count(),0);
    for(const index of [1,0]){
