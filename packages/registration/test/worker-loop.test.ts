@@ -73,3 +73,21 @@ test('claim failure retries preserve the existing scheduling deadline',async()=>
   });
   assert.equal(failures,5);assert.deepEqual(schedules,[0]);
 });
+
+test('shutdown during scheduling waits for completion without claiming a new batch',{timeout:1000},async()=>{
+  const stop=new AbortController();let claims=0,finished=false;
+  let release!:()=>void,entered!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  const scheduling=new Promise<void>(resolve=>{entered=resolve;});
+  const running=runWorkerLoop({
+    signal:stop.signal,concurrency:4,scheduleIntervalMs:60,pollIntervalMs:10,
+    async schedule(){entered();await gate;finished=true;},
+    async runOnce(){claims++;return false;},
+  });
+  await scheduling;
+  stop.abort();
+  assert.equal(finished,false);
+  release();await running;
+  assert.equal(finished,true);
+  assert.equal(claims,0,'shutdown must prevent claims after the active schedule finishes');
+});
