@@ -25,5 +25,36 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Reproduce activity and blocker ordering on Linux PostgreSQL
-        run: node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test --test-timeout=30000 --test-name-pattern='wait observation refreshes activity' test/recovery-qualification.test.ts
+      - name: Verify the full recovery file and an omitted refresh in disposable test copies
+        run: |
+          cat > /tmp/recovery-wait-controls.py <<'PYTHON'
+          from pathlib import Path
+          import subprocess, tempfile
+          root=Path.cwd()
+          source=root/'packages/backups/test/recovery-qualification.test.ts'
+          command=['node','--test','--test-timeout=30000']
+          subprocess.run(command+[str(source)],check=True,cwd=root/'packages/backups')
+          text=source.read_text()
+          begin=text.index('async function blockedBy(')
+          end=text.index("test('approval rechecks qualification",begin)
+          legacy="""async function blockedBy(id:number,observer:Pick<typeof db.secondPool,'query'>=db.secondPool){
+           const until=Date.now()+4000;
+           while(Date.now()<until){const row=(await observer.query('SELECT query FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[db.schema,id])).rows[0];if(row)return String(row.query);await new Promise(r=>setTimeout(r,10));}
+           assert.fail('operation must wait for the acknowledged PostgreSQL lock');
+          }
+          """
+          with tempfile.NamedTemporaryFile(mode='w',prefix='.d164-omitted-refresh-',suffix='.test.ts',dir=source.parent,delete=False) as copy:
+           copy.write(text[:begin]+legacy+text[end:]);fault=Path(copy.name)
+          try:
+           result=subprocess.run(command+['--test-name-pattern=wait observation refreshes activity',str(fault)],cwd=root/'packages/backups',capture_output=True,text=True)
+           print(result.stdout,flush=True);print(result.stderr,flush=True)
+           assert result.returncode==1,result.returncode
+           assert 'SELECT expires_at>clock_timestamp() AS valid FROM backup_recoveries WHERE id=$1' in result.stdout
+           assert 'AssertionError' in result.stdout
+           print('D164 omitted refresh: expected mismatch caught',flush=True)
+          finally:
+           fault.unlink()
+          subprocess.run(command+['--test-name-pattern=wait observation refreshes activity',str(source)],check=True,cwd=root/'packages/backups')
+          print('D164 restored refresh: passed',flush=True)
+          PYTHON
+          node scripts/test-postgres.mjs exec python3 /tmp/recovery-wait-controls.py
