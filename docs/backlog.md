@@ -4592,6 +4592,13 @@ light and dark, at 390 and 1280 pixels. Removing each new reconciliation guard
 in a disposable copy makes its regression fail. PostgreSQL suites run in GitHub
 CI while Docker is down locally.
 
+A refused installation refresh (HTTP 401 or 403) now clears your rows, selected
+organisation and Stop access confirmation, so stale actions disappear before a
+later session check redirects you. Controller and stubbed Chromium checks reach
+the GET `/api/account/installations` failure while the session stays signed in;
+the 403 is a defensive response fixture. Temporary failures retain your list,
+and a successful retry restores rows without restoring confirmation (D174).
+
 ## Venue actions during installation refresh (D166)
 
 Recovery now waits for an installation refresh before you change its venue,
