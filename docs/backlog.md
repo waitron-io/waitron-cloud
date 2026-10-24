@@ -3696,10 +3696,12 @@ notifications separately.
   with certificate validity while refusing private production targets. Address-policy
   regressions also refuse non-public IPv4 embedded in IPv4-compatible and 6to4 IPv6
   addresses and deprecated site-local IPv6, while retaining public embedded targets.
-  Teredo and local NAT64 prefixes retain their existing refusal. Direct public IPv4
-  still needs a separate fix: the shared address list also matches IPv4 against its
-  mapped-IPv6 refusal, so it currently refuses public IPv4 answers too. Split the
-  family lists with direct-address regressions before qualifying IPv4-only targets.
+  Teredo and local NAT64 prefixes retain their existing refusal. Separate IPv4 and
+  IPv6 block lists now let direct public IPv4 answers pass the address policy without
+  matching the mapped-IPv6 refusal. Native regressions cover public addresses, both
+  ends of every existing refused IPv4 subnet, adjacent allowed addresses, malformed
+  and mismatched inputs, and mapped-IPv6 refusal. External IPv4-only routing remains
+  unqualified; the address-policy checks do not establish network reachability.
   IPv4-translated `::ffff:0:0:0/96` and other reserved `::/8` forms also need scoped
   classification and routing checks: the classifier still accepts `::ffff:0:7f00:1`
   and `::1:7f00:1`; whether either can reach loopback has not been tested.

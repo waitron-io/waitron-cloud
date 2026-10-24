@@ -23,12 +23,13 @@ export interface ProbeOptions {
 interface ScopedProbeOptions extends ProbeOptions {externalSignal?:AbortSignal;deadlineSignal?:AbortSignal}
 
 class ProbeError extends Error {readonly failure:ProbeFailure;constructor(failure:ProbeFailure){super(failure);this.failure=failure;}}
-const blocked=new BlockList(),embeddedIpv4Blocked=new BlockList();
-for(const [network,prefix] of [['0.0.0.0',8],['10.0.0.0',8],['100.64.0.0',10],['127.0.0.0',8],['169.254.0.0',16],['172.16.0.0',12],['192.0.0.0',24],['192.0.2.0',24],['192.88.99.0',24],['192.168.0.0',16],['198.18.0.0',15],['198.51.100.0',24],['203.0.113.0',24],['224.0.0.0',4],['240.0.0.0',4]] as const){blocked.addSubnet(network,prefix,'ipv4');embeddedIpv4Blocked.addSubnet(network,prefix,'ipv4');}
-for(const [network,prefix] of [['::',128],['::1',128],['::ffff:0:0',96],['64:ff9b::',96],['64:ff9b:1::',48],['100::',64],['2001::',23],['2001:db8::',32],['3fff::',20],['fc00::',7],['fe80::',10],['fec0::',10],['ff00::',8]] as const)blocked.addSubnet(network,prefix,'ipv6');
+// Keep families separate: mapped IPv6 subnets also match direct IPv4 in BlockList.
+const ipv4Blocked=new BlockList(),ipv6Blocked=new BlockList();
+for(const [network,prefix] of [['0.0.0.0',8],['10.0.0.0',8],['100.64.0.0',10],['127.0.0.0',8],['169.254.0.0',16],['172.16.0.0',12],['192.0.0.0',24],['192.0.2.0',24],['192.88.99.0',24],['192.168.0.0',16],['198.18.0.0',15],['198.51.100.0',24],['203.0.113.0',24],['224.0.0.0',4],['240.0.0.0',4]] as const)ipv4Blocked.addSubnet(network,prefix,'ipv4');
+for(const [network,prefix] of [['::',128],['::1',128],['::ffff:0:0',96],['64:ff9b::',96],['64:ff9b:1::',48],['100::',64],['2001::',23],['2001:db8::',32],['3fff::',20],['fc00::',7],['fe80::',10],['fec0::',10],['ff00::',8]] as const)ipv6Blocked.addSubnet(network,prefix,'ipv6');
 
 export function isPublicProbeAddress(address:string,family:number):address is string {
- if((family!==4&&family!==6)||isIP(address)!==family||blocked.check(address,family===4?'ipv4':'ipv6'))return false;
+ if((family!==4&&family!==6)||isIP(address)!==family||(family===4?ipv4Blocked:ipv6Blocked).check(address,family===4?'ipv4':'ipv6'))return false;
  if(family===4)return true;
  // Canonical hex also covers dotted IPv4 tails; expand before locating the tunnel endpoint.
  const canonical=new URL(`http://[${address.split('%',1)[0]}]`).hostname.slice(1,-1);
@@ -37,8 +38,7 @@ export function isPublicProbeAddress(address:string,family:number):address is st
  const offset=words[0]===0x2002?1:words.slice(0,6).every(word=>word===0)?6:undefined;
  if(offset===undefined)return true;
  const high=words[offset]!,low=words[offset+1]!,ipv4=[high>>>8,high&255,low>>>8,low&255].join('.');
- // A separate IPv4 list avoids BlockList's implicit matching against mapped IPv6 ranges.
- return !embeddedIpv4Blocked.check(ipv4,'ipv4');
+ return !ipv4Blocked.check(ipv4,'ipv4');
 }
 function abortFailure(options:ScopedProbeOptions):ProbeFailure {return options.externalSignal?.aborted?'cancelled':'timeout';}
 async function abortable<T>(promise:Promise<T>,options:ScopedProbeOptions):Promise<T> {
