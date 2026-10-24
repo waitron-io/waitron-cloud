@@ -469,3 +469,42 @@ test('forcedCollectionOfAStillWritingChildCannotQualifyInterruptedAccounting', {
   assert.deepEqual(await run.closeResources(), { measurementValid: false });
   clean(f);
 });
+
+// Control only this deadline; transport polling and native child timers keep their real clocks.
+function deadlineClock(t) {
+  const realTimeout = globalThis.setTimeout;
+  let expire;
+  t.mock.method(globalThis, 'setTimeout', (callback, milliseconds, ...args) => {
+    const timer = realTimeout(callback, milliseconds, ...args);
+    if (milliseconds === 4010) expire = () => { clearTimeout(timer); callback(...args); };
+    return timer;
+  });
+  return () => expire?.();
+}
+test('replayStreamWholeRunDeadlineIncludesOpeningAndCollectsBeforeRefusal', { timeout: 10000 }, async t => {
+  const f = await fixture(t, 'held-opening');
+  const expire = deadlineClock(t);
+  const opening = module.openReplayStream({ ...f, windowSeconds: 4.01 });
+  await f.heldInventory;
+  expire();
+  f.releaseInventory();
+  let unexpected;
+  try { await assert.rejects(async () => { unexpected = await opening; }, bad); }
+  finally { await unexpected?.close(); }
+  clean(f);
+});
+
+test('replayStreamIdleDeadlineCollectsWithoutAnotherCallerOperation', { timeout: 10000 }, async t => {
+  const f = await fixture(t), realTimeout = globalThis.setTimeout;
+  const expire = deadlineClock(t);
+  const run = await open(t, { ...f, windowSeconds: 4.01 });
+  await run.setPhase('workload'); await run.setPhase('idle');
+  const endpoint = JSON.parse(readFileSync(join(f.root, 'native-stream/stream.json'), 'utf8')).dbs[0].replica.endpoint;
+  expire();
+  for (let n = 0; n < 500 && existsSync(join(f.root, 'native-stream')); n++)
+    await new Promise(resolve => realTimeout(resolve, 10));
+  // Check before finish/close: either would otherwise hide missing deadline collection.
+  clean(f);
+  await assert.rejects(fetch(endpoint), error => error.cause?.code === 'ECONNREFUSED');
+  await assert.rejects(run.finish({ expectedSales: 1 }), bad);
+});

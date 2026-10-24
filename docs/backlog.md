@@ -4621,9 +4621,21 @@ the reproduced ordering defect; attributing the earlier intermittent event to
 that order remains an inference. The separate replication interruption remains
 open.
 
-Every isolation check and existing deadline remains unchanged. Local
-Docker-backed checks are unavailable while Docker is down; GitHub CI supplies
-that evidence.
+The strict 4.01-second streamed-day control covers setup as well as later
+phases. A slow setup can consume that budget before idle begins, as observed
+in [run 40064831558](https://github.com/waitron-io/waitron-cloud/actions/runs/40064831558).
+Following the owner's 24 October decision, this control requires refusal after
+the original deadline in whichever phase it reaches, unchanged source data,
+removed private state and collection of every child actually started. It also
+checks that each recorded child has exited. A separate native control enters
+idle before firing the unchanged deadline callback; real HTTP, SQLite and
+child processes must be collected before another caller operation. An opening
+control fires that same deadline while storage setup is held. Removing the
+deadline makes both native controls fail; restoration passes. Only the deadline
+clock is controlled in these native cases; the full Linux streamed-day journey
+keeps its real clock. All runtime timers, budgets and isolation checks remain.
+Local Docker-backed checks are unavailable while Docker is down; GitHub CI
+supplies that evidence.
 
 ## Account stop-access prompt refresh (D165)
 
