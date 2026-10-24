@@ -54,9 +54,6 @@ jobs:
           }""")
           p.write_text(s)
           p=Path('scripts/cloud-cost/fixtures/litestream-smoke.mjs');s=p.read_text()
-          point="stage = 'stop'; const ended = await stop(replicator);"
-          assert s.count(point)==1
-          s=s.replace(point,"stage = 'stop'; console.error('litestream_lifecycle=stopping'); const ended = await stop(replicator); console.error('litestream_lifecycle=stopped');")
           point="res.writeHead(incoming.statusCode, incoming.headers); incoming.on('error', () => res.destroy()); incoming.pipe(res);"
           assert s.count(point)==1
           s=s.replace(point, """const forward = () => { res.writeHead(incoming.statusCode, incoming.headers); incoming.on('error', () => res.destroy()); incoming.pipe(res); };

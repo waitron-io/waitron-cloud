@@ -481,6 +481,41 @@ test('genuinePinnedLitestreamRetainsVersionedStorageWithNativeRetryAndRestore', 
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
 
+test('genuinePinnedLitestreamDrainsCommittedPutRepliesBeforeShutdown', async t => {
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  cpSync(prepared.litestreamBinary, join(f.codeRoot, 'litestream'));
+  for (const name of ['litestream.mjs', 'stream-versions.mjs']) cpSync(new URL('../' + name, import.meta.url), join(f.codeRoot, name));
+  cpSync(new URL('./litestream-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-litestream-smoke.mjs'));
+  // Delay the reply after the real storage backend commits; restore can already see that object.
+  const smokePath = join(f.codeRoot, 'cost-litestream-smoke.mjs');
+  const originalSmoke = readFileSync(smokePath, 'utf8');
+  const forwarding = "res.writeHead(incoming.statusCode, incoming.headers); incoming.on('error', () => res.destroy()); incoming.pipe(res);";
+  const delayedSmoke = originalSmoke.replace("let stage = 'prepare';", "let delayedPutReplies = 0; let stage = 'prepare';")
+    .replace(forwarding, `const forward = () => { ${forwarding} };
+      if (req.method === 'PUT' && incoming.statusCode < 300) { delayedPutReplies++; setTimeout(forward, 1500); } else forward();`)
+    .replace('const result = { version, injectedFailures,', 'const result = { delayedPutReplies, version, injectedFailures,');
+  assert.ok(originalSmoke.includes(forwarding));
+  writeFileSync(smokePath, delayedSmoke);
+  let stack;
+  f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const result = JSON.parse(execFileSync('docker', ['exec', '-e', 'COST_LITESTREAM_TRANSPORT=1', '-e', 'COST_LITESTREAM_VERSIONS=1',
+    s3, 'node', '/code/cost-litestream-smoke.mjs'], { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 110000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  assert.ok(result.delayedPutReplies > 0);
+  assert.equal(result.injectedFailures, 1); assert.equal(result.restoredSales, 2); assert.equal(result.integrity, 'ok');
+  assert.deepEqual(result.fiscal, { ok: true, issues: 0 });
+  assert.equal(result.replication.requestsReconciled, true); assert.equal(result.restore.requestsReconciled, true);
+  assert.equal(result.transport.replication.reconciled, true); assert.equal(result.transport.restore.reconciled, true);
+  assert.equal(result.lifetimes.scope, 'versioned-object-history'); assert.equal(result.lifetimes.status, 'measured');
+  assert.ok(result.lifetimes.objects.bytes >= result.inventoryBytes); assert.ok(result.lifetimes.objects.currentVersions === result.inventoryObjects);
+  assert.ok(result.lifetimes.byteSeconds.low > 0); assert.ok(result.lifetimes.byteSeconds.high >= result.lifetimes.byteSeconds.low);
+  assert.equal(result.cleanedObjects, true); assert.equal(result.leaked, false); assert.equal(result.administration.reconciled, true);
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});
+
 test('genuineNativeBatchListenerRetainsCommittedLostRepliesAndEveryVersionLifetime', async t => {
   const f = fixture(t), plan = local.prepareIsolatedStack(f);
   for (const name of ['litestream.mjs', 'stream-versions.mjs']) cpSync(new URL('../' + name, import.meta.url), join(f.codeRoot, name));
