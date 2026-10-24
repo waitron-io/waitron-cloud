@@ -1991,8 +1991,11 @@ notifications separately.
   wrapper. Its public function signature stays compatible; existing CLI checks
   retain full main runs, exact output fields and zero PR API calls. Generation
   is a repository-root command; subfolder invocation refuses without writing.
-  Its final generated-policy recheck remains defensive validation without an
-  independent failure control; input-schema and admission guards are covered.
+  An independent subprocess check corrupts only the generated audit digest after
+  valid staged inputs have passed. The final validation refuses that output without
+  changing the existing policy, staged inputs or working tree. Removing that final
+  validation in a disposable copy makes the check fail; healthy generation passes.
+  Input-schema and admission guards retain their existing coverage.
   Mixed changes also retain the existing fallback. The script job verifies the
   exact checkout and changed paths, and the summary requires its successful result.
   The identity audit covers that helper's only executable consumer, its own spawned test;
