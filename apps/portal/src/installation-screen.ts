@@ -1,3 +1,4 @@
+import {formatDateTime} from './dates.ts';
 import {translationConsentScreen} from './translation-consent-screen.ts';
 import {remoteScreen} from './remote-screen.ts';
 import {alertScreen,monitoringScreen} from './alert-screen.ts';
@@ -7,7 +8,7 @@ import type {PortalApp} from './app.ts';
 import {usageScreen} from './usage-screen.ts';
 export function installationScreen(app:PortalApp){
  const c=app.copy,controller=app.installations,disabled=controller.pending||!!controller.waiting;
- const date=(v:string|null)=>v?html`<time datetime=${v}>${new Date(v).toLocaleString(app.locale)}</time>`:c.neverContacted;
+ const date=(v:string|null)=>v?html`<time datetime=${v}>${formatDateTime(v,app.locale)}</time>`:c.neverContacted;
  const labels={remote_access:c.remoteAccess,continuous_backup:c.continuousBackup,retained_snapshots:c.retainedSnapshots};
  const states={unconfigured:c.serviceUnconfigured,provisioning:c.serviceProvisioning,ready:c.serviceReady,failed:c.serviceFailed};
  const health={unknown:c.healthUnknown,healthy:c.healthHealthy,degraded:c.healthDegraded,failed:c.healthFailed};
