@@ -178,3 +178,49 @@ for (const [label, failure, notice, error] of [
     assert.deepEqual(controller.passkeys, []);
   });
 }
+
+
+test('failed passkey lists retain the attempt gate and explicit retries can establish an empty list', async () => {
+  let healthy = false, calls = 0;
+  const controller = new PasskeyController(() => {}, async <T>(): Promise<ApiResult<T>> => {
+    calls++;
+    return healthy ? {ok: true, value: {passkeys: []} as T}
+      : {ok: false, status: 503, code: 'unavailable', retryAfterMs: 0};
+  }, browser());
+  controller.account('owner');
+  await controller.load();
+  assert.equal(controller.loaded, true);
+  assert.equal(controller.listLoaded, false);
+  assert.equal(controller.error, 'passkeyUnavailable');
+  controller.fence();
+  assert.equal(controller.loaded, true);
+  assert.equal(controller.listLoaded, false);
+  healthy = true;
+  await controller.load();
+  assert.equal(calls, 2);
+  assert.equal(controller.listLoaded, true);
+  assert.equal(controller.error, undefined);
+  healthy = false;
+  await controller.load();
+  assert.equal(controller.listLoaded, false, 'a later failed read cannot establish emptiness');
+});
+
+test('switching accounts clears passkey list success and ignores the former account reply', async () => {
+  let finish!: (result: ApiResult<unknown>) => void;
+  let deferred = false;
+  const controller = new PasskeyController(() => {}, async <T>(): Promise<ApiResult<T>> => deferred
+    ? new Promise(resolve => {finish = resolve as (result: ApiResult<unknown>) => void;})
+    : {ok: true, value: {passkeys: [{id, createdAt, lastUsedAt}]} as T}, browser());
+  controller.account('owner');
+  await controller.load();
+  assert.equal(controller.listLoaded, true);
+  deferred = true;
+  const pending = controller.load();
+  controller.account('different');
+  assert.equal(controller.listLoaded, false);
+  finish({ok: true, value: {passkeys: [{id, createdAt, lastUsedAt}]}});
+  await pending;
+  assert.equal(controller.loaded, false);
+  assert.equal(controller.listLoaded, false);
+  assert.deepEqual(controller.passkeys, []);
+});
