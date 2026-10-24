@@ -14,7 +14,9 @@ const browserStep = workflow.match(/      - name: Install Chromium with bounded 
 // Execute the workflow's shell. Only the outside installer and sudo boundary are controlled.
 async function install(t, scenario = {}) {
   const mirror = createServer((request, response) => {
-    if (request.url === '/mirror.math.princeton.edu/font.deb') response.end('qualified dependency bytes');
+    if (request.url === '/mirror.math.princeton.edu/font.deb' && !scenario.unavailablePrinceton) response.end('qualified dependency bytes');
+    else if (request.url === '/archive.ubuntu.com/font.deb' && scenario.unavailablePrinceton && !scenario.allUnavailable) response.end('qualified dependency bytes');
+    else if (scenario.unavailablePrinceton) { response.writeHead(503); response.end('unavailable'); }
     // The other source accepts the connection but never supplies its package.
   });
   await new Promise(resolve => mirror.listen(0, '127.0.0.1', resolve));
@@ -36,10 +38,21 @@ count.write_text(str(n))
 assert sys.argv[1:] == ['--filter', '@waitron-cloud/ui-smoke', 'exec', 'playwright', 'install', '--with-deps', 'chromium']
 if os.environ.get('DOWNLOAD_SOURCE_REQUIRED') == '1':
     source = (root / 'sources.list.d' / 'ubuntu.sources').read_text()
-    host = 'azure.archive.ubuntu.com' if 'mirror+file:/etc/apt/apt-mirrors.txt' in source else urllib.parse.urlparse(source.split('URIs: ', 1)[1].splitlines()[0]).hostname
-    print('fetching controlled dependency from ' + host, flush=True)
-    with urllib.request.urlopen(os.environ['DOWNLOAD_MIRROR'] + '/' + host + '/font.deb') as response:
-        assert response.read() == b'qualified dependency bytes'
+    uri = source.split('URIs: ', 1)[1].splitlines()[0]
+    if uri.startswith('mirror+file:') and uri != 'mirror+file:/etc/apt/apt-mirrors.txt':
+        hosts = [urllib.parse.urlparse(line.split()[0]).hostname for line in pathlib.Path(uri.removeprefix('mirror+file:')).read_text().splitlines()]
+    else:
+        hosts = ['azure.archive.ubuntu.com' if uri == 'mirror+file:/etc/apt/apt-mirrors.txt' else urllib.parse.urlparse(uri).hostname]
+    for host in hosts:
+        print('fetching controlled dependency from ' + host, flush=True)
+        try:
+            with urllib.request.urlopen(os.environ['DOWNLOAD_MIRROR'] + '/' + host + '/font.deb') as response:
+                assert response.read() == b'qualified dependency bytes'
+            break
+        except urllib.error.HTTPError:
+            continue
+    else:
+        sys.exit(9)
     (root / 'installed').write_text('yes')
     sys.exit(0)
 if os.environ.get('DOWNLOAD_FAIL') == '1':
@@ -317,4 +330,22 @@ test('workflow escapes a stalled primary archive without a second install attemp
   assert.equal(result.code, 0, result.output);
   assert.equal(result.attempts, 1);
   assert.equal(result.installed, 'yes');
+});
+
+// Repeating a single prepared host must fail when that host is unavailable.
+test('workflow reaches the alternate archive when Princeton is unavailable within one attempt', {timeout: 15000}, async t => {
+  const result = await install(t, {source: true, unavailablePrinceton: true});
+  assert.equal(result.code, 0, result.output);
+  assert.equal(result.attempts, 1);
+  assert.equal(result.installed, 'yes');
+  assert.match(result.output, /fetching controlled dependency from mirror\.math\.princeton\.edu/);
+  assert.match(result.output, /fetching controlled dependency from archive\.ubuntu\.com/);
+});
+
+test('workflow refuses after both bounded attempts exhaust all offered archives', {timeout: 15000}, async t => {
+  const result = await install(t, {source: true, unavailablePrinceton: true, allUnavailable: true});
+  assert.equal(result.code, 1, result.output);
+  assert.equal(result.attempts, 2);
+  assert.equal(result.installed, null);
+  assert.match(result.output, /fetching controlled dependency from archive\.ubuntu\.com/);
 });
