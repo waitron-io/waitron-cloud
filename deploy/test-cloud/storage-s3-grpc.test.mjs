@@ -28,13 +28,29 @@ async function collide(t, attempts) {
     let child;
     if (children.length < attempts) {
       const owner = owners[children.length];
-      if (grpcFlag) { owner.close(); owner.listen(grpc, '127.0.0.1'); }
-      const source = `require('node:net').createServer().on('error', error => {
+      let listening = Promise.resolve();
+      if (grpcFlag) {
+        owner.close();
+        listening = new Promise((resolve, reject) => {
+          owner.once('listening', resolve);
+          owner.once('error', reject);
+          owner.listen(grpc, '127.0.0.1');
+        });
+      }
+      const source = `process.once('message', message => {
+        if (message.error) throw new Error(message.error);
+        require('node:net').createServer().on('error', error => {
         if (error.code !== 'EADDRINUSE') throw error;
         process.stderr.write('W1024 15:20:26.678074 mini.go:1043 gRPC port 33646 for Admin is not available, finding alternative...\\nF1024 15:20:27.307292 s3.go:440 s3 failed to listen on grpc port ${grpc}: listen tcp 127.0.0.1:${grpc}: bind: address already in use\\n');
         process.exit(72);
-      }).listen(${grpc}, '127.0.0.1');`;
-      child = spawn(process.execPath, ['-e', source], options);
+      }).on('listening', () => { process.stderr.write('collision probe unexpectedly acquired its port'); process.exit(73); }).listen(${grpc}, '127.0.0.1');
+      });`;
+      child = spawn(process.execPath, ['-e', source], {...options, stdio:[...options.stdio, 'ipc']});
+      // Start the bind probe only after the competing listener owns its port.
+      listening.then(
+        () => child.send({ready:true}, () => {}),
+        error => child.send({error:error.message}, () => {}),
+      );
     } else child = spawn(binary, args, options);
     children.push(child);
     return child;

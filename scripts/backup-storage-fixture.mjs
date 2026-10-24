@@ -314,7 +314,7 @@ async function startBackupStorageAttempt(options) {
       "-ip=127.0.0.1",
       "-ip.bind=127.0.0.1",
       "-s3.port=" + s3,
-      // An implicit S3 gRPC port is HTTP + 10000, outside our reservations.
+      // An implicit S3 gRPC port is derived from HTTP, outside our reservations.
       "-s3.port.grpc=" + s3Grpc,
       "-s3.cert.file=" + join(root, "cert.pem"),
       "-s3.key.file=" + join(root, "key.pem"),
