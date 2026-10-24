@@ -213,7 +213,11 @@ work can resume. The Cloud matching-code API now verifies signed installation re
 Cloud approvals. Its [wire contract](superpowers/specs/2026-09-23-venue-pairing-design.md)
 uses local confirmation of the chosen business. Both confirmation screens and the
 Waitron manager adapter now pass the [local two-installation proof](local-pairing.md),
-including restart and lost-completion recovery. Installation credential renewal,
+including restart and lost-completion recovery. You can paste a pairing code with
+outer whitespace: the portal trims it before checking and sending the eight digits,
+and shows the trimmed code. Internal spaces and malformed codes remain refused
+locally. Controller and English/Spanish browser tests cover both exchanges and
+preserve leading zeroes. Installation credential renewal,
 configuration, observations and revocation now work through key-bound one-hour leases.
 The account and Waitron screens show English/Spanish status and explicit stop-access
 confirmation. PostgreSQL and real two-server tests cover renewal/revocation races,

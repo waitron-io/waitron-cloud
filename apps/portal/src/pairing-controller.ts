@@ -27,6 +27,7 @@ export class PairingController {
   async approve(){await this.#exchange(true);}
   async #exchange(approve:boolean){
     if(!this.#ready())return;
+    this.code=this.code.trim();
     this.error=undefined;this.codeError=!/^\d{8}$/.test(this.code);
     if(this.codeError){this.error='pairCodeError';this.#changed();return;}
     const chosen=this.businesses.find(b=>b.legalBusinessId===this.selected);
