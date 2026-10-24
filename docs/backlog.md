@@ -1763,7 +1763,11 @@ notifications separately.
   be inspected, including throwing or revoked JavaScript proxies, objects that
   intercept property inspection. Each field is contained separately, so an
   unreadable step does not discard a valid phase. The same fixed labels and
-  original checks apply. The launch, reconnect and logout failure tests also
+  original checks apply. A synchronous failure while printing either label also
+  preserves the exact original refusal; the reporter stops printing after that
+  failure. The same focused command above checks both output failures and normal
+  output. This does not identify the historical reconnect failure's cause.
+  The launch, reconnect and logout failure tests also
   inspect the real traffic-meter listener and require it to be closed when the
   journey refuses. Removing the meter cleanup fails six named assertions;
   independent test teardown collects the listener and timer without waiting for
