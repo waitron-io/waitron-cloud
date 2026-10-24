@@ -106,6 +106,7 @@ async function solve(challenge:string,difficulty:number,options:ScopedProbeOptio
 function accessCookie(headers:import('node:http').IncomingHttpHeaders){
  const values=headers['set-cookie'];if(!values||values.length!==1)throw new ProbeError('challenge');
  const parts=values[0]!.split(';').map(value=>value.trim()),match=/^__Host-waitron-public=([A-Za-z0-9._~-]{1,1024})$/.exec(parts[0]??'');if(!match)throw new ProbeError('challenge');
+ if(parts.slice(1).some(part=>part.split('=',1)[0]!.trim().toLowerCase()==='domain'))throw new ProbeError('challenge');
  const attributes=new Set(parts.slice(1).map(value=>value.toLowerCase()));if(!attributes.has('path=/')||!attributes.has('secure')||!attributes.has('httponly')||!attributes.has('samesite=strict'))throw new ProbeError('challenge');
  return parts[0]!;
 }

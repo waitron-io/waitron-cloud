@@ -3819,6 +3819,12 @@ notifications separately.
   data. Stale health is shown as unknown and the permission is rechecked before release.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
+  The public HTTPS probe refuses any `Domain` attribute on its challenge cookie,
+  including empty and bare forms that some browsers ignore. Real TLS fixtures
+  fixtures reproduce the former false healthy result and check that refusal stops
+  before cookie replay. The host-only control and actual public gateway journey
+  still pass. Run `node --test packages/remote-access/test/probe.test.ts` without
+  PostgreSQL. This qualifies local protocol validation, not production monitoring.
   The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
   separates existing local detection from proposed production operator alerts and
   opted-in venue mail, with worked outage and backup timelines. The owner approved
