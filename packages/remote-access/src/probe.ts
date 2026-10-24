@@ -112,9 +112,10 @@ function accessCookie(headers:import('node:http').IncomingHttpHeaders){
  const paths=values[0]!.split(';').slice(1).map(value=>value.split('=')).filter(value=>trimPath(value[0]!).toLowerCase()==='path');
  if(trimPath(paths.at(-1)?.slice(1).join('=')??'')!=='/')throw new ProbeError('challenge');
  // A nonpositive final Max-Age deletes the cookie before a browser can replay it.
- const maxAges=values[0]!.split(';').slice(1).map(value=>value.split('=')).filter(value=>trimPath(value[0]!).toLowerCase()==='max-age');
+ // Chromium ignores oversized attribute values, leaving the earlier one effective.
+ const maxAges=values[0]!.split(';').slice(1).map(value=>value.split('=')).filter(value=>trimPath(value[0]!).toLowerCase()==='max-age').filter(value=>trimPath(value.slice(1).join('=')).length<=1024);
  const maxAge=trimPath(maxAges.at(-1)?.slice(1).join('=')??'');
- if(/^-?\d+$/.test(maxAge)&&Number(maxAge)<=0)throw new ProbeError('challenge');
+ if(/^[+-]?\d+$/.test(maxAge)&&Number(maxAge)<=0)throw new ProbeError('challenge');
  const attributes=new Set(parts.slice(1).map(value=>value.toLowerCase()));if(!attributes.has('path=/')||!attributes.has('secure')||!attributes.has('httponly')||!attributes.has('samesite=strict'))throw new ProbeError('challenge');
  return parts[0]!;
 }
