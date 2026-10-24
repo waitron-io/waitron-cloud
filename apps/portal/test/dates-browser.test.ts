@@ -4,6 +4,7 @@ import {test} from 'node:test';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
 import {translations} from '../src/locale.ts';
+import {validRecoveryView, type RecoveryView} from '../src/recovery-types.ts';
 
 const stamp='2026-11-10T09:05:09.000Z', expiry='2026-12-10T09:05:09.000Z';
 const venue='20000000-0000-4000-8000-000000000001', point='20000000-0000-4000-8000-000000000002', request='20000000-0000-4000-8000-000000000003';
@@ -12,6 +13,8 @@ const installation={installationId:venue,venueId:venue,organisationId:venue,lega
  services:['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'ready',health:'healthy',failure:null,observedAt:stamp})),
  monitoring:{enabled:true,fresh:true,checkedAt:stamp,incidents:[{kind:'disconnected',openedAt:stamp,changedAt:stamp},{kind:'public_certificate_expiring',openedAt:stamp,changedAt:stamp}],remoteChecks:{public:{status:'healthy',checkedAt:stamp,certificateNotAfter:expiry},staff:{status:'healthy',checkedAt:stamp,certificateNotAfter:expiry}}},
 };
+const approved: RecoveryView={requestId:request,state:'approved',expiresAt:expiry,operationId:request,operation:{id:request,venueId:venue,pointId:null,source:{kind:'continuous',recoverableAt:stamp,sourceNodeId:venue},mode:'failure',status:'pending',expiresAt:expiry}};
+assert(validRecoveryView(approved));
 const bundle=await build({stdin:{contents:`
  import {applyTokens} from '@waitron-io/ui-core/tokens';
  import {PortalApp} from './src/app.ts';
@@ -56,9 +59,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    await assertTimes(source==='snapshot'?5:3);
    if(process.env.DATES_RECEIPT_DIR)await page.screenshot({path:`${process.env.DATES_RECEIPT_DIR}/${locale}-${theme}-${width}-${source}.png`,fullPage:true});
   }
-  await page.evaluate(({venue,stamp,expiry})=>{
-   const app=(window as any).app;app.recovery.view.operation={status:'approved',expiresAt:expiry,venueId:venue,source:{kind:'continuous',recoverableAt:stamp}};app.draw();
-  },{venue,stamp,expiry});
+  await page.evaluate(approved=>{const app=(window as any).app;app.recovery.view=approved;app.draw();},approved);
   await assertTimes(2);
  }finally{await browser.close();}
 });
