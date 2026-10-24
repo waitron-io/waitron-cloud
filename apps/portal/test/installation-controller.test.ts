@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {InstallationController} from '../src/installation-controller.ts';
 import type {ApiResult} from '../src/api.ts';
+import type {AccountInstallation} from '../src/installation-types.ts';
 const id='12345678-1234-4234-8234-123456789abc';
 const view={installationId:id,venueId:id,organisationId:id,legalBusinessId:id,environment:'test',revision:0,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,services:[],canRevoke:true};
 test('stop requires an offered owner action and explicit confirmation; a lost reply remains recoverable',async()=>{
@@ -52,4 +53,19 @@ test('remote monitoring accepts only redacted route evidence and known incidents
   {...item.monitoring.remoteChecks,public:{...item.monitoring.remoteChecks.public,failure:'timeout'}},
  ])assert.equal(validInstallation({...item,monitoring:{...item.monitoring,remoteChecks}}),false);
  assert.equal(validInstallation({...item,monitoring:{...item.monitoring,incidents:[{kind:'remote_failed',openedAt:checkedAt,changedAt:checkedAt}]}}),false);
+});
+
+for(const change of ['permission','organisation','fallback','removed','revoked','unchanged'] as const)test(`refresh ${change}: stop confirmation belongs to the still offered installation and organisation`,async()=>{
+ const other='22345678-1234-4234-8234-123456789abc';
+ let items:AccountInstallation[]=[view];const writes:unknown[]=[];
+ const c=new InstallationController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  if(body)writes.push(body);
+  return {ok:true,value:(path.endsWith('/revoke')?{...view,revokedAt:'2026-10-24T00:00:00.000Z'}:{installations:items}) as T};
+ });
+ c.account('owner');await c.load();c.choose(id);assert.equal(c.confirming,id);
+ items=change==='permission'?[{...view,canRevoke:false}]:change==='organisation'?[{...view,organisationId:other},{...view,installationId:other,venueId:other}]:change==='fallback'?[{...view,organisationId:other}]:change==='removed'?[]:change==='revoked'?[{...view,revokedAt:'2026-10-24T00:00:00.000Z'}]:[view];
+ await c.load();
+ assert.equal(c.selectedOrganisation,change==='removed'?undefined:change==='fallback'?other:id);
+ assert.equal(c.confirming,change==='unchanged'?id:undefined);
+ await c.revoke();assert.deepEqual(writes,change==='unchanged'?[{installationId:id}]:[]);
 });

@@ -16,7 +16,7 @@ export class InstallationController {
  async load(){
   if(!this.#account||this.pending||this.waiting)return;const generation=this.#generation;this.pending=true;this.error=undefined;this.#changed();
   const result=await this.#request<{installations:AccountInstallation[]}>('/installations');if(generation!==this.#generation)return;this.pending=false;this.loaded=true;
-  if(result.ok){this.installations=result.value.installations;if(!this.organisations.some(o=>o.id===this.selectedOrganisation))this.selectedOrganisation=this.organisations[0]?.id;if(!this.installations.some(i=>i.installationId===this.confirming&&!i.revokedAt))this.confirming=undefined;}else this.#failure(result);this.#changed();
+  if(result.ok){this.installations=result.value.installations;if(!this.organisations.some(o=>o.id===this.selectedOrganisation)){this.selectedOrganisation=this.organisations[0]?.id;this.confirming=undefined;}if(!this.visible.some(i=>i.installationId===this.confirming&&i.canRevoke&&!i.revokedAt))this.confirming=undefined;}else this.#failure(result);this.#changed();
  }
  async revoke(){
   if(!this.#account||this.pending||this.waiting||!this.confirming)return;const selected=this.installations.find(i=>i.installationId===this.confirming&&i.canRevoke&&!i.revokedAt);if(!selected)return;
