@@ -2069,9 +2069,12 @@ notifications separately.
   wider lock/root
   selection, package precision and their real scratch controls remain open. Review follow-ups:
   independent deletions of the audit-version, manifest null-byte and manifest
-  dot-segment checks fail the existing policy-refusal test. Deleting the Markdown
-  inner path filter still passes all nine input-audit tests, so its independent
-  removal control remains open. The regular-file defenses have a paired removal
+  dot-segment checks fail the existing policy-refusal test. The Markdown inner
+  path filter also has an independent removal control: deleting it makes the
+  strict-summary refusal test in `scripts/ci-docs.test.mjs` fail with
+  "Missing expected exception". All 11 document tests pass before deletion and
+  after restoration (`node --test scripts/ci-docs.test.mjs`). The regular-file
+  defenses have a paired removal
   control. Keep the refusal assertions when simplifying these checks. Keep the renewal recipe's explicit manifest patterns aligned with
   discovered workspace members; a mismatch currently retains full work. The
   lock-specific explanation now lists changed package manifests separately from
