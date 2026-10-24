@@ -28,7 +28,7 @@ export function installationScreen(app:PortalApp){
     ${monitoringScreen(app,i)}
     ${i.canRevoke?backupScreen(app,i.venueId):nothing}
     ${i.canRevoke?translationConsentScreen(app,i.venueId):nothing}
-    ${i.canRevoke?html`<p class="help">${c.diagnosticHelp}</p><wt-button .disabled=${app.diagnostics.pending||!!app.diagnostics.waiting}
+    ${i.canRevoke?html`<p class="help">${c.diagnosticHelp}</p><wt-button .disabled=${controller.pending||app.diagnostics.pending||!!app.diagnostics.waiting}
       .loading=${app.diagnostics.pending&&app.diagnostics.selected===i.installationId} @click=${()=>{void app.diagnostics.download(i.installationId);}}>${c.diagnosticDownload}</wt-button>`:nothing}
     ${controller.confirming===i.installationId?html`<div role="group" aria-label=${c.stopAccess}><p>${c.stopHelp}</p>
       <wt-form-actions><wt-button .disabled=${controller.pending} @click=${()=>controller.choose()}>${c.cancelStop}</wt-button><wt-button .disabled=${disabled} @click=${()=>{void controller.revoke();}}>${c.confirmStop}</wt-button></wt-form-actions></div>`

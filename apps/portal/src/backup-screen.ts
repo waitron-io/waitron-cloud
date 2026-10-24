@@ -2,8 +2,8 @@ import {html,nothing} from 'lit';
 import type {PortalApp} from './app.ts';
 export function backupScreen(app:PortalApp,venueId:string){
  const c=app.copy,b=app.backups;
- if(b.venueId!==venueId)return html`<wt-button @click=${()=>{void b.open(venueId);}}>${c.viewSnapshots}</wt-button>`;
- const selected=b.page?.points.find(p=>p.id===b.selected),continuous=b.page?.continuousRecovery,disabled=b.pending||!!b.waiting,recover=app.path==='/recover',showSnapshot=!recover||b.selectedSource==='snapshot';
+ if(b.venueId!==venueId)return html`<wt-button .disabled=${app.installations.pending} @click=${()=>{void b.open(venueId);}}>${c.viewSnapshots}</wt-button>`;
+ const selected=b.page?.points.find(p=>p.id===b.selected),continuous=b.page?.continuousRecovery,disabled=app.installations.pending||b.pending||!!b.waiting,recover=app.path==='/recover',showSnapshot=!recover||b.selectedSource==='snapshot';
  const states={pending:c.snapshotPending,verified:c.snapshotVerified,failed:c.snapshotFailed};
  const date=(s:string)=>new Date(s).toLocaleString(app.locale);
  return html`<section aria-label=${recover?c.recoverySource:c.snapshotHistory}>${recover?html`<h2>${c.recoverySource}</h2>`:html`<h4>${c.snapshotHistory}</h4>`}

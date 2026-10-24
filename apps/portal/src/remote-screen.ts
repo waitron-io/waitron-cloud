@@ -3,8 +3,8 @@ import type {PortalApp} from './app.ts';
 import {remoteReady,type RemoteKind} from './remote-types.ts';
 export function remoteScreen(app:PortalApp,id:string){
  const c=app.copy,r=app.remote;
- if(r.installationId!==id)return html`<wt-button @click=${()=>{void r.open(id);}}>${c.remoteSetup}</wt-button>`;
- const v=r.view,disabled=r.pending||!!r.waiting,ready=remoteReady(v);
+ if(r.installationId!==id)return html`<wt-button .disabled=${app.installations.pending} @click=${()=>{void r.open(id);}}>${c.remoteSetup}</wt-button>`;
+ const v=r.view,disabled=app.installations.pending||r.pending||!!r.waiting,ready=remoteReady(v);
  return html`<section class="remote-setup" aria-label=${c.remoteSetupTitle}><h4>${c.remoteSetupTitle}</h4>
   ${r.error?html`<p role="alert">${c[r.error]}</p>`:nothing}${r.notice?html`<p role="status">${c[r.notice]}</p>`:nothing}
   ${r.pending?html`<p role="status">${c.wait}</p>`:nothing}
