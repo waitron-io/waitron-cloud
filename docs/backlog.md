@@ -2171,8 +2171,13 @@ notifications separately.
   strict-summary refusal test in `scripts/ci-docs.test.mjs` fail with
   "Missing expected exception". All 11 document tests pass before deletion and
   after restoration (`node --test scripts/ci-docs.test.mjs`). The regular-file
-  defenses have a paired removal
-  control. Keep the refusal assertions when simplifying these checks. Keep the renewal recipe's explicit manifest patterns aligned with
+  defenses retain their paired removal control. Seven additional checks refuse
+  a non-blob object even when its reported file mode is regular, covering the
+  policy, both script pairs, the lockfile and the package manifest. Each uses
+  controlled malformed inventory at the Git reader boundary and passes its valid
+  input control. Deleting only the object-type guard fails all seven named checks;
+  normal Git producing inconsistent metadata is not claimed. Keep the refusal
+  assertions when simplifying these checks. Keep the renewal recipe's explicit manifest patterns aligned with
   discovered workspace members; a mismatch currently retains full work. The
   lock-specific explanation now lists changed package manifests separately from
   changed resolved dependency inputs, so you can see why a manifest owner runs
