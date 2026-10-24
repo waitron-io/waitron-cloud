@@ -231,6 +231,7 @@ export class PortalApp {
     const f = this.fields;
     const emailNeeded = this.path === '/login' || !this.completion;
     const passwordNeeded = this.path === '/login' || this.completion;
+    if (emailNeeded) f.email = f.email.trim();
     if (emailNeeded && (!f.email || f.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email))) this.errors.email = 'emailError';
     if (passwordNeeded && (new TextEncoder().encode(f.password).length > 1024 || (this.completion ? [...f.password].length < 15 : !f.password)))
       this.errors.password = new TextEncoder().encode(f.password).length > 1024 ? 'passwordLong' : this.completion ? 'passwordHelp' : 'requiredPassword';
