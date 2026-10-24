@@ -3393,8 +3393,15 @@ notifications separately.
   HTTP tests now accept a password at exactly 1024 UTF-8 bytes, reject 1025 bytes
   without consuming the signup token, and reject a declared body over 16 KiB before
   an incomplete client finishes sending it. Deleting both independent password guards
-  breaks the boundary test; deleting only the HTTP guard remains masked by the store's
-  defence-in-depth check. Deleting the declared-length guard breaks its early-refusal test;
+  breaks the database-backed boundary test. Independent HTTP checks replace the store
+  boundary so its second password check cannot mask a missing HTTP guard. Signup,
+  login and password reset admit 1024 UTF-8 bytes and refuse 1025 before calling
+  their store, for ASCII and multibyte passwords. Deleting the HTTP guard, counting
+  characters instead of bytes or rejecting the exact limit fails these checks;
+  restoring the guard passes. Run `node --test
+  packages/account-http/test/http-password-boundary.test.ts` without PostgreSQL.
+  The original database-backed assertions and production guards are unchanged.
+  Deleting the declared-length guard breaks its early-refusal test;
   the separate streamed-body bound remains covered.
   Review the inherited password cost for deployment. The [identity source review](identity-upstream-review.md)
   classifies every mapped Waitron source and test change through `b9440c685e44`.
