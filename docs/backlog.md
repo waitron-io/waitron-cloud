@@ -4725,6 +4725,16 @@ request issued before the callback can be admitted after it starts. You cannot
 use the admission count to infer when the native process issued the request,
 or treat an idle transport and exit code zero as a completed drain.
 
+A separate probe uses the same native release's local control socket. With
+its first metadata list held at the relay, `POST /stop` returns
+HTTP 200, `status: stopped` and transaction ID zero before that reply finishes.
+The request is still open when the confirmation arrives. Releasing and finishing
+that reply before calling stop passes the paired ordering control. This initial
+metadata probe does not run the sale/restore workload or prove what happens to
+every later request. It rules out treating the runtime stop confirmation alone
+as a complete request drain. Cleanup terminates the owned process after the
+observation; cancellation during cleanup is not evidence of cancellation by stop.
+
 The shutdown repair remains open. Preserve full-session request, byte and
 lifetime evidence and the existing refusal for interrupted I/O. Investigate a
 native writer drain mechanism before changing stop behavior; merely waiting for
