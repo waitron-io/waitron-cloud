@@ -11,6 +11,7 @@ const postgres = 'postgres:18-alpine';
 const mailpit = 'axllent/mailpit:v1.31.1';
 const transient = 'net/http: request canceled (Client.Timeout exceeded while awaiting headers)';
 const gatewayFailure = 'Error response from daemon: Head "https://registry-1.docker.io/v2/axllent/mailpit/manifests/v1.31.1": received unexpected HTTP status: 502 Bad Gateway';
+const unreachableFailure = 'Error response from daemon: Get "https://registry-1.docker.io/v2/": dial tcp [2600:1f18:2148:bc00:6c71:bfe1:7acf:43cc]:443: connect: network is unreachable';
 
 // Run the actual launcher; only external Docker and the requested package command are controlled.
 async function launch(t, scenario = {}) {
@@ -217,6 +218,28 @@ for (const status of ['401 Unauthorized', '403 Forbidden', '404 Not Found', '429
     assert.equal(result.calls.some(call => ['run', 'pnpm', 'rm'].includes(call.command)), false);
   });
 }
+
+for (const image of [postgres, mailpit]) {
+  test(`launcher recovers from the recorded network-unreachable response for ${image} before creating containers`, async t => {
+    const result = await launch(t, {cached: [], failureImage: image, failures: [unreachableFailure]});
+    assert.equal(result.code, 0, result.output);
+    assert.equal(result.calls.filter(call => call.command === 'pull' && call.image === image).length, 2);
+    assert.ok(result.calls.findIndex(call => call.command === 'run') > result.calls.findLastIndex(call => call.command === 'pull'));
+    assert.equal(result.calls.find(call => call.command === 'pnpm')?.database, true);
+    const created = result.calls.filter(call => call.command === 'run').map(call => call.name);
+    assert.deepEqual(result.calls.filter(call => call.command === 'rm').map(call => call.name), created.toReversed());
+  });
+}
+
+test('three network-unreachable responses exhaust acquisition before any container starts', async t => {
+  const result = await launch(t, {cached: [postgres], failureImage: mailpit,
+    failures: [unreachableFailure, unreachableFailure, unreachableFailure, unreachableFailure]});
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.filter(call => call.command === 'pull').length, 3);
+  assert.equal(result.failures.length, 1);
+  assert.equal(result.calls.some(call => ['run', 'pnpm', 'rm'].includes(call.command)), false);
+  assert.match(result.output, /connect: network is unreachable/);
+});
 
 test('an unavailable Docker daemon during inspection is not treated as a missing image', async t => {
   const result = await launch(t, {inspectFailure: 'Cannot connect to the Docker daemon'});
