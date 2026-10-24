@@ -26,7 +26,7 @@ export function screen(app: PortalApp) {
         @click=${() => {app.readFields(); app.reveal = !app.reveal; app.draw();}}>${app.reveal ? c.hide : c.show}</button>` : nothing}
     </wt-input>`;
   const password = () => field('password', app.completion ? 'newPassword' : 'password', app.reveal ? 'text' : 'password', app.completion ? 'new-password' : 'current-password');
-  const action = (label: string, fn = () => {void app.submit();}) => html`<wt-form-actions><wt-button variant="primary" id="submit" .disabled=${!!app.waiting || app.pending||app.authenticator.pending||(app.path==='/login'&&Date.now()<app.authenticator.retryAt)}
+  const action = (label: string, fn = () => {void app.submit();}) => html`<wt-form-actions><wt-button variant="primary" id="submit" .disabled=${!!app.waiting || app.pending||app.authenticator.pending}
     .loading=${app.pending} @click=${fn}>${app.pending ? c.wait : label}</wt-button></wt-form-actions>`;
   const retryLink = app.path === '/signup' ? '/signup' : '/forgot-password';
   let content;

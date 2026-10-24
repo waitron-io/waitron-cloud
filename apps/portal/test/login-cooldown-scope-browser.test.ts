@@ -21,7 +21,7 @@ const flows = [
   {path: '/signup', endpoint: '/signup/complete', button: 'create'},
 ] as const;
 
-async function open(browser: Browser, locale: Locale, theme: 'light' | 'dark', width: number, resetLimited = false) {
+async function open(browser: Browser, locale: Locale, theme: 'light' | 'dark', width: number, limitedResetPath?: string) {
   const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
   page.setDefaultTimeout(3000);
   await page.clock.install({time: new Date('2026-10-24T12:00:00Z')});
@@ -33,7 +33,7 @@ async function open(browser: Browser, locale: Locale, theme: 'light' | 'dark', w
     if (path === '/session') return route.fulfill({status: 401, json: {error: 'credentials_invalid'}});
     calls.push({path, body: route.request().postDataJSON()});
     if (path === '/login') return route.fulfill({status: 429, headers: {'Retry-After': '900'}, json: {error: 'rate_limited'}});
-    if (path === '/password-reset/request' && resetLimited && calls.filter(call => call.path === path).length === 1)
+    if (path === limitedResetPath && calls.filter(call => call.path === path).length === 1)
       return route.fulfill({status: 429, headers: {'Retry-After': '2'}, json: {error: 'rate_limited'}});
     if (path === '/password-reset/request' || path === '/signup/request') return route.fulfill({status: 202, json: {status: 'accepted'}});
     if (path === '/password-reset/complete') return route.fulfill({json: {status: 'completed'}});
@@ -106,14 +106,20 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
   });
 }
 
-for (const locale of ['en', 'es'] as const) test(`${locale}: password recovery keeps its own retry delay during a sign-in cooldown`, async () => {
+for (const locale of ['en', 'es'] as const) for (const completion of [false, true]) test(`${locale}: password recovery ${completion ? 'completion' : 'request'} keeps its own retry delay during a sign-in cooldown`, async () => {
   const browser = await chromium.launch({headless: true});
   try {
-    const {page, calls} = await open(browser, locale, 'light', 390, true), c = translations[locale];
+    const endpoint = completion ? '/password-reset/complete' : '/password-reset/request';
+    const {page, calls} = await open(browser, locale, 'light', 390, endpoint), c = translations[locale];
     try {
-      await page.getByRole('link', {name: c.forgot, exact: true}).click();
-      await page.locator('input[name=email]').fill('owner@example.test');
-      const submit = page.getByRole('button', {name: c.sendReset, exact: true});
+      if (completion) {
+        await page.evaluate(path => {history.pushState(null, '', path); dispatchEvent(new PopStateEvent('popstate'));}, `/reset-password#token=${token}`);
+        await page.locator('input[name=password]').fill(password);
+      } else {
+        await page.getByRole('link', {name: c.forgot, exact: true}).click();
+        await page.locator('input[name=email]').fill('owner@example.test');
+      }
+      const submit = page.getByRole('button', {name: completion ? c.savePassword : c.sendReset, exact: true});
       assert.equal(await submit.isEnabled(), true);
       await submit.click();
       await page.getByRole('alert').filter({hasText: c.limited}).waitFor();
@@ -127,8 +133,9 @@ for (const locale of ['en', 'es'] as const) test(`${locale}: password recovery k
       await page.clock.runFor(1000);
       assert.equal(await submit.isEnabled(), true);
       await submit.click();
-      await page.getByRole('status').filter({hasText: c.emailSent}).waitFor();
-      assert.deepEqual(calls.slice(1), Array.from({length: 2}, () => ({path: '/password-reset/request', body: {email: 'owner@example.test', locale}})));
+      await page.getByRole('status').filter({hasText: completion ? c.resetReady : c.emailSent}).waitFor();
+      const body = completion ? {token, password, locale} : {email: 'owner@example.test', locale};
+      assert.deepEqual(calls.slice(1), [{path: endpoint, body}, {path: endpoint, body}]);
     } finally { await page.close(); }
   } finally { await browser.close(); }
 });
