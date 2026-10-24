@@ -3693,7 +3693,14 @@ notifications separately.
   failed observations defer their next check while other venues continue. SMTP uncertain-acceptance duplicates remain possible. A separate bounded
   functional probe now derives current authorised placements, solves the real public
   challenge, verifies staff TLS/hostname trust and persists revision-bound evidence
-  with certificate validity while refusing private production targets. The monitor rejects
+  with certificate validity while refusing private production targets. Address-policy
+  regressions also refuse non-public IPv4 embedded in IPv4-compatible and 6to4 IPv6
+  addresses and deprecated site-local IPv6, while retaining public embedded targets.
+  Teredo and local NAT64 prefixes retain their existing refusal. Direct public IPv4
+  still needs a separate fix: the shared address list also matches IPv4 against its
+  mapped-IPv6 refusal, so it currently refuses public IPv4 answers too. Split the
+  family lists with direct-address regressions before qualifying IPv4-only targets.
+  The monitor rejects
   late results after hostname changes, replacement or revocation, treats stale evidence as
   unknown, and records deduplicated route-failure, certificate-expiry and recovery
   transitions independently from installation contact. The local two-venue gateway proof

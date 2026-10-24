@@ -105,7 +105,10 @@ and the verified certificate validity dates and SHA-256 fingerprint on success.
 The public check receives and solves the normal bot challenge before requesting
 `/public/availability`; there is no unprotected health bypass. The staff check performs
 only a trusted hostname-verifying TLS handshake and sends no HTTP request or login.
-Production resolution refuses private, loopback, link-local and reserved addresses.
+Production resolution refuses private, loopback, link-local and reserved addresses,
+including deprecated site-local IPv6. IPv4-compatible (`::/96`) and 6to4 (`2002::/16`)
+addresses must also contain a public IPv4 address. Teredo and NAT64 prefixes remain
+refused.
 Tests inject an exact mapping for their configured fixture names; the CLI has no URL,
 address, port or trust-disable option.
 
