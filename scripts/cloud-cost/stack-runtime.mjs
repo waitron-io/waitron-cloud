@@ -32,13 +32,34 @@ async function body(req) {
   for await (const chunk of req) { size += chunk.length; if (size > 1048576) fail(); parts.push(chunk); }
   return JSON.parse(Buffer.concat(parts));
 }
-function binary(command, args) {
-  const child = spawn(command, args, { stdio: 'ignore' });
+function gatewayFailure(value) {
+  // Only fixed categories cross the private mount; binary output can contain paths or credentials.
+  try { writeFileSync('/state/gateway-failure.json', JSON.stringify(value), { mode: 0o600, flag: 'wx' }); }
+  catch { /* Diagnostics cannot replace the service's original exit. */ }
+}
+function binary(command, args, diagnoseGateway = false) {
+  const child = spawn(command, args, { stdio: diagnoseGateway ? ['ignore', 'ignore', 'pipe'] : 'ignore' });
+  const stderr = Buffer.alloc(8192); let stderrLength = 0;
+  child.stderr?.on('data', chunk => { stderrLength += chunk.copy(stderr, stderrLength, 0, Math.min(chunk.length, stderr.length - stderrLength)); });
   let stopping = false;
   const stop = () => { stopping = true; child.kill('SIGTERM'); };
   process.once('SIGTERM', stop); process.once('SIGINT', stop);
-  child.once('error', () => process.exit(1));
-  child.once('exit', code => process.exit(stopping ? 0 : code ?? 1));
+  child.once('error', error => {
+    if (diagnoseGateway) gatewayFailure({ stage: 'binary', reason: 'spawn',
+      ...(['ENOENT', 'EACCES', 'EPERM', 'EIO'].includes(error.code) ? { code: error.code } : {}) });
+    process.exit(1);
+  });
+  child.once(diagnoseGateway ? 'close' : 'exit', (code, signal) => {
+    if (diagnoseGateway && !stopping && code !== 0) {
+      const output = stderr.subarray(0, stderrLength).toString('utf8');
+      const reason = signal ? 'signal' : /could not resolve address/.test(output) ? 'dns-resolution'
+        : /cannot bind socket/.test(output) ? 'bind' : /unable to load (?:SSL )?certificate/.test(output) ? 'tls' : 'child-exit';
+      gatewayFailure({ stage: 'binary', reason,
+        ...(Number.isInteger(code) && code >= 0 && code <= 255 ? { exitCode: code } : {}),
+        ...(['SIGTERM', 'SIGKILL', 'SIGABRT', 'SIGSEGV', 'SIGINT'].includes(signal) ? { signal } : {}) });
+    }
+    process.exit(stopping ? 0 : code ?? 1);
+  });
 }
 async function check() {
   const ready = async (url, tls = false) => { try { return (await request(url, { tls })).status === 200; } catch { return false; } };
@@ -87,7 +108,7 @@ export async function runStackService(role) {
   if (role === 'mailpit') { binary('mailpit', ['--smtp', '0.0.0.0:1025', '--listen', '0.0.0.0:8025', '--database', '/tmp/mail.db']); return; }
   if (role === 'gateway') {
     writeFileSync('/state/haproxy.cfg', 'global\n  maxconn 100\ndefaults\n  mode http\n  timeout connect 2s\n  timeout client 5s\n  timeout server 5s\nfrontend local\n  bind :8443 ssl crt /state/gateway.pem\n  default_backend venue\nbackend venue\n  server venue waitron:8080 check\n');
-    binary('haproxy', ['-W', '-db', '-f', '/state/haproxy.cfg']); return;
+    binary('haproxy', ['-W', '-db', '-f', '/state/haproxy.cfg'], true); return;
   }
   let s, replay;
   if (role === 'fiscal') {

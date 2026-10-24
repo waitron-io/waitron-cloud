@@ -39,7 +39,7 @@ globalThis.startupProbe={abort:()=>controller.abort(),spawnSync(command,args,opt
  if(args[0]==='network'&&args[1]==='inspect')return ok([network()]);
  if(args[0]==='inspect'&&args[1]==='--format'){
   events.push('state');
-  if(args.at(-1)!==ids[1])throw Error('Wrong diagnostic target');
+  if(args.at(-1)!==(fault.startsWith('gateway-')?ids[5]:ids[1]))throw Error('Wrong diagnostic target');
   if(fault==='state-missing')return {...error(),stderr:'Error response from daemon: No such container: PRIVATE_CANARY'};
   if(fault==='state-timeout')return actualSpawnSync(process.execPath,['-e',`setTimeout(()=>process.stdout.write(JSON.stringify({Status:'exited',Running:false,ExitCode:7,OOMKilled:true,Dead:false,Restarting:false})),2200)`],options);
   if(fault==='state-overflow')return actualSpawnSync(process.execPath,['-e',`process.stdout.write(JSON.stringify({Status:'exited',Running:false,ExitCode:7,OOMKilled:true,Dead:false,Restarting:false,Error:'PRIVATE_CANARY'.repeat(5000)}))`],options);
@@ -51,6 +51,19 @@ globalThis.startupProbe={abort:()=>controller.abort(),spawnSync(command,args,opt
  }
  if(args[0]==='inspect')return ok(containers().filter(c=>args.includes(c.Id)).slice(0,fault==='resources'?5:6));
  if(args[0]==='exec'){
+  if(fault.startsWith('gateway-')&&args[1]===ids[5]){
+   const value={stage:'binary',reason:'dns-resolution',exitCode:1};
+   if(fault==='gateway-private')value.reason='PRIVATE_CANARY';
+   if(fault==='gateway-extra')value.secret='PRIVATE_CANARY';
+   if(fault==='gateway-invalid-exit')value.exitCode=256;
+   if(fault==='gateway-invalid-signal')value.signal='PRIVATE_CANARY';
+   if(fault==='gateway-invalid-code')value.code='PRIVATE_CANARY';
+   if(fault==='gateway-invalid-stage')value.stage='PRIVATE_CANARY';
+   if(fault!=='gateway-missing')writeFileSync(join(stateRoot,'gateway-failure.json'),
+    fault==='gateway-malformed'?'PRIVATE_CANARY':JSON.stringify(value)+(fault==='gateway-oversized'?' '.repeat(1500):''),{mode:fault==='gateway-public'?0o644:0o600});
+   events.push('runtime');
+   return {...error(),stderr:'Error response from daemon: Container PRIVATE_CANARY is not running'};
+  }
   if(fault.startsWith('state-')&&args[1]===ids[1])return {...error(),stderr:'Error response from daemon: Container PRIVATE_CANARY is not running'};
   if(fault==='isolation-command')return error();
   if(fault==='outbound-result')return {...error(),stdout:JSON.stringify({blockedConnections:3,blockedDns:1,localControl:true,secret:'PRIVATE_CANARY'}),stderr:'PRIVATE_CANARY'};
