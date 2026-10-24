@@ -20,8 +20,13 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       page.setDefaultTimeout(4000);
       const c = translations[locale], calls: string[] = [];
       let refused = false;
+      const authenticator = await page.context().newCDPSession(page);
+      await authenticator.send('WebAuthn.enable');
+      await authenticator.send('WebAuthn.addVirtualAuthenticator', {options: {
+        protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true,
+        isUserVerified: true, automaticPresenceSimulation: true,
+      }});
       await page.addInitScript(() => {
-        PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = async () => true;
         navigator.credentials.get = async () => {throw new DOMException('Prompt cancelled', 'NotAllowedError');};
       });
       await page.route('https://portal.test/login', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
