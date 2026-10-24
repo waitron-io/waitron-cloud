@@ -12,11 +12,12 @@ export function fiscalAllocationScreen(app:PortalApp){
  const operatorText=(value:ReserveInput['binding']['operatorId'])=>typeof value==='string'?value:c.fiscalRecoveryKey+' · '+value.nodeId+' · '+value.eventId;
  const reserve=()=>{
   if(!draft)return;
+  const scope={...draft.scope,taxpayerNif:draft.scope.taxpayerNif.trim().toUpperCase(),softwareId:draft.scope.softwareId.trim().toUpperCase()},input={...draft,scope};
   f.fieldErrors.clear();
-  if(!/^[A-Z0-9]{9}$/.test(draft.scope.taxpayerNif))f.fieldErrors.add('fiscalNif');if(!/^[A-Z0-9]{2}$/.test(draft.scope.softwareId))f.fieldErrors.add('fiscalSoftware');
+  if(!/^[A-Z0-9]{9}$/.test(scope.taxpayerNif))f.fieldErrors.add('fiscalNif');if(!/^[A-Z0-9]{2}$/.test(scope.softwareId))f.fieldErrors.add('fiscalSoftware');
   for(const k of ['eventId','operatorId','sourceId','targetNodeId','incidentEvidence'] as const){const value=draft.binding[k];if(typeof value==='string'&&(!value.trim()||value.length>256||/[\x00-\x1f\x7f]/.test(value)))f.fieldErrors.add(k);}
   draft.bases.forEach((s,i)=>{if(!/^[A-Za-z0-9/_.-]{1,21}$/.test(s.code))f.fieldErrors.add('base-'+i);});
-  if(!validReserve(draft)){f.error='fiscalInvalid';app.draw();return;}void f.reserve(draft);
+  if(!validReserve(input)){f.error='fiscalInvalid';app.draw();return;}void f.reserve(input);
  };
  const consume=()=>{if(p)void f.consume({version:1,operationId:crypto.randomUUID(),allocationId:p.allocation.allocationId,binding:p.binding,oldMachineOffline:f.oldMachineOffline,oldMachineAbsent:f.oldMachineAbsent,noParallelRecovery:f.noParallelRecovery,confirmedAt:new Date().toISOString()});};
  const importPaper=()=>{try{const input:unknown=JSON.parse(f.paperText);if(!validPaperHistory(input))throw Error();f.fieldErrors.delete('paper');void f.importPaper(input);}catch{f.fieldErrors.add('paper');f.error='fiscalInvalid';app.draw();}};

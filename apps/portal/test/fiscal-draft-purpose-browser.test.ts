@@ -71,3 +71,90 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     } finally { await browser.close(); }
   });
 }
+
+for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
+  for (const [kind, nif, software] of [
+    ['lowercase', 'b12345678', 'ab'],
+    ['padded', ' B12345678 ', ' AB '],
+  ] as const) {
+    test(`${locale} ${theme} ${width}: ${kind} fiscal identifiers are normalised before reserve`, async () => {
+      const browser = await chromium.launch({ headless: true });
+      try {
+        const page = await browser.newPage({ locale, colorScheme: theme, viewport: { width, height: 900 } });
+        const requests: unknown[] = [];
+        await page.route('https://portal.test/api/account/fiscal-allocations/reserve', async route => {
+          requests.push(route.request().postDataJSON());
+          await route.fulfill({ status: 400, json: { error: 'invalid_input' } });
+        });
+        await page.route('https://portal.test/', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><div id="portal" class="portal"></div>' }));
+        await page.goto('https://portal.test/');
+        await page.addStyleTag({ content: styles });
+        await page.addScriptTag({ content: script });
+        await page.evaluate(({ locale, receipt }) => (window as any).mount(locale, receipt), { locale, receipt });
+        const c = translations[locale];
+        await page.getByRole('button', { name: c.fiscalNew, exact: true }).click();
+        const nifField = page.locator('wt-input[name=fiscalNif]');
+        const softwareField = page.locator('wt-input[name=fiscalSoftware]');
+        await nifField.locator('input').fill('');
+        await nifField.locator('input').focus();
+        await page.keyboard.insertText(nif);
+        await softwareField.locator('input').fill('');
+        await softwareField.locator('input').focus();
+        await page.keyboard.insertText(software);
+        assert.equal(await nifField.locator('input').inputValue(), nif);
+        assert.equal(await softwareField.locator('input').inputValue(), software);
+        const before = await page.evaluate(() => structuredClone((window as any).fiscal.selection));
+        await page.getByRole('button', { name: c.fiscalReserve, exact: true }).click();
+        await page.waitForFunction(() => !(window as any).fiscal.pending);
+        assert.equal(requests.length, 1, 'a valid normalised draft must reach the reserve endpoint');
+        assert.deepEqual(requests[0], { ...before, scope: {
+          taxpayerNif: 'B12345678', softwareId: 'AB', environment: 'preproduction',
+        } });
+        assert.deepEqual(await page.evaluate(() => [...(window as any).fiscal.fieldErrors]), []);
+        assert.equal(await nifField.locator('input').inputValue(), 'B12345678');
+        assert.equal(await softwareField.locator('input').inputValue(), 'AB');
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        if (process.env.FISCAL_PORTAL_RECEIPT_DIR && kind === 'lowercase') {
+          await mkdir(process.env.FISCAL_PORTAL_RECEIPT_DIR, { recursive: true });
+          await page.screenshot({ path: `${process.env.FISCAL_PORTAL_RECEIPT_DIR}/${locale}-${theme}-${width}-normalised.png`, fullPage: true });
+        }
+      } finally { await browser.close(); }
+    });
+  }
+}
+
+test('malformed fiscal identifiers send no reserve request', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const requests: unknown[] = [];
+    await page.route('https://portal.test/api/account/fiscal-allocations/reserve', async route => {
+      requests.push(route.request().postDataJSON());
+      await route.fulfill({ status: 400, json: { error: 'invalid_input' } });
+    });
+    await page.route('https://portal.test/', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><div id="portal" class="portal"></div>' }));
+    await page.goto('https://portal.test/');
+    await page.addScriptTag({ content: script });
+    await page.evaluate(receipt => (window as any).mount('en', receipt), receipt);
+    const c = translations.en;
+    await page.getByRole('button', { name: c.fiscalNew, exact: true }).click();
+    const nif = page.locator('wt-input[name=fiscalNif] input');
+    const software = page.locator('wt-input[name=fiscalSoftware] input');
+    for (const [nifValue, softwareValue, errors] of [
+      ['B123 5678', 'AB', ['fiscalNif']],
+      ['B1234567!', 'AB', ['fiscalNif']],
+      ['B1234567', 'AB', ['fiscalNif']],
+      ['B123456789', 'AB', ['fiscalNif']],
+      ['   ', 'AB', ['fiscalNif']],
+      ['B12345678', 'A!', ['fiscalSoftware']],
+      ['B12345678', 'A ', ['fiscalSoftware']],
+      ['B12345678', 'ABC', ['fiscalSoftware']],
+    ] as const) {
+      await nif.fill(nifValue);
+      await software.fill(softwareValue);
+      await page.getByRole('button', { name: c.fiscalReserve, exact: true }).click();
+      assert.deepEqual(await page.evaluate(() => [...(window as any).fiscal.fieldErrors]), errors);
+      assert.equal(requests.length, 0);
+    }
+  } finally { await browser.close(); }
+});

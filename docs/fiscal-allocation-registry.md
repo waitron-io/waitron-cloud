@@ -294,6 +294,10 @@ source and target server, and incident record. Your custodian must have establis
 these details independently. Cloud sign-in and a typed NIF supply no taxpayer or
 operator authority. An on-prem venue needs no managed Cloud backup.
 
+You can enter the NIF and software ID in lowercase or paste them with surrounding
+spaces. Before reserving, the page trims those spaces and converts the identifiers
+to uppercase. Spaces within an identifier remain invalid.
+
 Reserve the complete identity set before confirming consumption. For recovery,
 confirm that the old server is out of service and no parallel recovery is running.
 Initial setup requires confirmation that no previous server exists. Consumption

@@ -372,7 +372,14 @@ signed purpose: Standard, Full and Rectificative. Selection is applied to the
 rendered options so the first option cannot replace a purpose before the options
 exist. Chromium checks cover English and Spanish, both themes and 390/1280 widths,
 new-draft edits and the unchanged signed packet. The real-server key-event journey
-also checks all three displayed purposes. Organisation and venue selections now
+also checks all three displayed purposes. Before reserving a new draft, your NIF
+and software ID are trimmed and uppercased; lowercase entries reach the strict
+endpoint as uppercase values. Stubbed Chromium checks cover both languages,
+themes and widths, complete padded input and malformed-input refusals.
+The shared input does not pass its declared length limits to the native field:
+padded values arrive complete, and overlong identifiers are refused on Reserve.
+Passing those limits through the shared input remains a separate follow-up.
+Organisation and venue selections now
 apply to their rendered options too, so your first view matches the supplied draft.
 The pre-fix real-server journey showed the first organisation and an empty venue
 while an untouched submission reserved the supplied second organisation's venue.
