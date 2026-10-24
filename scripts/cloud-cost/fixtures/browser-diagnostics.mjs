@@ -21,10 +21,13 @@ export function parseBrowserDiagnostics(stderr) {
 export async function withBrowserDiagnostics(run, report) {
   try { return await run(); }
   catch (error) {
-    const phase = diagnosticValue(error, 'browserPhase');
-    if (phases.has(phase)) report('cost_browser_phase=' + phase);
-    const step = diagnosticValue(error, 'browserStep');
-    if (phase === 'reconnect' && steps.has(step)) report('cost_browser_step=' + step);
+    // Diagnostic output must preserve the journey's original refusal too.
+    try {
+      const phase = diagnosticValue(error, 'browserPhase');
+      if (phases.has(phase)) report('cost_browser_phase=' + phase);
+      const step = diagnosticValue(error, 'browserStep');
+      if (phase === 'reconnect' && steps.has(step)) report('cost_browser_step=' + step);
+    } catch {}
     throw error;
   }
 }

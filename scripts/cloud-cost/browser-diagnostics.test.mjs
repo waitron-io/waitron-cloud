@@ -132,3 +132,19 @@ test('browserReporterPreservesRefusalWhenAProxyReturnsAnInvalidDescriptor', asyn
   await assert.rejects(helper.withBrowserDiagnostics(async () => {throw refusal;}, value => messages.push(value)), error => error === refusal);
   assert.deepEqual(messages, []);
 });
+
+// Removing output containment lets a reporter replace the journey's refusal.
+for (const [stage, failAt, expected] of [
+  ['phase', 1, ['cost_browser_phase=reconnect']],
+  ['step', 2, ['cost_browser_phase=reconnect', 'cost_browser_step=takings']],
+]) test('browserReporterPreservesTheOriginalRefusalWhenOutputThrows_' + stage, async () => {
+  const original = Object.assign(Error('PRIVATE_ORIGINAL_REFUSAL'), {
+    browserPhase: 'reconnect', browserStep: 'takings',
+  });
+  const messages = [];
+  await assert.rejects(helper.withBrowserDiagnostics(async () => {throw original;}, text => {
+    messages.push(text);
+    if (messages.length === failAt) throw Error('PRIVATE_OUTPUT_REFUSAL');
+  }), error => error === original);
+  assert.deepEqual(messages, expected);
+});
