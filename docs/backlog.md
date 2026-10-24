@@ -1758,11 +1758,13 @@ notifications separately.
   accounting, isolation, cache and cleanup check and deadline remains intact.
   A later recurrence in
   [40092022379](https://github.com/waitron-io/waitron-cloud/actions/runs/40092022379/job/120866647453)
-  identifies reconnect/takings after 16,188.328 ms, but still has no underlying
-  error category. Reconnect refusals now retain three more fixed observations:
-  whether the thrown error identifies itself as a timeout, whether the session
-  check during reload received an accepted, refused or other response (or none),
-  and whether a page error occurred during reconnect. These observations use
+  identifies reconnect/takings. The whole test took 16,188.328 ms; that is not
+  a measurement of the takings wait. It still has no underlying error category.
+  Reconnect refusals now retain three more fixed observations: whether the thrown
+  error identifies itself as a timeout, the last session-check response observed
+  during reconnect (accepted, refused, other or none), and whether a page error
+  occurred during reconnect. A later session response replaces an earlier one;
+  this label does not preserve the full response history. These observations use
   existing events and add no browser request or wait. Only the fixed labels cross
   the generated child boundary; exception text, URLs, credentials and page content
   remain private. Run `node --test scripts/cloud-cost/browser-refusal-evidence.test.mjs`

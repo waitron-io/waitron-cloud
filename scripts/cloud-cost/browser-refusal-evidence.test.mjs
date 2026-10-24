@@ -122,3 +122,16 @@ for (const [key, value, label] of [
   }), error => error === original);
   assert.deepEqual(messages, ['cost_browser_phase=reconnect', 'cost_browser_' + label + '=' + value]);
 });
+
+// Moving evidence outside its phase would mislabel an earlier journey refusal.
+test('browserEvidenceStaysAbsentOutsideReconnect', async () => {
+  const chromium = {async launch() {throw Error('PRIVATE_LAUNCH');}};
+  await assert.rejects(measureRemoteBrowser({chromium, staffHostname: 'staff.generated.example.test',
+    email: 'generated@example.test', password: 'PRIVATE_PASSWORD'}), error => {
+    assert.equal(error.browserPhase, 'launch');
+    for (const key of ['browserFailure', 'browserSession', 'browserPage'])
+      assert.equal(Object.getOwnPropertyDescriptor(error, key), undefined);
+    assert.equal(error.message, 'Invalid cloud cost browser journey');
+    return true;
+  });
+});
