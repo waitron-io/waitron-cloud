@@ -738,7 +738,8 @@ test('stackGatewaySelectionStartsItsBackendBeforeNameResolution', t => {
   writeFileSync(probeConfig, JSON.stringify({ ...f, prepared: preparedPlan }), { mode: 0o600, flag: 'wx' });
   const result = JSON.parse(execFileSync(process.execPath,
     [new URL('./gateway-startup-order-probe.mjs', import.meta.url).pathname, probeConfig],
-    { encoding: 'utf8', timeout: 120000, stdio: ['ignore', 'pipe', 'inherit'] }));
+    // Both bounded Compose calls must finish before a timeout can start the parent's cleanup.
+    { encoding: 'utf8', timeout: 360000, stdio: ['ignore', 'pipe', 'inherit'] }));
   assert.deepEqual(result.ready, { postgres: true, s3: true, mailpit: true, fiscal: true, waitron: true, gateway: true });
   assert.deepEqual(result.isolation, { isolated: true, containers: 6, blockedConnections: 18, blockedDns: 12, localControl: true });
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');

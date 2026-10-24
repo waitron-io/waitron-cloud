@@ -22,7 +22,9 @@ globalThis.gatewayOrderProbe = (command, argv, options) => {
       if (gateway.Config.Labels['io.waitron.cloud-cost.owner'] !== args.journal.token
         || gateway.Config.Labels['com.docker.compose.project'] !== args.prepared.project) throw Error('Unowned gateway');
       if (!gateway.State.Running) {
-        const runtime = JSON.parse(readFileSync(join(args.stateRoot, 'gateway-failure.json'), 'utf8'));
+        let runtime = null;
+        try { runtime = JSON.parse(readFileSync(join(args.stateRoot, 'gateway-failure.json'), 'utf8')); }
+        catch { /* A killed gateway may leave no runtime evidence; its stopped state still refuses. */ }
         console.error('gateway_order=' + JSON.stringify({ running: false, runtime }));
         return { status: 1, stdout: '', stderr: '' };
       }
