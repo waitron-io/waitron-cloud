@@ -1788,6 +1788,21 @@ notifications separately.
   Capture an instrumented Linux recurrence before attributing the historical
   cause. A passing unchanged repeat would not explain it. Local Docker-backed
   qualification remains unavailable until Docker returns; CI runs the real journey.
+  Reconnect refusals also retain fixed request-event counts, grouped by known
+  route, whether Node first observed the request before or during reconnect,
+  and lifecycle event. This does not establish when Chromium issued it. Pending requests remain visible, including streams from before reload.
+  Counts saturate at 999; raw paths, query strings, bodies and network errors
+  are never printed. These passive observations add no request or wait and do
+  not change the existing accounting refusal or deadlines. A not-modified
+  response (HTTP 304) has its own label, separate from a redirect. Run
+  `node --test scripts/cloud-cost/browser-traffic-evidence.test.mjs` for the
+  controlled lifecycle and real child-boundary checks. The cause of the Linux
+  takings timeout and outstanding-request refusals remains under investigation.
+  Twelve independent Linux observations ran the complete seven-case group at
+  diagnostic heads `6bdf753` and `a58e794`: all 84 cases passed. No instrumented
+  recurrence was captured, so these passes establish neither a cause nor a fix.
+  The temporary observation workflow is removed; retain the next diagnostic
+  refusal before changing browser behavior or any existing check.
   The reporter preserves the original refusal when a diagnostic property cannot
   be inspected, including throwing or revoked JavaScript proxies, objects that
   intercept property inspection. Each field is contained separately, so an
