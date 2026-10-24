@@ -3221,6 +3221,8 @@ implementation or production evidence.
   installation. It reports redacted access, service, monitoring, remote-check and backup
   evidence without account, provider, hostname, configuration, credential or raw-error
   data. Stale health is shown as unknown and the permission is rechecked before release.
+  If a diagnostic download fails, you see its error beside the venue you chose. Starting
+  another download clears that warning; changing accounts clears its venue association.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
   Production observation, phone delivery, recovery targets and C39 plan/build approval

@@ -9,20 +9,21 @@ function browserSave(value:DiagnosticExport,name:string){
  try{link.href=url;link.download=name;link.click();}finally{URL.revokeObjectURL(url);}
 }
 export class DiagnosticController{
- pending=false;selected:string|undefined;error:keyof Copy|undefined;retryAt=0;
+ pending=false;selected:string|undefined;error:keyof Copy|undefined;errorInstallationId:string|undefined;retryAt=0;
  #account:string|undefined;#generation=0;readonly #changed:()=>void;readonly #request:typeof accountRequest;readonly #save:Saver;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest,save:Saver=browserSave){this.#changed=changed;this.#request=request;this.#save=save;}
- account(id:string|undefined){if(id!==this.#account){this.#account=id;this.#generation++;this.pending=false;this.selected=undefined;this.error=undefined;}}
+ account(id:string|undefined){if(id!==this.#account){this.#account=id;this.#generation++;this.pending=false;this.selected=undefined;this.error=undefined;this.errorInstallationId=undefined;}}
  get waiting(){return Math.max(0,Math.ceil((this.retryAt-Date.now())/1000));}
  async download(installationId:string){
   if(!this.#account||this.pending||this.waiting||!uuid.test(installationId))return;const generation=this.#generation;
-  this.pending=true;this.selected=installationId;this.error=undefined;this.#changed();
+  this.pending=true;this.selected=installationId;this.error=undefined;this.errorInstallationId=undefined;this.#changed();
   const result:ApiResult<DiagnosticExport>=await this.#request('/diagnostics/read',{installationId});if(generation!==this.#generation)return;
   this.pending=false;this.selected=undefined;
   if(result.ok&&validDiagnosticExport(result.value)&&result.value.installation.installationId===installationId){
    const stamp=result.value.generatedAt.replaceAll('-','').replaceAll(':','').replace(/\.\d{3}Z$/,'Z');
    this.#save(result.value,`waitron-cloud-diagnostic-${result.value.installation.venueId.slice(0,8)}-${stamp}.json`);
   }else if(result.ok)this.error='diagnosticUnavailable';else this.#failure(result);
+  if(this.error)this.errorInstallationId=installationId;
   this.#changed();
  }
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>){
