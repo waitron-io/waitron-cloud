@@ -143,7 +143,7 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
             (state / 'cache/archives/partial').mkdir(parents=True)
             signed.write_bytes(original_signed.replace(b'Origin: Cloud fixture', b'Origin: Wrong fixture')
                                if mode == 'signature' else original_signed)
-            deb.write_bytes(original_deb + b'tampered' if mode == 'package-hash' else original_deb)
+            deb.write_bytes(bytes([original_deb[0] ^ 1]) + original_deb[1:] if mode == 'package-hash' else original_deb)
             options = ['-o', f'Dir::Etc::sourcelist={apt}/sources.list', '-o', 'Dir::Etc::sourceparts=-',
                        '-o', f'Dir::Etc::parts={apt}/apt.conf.d', '-o', 'Dir::Etc::main=-',
                        '-o', f'Dir::State={state}', '-o', f'Dir::State::lists={state}/lists',
@@ -171,7 +171,7 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
             assert 'Download attempt exceeded' not in log, log
             if mode == 'package-hash':
                 assert download.returncode != 0, log
-                assert 'Hash Sum mismatch' in log or 'unexpected size' in log, log
+                assert 'Hash Sum mismatch' in log, log
                 outcomes['packageHashRefused'] = True
             else:
                 assert download.returncode == 0, log
