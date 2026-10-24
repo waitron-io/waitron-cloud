@@ -1,23 +1,29 @@
 # Run a venue in Cloud, or recover its local server there
 
-**D88 · 2026-10-21 · PROPOSED for owner approval. Nothing in this proposal authorises a build or deployment.**
+**D88 · 2026-10-21 · Reconciled 2026-10-24. Duplicate design-approval gate closed; implementation belongs to P6/D115 and the dependencies below.**
 
 This documentation extends published #265 with the owner's local-device and public
 customer access scope. It comes with the **Cloud step soon after go-live**, not
-go-live. Publication is not owner design approval; implementation and provider work
-remain blocked. The owner selected cold recovery on 2026-10-21. The
+go-live. The approved [production design](2026-10-22-cloud-production-deployment-design.md),
+especially sections 3–6, 8–9 and 12, supplies the current deployment direction and
+local build/rehearsal authority. This reconciliation adds no authority. The owner
+selected cold recovery on 2026-10-21. The
 [D101 data-protection design](2026-10-22-cloud-data-protection-design.md) was approved
 on 2026-10-22 around 08:30 for build planning only, including its D88 data-protection
 direction. Its [roadmap](../plans/2026-10-22-cloud-data-protection.md) records the reviewed
-documentation milestone; implementation requires separate build authority. Broader D88 hosting/isolation/shared contracts
-and existing recovery/fiscal gates remain separate and open.
+documentation milestone; follow its slice-specific build authority. Exact shared
+contracts, recovery/fiscal acceptance and provider/launch qualification remain open.
 
 **2026-10-23 handover revision:** the [A1018 shared direction](../../waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018)
 replaces this draft's external stop-proof requirement. Cloud agrees the direction.
 The owner’s 15:37 correction makes M2 solely responsible for AEAT after either
 takeover, including returned M1 originals and outcomes; M1 never contacts AEAT.
-Waitron asks one short revised owner design question. Retained defaults, build and
-runtime acceptance remain pending. The owner approved gVisor and Spain running
+The owner approved both revised Harbour Kitchen examples and the retained defaults
+on 2026-10-24 at 04:07, recorded in [Waitron
+`060966c2b3e9203acf0849042814997307cae463`](https://github.com/clintongormley/waitron/blob/060966c2b3e9203acf0849042814997307cae463/docs/superpowers/specs/2026-10-23-a1018-simple-handover-design.md).
+This supersedes pending-question wording at the historical Cloud contract pin;
+exact formats, compatible A947 amendments, separate A1018 build authority and
+runtime acceptance remain open. The owner approved gVisor and Spain running
 from Paris on 2026-10-23; those choices do not grant provider or activation authority.
 
 You should be able to start a new venue with its main Waitron server in Cloud, or recover there after its local servers fail. Cloud supplies the place to run it, storage, connectivity and recovery coordination. Waitron decides whether a server may write sales or file fiscal records. **Promotion** enables a standby as the active writer; restoring a database does not confer that authority.
@@ -52,9 +58,9 @@ A947 reports A679's hour-coded series as superseding the old seat-number allocat
 
 ## Give each venue its own operational instance
 
-An operational instance means an isolated Waitron process or container with its own configuration, machine identity, disk and resource budget. It does not necessarily mean a whole virtual machine. Recommend evaluating several isolated venue containers on shared hosts because each venue still has one separately managed application and SQLite file, while spare host capacity can be shared. The owner approved the gVisor sandbox choice on 2026-10-23; deployed isolation and capacity evidence remain unqualified.
+An operational instance means one isolated Waitron runtime per venue, with its own configuration, machine identity, disk and resource budget. The approved production direction runs several venue runtimes on shared machines, each inside gVisor as well as its own namespace, disk and network rules. This shares spare capacity while keeping each venue separately managed. The owner approved gVisor on 2026-10-23; deployed isolation and capacity evidence remain unqualified.
 
-A dedicated virtual machine per venue is expected to give a stronger host boundary and simpler attribution, at the cost of an idle machine floor for each venue. That security tradeoff needs review. Shared containers share the kernel, the host operating system's core, and host failure. Do not accept a namespace alone as isolation evidence. Do not select a venue count per host until representative sales, filing, backup, restore and neighbour-overload measurements pass. Keep dedicated machines available if the approved security boundary requires them.
+A namespace alone is not isolation evidence. gVisor's boundary and shared-machine failure still need actual security and overload qualification. Do not select a venue count per host until representative sales, filing, backup, restore and neighbour-overload measurements pass. A stronger sandbox or dedicated machine would need its own sizing and cost evidence; it is not an unanswered initial hosting choice.
 
 The owner's country-pack policy names each country's home and permitted backup regions;
 same-country hosting is not always possible. For Spain, venue data, logs and keys stay
@@ -69,12 +75,36 @@ D102's owner-selected SES email in an EU region is a separate exception. Neither
 exception proves a Spain-only supplier chain or settles AI location/legal evidence.
 
 Place each venue independently in its approved home region and a **cell**, a bounded
-group operated and recovered together. An organisation can span cells. Record the
+group operated and recovered together. Each country runs its own Cloud and cells;
+the approved starting direction is one Kubernetes cluster per cell. An organisation
+can span cells within its country. Record the
 cell's provider, region, zone layout, permitted data classes, capacity and release
 versions. Qualify each country/service against D101's supplier/transfer register;
 unknown locations and supplier access remain launch gates.
 
-Use the established Kubernetes direction for scheduling and staged operations, with provider adapters underneath. A **StatefulSet** is Kubernetes' controller for workloads with stable identities and persistent storage. A one-instance StatefulSet is a packaging candidate, not permission to restart a second writer. Cluster sharing across cells, the service choice, zone layout and recovery reserve remain deployment decisions. Shared cluster, account, identity, PostgreSQL and secrets dependencies must be named in the cell failure map.
+Use the approved Kubernetes/EKS direction with provider adapters underneath. A **StatefulSet** is Kubernetes' controller for workloads with stable identities and persistent storage. A one-instance StatefulSet is a packaging candidate, not permission to restart a second writer. Start with three machines across three zones per cell and retain room for the largest machine to fail, as production sections 5 and 10 specify. Size from measurements. Name account, identity, PostgreSQL, secrets and other shared dependencies in the cell failure map.
+
+### Keep customer accounts in the country
+
+The owner's 2026-10-24 decision puts customer accounts and sign-in beside their
+venues. Marta signs in at `es.waitron.io`; Spain handles signup, credentials,
+sessions, account recovery and self-service box recovery without global. A
+Frankfurt outage must be invisible to every country customer flow, including
+fresh sign-in and recovery, rather than merely preserving existing trading.
+
+Each customer organisation has one Cloud account owner per country, with no
+invitations, manager accounts or concurrent second owner. The same human with
+Spanish and Italian venues has separate accounts. Waitron's venue permissions
+remain separate; Cloud ownership alone supplies no activation authority. Future
+owner transfer needs a country-scoped, verified transfer/recovery design. It must
+replace the owner, never create a second owner or automatic support takeover.
+
+Global keeps the worldwide operator console and apex country routing only,
+optionally billing. Recommend country billing so customer billing self-service
+also survives global loss. This is a proposal for the later billing design,
+not approved billing implementation. Global aggregated reporting needs a later
+privacy/data-scope agreement and cannot become a customer-path dependency.
+Production section 4 names the P3 interface changes and G-owned follow-up work.
 
 ```mermaid
 flowchart LR
@@ -175,7 +205,7 @@ backup copy alone supplies no activation authority. Disk snapshots alone are not
 
 The proposed joint contract home is the **[hosted lifecycle and promotion section](../../waitron-integration-contract.md#hosted-lifecycle-and-promotion-proposed) of Cloud's integration contract**. This design records its required contents, not an approved wire format. The
 [A1018 section](../../waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018)
-records the revised handover direction and supersedes the external-proof requirement. Waitron's canonical topology and A947 section 10 must link to that same home when both owners accept a pinned revision. Cloud agrees the revised direction only; owner approval, exact formats and runtime
+records the revised handover direction and supersedes the external-proof requirement. Waitron's canonical topology and A947 section 10 must link to that same home when both owners accept a pinned revision. The owner approved the revised A1018 design on 2026-10-24 at the Waitron pin above; exact formats, separate build authority and runtime
 qualification remain separate. The older A947 pin above is historical input, not
 acceptance of the rejected stop-proof protocol.
 
@@ -194,6 +224,14 @@ Bilateral design acceptance records both repository revisions, named owners and 
 ## Upgrade the application without rolling back its ledger
 
 Pin each Waitron image by digest, record its schema and contract versions, and roll through a small approved cell cohort with a pause control. Block overlapping restore, move and upgrade operations. Stop writes and filing through Waitron's quiescence contract, settle outstanding device/provider work, capture a final recovery point and verify compatibility before migration. Keep old disk state protected while the candidate is checked without business workers.
+
+Production sections 6 and 8 supersede D88's earlier blanket human-approval rule.
+Use each action's recorded permission: ask first or act and report. Workload restart
+and failed-machine replacement initiation confer no writer authority. At launch
+the owner widens each release wave; later self-widening remains P5 work. Release
+one cell at a time within each country, independently of other countries, with at
+most one disruptive operation per cell initially. Planned moves use the venue's
+quiet hours and load profile; only failure justifies a move during trading.
 
 Restarting the previous image is permitted only when Waitron proves schema compatibility and no irreversible migration, activation or new writes occurred. Once writes occur or a new generation is opened, **do not roll back the ledger, reuse the old generation or resume a retired identity**. Repair forward or take the approved replacement/recovery path with Waitron's fresh activation rules. An older snapshot is for isolated inspection or explicit fresh recovery, never an in-place undo. Record uncertain external outcomes rather than retrying payments or fiscal submissions blindly.
 
@@ -314,7 +352,7 @@ Before pricing, extend D68's scope with representative hosted workloads and conc
 | --- | --- | --- |
 | Host/control partition or forced pod deletion | No automatic emergency declaration. Preserve disk and same-M2 operation; controlled copy/filing history must resolve. | Keep M1 live behind a partition, show the emergency warning and disclosed business overlap, then deliver the newer signed role. |
 | Two promoters or lost activation reply | Retain one intent; reconcile Waitron outcome and pointer/membership state; do not activate again blindly. | Concurrent promotion and crashes around local commit, CAS and receipt delivery on both pinned consumers. |
-| Stale two-box copy-up or returning old box | Show recoverable time and every peer; check role before business/filing; preserve fiscal tail, chain ownership and nonfiscal archive. | Lag, emergency holds on copied outbox rows through reboot/reset, fiscal-only return and no replay or premature wipe. |
+| Stale two-box copy-up or returning old box | Show recoverable time and every peer; check role before business/filing; preserve fiscal tail, sole M2 AEAT assignment and nonfiscal archive. | Lag, M1 restriction and M2 assignment through reboot/reset, temporary per-chain apply pauses and unresolved filing-case holds, fiscal-only return and no replay or premature wipe; no emergency predecessor ownership hold blocks M2. |
 | Disk or zone loss | Restore a qualified source onto a new disk through the explicitly selected scenario or authorised cold restore. | Same-zone restart and cross-zone restore with measured capacity, accepted loss, actor declaration where required and recorded same-M2 activation. |
 | Provision/upgrade worker crashes | Resume the recorded intent; reject stale completion; preserve any possibly written ledger. | Lost allocation replies, duplicate workers, migration failures and crash after first new write/generation. |
 | Stream loss, wrong key or failed snapshot | Use only a qualified fallback; retain the protected copy and key dependencies. | Restore with stream absent, older keys, source absent, failed verifier and interrupted cleanup; no fiscal activation by verification. |
@@ -331,18 +369,30 @@ consumer. These paths were read, not run; they do not establish this lifecycle.
 
 The driver checked the official [StatefulSet](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/) and [persistent-volume](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) documentation on 2026-10-21: orchestration/storage objects do not supply application fencing proof. The supplied [EBS documentation](https://docs.aws.amazon.com/ebs/latest/userguide/ebs-volumes.html) establishes same-zone attachment. Other deployment capability, capacity and isolation statements above are proposed requirements or explicitly unverified assumptions until the selected configuration passes the [launch gate](../../launch-evidence.md#pass-the-production-evidence-gate).
 
-## Full approval and remaining evidence
+## D88 design reconciliation and remaining evidence
 
-The cold shape, country-pack location rule, exit policy and normal/emergency support
-routes are answered. The complete D101/D88 data-protection engineering design was
-approved on 2026-10-22 around 08:30 for build planning only; O1 is answered. Follow the
-[D101 roadmap](../plans/2026-10-22-cloud-data-protection.md) for separately reviewed
-planning. All six lawyer questions, AI eligibility acceptance, KMS deletion-waiting
-policy and provider/runtime proof remain open. Broader D88 hosting/isolation/shared
-contracts are not approved. Do not reopen the answered owner choices.
-Supplier/entity/location/transfer qualification, legal annexes, shared-host security
-and actual bilateral contract acceptance remain prerequisites. Set tolerated data
-loss, recovery time and promotion permissions from measured evidence, then packages
-and prices from the extended D68 model. D103 owns later monitor/release/compute
-proposals. The [conditional delivery outline](../plans/2026-10-21-cloud-hosted-venue-design.md)
-keeps every build slice behind those gates; this publication is not build authority.
+**Close D88's duplicate design-approval gate. No D88 owner question remains ready
+to ask now.** The approved production design and later owner answers settle cold
+recovery, per-venue gVisor runtimes on shared machines, country cells, Spain/Paris,
+country accounts with one owner, per-action automation, per-cell releases and
+quiet-hour moves. A1018's design is approved separately at the verified Waitron
+pin above. Do not ask for blanket hosting approval again or revoke the existing
+local build/rehearsal authority. `.local` stays the local default; separate public
+and staff paths and A951 retain their own contract and qualification gates.
+
+| Remaining delivery | Owner / dependency |
+| --- | --- |
+| Hosted runtime, placement, lifecycle, quiet-hour moves and recovery adapters | P6/D115, after P1 packaging, P4 action interfaces and jointly accepted A1018 formats/consumers; separate A1018 build authority still applies. |
+| Customer identity, single-owner account model and outage-independent recovery | P3/D112; Lane G revises its data split, trust, migration and customer flows, then obtains plan review and re-approval. P1's shared database remains transitional. |
+| Action permissions and country-local decisions; release progression | P4, with G reconciling P3 authority dependencies; P5 owns release waves under production sections 6 and 8. |
+| `.local`, staff/public access and device integration | A951 and the shared acceptance matrix; D123/D130/D132/D136 dispositions, actual consumer pins, device and provider proof stay separate. |
+| Data location, support, exit and legal qualification | D101's slice-specific authority and remaining legal/provider/privacy gates, including Spain-from-Paris amendment. |
+| Regional infrastructure rebuild, usable keys/databases and outside monitor | P7, after P2/P3 and legal/provider qualification; no regional event supplies venue activation authority. |
+
+Measurement-based reliability promises, recovery bounds, packages and pricing
+remain later launch decisions, after representative hosting/recovery measurements
+extend D68. D101's six lawyer
+questions, AI eligibility, KMS deletion-waiting policy, shared-host security and
+bilateral runtime acceptance remain open. The [conditional delivery outline](../plans/2026-10-21-cloud-hosted-venue-design.md)
+records acceptance boundaries, not a replacement executable P6 plan or new authority
+for provider resources, spending, deployment or customer enablement.
