@@ -18,6 +18,7 @@ const flows = [
   {path: '/login', endpoint: '/login', button: 'login'},
 ] as const;
 const password = '  A café owner password  ';
+const nonbreakingSpace = String.fromCodePoint(0xa0);
 async function open(browser: Browser, flow: typeof flows[number], locale: Locale, theme = 'light', width = 390) {
   const page = await browser.newPage({locale, colorScheme: theme as 'light' | 'dark', viewport: {width, height: 900}});
   page.setDefaultTimeout(3000);
@@ -44,7 +45,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     try {
       for (const flow of flows) for (const [kind, email] of [
         ['ordinary', ' owner@example.test '],
-        ['nonbreaking', '\u00a0owner@example.test\u00a0'],
+        ['nonbreaking', nonbreakingSpace + 'owner@example.test' + nonbreakingSpace],
       ] as const) await t.test(`${flow.path} ${kind}`, async () => {
         const {page, calls} = await open(browser, flow, locale, theme, width), c = translations[locale];
         try {
@@ -71,7 +72,7 @@ for (const locale of ['en', 'es'] as const) test(`${locale}: trimming still refu
   const browser = await chromium.launch({headless: true});
   try {
     for (const flow of flows) for (const [kind, email] of [
-      ['blank', '\u00a0 \u00a0'], ['internal space', 'owner @example.test'], ['missing domain', 'owner@'],
+      ['blank', nonbreakingSpace + ' ' + nonbreakingSpace], ['internal space', 'owner @example.test'], ['missing domain', 'owner@'],
       ['too long', 'a'.repeat(64) + '@' + 'b'.repeat(63) + '.' + 'c'.repeat(63) + '.' + 'd'.repeat(62)],
     ]) await t.test(`${flow.path} ${kind}`, async () => {
       const {page, calls} = await open(browser, flow, locale), c = translations[locale];
@@ -94,7 +95,7 @@ test('a padded email at the length boundary is sent without its surrounding spac
     for (const flow of flows) await t.test(flow.path, async () => {
       const {page, calls} = await open(browser, flow, 'en'), c = translations.en;
       try {
-        await page.locator('input[name=email]').fill('\u00a0' + email + '\u00a0');
+        await page.locator('input[name=email]').fill(nonbreakingSpace + email + nonbreakingSpace);
         if (flow.path === '/login') await page.locator('input[name=password]').fill(password);
         await page.getByRole('button', {name: c[flow.button], exact: true}).click();
         assert.equal(await page.locator('wt-input[name=email]').getByText(c.emailError, {exact: true}).count(), 0);
