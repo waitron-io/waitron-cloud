@@ -604,7 +604,8 @@ and withdrawal, a session ended during body delivery, strict bodies, owner isola
 and machine refusal before agreement and after withdrawal.
 Task 15 adds the owner-only menu-translation control in each installation's entry
 on `/account`, with draft English and Spanish wording. You can agree, withdraw or
-retry a failed read; a read failure appears once above the venues you own, while
+retry a failed read; a read failure appears only in the first visible translation
+control, while
 an unanswered write keeps the last confirmed choice and asks you to retry only in
 that venue's control. Stubbed Chromium checks cover two venues, successful read
 retry, venue-specific write warnings and views without translation controls in

@@ -50,6 +50,17 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     await page.screenshot({path:`${process.env.TRANSLATION_ALERT_RECEIPT_DIR}/${locale}-${theme}-${width}-read.png`,fullPage:true});
    }
   });
+  await t.test('the first offered translation control carries the read warning when the first venue has no control',async()=>{
+   installations=initial.map((i,index)=>({...i,canRevoke:index===1}));
+   await page.evaluate(async()=>{await (window as any).app.installations.load();});
+   try{
+    assert.equal(await readAlerts.count(),1);
+    assert.equal(await group(1).getByRole('alert').count(),1);
+   }finally{
+    installations=initial;
+    await page.evaluate(async()=>{await (window as any).app.installations.load();});
+   }
+  });
   await t.test('a successful retry clears the read error and a failed write names only its venue',async()=>{
    readStatus=200;
    await group(1).getByRole('button',{name:c.refreshStatus,exact:true}).click();

@@ -17,7 +17,6 @@ export function installationScreen(app:PortalApp){
   ${!controller.loaded?html`<p role="status">${c.wait}</p>`:!controller.installations.length&&!controller.error?html`<p>${c.noInstallations}</p>`:nothing}
   ${controller.organisations.length>1?html`<div class="business-choice"><label for="venue-organisation">${c.chooseOrganisation}</label><select id="venue-organisation" ?disabled=${controller.pending} @change=${(e:Event)=>controller.selectOrganisation((e.target as HTMLSelectElement).value)}>${controller.organisations.map(o=>html`<option value=${o.id} .selected=${o.id===controller.selectedOrganisation}>${o.name}</option>`)}</select></div>`:controller.organisations.length?html`<p>${controller.organisations[0]!.name}</p>`:nothing}
   ${usageScreen(app)}
-  ${app.translationConsent.error&&!app.translationConsent.errorVenueId&&controller.visible.some(i=>i.canRevoke)?html`<p role="alert">${c[app.translationConsent.error]}</p>`:nothing}
   ${controller.visible.map(i=>html`<article class="installation"><h3>${i.overview?.businessName??i.legalBusinessId} · ${i.venueId.slice(0,8)}</h3><p>${i.environment==='test'?c.pairTest:c.pairProduction}${i.overview?.countryCode?html` · ${i.overview.countryCode}`:nothing}</p>
     <dl><dt>${c.pairVenue}</dt><dd class="venue-id">${i.venueId}</dd></dl>
     <p role="status">${i.revokedAt?c.accessStopped:!i.lastContactAt?c.accessPending:!i.leaseExpiresAt||Date.parse(i.leaseExpiresAt)<=Date.now()||Date.parse(i.lastContactAt)<Date.now()-300000?c.accessStale:c.accessActive}</p>
@@ -28,7 +27,7 @@ export function installationScreen(app:PortalApp){
     ${i.canRevoke&&!i.revokedAt?remoteScreen(app,i.installationId):nothing}
     ${monitoringScreen(app,i)}
     ${i.canRevoke?backupScreen(app,i.venueId):nothing}
-    ${i.canRevoke?translationConsentScreen(app,i.venueId):nothing}
+    ${i.canRevoke?translationConsentScreen(app,i.venueId,i===controller.visible.find(venue=>venue.canRevoke)):nothing}
     ${i.canRevoke?html`<p class="help">${c.diagnosticHelp}</p><wt-button .disabled=${controller.pending||app.diagnostics.pending||!!app.diagnostics.waiting}
       .loading=${app.diagnostics.pending&&app.diagnostics.selected===i.installationId} @click=${()=>{void app.diagnostics.download(i.installationId);}}>${c.diagnosticDownload}</wt-button>`:nothing}
     ${controller.confirming===i.installationId?html`<div role="group" aria-label=${c.stopAccess}><p>${c.stopHelp}</p>
