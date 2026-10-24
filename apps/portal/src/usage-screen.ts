@@ -7,7 +7,8 @@ export function formatBytes(decimal:string,locale:Locale,byteLabel:string){
  const value=BigInt(decimal),absolute=value<0n?-value:value,number=new Intl.NumberFormat(locale);
  if(absolute>maximumSafe)return `${number.format(value)} ${byteLabel}`;
  let divisor=1n,unit=0;
- while(unit<units.length-1&&absolute>=divisor*1024n){divisor*=1024n;unit++;}
+ // Choose the unit after rounding to tenths so a boundary displays 1 of the next unit.
+ while(unit<units.length-1&&(absolute*10n+divisor/2n)/divisor>=10240n){divisor*=1024n;unit++;}
  if(unit===0)return `${number.format(value)} ${byteLabel}`;
  const sign=value<0n?'-':'',whole=absolute/divisor,tenth=((absolute%divisor)*10n+divisor/2n)/divisor;
  const rounded=tenth===10n?whole+1n:whole,digit=tenth===10n?0n:tenth;
