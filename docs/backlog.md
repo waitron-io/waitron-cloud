@@ -4528,3 +4528,17 @@ identify the service and state, reproduce its cause, then fix it test-first.
 Every isolation check and existing deadline remains unchanged. Local
 Docker-backed checks are unavailable while Docker is down; GitHub CI supplies
 that evidence.
+
+## Account stop-access prompt refresh (D165)
+
+When a refresh removes your permission to stop an installation or moves it out
+of your selected organisation, Account now closes the Stop access prompt. A
+refresh that changes the selected organisation also clears confirmation, so
+you must choose the action again in that organisation. An unchanged, permitted
+prompt stays open and sends the same installation ID when you confirm.
+
+Controller and stubbed Chromium checks cover permission loss, organisation
+changes and the unchanged action. The browser checks cover English and Spanish,
+light and dark, at 390 and 1280 pixels. Removing each new reconciliation guard
+in a disposable copy makes its regression fail. PostgreSQL suites run in GitHub
+CI while Docker is down locally.
