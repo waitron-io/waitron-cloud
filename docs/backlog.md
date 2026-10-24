@@ -4611,12 +4611,15 @@ A new instrumented recurrence in [PR369 cost run 40062864377, job
 120780089952](https://github.com/waitron-io/waitron-cloud/actions/runs/40062864377/job/120780089952)
 identifies a HAProxy name-resolution failure: gateway exit 1 during the outbound
 check, after 1,754 milliseconds, without an out-of-memory kill or restart.
-The generated gateway names `waitron:8080`, but its Compose plan has no backend
-startup dependency. A controlled Linux regression selects the gateway first
-through the real Compose plan, then requires the complete stack to become ready
-and retain all isolation and cleanup checks. Until that experiment runs, startup
-ordering is a hypothesis; the recorded failure does not explain why DNS was
-unavailable. The separate replication interruption remains open.
+A controlled Linux regression starts the generated gateway first through its
+real Compose plan. Without a backend dependency, HAProxy exits with the same
+name-resolution category. The generated gateway now depends on the Waitron
+service reaching its started state, so its backend joins the private network
+before HAProxy resolves `waitron:8080`. The regression then requires all six
+services to become ready, all isolation checks and owned cleanup. This fixes
+the reproduced ordering defect; attributing the earlier intermittent event to
+that order remains an inference. The separate replication interruption remains
+open.
 
 Every isolation check and existing deadline remains unchanged. Local
 Docker-backed checks are unavailable while Docker is down; GitHub CI supplies
