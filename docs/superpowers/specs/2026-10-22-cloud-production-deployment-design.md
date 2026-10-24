@@ -13,8 +13,12 @@ very little about cloud so I'm happy for you to recommend everything") and can o
 stop-proof model. Sections 3, 6, 9 and 12 now follow the [revised shared direction](../../waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018).
 The owner’s 15:37 correction assigns all AEAT communication to M2 after either
 takeover; returning M1 transfers fiscal originals and outcomes without AEAT contact.
-The full revised design and retained defaults await one short Waitron-led question;
-publication does not extend the original local build authority to that protocol.
+The owner approved the revised design, both Harbour Kitchen examples and retained
+defaults on 2026-10-24 at 04:07, recorded in [Waitron
+`060966c2b3e9203acf0849042814997307cae463`](https://github.com/clintongormley/waitron/blob/060966c2b3e9203acf0849042814997307cae463/docs/superpowers/specs/2026-10-23-a1018-simple-handover-design.md).
+That approval supersedes the pending-question wording at the historical Cloud
+contract pin. Exact formats, compatible A947 amendments, separate A1018 build
+authority and runtime qualification remain open.
 
 ## 1. Why
 
@@ -60,8 +64,9 @@ start."
 
 **Non-goals for this design**
 
-- Billing, prices and plans (launch item 3), legal terms (item 4), roles and invitations
-  (item 5), support (item 6). This design leaves room for them; it does not design them.
+- Billing, prices and plans (launch item 3), legal terms (item 4), the single-owner
+  account lifecycle replacing roles and invitations (item 5), support (item 6).
+  Section 4 records the owner's account boundary; it does not implement these services.
 - The thresholds and on-call rules of monitoring: the
   [C39 thresholds design](2026-10-22-cloud-monitoring-thresholds-design.md) covers what to
   watch. This design covers what Cloud *does* with what it sees, and corrects C39 where it
@@ -114,28 +119,74 @@ moving just that small group."
 
 - **A country** runs as its own Cloud: its own cells, its own copy of the country's
   services (remote-access gateways, backup storage and verification, monitoring, hosted
-  venues), its own DNS records, its own second region for failover. Spain is the first.
-  Nothing a country needs to keep serving its venues lives in another country.
-- **The global layer** holds what spans countries: Cloud accounts and sign-in, billing
-  when it exists, the owner's worldwide console, and the `waitron.io` apex. It holds no
-  venue data. If the global layer is down, venues keep trading and their customers keep
-  reaching them; signing in to the Cloud portal, billing and anything that needs a portal
-  sign-in (such as starting a self-service box recovery) wait. **It is separated from
-  Spain before launch** (owner, 2026-10-22, choosing this over splitting when a second
-  country starts). Today one PostgreSQL migration chain (`packages/registration/migrations`)
-  holds everything, so the split is part of this build. **(our call)** The starting line:
-  accounts, sign-in, organisations and their members, plans and billing, and the console
-  are global; installations, pairing, routes, backups, monitoring, hosted venues and the
-  audit of what happened to a venue belong to the country. A country's services trust a
-  global sign-in through a signed token they can check without calling the global layer.
-  The global layer runs in its own AWS account in Frankfurt (`eu-central-1`), failing over
-  to another EU region, so neither a Spain outage nor a Paris one takes it down.
+  venues), customer accounts and sign-in, its own DNS records and its own second region
+  for failover. Spain is the first. Nothing a country needs for customer flows depends
+  on the global layer, including fresh sign-in, account recovery and box recovery.
+- **A customer account belongs to one country (owner, 2026-10-24 11:07).** Marta
+  signs in at `es.waitron.io`; Spain owns her credentials, sessions, account security,
+  recovery, organisation and venues. A Frankfurt outage is invisible to her customer
+  flows. The same human operating in two countries has two separate accounts. Each
+  customer organisation has **one Cloud account owner per country**, with no invitations,
+  manager accounts or concurrent second owner. This replaces the earlier delegated
+  starting line, "organisations and their members", and global customer sign-in tokens.
+  It does not change staff roles inside Waitron or grant fiscal/activation permission.
+- **The global layer** keeps the owner's worldwide operator console and the
+  `waitron.io` apex routing people to their country, optionally billing. It holds no
+  venue data under this design. It runs in its own AWS account in Frankfurt
+  (`eu-central-1`), failing over to another EU region, so neither a Spain outage nor a
+  Paris one takes it down. **It is separated from Spain before launch** (owner,
+  2026-10-22). Customer access through a country's name cannot require the apex to
+  answer or global to issue/refresh authority. Operator-console loss may delay
+  ask-first operations; ordinary customer work and recovery remain country-local.
 - **A cell** is a small group of machines in one country and region, with its own
   remote-access gateway, operated and recovered together (the hosting proposal's
   definition). A cell is the unit that fails, upgrades and moves. The current code caps a
   cell at 64 venues (`packages/remote-access/src/config.ts`); **(our call)** keep 64 as the
   starting cap and revisit it from measurements.
 - **A machine** runs many venues' workloads side by side (section 5).
+
+**Billing recommendation, not approved implementation.** Put customer billing and
+its self-service path in the country so global loss cannot block them. The later
+billing design decides provider, records and processing scope; optional global
+billing must still meet the no-customer-dependency rule. Worldwide aggregated
+reporting needs a later privacy/data-scope agreement before any export or storage.
+It cannot become a dependency of a country customer path.
+
+**Owner transfer is future work.** A country-scoped verified transfer/recovery
+must replace the single owner without an invitation, concurrent second owner or
+automatic support takeover. Lost-owner recovery needs its own evidence and abuse
+controls; this document supplies no transfer endpoint or support permission.
+
+**P3 dependencies and Lane G follow-up.** One migration chain currently holds
+accounts and venue services together; P1's database is transitional. G owns the
+P3/P4 plans and launch priority 5, and must revise, review and re-ask P3 plan
+approval against the owner's decisions. The affected boundaries are:
+
+- P3's data classification, schema ownership and copies: keep customer identity,
+  credentials/factors, sessions, organisation/sole owner, legal-business profiles,
+  plan/service state, security audit and account mail/recovery in the country;
+  remove global customer profiles, membership copies and invitation assumptions.
+- P3's signed global customer permits, offline trust, revocation and actor adapters:
+  replace the global customer issuer dependency with country-owned authentication,
+  permission and final rechecks. Keep global operator authority separately scoped;
+  customer ownership never confers operator or Waitron activation authority.
+  G must reconcile its proposed `ControlScope`/`ControlClaims`, `ControlTrust`,
+  session exchange, revocation barrier and `HumanAuthority`/`CountryControl`
+  interfaces; this document accepts no new encoding or permission contract.
+- P3's API/portal routing, cookies, factor/signup/reset mail and customer recovery:
+  make every journey country-local, including starting a new box recovery during
+  global loss. Reconcile plan/entitlement and account allowance handling with the
+  country boundary; billing remains a later design.
+- P3's cutover, keys, migration, backup/restore and failure acceptance: separate
+  customer and operator custody, preserve IDs and security/fiscal assertions, and
+  prove fresh customer sign-in and both account/box recovery with global absent.
+- P4's P3 authentication/approval and notification dependencies: distinguish the
+  worldwide operator from the sole country customer owner, keeping action records
+  and checks in the country. Global loss supplies no emergency declaration.
+- Launch priority 5's roles/invitations scope: replace multiple Cloud users with
+  the single-owner lifecycle and future verified transfer/recovery above. G also
+  owns the coordinated canonical A1018 status notice; preserve historical pins
+  while recording the 24 October design approval and remaining format/build gates.
 
 **Names (owner, 2026-10-22).** One domain, `waitron.io`, with one subdomain per country.
 Every venue keeps one stable public name under its country's subdomain
@@ -291,8 +342,9 @@ human declaration or bypasses copy, filing, authentication or activation gates.
 A separately selected cold restore keeps its existing recovery source, key,
 operation and sole-recovery gates and accepted tail loss, with a fresh chain and
 no added hard-stop proof. Failed handover never silently becomes restore or emergency.
-The revised protocol and its recommended defaults still await owner design approval,
-separate build authority and runtime acceptance through Waitron's combined question.
+The revised protocol and retained defaults have owner design approval at the
+24 October Waitron pin above. Exact formats, compatible A947 amendments, separate
+A1018 build authority and runtime acceptance remain required.
 
 ## 10. How it is built (our call, all of it)
 
@@ -397,19 +449,21 @@ list, all rehearsed on the LAN test Cloud. Opening AWS accounts, spending money 
 production schema changes wait for a separate go-ahead from the owner once the rehearsal
 works.
 
-**Depends on Waitron.** P6 needs section 9's revised joint handover contract, owner
-approval and qualified consumers. P7 rebuilds the country platform without inventing
+**Depends on Waitron.** P6 needs section 9's approved A1018 design translated into
+jointly accepted formats, compatible A947 amendments, separate build authority
+and qualified consumers. P7 rebuilds the country platform without inventing
 venue activation authority: each recovered venue explicitly uses controlled handover,
 emergency declaration or separately selected cold restore. Rebuilding infrastructure
 or approving an automation never supplies missing venue evidence or fiscal permission.
 
 **For the owner**
 
-- The revised A1018 policy defaults and both worked examples, in the one Waitron-led
-  question. The gVisor sandbox choice and running Spain from Paris were approved on
-  2026-10-23; isolation, recovery, legal and provider qualification still remain.
-- Where account data may live once a country outside the EU joins (the product discussion
-  leaves "where cross-country account data may live" open); inside the EU it is Frankfurt.
+- No duplicate D88 or A1018 design question remains ready now. A1018's examples
+  and retained defaults are approved on 2026-10-24; gVisor and Spain-from-Paris
+  were approved on 2026-10-23. Existing local build/rehearsal authority stands.
+- Later billing design, any global reporting privacy/data scope and country-specific
+  legal/provider qualification remain separate. Customer account data belongs to
+  its country, including future non-EU countries; Frankfurt is not its default.
 
 **For the builder**
 
@@ -420,3 +474,8 @@ or approving an automation never supplies missing venue evidence or fiscal permi
 - The revised handover's final-copy/local-state inventory, actor binding, per-chain
   filing ownership and same-M2 retry format, jointly with Waitron before build.
 - Measuring a trading venue's memory and the remote-access traffic, then re-pricing.
+- Reconcile P3/P4 and launch priority 5 as listed in section 4. P6/D115 carries
+  D88's runtime/build delivery after P1/P4 and joint protocol acceptance; A951,
+  D101, P3 and P7 retain their separate access, data, account and recovery gates.
+  Reliability promises and pricing follow measurements at launch, not a new
+  blanket design-approval gate.
