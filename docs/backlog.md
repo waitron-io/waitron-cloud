@@ -4154,6 +4154,31 @@ and a controlled cleanup barrier must finish before the retry creates its next
 directory. Ten deliberate guard faults were caught
 in a disposable checkout and the original files restored before the final checks.
 
+A later rejection in [run 40106355179](https://github.com/waitron-io/waitron-cloud/actions/runs/40106355179)
+identifies an unreserved S3 gRPC listener: HTTP port 35547 derives port 45547,
+which is absent from the seven-port allocation. SeaweedFS 4.47 derives a separate internal service port
+when no explicit S3 gRPC port is supplied. The fixture now reserves an eighth
+port and supplies `-s3.port.grpc`, so its existing allocation diagnostics and
+single retry also cover that listener. Deterministic child tests reproduce the
+observed S3 bind-refusal message after a real occupied-socket error, then check
+recovery, refusal after two failures, and disabled retries. Competing listeners
+remain open. The complete-allocation and diagnostic-count checks now require
+eight ports; their other assertions and all deadlines remain unchanged.
+
+Qualification: all nine dense Linux samples in
+[run 40110095865](https://github.com/waitron-io/waitron-cloud/actions/runs/40110095865)
+start and stop sixteen concurrent stores, then pass the cache and S3 collision
+checks. The temporary stress workflow is removed after that run. Three deliberate
+allocation faults fail the new tests; restored controls pass. The collision probe
+waits for its competing listener before binding, including a controlled delayed
+listener. The unchanged bounded retry still refuses unknown ports and other exits.
+
+The run-it review also observes two unreserved admin listeners per native store,
+even with `-admin.ui=false`. Sixteen concurrent native stores succeed using their
+fallback allocation. An admin bind refusal and its effect on startup remain
+unproved. Follow-up: reproduce that failure and qualify explicit admin-port
+reservations if needed; do not widen the S3 repair's retry to unknown ports.
+
 Remaining: retain the diagnostics to attribute any recurrence of the original
 read-only-cache rejection. Do not treat this demonstrated readiness repair as
 proof of that historical failure's cause.
