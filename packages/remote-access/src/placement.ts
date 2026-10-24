@@ -163,7 +163,7 @@ export class RemoteAccessStore {
  async hostnameInstructions(id:string,kind:'staff'|'public',custom:string){return dnsInstructions(custom,await this.#assigned(id,kind));}
  async setHostname(id:string,kind:'staff'|'public',custom:string,expectedRevision:number,resolve:typeof resolveCname=resolveCname,authorize?:(client:PoolClient)=>Promise<string>):Promise<Placement>{
   const assigned=await this.#assigned(id,kind);
-  if(!isHostname(custom)||!Number.isSafeInteger(expectedRevision)||expectedRevision<0)fail('invalid_hostname');
+  if(!isHostname(custom)||custom.length>237||!Number.isSafeInteger(expectedRevision)||expectedRevision<0)fail('invalid_hostname');
   // The complete operator namespace is reserved, including names for venues not provisioned yet.
   if(custom!==assigned){
    if((await this.#pool.query("SELECT id FROM remote_cells WHERE $1=suffix OR right($1,length(suffix)+1)='.'||suffix",[custom])).rowCount)fail('hostname_conflict');

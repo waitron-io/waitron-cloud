@@ -210,6 +210,8 @@ remote setup now has owner-only English/Spanish screens for assigned names, cust
 changes, readiness and local-network guidance. After an uncertain save reply, the portal
 reads the current settings once even during Retry-After; new saves and manual refreshes
 keep waiting, so you can see whether the name was saved without repeating the change.
+Custom names are limited to 237 characters in the portal, DNS instructions and save
+validation, leaving room for the certificate record's `_acme-challenge.` prefix.
 A PostgreSQL-backed local reconciler now
 publishes signed routes and renews public/staff certificates through explicit filesystem,
 DNS and ACME adapters. Its receipt covers duplicate workers, expired-lease restart,

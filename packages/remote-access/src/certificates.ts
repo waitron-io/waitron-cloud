@@ -13,7 +13,8 @@ export function validateCsr(pem:string,hostname:string):void {
  }catch{throw new Error('invalid_csr');}
 }
 export function dnsInstructions(custom:string,assigned:string){
- if(!isHostname(custom)||!isHostname(assigned)||custom===assigned)throw new Error('invalid_hostname');
+ // The DNS-01 label adds 16 characters to both names in the certificate CNAME.
+ if(!isHostname(custom)||custom.length>237||!isHostname(assigned)||assigned.length>237||custom===assigned)throw new Error('invalid_hostname');
  return [{type:'CNAME',name:custom,value:assigned},{type:'CNAME',name:`_acme-challenge.${custom}`,value:`_acme-challenge.${assigned}`}];
 }
 export async function verifyDelegation(custom:string,assigned:string,resolve:typeof resolveCname=resolveCname){
