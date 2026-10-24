@@ -4,7 +4,7 @@ import {backupScreen} from './backup-screen.ts';
 export function recoveryScreen(app:PortalApp){
  const r=app.recovery,c=app.copy,installations=app.installations,b=app.backups;
  if(!r.requestId||app.link.invalid)return html`<p>${c.recoveryMissing}</p>`;
- if(app.session.state.kind!=='authenticated')return html`<p role="status">${c.checking}</p><wt-button .disabled=${!!app.waiting} @click=${()=>{void app.session.check();}}>${c.retry}</wt-button>`;
+ if(app.session.state.kind!=='authenticated')return html`<p role="status">${app.session.state.kind==='unavailable'?c.sessionUnavailable:c.checking}</p><wt-button .disabled=${!!app.waiting} @click=${()=>{void app.session.check();}}>${c.retry}</wt-button>`;
  const disabled=r.pending||!!app.waiting,op=r.view?.operation,replacement=r.view?.replacement,complete=replacement?.state==='complete',expired=!!r.view&&!complete&&Date.parse(op?.expiresAt??r.view.expiresAt)<=Date.now();
  const venues=[...new Map(installations.visible.filter(i=>i.canRevoke&&i.environment==='test').map(i=>[i.venueId,i])).values()];
  const selectionDisabled=disabled||installations.pending;
