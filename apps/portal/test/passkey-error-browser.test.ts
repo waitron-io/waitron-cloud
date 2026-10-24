@@ -9,7 +9,8 @@ const bundle = await build({stdin: {contents: `
  import {applyTokens} from '@waitron-io/ui-core/tokens';
  import {PortalApp} from './src/app.ts';
  applyTokens(document.body);
- new PortalApp(document.querySelector('#portal'));
+ const app = new PortalApp(document.querySelector('#portal'));
+ Object.assign(window, {diagnosticApp: app});
 `, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
@@ -19,7 +20,26 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       for (const path of ['/account', '/', '/login']) await t.test(path, async () => {
         const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
         page.setDefaultTimeout(4000);
+        const events: unknown[] = [];
+        const record = (event: unknown) => { if (events.length < 100) events.push(event); };
+        page.on('request', request => { if (request.url().includes('/api/account/')) record({kind: 'request', path: new URL(request.url()).pathname}); });
+        page.on('response', response => { if (response.url().includes('/api/account/')) record({kind: 'response', path: new URL(response.url()).pathname, status: response.status()}); });
+        page.on('pageerror', () => record({kind: 'pageerror'}));
         try {
+          await page.exposeFunction('recordPasskeyDiagnostic', record);
+          await page.addInitScript(() => {
+            const state = () => {
+              const app = (window as any).diagnosticApp;
+              return {path: location.pathname, passwordPresent: !!app?.passkeys.password,
+                pending: app?.passkeys.pending, loaded: app?.passkeys.loaded, error: app?.passkeys.error,
+                alertCount: document.querySelectorAll('.passkeys [role=alert]').length};
+            };
+            for (const type of ['pointerdown', 'pointerup', 'click', 'input', 'wt-change']) document.addEventListener(type, event => {
+              const target = event.composedPath()[0] as HTMLElement;
+              void (window as any).recordPasskeyDiagnostic({kind: 'event', type, tag: target.tagName, ...state()});
+            }, true);
+            new MutationObserver(() => { void (window as any).recordPasskeyDiagnostic({kind: 'dom', ...state()}); }).observe(document, {subtree: true, childList: true});
+          });
           const authenticator = await page.context().newCDPSession(page);
           await authenticator.send('WebAuthn.enable');
           await authenticator.send('WebAuthn.addVirtualAuthenticator', {options: {
@@ -56,7 +76,13 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             await mkdir(process.env.PASSKEY_ERROR_RECEIPT_DIR, {recursive: true});
             await page.screenshot({path: `${process.env.PASSKEY_ERROR_RECEIPT_DIR}/${locale}-${theme}-${width}-${account ? path === '/' ? 'root' : 'account' : 'login'}.png`, fullPage: true});
           }
-        } finally { await page.close(); }
+        } finally {
+          console.log('PASSKEY_DIAGNOSTIC ' + JSON.stringify({locale, theme, width, route: path, events,
+            final: await page.evaluate(() => { const app = (window as any).diagnosticApp; return {path: location.pathname,
+              pending: app?.passkeys.pending, loaded: app?.passkeys.loaded, error: app?.passkeys.error,
+              passwordPresent: !!app?.passkeys.password, alerts: [...document.querySelectorAll('[role=alert]')].map(e => e.textContent?.slice(0, 160))}; }).catch(() => ({unavailable: true}))}));
+          await page.close();
+        }
       });
     } finally { await browser.close(); }
   });

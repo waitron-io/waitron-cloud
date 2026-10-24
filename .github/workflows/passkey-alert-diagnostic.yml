@@ -1,0 +1,54 @@
+name: Passkey alert diagnosis
+on:
+  pull_request:
+    paths:
+      - 'apps/portal/test/passkey-error-browser.test.ts'
+      - '.github/workflows/passkey-alert-diagnostic.yml'
+permissions:
+  contents: read
+  packages: read
+jobs:
+  linux-observation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: pnpm --filter @waitron-cloud/portal exec playwright install --with-deps chromium
+      - name: Observe bounded original journeys
+        run: |
+          mkdir -p diagnostics
+          python3 -u - <<'PYTHON'
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          from pathlib import Path
+          import subprocess, json
+          def observe(index):
+              result = subprocess.run(['node', '--test', '--test-timeout=120000', 'test/passkey-error-browser.test.ts'],
+                  cwd='apps/portal', capture_output=True, text=True, timeout=150)
+              Path(f'diagnostics/journey-{index}.log').write_text(result.stdout + result.stderr)
+              print(json.dumps({'journey': index, 'exit': result.returncode}), flush=True)
+              if result.returncode:
+                  print(result.stdout + result.stderr, flush=True)
+              return result.returncode
+          with ThreadPoolExecutor(max_workers=2) as workers:
+              results = [future.result() for future in as_completed([workers.submit(observe, i) for i in range(12)])]
+          print(json.dumps({'runs': len(results), 'failed': sum(bool(r) for r in results)}), flush=True)
+          PYTHON
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: passkey-alert-${{ github.event.pull_request.head.sha }}
+          path: diagnostics/
+          retention-days: 14
