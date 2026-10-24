@@ -3322,6 +3322,10 @@ notifications separately.
   factor changes end every session. Its [implementation plan](superpowers/plans/2026-10-12-cloud-authenticator-factor.md)
   covers storage, account controls and browser acceptance. Storage, API and the bilingual
   portal, operational key rotation and private stack configuration are implemented locally.
+  You can paste spaced authenticator or recovery codes into sign-in and factor controls.
+  The portal removes whitespace, preserves recovery-code hyphens and refuses empty proof
+  or activation codes before sending. Passwords and server validation stay unchanged.
+  `node --test apps/portal/test/authenticator-controller.test.ts` covers each request path.
   The populated 34-to-35 upgrade/restore rehearsal and packaged stack clean-install,
   restart, rebuild/upgrade and cleanup proofs passed with 35 migrations for the
   authenticator release. Current packaged proofs follow the selected release manifest.

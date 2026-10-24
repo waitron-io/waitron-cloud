@@ -2,6 +2,7 @@ import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
 import type {FactorChallenge,FactorChange,FactorEnrolment,FactorProof,FactorStatus,PasswordLogin} from './authenticator-types.ts';
 type Request=<T>(path:string,body?:Record<string,unknown>)=>Promise<ApiResult<T>>;
+const normaliseCode=(code:string)=>code.replace(/\s/g,'');
 export class AuthenticatorController {
   challenge:FactorChallenge|undefined;
   enrolment:FactorEnrolment|undefined;
@@ -28,9 +29,9 @@ export class AuthenticatorController {
     this.#failure(result);if(this.error==='factorUnavailable')this.error='unavailable';this.#changed();return result.status===0||result.status>=500?'reconcile':false;
   }
   async completeLogin():Promise<'authenticated'|'reconcile'|false>{
-    if(!this.challenge||!this.proofCode)return false;
+    const code=normaliseCode(this.proofCode);if(!this.challenge||!code)return false;
     const generation=this.#start();if(generation===undefined)return false;
-    const body={challengeToken:this.challenge.challengeToken,proof:{kind:this.proofKind,code:this.proofCode.trim()}};this.#clearInput();
+    const body={challengeToken:this.challenge.challengeToken,proof:{kind:this.proofKind,code}};this.#clearInput();
     const result=await this.#request<{accountId:string}>('/login/factor',body);
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){this.challenge=undefined;this.#changed();return 'authenticated';}
@@ -42,15 +43,19 @@ export class AuthenticatorController {
   async load(){if(!this.#account)return;const generation=this.#start();if(generation===undefined)return;
     const result=await this.#request<FactorStatus>('/authenticator');if(generation!==this.#generation)return;
     this.pending=false;this.loaded=result.ok;if(result.ok)this.status=result.value;else this.#failure(result);this.#changed();}
-  #authority(){return {password:this.password,...(this.status?.active?{proof:{kind:this.proofKind,code:this.proofCode.trim()}}:{})};}
-  async begin(){if(!this.#account||!this.password)return;const generation=this.#start();if(generation===undefined)return;
-    const body=this.#authority();this.#clearInput();const result=await this.#request<FactorEnrolment>('/authenticator/begin',body);
+  #authority(){const code=normaliseCode(this.proofCode);if(this.status?.active&&!code)return undefined;
+    return {password:this.password,...(this.status?.active?{proof:{kind:this.proofKind,code}}:{})};}
+  async begin(){if(!this.#account||!this.password)return;const body=this.#authority();if(!body)return;
+    const generation=this.#start();if(generation===undefined)return;
+    this.#clearInput();const result=await this.#request<FactorEnrolment>('/authenticator/begin',body);
     if(generation!==this.#generation)return;this.pending=false;this.enrolment=undefined;
     if(result.ok)this.enrolment=result.value;else this.#failure(result,true);this.#changed();}
   async #change(action:'activate'|'remove'|'regenerate'):Promise<FactorChange|'reconcile'|false>{
-    if(!this.#account||!this.password||action==='activate'&&(!this.enrolment||!this.confirmation))return false;
+    const code=normaliseCode(this.confirmation);
+    if(!this.#account||!this.password||action==='activate'&&(!this.enrolment||!code))return false;
+    const authority=this.#authority();if(!authority)return false;
     const generation=this.#start();if(generation===undefined)return false;
-    const body={...this.#authority(),...(action==='activate'?{pendingToken:this.enrolment!.pendingToken,code:this.confirmation.trim()}:{})};this.#clearInput();
+    const body={...authority,...(action==='activate'?{pendingToken:this.enrolment!.pendingToken,code}:{})};this.#clearInput();
     const result=await this.#request<FactorChange>(`/authenticator/${action}`,body);
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){this.fence();this.#changed();return result.value;}

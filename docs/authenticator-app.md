@@ -4,6 +4,10 @@ A stolen password can otherwise open your Cloud account. You can add an optional
 authenticator app from **Account**, then use its six-digit code or a saved recovery
 code when signing in with your password. Passkey sign-in remains available separately.
 
+You can paste codes with spaces, such as `123 456`. The portal removes whitespace
+from authenticator and recovery codes, keeping recovery-code hyphens. Blank codes
+stay in the form without sending a request, so they do not spend a server attempt.
+
 Scan the QR code or enter the setup secret in your authenticator, then confirm with
 its current code. The portal renders the QR locally. Save the ten recovery codes
 when they appear: each works once, and Cloud stores only their hashes. Setup secrets
