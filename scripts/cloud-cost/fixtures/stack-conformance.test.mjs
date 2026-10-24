@@ -731,6 +731,27 @@ test('generatedArchiveStoragePublishesACompleteAnonymousReceiptAfterCleanup', as
 
 import { readdirSync } from 'node:fs';
 
+// A real HAProxy name-resolution refusal must survive its stopped container and owned cleanup.
+test('stackReportsGatewayBinaryFailureBeforeRemovingItsResources', async t => {
+  const f = fixture(t), preparedPlan = local.prepareIsolatedStack(f);
+  f.onCleanup(() => cleanupRecordedStack(f, preparedPlan.project, docker));
+  const probeConfig = join(f.root, 'gateway-diagnostic-probe.json');
+  writeFileSync(probeConfig, JSON.stringify({ ...f, prepared: preparedPlan }), { mode: 0o600, flag: 'wx' });
+  const diagnostic = JSON.parse(execFileSync(process.execPath,
+    [new URL('./gateway-isolation-diagnostic-probe.mjs', import.meta.url).pathname, probeConfig],
+    { encoding: 'utf8', timeout: 120000, stdio: ['ignore', 'pipe', 'pipe'] }));
+  assert.equal(diagnostic.stage, 'isolation');
+  assert.equal(diagnostic.command, 'outbound-canary');
+  assert.equal(diagnostic.exitCode, 1);
+  assert.equal(diagnostic.container.role, 'gateway');
+  assert.equal(diagnostic.container.status, 'exited');
+  assert.equal(diagnostic.container.oomKilled, false);
+  assert.deepEqual(diagnostic.container.runtime, { stage: 'binary', reason: 'dns-resolution', exitCode: 1 });
+  assert.equal(JSON.stringify(diagnostic).includes('missing-backend'), false);
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});
+
 function assertStableHostFiles(stateRoot) {
   assert.deepEqual(readdirSync(stateRoot).sort(), [
     'gateway-cert.pem', 'gateway-key.pem', 'gateway.pem', 'haproxy.cfg',

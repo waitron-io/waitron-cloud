@@ -1,13 +1,18 @@
 // Only Docker is simulated; ownership, configuration, files, OpenSSL and stack orchestration are real.
 import {registerHooks} from 'node:module';
 import {spawnSync as actualSpawnSync} from 'node:child_process';
-import {mkdtempSync,realpathSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,realpathSync,mkdirSync,writeFileSync,readFileSync,rmSync,symlinkSync,linkSync,renameSync,fstatSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const fault=process.argv[2], cleanupFailure=process.argv[3];
 const events=[], originalError=console.error;
-console.error=(...args)=>{events.push('report');originalError(...args);};
-const parent=realpathSync(mkdtempSync(join(tmpdir(),'cloud-startup-probe-')));
+console.error=(...args)=>{
+ events.push('report');
+ if(['gateway-link','gateway-hardlink','gateway-fifo'].includes(fault))rmSync(join(stateRoot,'gateway-failure.json'),{force:true});
+ if(fault==='gateway-linked-state'){rmSync(stateRoot);renameSync(stateRoot+'-moved',stateRoot);}
+ originalError(...args);
+};
+const parent=realpathSync(process.argv[4]??mkdtempSync(join(tmpdir(),'cloud-startup-probe-')));
 const source=join(parent,'source'),root=join(parent,'owned'),codeRoot=join(root,'code'),stateRoot=join(root,'state');
 for(const path of [source,root,codeRoot,stateRoot])mkdirSync(path,{mode:0o700});
 const token='a'.repeat(64),journal={path:join(root,'journal.json'),token},image='sha256:'+'b'.repeat(64);
@@ -39,7 +44,7 @@ globalThis.startupProbe={abort:()=>controller.abort(),spawnSync(command,args,opt
  if(args[0]==='network'&&args[1]==='inspect')return ok([network()]);
  if(args[0]==='inspect'&&args[1]==='--format'){
   events.push('state');
-  if(args.at(-1)!==ids[1])throw Error('Wrong diagnostic target');
+  if(args.at(-1)!==(fault.startsWith('gateway-')?ids[5]:ids[1]))throw Error('Wrong diagnostic target');
   if(fault==='state-missing')return {...error(),stderr:'Error response from daemon: No such container: PRIVATE_CANARY'};
   if(fault==='state-timeout')return actualSpawnSync(process.execPath,['-e',`setTimeout(()=>process.stdout.write(JSON.stringify({Status:'exited',Running:false,ExitCode:7,OOMKilled:true,Dead:false,Restarting:false})),2200)`],options);
   if(fault==='state-overflow')return actualSpawnSync(process.execPath,['-e',`process.stdout.write(JSON.stringify({Status:'exited',Running:false,ExitCode:7,OOMKilled:true,Dead:false,Restarting:false,Error:'PRIVATE_CANARY'.repeat(5000)}))`],options);
@@ -51,6 +56,25 @@ globalThis.startupProbe={abort:()=>controller.abort(),spawnSync(command,args,opt
  }
  if(args[0]==='inspect')return ok(containers().filter(c=>args.includes(c.Id)).slice(0,fault==='resources'?5:6));
  if(args[0]==='exec'){
+  if(fault.startsWith('gateway-')&&args[1]===ids[5]){
+   const value={stage:'binary',reason:'dns-resolution',exitCode:1};
+   if(fault==='gateway-private')value.reason='PRIVATE_CANARY';
+   if(fault==='gateway-extra')value.secret='PRIVATE_CANARY';
+   if(fault==='gateway-invalid-exit')value.exitCode=256;
+   if(fault==='gateway-invalid-signal')value.signal='PRIVATE_CANARY';
+   if(fault==='gateway-invalid-code')value.code='PRIVATE_CANARY';
+   if(fault==='gateway-invalid-stage')value.stage='PRIVATE_CANARY';
+   if(['gateway-link','gateway-hardlink'].includes(fault)){
+    const target=join(source,'gateway-failure.json');writeFileSync(target,JSON.stringify(value),{mode:0o600});
+    (fault==='gateway-link'?symlinkSync:linkSync)(target,join(stateRoot,'gateway-failure.json'));
+   }else if(fault==='gateway-fifo'){
+    if(actualSpawnSync('mkfifo',[join(stateRoot,'gateway-failure.json')]).status!==0)throw Error('Cannot create owned pipe control');
+   }else if(fault!=='gateway-missing')writeFileSync(join(stateRoot,'gateway-failure.json'),
+    fault==='gateway-malformed'?'PRIVATE_CANARY':JSON.stringify(value)+(fault==='gateway-oversized'?' '.repeat(1500):''),{mode:fault==='gateway-public'?0o644:0o600});
+   if(fault==='gateway-linked-state'){renameSync(stateRoot,stateRoot+'-moved');symlinkSync(stateRoot+'-moved',stateRoot);}
+   events.push('runtime');
+   return {...error(),stderr:'Error response from daemon: Container PRIVATE_CANARY is not running'};
+  }
   if(fault.startsWith('state-')&&args[1]===ids[1])return {...error(),stderr:'Error response from daemon: Container PRIVATE_CANARY is not running'};
   if(fault==='isolation-command')return error();
   if(fault==='outbound-result')return {...error(),stdout:JSON.stringify({blockedConnections:3,blockedDns:1,localControl:true,secret:'PRIVATE_CANARY'}),stderr:'PRIVATE_CANARY'};
@@ -67,7 +91,11 @@ globalThis.startupProbe={abort:()=>controller.abort(),spawnSync(command,args,opt
  }
  throw Error('Unexpected Docker command');
 }};
-registerHooks({resolve(specifier,context,next){if(specifier==='node:child_process'&&context.parentURL?.endsWith('/local.mjs'))
+// A foreign uid cannot be created without privileges; alter only the filesystem metadata boundary.
+globalThis.startupProbe.fstatSync=(...args)=>{const stat=fstatSync(...args);if(fault==='gateway-owner')stat.uid+=1;return stat;};
+registerHooks({resolve(specifier,context,next){
+ if(specifier==='node:fs'&&context.parentURL?.endsWith('/local.mjs'))return {url:'data:text/javascript,'+encodeURIComponent(`export * from 'node:fs';export const fstatSync=(...args)=>globalThis.startupProbe.fstatSync(...args);`),shortCircuit:true};
+ if(specifier==='node:child_process'&&context.parentURL?.endsWith('/local.mjs'))
  return {url:'data:text/javascript,'+encodeURIComponent(`import {spawn as actualSpawn} from 'node:child_process';
  export const spawnSync=(...args)=>globalThis.startupProbe.spawnSync(...args);
  export const spawn=(command,args,options)=>{const child=actualSpawn(${JSON.stringify(fault==='missing-certificate'?'/nonexistent-cloud-cost-openssl':['certificate','certificate-cancelled'].includes(fault)?process.execPath:'/usr/bin/openssl')},${fault==='certificate-cancelled'?JSON.stringify(['-e','setInterval(()=>{},1000)']):fault==='certificate'?JSON.stringify(['-e',"process.stderr.write('PRIVATE_CANARY');process.exit(7)"]):'args'},options);${fault==='certificate-cancelled'?'setImmediate(()=>globalThis.startupProbe.abort());':''}return child;};`),shortCircuit:true};return next(specifier,context);}});

@@ -4542,6 +4542,25 @@ parent's fallback requires recorded creation IDs plus fresh owner, project and
 name checks before removing a resource; matching labels alone cannot authorise
 removal. Native controls cover foreign identity and ownership refusals.
 
+A later instrumented recurrence in [PR362 cost run 40054514898, job
+120754852118](https://github.com/waitron-io/waitron-cloud/actions/runs/40054514898/job/120754852118)
+identifies the gateway: exited with code 1, without an out-of-memory kill, dead
+state or restart. Its binary output was discarded, so this does not explain
+why HAProxy stopped. The generated gateway now retains a private failure record
+before exiting. Only fixed categories for name resolution, socket binding,
+certificate loading, child exit, signal or process creation are retained, with
+bounded exit metadata. Raw output stays private and only its first 8 KiB are
+inspected. Failure output drains for at most 250 milliseconds after the master
+exits; an orderly stop does not wait for descendants holding stderr open.
+Synchronous and asynchronous process-creation failures retain the same fixed
+categories. The parent reads at most 1,025 bytes of a private regular file before
+cleanup, validates every field and rejects unknown fields or values. Missing
+or invalid evidence preserves the original refusal. Real child-process checks
+cover the categories, split output, large output, signal and spawn failures;
+a Linux control forces a real HAProxy name-resolution failure and checks that
+the parent retains its category and removes the owned resources. This
+controlled failure does not establish the historical recurrence's cause.
+
 The historical cause remains unknown. Use the next diagnostic recurrence to
 identify the service and state, reproduce its cause, then fix it test-first.
 Every isolation check and existing deadline remains unchanged. Local

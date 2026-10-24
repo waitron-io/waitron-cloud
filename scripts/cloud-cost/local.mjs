@@ -386,7 +386,26 @@ const lookup = host => new Promise(resolve => {
   process.exit(localControl && result.blockedConnections === 3 && result.blockedDns === 2 ? 0 : 1);
 })().catch(()=>process.exit(1));`;
 
-function failedContainerState(container) {
+function gatewayRuntimeFailure(args) {
+  let fd;
+  try {
+    requireThat(args && inside(args.root, args.stateRoot) && realpathSync(args.stateRoot) === args.stateRoot);
+    fd = openSync(join(args.stateRoot, 'gateway-failure.json'), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const stat = fstatSync(fd);
+    requireThat(stat.isFile() && stat.nlink === 1 && stat.uid === process.getuid() && (stat.mode & 0o777) === 0o600 && stat.size <= 1024);
+    const buffer = Buffer.alloc(1025), length = readSync(fd, buffer, 0, buffer.length, 0);
+    requireThat(length <= 1024);
+    const value = JSON.parse(buffer.subarray(0, length).toString('utf8'));
+    requireThat(value && value.stage === 'binary' && ['dns-resolution', 'bind', 'tls', 'child-exit', 'spawn', 'signal'].includes(value.reason)
+      && Object.keys(value).every(key => ['stage', 'reason', 'exitCode', 'signal', 'code'].includes(key))
+      && (value.exitCode === undefined || Number.isInteger(value.exitCode) && value.exitCode >= 0 && value.exitCode <= 255)
+      && (value.signal === undefined || ['SIGTERM', 'SIGKILL', 'SIGABRT', 'SIGSEGV', 'SIGINT'].includes(value.signal))
+      && (value.code === undefined || ['ENOENT', 'EACCES', 'EPERM', 'EIO'].includes(value.code)));
+    return value;
+  } catch { /* Missing or invalid evidence cannot replace the original command refusal. */ }
+  finally { if (fd !== undefined) closeSync(fd); }
+}
+function failedContainerState(container, ownership) {
   const role = container.Config.Labels['io.waitron.cloud-cost.role'];
   const diagnostic = { role: ['postgres', 's3', 'mailpit', 'waitron', 'fiscal', 'gateway'].includes(role) ? role : 'unknown', inspection: 'unavailable' };
   // Inspect the validated immutable ID before cleanup; raw state can contain private runtime errors.
@@ -401,12 +420,13 @@ function failedContainerState(container) {
     if (!['created', 'running', 'paused', 'restarting', 'removing', 'exited', 'dead'].includes(state?.Status)
       || !['Running', 'OOMKilled', 'Dead', 'Restarting'].every(key => typeof state[key] === 'boolean')
       || !Number.isInteger(state.ExitCode) || state.ExitCode < 0 || state.ExitCode > 255) return diagnostic;
+    const runtime = diagnostic.role === 'gateway' ? gatewayRuntimeFailure(ownership) : undefined;
     return { role: diagnostic.role, status: state.Status, running: state.Running, exitCode: state.ExitCode,
-      oomKilled: state.OOMKilled, dead: state.Dead, restarting: state.Restarting };
+      oomKilled: state.OOMKilled, dead: state.Dead, restarting: state.Restarting, ...(runtime ? { runtime } : {}) };
   } catch { return diagnostic; }
 }
 
-function dockerRead(argv, container) {
+function dockerRead(argv, container, ownership) {
   const result = spawnSync('docker', argv, { env: environment(), encoding: 'utf8',
     timeout: 15000, maxBuffer: 2 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
   if (result.status !== 0 || result.error) {
@@ -428,7 +448,7 @@ function dockerRead(argv, container) {
           context.canary = { blockedConnections: value.blockedConnections, blockedDns: value.blockedDns, localControl: value.localControl };
       } catch { /* Unknown command output stays private. */ }
     }
-    if (canary && container) context.container = failedContainerState(container);
+    if (canary && container) context.container = failedContainerState(container, ownership);
     requireCommand(result, context);
   }
   return JSON.parse(result.stdout);
@@ -446,7 +466,7 @@ export async function proveDockerIsolation(args) {
       // Refuse a runtime without Node rather than infer its outbound behavior from another image.
       requireThat(c.Config.Env.some(v => v.startsWith('NODE_VERSION=')));
       record(args, { kind: 'outbound-proof', state: 'intent', containerIds: [c.Id] });
-      const result = dockerRead(['exec', c.Id, 'node', '-e', outboundCanary], c);
+      const result = dockerRead(['exec', c.Id, 'node', '-e', outboundCanary], c, args);
       requireThat(Object.keys(result).length === 3 && result.blockedConnections === 3 && result.blockedDns === 2 && result.localControl === true);
       blockedConnections += result.blockedConnections; blockedDns += result.blockedDns;
       record(args, { kind: 'outbound-proof', state: 'ready', containerIds: [c.Id] });
