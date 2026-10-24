@@ -2513,9 +2513,13 @@ notifications separately.
   expressions can select extra work, including text after a function body
   without a semicolon. An ordinary object expression and a semicolon
   before that inert text have separate package-isolation controls. The
-  bracket exclusion still lacks an independent omission control; the earlier
-  array guard also retains inert text inside arrays. General
-  expression parsing and the wider reader inventory remain unqualified.
+  nested-predecessor delimiter limit now has an independent omission control:
+  a completed array statement followed by inert reader text keeps only the
+  changed package selected. Removing the whole limit selects unrelated packages;
+  restoring it passes. This proves the statement boundary after a closing bracket,
+  not the exclusion of bracket characters alone: the earlier array guard also
+  retains inert text inside arrays. General expression parsing and the wider
+  reader inventory remain unqualified.
   Unicode escapes in dot-member names, such as `fs.re\u0061ddirSync`,
   now retain full package work. Node execution controls cover all four directory
   APIs, escapes at the start and end of a name, zero-padded brace escapes,

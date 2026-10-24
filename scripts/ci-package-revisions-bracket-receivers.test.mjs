@@ -140,3 +140,13 @@ console.log(rows[0].value);
   assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
 }));
 
+
+
+test('a completed array statement cannot join later inert text into a directory reader', () => fixture(({root, write, commit, plan}) => {
+  write('packages/portal/src/index.mjs', "const rows = [];\nconsole.log('a, readdirSync, b');\n");
+  const base = commit();
+  write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.equal(execFileSync(process.execPath, ['packages/portal/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'a, readdirSync, b\n');
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue']);
+}));
