@@ -938,6 +938,9 @@ approved contract; the partial runtime above does not complete joint proof or re
   A malformed recovery code now marks the code field and shows its guidance below
   the field, alongside the existing alert. English/Spanish browser checks cover both
   themes and widths, no request for malformed codes, and trimmed leading-zero codes.
+  Long organisation names now stay within the recovery column on phones.
+  Stubbed Chromium checks cover both languages, themes and widths, selection and
+  disabling the organisation choice while installations refresh.
   Production activation remains separate work.
   Use Cloud-managed recovery keys by default for the stream and managed snapshots:
   an authorised owner must not need the original server or a separately saved backup
