@@ -15,6 +15,41 @@ function controller(replies: ApiResult<unknown>[], calls: {path:string;body:unkn
 }
 const ok=(value:unknown):ApiResult<unknown>=>({ok:true,value});
 const lost:ApiResult<unknown>={ok:false,status:0,code:'network_error',retryAfterMs:0};
+const enrolment={pendingToken:token,secret:'JBSWY3DPEHPK3PXP',uri:'otpauth://totp/Cloud?secret=JBSWY3DPEHPK3PXP',expiresAt};
+for(const kind of ['totp','recovery'] as const)for(const action of ['completeLogin','begin','activate','remove','regenerate'] as const){
+  test(`${action} removes whitespace from ${kind} proof and preserves recovery hyphens`,async()=>{
+    const calls:{path:string;body:unknown}[]=[];
+    const c=controller([ok(action==='completeLogin'?{accountId:'owner'}:action==='begin'?enrolment:changed)],calls);
+    c.account('owner');c.status=status;c.challenge={factorRequired:true,challengeToken:token,expiresAt};c.enrolment=enrolment;
+    c.password=' current password ';c.proofKind=kind;
+    c.proofCode=kind==='totp'?' \t123\u00a0456\n ':' ABCDEF01- 23456789-\tABCDEF01-23456789\n';c.confirmation=' \t654 321\n';
+    await c[action]();
+    const proof={kind,code:kind==='totp'?'123456':'ABCDEF01-23456789-ABCDEF01-23456789'};
+    assert.deepEqual(calls,[{path:action==='completeLogin'?'/login/factor':`/authenticator/${action}`,body:action==='completeLogin'
+      ?{challengeToken:token,proof}:{password:' current password ',proof,...(action==='activate'?{pendingToken:token,code:'654321'}:{})}}]);
+    assert.equal(c.proofCode,'');assert.equal(c.confirmation,'');assert.equal(c.password,'');
+  });
+  test(`${action} keeps state and sends nothing for whitespace-only ${kind} proof`,async()=>{
+    const calls:{path:string;body:unknown}[]=[];const c=controller([ok(changed)],calls);
+    c.account('owner');c.status=status;c.challenge={factorRequired:true,challengeToken:token,expiresAt};c.enrolment=enrolment;
+    c.password='current';c.proofKind=kind;c.proofCode=' \t\u00a0\n ';c.confirmation='654321';
+    assert.equal(await c[action](),action==='begin'?undefined:false);
+    assert.deepEqual(calls,[]);assert.equal(c.pending,false);assert.equal(c.challenge?.challengeToken,token);
+    assert.equal(c.enrolment,enrolment);assert.equal(c.password,'current');assert.equal(c.confirmation,'654321');
+  });
+}
+for(const active of [false,true])test(`activation sends nothing for blank confirmation with active factor ${active}`,async()=>{
+  const calls:{path:string;body:unknown}[]=[];const c=controller([ok(changed)],calls);
+  c.account('owner');c.status={...status,active};c.enrolment=enrolment;c.password='current';c.proofCode='123456';c.confirmation=' \t\u00a0\n ';
+  assert.equal(await c.activate(),false);assert.deepEqual(calls,[]);assert.equal(c.pending,false);assert.equal(c.enrolment,enrolment);
+});
+test('first enrolment and activation need no existing-factor proof',async()=>{
+  const calls:{path:string;body:unknown}[]=[];const c=controller([ok(enrolment),ok(changed)],calls);
+  c.account('owner');c.status={...status,active:false};c.password='current';await c.begin();
+  c.password='current';c.confirmation=' 654 321 ';await c.activate();
+  assert.deepEqual(calls,[{path:'/authenticator/begin',body:{password:'current'}},
+    {path:'/authenticator/activate',body:{password:'current',pendingToken:token,code:'654321'}}]);
+});
 test('password second step stays in memory and failed completion is never automatically retried',async()=>{
   const calls:{path:string;body:unknown}[]=[];const c=controller([ok({factorRequired:true,challengeToken:token,expiresAt}),lost],calls);
   assert.equal(await c.startLogin('owner@example.test','password'),'factor');assert.equal(c.challenge?.challengeToken,token);
