@@ -160,7 +160,8 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
                 if mode == 'signature':
                     assert 'BADSIG' in log, log
                 else:
-                    assert '503' in log and 'Failed to fetch' in log, log
+                    # APT retains the first connection error after exhausting its mirrors.
+                    assert 'connection timed out' in log and 'Failed to fetch' in log, log
                 outcomes['signatureRefused' if mode == 'signature' else 'exhaustedRefused'] = True
                 continue
             assert update.returncode == 0, log
