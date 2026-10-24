@@ -3383,7 +3383,8 @@ notifications separately.
   sign-in prompt, one status message confirms that nothing changed; you can retry.
   Starting password sign-in clears that notice. Cancelling Add a passkey also shows
   one status message, including when the browser library wraps the cancellation.
-  You can retry without a verification request; other prompt failures keep their alert.
+  Cancelling sends no credential verification request. You can try again; other
+  prompt failures keep their alert.
   Controller and stubbed Chromium checks cover these enrollment outcomes.
   Unsupported browsers keep one help message. Stubbed Chromium checks cover both
   languages, themes and widths, repeated cancellation and a later refused attempt.
