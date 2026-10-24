@@ -17,8 +17,9 @@ export class RemoteController {
   this.error=result.code==='remote_not_placed'?'remoteNotPlaced':result.status===429?'limited':result.status===401?'pairSession':result.status===403?'forbidden':result.code==='dns_not_verified'?'remoteDnsWait':result.code==='hostname_conflict'?'remoteNameTaken':result.status===409?'remoteConflict':result.status===400?'remoteInvalid':'unavailable';
   if(result.status===401||result.status===403){this.view=undefined;this.confirmation=undefined;this.hostname='';}
  }
- async load(){
-  if(!this.#account||!this.installationId||this.pending||this.waiting)return;
+ async load(){return this.#load(false);}
+ async #load(reconcile:boolean){
+  if(!this.#account||!this.installationId||this.pending||(!reconcile&&this.waiting))return;
   const generation=this.#generation,id=this.installationId;this.pending=true;this.error=undefined;this.confirmation=undefined;this.#changed();
   const result=await this.#request<RemoteView>('/remote-access/status',{installationId:id});if(generation!==this.#generation)return;
   this.pending=false;
@@ -46,7 +47,7 @@ export class RemoteController {
   else if(!result.ok){
    this.#failure(result);
    if(result.status===0||result.status>=500||result.status===409){
-    this.view=undefined;const refreshed=await this.load();if(generation!==this.#generation)return;
+    this.view=undefined;const refreshed=await this.#load(true);if(generation!==this.#generation)return;
     if(refreshed?.names?.[change.kind].current===change.hostname)this.notice='remoteSaved';
     else if(!this.error)this.error=result.status===409?'remoteConflict':'remoteUncertain';
    }
