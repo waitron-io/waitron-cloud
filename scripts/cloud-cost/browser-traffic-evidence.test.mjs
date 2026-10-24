@@ -4,7 +4,7 @@ import {measureRemoteBrowser} from './browser.mjs';
 import {runBrowserFixture, withBrowserDiagnostics, parseBrowserDiagnostics} from './fixtures/browser-diagnostics.mjs';
 
 // Losing lifecycle observations would hide which request blocked the unchanged journey.
-for (const mode of ['pending-before', 'failed-overview', 'error-overview', 'finished-overview'])
+for (const mode of ['pending-before', 'failed-overview', 'error-overview', 'finished-overview', 'late-before', 'saturated'])
 test('browserReconnectTrafficEvidence_' + mode, async () => {
   const events = new Map();
   let reconnect = false;
@@ -21,6 +21,11 @@ test('browserReconnectTrafficEvidence_' + mode, async () => {
   const page = {locator, on() {}, setDefaultTimeout() {}, async goto() {}, async reload() {
     reconnect = true;
     events.get('request')(overview);
+    if (mode === 'saturated') for (let i = 1; i < 1005; i++) events.get('request')(request('/management-api/reports/overview?PRIVATE=' + i));
+    if (mode === 'late-before') {
+      events.get('response')({url: before.url, request: () => before, status: () => 200});
+      events.get('requestfinished')(before);
+    }
     if (mode === 'failed-overview') events.get('requestfailed')(overview);
     if (mode === 'error-overview' || mode === 'finished-overview') {
       events.get('response')({url: overview.url, request: () => overview, status: () => mode === 'error-overview' ? 503 : 200});
@@ -28,7 +33,7 @@ test('browserReconnectTrafficEvidence_' + mode, async () => {
     }
   }};
   const context = {on: (event, listener) => events.set(event, listener), async newPage() {
-    if (mode === 'pending-before') events.get('request')(before);
+    if (mode === 'pending-before' || mode === 'late-before') events.get('request')(before);
     return page;
   }, async newCDPSession() {return {async send() {}, on() {}};}};
   // A pre-reload EventSource may still be open; drain(true) must retain it.
@@ -36,6 +41,8 @@ test('browserReconnectTrafficEvidence_' + mode, async () => {
   const chromium = {async launch() {return {async newContext() {return context;}, async close() {}};}};
   const want = {
     'pending-before': 'before:live:pending:1,before:live:started:1,reconnect:overview:pending:1,reconnect:overview:started:1',
+    'late-before': 'before:live:finished:1,before:live:ok:1,before:live:started:1,reconnect:overview:pending:1,reconnect:overview:started:1',
+    'saturated': 'reconnect:overview:pending:999,reconnect:overview:started:999',
     'failed-overview': 'reconnect:overview:failed:1,reconnect:overview:started:1',
     'error-overview': 'reconnect:overview:error:1,reconnect:overview:finished:1,reconnect:overview:started:1',
     'finished-overview': 'reconnect:overview:finished:1,reconnect:overview:ok:1,reconnect:overview:started:1',
@@ -74,4 +81,24 @@ test('browserTrafficEvidenceRejectsUnboundedAndPrivateOutput', async () => {
   }
   assert.equal(reads, 0);
   assert.deepEqual(messages, Array(7).fill('cost_browser_phase=reconnect'));
+});
+
+test('browserTrafficEvidenceContainsHostileInspectionAndOutput', async () => {
+  let reads = 0;
+  const original = Object.defineProperties(Error('PRIVATE'), {browserPhase: {value: 'reconnect'},
+    browserTraffic: {get() {reads++; throw Error('PRIVATE_GETTER');}}});
+  const messages = [];
+  await assert.rejects(withBrowserDiagnostics(async () => {throw original;}, line => messages.push(line)), e => e === original);
+  assert.equal(reads, 0);
+  assert.deepEqual(messages, ['cost_browser_phase=reconnect']);
+  const outputFailure = Object.assign(Error('PRIVATE'), {browserPhase: 'reconnect', browserTraffic: 'none'});
+  await assert.rejects(withBrowserDiagnostics(async () => {throw outputFailure;}, () => {throw Error('PRIVATE_OUTPUT');}), e => e === outputFailure);
+});
+
+test('browserTrafficEvidenceStaysInsideReconnect', async () => {
+  const original = Object.assign(Error('PRIVATE'), {browserPhase: 'login', browserTraffic: 'before:session:refused:1'});
+  const messages = [];
+  await assert.rejects(withBrowserDiagnostics(async () => {throw original;}, line => messages.push(line)), e => e === original);
+  assert.deepEqual(messages, ['cost_browser_phase=login']);
+  assert.equal(parseBrowserDiagnostics('cost_browser_phase=login\ncost_browser_traffic=before:session:refused:1\n').browserTraffic, undefined);
 });
