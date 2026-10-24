@@ -104,7 +104,8 @@ To use a name such as `staff.your-cafe.es`, choose the address to change, enter 
 and select **Review DNS settings**. Create both displayed CNAME records at your domain
 provider. The first directs traffic to your venue; the second delegates certificate
 validation. Keep both records while you use the name. Use a subdomain because many DNS
-providers cannot put a CNAME at the domain root.
+providers cannot put a CNAME at the domain root. Your name can contain at most 237
+characters, leaving room for the certificate record's `_acme-challenge.` prefix.
 
 Select **Check DNS and use this name** when both records are present. A failed check
 leaves your current name unchanged. DNS can take time to propagate, so check the records

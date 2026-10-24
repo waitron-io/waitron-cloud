@@ -3,7 +3,7 @@ export interface RemoteView {installationId:string;revision:number;revoked:boole
 export interface RemoteDns {installationId:string;kind:RemoteKind;hostname:string;records:{type:'CNAME';name:string;value:string}[];}
 const object=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
 const id=(v:unknown)=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
-export const remoteHostname=(v:unknown):v is string=>typeof v==='string'&&v.length<=253&&v.includes('.')&&v.split('.').every(s=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(s))&&!/^\d+(\.\d+){3}$/.test(v);
+export const remoteHostname=(v:unknown):v is string=>typeof v==='string'&&v.length<=237&&v.includes('.')&&v.split('.').every(s=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(s))&&!/^\d+(\.\d+){3}$/.test(v);
 export function validRemoteView(v:unknown):v is RemoteView{
  if(!object(v)||!id(v.installationId)||!Number.isSafeInteger(v.revision)||(v.revision as number)<0||typeof v.revoked!=='boolean'||!object(v.service))return false;
  const names=v.names;
