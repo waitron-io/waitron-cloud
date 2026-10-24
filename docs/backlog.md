@@ -931,6 +931,10 @@ approved contract; the partial runtime above does not complete joint proof or re
   approval flow. Continuous recovery freezes verified pointer evidence and releases a
   bounded recovery kit; snapshot recovery uses scoped download authority. A separate
   owner-confirmed Cloud replacement issues fresh installation and tunnel keys.
+  When you choose a snapshot, older pages and catalogue refreshes keep that recovery
+  source with a point on the displayed page. Changing it clears both confirmations;
+  only a verified snapshot can be approved. Controller and stubbed-browser checks
+  cover pagination, the displayed data-loss time and the approved snapshot identifier.
   Production activation remains separate work.
   Use Cloud-managed recovery keys by default for the stream and managed snapshots:
   an authorised owner must not need the original server or a separately saved backup

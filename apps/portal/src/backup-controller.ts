@@ -18,7 +18,7 @@ export class BackupController {
   if(generation!==this.#generation)return;this.pending=false;
   if(result.ok&&result.value.venueId===venueId){
    const previousSource=this.selectedSource,previousPoint=this.selected;this.page=result.value;this.selected=this.page.points.some(p=>p.id===previousPoint)?previousPoint:this.page.points.find(p=>p.id===this.page!.defaultPointId)?.id??this.page.points[0]?.id;
-   this.selectedSource=previousSource==='snapshot'&&this.page.points.some(p=>p.id===previousPoint)?'snapshot':this.page.continuousRecovery?'continuous':this.selected?'snapshot':undefined;
+   this.selectedSource=previousSource==='snapshot'&&this.selected?'snapshot':this.page.continuousRecovery?'continuous':this.selected?'snapshot':undefined;
   }else if(!result.ok){
    this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);
    this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?'forbidden':'unavailable';
