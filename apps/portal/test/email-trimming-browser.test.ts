@@ -85,3 +85,22 @@ for (const locale of ['en', 'es'] as const) test(`${locale}: trimming still refu
     });
   } finally { await browser.close(); }
 });
+
+test('a padded email at the length boundary is sent without its surrounding spaces', async t => {
+  const browser = await chromium.launch({headless: true});
+  const email = 'a'.repeat(64) + '@' + 'b'.repeat(63) + '.' + 'c'.repeat(63) + '.' + 'd'.repeat(61);
+  assert.equal(email.length, 254);
+  try {
+    for (const flow of flows) await t.test(flow.path, async () => {
+      const {page, calls} = await open(browser, flow, 'en'), c = translations.en;
+      try {
+        await page.locator('input[name=email]').fill('\u00a0' + email + '\u00a0');
+        if (flow.path === '/login') await page.locator('input[name=password]').fill(password);
+        await page.getByRole('button', {name: c[flow.button], exact: true}).click();
+        assert.equal(await page.locator('wt-input[name=email]').getByText(c.emailError, {exact: true}).count(), 0);
+        await (flow.path === '/login' ? page.getByRole('alert').filter({hasText: c.credentials}) : page.getByRole('status').filter({hasText: c.emailSent})).waitFor();
+        assert.deepEqual(calls, [{path: flow.endpoint, body: flow.path === '/login' ? {email, password} : {email, locale: 'en'}}]);
+      } finally { await page.close(); }
+    });
+  } finally { await browser.close(); }
+});
