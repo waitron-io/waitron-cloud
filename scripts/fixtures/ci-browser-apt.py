@@ -8,11 +8,11 @@ import json
 import os
 from pathlib import Path
 import pwd
+import socket
 import subprocess
 import sys
 import tempfile
 import threading
-import time
 
 
 def run(command, **kwargs):
@@ -28,6 +28,8 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
     keys = root / 'gnupg'
     keys.mkdir(mode=0o700)
     server = None
+    blackhole = None
+    blocker = None
     try:
         run(['gpg', '--homedir', str(keys), '--batch', '--pinentry-mode', 'loopback',
              '--passphrase', '', '--quick-generate-key', 'Cloud APT fixture', 'rsa2048', 'sign', '0'])
@@ -63,6 +65,19 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
         run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
              '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1',
              '-keyout', str(private), '-out', str(cert)])
+        # Fill this owned listener's only pending slot. Later SYNs never complete.
+        blackhole = socket.socket()
+        blackhole.bind(('127.0.0.2', 0))
+        blackhole.listen(0)
+        blocker = socket.create_connection(blackhole.getsockname(), timeout=1)
+        with socket.socket() as probe:
+            probe.settimeout(0.2)
+            try:
+                probe.connect(blackhole.getsockname())
+            except TimeoutError:
+                pass
+            else:
+                raise AssertionError('first mirror must not complete a connection')
         requests = []
         mode = 'fallback'
 
@@ -72,9 +87,6 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
 
             def do_GET(self):
                 requests.append(self.path)
-                if self.path.startswith('/first/'):
-                    time.sleep(2)
-                    return
                 if mode == 'exhausted':
                     self.send_error(503)
                     return
@@ -93,12 +105,32 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
         thread.start()
         base = f'https://127.0.0.1:{server.server_port}'
         (apt / 'sources.list').write_text(f'deb [arch=amd64 signed-by={keyring}] https://archive.ubuntu.com/ubuntu noble main\n')
+        (apt / 'apt.conf.d').mkdir()
+        # Match the runner image's late settings, including its real retry count.
+        (apt / 'apt.conf.d/zz-retries').write_text('Acquire::Retries "1";\nAcquire::https::Timeout "15";\n')
+        bootstrap = root / 'apt.conf'
+        bootstrap.write_text(f'Dir::Etc::parts "{apt}/apt.conf.d";\nDir::Etc::main "-";\n')
+        os.environ['APT_CONFIG'] = str(bootstrap)
         run([sys.executable, 'scripts/ci-browser-source.py', '--apt-root', str(apt)])
+        effective = run(['apt-config', 'dump', 'Acquire::https::Timeout', 'Acquire::Retries'])
+        assert 'Acquire::https::Timeout "10";' in effective, effective
+        assert 'Acquire::Retries "1";' in effective, effective
+        # Reproduce the old filename's precedence defect, then restore the candidate.
+        generated = apt / 'apt.conf.d/zzzz-waitron-browser-mirrors'
+        legacy = apt / 'apt.conf.d/99waitron-browser-mirrors'
+        generated.rename(legacy)
+        try:
+            legacy_effective = run(['apt-config', 'dump', 'Acquire::https::Timeout'])
+            assert 'Acquire::https::Timeout "15";' in legacy_effective, legacy_effective
+        finally:
+            legacy.rename(generated)
         mirrors = apt / 'waitron-browser-mirrors.txt'
         assert mirrors.is_file(), 'source preparation must offer an alternate archive'
         # Substitute only network endpoints and elapsed time; real APT verifies every byte.
-        mirrors.write_text(f'{base}/first\tpriority:1\n{base}/second\tpriority:2\n')
-        config = apt / 'apt.conf.d/99waitron-browser-mirrors'
+        mirrors.write_text(mirrors.read_text().replace('https://mirror.math.princeton.edu/pub/ubuntu',
+                                                       f'https://127.0.0.2:{blackhole.getsockname()[1]}/first')
+                           .replace('https://archive.ubuntu.com/ubuntu', f'{base}/second'))
+        config = generated
         assert config.read_text() == 'Acquire::https::Timeout "10";\n'
         config.write_text('Acquire::https::Timeout "1";\n')
         supervisor = [sys.executable, str(Path('scripts/ci-download.py').resolve()),
@@ -116,23 +148,26 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
                        '-o', f'Dir::Etc::parts={apt}/apt.conf.d', '-o', 'Dir::Etc::main=-',
                        '-o', f'Dir::State={state}', '-o', f'Dir::State::lists={state}/lists',
                        '-o', f'Dir::Cache={state}/cache', '-o', f'Acquire::https::CAInfo={cert}',
-                       '-o', 'Acquire::Retries=0', '-o', 'APT::Update::Error-Mode=any',
+                       '-o', 'APT::Update::Error-Mode=any',
                        '-o', f'APT::Sandbox::User={pwd.getpwuid(os.getuid()).pw_name}']
             start = len(requests)
             update = subprocess.run([*supervisor, 'apt-get', *options, 'update'], capture_output=True, text=True, timeout=12)
             log = update.stdout + update.stderr
-            assert any(path.startswith('/first/') for path in requests[start:]), log
+            assert 'Download attempt exceeded' not in log, log
             assert any(path.startswith('/second/') for path in requests[start:]), log
             if mode in ('signature', 'exhausted'):
                 assert update.returncode != 0, log
                 if mode == 'signature':
-                    assert 'BADSIG' in log or 'invalid' in log, log
+                    assert 'BADSIG' in log, log
+                else:
+                    assert '503' in log and 'Failed to fetch' in log, log
                 outcomes['signatureRefused' if mode == 'signature' else 'exhaustedRefused'] = True
                 continue
             assert update.returncode == 0, log
             download = subprocess.run([*supervisor, 'apt-get', *options, 'download', 'cloud-apt-fixture=1.0'],
                                       cwd=state, capture_output=True, text=True, timeout=12)
             log = download.stdout + download.stderr
+            assert 'Download attempt exceeded' not in log, log
             if mode == 'package-hash':
                 assert download.returncode != 0, log
                 assert 'Hash Sum mismatch' in log or 'unexpected size' in log, log
@@ -146,5 +181,9 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
         if server:
             server.shutdown()
             server.server_close()
+        if blocker:
+            blocker.close()
+        if blackhole:
+            blackhole.close()
         subprocess.run(['gpgconf', '--homedir', str(keys), '--kill', 'gpg-agent'],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
