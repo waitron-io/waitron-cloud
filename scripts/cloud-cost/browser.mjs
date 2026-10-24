@@ -10,6 +10,7 @@ export async function measureRemoteBrowser(options) {
   let chromium, staffHostname, email, password;
   let browser, meter, step, phase = 'options';
   let reconnectSession = 'unseen', reconnectPage = 'clear';
+  let trafficSnapshot = () => 'none';
   try {
     const keys = ['chromium', 'staffHostname', 'email', 'password'];
     need(options && Object.getPrototypeOf(options) === Object.prototype
@@ -32,28 +33,62 @@ export async function measureRemoteBrowser(options) {
       unfinishedStreamRequests: 0, streamBodyBytes: null, bodyBytesCoverage: 'completed-requests-only',
       failedRequests: 0, unexpectedResponses: 0, pageErrors: 0, outsideRequests: 0, cachedRequests: 0 };
     const pending = [], seen = new Set();
+    const traffic = new Map(), requestKeys = new WeakMap();
+    const route = req => {
+      const url = new URL(req.url());
+      if (url.origin !== 'https://' + staffHostname) return 'outside';
+      if (req.resourceType?.() === 'eventsource') return 'live';
+      if (url.pathname === '/management-api/session/me') return 'session';
+      if (url.pathname === '/management-api/reports/overview') return 'overview';
+      if (url.pathname === '/management-api/reports/overdue-orders') return 'overdue';
+      if (url.pathname.startsWith('/management-api/')) return 'api';
+      if (url.pathname.startsWith('/manage/assets/')) return 'asset';
+      if (url.pathname === '/manage/' || url.pathname === '/manage') return 'document';
+      return 'other';
+    };
+    const keyFor = req => requestKeys.get(req) ?? ((phase === 'reconnect' ? 'reconnect' : 'before') + ':' + route(req));
+    // Fixed event buckets keep URLs and bodies private. Counts saturate at 999.
+    const record = (req, event) => {
+      const key = keyFor(req) + ':' + event;
+      traffic.set(key, Math.min(999, (traffic.get(key) ?? 0) + 1));
+    };
+    trafficSnapshot = () => {
+      const counts = new Map(traffic);
+      for (const req of seen) {
+        const key = keyFor(req) + ':pending';
+        counts.set(key, Math.min(999, (counts.get(key) ?? 0) + 1));
+      }
+      return [...counts].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+        .map(([key, count]) => key + ':' + count).join(',') || 'none';
+    };
     const group = req => req.resourceType() === 'eventsource' ? 'eventsource'
       : new URL(req.url()).pathname.startsWith('/management-api/') ? 'api'
       : Object.hasOwn(result.requests, req.resourceType()) ? req.resourceType() : 'other';
     // Routing interception disables Chromium's HTTP cache. Isolation is enforced
     // by the internal network and DNS rules; observation leaves the cache intact.
     context.on('request', req => {
+      requestKeys.set(req, keyFor(req)); record(req, 'started');
       if (new URL(req.url()).origin !== 'https://' + staffHostname) result.outsideRequests++;
       seen.add(req); result.requests[group(req)]++;
     });
     context.on('response', res => {
+      const status = res.status();
+      record(res.request?.() ?? res, status >= 200 && status < 300 ? 'ok'
+        : status >= 300 && status < 400 ? 'redirect' : status === 401 || status === 403 ? 'refused' : 'error');
       if (phase === 'reconnect' && new URL(res.url()).pathname === '/management-api/session/me')
         reconnectSession = res.status() === 200 ? 'accepted' : res.status() === 401 ? 'refused' : 'other';
       if (res.status() >= 400 && !(res.status() === 401 && new URL(res.url()).pathname === '/management-api/session/me'))
         result.unexpectedResponses++;
     });
     context.on('requestfinished', req => {
+      record(req, 'finished');
       seen.delete(req);
       pending.push(req.sizes().then(size => {
         result.completedRequests++; result.completedRequestBodyBytes += size.requestBodySize; result.completedResponseBodyBytes += size.responseBodySize;
-      }).catch(() => { result.failedRequests++; }));
+      }).catch(() => { record(req, 'size-failed'); result.failedRequests++; }));
     });
     context.on('requestfailed', req => {
+      record(req, req.failure()?.errorText === 'net::ERR_ABORTED' ? 'aborted' : 'failed');
       seen.delete(req);
       if (group(req) === 'eventsource' && req.failure()?.errorText === 'net::ERR_ABORTED') result.interruptedStreamRequests++;
       else result.failedRequests++;
@@ -128,6 +163,7 @@ export async function measureRemoteBrowser(options) {
       Object.defineProperties(error, {
         browserStep: { value: step }, browserFailure: { value: failure },
         browserSession: { value: reconnectSession }, browserPage: { value: reconnectPage },
+        browserTraffic: { value: trafficSnapshot() },
       });
     }
     throw error;
