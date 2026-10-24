@@ -3832,6 +3832,12 @@ notifications separately.
   before cookie replay. The host-only control and actual public gateway journey
   still pass. Run `node --test packages/remote-access/test/probe.test.ts` without
   PostgreSQL. This qualifies local protocol validation, not production monitoring.
+  The probe also checks the last `Path` attribute before replaying the cookie.
+  Native HTTPS cases reproduce false healthy results when a later path is wrong,
+  empty or bare; Chromium rejects those same cookies. A final root path, duplicate
+  root paths and an unrelated path hint remain healthy controls. Refusal sends no
+  cookie to the availability endpoint. The real gateway challenge still passes;
+  this is a local monitoring correction, not production qualification.
   The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
   separates existing local detection from proposed production operator alerts and
   opted-in venue mail, with worked outage and backup timelines. The owner approved
