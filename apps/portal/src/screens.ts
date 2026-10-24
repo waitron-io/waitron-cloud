@@ -48,6 +48,7 @@ export function screen(app: PortalApp) {
       <button class="text-button" type="button" ?disabled=${app.pending} @click=${() => {app.requested = false; app.error = undefined; app.draw(); app.focusHeading();}}>${c.changeEmail}</button>`;
   } else if (app.path === '/login') {
     content = html`${app.notice ? html`<p role="status">${c[app.notice]}</p>` : nothing}${field('email', 'email', 'email', 'username')}${password()}
+      ${app.passkeys.notice && app.passkeys.notice !== 'passkeyUnsupported' ? html`<p role="status">${c[app.passkeys.notice]}</p>` : nothing}
       ${action(c.login)}${passkeySignInScreen(app)}<nav>${link('/forgot-password', c.forgot)}<span>${c.signupLink} ${link('/signup', c.signup)}</span></nav>`;
   } else if (app.path === '/signup' && app.link.token) {
     content = html`${password()}<p class="help">${c.passwordHelp}</p>${field('legalBusinessName', 'legalName', 'text', 'organization')}
