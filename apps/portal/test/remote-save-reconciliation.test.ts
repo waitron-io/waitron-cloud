@@ -29,7 +29,7 @@ for(const committed of [true,false])test(`a 503 save with Retry-After re-reads o
  assert.deepEqual(calls[2]!.body,{installationId:id,kind:'staff',hostname,expectedRevision:'1'});
  controller.edit(assigned);await controller.preview();await controller.apply();await controller.load();assert.equal(calls.length,4);
  now+=999;await controller.preview();await controller.load();assert.equal(calls.length,4);
- now++;await controller.preview();assert.equal(controller.confirmation?.hostname,assigned);await controller.apply();
+ now++;await controller.preview();assert.deepEqual(controller.confirmation,{kind:'staff',hostname:assigned,revision:2,records:[]});await controller.apply();
  assert.equal(saves,2);assert.equal(calls.length,5);assert.equal(controller.notice,'remoteSaved');assert.equal(controller.view?.names?.staff.current,assigned);
 });
 
