@@ -4512,3 +4512,14 @@ identify the service and state, reproduce its cause, then fix it test-first.
 Every isolation check and existing deadline remains unchanged. Local
 Docker-backed checks are unavailable while Docker is down; GitHub CI supplies
 that evidence.
+
+
+## Backup recovery wait observation (D164)
+
+The independent merge of [PR #352](https://github.com/waitron-io/waitron-cloud/pull/352)
+failed the proof-expiry case in `recovery-qualification.test.ts`: its observer
+reported an expiry query while acknowledging a qualification lock. The source and
+test matched the green candidate, which does not establish the cause. A controlled
+Linux PostgreSQL experiment pauses the activity observer before its live blocker
+check and records both backend IDs, query times, wait events and test stages.
+Preserve every expiry guard, refusal assertion and deadline while investigating.

@@ -1,0 +1,29 @@
+name: Recovery wait observation investigation
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/recovery-wait-diagnostic.yml'
+permissions:
+  contents: read
+  packages: read
+jobs:
+  linux-reproduction:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Reproduce activity and blocker ordering on Linux PostgreSQL
+        run: node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test --test-timeout=30000 --test-name-pattern='wait observation refreshes activity' test/recovery-qualification.test.ts

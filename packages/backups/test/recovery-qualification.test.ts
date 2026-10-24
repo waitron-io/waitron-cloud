@@ -84,9 +84,9 @@ test('restored report changes no registration, keys, routing, or activation stat
  const before=await snapshot();await f.recovery.target(f.t.id,'restored',f.t.envelope('restored',f.point.digest));
  assert.deepEqual(await snapshot(),before);assert.equal((await f.recovery.status(f.session.token,f.t.id)).status,'restored');
 });
-async function blockedBy(id:number){
+async function blockedBy(id:number,observer:Pick<typeof db.secondPool,'query'>=db.secondPool){
  const until=Date.now()+4000;
- while(Date.now()<until){const row=(await db.secondPool.query('SELECT query FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[db.schema,id])).rows[0];if(row)return String(row.query);await new Promise(r=>setTimeout(r,10));}
+ while(Date.now()<until){const row=(await observer.query('SELECT query FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[db.schema,id])).rows[0];if(row)return String(row.query);await new Promise(r=>setTimeout(r,10));}
  assert.fail('operation must wait for the acknowledged PostgreSQL lock');
 }
 test('approval rechecks qualification after waiting for the selected point foreign key',async()=>{
@@ -176,4 +176,50 @@ test('replacement rolls registration, rotation and routing back when qualificati
   await noReplacement(f);assert.deepEqual((await db.pool.query('SELECT * FROM remote_placements WHERE venue_id=$1',[f.installed.venueId])).rows,original);
   assert.equal((await db.pool.query('SELECT result FROM installation_replacements WHERE id=$1',[f.t.id])).rows[0].result,null);
  }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
+});
+
+// A backend can advance after the activity snapshot but before the live blocker check.
+test('wait observation refreshes activity after acknowledging the blocker',async context=>{
+ const f=await approved(),holder=await db.secondPool.connect(),waiter=await db.pool.connect(),observer=await db.secondPool.connect();
+ const holderPid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+ const waiterPid=(await waiter.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+ const observerPid=(await observer.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+ let observation:Promise<string>|undefined,lookup:Promise<unknown>|undefined;
+ async function acknowledged(pid:number,stage:string){
+  const until=Date.now()+4000;
+  while(Date.now()<until){
+   if((await db.pool.query('SELECT $2::integer=ANY(pg_catalog.pg_blocking_pids($1)) AS blocked',[pid,holderPid])).rows[0].blocked)return;
+   await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  assert.fail(`${stage} must reach its acknowledged lock`);
+ }
+ try{
+  await holder.query('BEGIN');await holder.query('LOCK backup_verification_attempts IN ACCESS EXCLUSIVE MODE');
+  await holder.query('SELECT pg_advisory_lock($1)',[holderPid]);
+  await waiter.query('SELECT expires_at>clock_timestamp() AS valid FROM backup_recoveries WHERE id=$1',[f.t.id]);
+  await holder.query(`CREATE FUNCTION ${db.schema}.pg_blocking_pids(integer) RETURNS integer[] LANGUAGE plpgsql AS $$
+   BEGIN
+    IF $1=${waiterPid} THEN PERFORM pg_advisory_xact_lock(${holderPid}); END IF;
+    RETURN pg_catalog.pg_blocking_pids($1);
+   END $$`);
+  // Publish the gate without releasing the separate session advisory lock.
+  await holder.query('COMMIT');await holder.query('BEGIN');await holder.query('LOCK backup_verification_attempts IN ACCESS EXCLUSIVE MODE');
+  await observer.query(`SET search_path=${db.schema},pg_catalog`);
+  observation=blockedBy(holderPid,observer);void observation.catch(()=>{});
+  await acknowledged(observerPid,'activity snapshot captured before live blocker check');
+  lookup=waiter.query('SELECT * FROM backup_point_qualification WHERE point_id=$1',[f.point.id]);void lookup.catch(()=>{});
+  await acknowledged(waiterPid,'qualification lookup');
+  const fields='pid,query,query_start,state,wait_event_type,wait_event';
+  context.diagnostic(JSON.stringify({stage:'qualification blocked before observer resumes',blockerPid:holderPid,waiter:(await db.pool.query(`SELECT ${fields} FROM pg_stat_activity WHERE pid=$1`,[waiterPid])).rows[0],observer:(await db.pool.query(`SELECT ${fields} FROM pg_stat_activity WHERE pid=$1`,[observerPid])).rows[0]}));
+  await holder.query('SELECT pg_advisory_unlock($1)',[holderPid]);
+  const observed=await observation;
+  context.diagnostic(JSON.stringify({stage:'acknowledged wait query returned',blockerPid:holderPid,waiterPid,observed}));
+  assert.match(observed,/FROM backup_point_qualification/);
+ }finally{
+  await holder.query('SELECT pg_advisory_unlock($1)',[holderPid]);await holder.query('ROLLBACK');
+  await Promise.allSettled([lookup,observation].filter(Boolean));
+  await observer.query(`SET search_path=${db.schema}`);
+  await holder.query(`DROP FUNCTION IF EXISTS ${db.schema}.pg_blocking_pids(integer)`);
+  holder.release();waiter.release();observer.release();
+ }
 });
