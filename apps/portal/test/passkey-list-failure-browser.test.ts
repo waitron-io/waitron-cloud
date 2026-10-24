@@ -62,6 +62,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         return app.session.state.kind === 'authenticated';
       });
       assert.equal(lists, 1, 'returning to Account does not silently restart a failed read');
+      assert.equal(await section.getByRole('alert').count(), 0, 'navigation clears the previous feedback');
       assert.equal(await section.getByText(c.passkeyNone, {exact: true}).count(), 0);
       const requested = page.waitForRequest('**/api/account/passkeys');
       await retry.click();
