@@ -731,6 +731,21 @@ test('generatedArchiveStoragePublishesACompleteAnonymousReceiptAfterCleanup', as
 
 import { readdirSync } from 'node:fs';
 
+test('stackGatewaySelectionStartsItsBackendBeforeNameResolution', t => {
+  const f = fixture(t), preparedPlan = local.prepareIsolatedStack(f);
+  f.onCleanup(() => cleanupRecordedStack(f, preparedPlan.project, docker));
+  const probeConfig = join(f.root, 'gateway-order-probe.json');
+  writeFileSync(probeConfig, JSON.stringify({ ...f, prepared: preparedPlan }), { mode: 0o600, flag: 'wx' });
+  const result = JSON.parse(execFileSync(process.execPath,
+    [new URL('./gateway-startup-order-probe.mjs', import.meta.url).pathname, probeConfig],
+    // Both bounded Compose calls must finish before a timeout can start the parent's cleanup.
+    { encoding: 'utf8', timeout: 360000, stdio: ['ignore', 'pipe', 'inherit'] }));
+  assert.deepEqual(result.ready, { postgres: true, s3: true, mailpit: true, fiscal: true, waitron: true, gateway: true });
+  assert.deepEqual(result.isolation, { isolated: true, containers: 6, blockedConnections: 18, blockedDns: 12, localControl: true });
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});
+
 // A real HAProxy name-resolution refusal must survive its stopped container and owned cleanup.
 test('stackReportsGatewayBinaryFailureBeforeRemovingItsResources', async t => {
   const f = fixture(t), preparedPlan = local.prepareIsolatedStack(f);

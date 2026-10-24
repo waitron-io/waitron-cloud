@@ -4607,11 +4607,35 @@ a Linux control forces a real HAProxy name-resolution failure and checks that
 the parent retains its category and removes the owned resources. This
 controlled failure does not establish the historical recurrence's cause.
 
-The historical cause remains unknown. Use the next diagnostic recurrence to
-identify the service and state, reproduce its cause, then fix it test-first.
-Every isolation check and existing deadline remains unchanged. Local
-Docker-backed checks are unavailable while Docker is down; GitHub CI supplies
-that evidence.
+A new instrumented recurrence in [PR369 cost run 40062864377, job
+120780089952](https://github.com/waitron-io/waitron-cloud/actions/runs/40062864377/job/120780089952)
+identifies a HAProxy name-resolution failure: gateway exit 1 during the outbound
+check, after 1,754 milliseconds, without an out-of-memory kill or restart.
+A controlled Linux regression starts the generated gateway first through its
+real Compose plan. Without a backend dependency, HAProxy exits with the same
+name-resolution category. The generated gateway now depends on the Waitron
+service reaching its started state, so its backend joins the private network
+before HAProxy resolves `waitron:8080`. The regression then requires all six
+services to become ready, all isolation checks and owned cleanup. This fixes
+the reproduced ordering defect; attributing the earlier intermittent event to
+that order remains an inference. The separate replication interruption remains
+open.
+
+The strict 4.01-second streamed-day control covers setup as well as later
+phases. A slow setup can consume that budget before idle begins, as observed
+in [run 40064831558](https://github.com/waitron-io/waitron-cloud/actions/runs/40064831558).
+Following the owner's 24 October decision, this control requires refusal after
+the original deadline in whichever phase it reaches, unchanged source data,
+removed private state and collection of every child actually started. It also
+checks that each recorded child has exited. A separate native control enters
+idle before firing the unchanged deadline callback; real HTTP, SQLite and
+child processes must be collected before another caller operation. An opening
+control fires that same deadline while storage setup is held. Removing the
+deadline makes both native controls fail; restoration passes. Only the deadline
+clock is controlled in these native cases; the full Linux streamed-day journey
+keeps its real clock. All runtime timers, budgets and isolation checks remain.
+Local Docker-backed checks are unavailable while Docker is down; GitHub CI
+supplies that evidence.
 
 ## Account stop-access prompt refresh (D165)
 

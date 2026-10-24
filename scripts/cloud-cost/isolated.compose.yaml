@@ -126,6 +126,11 @@
     },
     "gateway": {
       "image": "prepared",
+      "depends_on": {
+        "waitron": {
+          "condition": "service_started"
+        }
+      },
       "pull_policy": "never",
       "entrypoint": [],
       "command": [

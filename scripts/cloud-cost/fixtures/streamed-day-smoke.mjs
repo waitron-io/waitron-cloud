@@ -46,17 +46,21 @@ async function run() {
       target: 'http://127.0.0.1:8334', sdk, bucket: Bucket, versioned: false, startupSeconds: 2, idleSeconds: 2,
       windowSeconds: mode === 'deadline' ? 4.01 : 60 } }); }
   catch { if (mode === 'normal') throw Error('Synthetic normal replay refused'); refused = true; }
-  if (mode === 'cancel' && !abort.signal.aborted || mode === 'deadline' && lastPhase !== 'idle') {
+  if (mode === 'cancel' && !abort.signal.aborted || mode === 'deadline'
+    && !observed.some(event => event.kind === 'replay-refusal' && event.elapsedMs >= 4010)) {
     console.error(JSON.stringify({ mode, lastPhase: lastPhase ?? null, refused, observed }));
     throw Error('Synthetic stop not reached');
   }
   stage = 'result'; const entries = JSON.parse(readFileSync(journal.path, 'utf8')).localResources;
   const started = entries.filter(e => e.kind === 'stream-process' && e.state === 'started');
-  const collected = started.every(e => entries.some(r => r.kind === 'stream-process' && r.state === 'collected' && r.pid === e.pid));
+  const collected = started.every(e => {
+    if (!entries.some(r => r.kind === 'stream-process' && r.state === 'collected' && r.pid === e.pid)) return false;
+    try { process.kill(e.pid, 0); return false; } catch (error) { return error.code === 'ESRCH'; }
+  });
   const inventory = await client.send(new sdk.ListObjectsV2Command({ Bucket }));
   const inventoryBytes = (inventory.Contents ?? []).reduce((n, row) => n + row.Size, 0);
   const clean = !existsSync(root + '/replay') && !existsSync(root + '/native-stream');
-  return { result, refused, inventoryBytes, sourceUnchanged: before === fingerprint(), collected: started.length === (mode === 'normal' ? 3 : 2) && collected, clean,
+  return { result, refused, inventoryBytes, sourceUnchanged: before === fingerprint(), collected: (mode === 'deadline' ? started.length <= 2 : started.length === (mode === 'normal' ? 3 : 2)) && collected, clean,
     leaked: /PRIVATE_|2026-|\/state|synthetic-|taxId|locationId/.test(JSON.stringify(result)) };
 }
 try { process.stdout.write(JSON.stringify(await run())); }
