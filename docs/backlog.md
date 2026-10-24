@@ -4996,6 +4996,16 @@ and shows the error. Both languages, themes and widths are covered. These screen
 checks use supplied server responses; PostgreSQL checks run in GitHub CI while
 local Docker is down. Server permission checks and request contents are unchanged.
 
+## Public browser challenge feedback (D213)
+
+If your browser's bot-check answer is refused or its request fails, the public
+page now asks you to reload in English and Spanish. A worker error shows the
+same message; a successful answer still opens `/public/availability`. Native
+checks execute the served script for 403, 429, network and worker failures, an
+initial request failure and success. Token checks, proof difficulty, lifetimes,
+paths and the content security policy are unchanged. Production browser and
+network qualification remains part of public deployment.
+
 ## Public gateway source limits (D191)
 
 The public gate now counts an IPv6 /64 network as one source, while IPv4-mapped
