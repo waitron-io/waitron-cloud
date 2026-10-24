@@ -292,6 +292,10 @@ after navigation, and recovery's own visible retry countdown and expiry.
 Recovery shows a failed session check as unavailable and lets you retry.
 English/Spanish browser checks cover HTTP and network failures, the pending
 message and retry to sign-in without exposing recovery controls.
+Installation, snapshot, monitoring and recovery dates spell out the month in
+English and Spanish. Local time and seconds are retained, including the warning
+about changes lost during recovery. Database-free browser checks cover both
+recovery sources and the approved continuous source, light/dark and phone/desktop.
 Next, configure live mail delivery and the deployment/account-security controls below. Pairing
 remains a separate exchange requiring both Cloud and local administrator proof.
 
