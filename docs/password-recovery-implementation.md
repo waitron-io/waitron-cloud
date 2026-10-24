@@ -7,6 +7,9 @@ and sending it, as it does for sign-in and signup. Spaces inside an address stil
 produce a field error. Completion changes the password and ends every existing
 session in one transaction. Your memberships and platform permissions stay unchanged.
 
+A sign-in retry delay does not disable password recovery. If recovery asks you to
+wait, its countdown shows when you can retry.
+
 ## Backend boundary
 
 Only enabled accounts with a verified email and an existing password receive reset

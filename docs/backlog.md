@@ -286,6 +286,9 @@ setup, same-origin serving and real browser/email tests. The
 [implementation plan](superpowers/plans/2026-09-23-account-portal.md) records the delivery.
 Email links use fragments; legacy query links remain accepted. Browser tests cover
 committed writes with lost replies, session expiry, retry delays and account isolation.
+Sign-in retry delays leave signup and password recovery usable. English/Spanish
+browser tests cover both request and completion forms, retained sign-in deadlines
+after navigation, and recovery's own visible retry countdown and expiry.
 Next, configure live mail delivery and the deployment/account-security controls below. Pairing
 remains a separate exchange requiring both Cloud and local administrator proof.
 
