@@ -88,6 +88,7 @@ for (const [key, label, allowed] of [
     for (const original of [
       Object.assign(Error('PRIVATE'), {browserPhase: 'reconnect', [key]: 'PRIVATE https://private.example'}),
       Object.assign(Error('PRIVATE'), {browserPhase: 'reconnect', [key]: allowed[0] + '\n'}),
+      Object.assign(Error('PRIVATE'), {browserPhase: 'reconnect', [key]: {toString() {reads++; return allowed[0];}}}),
       Object.defineProperties(Error('PRIVATE'), {browserPhase: {value: 'reconnect'},
         [key]: {get() {reads++; throw Error('PRIVATE_GETTER');}}}),
       new Proxy(Object.assign(Error('PRIVATE'), {browserPhase: 'reconnect'}), {
@@ -100,7 +101,7 @@ for (const [key, label, allowed] of [
     ]) await assert.rejects(diagnostics.withBrowserDiagnostics(async () => {throw original;}, text => messages.push(text)), e => e === original);
     assert.equal(reads, 0);
     assert.deepEqual(messages, ['cost_browser_phase=reconnect', 'cost_browser_phase=reconnect',
-      'cost_browser_phase=reconnect', 'cost_browser_phase=reconnect', 'cost_browser_phase=login']);
+      'cost_browser_phase=reconnect', 'cost_browser_phase=reconnect', 'cost_browser_phase=reconnect', 'cost_browser_phase=login']);
     for (const input of [
       `cost_browser_phase=reconnect\ncost_browser_${label}=PRIVATE\n`,
       `cost_browser_phase=reconnect\nprefix cost_browser_${label}=${allowed[0]}\n`,
