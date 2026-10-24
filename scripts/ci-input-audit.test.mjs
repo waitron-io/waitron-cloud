@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import test from 'node:test';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync, renameSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
@@ -400,4 +400,53 @@ JSON.stringify = function(value, replacer, space) {
   assert.equal(readFileSync(join(root, policyPath), 'utf8'), original, 'Refusal must preserve the existing output');
   assert.equal(git('write-tree'), index, 'Refusal must preserve staged inputs');
   assert.equal(git('status', '--porcelain'), before, 'Refusal must leave the working tree unchanged');
+}));
+
+
+test('staged generation refuses a linked scripts directory without changing its outside policy', () => stagedFixture(({root, git, write, cli}) => {
+  const healthy = cli('--write-staged');
+  assert.equal(healthy.status, 0, healthy.stdout + healthy.stderr);
+  const outside = mkdtempSync(join(tmpdir(), 'cloud-audit-outside-'));
+  try {
+    renameSync(join(root, 'scripts'), join(outside, 'scripts'));
+    symlinkSync(join(outside, 'scripts'), join(root, 'scripts'), 'dir');
+    const target = join(outside, policyPath);
+    const original = 'Unrelated outside policy\n';
+    writeFileSync(target, original);
+    write('scripts/owner-content.txt', 'Unrelated outside content\n');
+    const index = git('write-tree');
+    const before = git('status', '--porcelain');
+    const result = cli('--write-staged');
+    assert.ifError(result.error);
+    assert.equal(readFileSync(target, 'utf8'), original, 'Generation must preserve the outside policy');
+    assert.equal(result.status, 1, `Linked-directory generation must refuse: ${result.stdout}${result.stderr}`);
+    assert.match(result.stderr, /Audit output directory must be a real directory/);
+    assert.equal(readFileSync(join(outside, 'scripts/owner-content.txt'), 'utf8'), 'Unrelated outside content\n');
+    assert.equal(git('write-tree'), index, 'Refusal must preserve staged inputs');
+    assert.equal(git('status', '--porcelain'), before, 'Refusal must preserve the working tree');
+  } finally {rmSync(outside, {recursive: true, force: true});}
+}));
+
+
+test('committed audit checking through a linked scripts directory stays read only', () => stagedFixture(({root, git, cli, save}) => {
+  const generated = cli('--write-staged');
+  assert.equal(generated.status, 0, generated.stdout + generated.stderr);
+  const head = save();
+  const outside = mkdtempSync(join(tmpdir(), 'cloud-audit-check-outside-'));
+  try {
+    renameSync(join(root, 'scripts'), join(outside, 'scripts'));
+    symlinkSync(join(outside, 'scripts'), join(root, 'scripts'), 'dir');
+    const target = join(outside, policyPath);
+    const original = 'Unrelated outside policy\n';
+    writeFileSync(target, original);
+    const index = git('write-tree');
+    const before = git('status', '--porcelain');
+    const result = cli('--check', head);
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    for (const mode of modes) assert.match(result.stdout, new RegExp('^' + mode + ': current$', 'm'));
+    assert.equal(readFileSync(target, 'utf8'), original);
+    assert.equal(git('write-tree'), index);
+    assert.equal(git('status', '--porcelain'), before);
+  } finally {rmSync(outside, {recursive: true, force: true});}
 }));

@@ -2019,6 +2019,13 @@ notifications separately.
   Regressions preserve both policies, staged inputs and the working tree on refusal;
   normal root generation still succeeds. Read-only
   checking of a committed audit remains available from subfolders.
+  Generation also refuses when the live `scripts` directory is itself a symbolic
+  link, before opening its output. A real temporary Git repository reproduces an outside
+  policy overwrite through that directory link. The refusal preserves the outside
+  files, staged inputs and working tree; ordinary root generation still succeeds.
+  Committed checking reads saved Git blobs and remains read-only through the same
+  linked directory. This checks the directory before writing; it does not protect
+  against another process replacing the directory during generation.
   An independent subprocess check corrupts only the generated audit digest after
   valid staged inputs have passed. The final validation refuses that output without
   changing the existing policy, staged inputs or working tree. Removing that final
