@@ -92,8 +92,17 @@ test('owner permission lost after diagnostic reads begin is refused by the final
    if(waiting)break;await delay(20);
   }
   assert.equal(waiting,true);
-  let revoked=false;revoke=db.secondPool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[owner,organisation]).then(()=>{revoked=true;});
-  await delay(100);assert.equal(revoked,true,'the diagnostic retained the membership lock before its final authority check');
+  const started=performance.now();let submitted=false,revoked=false;
+  revoke=(async()=>{
+   await delay(Number(process.env.D198_SUBMIT_DELAY_MS??0));submitted=true;
+   await db.secondPool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[owner,organisation]);revoked=true;
+   console.log('D198 completion',JSON.stringify({elapsedMs:performance.now()-started}));
+  })();
+  await delay(100);
+  console.log('D198 at assertion',JSON.stringify({elapsedMs:performance.now()-started,submitted,revoked,activity:(await blocker.query(`SELECT state,wait_event_type,wait_event,cardinality(pg_blocking_pids(pid)) AS blockers,
+   CASE WHEN query LIKE 'UPDATE organisation_memberships%' THEN 'membership-update' WHEN query LIKE 'SELECT kind,opened_at,changed_at FROM venue_incidents%' THEN 'incident-read' ELSE 'other' END AS operation
+   FROM pg_stat_activity WHERE application_name=$1 AND pid<>pg_backend_pid()`,[db.schema])).rows}));
+  assert.equal(revoked,true,'the diagnostic retained the membership lock before its final authority check');
   await blocker.query('COMMIT');await revoke;
   assert.equal((await pending).status,403);
  }finally{
