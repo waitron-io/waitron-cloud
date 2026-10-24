@@ -28,7 +28,7 @@ export class RemoteController {
  }
  async preview(){
   if(!this.#account||!this.view?.names||this.view.revoked||!this.installationId||this.pending||this.waiting)return;
-  const hostname=this.hostname.trim().toLowerCase(),kind=this.kind,revision=this.view.revision,id=this.installationId,generation=this.#generation;
+  const hostname=this.hostname.trim().toLowerCase().replace(/\.$/,''),kind=this.kind,revision=this.view.revision,id=this.installationId,generation=this.#generation;
   this.confirmation=undefined;this.error=undefined;this.notice=undefined;
   if(!remoteHostname(hostname)){this.error='remoteInvalid';this.#changed();return;}
   this.hostname=hostname;

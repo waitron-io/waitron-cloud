@@ -39,3 +39,22 @@ test('remote readiness expires with its lease even when the observation is still
 test('a placement removed while editing reports the missing gateway',async()=>{
  const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>path.endsWith('/status')?{ok:true,value:view as T}:{ok:false,status:409,code:'remote_not_placed',retryAfterMs:0});c.account('owner');await c.open(id);c.edit(dns.hostname);await c.preview();assert.equal(c.error,'remoteNotPlaced');
 });
+
+for(const input of ['staff.cafe.example.', '  STAFF.Cafe.Example.  '])test(`a fully qualified name with one trailing dot previews without it: ${JSON.stringify(input)}`,async()=>{
+ const calls:{path:string;body?:Record<string,unknown>}[]=[];
+ const c=new RemoteController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  calls.push({path,body});return {ok:true,value:(path.endsWith('/status')?view:dns) as T};
+ });
+ c.account('owner');await c.open(id);c.edit(input);await c.preview();
+ assert.equal(c.error,undefined);
+ assert.equal(c.hostname,'staff.cafe.example');
+ assert.deepEqual(calls,[{path:'/remote-access/status',body:{installationId:id}},{path:'/remote-access/dns',body:{installationId:id,kind:'staff',hostname:'staff.cafe.example'}}]);
+ assert.deepEqual(c.confirmation,{kind:'staff',hostname:'staff.cafe.example',revision:1,records:dns.records});
+});
+for(const input of ['staff.cafe.example..','https://staff.cafe.example.','staff.cafe.example/path.','127.0.0.1.',['a'.repeat(63),'b'.repeat(63),'c'.repeat(63),'d'.repeat(46)].join('.')+'.'])test(`invalid remote names stay refused before DNS: ${JSON.stringify(input)}`,async()=>{
+ const calls:string[]=[];
+ const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{calls.push(path);return {ok:true,value:view as T};});
+ c.account('owner');await c.open(id);c.edit(input);await c.preview();
+ assert.equal(c.error,'remoteInvalid');assert.equal(c.confirmation,undefined);
+ assert.deepEqual(calls,['/remote-access/status']);
+});
