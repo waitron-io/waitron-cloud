@@ -1756,6 +1756,18 @@ notifications separately.
   `node --test scripts/cloud-cost/browser.test.mjs scripts/cloud-cost/browser-diagnostics.test.mjs`
   to check the labels, redaction and unchanged failure cleanup. Every original
   accounting, isolation, cache and cleanup check and deadline remains intact.
+  A later recurrence in
+  [40092022379](https://github.com/waitron-io/waitron-cloud/actions/runs/40092022379/job/120866647453)
+  identifies reconnect/takings after 16,188.328 ms, but still has no underlying
+  error category. Reconnect refusals now retain three more fixed observations:
+  whether the thrown error identifies itself as a timeout, whether the session
+  check during reload received an accepted, refused or other response (or none),
+  and whether a page error occurred during reconnect. These observations use
+  existing events and add no browser request or wait. Only the fixed labels cross
+  the generated child boundary; exception text, URLs, credentials and page content
+  remain private. Run `node --test scripts/cloud-cost/browser-refusal-evidence.test.mjs`
+  alongside the command above to check the boundary, unusual thrown values and
+  failed diagnostic output. Original tests and journey deadlines stay unchanged.
   Capture an instrumented Linux recurrence before attributing the historical
   cause. A passing unchanged repeat would not explain it. Local Docker-backed
   qualification remains unavailable until Docker returns; CI runs the real journey.

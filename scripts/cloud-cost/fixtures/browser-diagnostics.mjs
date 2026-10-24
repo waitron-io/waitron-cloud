@@ -4,6 +4,11 @@ const phases = new Set(['options', 'meter', 'launch', 'context', 'login', 'dashb
   'reconnect', 'logout', 'close', 'accounting', 'snapshot']);
 
 const steps = new Set(['reload', 'takings', 'overdue-empty', 'requests']);
+const observations = [
+  ['browserFailure', 'failure', /^(?:timeout|other)$/],
+  ['browserSession', 'session', /^(?:accepted|refused|other|unseen)$/],
+  ['browserPage', 'page', /^(?:error|clear)$/],
+];
 
 // Diagnostic inspection must not replace the journey's original refusal.
 function diagnosticValue(error, key) {
@@ -15,7 +20,12 @@ export function parseBrowserDiagnostics(stderr) {
   const browserPhase = /(?:^|\n)cost_browser_phase=(options|meter|launch|context|login|dashboard|reconnect|logout|close|accounting|snapshot)\n/.exec(stderr)?.[1];
   const browserStep = browserPhase === 'reconnect'
     ? /(?:^|\n)cost_browser_step=(reload|takings|overdue-empty|requests)\n/.exec(stderr)?.[1] : undefined;
-  return {browserPhase, browserStep};
+  const parsed = {browserPhase, browserStep};
+  if (browserPhase === 'reconnect') for (const [key, label, allowed] of observations) {
+    const value = new RegExp('(?:^|\\n)cost_browser_' + label + '=([^\\n]*)\\n').exec(stderr)?.[1];
+    if (typeof value === 'string' && allowed.test(value)) parsed[key] = value;
+  }
+  return parsed;
 }
 
 export async function withBrowserDiagnostics(run, report) {
@@ -27,6 +37,10 @@ export async function withBrowserDiagnostics(run, report) {
       if (phases.has(phase)) report('cost_browser_phase=' + phase);
       const step = diagnosticValue(error, 'browserStep');
       if (phase === 'reconnect' && steps.has(step)) report('cost_browser_step=' + step);
+      if (phase === 'reconnect') for (const [key, label, allowed] of observations) {
+        const value = diagnosticValue(error, key);
+        if (typeof value === 'string' && allowed.test(value)) report('cost_browser_' + label + '=' + value);
+      }
     } catch {}
     throw error;
   }
