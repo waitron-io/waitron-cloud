@@ -106,9 +106,12 @@ test('public probe reports refused, timed-out, wrong-host and untrusted TLS with
 test('public probe refuses a Domain attribute on its host-only challenge cookie',async t=>{
  const material=await certificate('probe.example.test');
  for(const [label,cookie,healthy] of [
+  ['first attribute','__Host-waitron-public=fixture; Domain=probe.example.test; Path=/; Secure; HttpOnly; SameSite=Strict',false],
   ['exact host','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; Domain=probe.example.test',false],
   ['parent domain','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; Domain=.example.test',false],
   ['mixed case and whitespace','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; dOmAiN = probe.example.test',false],
+  ['empty domain','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; Domain=',false],
+  ['bare domain','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; Domain',false],
   ['host-only control','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=300; DomainHint=ignored',true],
  ] as const)await t.test(label,async()=>{
   let replays=0;

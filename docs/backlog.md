@@ -3819,8 +3819,8 @@ notifications separately.
   data. Stale health is shown as unknown and the permission is rechecked before release.
 - **Service monitoring.** Check representative operations from outside the affected
   cell; track errors, response times, queued work, backup freshness and capacity.
-  The public HTTPS probe refuses a challenge cookie carrying a `Domain` attribute,
-  including mixed-case names and whitespace around the attribute name. Real TLS
+  The public HTTPS probe refuses any `Domain` attribute on its challenge cookie,
+  including empty and bare forms that some browsers ignore. Real TLS fixtures
   fixtures reproduce the former false healthy result and check that refusal stops
   before cookie replay. The host-only control and actual public gateway journey
   still pass. Run `node --test packages/remote-access/test/probe.test.ts` without
