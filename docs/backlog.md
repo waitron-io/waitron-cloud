@@ -2941,14 +2941,15 @@ notifications separately.
   Run `node --test scripts/ci-browser-source.test.mjs scripts/ci-download.test.mjs scripts/ci-browser-apt.test.mjs`
   to check preserved source fields, the unchanged workflow, controlled unavailable
   mirrors and exhausted attempts. On Linux, the final check runs real APT against
-  a temporary signed archive: it downloads through the alternative after a stalled
-  first mirror, refuses two unavailable mirrors, rejects altered signatures and
+  a temporary signed archive: it checks the effective timeout after runner defaults,
+  downloads through the alternative when the first connection cannot complete,
+  refuses two unavailable mirrors, rejects altered signatures and
   rejects changed package bytes. It installs no package and uses no system APT
   state. On macOS that Linux check is skipped; GitHub CI must execute it.
   Real Actions qualification must show two consecutive full runs of the same
   head and its independent merge run, with one install attempt and every portal
-  and UI-smoke test executed. This D200 candidate still needs those results;
-  controlled checks alone do not qualify public mirror availability.
+  and UI-smoke test executed. Keep this gate when changing sources; controlled
+  checks alone do not qualify public mirror availability.
   [Run 39890570457](https://github.com/waitron-io/waitron-cloud/actions/runs/39890570457/job/120209180867)
   and [run 40094682408](https://github.com/waitron-io/waitron-cloud/actions/runs/40094682408/job/120874425012)
   could not connect to Princeton at `128.112.18.21:443`. The fallback addresses
