@@ -3700,6 +3700,9 @@ notifications separately.
   still needs a separate fix: the shared address list also matches IPv4 against its
   mapped-IPv6 refusal, so it currently refuses public IPv4 answers too. Split the
   family lists with direct-address regressions before qualifying IPv4-only targets.
+  IPv4-translated `::ffff:0:0:0/96` and other reserved `::/8` forms also need scoped
+  classification and routing checks: the classifier still accepts `::ffff:0:7f00:1`
+  and `::1:7f00:1`; whether either can reach loopback has not been tested.
   The monitor rejects
   late results after hostname changes, replacement or revocation, treats stale evidence as
   unknown, and records deduplicated route-failure, certificate-expiry and recovery
