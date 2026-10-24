@@ -73,7 +73,7 @@ export async function measureRemoteBrowser(options) {
     });
     context.on('response', res => {
       const status = res.status();
-      record(res.request?.() ?? res, status >= 200 && status < 300 ? 'ok'
+      record(res.request?.() ?? res, status === 304 ? 'not-modified' : status >= 200 && status < 300 ? 'ok'
         : status >= 300 && status < 400 ? 'redirect' : status === 401 || status === 403 ? 'refused' : 'error');
       if (phase === 'reconnect' && new URL(res.url()).pathname === '/management-api/session/me')
         reconnectSession = res.status() === 200 ? 'accepted' : res.status() === 401 ? 'refused' : 'other';
