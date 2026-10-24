@@ -7,8 +7,54 @@ import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomBytes,createHash} from 'node:crypto';
+import {runInNewContext} from 'node:vm';
 import {createPublicGate} from '../src/public-gate.ts';
 const host='sol.example.test';
+for(const outcome of ['403','429','network','worker','challenge','success'])test(`served challenge script recovers from ${outcome}`,async()=>{
+ const f=await fixture();try{
+  const script=await(await f.send('/_cloud/challenge.js')).text();
+  const paragraph={textContent:'Please wait a moment. / Espera un momento.'};
+  const redirects:string[]=[],requests:{path:string;init?:RequestInit}[]=[],errors:unknown[]=[];
+  let browserWorker:{onmessage?:({data}:{data:unknown})=>Promise<void>;onerror?:()=>void;terminate:()=>void};
+  let terminated=false;
+  const proof={challenge:'browser-proof',nonce:42};
+  await runInNewContext(script,{
+   document:{querySelector:()=>paragraph},location:{replace:(path:string)=>redirects.push(path)},
+   Worker:class {
+    constructor(path:string){assert.equal(path,'/_cloud/worker.js');browserWorker=this;}
+    postMessage(){}
+    terminate(){terminated=true;}
+   },
+   fetch:async(path:string,init?:RequestInit)=>{
+    requests.push({path,init});
+    if(path==='/_cloud/challenge'){
+     if(outcome==='challenge')throw new Error('offline');
+     return Response.json({challenge:'browser-proof',difficulty:8});
+    }
+    assert.equal(path,'/_cloud/solve');
+    if(outcome==='network')throw new Error('offline');
+    return new Response(null,{status:outcome==='403'?403:outcome==='429'?429:204});
+   },
+  });
+  if(outcome==='worker')browserWorker!.onerror?.();
+  else if(outcome!=='challenge')await browserWorker!.onmessage!({data:proof}).catch(error=>errors.push(error));
+  if(outcome==='success'){
+   assert.deepEqual(redirects,['/public/availability']);
+   assert.equal(paragraph.textContent,'Please wait a moment. / Espera un momento.');
+  }else{
+   assert.equal(paragraph.textContent,'Please reload to try again. / Vuelve a cargar para intentarlo de nuevo.');
+   assert.deepEqual(redirects,[]);
+  }
+  assert.deepEqual(errors,[],'browser event handlers must contain request failures');
+  assert.equal(requests.length,outcome==='worker'||outcome==='challenge'?1:2);
+  if(requests.length===2){
+   assert.equal(terminated,true);
+   assert.equal(requests[1]!.init!.method,'POST');
+   assert.equal(new Headers(requests[1]!.init!.headers).get('content-type'),'application/json');
+   assert.deepEqual(JSON.parse(requests[1]!.init!.body as string),proof);
+  }
+ }finally{await f.close();}
+});
 async function fixture(){
  let now=Date.now(),available=true,disconnect=false;
  const root=await mkdtemp(join(tmpdir(),'cloud-gate-pki-'));
