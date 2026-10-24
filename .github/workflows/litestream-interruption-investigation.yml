@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        observation: [1, 2, 3, 4]
+        observation: [delayed-put-reply-1, delayed-put-reply-2]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -57,6 +57,10 @@ jobs:
           point="stage = 'stop'; const ended = await stop(replicator);"
           assert s.count(point)==1
           s=s.replace(point,"stage = 'stop'; console.error('litestream_lifecycle=stopping'); const ended = await stop(replicator); console.error('litestream_lifecycle=stopped');")
+          point="res.writeHead(incoming.statusCode, incoming.headers); incoming.on('error', () => res.destroy()); incoming.pipe(res);"
+          assert s.count(point)==1
+          s=s.replace(point, """const forward = () => { res.writeHead(incoming.statusCode, incoming.headers); incoming.on('error', () => res.destroy()); incoming.pipe(res); };
+              if(req.method==='PUT' && incoming.statusCode<300) { console.error('litestream_lifecycle=delayed-put-reply'); setTimeout(forward,1500); } else forward();""")
           p.write_text(s)
       - run: pnpm test:cloud-cost:conformance --only stack-conformance.test.mjs --pattern '^genuinePinnedLitestreamRetainsVersionedStorageWithNativeRetryAndRestore$'
         env:
