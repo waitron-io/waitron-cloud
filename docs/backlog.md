@@ -2950,16 +2950,21 @@ notifications separately.
   owner remains unknown. D101 slice 3 landed in PR311 after fresh head and merge
   CI; every later fixture change still requires its own qualification. A
   successful unchanged rerun is not a cause diagnosis.
-  A separate test-harness route failure is also open. In
+  A separate test-harness route failure remains unattributed. In
   [run 39813909743](https://github.com/waitron-io/waitron-cloud/actions/runs/39813909743/job/119947375548),
   registration shard 2 never ran its tests: pulling `axllent/mailpit:v1.31.1`
-  from Docker Hub failed with an IPv6 `network is unreachable` error.
-  `scripts/test-postgres.mjs` refuses that response outside its current transient
-  error list. Qualify the runner's Docker Hub route and acquisition handling
-  separately, retaining the existing 120-second deadline and three-attempt
-  maximum. A later successful pull does not establish a route fix. The job's
-  stale `in_progress` record hid its failed step, so read the actual job log as
-  well as its final status before counting any tests.
+  from Docker Hub failed with an IPv6 `connect: network is unreachable` error.
+  The launcher now retries that connection response within its existing
+  three-attempt, 120-second per-image acquisition limits. Docker-free checks run
+  the real launcher against a controlled Docker executable, proving recovery
+  for both pinned images before either container starts, and refusal after three
+  unreachable responses without running package tests. Original assertions,
+  deadlines, cancellation and container cleanup remain unchanged. Run
+  `node --test scripts/ci-test-postgres.test.mjs` for those checks. Real Docker
+  qualification runs in CI while local Docker is unavailable. The outside
+  route's cause and recovery remain unproved; a later successful pull does not
+  establish a route fix. The historical job's stale `in_progress` record hid its
+  failed step, so read the actual job log and final status before counting tests.
   Main pushes use a unique concurrency
   group per run so a later merge cannot cancel an earlier merge's checks;
   superseded pull request runs still cancel. The workflow text guard checks shard
