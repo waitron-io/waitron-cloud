@@ -102,3 +102,31 @@ test('public probe reports refused, timed-out, wrong-host and untrusted TLS with
   for(const result of cases){const text=JSON.stringify(result.public);assert.doesNotMatch(text,/127\.0\.0\.1|ECONN|wrong\.example|self.signed/i);}
  }finally{for(const socket of hangingSockets)socket.destroy();await new Promise<void>(resolve=>hanging.close(()=>resolve()));await Promise.all([wrong.close(),untrusted.close()]);}
 });
+
+test('public probe refuses a Domain attribute on its host-only challenge cookie',async t=>{
+ const material=await certificate('probe.example.test');
+ for(const [label,cookie,healthy] of [
+  ['exact host','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; Domain=probe.example.test',false],
+  ['parent domain','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; Domain=.example.test',false],
+  ['mixed case and whitespace','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; dOmAiN = probe.example.test',false],
+  ['host-only control','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=300; DomainHint=ignored',true],
+ ] as const)await t.test(label,async()=>{
+  let replays=0;
+  const fixture=await listenHttps(material,(req,res)=>{
+   if(req.url==='/public/availability'){
+    if(req.headers.cookie){replays++;res.setHeader('content-type','application/json');res.end('{}');}
+    else{res.statusCode=403;res.setHeader('content-type','text/html');res.end('<script src="/_cloud/challenge.js"></script>');}
+   }else if(req.url==='/_cloud/challenge'){
+    res.setHeader('content-type','application/json');res.end('{"challenge":"fixture-challenge","difficulty":8}');
+   }else if(req.url==='/_cloud/solve'){
+    res.statusCode=204;res.setHeader('set-cookie',cookie);res.end();
+   }else{res.statusCode=404;res.end();}
+  });
+  try{
+   const result=await probeTarget(target(),{ca:material.cert,connect:connect(fixture.port)});
+   assert.equal(result.public.status,healthy?'healthy':'failed');
+   if(!healthy){assert.equal(result.public.status==='failed'&&result.public.failure,'challenge');}
+   assert.equal(replays,healthy?1:0,'A refused cookie must not be sent to the availability endpoint');
+  }finally{await fixture.close();}
+ });
+});
