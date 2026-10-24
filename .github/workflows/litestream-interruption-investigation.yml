@@ -1,0 +1,63 @@
+name: Litestream interruption investigation
+on:
+  pull_request:
+    branches: [main]
+    paths: ['.github/workflows/litestream-interruption-investigation.yml']
+permissions:
+  contents: read
+  packages: read
+jobs:
+  observe:
+    if: github.head_ref == 'fix/litestream-replication-interruption'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        observation: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: pnpm/action-setup@v6
+        env:
+          NODE_OPTIONS: --require=${{ github.workspace }}/scripts/ci-pnpm-diagnostics.cjs
+          npm_config_fetch_timeout: '15000'
+          npm_config_fetch_retries: '1'
+          npm_config_fetch_retry_mintimeout: '1000'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Add temporary closed-category I/O probes
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('scripts/cloud-cost/litestream.mjs')
+          s=p.read_text()
+          point="if (interrupted) remember(reason, error, ioEvent, name);"
+          assert s.count(point)==1
+          s=s.replace(point, """if (interrupted) {
+            const labels = new Set(['ECONNRESET','ECONNREFUSED','EPIPE','ETIMEDOUT','ERR_STREAM_PREMATURE_CLOSE','ERR_STREAM_DESTROYED','ERR_STREAM_WRITE_AFTER_END','ABORT_ERR','ERR_HTTP_CONTENT_LENGTH_MISMATCH']);
+            const category = e => labels.has(e?.code) ? e.code : e?.constructor === AggregateError ? 'aggregate' : 'other';
+            console.error('litestream_io_probe='+JSON.stringify({reason,ioEvent,name,error:category(error),
+              leaves: error?.constructor === AggregateError ? error.errors.slice(0,8).map(category) : [],
+              statusCode,bytesOut,bytesIn,expectedOut,expectedIn,sent,received,
+              requestComplete:source.complete,requestDestroyed:source.destroyed,
+              responseEnded:destination.writableEnded,responseFinished:destination.writableFinished,responseDestroyed:destination.destroyed}));
+            remember(reason, error, ioEvent, name);
+          }""")
+          p.write_text(s)
+          p=Path('scripts/cloud-cost/fixtures/litestream-smoke.mjs');s=p.read_text()
+          point="stage = 'stop'; const ended = await stop(replicator);"
+          assert s.count(point)==1
+          s=s.replace(point,"stage = 'stop'; console.error('litestream_lifecycle=stopping'); const ended = await stop(replicator); console.error('litestream_lifecycle=stopped');")
+          p.write_text(s)
+      - run: pnpm test:cloud-cost:conformance --only stack-conformance.test.mjs --pattern '^genuinePinnedLitestreamRetainsVersionedStorageWithNativeRetryAndRestore$'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
