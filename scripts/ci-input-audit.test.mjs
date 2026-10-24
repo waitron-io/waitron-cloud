@@ -154,6 +154,38 @@ test('complete ordered inventories and regular policy and owning inputs are requ
     sha256([...included.identity].reverse().map(index => records[index]).join('')));
 });
 
+test('audit policy requires a blob even when its saved file mode is regular', async () => {
+  const {readInputAudit} = await api();
+  assert.deepEqual(readInputAudit(revision, fixture()).policy, policy());
+  const tree = records.map(record => record.endsWith(`\t${policyPath}\0`)
+    ? record.replace('100644 blob', '100644 commit') : record).join('');
+  assert.throws(() => readInputAudit(revision, fixture({tree})), {
+    code: 'ERR_ASSERTION', message: `Missing regular audit input: ${policyPath}`,
+  });
+});
+
+for (const [mode, path] of [
+  ['identity', 'scripts/identity-upstream.mjs'],
+  ['identity', 'scripts/identity-upstream.test.mjs'],
+  ['gateway', 'scripts/verify-gateway-reconnection-receipt.mjs'],
+  ['gateway', 'scripts/verify-gateway-reconnection-receipt.test.mjs'],
+  ['lock', 'pnpm-lock.yaml'],
+  ['lock', 'packages/example/package.json'],
+]) test(`${mode} requires a blob for ${path} even when its saved file mode is regular`, async () => {
+  const {readInputAudit, fingerprintInputMode} = await api();
+  const healthyGit = fixture();
+  const healthy = fingerprintInputMode(mode, revision, healthyGit,
+    readInputAudit(revision, healthyGit).entries, [manifestPath]);
+  assert.equal(healthy.inputSha256, expectedDigest(mode));
+  const tree = records.map(record => record.endsWith(`\t${path}\0`)
+    ? record.replace('100644 blob', '100644 commit') : record).join('');
+  const git = fixture({tree});
+  const {entries} = readInputAudit(revision, git);
+  assert.throws(() => fingerprintInputMode(mode, revision, git, entries, [manifestPath]), {
+    code: 'ERR_ASSERTION', message: `Missing regular audit input: ${path}`,
+  });
+});
+
 test('lock projections pin metadata validate all dependency kinds and require complete evidence', async () => {
   const {auditInputMode} = await api();
   const audited = {...policy(), lockInputSha256: expectedDigest('lock')};
