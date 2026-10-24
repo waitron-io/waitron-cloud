@@ -3381,7 +3381,10 @@ notifications separately.
   and Spanish. Passkey failures appear once in the relevant alert: beside your passkeys
   on Account (including `/`), or in the sign-in error summary. When you cancel a passkey
   sign-in prompt, one status message confirms that nothing changed; you can retry.
-  Starting password sign-in clears that notice. Account feedback stays unchanged.
+  Starting password sign-in clears that notice. Cancelling Add a passkey also shows
+  one status message, including when the browser library wraps the cancellation.
+  You can retry without a verification request; other prompt failures keep their alert.
+  Controller and stubbed Chromium checks cover these enrollment outcomes.
   Unsupported browsers keep one help message. Stubbed Chromium checks cover both
   languages, themes and widths, repeated cancellation and a later refused attempt.
   Passkey and session

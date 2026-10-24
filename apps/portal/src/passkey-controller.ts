@@ -135,6 +135,7 @@ export class PasskeyController {
     catch (error) {
       if (generation !== this.#generation) return;
       this.pending = false;
+      if (error instanceof Error && error.cause instanceof DOMException) error = error.cause;
       if (this.#cancelled(error)) this.notice = 'passkeyCancelled'; else this.error = 'passkeyUnavailable';
       this.#changed(); return;
     }

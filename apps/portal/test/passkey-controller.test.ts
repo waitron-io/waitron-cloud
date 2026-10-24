@@ -147,3 +147,34 @@ test('fresh-password errors stay distinct from stale CSRF authority', async () =
   await controller.enroll('correct');
   assert.equal(controller.error, 'forbidden');
 });
+
+for (const [label, failure, notice, error] of [
+  ['library-wrapped NotAllowedError', new Error('Prompt failed', {cause: new DOMException('Cancelled', 'NotAllowedError')}), 'passkeyCancelled', undefined],
+  ['library-wrapped AbortError', new Error('Prompt failed', {cause: new DOMException('Aborted', 'AbortError')}), 'passkeyCancelled', undefined],
+  ['direct NotAllowedError', new DOMException('Cancelled', 'NotAllowedError'), 'passkeyCancelled', undefined],
+  ['direct AbortError', new DOMException('Aborted', 'AbortError'), 'passkeyCancelled', undefined],
+  ['library-wrapped SecurityError', new Error('Prompt failed', {cause: new DOMException('Refused', 'SecurityError')}), undefined, 'passkeyUnavailable'],
+  ['named JavaScript error', Object.assign(new Error('Other failure'), {name: 'NotAllowedError'}), undefined, 'passkeyUnavailable'],
+  ['non-browser cause', new Error('Prompt failed', {cause: new Error('Other failure')}), undefined, 'passkeyUnavailable'],
+] as const) {
+  test(`adding a passkey reports ${label} without verifying a credential`, async () => {
+    const calls: Array<{path: string; body: unknown}> = [];
+    let redraws = 0;
+    const request = async <T>(path: string, body?: Record<string, unknown>): Promise<ApiResult<T>> => {
+      calls.push({path, body});
+      assert.equal(path, '/passkeys/registration/options');
+      return {ok: true, value: registrationOptions as T};
+    };
+    const controller = new PasskeyController(() => {redraws++;}, request,
+      browser({register: async () => {throw failure;}}));
+    controller.account('owner');
+    controller.password = 'Current account password';
+    await controller.enroll(controller.password);
+    assert.equal(controller.notice, notice);
+    assert.equal(controller.error, error);
+    assert.equal(controller.pending, false);
+    assert.equal(redraws, 2);
+    assert.deepEqual(calls, [{path: '/passkeys/registration/options', body: {password: 'Current account password'}}]);
+    assert.deepEqual(controller.passkeys, []);
+  });
+}
