@@ -3723,7 +3723,11 @@ notifications separately.
   that continuous-stream bytes and account identity mail are excluded. Byte totals
   that round to 1024 use the next unit, up to TiB, in both languages, including negative
   totals; larger-than-safe integers keep their exact byte display.
-  `node --test apps/portal/test/usage-format.test.ts` covers these boundaries. PostgreSQL and
+  `node --test apps/portal/test/usage-format.test.ts` covers these boundaries. Your
+  installation, probe and alert-outcome counts use your language's number grouping
+  without losing integer precision, including values larger than JavaScript's exact
+  number range. Native formatter and stubbed browser checks cover all six count fields
+  in English and Spanish; byte formatting keeps its separate scale rules. PostgreSQL and
   browser tests prove retry rollback, tenant isolation and fresh/incomplete views. This is
   observational only. A bounded watch worker now runs in the local deployment, retries
   failed passes and exposes stalled progress through existing operations freshness.
