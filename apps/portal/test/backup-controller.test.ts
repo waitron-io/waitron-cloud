@@ -26,8 +26,34 @@ test('pagination replaces the page; failures retain it and Retry-After survives 
  c.account('owner');await c.open(venue);assert.equal(c.selectedSource,'continuous');assert.equal(c.selected,venue);c.select('not-offered');assert.equal(c.selectedSource,'continuous');
  c.select(venue);assert.equal(c.selectedSource,'snapshot');
  mode='failed';await c.load(true);assert.equal(c.page?.points[0]?.id,venue);assert.equal(c.error,'unavailable');
- mode='second';await c.load(true);assert.equal(c.page?.points.length,1);assert.equal(c.page?.points[0]?.id,other);assert.equal(c.selectedSource,'continuous');assert.deepEqual(calls.at(-1),{path:'/backups/list',body:{venueId:venue,cursor:'next'}});
+ mode='second';await c.load(true);assert.equal(c.page?.points.length,1);assert.equal(c.page?.points[0]?.id,other);assert.equal(c.selectedSource,'snapshot');assert.deepEqual(calls.at(-1),{path:'/backups/list',body:{venueId:venue,cursor:'next'}});
  mode='limited';await c.load();assert.equal(c.error,'limited');c.close();await c.open(venue);assert.equal(calls.length,4);assert(c.waiting>0);
+});
+
+for(const {name,points,defaultPointId,expected} of [
+ {name:'the next page default',points:[{...point,id:other},point],defaultPointId:other,expected:venue},
+ {name:'a new page default',points:[{...point,id:other},{...point,id:'32345678-1234-4234-8234-123456789abc'}],defaultPointId:'32345678-1234-4234-8234-123456789abc',expected:'32345678-1234-4234-8234-123456789abc'},
+ {name:'the first point without a page default',points:[{...point,id:other}],defaultPointId:null,expected:other},
+])test(`loading older snapshots keeps a snapshot choice over ${name}`,async()=>{
+ let older=false;
+ const c=new BackupController(()=>{},async<T>():Promise<ApiResult<T>>=>({ok:true,value:(older?{...page,points,defaultPointId,nextCursor:null}:page) as T}));
+ c.account('owner');await c.open(venue);assert.equal(c.selectedSource,'continuous');c.select(venue);
+ older=true;await c.load(true);
+ assert.equal(c.selectedSource,'snapshot');assert.equal(c.selected,expected);assert.ok(c.page?.points.some(p=>p.id===c.selected));
+});
+
+for(const stream of [continuous,null])test(`an empty older page clears a snapshot choice with ${stream?'continuous recovery':'no continuous recovery'}`,async()=>{
+ let older=false;
+ const c=new BackupController(()=>{},async<T>():Promise<ApiResult<T>>=>({ok:true,value:(older?{...page,points:[],defaultPointId:null,nextCursor:null,continuousRecovery:stream}:page) as T}));
+ c.account('owner');await c.open(venue);c.select(venue);older=true;await c.load(true);
+ assert.equal(c.selected,undefined);assert.equal(c.selectedSource,stream?'continuous':undefined);
+});
+
+for(const status of [401,403])test(`a ${status} older-page response clears the catalogue and both choices`,async()=>{
+ let older=false;
+ const c=new BackupController(()=>{},async<T>():Promise<ApiResult<T>>=>older?{ok:false,status,code:'forbidden',retryAfterMs:0}:{ok:true,value:page as T});
+ c.account('owner');await c.open(venue);c.select(venue);older=true;await c.load(true);
+ assert.equal(c.page,undefined);assert.equal(c.selected,undefined);assert.equal(c.selectedSource,undefined);assert.equal(c.error,status===401?'pairSession':'forbidden');
 });
 test('a stale continuous source falls back to the default verified snapshot on reload',async()=>{
  let fresh=true;
