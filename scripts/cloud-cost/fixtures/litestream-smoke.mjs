@@ -125,7 +125,13 @@ async function smoke() {
     if (restoredSales !== 2 || integrity !== 'ok') fail();
     stage = 'stop';
     // Committed objects can be restored before the writer has received its PUT reply.
-    const ended = await (replication.transport ? replication.transport.whenIdle(() => stop(replicator)) : stop(replicator));
+    let drainTimer, ended;
+    try {
+      ended = await (replication.transport ? Promise.race([
+        replication.transport.whenIdle(() => stop(replicator)),
+        new Promise((_, reject) => { drainTimer = setTimeout(() => reject(Error('Synthetic Litestream stop timed out')), 2000); }),
+      ]) : stop(replicator));
+    } finally { clearTimeout(drainTimer); }
     if (ended.invalid || ended.code !== 0) fail();
     stage = 'audit-end'; replication.audit.end(); restore.audit.end();
     await delay(20);

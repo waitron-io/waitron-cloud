@@ -4597,8 +4597,8 @@ The smoke fixture now waits for its active transfers to finish before stopping
 Litestream. A restore can see a committed object while the writer still awaits
 its PUT reply; stopping at that point cancels the pending exchange. Two controlled
 [Linux observations](https://github.com/waitron-io/waitron-cloud/actions/runs/40075195985)
-delayed successful replies after the real storage commit and failed at transport
-close. Both [fixed observations](https://github.com/waitron-io/waitron-cloud/actions/runs/40075626914)
+delayed successful replies after the real storage commit and failed with
+`active-close` at transport close. Both [fixed observations](https://github.com/waitron-io/waitron-cloud/actions/runs/40075626914)
 pass with the same delay and unchanged assertions and deadlines. A native real-HTTP
 probe also reproduces the historical `response-pipeline` / `put` diagnostic when
 the client exits before its committed reply arrives. That reproduction proves a
@@ -4606,6 +4606,10 @@ possible cause; the old logs cannot establish the cause of every historical even
 
 A Docker-free regression runs the actual smoke and transport with a real HTTP
 writer child. Removing the wait-before-stop guard fails; restoring it passes.
+A silent-backend case requires refusal at the stop step before its outer process
+deadline. The new drain wait has a two-second limit; the existing signal and
+force-stop limits remain unchanged. The native harness owns a separate process
+group and collects it even when its outer deadline fires.
 A separate pinned-Litestream case delays committed PUT replies and checks the
 original restore, integrity, fiscal, request, byte, version-history and cleanup
 invariants. Every earlier test assertion and deadline remains unchanged. Existing

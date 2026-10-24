@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
 // Cancelling the native writer after commit can still cut off its unacknowledged PUT.
-test('the smoke waits for a committed PUT reply before stopping its writer', () => {
+function run({ reply }) {
   const actual = new URL('./litestream.mjs', import.meta.url).href;
   const fixture = new URL('./fixtures/litestream-smoke.mjs', import.meta.url).href;
   const modules = {
@@ -39,7 +39,7 @@ test('the smoke waits for a committed PUT reply before stopping its writer', () 
           return process.getBuiltinModule('child_process').spawn(process.execPath,['--input-type=module','--eval',code],{stdio:['ignore','ignore','pipe']});
         }
         const child=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>true;
-        state.stored.then(()=>{setTimeout(()=>state.reply(),75);setImmediate(()=>child.emit('close',0));});
+        state.stored.then(()=>{if(${reply})setTimeout(()=>state.reply(),75);setImmediate(()=>child.emit('close',0));});
         return child;
       }`,
   };
@@ -49,9 +49,27 @@ test('the smoke waits for a committed PUT reply before stopping its writer', () 
     await import(${JSON.stringify(fixture)});`;
   const result = spawnSync(process.execPath, ['--input-type=module', '--eval', code], {
     env: { ...process.env, COST_LITESTREAM_TRANSPORT: '1', COST_LITESTREAM_LIFETIMES: '0',
-      COST_LITESTREAM_VERSIONS: '0', COST_LITESTREAM_HISTORIES: '0' }, encoding: 'utf8', timeout: 3000,
+      COST_LITESTREAM_VERSIONS: '0', COST_LITESTREAM_HISTORIES: '0' }, encoding: 'utf8', timeout: 3000, detached: true,
   });
+  // The detached group belongs only to this harness and its writer, including a timed-out run.
+  if (result.pid > 0) {
+    try { process.kill(-result.pid, 'SIGKILL'); }
+    catch (error) { if (error.code !== 'ESRCH') throw error; }
+  }
+  return result;
+}
+
+test('the smoke waits for a committed PUT reply before stopping its writer', () => {
+  const result = run({ reply: true });
   assert.equal(result.error, undefined, result.error?.message);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stderr, /"stage":"replication-transport","status":"fulfilled"/);
+});
+
+test('a silent storage backend refuses at the bounded stop step', () => {
+  const result = run({ reply: false });
+  assert.equal(result.error, undefined, 'the smoke must refuse before the outer process deadline');
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /Synthetic Litestream phase: stop/);
+  assert.doesNotMatch(result.stderr, /"stage":"replication-transport","status":"fulfilled"/);
 });
