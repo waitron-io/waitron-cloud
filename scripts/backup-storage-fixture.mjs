@@ -293,7 +293,7 @@ async function startBackupStorageAttempt(options) {
     // Keep every listener open while choosing the batch so the kernel cannot
     // assign one port to two SeaweedFS services. Reject connections so releasing
     // the reservations cannot wait for a peer before handing them to the child.
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 8; i++) {
       const reservation = netServer(socket => socket.destroy());
       portReservations.push(reservation);
       await new Promise((resolve, reject) => {
@@ -302,9 +302,9 @@ async function startBackupStorageAttempt(options) {
       });
       ports.push(reservation.address().port);
     }
-    const [s3, master, masterGrpc, volume, volumeGrpc, filer, filerGrpc] =
+    const [s3, master, masterGrpc, volume, volumeGrpc, filer, filerGrpc, s3Grpc] =
       ports;
-    allocatedPorts = { s3, master, masterGrpc, volume, volumeGrpc, filer, filerGrpc };
+    allocatedPorts = { s3, master, masterGrpc, volume, volumeGrpc, filer, filerGrpc, s3Grpc };
     const endpoint = "https://127.0.0.1:" + s3;
     await mkdir(join(root, "data"));
     log = await open(join(root, "store.log"), "w");
@@ -314,6 +314,8 @@ async function startBackupStorageAttempt(options) {
       "-ip=127.0.0.1",
       "-ip.bind=127.0.0.1",
       "-s3.port=" + s3,
+      // An implicit S3 gRPC port is HTTP + 10000, outside our reservations.
+      "-s3.port.grpc=" + s3Grpc,
       "-s3.cert.file=" + join(root, "cert.pem"),
       "-s3.key.file=" + join(root, "key.pem"),
       "-s3.config=" + iamPath,

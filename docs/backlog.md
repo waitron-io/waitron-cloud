@@ -4154,6 +4154,17 @@ and a controlled cleanup barrier must finish before the retry creates its next
 directory. Ten deliberate guard faults were caught
 in a disposable checkout and the original files restored before the final checks.
 
+A later rejection in [run 40106355179](https://github.com/waitron-io/waitron-cloud/actions/runs/40106355179)
+identifies an unreserved S3 gRPC listener: HTTP port 35547 derives port 45547,
+which is absent from the seven-port allocation. SeaweedFS 4.47 uses HTTP + 10000
+when no explicit S3 gRPC port is supplied. The fixture now reserves an eighth
+port and supplies `-s3.port.grpc`, so its existing allocation diagnostics and
+single retry also cover that listener. Deterministic child tests reproduce the
+observed S3 bind-refusal message after a real occupied-socket error, then check
+recovery, refusal after two failures, and disabled retries. Competing listeners
+remain open. The complete-allocation and diagnostic-count checks now require
+eight ports; their other assertions and all deadlines remain unchanged.
+
 Remaining: retain the diagnostics to attribute any recurrence of the original
 read-only-cache rejection. Do not treat this demonstrated readiness repair as
 proof of that historical failure's cause.

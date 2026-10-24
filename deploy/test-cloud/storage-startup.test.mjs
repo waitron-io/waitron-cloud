@@ -4,7 +4,7 @@ import test from 'node:test';
 import {startBackupStorage} from '../../scripts/backup-storage-fixture.mjs';
 
 // Closing each allocation immediately lets later listeners reuse the same port.
-test('storage holds the complete seven-port allocation until child startup', {timeout:90000}, async t => {
+test('storage holds the complete eight-port allocation until child startup', {timeout:90000}, async t => {
   const listen = Server.prototype.listen;
   const held = new Set();
   let maximumHeld = 0;
@@ -20,7 +20,7 @@ test('storage holds the complete seven-port allocation until child startup', {ti
   });
   const storage = await startBackupStorage();
   t.after(() => storage.stop());
-  assert.equal(maximumHeld, 7, 'all seven child ports must remain reserved together');
+  assert.equal(maximumHeld, 8, 'all eight child ports must remain reserved together');
   assert.equal(held.size, 0, 'temporary reservations must close before returning the storage client');
   await storage.bucket('allocated-ports-work');
 });
@@ -66,7 +66,7 @@ test('a child port collision reports the allocation and current socket owners wi
   await assert.rejects(startBackupStorage({retryPortCollision:false}), error => {
     assert.match(error.message, /SeaweedFS exited:/);
     assert.equal(error.storageStartup?.ports?.filer, allocated, 'failure must identify the allocated filer port');
-    assert.equal(Object.keys(error.storageStartup.ports).length, 7);
+    assert.equal(Object.keys(error.storageStartup.ports).length, 8);
     assert.ok(error.storageStartup.socketOwners, 'failure must record socket ownership or an explicit collection failure');
     if (error.storageStartup.socketOwners.source === 'lsof') {
       assert.match(error.storageStartup.socketOwners.output, new RegExp('p' + process.pid + '\\b'));

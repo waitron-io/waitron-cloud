@@ -1,0 +1,48 @@
+name: Temporary S3 gRPC storage qualification
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  packages: read
+jobs:
+  storage:
+    if: github.head_ref == 'fix/storage-s3-grpc-handoff'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Three independent dense samples and focused regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for sample in 1 2 3; do
+            echo "Dense sample $sample on runner ${{ matrix.sample }}"
+            node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import {inspect} from 'node:util';
+          import {startBackupStorage} from './scripts/backup-storage-fixture.mjs';
+          const results = await Promise.allSettled(Array.from({length:16}, () => startBackupStorage()));
+          for (const result of results) if (result.status === 'rejected') console.error(inspect(result.reason, {depth:8}));
+          try { assert.equal(results.filter(result => result.status === 'fulfilled').length, 16); }
+          finally { await Promise.all(results.filter(result => result.status === 'fulfilled').map(result => result.value.stop())); }
+          console.log('Sixteen concurrent stores started and stopped');
+          JS
+            node --test deploy/test-cloud/storage-cache.test.mjs deploy/test-cloud/storage-s3-grpc.test.mjs
+          done
