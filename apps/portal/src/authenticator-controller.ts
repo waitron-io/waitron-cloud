@@ -26,7 +26,7 @@ export class AuthenticatorController {
     const result=await this.#request<PasswordLogin>('/login',{email,password});
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){if('factorRequired' in result.value){this.challenge=result.value;this.#changed();return 'factor';}this.#changed();return 'authenticated';}
-    this.#failure(result);if(this.error==='factorUnavailable')this.error='unavailable';this.#changed();return result.status===0||result.status>=500?'reconcile':false;
+    this.#failure(result);if(this.error==='factorUnavailable')this.error=result.status===400?'invalid':'unavailable';this.#changed();return result.status===0||result.status>=500?'reconcile':false;
   }
   async completeLogin():Promise<'authenticated'|'reconcile'|false>{
     const code=normaliseCode(this.proofCode);if(!this.challenge||!code)return false;
