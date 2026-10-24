@@ -9,6 +9,7 @@ const need = value => { if (!value) fail(); };
 export async function measureRemoteBrowser(options) {
   let chromium, staffHostname, email, password;
   let browser, meter, step, phase = 'options';
+  let reconnectSession = 'unseen', reconnectPage = 'clear';
   try {
     const keys = ['chromium', 'staffHostname', 'email', 'password'];
     need(options && Object.getPrototypeOf(options) === Object.prototype
@@ -41,6 +42,8 @@ export async function measureRemoteBrowser(options) {
       seen.add(req); result.requests[group(req)]++;
     });
     context.on('response', res => {
+      if (phase === 'reconnect' && new URL(res.url()).pathname === '/management-api/session/me')
+        reconnectSession = res.status() === 200 ? 'accepted' : res.status() === 401 ? 'refused' : 'other';
       if (res.status() >= 400 && !(res.status() === 401 && new URL(res.url()).pathname === '/management-api/session/me'))
         result.unexpectedResponses++;
     });
@@ -65,7 +68,10 @@ export async function measureRemoteBrowser(options) {
     const page = await context.newPage(); page.setDefaultTimeout(10000);
     const cdp = await context.newCDPSession(page); await cdp.send('Network.enable');
     const cached = new Set(); cdp.on('Network.requestServedFromCache', ({requestId}) => { cached.add(requestId); result.cachedRequests = cached.size; });
-    page.on('pageerror', () => { result.pageErrors++; });
+    page.on('pageerror', () => {
+      result.pageErrors++;
+      if (phase === 'reconnect') reconnectPage = 'error';
+    });
     phase = 'login';
     await page.goto('https://' + staffHostname + '/manage/');
     const login = page.locator('dashboard-login-screen');
@@ -110,10 +116,20 @@ export async function measureRemoteBrowser(options) {
     await meter.close(); result.snapshot = meter.snapshot();
     need(result.snapshot.producer.bytesFromGateway > result.completedResponseBodyBytes && result.completedResponseBodyBytes > 0);
     return result;
-  } catch {
+  } catch (cause) {
     const error = Error('Invalid cloud cost browser journey');
     Object.defineProperty(error, 'browserPhase', { value: phase });
-    if (phase === 'reconnect') Object.defineProperty(error, 'browserStep', { value: step });
+    if (phase === 'reconnect') {
+      // Only fixed observations cross the generated child boundary. Inspecting
+      // an unusual thrown value must not replace the public journey refusal.
+      let failure = 'other';
+      try { if (Object.getOwnPropertyDescriptor(cause, 'name')?.value === 'TimeoutError') failure = 'timeout'; }
+      catch {}
+      Object.defineProperties(error, {
+        browserStep: { value: step }, browserFailure: { value: failure },
+        browserSession: { value: reconnectSession }, browserPage: { value: reconnectPage },
+      });
+    }
     throw error;
   }
   finally { await browser?.close().catch(() => {}); await meter?.close().catch(() => {}); }
