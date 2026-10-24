@@ -407,7 +407,8 @@ The public allowlist rejects manager/setup/sync/media routes, upgrades and arbit
 paths. Upstream requests discard cookies, authorization and forwarded headers. Staff
 passthrough has connection limits but cannot inspect encrypted staff requests. Proof of
 work adds a cost to automation; it does not identify humans or stop a determined client
-with enough resources. IPv4/IPv6 addresses behind a shared NAT share a source quota.
+with enough resources. Callers sharing an IPv4 address or an IPv6 /64 network
+(the first 64 address bits) share a source quota.
 ECH is not configured: an unrecognized outer ClientHello name cannot route.
 
 A failed apply retries the exact persisted configuration without extending its expiry.
@@ -493,13 +494,31 @@ before the receipt was written. PostgreSQL and Mailpit belong to the outer runne
 which removed them after the proof exited successfully.
 
 The current policy is shared: one source gets 120 gate requests per minute across
-all venues, and the gate has 64 upstream slots across all sources and venues.
-Challenge requests also spend that allowance. HAProxy separately permits at most
-32 concurrent connections and a connection rate of 60 per ten seconds from a
-source. Solving a challenge grants no separate allowance. A valid customer can
-therefore receive a refusal because another customer shares their address or
+all venues. An IPv4 address is one source; an IPv6 /64 network is one source, so
+rotating addresses within that network cannot fill the source table. IPv4-mapped
+IPv6 addresses share the corresponding IPv4 allowance. The gate tracks at most
+4,096 sources and refuses new sources until an existing bucket expires after
+60 seconds. Many distinct networks can still fill that table. Challenge proofs
+and access cookies remain bound to the full client address, even within one /64.
+The gate has 64 upstream slots across all sources and venues.
+Challenge requests also spend that allowance. HAProxy separately configures at most
+32 concurrent connections and a connection rate of 60 per ten seconds per full
+client address, rather than per /64. Its IPv6 connection accounting still needs
+deployment qualification. Solving a challenge grants no separate allowance. A valid
+customer can therefore receive a refusal because another customer shares their address or
 because a different venue occupies the available slots. These are capacity
 interactions; the session and credential checks still apply.
+
+You can check address rotation, shared allowances, full-address proof and cookie
+binding, table capacity and expiry without Docker:
+
+```sh
+node --test packages/remote-access/test/public-gate.test.ts
+```
+
+These checks use real HTTP and HTTPS sockets with an injected clock. The
+2026-09-30 receipt remains a historical measurement of its named revisions; it
+does not measure the IPv6 grouping policy or qualify a production deployment.
 
 The profile retains those policy values. You still need to choose per-venue
 fairness and an authenticated automated-client policy. These local synthetic

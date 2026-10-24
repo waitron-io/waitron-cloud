@@ -6,9 +6,11 @@ import {loadWorkspace} from './ci-scope.mjs';
 // schema and deployment inputs so current changes still exercise omission and refusal assertions.
 const schemaInputs = JSON.parse(readFileSync(new URL('./fixtures/ci-schema-inputs.json', import.meta.url), 'utf8'));
 const deploymentInputs = JSON.parse(readFileSync(new URL('./fixtures/ci-deployment-inputs.json', import.meta.url), 'utf8'));
+// Gateway omission fixtures use the audited source; current source changes must still retain the real suite.
+const gatewayInputs = JSON.parse(readFileSync(new URL('./fixtures/ci-gateway-inputs.json', import.meta.url), 'utf8'));
 const inputs = {...deploymentInputs.files, ...schemaInputs.files, ...JSON.parse(readFileSync(new URL('./fixtures/ci-dependency-inputs.json', import.meta.url), 'utf8')),
   ...JSON.parse(readFileSync(new URL('./fixtures/ci-execution-inputs.json', import.meta.url), 'utf8')),
-  ...JSON.parse(readFileSync(new URL('./fixtures/ci-local-stack-reader-inputs.json', import.meta.url), 'utf8'))};
+  ...JSON.parse(readFileSync(new URL('./fixtures/ci-local-stack-reader-inputs.json', import.meta.url), 'utf8')), ...gatewayInputs};
 
 export function receiptFixtureWorkspace() {
   return loadWorkspace().filter(pkg => Object.hasOwn(inputs, `${pkg.directory}/package.json`));

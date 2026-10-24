@@ -4789,3 +4789,21 @@ retaining it restores the controls. A failed refresh restores Recovery's control
 and shows the error. Both languages, themes and widths are covered. These screen
 checks use supplied server responses; PostgreSQL checks run in GitHub CI while
 local Docker is down. Server permission checks and request contents are unchanged.
+
+## Public gateway source limits (D191)
+
+The public gate now counts an IPv6 /64 network as one source, while IPv4-mapped
+IPv6 addresses share their corresponding IPv4 allowance. Rotating 4,096 addresses
+inside one /64 no longer fills the table or refuses a different network. Native
+HTTP/HTTPS regressions cover the 120-request allowance, equivalent spellings,
+separate networks, full-address challenge/access binding, the 4,096-source cap
+and expiry. The [limits guide](local-remote-access.md#measure-shared-public-traffic-limits)
+keeps the 2026-09-30 receipt as a historical measurement.
+
+Before public deployment, qualify fairness for customers sharing IPv4 addresses
+or IPv6 networks, including IPv4-to-IPv6 translation. Many distinct networks can
+still exhaust all 4,096 source buckets and refuse new callers until expiry; the next gateway hardening task must
+choose and test admission under that pressure. Per-venue fairness, coordinated
+limits across gateways and HAProxy connection-table pressure remain open. Verify
+IPv6 connection accounting with HAProxy's configured `stick-table type ip`; native
+gate checks do not qualify that separate layer.
