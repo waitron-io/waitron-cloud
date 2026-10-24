@@ -4779,10 +4779,25 @@ every later request. It rules out treating the runtime stop confirmation alone
 as a complete request drain. Cleanup terminates the owned process after the
 observation; cancellation during cleanup is not evidence of cancellation by stop.
 
-The shutdown repair remains open. Preserve full-session request, byte and
-lifetime evidence and the existing refusal for interrupted I/O. Investigate a
-native writer drain mechanism before changing stop behavior; merely waiting for
-an empty transport does not prevent new requests from that separate process.
+A further native probe identifies the held initial list in the snapshot-retention
+background task. After the stop reply, the private native stack contains
+`Store.monitorCompactionLevel`, `Store.EnforceSnapshotRetention`,
+`DB.EnforceSnapshotRetention` and AWS `ListObjectsV2`. Releasing that reply can
+lead to another list while the database is stopped. This identifies the controlled
+macOS task; it does not identify the historical Linux request. Waiting until just
+one active stack frame disappears also fails to establish that all background
+work has finished. Native stack dumps remain local diagnostic evidence.
+
+The shutdown repair remains open. The proposed [native drain design](superpowers/specs/2026-10-24-litestream-native-drain-design.md)
+and [implementation plan](superpowers/plans/2026-10-24-litestream-native-drain.md)
+close background-cycle admission, join admitted work and finish the final flush
+before acknowledging shutdown. This is an unbuilt proposal. Before implementing
+or building a custom binary, the owner must decide whether to pursue a separately
+pinned patched Litestream build for the synthetic smoke. A custom build changes
+what is measured; its qualification cannot certify the unchanged official pin.
+Preserve full-session request, byte and lifetime evidence and the existing refusal
+for interrupted I/O. Merely waiting for an empty transport does not prevent new
+requests from that separate process.
 Any proposal to exclude shutdown traffic or accept incomplete evidence requires
 a separately reviewed change to the audit contract. This diagnostic milestone
 does not qualify either alternative.
