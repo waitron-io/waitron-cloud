@@ -2019,8 +2019,8 @@ notifications separately.
   Regressions preserve both policies, staged inputs and the working tree on refusal;
   normal root generation still succeeds. Read-only
   checking of a committed audit remains available from subfolders.
-  Generation also refuses a symbolic link in the live `scripts` directory before
-  opening its output. A real temporary Git repository reproduces an outside
+  Generation also refuses when the live `scripts` directory is itself a symbolic
+  link, before opening its output. A real temporary Git repository reproduces an outside
   policy overwrite through that directory link. The refusal preserves the outside
   files, staged inputs and working tree; ordinary root generation still succeeds.
   Committed checking reads saved Git blobs and remains read-only through the same

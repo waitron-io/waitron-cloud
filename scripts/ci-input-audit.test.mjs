@@ -420,7 +420,7 @@ test('staged generation refuses a linked scripts directory without changing its 
     assert.ifError(result.error);
     assert.equal(readFileSync(target, 'utf8'), original, 'Generation must preserve the outside policy');
     assert.equal(result.status, 1, `Linked-directory generation must refuse: ${result.stdout}${result.stderr}`);
-    assert.match(result.stderr, /directory/i);
+    assert.match(result.stderr, /Audit output directory must be a real directory/);
     assert.equal(readFileSync(join(outside, 'scripts/owner-content.txt'), 'utf8'), 'Unrelated outside content\n');
     assert.equal(git('write-tree'), index, 'Refusal must preserve staged inputs');
     assert.equal(git('status', '--porcelain'), before, 'Refusal must preserve the working tree');
