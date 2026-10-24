@@ -168,3 +168,45 @@ test('public probe uses the last Path attribute before replaying its host-only c
   }finally{await fixture.close();}
  });
 });
+
+test('public probe refuses a challenge cookie deleted by its last Max-Age attribute',async t=>{
+ const material=await certificate('probe.example.test');
+ for(const [label,extra,healthy] of [
+  ['zero','; Max-Age=0',false],
+  ['negative','; Max-Age=-1',false],
+  ['negative zero','; Max-Age=-0',false],
+  ['zero padded','; Max-Age=000',false],
+  ['ordinary whitespace','; mAx-AgE = \t0 \t',false],
+  ['positive','; Max-Age=300',true],
+  ['session','',true],
+  ['deletion last','; Max-Age=300; Max-Age=0',false],
+  ['positive restored last','; Max-Age=0; Max-Age=300',true],
+  ['invalid last','; Max-Age=0; Max-Age=invalid',true],
+  ['plus sign ignored','; Max-Age=0; Max-Age=+300',true],
+  ['equals ignored','; Max-Age=0; Max-Age=300=extra',true],
+  ['nonpositive equals value','; Max-Age=300; Max-Age=0=extra',true],
+  ['no-break name ignored','; Max-Age=0; Max-Age\u00a0=300',false],
+  ['no-break value ignored','; Max-Age=0; Max-Age=300\u00a0; Secure',true],
+  ['nonpositive no-break value','; Max-Age=300; Max-Age=0\u00a0; Secure',true],
+  ['bare last','; Max-Age=0; Max-Age',true],
+  ['unrelated hint','; Max-AgeHint=0',true],
+ ] as const)await t.test(label,async()=>{
+  let replays=0;
+  const fixture=await listenHttps(material,(req,res)=>{
+   if(req.url==='/public/availability'){
+    if(req.headers.cookie){replays++;res.setHeader('content-type','application/json');res.end('{}');}
+    else{res.statusCode=403;res.setHeader('content-type','text/html');res.end('<script src="/_cloud/challenge.js"></script>');}
+   }else if(req.url==='/_cloud/challenge'){
+    res.setHeader('content-type','application/json');res.end('{"challenge":"fixture-challenge","difficulty":8}');
+   }else if(req.url==='/_cloud/solve'){
+    res.statusCode=204;res.setHeader('set-cookie','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict'+extra);res.end();
+   }else{res.statusCode=404;res.end();}
+  });
+  try{
+   const result=await probeTarget(target(),{ca:material.cert,connect:connect(fixture.port)});
+   assert.equal(result.public.status,healthy?'healthy':'failed');
+   if(!healthy)assert.equal(result.public.status==='failed'&&result.public.failure,'challenge');
+   assert.equal(replays,healthy?1:0,'A deleted cookie must not reach the availability endpoint');
+  }finally{await fixture.close();}
+ });
+});
