@@ -34,6 +34,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   });
   await page.goto('https://portal.test/');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   const input=reserve();input.scope.taxpayerNif='';input.bases=[{code:'',purpose:'standard'},{code:'A',purpose:'full'}];
+  if(action==='add')input.bases.push({code:'',purpose:'rectificative'});
   await page.evaluate(({locale,accountId,input})=>(window as any).mount(locale,accountId,input),{locale,accountId,input});
   const c=translations[locale],nif=page.locator('wt-input[name=fiscalNif]'),base=(i:number)=>page.locator(`wt-input[name="base-${i}"]`);
   const error=async(field:ReturnType<typeof page.locator>)=>{
@@ -42,6 +43,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   };
   await page.getByRole('button',{name:c.fiscalReserve,exact:true}).click();
   assert.equal(await error(base(0)),c.fiscalRequired);assert.equal(await error(nif),c.fiscalRequired);assert.equal(await error(base(1)),'');
+  if(action==='add')assert.equal(await error(base(2)),c.fiscalRequired);
   await page.getByRole('button',{name:action==='remove'?c.fiscalRemoveBase+' 1':c.fiscalAddBase,exact:true}).click();
   assert.equal(await error(base(0)),'','a row must not inherit an error from the previous list');
   assert.equal(await error(nif),c.fiscalRequired,'series edits must keep unrelated validation feedback');
@@ -55,9 +57,11 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    await page.getByRole('button',{name:c.fiscalRemoveBase+' 2',exact:true}).click();
    await page.getByRole('button',{name:c.fiscalAddBase,exact:true}).click();assert.equal(await error(base(1)),'');
   }else{
-   assert.equal(await error(base(2)),'');
+   assert.equal(await error(base(2)),'');assert.equal(await error(base(3)),'');
+   assert.equal(await base(1).locator('input').inputValue(),'A');
+   assert.equal(await page.getByLabel(c.fiscalPurpose+' 2',{exact:true}).inputValue(),'full');
    await page.getByRole('button',{name:c.fiscalReserve,exact:true}).click();
-   assert.equal(await error(base(0)),c.fiscalRequired);assert.equal(await error(base(1)),'');assert.equal(await error(base(2)),c.fiscalRequired);
+   assert.equal(await error(base(0)),c.fiscalRequired);assert.equal(await error(base(1)),'');assert.equal(await error(base(2)),c.fiscalRequired);assert.equal(await error(base(3)),c.fiscalRequired);
   }
   assert.equal(await error(nif),c.fiscalRequired);assert.equal(requests,0,'invalid fiscal drafts must stay local');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);

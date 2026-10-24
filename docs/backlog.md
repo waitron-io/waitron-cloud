@@ -339,6 +339,8 @@ error and retained states. On-prem venues need no managed backup to use the jour
 Adding or removing a fiscal series clears stale series-field errors while keeping
 feedback on other fields. English/Spanish browser checks retain valid series codes
 and purposes and confirm that Reserve still flags empty series before sending.
+The no-request checks also rely on the controller's validation; a focused test
+that isolates the screen's own refusal remains a client-validation follow-up.
 Browser validation checks structure; local recovery must verify cryptographic
 trust and authority before activation. Cloud now preserves the exact person or recovery-key event operator through
 reserve validation, consumption approval, signed manual packets and retained
