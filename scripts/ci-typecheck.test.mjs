@@ -77,7 +77,7 @@ test('root typecheck rejects real source errors in every backend package, includ
 test('root typecheck rejects real test errors in every backend package, including a newly added package', () => fixture(({write, check}) => {
   const directories = [...memberDirectories.filter(directory => directory.startsWith('packages/') && directory !== 'packages/ui-smoke'),
     'packages/new-venue-service'];
-  const sources = directories.map(directory => `${directory}/test/probe-${directory.split('/').at(-1)}.ts`);
+  const sources = directories.map(directory => `${directory}/test/probe-${directory.split('/').at(-1)}.test.ts`);
   for (const source of sources) write(source, 'export const venueCount: number = "invalid";\n');
   const rejected = check();
   assert.notEqual(rejected.status, 0, rejected.output);
