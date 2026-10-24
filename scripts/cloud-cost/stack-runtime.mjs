@@ -38,18 +38,22 @@ function gatewayFailure(value) {
   catch { /* Diagnostics cannot replace the service's original exit. */ }
 }
 function binary(command, args, diagnoseGateway = false) {
-  const child = spawn(command, args, { stdio: diagnoseGateway ? ['ignore', 'ignore', 'pipe'] : 'ignore' });
-  const stderr = Buffer.alloc(8192); let stderrLength = 0;
-  child.stderr?.on('data', chunk => { stderrLength += chunk.copy(stderr, stderrLength, 0, Math.min(chunk.length, stderr.length - stderrLength)); });
-  let stopping = false;
-  const stop = () => { stopping = true; child.kill('SIGTERM'); };
-  process.once('SIGTERM', stop); process.once('SIGINT', stop);
-  child.once('error', error => {
+  const spawnFailure = error => {
     if (diagnoseGateway) gatewayFailure({ stage: 'binary', reason: 'spawn',
       ...(['ENOENT', 'EACCES', 'EPERM', 'EIO'].includes(error.code) ? { code: error.code } : {}) });
     process.exit(1);
-  });
-  child.once(diagnoseGateway ? 'close' : 'exit', (code, signal) => {
+  };
+  let child;
+  try { child = spawn(command, args, { stdio: diagnoseGateway ? ['ignore', 'ignore', 'pipe'] : 'ignore' }); }
+  catch (error) { if (!diagnoseGateway) throw error; spawnFailure(error); return; }
+  const stderr = Buffer.alloc(8192); let stderrLength = 0;
+  child.stderr?.on('data', chunk => { stderrLength += chunk.copy(stderr, stderrLength, 0, Math.min(chunk.length, stderr.length - stderrLength)); });
+  let stopping = false, drainTimer, exitResult;
+  const stop = () => { stopping = true; if (exitResult) finish(...exitResult); else child.kill('SIGTERM'); };
+  process.once('SIGTERM', stop); process.once('SIGINT', stop);
+  child.once('error', spawnFailure);
+  function finish(code, signal) {
+    clearTimeout(drainTimer);
     if (diagnoseGateway && !stopping && code !== 0) {
       const output = stderr.subarray(0, stderrLength).toString('utf8');
       const reason = signal ? 'signal' : /could not resolve address/.test(output) ? 'dns-resolution'
@@ -59,7 +63,14 @@ function binary(command, args, diagnoseGateway = false) {
         ...(['SIGTERM', 'SIGKILL', 'SIGABRT', 'SIGSEGV', 'SIGINT'].includes(signal) ? { signal } : {}) });
     }
     process.exit(stopping ? 0 : code ?? 1);
+  }
+  child.once('exit', (code, signal) => {
+    exitResult = [code, signal];
+    if (!diagnoseGateway || stopping) { finish(code, signal); return; }
+    // A surviving worker may hold stderr open after the master exits; evidence cannot prolong shutdown.
+    drainTimer = setTimeout(() => { child.stderr?.destroy(); finish(code, signal); }, 250);
   });
+  if (diagnoseGateway) child.once('close', finish);
 }
 async function check() {
   const ready = async (url, tls = false) => { try { return (await request(url, { tls })).status === 200; } catch { return false; } };

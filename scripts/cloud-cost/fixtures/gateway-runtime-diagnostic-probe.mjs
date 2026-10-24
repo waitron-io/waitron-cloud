@@ -12,6 +12,15 @@ globalThis.gatewayRuntimeProbe = {
   },
   spawn(command, args, options) {
     if (command !== 'haproxy') throw Error('Unexpected runtime binary');
+    if (fault === 'sync-spawn') throw Object.assign(Error('PRIVATE_CANARY'), { code: 'EPERM' });
+    if (['holder', 'stop-holder', 'delayed-output'].includes(fault)) {
+      const grandchild = `require('fs').writeFileSync(${JSON.stringify(join(root, 'descendant.pid'))},String(process.pid));
+        process.on('disconnect',()=>setTimeout(()=>{${fault === 'delayed-output' ? "process.stderr.write(\"could not resolve address 'PRIVATE_CANARY'\");" : ''}process.exit(0);},${fault === 'delayed-output' ? 25 : 4000}));
+        process.send('ready');`;
+      const program = `const child=require('child_process').spawn(process.execPath,['-e',${JSON.stringify(grandchild)}],{stdio:['ignore','ignore',2,'ipc']});
+        child.on('message',()=>{${fault === 'stop-holder' ? 'setInterval(()=>{},1000);' : 'process.exit(1);'}});`;
+      return spawn(process.execPath, ['-e', program], options);
+    }
     const outputs = {
       dns: "[ALERT] : 'server venue' : could not resolve address 'PRIVATE_CANARY'.",
       split: "[ALERT] : could not resolve address 'PRIVATE_CANARY'.",
@@ -45,3 +54,11 @@ registerHooks({ resolve(specifier, context, next) {
 const { runStackService } = await import('../stack-runtime.mjs');
 try { await runStackService('gateway'); }
 catch { process.exitCode = 1; }
+if (fault === 'stop-holder') {
+  const poll = setInterval(() => {
+    if (fs.existsSync(join(root, 'descendant.pid'))) {
+      clearInterval(poll);
+      setTimeout(() => process.kill(process.pid, 'SIGTERM'), 100);
+    }
+  }, 5);
+}

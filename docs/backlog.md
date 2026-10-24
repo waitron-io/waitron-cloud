@@ -4550,7 +4550,10 @@ why HAProxy stopped. The generated gateway now retains a private failure record
 before exiting. Only fixed categories for name resolution, socket binding,
 certificate loading, child exit, signal or process creation are retained, with
 bounded exit metadata. Raw output stays private and only its first 8 KiB are
-inspected. The parent reads at most 1,025 bytes of a private regular file before
+inspected. Failure output drains for at most 250 milliseconds after the master
+exits; an orderly stop does not wait for descendants holding stderr open.
+Synchronous and asynchronous process-creation failures retain the same fixed
+categories. The parent reads at most 1,025 bytes of a private regular file before
 cleanup, validates every field and rejects unknown fields or values. Missing
 or invalid evidence preserves the original refusal. Real child-process checks
 cover the categories, split output, large output, signal and spawn failures;
