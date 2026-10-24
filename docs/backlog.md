@@ -3216,7 +3216,18 @@ notifications separately.
   and email recovery remain available. Durable five-minute ceremonies are single-use,
   exact-origin and exact-RP checks are enforced, and a real Chromium virtual authenticator
   proves enrolment, sign-in, replay rejection, account isolation and removal in English
-  and Spanish. The account page now lists only your live management sessions, marks the
+  and Spanish. Passkey failures appear once in the relevant alert: beside your passkeys
+  on Account (including `/`), or in the sign-in error summary. Stubbed Chromium checks
+  cover both languages, light/dark themes and phone/desktop widths, with a Chromium
+  virtual authenticator so the fixture offers passkeys on Linux too. Qualification
+  also exposed an independent rotation wait-observer failure in
+  `packages/registration/test/authenticator-keys.test.ts:108` (CI40057746479,
+  job120764846013): it expected an account `FOR UPDATE` wait but sampled `FOR SHARE`.
+  The test, rotation implementation, launcher and workflow match the preceding main
+  revision. Record the actual blocker/waiter IDs and test stage on Linux, reproduce
+  the cause and retain every authority assertion and deadline; a later passing run
+  does not explain this observation. The account page
+  now lists only your live management sessions, marks the
   current one and shows creation, last-use and effective-expiry times. You can revoke any
   session with a CSRF-protected, account-scoped action; uncertain replies reconcile from
   the passive list, and revoking the current session returns you to sign-in. Passkey rows
