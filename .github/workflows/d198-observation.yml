@@ -38,17 +38,40 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Observe ordinary completions
+      - name: Corrected normal and delayed cases
         run: |
+          pnpm --dir packages/account-http exec node --test --test-timeout=30000 test/diagnostics.test.ts
           for attempt in $(seq 1 8); do
             pnpm --dir packages/account-http exec node --test --test-timeout=30000 --test-name-pattern='owner permission lost after diagnostic reads' test/diagnostics.test.ts
           done
-      - name: Controlled delayed submission must expose the old false lock assertion
-        env:
-          D198_SUBMIT_DELAY_MS: '200'
+      - name: A retained membership lock must still fail within 100 ms
         run: |
+          cp packages/account-http/src/diagnostics.ts /tmp/d198-diagnostics-original.ts
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          p=Path('packages/account-http/src/diagnostics.ts');s=p.read_text();assert 'FOR SHARE OF i`' in s;p.write_text(s.replace('FOR SHARE OF i`','FOR SHARE OF i,m`',1))
+          PYCODE
           set +e
-          pnpm --dir packages/account-http exec node --test --test-timeout=30000 --test-name-pattern='owner permission lost after diagnostic reads' test/diagnostics.test.ts > /tmp/d198-delayed.log 2>&1
+          pnpm --dir packages/account-http exec node --test --test-timeout=30000 --test-name-pattern='owner permission lost after diagnostic reads' test/diagnostics.test.ts > /tmp/d198-lock-fault.log 2>&1
           result=$?
-          cat /tmp/d198-delayed.log
-          test "$result" -ne 0 && grep -q 'the diagnostic retained the membership lock' /tmp/d198-delayed.log
+          set -e
+          cp /tmp/d198-diagnostics-original.ts packages/account-http/src/diagnostics.ts
+          cat /tmp/d198-lock-fault.log
+          test "$result" -ne 0
+          grep -q 'lock timeout' /tmp/d198-lock-fault.log
+      - name: Missing final ownership recheck must still fail
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          p=Path('packages/account-http/src/diagnostics.ts');s=p.read_text();needle="if(!permission.rowCount)throw new AccountHttpError(403,'forbidden');";assert needle in s;p.write_text(s.replace(needle,'',1))
+          PYCODE
+          set +e
+          pnpm --dir packages/account-http exec node --test --test-timeout=30000 --test-name-pattern='owner permission lost after diagnostic reads' test/diagnostics.test.ts > /tmp/d198-recheck-fault.log 2>&1
+          result=$?
+          set -e
+          cp /tmp/d198-diagnostics-original.ts packages/account-http/src/diagnostics.ts
+          cat /tmp/d198-recheck-fault.log
+          test "$result" -ne 0
+          grep -q '200 !== 403' /tmp/d198-recheck-fault.log
+      - name: Restored full diagnostic file
+        run: pnpm --dir packages/account-http exec node --test --test-timeout=30000 test/diagnostics.test.ts

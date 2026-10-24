@@ -81,34 +81,31 @@ test('owner permission lost while the authority read waits is refused',async()=>
  }finally{await locker.query('ROLLBACK').catch(()=>{});locker.release();}
 });
 
-test('owner permission lost after diagnostic reads begin is refused by the final recheck',async()=>{
- const blocker=await db.secondPool.connect();let pending:Promise<Response>|undefined,revoke:Promise<unknown>|undefined;
+for(const submitDelayMs of [0,200])test('owner permission lost after diagnostic reads begin is refused by the final recheck'+(submitDelayMs?' with delayed revocation submission':''),async()=>{
+ const blocker=await db.secondPool.connect();let pending:Promise<Response>|undefined;
  try{
-  await blocker.query('BEGIN');await blocker.query('LOCK TABLE venue_incidents IN ACCESS EXCLUSIVE MODE');
-  pending=Promise.resolve(call({installationId:installation}));
-  const deadline=Date.now()+5000;let waiting=false;
-  while(Date.now()<deadline){
-   waiting=(await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT kind,opened_at,changed_at FROM venue_incidents%'",[db.schema])).rowCount!>0;
-   if(waiting)break;await delay(20);
-  }
-  assert.equal(waiting,true);
-  const started=performance.now();let submitted=false,revoked=false;
-  revoke=(async()=>{
-   await delay(Number(process.env.D198_SUBMIT_DELAY_MS??0));submitted=true;
-   await db.secondPool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[owner,organisation]);revoked=true;
-   console.log('D198 completion',JSON.stringify({elapsedMs:performance.now()-started}));
-  })();
-  await delay(100);
-  console.log('D198 at assertion',JSON.stringify({elapsedMs:performance.now()-started,submitted,revoked,activity:(await blocker.query(`SELECT state,wait_event_type,wait_event,cardinality(pg_blocking_pids(pid)) AS blockers,
-   CASE WHEN query LIKE 'UPDATE organisation_memberships%' THEN 'membership-update' WHEN query LIKE 'SELECT kind,opened_at,changed_at FROM venue_incidents%' THEN 'incident-read' ELSE 'other' END AS operation
-   FROM pg_stat_activity WHERE application_name=$1 AND pid<>pg_backend_pid()`,[db.schema])).rows}));
-  assert.equal(revoked,true,'the diagnostic retained the membership lock before its final authority check');
-  await blocker.query('COMMIT');await revoke;
-  assert.equal((await pending).status,403);
+  const revoker=await db.secondPool.connect();try{
+   await blocker.query('BEGIN');await blocker.query('LOCK TABLE venue_incidents IN ACCESS EXCLUSIVE MODE');
+   const blockerPid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+   pending=Promise.resolve(call({installationId:installation}));
+   const deadline=Date.now()+5000;let waiting=false;
+   while(Date.now()<deadline){
+    waiting=(await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT kind,opened_at,changed_at FROM venue_incidents%' AND $2=ANY(pg_blocking_pids(pid))",[db.schema,blockerPid])).rowCount!>0;
+    if(waiting)break;await delay(20);
+   }
+   assert.equal(waiting,true);
+   await revoker.query('BEGIN');
+   // Only a lock wait violates this check; connection, commit and callback delays do not.
+   await revoker.query("SET LOCAL lock_timeout='100ms'; SET LOCAL statement_timeout='5s'");
+   await delay(submitDelayMs);
+   const revoked=await revoker.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[owner,organisation]);
+   assert.equal(revoked.rowCount,1);await revoker.query('COMMIT');
+   await blocker.query('COMMIT');
+   assert.equal((await pending).status,403);
+  }finally{await revoker.query('ROLLBACK').catch(()=>{});revoker.release();}
  }finally{
   await blocker.query('ROLLBACK').catch(()=>{});blocker.release();
   if(pending)await pending.catch(()=>{});
-  if(revoke)await revoke.catch(()=>{});
  }
 });
 
