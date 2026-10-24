@@ -1661,7 +1661,12 @@ notifications separately.
   after normal cleanup and during result admission: fixed replay and stream stages,
   native exit codes and signals, stderr byte counts and fixed keyword flags. Unlisted signals
   use a fixed `other` code. The paced test prints the complete admitted trace on
-  failure. Raw output, paths and exception text stay private. Generated failures
+  failure. If diagnostic inspection, JSON serialization or the reporter fails, you
+  still receive the exact original replay refusal. The reporter reads only an own
+  data property, without invoking accessors; native checks cover null and undefined
+  refusals, hostile proxies, circular and non-serializable diagnostics, and failed
+  output. Run `node --test scripts/cloud-cost/replay-diagnostics.test.mjs` for these
+  checks. Raw output, paths and exception text stay private. Generated failures
   exercise the worker boundary and malformed-trace refusals. If resource cleanup
   itself refuses, its error can still be generic; preserve the private journal's
   validated trace before fixture cleanup. Both historical paced failures remain
