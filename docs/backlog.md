@@ -3716,8 +3716,12 @@ notifications separately.
   fixture reduced monitor processing from 7,030 ms with 1,001 sweeps to 2,335 ms with one,
   queued the bounded incident fan-out in 24 ms and reduced delivery backlog lag from
   1,558 ms to 477 ms. A 103-recipient PostgreSQL test enforces two inserts per table.
-  Locked venues, restart completion and shutdown fencing remained intact. These are local
-  measurements, not capacity promises. The aggregate operations command now surfaces
+  Locked venues, restart completion and shutdown fencing remained intact. A Docker-free
+  worker-loop regression now pauses scheduling, requests shutdown and proves that the
+  schedule finishes without claiming another batch. Removing the post-schedule shutdown
+  check in a disposable copy makes it fail with four unexpected claims; restoring the
+  check passes. Runtime code and every earlier worker-loop assertion are unchanged. These
+  are local measurements and regression checks, not capacity promises. The aggregate operations command now surfaces
   the current worker queues and evidence projections through JSON, a readiness exit code
   and bounded-label Prometheus metrics. An opt-in local Compose collector now runs
   the same inspection on a bounded schedule, exports collection timestamps and failure,
