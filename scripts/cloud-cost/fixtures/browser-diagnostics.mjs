@@ -8,6 +8,7 @@ const observations = [
   ['browserFailure', 'failure', /^(?:timeout|other)$/],
   ['browserSession', 'session', /^(?:accepted|refused|other|unseen)$/],
   ['browserPage', 'page', /^(?:error|clear)$/],
+  ['browserRelay', 'relay', /^(?:none|socket-(?:client|upstream)-(?:reset|refused|pipe|other)|(?:timeout|incomplete)-(?:client|upstream)|empty-exchange|admission-refused|byte-limit|counter-mismatch|cancelled|window|listener-error|final-accounting)$/],
   ['browserTraffic', 'traffic', /^(?:none|(?:(?:before|reconnect):(?:outside|live|session|overview|overdue|api|asset|document|other):(?:started|ok|not-modified|redirect|refused|error|finished|size-failed|aborted|failed|pending):[1-9][0-9]{0,2})(?:,(?:before|reconnect):(?:outside|live|session|overview|overdue|api|asset|document|other):(?:started|ok|not-modified|redirect|refused|error|finished|size-failed|aborted|failed|pending):[1-9][0-9]{0,2}){0,197})$/],
 ];
 

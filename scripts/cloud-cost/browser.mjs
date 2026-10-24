@@ -164,6 +164,7 @@ export async function measureRemoteBrowser(options) {
         browserStep: { value: step }, browserFailure: { value: failure },
         browserSession: { value: reconnectSession }, browserPage: { value: reconnectPage },
         browserTraffic: { value: trafficSnapshot() },
+        browserRelay: { value: meter.failure() },
       });
     }
     throw error;
