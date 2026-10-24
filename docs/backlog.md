@@ -121,15 +121,17 @@ order. Remote access matters most because Waitron's customer-facing features wai
    fiscal-only transfer amendments, authorised A1034 test-service receipts, build
    authority and all eight scenario/direction runtime checks remain open. Country rebuild and action status
    supply no venue declaration or activation authority.
-2. **Production monitoring, alerting and the status page.** No real venue should depend on a
-   Cloud nobody is watching. Built for test installations only: venue contact, snapshot age,
-   backup verification and remote-route checks, plus opt-in alert emails to venue owners
-   ([local monitoring](local-monitoring.md)). The
-   [C39 thresholds](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md) are
-   approved for planning only. [Incident response](incident-response.md) (D104) proposes the
-   owner as the only person on call and a free hosted status page. Missing: production
-   collection and retained history, checks from outside the affected cell, a chosen paging
-   provider, and the status page itself.
+2. **Production monitoring, alerting and the status page — DESIGNED AND APPROVED (2026-10-24).**
+   The [design](superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md) was
+   approved by the owner for building and rehearsing locally; the paging, outside-machine and
+   Anthropic accounts, and any spending, need a separate go-ahead (its section 16). It changes
+   C39 and D104 where its section 3 says: the owner is paged after an AI investigation or at
+   15 minutes, by a text then a phone call; the status page updates itself; an on-prem box
+   going quiet never pages. It adds opt-in error reports from boxes, staff problem reports
+   (typed text sent by an admin), and a triage agent. D101's AI gate still has to be opened
+   for the investigator's inputs before it runs in production. Waitron work it needs: the
+   error-report opt-in and sender, the "report a problem" form, the "can trade" check and the
+   updater honouring a held version. Its plan order is written when its turn comes.
 3. **Billing.** Remote access and backups are paid services, and so is the rota solver
    below. Today billing is one bullet under _Platform work to scope_. The plan switch is a
    test-only one an operator sets by hand, and the usage ledger is "observational only"
