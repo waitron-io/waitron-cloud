@@ -2014,9 +2014,10 @@ notifications separately.
   retain full main runs, exact output fields and zero PR API calls. Generation
   is a repository-root command. A real temporary Git repository reproduces a
   subfolder invocation overwriting a nested lookalike policy. Generation now
-  checks Git's current-directory prefix before reading staged inputs or writing
-  output. The regression requires refusal with both policies, staged inputs and
-  the working tree unchanged; normal root generation still succeeds. Read-only
+  requires a working tree and an empty current-directory prefix before reading
+  staged inputs or writing output, including refusal inside Git's metadata directory.
+  Regressions preserve both policies, staged inputs and the working tree on refusal;
+  normal root generation still succeeds. Read-only
   checking of a committed audit remains available from subfolders.
   An independent subprocess check corrupts only the generated audit digest after
   valid staged inputs have passed. The final validation refuses that output without

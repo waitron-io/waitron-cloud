@@ -311,6 +311,24 @@ test('committed audit checking from a subfolder remains read only', () => staged
   assert.equal(git('status', '--porcelain'), before);
 }));
 
+test('staged generation from Git metadata refuses without overwriting a lookalike policy', () => stagedFixture(({root, git, write}) => {
+  const original = readFileSync(join(root, policyPath), 'utf8');
+  const nestedPath = '.git/scripts/ci-input-audit.json';
+  const nestedContent = 'Unrelated Git metadata policy\n';
+  write(nestedPath, nestedContent);
+  const index = git('write-tree');
+  const before = git('status', '--porcelain');
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./ci-input-audit.mjs', import.meta.url)), '--write-staged'],
+    {cwd: join(root, '.git'), encoding: 'utf8', timeout: 10_000});
+  assert.ifError(result.error);
+  assert.equal(result.status, 1, `Generation inside Git metadata must refuse: ${result.stdout}${result.stderr}`);
+  assert.match(result.stderr, /repository root/i);
+  assert.equal(readFileSync(join(root, policyPath), 'utf8'), original);
+  assert.equal(readFileSync(join(root, nestedPath), 'utf8'), nestedContent);
+  assert.equal(git('write-tree'), index);
+  assert.equal(git('status', '--porcelain'), before);
+}));
+
 test('staged renewal refuses unsupported incomplete and nonregular workspace inputs without writing', () => stagedFixture(({root, git, write, cli}) => {
   const baseline = git('rev-parse', 'HEAD').trim();
   const cases = [
