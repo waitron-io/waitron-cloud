@@ -207,7 +207,10 @@ now uses real WireGuard/HAProxy, two Waitron servers, ACME DNS validation, brows
 challenges, local DNS, gateway replacement, revocation and expiring route authority.
 Operator placement and customer
 remote setup now has owner-only English/Spanish screens for assigned names, custom DNS
-changes, readiness and local-network guidance. A PostgreSQL-backed local reconciler now
+changes, readiness and local-network guidance. After an uncertain save reply, the portal
+reads the current settings once even during Retry-After; new saves and manual refreshes
+keep waiting, so you can see whether the name was saved without repeating the change.
+A PostgreSQL-backed local reconciler now
 publishes signed routes and renews public/staff certificates through explicit filesystem,
 DNS and ACME adapters. Its receipt covers duplicate workers, expired-lease restart,
 bounded failure, failed-renewal retention and hostname/lease fences; focused filesystem
