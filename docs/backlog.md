@@ -1806,10 +1806,24 @@ notifications separately.
   controlled lifecycle and real child-boundary checks. The cause of the Linux
   takings timeout and outstanding-request refusals remains under investigation.
   Twelve independent Linux observations ran the complete seven-case group at
-  diagnostic heads `6bdf753` and `a58e794`: all 84 cases passed. No instrumented
-  recurrence was captured, so these passes establish neither a cause nor a fix.
-  The temporary observation workflow is removed; retain the next diagnostic
-  refusal before changing browser behavior or any existing check.
+  diagnostic heads `6bdf753` and `a58e794`: all 84 cases passed. A later instrumented
+  recurrence in [run 40122070386](https://github.com/waitron-io/waitron-cloud/actions/runs/40122070386/job/120955659784)
+  times out at reconnect/takings with an accepted session and no page error.
+  Both overview and overdue requests fail, alongside other API and live-stream
+  requests. These counts do not identify the underlying connection failure.
+  Reconnect refusals now retain the byte-counting relay's first refusal category
+  before browser cleanup. You can distinguish a socket reset, refused connection,
+  broken pipe or other socket error, timeout, incomplete close, empty exchange,
+  admission or byte limit, cancellation, observation-window end, listener error
+  or accounting refusal.
+  `none` means the relay had not refused when the browser error was caught.
+  Later cleanup cannot replace the first category. Socket sides identify the
+  browser-facing client or gateway-facing upstream; raw network errors and payloads
+  stay private. Run `node --test scripts/cloud-cost/remote-refusal-evidence.test.mjs scripts/cloud-cost/browser-relay-evidence.test.mjs`
+  for real relay sockets with controlled resets and injected faults, preserved
+  accounting refusals and the child-process diagnostic boundary. These controls do not establish the historical Linux cause.
+  The temporary observation workflow is removed. Retain the next instrumented
+  refusal before repairing browser behavior; all existing checks and deadlines remain.
   The reporter preserves the original refusal when a diagnostic property cannot
   be inspected, including throwing or revoked JavaScript proxies, objects that
   intercept property inspection. Each field is contained separately, so an
