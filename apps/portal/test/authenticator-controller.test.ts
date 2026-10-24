@@ -130,3 +130,10 @@ test('fencing also refuses delayed completions, active changes, cancellation and
   });c.account('owner');c.status=status;c.password='current';c.proofCode='123456';const pending=c.regenerate();
   await new Promise(r=>setImmediate(r));c.fence();resolve({ok:false,status:401,code:'unauthenticated',retryAfterMs:0});assert.equal(await pending,false);assert.equal(c.error,undefined);
 });
+
+test('sign-in invalid input is a validation refusal rather than a service outage',async()=>{
+  let redraws=0;
+  const c=new module!.AuthenticatorController(()=>{redraws++;},async()=>({ok:false,status:400,code:'invalid_input',retryAfterMs:0}));
+  assert.equal(await c.startLogin('ana..garcia@example.com','secret'),false);
+  assert.equal(c.error,'invalid');assert.equal(c.pending,false);assert.equal(redraws,2);
+});

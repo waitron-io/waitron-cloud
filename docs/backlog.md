@@ -3284,9 +3284,13 @@ notifications separately.
   Stubbed Chromium checks cover all three forms in English and Spanish, both themes
   and phone/desktop widths; blank, internally spaced and overlong addresses stay
   refused, passwords retain their exact bytes and login refusals keep the generic
-  credentials message. The portal still sends some addresses the server refuses,
-  including a leading zero-width space (U+200B); align its field feedback with the
-  server’s address grammar in a separate portal follow-up. The email
+  credentials message. The portal email check follows the server's address grammar,
+  including local-part and domain-label boundaries, consecutive dots, non-ASCII
+  addresses and leading zero-width spaces. Sign-in, signup and recovery mark the
+  email field before sending an address the server refuses. A sign-in HTTP 400
+  shows validation feedback; wrong credentials keep their single generic answer.
+  Table checks compare the browser check with the unchanged server normaliser.
+  The email
   adapter is tested with capture/failure adapters and SMTP through local Mailpit.
   Password recovery now uses expiring single-use tokens bound to the account, email
   and current password hash; completion invalidates older links and revokes all existing
