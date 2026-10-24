@@ -458,6 +458,13 @@ HTTP, revision and revocation assertion. PostgreSQL and HTTP journeys are
 qualified by CI while local Docker is unavailable. The historical CI clock values
 remain unknown.
 
+**Short lease fixture timing.** The capture object-write and installation-lock
+fixtures, and the replacement provider-grant fixture, derive expiry from one
+issuance timestamp. A Docker-free advancing-clock probe executes their actual
+construction statements with the real issuer and verifies signed durations of
+100, 250 and 600,000 ms. All existing refusal assertions and waits stay unchanged;
+GitHub CI qualifies the PostgreSQL journeys while local Docker is unavailable.
+
 ## Translate all: approved design, implementation still open
 
 The [Cloud design](superpowers/specs/2026-10-14-translate-all-design.md) and
@@ -2029,11 +2036,12 @@ notifications separately.
   removed. These are timestamp-based estimates, not invoices or a completed
   full-run budget claim. Broader dependency additions, other controls and
   wider lock/root
-  selection, package precision and their real scratch controls remain open. Review follow-ups: the
-  audit-version and inner path filters lack independent removal controls; other
-  refusals currently mask their removal. The regular-file defenses have a paired
-  removal control. Keep the refusal assertions when simplifying these redundant
-  checks. Keep the renewal recipe's explicit manifest patterns aligned with
+  selection, package precision and their real scratch controls remain open. Review follow-ups:
+  independent deletions of the audit-version, manifest null-byte and manifest
+  dot-segment checks fail the existing policy-refusal test. Deleting the Markdown
+  inner path filter still passes all nine input-audit tests, so its independent
+  removal control remains open. The regular-file defenses have a paired removal
+  control. Keep the refusal assertions when simplifying these checks. Keep the renewal recipe's explicit manifest patterns aligned with
   discovered workspace members; a mismatch currently retains full work. The
   lock-specific explanation now lists changed package manifests separately from
   changed resolved dependency inputs, so you can see why a manifest owner runs

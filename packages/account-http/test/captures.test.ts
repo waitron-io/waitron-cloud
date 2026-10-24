@@ -83,7 +83,7 @@ test('disabled service, production environment and expired captures refuse new g
 });
 test('lease expires during object write: publication does not commit',async()=>{
  const capture=randomUUID();await request('backup-reserve',proof('backup-reserve',capture));const bytes=Buffer.from('archive');data.set('venue-one/incoming/'+capture,bytes);
- const values=JSON.parse(Buffer.from(lease.payload,'base64url').toString());const brief=issuer.issue({origin,leaseId:randomUUID(),installationId:id,venueId:values[5],environment:'test',publicKey:values[7],issuedAt:Date.now(),expiresAt:Date.now()+100});
+ const values=JSON.parse(Buffer.from(lease.payload,'base64url').toString());const now=Date.now(),brief=issuer.issue({origin,leaseId:randomUUID(),installationId:id,venueId:values[5],environment:'test',publicKey:values[7],issuedAt:now,expiresAt:now+100});
  putHook=async()=>{await new Promise(r=>setTimeout(r,150));};const response=await request('backup-publish',proof('backup-publish',capture,metadata(bytes),id,brief));assert.equal(response.status,401);assert.equal((await db.pool.query('SELECT count(*) FROM backup_points')).rows[0].count,'0');
 });
 for(const change of ['disable','expire'] as const)test('provider wait rechecks '+change+' before returning a grant',async()=>{
@@ -92,7 +92,7 @@ for(const change of ['disable','expire'] as const)test('provider wait rechecks '
 });
 test('a lease that expires while waiting for the installation lock cannot reserve a capture',async()=>{
  const values=JSON.parse(Buffer.from(lease.payload,'base64url').toString()),capture=randomUUID();
- const brief=issuer.issue({origin,leaseId:randomUUID(),installationId:id,venueId:values[5],environment:'test',publicKey:values[7],issuedAt:Date.now(),expiresAt:Date.now()+250});
+ const now=Date.now(),brief=issuer.issue({origin,leaseId:randomUUID(),installationId:id,venueId:values[5],environment:'test',publicKey:values[7],issuedAt:now,expiresAt:now+250});
  const blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('SELECT id FROM installations WHERE id=$1 FOR UPDATE',[id]);
  const response=request('backup-reserve',proof('backup-reserve',capture,{},id,brief));
  try{let blocked=false;for(let i=0;i<100;i++){if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[db.schema])).rowCount){blocked=true;break;}await new Promise(r=>setTimeout(r,10));}assert(blocked);await new Promise(r=>setTimeout(r,300));}finally{await blocker.query('ROLLBACK');blocker.release();}

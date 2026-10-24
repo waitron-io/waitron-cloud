@@ -161,7 +161,7 @@ test('current installation consumers preserve one venue and do not inherit the o
 test('replacement during provider grant issuance refuses to disclose old installation credentials',async()=>{
  const f=await ready();await f.store.machine('prepare',f.envelope('prepare'));
  const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
- const lease=issuer.issue({origin,leaseId:randomUUID(),installationId:f.installed.installationId,venueId:f.installed.venueId,environment:'test',publicKey:f.installedKey.publicKey,issuedAt:Date.now(),expiresAt:Date.now()+600000});
+ const now=Date.now(),lease=issuer.issue({origin,leaseId:randomUUID(),installationId:f.installed.installationId,venueId:f.installed.venueId,environment:'test',publicKey:f.installedKey.publicKey,issuedAt:now,expiresAt:now+600000});
  const bytes=encodeMachine({origin,action:'backup-reserve',installationId:f.installed.installationId,operationId:randomUUID(),issuedAt:Date.now(),lease:JSON.stringify(lease),body:'{}'});
  let granted=false;const captures=new BackupCaptures(db.pool,issuer,origin,{vault:f.vault,objects:()=>({async read(){throw Error();},async put(){throw Error();},async remove(){throw Error();}}),async grant(){granted=true;await new ReplacementStore(db.secondPool,f.vault,origin).complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f));return {credentials:{accessKeyId:'access',secretAccessKey:'secret',sessionToken:'temporary'},expiresAt:new Date(Date.now()+600000).toISOString()};}});
  await assert.rejects(captures.execute('backup-reserve',{payload:bytes.toString('base64url'),signature:f.installedKey.sign(bytes)}),/revoked/);assert(granted);
