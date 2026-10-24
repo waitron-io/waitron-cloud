@@ -3258,8 +3258,16 @@ notifications separately.
   when it ends. Navigation retains the wait; follow-up reads still reconcile uncertain
   changes without shortening a longer wait. Stubbed Chromium checks
   cover both languages, light/dark themes and phone/desktop widths, with a Chromium
-  virtual authenticator so the fixture offers passkeys on Linux too. Qualification
-  also exposed an independent rotation wait-observer failure in
+  virtual authenticator so the fixture offers passkeys on Linux too. Root-to-Account
+  navigation now finishes before startup reads begin, so the redirect cannot discard
+  their replies. A delayed session-activity reply no longer restarts the passkey list
+  and clears a wrong-password alert. A controlled Linux reproduction captured that
+  sequence across both languages, themes and widths; a separate browser regression
+  retains the alert after the activity reply, with the original error checks and
+  four-second waits unchanged. This addresses the repeated root-route timeout in
+  CI40062082033, CI40076659731 and CI40080920398; those historical runs did not capture
+  the request ordering themselves. Qualification also exposed an independent rotation
+  wait-observer failure in
   `packages/registration/test/authenticator-keys.test.ts:108` (CI40057746479,
   job120764846013): it expected an account `FOR UPDATE` wait but sampled `FOR SHARE`.
   The test, rotation implementation, launcher and workflow match the preceding main

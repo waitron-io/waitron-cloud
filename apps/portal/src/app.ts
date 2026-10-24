@@ -97,6 +97,8 @@ export class PortalApp {
   #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
+    // Redirect before starting reads so navigation cannot discard their replies.
+    if (this.path === '/' && state.kind === 'authenticated') this.navigate('/account');
     this.authenticator.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.authenticator.loaded) void this.authenticator.load();
     this.diagnostics.account(state.kind === 'authenticated' ? state.accountId : undefined);
@@ -117,8 +119,7 @@ export class PortalApp {
     if (['/account','/','/recover','/fiscal-allocations'].includes(this.path) && state.kind === 'authenticated' && !this.installations.loaded) void this.installations.load();
     this.pairing.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (this.path === '/connect' && state.kind === 'authenticated' && !this.pairing.loaded) void this.pairing.load();
-    if (this.path === '/' && state.kind === 'authenticated') this.navigate('/account');
-    else if ((['/', '/account', '/connect', '/recover', '/fiscal-allocations'].includes(this.path)) && state.kind === 'anonymous') {
+    if ((['/', '/account', '/connect', '/recover', '/fiscal-allocations'].includes(this.path)) && state.kind === 'anonymous') {
       this.navigate('/login');
       if (state.expired) { this.notice = 'sessionExpired'; this.draw(); }
     }
