@@ -52,6 +52,8 @@ for (const [fault, expected] of [
   ['state-throws', {role:'s3',inspection:'unavailable'}],
   ['state-malformed', {role:'s3',inspection:'unavailable'}],
   ['state-private', {role:'s3',inspection:'unavailable'}],
+  ['state-overflow', {role:'s3',inspection:'unavailable'}],
+  ...['Status', 'Running', 'ExitCode', 'OOMKilled', 'Dead', 'Restarting'].map(field => ['state-invalid-' + field, {role:'s3',inspection:'unavailable'}]),
 ]) test(`failed isolation retains fresh bounded container state before cleanup: ${fault}`, () => {
   const result = spawnSync(process.execPath, [new URL('./fixtures/stack-startup-diagnostic-probe.mjs', import.meta.url).pathname, fault, 'false'], {encoding:'utf8',timeout:15000});
   assert.equal(result.status, 0, result.stderr);

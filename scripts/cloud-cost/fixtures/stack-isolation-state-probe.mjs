@@ -15,6 +15,7 @@ globalThis.isolationStateProbe = (command, argv, options) => {
       const stopped = spawnSync('docker', ['stop', '--time', '1', container.Id], {encoding:'utf8',timeout:15000});
       if (stopped.status !== 0) throw Error('Cannot stop controlled service');
       interrupted = true;
+      if (process.argv[3] === 'abrupt') process.exit(75);
     }
   }
   return spawnSync(command, argv, options);

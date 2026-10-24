@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import * as local from '../local.mjs';
+import { cleanupRecordedStack } from './stack-parent-cleanup.mjs';
 const prepared = JSON.parse(readFileSync(process.env.COST_STACK_FIXTURE, 'utf8'));
 const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', env: { PATH: process.env.PATH }, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 function fixture(t) {
@@ -777,6 +778,7 @@ for (const [role, name, directory] of [['mailpit', 'mail.db', false], ['s3', 'st
 // A real service exit must refuse admission and retain its state before owned cleanup removes it.
 test('stackReportsStoppedIsolationServiceBeforeRemovingItsResources', async t => {
   const f = fixture(t), preparedPlan = local.prepareIsolatedStack(f);
+  f.onCleanup(() => cleanupRecordedStack(f, preparedPlan.project, docker));
   const probeConfig = join(f.root, 'isolation-state-probe.json');
   writeFileSync(probeConfig, JSON.stringify({...f, prepared:preparedPlan}), {mode:0o600,flag:'wx'});
   const output = JSON.parse(execFileSync(process.execPath,
@@ -795,4 +797,21 @@ test('stackReportsStoppedIsolationServiceBeforeRemovingItsResources', async t =>
   assert.equal(output.diagnostic.container.oomKilled, false);
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '', 'refused startup removes every owned container');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '', 'refused startup removes its owned network');
+});
+
+
+// A child's abrupt exit must leave enough private creation evidence for independent parent teardown.
+test('stackParentRemovesItsRecordedResourcesAfterIsolationChildExits', async t => {
+  const f = fixture(t), preparedPlan = local.prepareIsolatedStack(f);
+  const cleanup = () => cleanupRecordedStack(f, preparedPlan.project, docker);
+  f.onCleanup(cleanup);
+  const probeConfig = join(f.root, 'isolation-state-probe.json');
+  writeFileSync(probeConfig, JSON.stringify({...f, prepared:preparedPlan}), {mode:0o600,flag:'wx'});
+  assert.throws(() => execFileSync(process.execPath,
+    [new URL('./stack-isolation-state-probe.mjs', import.meta.url).pathname, probeConfig, 'abrupt'],
+    {encoding:'utf8',timeout:120000,stdio:['ignore','pipe','pipe']}), error => error.status === 75);
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`).split('\n').length, 6);
+  cleanup();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });

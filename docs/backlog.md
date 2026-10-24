@@ -4498,7 +4498,14 @@ refusal and owned cleanup. Raw errors, identifiers, paths and unknown fields
 stay private. Controlled Docker-free checks exercise these boundaries. A Linux
 case deliberately stops this invocation's storage service before its isolation
 command and checks both refusal and cleanup. Independent Linux observations
-also exercise the original eight-case group.
+also exercised the original eight-case group: [run 40042726726](https://github.com/waitron-io/waitron-cloud/actions/runs/40042726726)
+passed the new control and all eight original cases on each of four runners,
+36 checks in total, without a historical recurrence. The temporary investigation
+workflow is removed; the new control remains in ordinary conformance CI. A second
+Linux check exits the child abruptly after stopping its storage service. The
+parent's fallback requires recorded creation IDs plus fresh owner, project and
+name checks before removing a resource; matching labels alone cannot authorise
+removal. Native controls cover foreign identity and ownership refusals.
 
 The historical cause remains unknown. Use the next diagnostic recurrence to
 identify the service and state, reproduce its cause, then fix it test-first.
