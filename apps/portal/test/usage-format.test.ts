@@ -25,3 +25,13 @@ for(const locale of ['en','es'] as const){
   assert.equal(formatBytes(decimal,locale,label),locale==='en'?en:es);
  });
 }
+
+for(const locale of ['en','es'] as const)for(const [decimal,want] of [
+ ['1','1 byte'],['-1','-1 byte'],['2','2 bytes'],['0','0 bytes'],
+] as const)test(`${locale}: ${decimal} uses the matching byte unit`,()=>{
+ assert.equal(formatBytes(decimal,locale,'bytes'),want);
+});
+
+test('a translated singular byte label is kept',()=>{
+ assert.equal(formatBytes('1','es','octetos','octeto'),'1 octeto');
+});
