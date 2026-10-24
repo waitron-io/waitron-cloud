@@ -2926,27 +2926,36 @@ notifications separately.
   IPv4 address in [run 39810150851](https://github.com/waitron-io/waitron-cloud/actions/runs/39810150851/job/119934129050).
   Its local signed-download probe passed, so local reachability alone cannot
   qualify the source for Actions.
-  CI now directs recognised Azure, primary and runner mirror-file archive
-  references to `https://mirror.math.princeton.edu/pub/ubuntu`. This changes only the URI;
-  your release, components, architectures, signing keys and other sources stay
-  intact. Ubuntu's existing signed release metadata and package hash checks
-  still decide which bytes you can install. No additional signing key, cache,
-  unsigned source or longer deadline is introduced. See
-  [Ubuntu's archive verification](https://documentation.ubuntu.com/security/software-integrity/archive-verification/)
-  and the [Princeton's Ubuntu archive](https://mirror.math.princeton.edu/pub/ubuntu/).
-  Run `node --test scripts/ci-browser-source.test.mjs scripts/ci-download.test.mjs`
-  to check source preservation and the workflow against controlled stalled runner mirror-file
-  and primary sources. Both must reach the alternative in one attempt. Real
-  Actions qualification must also show two consecutive full runs of the same
+  CI directs recognised Azure, primary and runner mirror-file archive
+  references to a local APT mirror list. APT tries Princeton first, then
+  `https://archive.ubuntu.com/ubuntu` when a file cannot be fetched. Your release,
+  components, architectures, signing keys and unrelated source files retain their
+  values. A generated APT configuration limits HTTPS connection and idle waits
+  to 10 seconds, including other HTTPS sources on that disposable CI runner, so
+  an unavailable host leaves time for the alternative. The two outer 120-second
+  attempts, cleanup grace, package-lock waits and retry delay stay unchanged.
+  Ubuntu's signed release metadata and package hashes still decide which bytes
+  you can install; no additional signing key or unsigned source is introduced.
+  See [Ubuntu's archive verification](https://documentation.ubuntu.com/security/software-integrity/archive-verification/)
+  and [APT's mirror fallback and priority rules](https://manpages.ubuntu.com/manpages/noble/man1/apt-transport-mirror.1.html).
+  Run `node --test scripts/ci-browser-source.test.mjs scripts/ci-download.test.mjs scripts/ci-browser-apt.test.mjs`
+  to check preserved source fields, the unchanged workflow, controlled unavailable
+  mirrors and exhausted attempts. On Linux, the final check runs real APT against
+  a temporary signed archive: it downloads through the alternative after a stalled
+  first mirror, refuses two unavailable mirrors, rejects altered signatures and
+  rejects changed package bytes. It installs no package and uses no system APT
+  state. On macOS that Linux check is skipped; GitHub CI must execute it.
+  Real Actions qualification must show two consecutive full runs of the same
   head and its independent merge run, with one install attempt and every portal
-  and UI-smoke test executed. The public mirror can still fail; the existing
-  supervisor must then refuse the install within its unchanged limits. The
-  observed transfer bottlenecks do not establish the outside servers' cause.
+  and UI-smoke test executed. This D200 candidate still needs those results;
+  controlled checks alone do not qualify public mirror availability.
   [Run 39890570457](https://github.com/waitron-io/waitron-cloud/actions/runs/39890570457/job/120209180867)
-  later failed portal shard 2 before its tests: both bounded attempts could not
-  connect to Princeton at `128.112.18.21:443`. The other browser jobs installed.
-  The single-mirror availability risk remains open; no source, trust setting or
-  download limit changes with the backup-verification correction.
+  and [run 40094682408](https://github.com/waitron-io/waitron-cloud/actions/runs/40094682408/job/120874425012)
+  could not connect to Princeton at `128.112.18.21:443`. The fallback addresses
+  the repeated single-host dependency. Either public archive can still fail,
+  and the existing supervisor must refuse within its limits if neither works.
+  The outside network cause and the separate browser reconnect cause remain
+  unknown; those original red runs remain evidence.
   The rewrite recognises the runner's current lowercase, whitespace-delimited
   URIs. Qualify compact Deb822 URI fields or capitalised hostnames before
   widening that support when a runner changes its source format.
@@ -2959,8 +2968,7 @@ notifications separately.
   Source preparation now reads every selected file as UTF-8 before writing any
   source, so an unreadable vendor file refuses without rewriting earlier files.
   A real-command invalid-byte regression preserves both files byte for byte;
-  deliberate faults also prove each URI's leading whitespace boundary. All 17
-  focused source/download checks pass. This preflight does not make subsequent
+  deliberate faults also prove each URI's leading whitespace boundary. This preflight does not make subsequent
   write failures atomic or qualify new source formats. ARM
   runner sources remain unqualified; check their archive location before adding
   that architecture. The current workflow uses x64 runners. D117 preserves line
