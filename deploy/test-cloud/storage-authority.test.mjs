@@ -6,6 +6,7 @@ import {readFile,stat} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {Agent} from 'node:https';
 import {startBackupStorage} from '../../scripts/backup-storage-fixture.mjs';
+import {storageOperations} from './storage-operation-diagnostics.mjs';
 const require=createRequire(new URL('../../packages/backups/package.json',import.meta.url));
 const {S3Client,PutObjectCommand,GetObjectCommand,ListObjectsV2Command}=require('@aws-sdk/client-s3');
 const denied=e=>e?.$metadata?.httpStatusCode===403;
@@ -69,15 +70,16 @@ test('missing durable identity state refuses to overwrite an existing managed IA
 
 // Returning before the provider applies a new identity hands the caller unusable credentials.
 test('provision waits until the provider has applied both writer and reader identities', {timeout:90000},async t=>{
- const storage=await startBackupStorage();t.after(()=>storage.stop());
+ const operation=storageOperations(message=>t.diagnostic(message));
+ const storage=await operation('startup',()=>startBackupStorage());t.after(()=>storage.stop());
  const {openStorageAuthority}=await import('./storage-authority.mjs');
  const pending=[];t.after(()=>Promise.all(pending));
- const authority=await openStorageAuthority({directory:join(storage.root,'managed'),iamPath:join(storage.root,'iam.json'),admin:storage.admin,endpoint:storage.endpoint,region:'local',ca:storage.ca,reload:async()=>{pending.push(new Promise((resolve,reject)=>setTimeout(()=>storage.reloadIdentityFile().then(resolve,reject),150)));}});
- const venueId=randomUUID(),location=await storage.bucket('managed-delayed-reload'),prefix=`streams/${venueId}/`;
- const result=await authority.provision({venueId,location,prefix});
+ const authority=await operation('authority-open',()=>openStorageAuthority({directory:join(storage.root,'managed'),iamPath:join(storage.root,'iam.json'),admin:storage.admin,endpoint:storage.endpoint,region:'local',ca:storage.ca,reload:async()=>{pending.push(new Promise((resolve,reject)=>setTimeout(()=>operation('identity-reload',()=>storage.reloadIdentityFile()).then(resolve,reject),150)));}}));
+ const venueId=randomUUID(),location=await operation('bucket-create',()=>storage.bucket('managed-delayed-reload')),prefix=`streams/${venueId}/`;
+ const result=await operation('provision',()=>authority.provision({venueId,location,prefix}));
  const s3=new S3Client({endpoint:storage.endpoint,region:'local',credentials:result.writerCredentials,forcePathStyle:true,maxAttempts:1,requestHandler:{httpsAgent:new Agent({ca:storage.ca})}});t.after(()=>s3.destroy());
- await s3.send(new PutObjectCommand({Bucket:location.bucket,Key:prefix+'point',Body:'ready immediately'}));
- assert.equal((await authority.read(result.readerReference,location,prefix+'point')).toString(),'ready immediately');
+ await operation('writer-put',()=>s3.send(new PutObjectCommand({Bucket:location.bucket,Key:prefix+'point',Body:'ready immediately'})));
+ assert.equal((await operation('reader-get',()=>authority.read(result.readerReference,location,prefix+'point'))).toString(),'ready immediately');
 });
 
 // Removing the shared file lease must expose a lost identity when two processes provision at once.
