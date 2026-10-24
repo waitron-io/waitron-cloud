@@ -2707,8 +2707,11 @@ notifications separately.
   absent scripts objects and non-string commands. Isolated workspace checks
   remove each package command in turn, require the named inventory failure and
   pass after restoration. Every compiler assertion and command remains unchanged.
-  The equivalent `--project` spelling still fails the inventory or trace checks
-  and needs clearer trace diagnostics. Bootstrap setup now gives npm
+  Both `-p` and the equivalent `--project` spelling identify the same three
+  configurations in the inventory and real compiler trace. Isolated controls
+  switch every package to the long spelling and still refuse unknown commands
+  or configurations. All earlier compiler assertions remain in place.
+  Bootstrap setup now gives npm
   registry requests 15 seconds with one retry after one second, so a stalled
   tarball fetch cannot consume minutes before tests start. A real local `npm ci`
   against a held tarball request exceeds 35 seconds under the defaults and fails

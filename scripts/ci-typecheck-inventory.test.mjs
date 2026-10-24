@@ -73,3 +73,33 @@ test('compiler inventory names a package with a non-string typecheck script', ()
   writeFileSync(path, JSON.stringify(manifest));
   rejectsWithPackage(check, manifest.name);
 }));
+
+test('compiler inventory accepts equivalent --project arguments in every package', () => workspace(({root, check}) => {
+  for (const member of members) {
+    const path = join(root, member, 'package.json');
+    const manifest = JSON.parse(readFileSync(path, 'utf8'));
+    manifest.scripts.typecheck = manifest.scripts.typecheck.replace('tsc -p ', 'tsc --project ');
+    writeFileSync(path, JSON.stringify(manifest));
+    const result = check();
+    assert.equal(result.status, 0, `${member}: ${result.output}`);
+    assert.match(result.output, /ok \d+ - all declared package compiler configurations/);
+  }
+}));
+
+test('compiler inventory still refuses unknown commands and configurations', () => workspace(({root, check}) => {
+  const path = join(root, 'packages/account-http/package.json');
+  const original = readFileSync(path, 'utf8');
+  const manifest = JSON.parse(original);
+  for (const command of ['tsc --build ../../tsconfig.json', 'tsc --project ../../unknown-config.json']) {
+    manifest.scripts.typecheck = command;
+    writeFileSync(path, JSON.stringify(manifest));
+    const result = check();
+    assert.equal(result.status, 1, `${command}: ${result.output}`);
+    assert.match(result.output, /not ok \d+ - all declared package compiler configurations/);
+    assert.ok(result.output.includes(command.includes('--build') ?
+      `Unmapped typecheck command in ${manifest.name}` : 'unknown-config.json'), result.output);
+  }
+  writeFileSync(path, original);
+  const restored = check();
+  assert.equal(restored.status, 0, restored.output);
+}));
