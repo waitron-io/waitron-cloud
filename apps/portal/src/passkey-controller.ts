@@ -31,6 +31,7 @@ export class PasskeyController {
   pending = false;
   retryAt = 0;
   loaded = false;
+  listLoaded = false;
   error: keyof Copy | undefined;
   notice: keyof Copy | undefined;
   #account: string | undefined;
@@ -56,6 +57,7 @@ export class PasskeyController {
     this.passkeys = [];
     this.password = '';
     this.loaded = false;
+    this.listLoaded = false;
   }
 
   async checkSupport() {
@@ -82,6 +84,7 @@ export class PasskeyController {
     const result = await this.#request<{passkeys: PasskeySummary[]}>('/passkeys');
     if (generation !== this.#generation) return false;
     this.loaded = true;
+    this.listLoaded = result.ok;
     if (result.ok) { this.passkeys = result.value.passkeys; return true; }
     this.#failure(result);
     return false;
