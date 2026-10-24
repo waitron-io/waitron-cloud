@@ -128,6 +128,6 @@ test('prepared APT sources offer ordered independent mirrors with bounded transp
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(await readFile(join(root, 'waitron-browser-mirrors.txt'), 'utf8').catch(() => null),
     'https://mirror.math.princeton.edu/pub/ubuntu\tpriority:1\nhttps://archive.ubuntu.com/ubuntu\tpriority:2\n');
-  assert.equal(await readFile(join(root, 'apt.conf.d/99waitron-browser-mirrors'), 'utf8').catch(() => null),
+  assert.equal(await readFile(join(root, 'apt.conf.d/zzzz-waitron-browser-mirrors'), 'utf8').catch(() => null),
     'Acquire::https::Timeout "10";\n');
 });
