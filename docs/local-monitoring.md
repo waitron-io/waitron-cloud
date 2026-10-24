@@ -107,7 +107,9 @@ The public check receives and solves the normal bot challenge before requesting
 host-only cookie that names a domain. The probe refuses any `Domain` attribute,
 including empty and bare attributes that some browsers ignore. It also checks the
 last `Path` attribute: a later non-root, empty or bare path makes the host-prefixed
-cookie unusable, even when an earlier attribute says `Path=/`. The staff check
+cookie unusable, even when an earlier attribute says `Path=/`. Its Path comparison
+trims ordinary spaces and tabs, preserving other bytes so it cannot mistake a
+no-break space for a browser-accepted root path. The staff check
 performs only a trusted hostname-verifying TLS handshake and sends no HTTP request or login.
 Production resolution refuses private, loopback, link-local and reserved addresses,
 including deprecated site-local IPv6. IPv4-compatible (`::/96`) and 6to4 (`2002::/16`)

@@ -144,6 +144,10 @@ test('public probe uses the last Path attribute before replaying its host-only c
   ['root restored last','__Host-waitron-public=fixture; Path=/other; Secure; HttpOnly; SameSite=Strict; Path=/',true],
   ['duplicate root','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; Path=/',true],
   ['unrelated path hint','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; PathHint=/other',true],
+  ['no-break space in later name','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; Path=/other; Path\u00a0=/',false],
+  ['no-break space after final value','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; Path=/other; Path=/\u00a0; Secure',false],
+  ['ordinary whitespace before final root value','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; Path=/other; Path = \t/ \t',true],
+  ['equals in final value','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; Path=/=other',false],
  ] as const)await t.test(label,async()=>{
   let replays=0;
   const fixture=await listenHttps(material,(req,res)=>{
