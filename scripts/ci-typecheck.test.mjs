@@ -38,7 +38,7 @@ function fixture(run) {
     write('trace.mjs', `import {appendFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 if (process.argv[1]?.endsWith('/typescript/bin/tsc')) {
-  const at = process.argv.indexOf('-p');
+  const at = process.argv.findIndex(argument => argument === '-p' || argument === '--project');
   appendFileSync(process.env.TYPECHECK_TRACE, resolve(process.cwd(), process.argv[at + 1]) + '\\n');
 }\n`);
     const check = () => {
@@ -56,6 +56,18 @@ if (process.argv[1]?.endsWith('/typescript/bin/tsc')) {
 }
 
 test('root typecheck compiles each distinct workspace configuration once with the real compiler', () => fixture(({check}) => {
+  const result = check();
+  assert.equal(result.status, 0, result.output);
+  assert.deepEqual(result.configs.sort(), ['apps/portal/tsconfig.json', 'packages/ui-smoke/tsconfig.json', 'tsconfig.json']);
+}));
+
+test('root typecheck traces equivalent --project arguments with the real compiler', () => fixture(({root, write, check}) => {
+  for (const directory of ['', ...memberDirectories]) {
+    const path = join(directory, 'package.json');
+    const manifest = JSON.parse(readFileSync(join(root, path), 'utf8'));
+    manifest.scripts.typecheck = manifest.scripts.typecheck.replaceAll('tsc -p ', 'tsc --project ');
+    write(path, JSON.stringify(manifest));
+  }
   const result = check();
   assert.equal(result.status, 0, result.output);
   assert.deepEqual(result.configs.sort(), ['apps/portal/tsconfig.json', 'packages/ui-smoke/tsconfig.json', 'tsconfig.json']);
@@ -116,7 +128,7 @@ test('all declared package compiler configurations are included in the consolida
   for (const member of members) {
     const manifest = JSON.parse(readFileSync(join(member.path, 'package.json'), 'utf8'));
     const script = manifest.scripts?.typecheck;
-    const command = typeof script === 'string' ? script.match(/^tsc -p (\S+)$/) : null;
+    const command = typeof script === 'string' ? script.match(/^tsc (?:-p|--project) (\S+)$/) : null;
     assert.ok(command, `Unmapped typecheck command in ${manifest.name}`);
     configurations.add(relative(repository, resolve(member.path, command[1])));
   }
