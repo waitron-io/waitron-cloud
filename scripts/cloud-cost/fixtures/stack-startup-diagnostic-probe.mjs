@@ -1,5 +1,6 @@
 // Only Docker is simulated; ownership, configuration, files, OpenSSL and stack orchestration are real.
 import {registerHooks} from 'node:module';
+import {spawnSync as actualSpawnSync} from 'node:child_process';
 import {mkdtempSync,realpathSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -27,7 +28,7 @@ const containers=()=>roles.map((role,i)=>({Id:ids[i],Name:'/'+plan.services[role
  NetworkSettings:{Networks:{[project]:{NetworkID:networkId}},Ports:{}},Mounts:[]}));
 const network=()=>({Id:networkId,Name:project,Internal:fault!=='isolation',Driver:'bridge',Labels:{'io.waitron.cloud-cost.owner':token}});
 const error=()=>({status:1,stdout:'PRIVATE_CANARY',stderr:'postgresql://private:PRIVATE_CANARY@host/private',error:undefined,signal:null});
-globalThis.startupProbe={abort:()=>controller.abort(),spawnSync(command,args){
+globalThis.startupProbe={abort:()=>controller.abort(),spawnSync(command,args,options){
  if(command!=='docker')throw Error('Unexpected external command');
  const ok=value=>({status:0,stdout:typeof value==='string'?value:JSON.stringify(value),stderr:'',signal:null});
  if(args[0]==='compose'){created=true;if(['compose','reporting','timeout','missing-docker','unclassified','revoked','hostile-message'].includes(fault)){if(fault==='unclassified')throw Error('PRIVATE_CANARY');if(fault==='revoked'){const value=Proxy.revocable({},{});value.revoke();throw value.proxy;}if(fault==='hostile-message')throw Object.defineProperty(Error(), 'message', {get(){throw Error('PRIVATE_CANARY');}});const result=error();if(fault==='timeout'||fault==='missing-docker'){result.status=null;result.error={code:fault==='timeout'?'ETIMEDOUT':'ENOENT',message:'PRIVATE_CANARY'};}return result;}return ok('');}
@@ -36,8 +37,21 @@ globalThis.startupProbe={abort:()=>controller.abort(),spawnSync(command,args){
  if(args[0]==='ps'){if(fault==='discovery'&&!created)return error();return ok(created&&!removed?ids.join('\n'):'');}
  if(args[0]==='network'&&args[1]==='ls')return ok(created?networkId:'');
  if(args[0]==='network'&&args[1]==='inspect')return ok([network()]);
+ if(args[0]==='inspect'&&args[1]==='--format'){
+  events.push('state');
+  if(args.at(-1)!==ids[1])throw Error('Wrong diagnostic target');
+  if(fault==='state-missing')return {...error(),stderr:'Error response from daemon: No such container: PRIVATE_CANARY'};
+  if(fault==='state-timeout')return actualSpawnSync(process.execPath,['-e',`setTimeout(()=>process.stdout.write(JSON.stringify({Status:'exited',Running:false,ExitCode:7,OOMKilled:true,Dead:false,Restarting:false})),2200)`],options);
+  if(fault==='state-overflow')return actualSpawnSync(process.execPath,['-e',`process.stdout.write(JSON.stringify({Status:'exited',Running:false,ExitCode:7,OOMKilled:true,Dead:false,Restarting:false,Error:'PRIVATE_CANARY'.repeat(5000)}))`],options);
+  if(fault==='state-throws')throw Error('PRIVATE_CANARY');
+  if(fault==='state-malformed')return ok('PRIVATE_CANARY');
+  if(fault==='state-private')return ok({Status:'PRIVATE_CANARY',Running:'PRIVATE_CANARY',ExitCode:999,OOMKilled:'PRIVATE_CANARY',Dead:'PRIVATE_CANARY',Restarting:'PRIVATE_CANARY',Error:'PRIVATE_CANARY'});
+  if(fault.startsWith('state-invalid-')){const state={Status:'exited',Running:false,ExitCode:7,OOMKilled:true,Dead:false,Restarting:false};const field=fault.slice('state-invalid-'.length);state[field]=field==='ExitCode'?256:'PRIVATE_CANARY';return ok(state);}
+  return ok({Status:'exited',Running:false,ExitCode:7,OOMKilled:true,Dead:false,Restarting:false,Error:'PRIVATE_CANARY',FinishedAt:'PRIVATE_CANARY'});
+ }
  if(args[0]==='inspect')return ok(containers().filter(c=>args.includes(c.Id)).slice(0,fault==='resources'?5:6));
  if(args[0]==='exec'){
+  if(fault.startsWith('state-')&&args[1]===ids[1])return {...error(),stderr:'Error response from daemon: Container PRIVATE_CANARY is not running'};
   if(fault==='isolation-command')return error();
   if(fault==='outbound-result')return {...error(),stdout:JSON.stringify({blockedConnections:3,blockedDns:1,localControl:true,secret:'PRIVATE_CANARY'}),stderr:'PRIVATE_CANARY'};
   if(fault==='outbound-runtime')return {...error(),stdout:'PRIVATE_CANARY',stderr:'Error: Cannot find module PRIVATE_CANARY'};
