@@ -4801,7 +4801,9 @@ and expiry. The [limits guide](local-remote-access.md#measure-shared-public-traf
 keeps the 2026-09-30 receipt as a historical measurement.
 
 Before public deployment, qualify fairness for customers sharing IPv4 addresses
-or IPv6 networks. Many distinct networks can still exhaust all 4,096 source
-buckets and refuse new callers until expiry; the next gateway hardening task must
+or IPv6 networks, including IPv4-to-IPv6 translation. Many distinct networks can
+still exhaust all 4,096 source buckets and refuse new callers until expiry; the next gateway hardening task must
 choose and test admission under that pressure. Per-venue fairness, coordinated
-limits across gateways and HAProxy connection-table pressure remain open.
+limits across gateways and HAProxy connection-table pressure remain open. Verify
+IPv6 connection accounting with HAProxy's configured `stick-table type ip`; native
+gate checks do not qualify that separate layer.

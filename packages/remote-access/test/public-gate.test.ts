@@ -110,6 +110,8 @@ for(const {name,first,second}of [
  {name:'IPv6 /64 across compressed and expanded forms',first:'2001:db8:abcd:ffff::1',second:'2001:0DB8:ABCD:FFFF:ffff:ffff:ffff:ffff'},
  {name:'IPv6 /64 with zeroes compressed inside its network prefix',first:'2001:0:0:1::1',second:'2001::1:ffff:ffff:ffff:ffff'},
  {name:'IPv6 /64 with an embedded IPv4 tail',first:'2001:db8:1:2::192.0.2.1',second:'2001:db8:1:2::c000:202'},
+ {name:'IPv4-compatible IPv6 stays in its native IPv6 /64',first:'::192.0.2.1',second:'::192.0.2.2'},
+ {name:'scoped IPv6 addresses',first:'fe80::1%eth0',second:'FE80:0:0:0:ffff::2%eth0'},
  {name:'IPv4 and its dotted mapped IPv6 form',first:'192.0.2.1',second:'::ffff:192.0.2.1'},
  {name:'IPv4 and its expanded hexadecimal mapped IPv6 form',first:'192.0.2.1',second:'0000:0000:0000:0000:0000:FFFF:C000:0201'},
 ])test(`public request allowance is shared by ${name}`,async()=>{
@@ -127,6 +129,7 @@ for(const {name,first,second}of [
  {name:'neighbouring IPv6 /64 networks',first:'2001:db8:1:fffe::1',second:'2001:db8:1:ffff::1'},
  {name:'individual IPv4 addresses',first:'192.0.2.1',second:'192.0.2.2'},
  {name:'different mapped IPv4 addresses',first:'::ffff:192.0.2.1',second:'::ffff:c000:202'},
+ {name:'IPv4-compatible IPv6 and IPv4',first:'::192.0.2.1',second:'192.0.2.1'},
 ])test(`public request allowances stay separate for ${name}`,async()=>{
  const f=await fixture();try{
   for(let i=0;i<120;i++)assert.equal((await f.send('/_cloud/challenge',{'x-waitron-client-ip':first})).status,200);

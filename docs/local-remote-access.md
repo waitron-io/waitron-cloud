@@ -501,10 +501,11 @@ IPv6 addresses share the corresponding IPv4 allowance. The gate tracks at most
 60 seconds. Many distinct networks can still fill that table. Challenge proofs
 and access cookies remain bound to the full client address, even within one /64.
 The gate has 64 upstream slots across all sources and venues.
-Challenge requests also spend that allowance. HAProxy separately permits at most
-32 concurrent connections and a connection rate of 60 per ten seconds from a
-source. Solving a challenge grants no separate allowance. A valid customer can
-therefore receive a refusal because another customer shares their address or
+Challenge requests also spend that allowance. HAProxy separately configures at most
+32 concurrent connections and a connection rate of 60 per ten seconds per full
+client address, rather than per /64. Its IPv6 connection accounting still needs
+deployment qualification. Solving a challenge grants no separate allowance. A valid
+customer can therefore receive a refusal because another customer shares their address or
 because a different venue occupies the available slots. These are capacity
 interactions; the session and credential checks still apply.
 
