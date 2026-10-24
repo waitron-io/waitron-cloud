@@ -23,6 +23,7 @@ export class RecoveryController {
  replace(){return this.#exchange('replace');}
  async #exchange(action:'inspect'|'approve'|'close'|'replace'){
   if(!this.#account||!this.requestId||this.pending||this.waiting)return;
+  this.code=this.code.trim();
   if(!/^\d{8}$/.test(this.code)){this.error='pairCodeError';this.#changed();return;}
   if(action==='approve'&&(this.uncertain||this.view?.state!=='awaiting_owner'||!this.venueId||!this.source||(this.source==='snapshot'&&!this.pointId)||!this.stopped||!this.acceptLoss||Date.parse(this.view.expiresAt)<=Date.now()))return;
   if(action==='close'&&!this.view?.operation)return;
@@ -37,7 +38,7 @@ export class RecoveryController {
   else{
    if(!result.ok){this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?'forbidden':result.status===410?'recoveryExpired':'unavailable';if(result.status===401||result.status===403){this.view=undefined;this.#confirmedReplacement=undefined;this.choose(undefined,undefined);}}
    else this.error='unavailable';
-   if(action!=='inspect'){this.#confirmedReplacement=undefined;this.uncertain=true;this.error='recoveryUncertain';this.#changed();await this.inspect();}
+   if(action!=='inspect'&&(result.ok||result.status===0||result.status>=500||result.code==='unexpected_response')){this.#confirmedReplacement=undefined;this.uncertain=true;this.error='recoveryUncertain';this.#changed();await this.inspect();}
   }
   this.#changed();
  }

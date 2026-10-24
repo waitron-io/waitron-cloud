@@ -4618,6 +4618,20 @@ qualification is unavailable until Docker returns; GitHub CI supplies the genuin
 Linux checks. Reproduce any new diagnostic recurrence before changing transport,
 accounting or cleanup behavior.
 
+## Recovery refusal messages and pasted codes (D192)
+
+Recovery now keeps the server's definite refusal message for approval, close and
+replacement, including rate limits, expired requests and lost permission. It
+reconciles only uncertain replies, so a refused action does not erase its error
+or lock approval as an unknown outcome. Outer code whitespace is trimmed before
+validation and sending; leading zeroes remain. Existing request binding,
+confirmations and permission guards stay in place.
+
+Native controller and stubbed-browser checks cover definite refusals, cooldowns,
+uncertain writes and padded codes. Real PostgreSQL recovery suites remain CI's
+gate while Docker is down locally. This does not qualify production recovery,
+prove an old server has stopped, or change the existing recovery source limits.
+
 ## Recovery screen scope and supplied choices (D158)
 
 When you return from Account, recovery now clears a backup selection that is not

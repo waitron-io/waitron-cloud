@@ -74,3 +74,52 @@ for(const field of ['pointId','venueId'] as const)test(`a successful approval re
  let reads=0;const calls:string[]=[];const c=new RecoveryController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{calls.push(path);if(path.endsWith('/approve'))return {ok:true,value:{...approved,operation:{...approved.operation,[field]:id}} as T};if(reads++===0)return {ok:true,value:pending as T};return {ok:false,status:0,code:'network_error',retryAfterMs:0};});
  c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;await c.approve();assert.equal(c.view?.state,'awaiting_owner');assert(c.uncertain);assert.deepEqual(calls,['/recovery/inspect','/recovery/approve','/recovery/inspect']);
 });
+
+for(const action of ['approve','close','replace'] as const)for(const {status,code,error}of [
+ {status:429,code:'rate_limited',error:'limited'},
+ {status:400,code:'invalid_input',error:'unavailable'},
+ {status:410,code:'link_unavailable',error:'recoveryExpired'},
+ {status:401,code:'unauthenticated',error:'pairSession'},
+ {status:403,code:'forbidden',error:'forbidden'},
+])test(`definite ${status} refusal of recovery ${action} keeps its error without another inspection`,async()=>{
+ const calls:string[]=[];
+ const view=action==='approve'?pending:{...approved,operation:{...approved.operation,status:'restored'},replacement};
+ const c=new RecoveryController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{
+  calls.push(path);return path.endsWith('/inspect')?{ok:true,value:view as T}:{ok:false,status,code,retryAfterMs:status===429?60000:0};
+ });
+ c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;
+ await c[action]();
+ assert.equal(c.error,error);assert.equal(c.uncertain,false);assert.equal(c.pending,false);
+ assert.deepEqual(calls,['/recovery/inspect','/recovery/'+action]);
+ if(status===429)assert.ok(c.waiting>0);
+ if(status===401||status===403){assert.equal(c.view,undefined);assert.equal(c.confirmReplacement,false);assert.equal(c.stopped,false);assert.equal(c.acceptLoss,false);}
+});
+
+for(const action of ['inspect','approve','close','replace'] as const)test(`recovery ${action} trims outer code whitespace and preserves leading zeroes`,async()=>{
+ const calls:{path:string;body:Record<string,unknown>|undefined}[]=[];
+ const ready={...approved,operation:{...approved.operation,status:'restored'},replacement};
+ const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{calls.push({path,body});return {ok:true,value:(path.endsWith('/inspect')&&action==='approve'?pending:ready) as T};});
+ c.open(id);c.account('owner');c.code='12345678';if(action!=='inspect')await c.inspect();c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;
+ c.code=' \t00123456\n ';await c[action]();
+ assert.equal(c.code,'00123456');const sent=calls.find(call=>call.path==='/recovery/'+action&&call.body?.code==='00123456');assert.ok(sent);
+});
+
+for(const action of ['approve','close','replace'] as const)for(const result of [
+ {ok:false,status:0,code:'network_error',retryAfterMs:0},
+ {ok:false,status:500,code:'temporarily_unavailable',retryAfterMs:0},
+ {ok:false,status:400,code:'unexpected_response',retryAfterMs:0},
+] as const)test(`uncertain recovery ${action} ${result.status}/${result.code} still reconciles without repeating the write`,async()=>{
+ const calls:string[]=[];let reads=0;
+ const ready={...approved,operation:{...approved.operation,status:'restored'},replacement};
+ const c=new RecoveryController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{
+  calls.push(path);if(!path.endsWith('/inspect'))return result;
+  return reads++===0?{ok:true,value:(action==='approve'?pending:ready) as T}:{ok:false,status:0,code:'network_error',retryAfterMs:0};
+ });
+ c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;await c[action]();
+ assert.equal(c.uncertain,true);assert.equal(c.confirmReplacement,false);assert.deepEqual(calls,['/recovery/inspect','/recovery/'+action,'/recovery/inspect']);
+});
+
+for(const code of ['12 345678','123456789','1234567','abcdefgh',''])test(`recovery still refuses malformed matching code ${JSON.stringify(code)} locally`,async()=>{
+ let calls=0;const c=new RecoveryController(()=>{},async<T>():Promise<ApiResult<T>>=>{calls++;return {ok:true,value:pending as T};});
+ c.open(id);c.account('owner');c.code=code;await c.inspect();assert.equal(calls,0);assert.equal(c.error,'pairCodeError');assert.equal(c.view,undefined);
+});
