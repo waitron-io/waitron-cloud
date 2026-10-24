@@ -117,7 +117,7 @@ const closeStages = new Set(['replication-transport', 'restore-transport', 'clea
   'cleanup-restore-transport', 'cleanup-replication-proxy', 'cleanup-restore-proxy', 'cleanup-admin-proxy']);
 const closeReasons = new Set(['request-validation', 'lifetime-completion', 'body-accounting', 'transfer-interrupted',
   'upstream-error', 'upstream-response-interrupted', 'client-error', 'phase-change', 'active-close']);
-const networkErrors = new Set(['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'ERR_STREAM_PREMATURE_CLOSE']);
+const networkErrors = new Set(['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'ERR_STREAM_PREMATURE_CLOSE', 'ERR_STREAM_UNABLE_TO_PIPE']);
 const ioEvents = new Set(['request-pipeline', 'response-aborted', 'response-error',
   'response-headers', 'response-pipeline', 'upstream-error', 'upstream-timeout', 'client-error']);
 const transportOperations = new Set(operations);
@@ -140,9 +140,12 @@ export async function withLitestreamCloseDiagnostics({ stage, close, report = li
     const raw = own(error, 'litestreamCloseDiagnostic'), reason = own(raw, 'reason');
     const diagnostic = {};
     if (closeReasons.has(reason)) diagnostic.reason = reason;
-    for (const key of ['pending', 'completed', 'connections']) {
+    for (const key of ['pending', 'completed', 'connections', 'idleActionsAtAdmission', 'idleActionsAtInterruption']) {
       const value = own(raw, key);
       if (Number.isSafeInteger(value) && value >= 0) diagnostic[key] = value;
+    }
+    for (const key of ['clientClosed', 'responseHeadersSeen']) {
+      const value = own(raw, key); if (typeof value === 'boolean') diagnostic[key] = value;
     }
     const code = own(raw, 'code'); if (networkErrors.has(code)) diagnostic.code = code;
     const ioEvent = own(raw, 'ioEvent'); if (ioEvents.has(ioEvent)) diagnostic.ioEvent = ioEvent;
@@ -167,9 +170,10 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   let invalid = false, closing, refusal, currentPhase = phase;
   const invocations = new Map(), pending = new Set(), connections = new Set();
   const idleWaiters = new Set();
-  let completed = 0;
-  const remember = (reason, error, ioEvent, operation) => {
-    refusal ??= { reason, ...(ioEvent ? { ioEvent, operation } : {}) };
+  let completed = 0, idleActionsStarted = 0;
+  const runIdleAction = action => { idleActionsStarted++; return action(); };
+  const remember = (reason, error, ioEvent, operation, context) => {
+    refusal ??= { reason, ...(ioEvent ? { ioEvent, operation, ...context } : {}) };
     if (refusal.reason === reason && !refusal.code && networkErrors.has(own(error, 'code'))) refusal.code = own(error, 'code');
   };
   const poison = (reason, error, ioEvent) => { remember(reason, error, ioEvent); invalid = true; meter.invalidate(); };
@@ -178,6 +182,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     const n = Number(value ?? 0); requireThat(Number.isSafeInteger(n)); return n;
   };
   const server = createServer(async (source, destination) => {
+    const idleActionsAtAdmission = idleActionsStarted;
     let id, name, expectedOut, completeLifetime, body;
     try {
       requireThat(!invalid && !closing && !Object.hasOwn(source.headers, 'x-amz-copy-source'));
@@ -202,12 +207,17 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       }
     } catch { poison('request-validation'); if (id) pending.delete(id.key); source.resume(); destination.writeHead(400); destination.end(); return; }
     let bytesOut = 0, bytesIn = 0, expectedIn = 0, statusCode = null, responseHeaders, sent = false, received = false, settled = false;
+    // Record the first failure's ordering; an idle callback does not freeze a separate writer process.
+    const rememberTransfer = (reason, error, ioEvent) => remember(reason, error, ioEvent, name, {
+      idleActionsAtAdmission, idleActionsAtInterruption: idleActionsStarted,
+      clientClosed: destination.destroyed, responseHeadersSeen: statusCode !== null,
+    });
     const responseChunks = lifetimes && ['delete-many', 'multipart-create', 'multipart-complete'].includes(name) ? [] : null;
     const finish = (interrupted, reason = 'transfer-interrupted', error, ioEvent) => {
       if (settled || !interrupted && (!sent || !received)) return;
       settled = true; pending.delete(id.key); completed++;
       // Lifetime refusal is a consequence of interrupted I/O; retain the original cause without changing invalidation.
-      if (interrupted) remember(reason, error, ioEvent, name);
+      if (interrupted) rememberTransfer(reason, error, ioEvent);
       let completing = 'lifetime-completion';
       try {
         completeLifetime?.({ statusCode, bytesOut, interrupted, responseHeaders,
@@ -221,13 +231,13 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       if (interrupted) poison(reason, error);
       if (pending.size === 0) for (const waiter of idleWaiters) {
         idleWaiters.delete(waiter);
-        try { requireThat(!invalid && !closing); waiter.resolve(waiter.action()); }
+        try { requireThat(!invalid && !closing); waiter.resolve(runIdleAction(waiter.action)); }
         catch { waiter.reject(Error('Invalid cloud cost Litestream audit')); }
       }
     };
     const upstream = request(endpoint, { method: source.method, path: source.url, headers: source.headers }, response => {
-      response.once('aborted', () => remember('upstream-response-interrupted', undefined, 'response-aborted', name));
-      response.on('error', error => remember('upstream-response-interrupted', error, 'response-error', name));
+      response.once('aborted', () => rememberTransfer('upstream-response-interrupted', undefined, 'response-aborted'));
+      response.on('error', error => rememberTransfer('upstream-response-interrupted', error, 'response-error'));
       try { statusCode = response.statusCode; responseHeaders = response.headers;
         expectedIn = source.method === 'HEAD' ? 0 : size(response.headers['content-length']); }
       catch (error) { finish(true, 'transfer-interrupted', error, 'response-headers'); response.destroy(); destination.destroy(); return; }
@@ -257,7 +267,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   return { url: `http://127.0.0.1:${server.address().port}`, whenIdle: async action => {
     requireThat(!invalid && !closing && typeof action === 'function');
-    if (pending.size === 0) return action();
+    if (pending.size === 0) return runIdleAction(action);
     return new Promise((resolve, reject) => idleWaiters.add({ action, resolve, reject }));
   }, setPhase: next => {
     try {

@@ -4673,6 +4673,20 @@ qualification is unavailable until Docker returns; GitHub CI supplies the genuin
 Linux checks. Reproduce any new diagnostic recurrence before changing transport,
 accounting or cleanup behavior.
 
+PR394's cost run 40099523703, job 120888687281, later refused a `list`
+response with `response-pipeline` after 22 completed attempts. A native real-HTTP
+probe reproduces that event when the client closes before upstream response
+headers arrive. Node's `ERR_STREAM_UNABLE_TO_PIPE` is now retained as a closed
+error category. First-failure diagnostics also record whether the client was
+closed, whether response headers had arrived, and the number of idle actions
+started at request admission and interruption. These counts distinguish a
+request before the smoke's stop action from one admitted after it; they do not
+freeze the writer or establish the historical cause. Interrupted accounting
+still refuses. Controlled cancellation before and after an idle action exercises
+the actual transport, and each case checks the original refusal and privacy
+boundary. Genuine Linux observations remain necessary before any shutdown fix.
+
+
 ## Recovery refusal messages and pasted codes (D192)
 
 Recovery now keeps the server's definite refusal message for approval, close and
