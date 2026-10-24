@@ -3216,7 +3216,10 @@ notifications separately.
   and email recovery remain available. Durable five-minute ceremonies are single-use,
   exact-origin and exact-RP checks are enforced, and a real Chromium virtual authenticator
   proves enrolment, sign-in, replay rejection, account isolation and removal in English
-  and Spanish. The account page now lists only your live management sessions, marks the
+  and Spanish. Passkey failures appear once in the relevant alert: beside your passkeys
+  on Account (including `/`), or in the sign-in error summary. Stubbed Chromium checks
+  cover both languages, light/dark themes and phone/desktop widths. The account page
+  now lists only your live management sessions, marks the
   current one and shows creation, last-use and effective-expiry times. You can revoke any
   session with a CSRF-protected, account-scoped action; uncertain replies reconcile from
   the passive list, and revoking the current session returns you to sign-in. Passkey rows
