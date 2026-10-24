@@ -144,7 +144,7 @@ for (const timing of ['before', 'immediate', 'waited']) test(`a cancelled list r
   assert.deepEqual(records.at(-1).diagnostic, {
     reason: 'transfer-interrupted', pending: 0, completed: timing === 'waited' ? 2 : 1, connections: 0,
     code: 'ERR_STREAM_UNABLE_TO_PIPE', ioEvent: 'response-pipeline', operation: 'list',
-    idleActionsAtAdmission: afterIdle ? 1 : 0, idleActionsAtInterruption: afterIdle ? 1 : 0,
+    idleActionsAtAdmission: afterIdle ? 1 : 0,
     clientClosed: true, responseHeadersSeen: true,
   });
   assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
@@ -161,4 +161,36 @@ test('hostile idle-ordering fields cannot escape the closed diagnostic categorie
     report: line => records.push(JSON.parse(line)) }), value => value === error);
   assert.deepEqual(records.at(-1).diagnostic, { reason: 'transfer-interrupted' });
   assert.equal(reads, 0); assert.equal(JSON.stringify(records).includes('PRIVATE_CANARY'), false);
+});
+
+for (const responseHeadersSeen of [false, true]) test(`upstream resets retain client state with response headers=${responseHeadersSeen}`, async t => {
+  let reset;
+  const backend = createServer((req, res) => {
+    req.resume(); req.on('end', () => {
+      if (!responseHeadersSeen) { res.destroy(); return; }
+      reset = () => res.destroy(); res.writeHead(200, { 'content-length': 100 }); res.write('x');
+    });
+  });
+  backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
+  t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
+  const meter = createMeter({ phase: 'workload', clock: () => 0 });
+  const transport = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`, meter, phase: 'workload' });
+  t.after(() => transport.close().catch(() => {}));
+  await new Promise(resolve => {
+    const client = request(transport.url + '/PRIVATE_CANARY/key', { headers }, res => {
+      res.on('error', resolve); res.once('data', () => reset()); res.resume(); res.on('end', resolve);
+    });
+    client.on('error', resolve); client.end();
+  });
+  const records = [];
+  await assert.rejects(withLitestreamCloseDiagnostics({ stage: 'replication-transport', close: () => transport.close(),
+    report: line => records.push(JSON.parse(line)) }));
+  const detail = records.at(-1).diagnostic;
+  assert.equal(detail.reason, responseHeadersSeen ? 'upstream-response-interrupted' : 'upstream-error');
+  assert.equal(detail.ioEvent, responseHeadersSeen ? 'response-aborted' : 'upstream-error');
+  assert.equal(detail.code, 'ECONNRESET'); assert.equal(detail.operation, 'get');
+  assert.equal(detail.idleActionsAtAdmission, 0);
+  assert.equal(detail.clientClosed, false); assert.equal(detail.responseHeadersSeen, responseHeadersSeen);
+  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+  assert.equal(JSON.stringify(records).includes('PRIVATE_CANARY'), false);
 });

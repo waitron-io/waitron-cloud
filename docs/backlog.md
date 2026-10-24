@@ -4673,19 +4673,38 @@ qualification is unavailable until Docker returns; GitHub CI supplies the genuin
 Linux checks. Reproduce any new diagnostic recurrence before changing transport,
 accounting or cleanup behavior.
 
-PR394's cost run 40099523703, job 120888687281, later refused a `list`
-response with `response-pipeline` after 22 completed attempts. A native real-HTTP
+[PR394's cost run 40099523703, job 120888687281](https://github.com/waitron-io/waitron-cloud/actions/runs/40099523703/job/120888687281)
+failed `genuinePinnedLitestreamDrainsCommittedPutRepliesBeforeShutdown` with
+`response-pipeline` during a `list`, after 22 completed attempts. A native real-HTTP
 probe reproduces that event when the client closes before upstream response
 headers arrive. Node's `ERR_STREAM_UNABLE_TO_PIPE` is now retained as a closed
-error category. First-failure diagnostics also record whether the client was
+error category. Transfer-failure diagnostics also record whether the client was
 closed, whether response headers had arrived, and the number of idle actions
-started at request admission and interruption. These counts distinguish a
-request before the smoke's stop action from one admitted after it; they do not
+started before request admission. That count distinguishes a request before
+the smoke's stop action from one admitted after it; it does not
 freeze the writer or establish the historical cause. Interrupted accounting
-still refuses. Controlled cancellation before and after an idle action exercises
-the actual transport, and each case checks the original refusal and privacy
-boundary. Genuine Linux observations remain necessary before any shutdown fix.
+still refuses. Controlled cancellation with no idle action and inside immediate
+or queued idle actions exercises the actual transport. Each case checks the
+original refusal and privacy boundary. Upstream resets before and after headers
+also check that the client and response state can be false.
 
+The four bounded Linux jobs in [run 40101340028](https://github.com/waitron-io/waitron-cloud/actions/runs/40101340028)
+ran 27 genuine delayed-reply cases: 25 passed and two refused. Both refusals
+record `ERR_STREAM_UNABLE_TO_PIPE`, `list`, a closed client, response headers,
+and idle-action counts of one at admission and interruption. The final
+diagnostic keeps the admission count; the interruption count was redundant.
+This establishes late admission during the smoke's stop action for those two observations;
+it does not identify which native goroutine issued the request or attribute
+every historical failure. The temporary observation workflow is removed after
+saving all four jobs and their exact checkouts.
+
+The shutdown repair remains open. Preserve full-session request, byte and
+lifetime evidence and the existing refusal for interrupted I/O. Investigate a
+native writer drain mechanism before changing stop behavior; merely waiting for
+an empty transport does not prevent new requests from that separate process.
+Any proposal to exclude shutdown traffic or accept incomplete evidence requires
+a separately reviewed change to the audit contract. This diagnostic milestone
+does not qualify either alternative.
 
 ## Recovery refusal messages and pasted codes (D192)
 

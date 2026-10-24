@@ -140,7 +140,7 @@ export async function withLitestreamCloseDiagnostics({ stage, close, report = li
     const raw = own(error, 'litestreamCloseDiagnostic'), reason = own(raw, 'reason');
     const diagnostic = {};
     if (closeReasons.has(reason)) diagnostic.reason = reason;
-    for (const key of ['pending', 'completed', 'connections', 'idleActionsAtAdmission', 'idleActionsAtInterruption']) {
+    for (const key of ['pending', 'completed', 'connections', 'idleActionsAtAdmission']) {
       const value = own(raw, key);
       if (Number.isSafeInteger(value) && value >= 0) diagnostic[key] = value;
     }
@@ -209,7 +209,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     let bytesOut = 0, bytesIn = 0, expectedIn = 0, statusCode = null, responseHeaders, sent = false, received = false, settled = false;
     // Record the first failure's ordering; an idle callback does not freeze a separate writer process.
     const rememberTransfer = (reason, error, ioEvent) => remember(reason, error, ioEvent, name, {
-      idleActionsAtAdmission, idleActionsAtInterruption: idleActionsStarted,
+      idleActionsAtAdmission,
       clientClosed: destination.destroyed, responseHeadersSeen: statusCode !== null,
     });
     const responseChunks = lifetimes && ['delete-many', 'multipart-create', 'multipart-complete'].includes(name) ? [] : null;
