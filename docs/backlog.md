@@ -4701,6 +4701,25 @@ it does not identify which native goroutine issued the request or attribute
 every historical failure. The temporary observation workflow is removed after
 saving all four jobs and their exact checkouts.
 
+A separate macOS counterexample uses the official Litestream 0.5.17 arm64
+release, archive SHA-256
+`e211f68ff7658d19f193f2914417afdf8f89a053ff8f263e5d6b3b1d3bbc7b08`.
+A loopback relay holds the native writer's first metadata list before the
+measuring transport admits it. The transport reports idle; its stop callback
+releases that request and sends SIGTERM. After the native process exits with
+code zero, the transport records `response-pipeline`, `list`,
+`ERR_STREAM_UNABLE_TO_PIPE`, a closed client, response headers and admission
+count one. The audit correctly refuses the interrupted exchange. Releasing
+and completing the held request before stopping passes the paired control.
+An initial upload without the relay delay also passes its stop control.
+
+This experiment uses a generated SQLite database and a controlled storage
+response. It does not run the Waitron workload, restore or Linux container,
+and it does not establish the historical cause. It proves that a native
+request issued before the callback can be admitted after it starts. You cannot
+use the admission count to infer when the native process issued the request,
+or treat an idle transport and exit code zero as a completed drain.
+
 The shutdown repair remains open. Preserve full-session request, byte and
 lifetime evidence and the existing refusal for interrupted I/O. Investigate a
 native writer drain mechanism before changing stop behavior; merely waiting for
