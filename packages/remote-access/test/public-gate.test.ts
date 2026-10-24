@@ -92,3 +92,70 @@ for(const dropConnection of [false,true])test(`unavailable venues return private
   assert.equal(f.gate.stats().unavailable,cases.length);assert.equal(f.gate.stats().forwarded,cases.length);assert.equal(f.gate.stats().active,0);
  }finally{await f.close();}
 });
+
+test('rotating 4096 addresses in one IPv6 /64 leaves another network able to request a challenge',async()=>{
+ const f=await fixture();try{
+  const statuses=new Map<number,number>();
+  for(let i=0;i<4096;i++){
+   const response=await f.send('/_cloud/challenge',{'x-waitron-client-ip':`2001:db8:1234:5678::${i.toString(16)}`});
+   statuses.set(response.status,(statuses.get(response.status)??0)+1);
+  }
+  assert.equal((await f.send('/_cloud/challenge',{'x-waitron-client-ip':'2001:db8:1234:5679::1'})).status,200,'another network must not be locked out');
+  assert.deepEqual([...statuses],[[200,120],[429,3976]]);
+  assert.equal(f.gate.stats().buckets,2);assert.equal(f.count(),0);
+ }finally{await f.close();}
+});
+
+for(const {name,first,second}of [
+ {name:'IPv6 /64 across compressed and expanded forms',first:'2001:db8:abcd:ffff::1',second:'2001:0DB8:ABCD:FFFF:ffff:ffff:ffff:ffff'},
+ {name:'IPv6 /64 with zeroes compressed inside its network prefix',first:'2001:0:0:1::1',second:'2001::1:ffff:ffff:ffff:ffff'},
+ {name:'IPv6 /64 with an embedded IPv4 tail',first:'2001:db8:1:2::192.0.2.1',second:'2001:db8:1:2::c000:202'},
+ {name:'IPv4 and its dotted mapped IPv6 form',first:'192.0.2.1',second:'::ffff:192.0.2.1'},
+ {name:'IPv4 and its expanded hexadecimal mapped IPv6 form',first:'192.0.2.1',second:'0000:0000:0000:0000:0000:FFFF:C000:0201'},
+])test(`public request allowance is shared by ${name}`,async()=>{
+ const f=await fixture();try{
+  for(let i=0;i<120;i++)assert.equal((await f.send('/_cloud/challenge',{'x-waitron-client-ip':i%2?second:first})).status,200);
+  assert.equal((await f.send('/_cloud/challenge',{'x-waitron-client-ip':second})).status,429);
+  assert.equal(f.gate.stats().buckets,1);assert.equal(f.count(),0);
+  f.advance(60000);
+  assert.equal((await f.send('/_cloud/challenge',{'x-waitron-client-ip':first})).status,200);
+  assert.equal(f.gate.stats().buckets,1);
+ }finally{await f.close();}
+});
+
+for(const {name,first,second}of [
+ {name:'neighbouring IPv6 /64 networks',first:'2001:db8:1:fffe::1',second:'2001:db8:1:ffff::1'},
+ {name:'individual IPv4 addresses',first:'192.0.2.1',second:'192.0.2.2'},
+ {name:'different mapped IPv4 addresses',first:'::ffff:192.0.2.1',second:'::ffff:c000:202'},
+])test(`public request allowances stay separate for ${name}`,async()=>{
+ const f=await fixture();try{
+  for(let i=0;i<120;i++)assert.equal((await f.send('/_cloud/challenge',{'x-waitron-client-ip':first})).status,200);
+  assert.equal((await f.send('/_cloud/challenge',{'x-waitron-client-ip':first})).status,429);
+  assert.equal((await f.send('/_cloud/challenge',{'x-waitron-client-ip':second})).status,200);
+  assert.equal(f.gate.stats().buckets,2);assert.equal(f.count(),0);
+ }finally{await f.close();}
+});
+
+test('sharing an IPv6 request allowance does not share challenge proofs or access cookies',async()=>{
+ const f=await fixture();try{
+  const source={'x-waitron-client-ip':'2001:db8:1:2::1'},neighbour={'x-waitron-client-ip':'2001:db8:1:2::2'};
+  const challenge=await (await f.send('/_cloud/challenge',source)).json() as {challenge:string;difficulty:number};
+  const body=JSON.stringify({challenge:challenge.challenge,nonce:solve(challenge.challenge,challenge.difficulty)});
+  assert.equal((await f.send('/_cloud/solve',neighbour,'POST',body)).status,403);
+  const answer=await f.send('/_cloud/solve',source,'POST',body);assert.equal(answer.status,204);
+  const cookie=answer.headers.get('set-cookie')!.split(';')[0]!;
+  assert.equal((await f.send('/public/availability',{...neighbour,cookie})).status,403);assert.equal(f.count(),0);
+  assert.equal((await f.send('/public/availability',{...source,cookie})).status,200);assert.equal(f.count(),1);
+ }finally{await f.close();}
+});
+
+test('4096 distinct source networks still bound the table and expired buckets free capacity',async()=>{
+ const f=await fixture();try{
+  for(let i=0;i<4096;i++)assert.equal((await f.send('/_cloud/challenge',{'x-waitron-client-ip':`2001:db8:${i.toString(16)}::1`})).status,200);
+  assert.equal((await f.send('/_cloud/challenge',{'x-waitron-client-ip':'2001:db9::1'})).status,429);
+  assert.equal(f.gate.stats().buckets,4096);assert.equal(f.count(),0);
+  f.advance(60000);
+  assert.equal((await f.send('/_cloud/challenge',{'x-waitron-client-ip':'2001:db9::1'})).status,200);
+  assert.equal(f.gate.stats().buckets,1);
+ }finally{await f.close();}
+});

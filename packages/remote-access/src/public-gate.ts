@@ -5,6 +5,15 @@ import {request} from 'node:https';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 interface Route {publicHostname:string;staffHostname:string;address:string;port:number}
 interface Options {key:Buffer;ca?:string|Buffer;routes:()=>Route[];difficulty?:number;now?:()=>number}
+function sourceBucket(ip:string):string{
+ if(isIP(ip)===4)return ip;
+ // URL canonicalisation handles embedded IPv4 without adding a dependency to the source-only gateway image.
+ const address=new URL(`http://[${ip.split('%')[0]}]/`).hostname.slice(1,-1);
+ const [start,end]=address.split('::'),left=start!.split(':').filter(Boolean),right=(end??'').split(':').filter(Boolean);
+ const words=(end===undefined?left:[...left,...Array<string>(8-left.length-right.length).fill('0'),...right]).map(word=>parseInt(word,16));
+ if(words.slice(0,5).every(word=>word===0)&&words[5]===0xffff)return [words[6]!>>>8,words[6]!&255,words[7]!>>>8,words[7]!&255].join('.');
+ return words.slice(0,4).map(word=>word.toString(16)).join(':')+'/64';
+}
 const worker=`onmessage=async({data})=>{const encoder=new TextEncoder();for(let nonce=0;nonce<1000000000;nonce++){const hash=new DataView(await crypto.subtle.digest('SHA-256',encoder.encode(data.challenge+':'+nonce)));if(hash.getUint32(0)<2**(32-data.difficulty)){postMessage({challenge:data.challenge,nonce});return;}}};`;
 const script=`(async()=>{try{const challenge=await(await fetch('/_cloud/challenge')).json();const worker=new Worker('/_cloud/worker.js');worker.onmessage=async({data})=>{worker.terminate();const reply=await fetch('/_cloud/solve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(!reply.ok)throw Error();location.replace('/public/availability');};worker.postMessage(challenge);}catch{document.querySelector('p').textContent='Please reload to try again. / Vuelve a cargar para intentarlo de nuevo.';}})();`;
 /** Bind this handler to loopback only, behind HAProxy's overwritten client-IP/SNI headers. */
@@ -26,7 +35,8 @@ export function createPublicGate(options:Options){
    if(typeof ip!=='string'||!isIP(ip)||typeof sni!=='string'||host!==sni||![sni,sni+':443'].includes(req.headers.host??'')){counters.rejected++;reply(421);return;}
    const route=options.routes().find(r=>r.publicHostname===host);if(!route){counters.rejected++;reply(421);return;}
    for(const [key,b]of buckets)if(b.until<=now())buckets.delete(key);
-   let bucket=buckets.get(ip);if(!bucket){if(buckets.size>=4096){counters.rejected++;reply(429);return;}bucket={count:0,until:now()+60000};buckets.set(ip,bucket);}
+   const source=sourceBucket(ip);
+   let bucket=buckets.get(source);if(!bucket){if(buckets.size>=4096){counters.rejected++;reply(429);return;}bucket={count:0,until:now()+60000};buckets.set(source,bucket);}
    if(++bucket.count>120){counters.rejected++;reply(429);return;}
    if(req.headers.upgrade||Number(req.headers['content-length']??0)>2048){counters.rejected++;reply(413);return;}
    const path=req.url;
