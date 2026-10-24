@@ -4017,6 +4017,18 @@ also stops Docker's own registry transfer. Qualify that with a real daemon and a
 controlled registry when local Docker is available; do not infer it from client
 termination.
 
+## Backup recovery wait observation (D164)
+
+A controlled Linux PostgreSQL reproduction in [PR #355](https://github.com/waitron-io/waitron-cloud/pull/355)
+pauses the activity snapshot before its live blocker check. It reproduces the
+expiry-query/qualification-lock mismatch from #352's independent merge. The test
+observer now acknowledges a blocked backend first, then reads its query in a new
+statement while the caller still holds the blocker. The original operation and
+proof-expiry cases record backend IDs, query times, wait events and stages. All
+original expiry guards, refusal assertions and deadlines remain unchanged;
+production recovery code is unchanged. This establishes an observer defect that
+can explain the historical failure, without proving that run's exact timing.
+
 ## Account HTTP reset-mail capture
 
 [CI run 39730254198](https://github.com/waitron-io/waitron-cloud/actions/runs/39730254198)
@@ -4512,14 +4524,3 @@ identify the service and state, reproduce its cause, then fix it test-first.
 Every isolation check and existing deadline remains unchanged. Local
 Docker-backed checks are unavailable while Docker is down; GitHub CI supplies
 that evidence.
-
-
-## Backup recovery wait observation (D164)
-
-The independent merge of [PR #352](https://github.com/waitron-io/waitron-cloud/pull/352)
-failed the proof-expiry case in `recovery-qualification.test.ts`: its observer
-reported an expiry query while acknowledging a qualification lock. The source and
-test matched the green candidate, which does not establish the cause. A controlled
-Linux PostgreSQL experiment pauses the activity observer before its live blocker
-check and records both backend IDs, query times, wait events and test stages.
-Preserve every expiry guard, refusal assertion and deadline while investigating.

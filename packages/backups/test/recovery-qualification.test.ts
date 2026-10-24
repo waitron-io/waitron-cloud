@@ -84,9 +84,17 @@ test('restored report changes no registration, keys, routing, or activation stat
  const before=await snapshot();await f.recovery.target(f.t.id,'restored',f.t.envelope('restored',f.point.digest));
  assert.deepEqual(await snapshot(),before);assert.equal((await f.recovery.status(f.session.token,f.t.id)).status,'restored');
 });
-async function blockedBy(id:number,observer:Pick<typeof db.secondPool,'query'>=db.secondPool){
+async function blockedBy(id:number,observer:Pick<typeof db.secondPool,'query'>=db.secondPool,diagnostic?:(sample:Record<string,unknown>)=>void){
  const until=Date.now()+4000;
- while(Date.now()<until){const row=(await observer.query('SELECT query FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[db.schema,id])).rows[0];if(row)return String(row.query);await new Promise(r=>setTimeout(r,10));}
+ while(Date.now()<until){
+  const waiter=(await observer.query('SELECT pid FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[db.schema,id])).rows[0];
+  if(waiter){
+   // Callers hold the blocker until this returns; a new statement reads activity after the live lock acknowledgement.
+   const current=(await observer.query('SELECT pid,query,query_start,state,wait_event_type,wait_event,pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE pid=$1',[waiter.pid])).rows[0];
+   if(current){diagnostic?.({blockerPid:id,...current});return String(current.query);}
+  }
+  await new Promise(r=>setTimeout(r,10));
+ }
  assert.fail('operation must wait for the acknowledged PostgreSQL lock');
 }
 test('approval rechecks qualification after waiting for the selected point foreign key',async()=>{
@@ -137,12 +145,12 @@ test('completed replay locks the current installation before the backup venue',a
   await blocker.query('COMMIT');assert.deepEqual(await pending,result);
  }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
 });
-for(const expiry of ['operation','proof'] as const)test(`info rechecks ${expiry} expiry after a qualification lookup waits`,async()=>{
+for(const expiry of ['operation','proof'] as const)test(`info rechecks ${expiry} expiry after a qualification lookup waits`,async context=>{
  const f=await approved(),blocker=await db.secondPool.connect(),id=(await blocker.query('SELECT pg_backend_pid() AS id')).rows[0].id,proof=f.t.envelope('info'),now=Date.now;let pending:Promise<unknown>|undefined;
  try{
   await blocker.query('BEGIN');await blocker.query('LOCK backup_verification_attempts IN ACCESS EXCLUSIVE MODE');
   pending=f.recovery.target(f.t.id,'info',proof);const refused=assert.rejects(pending,expiry==='operation'?/unavailable/:/invalid_proof/);void refused.catch(()=>{});
-  assert.match(await blockedBy(id),/FROM backup_point_qualification/);
+  assert.match(await blockedBy(id,db.secondPool,sample=>context.diagnostic(JSON.stringify({stage:`${expiry} expiry: qualification wait acknowledged`,...sample}))),/FROM backup_point_qualification/);
   if(expiry==='operation')await blocker.query("UPDATE backup_recoveries SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",[f.t.id]);
   else Date.now=()=>now()+61000;
   await blocker.query('COMMIT');await refused;
