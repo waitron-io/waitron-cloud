@@ -21,7 +21,7 @@ plan.services.gateway.command = ['node', '--import', '/code/gateway-config-fault
 const bytes = JSON.stringify(plan);
 writeFileSync(args.prepared.file, bytes);
 const journal = JSON.parse(readFileSync(args.journal.path, 'utf8'));
-journal.localResources.find(row => row.kind === 'compose-plan' && row.path === args.prepared.file).sha256 = createHash('sha256').update(bytes).digest('hex');
+journal.localResources.find(row => row.kind === 'compose-plan' && row.state === 'ready' && row.path === args.prepared.file).sha256 = createHash('sha256').update(bytes).digest('hex');
 writeFileSync(args.journal.path, JSON.stringify(journal));
 let observed = false;
 globalThis.gatewayIsolationProbe = (command, argv, options) => {
