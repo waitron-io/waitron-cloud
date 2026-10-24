@@ -5,7 +5,7 @@ import {execFileSync, spawnSync} from 'node:child_process';
 import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 
 const policyPath = 'scripts/ci-input-audit.json';
 const revision = 'a'.repeat(40);
@@ -310,4 +310,37 @@ test('staged renewal never follows a live policy link outside its output path', 
   const result = cli('--write-staged');
   assert.notEqual(result.status, 0, 'A staged regular policy cannot authorise writing through a live link');
   assert.equal(readFileSync(target, 'utf8'), 'Unrelated owner content\n');
+}));
+
+test('staged generation refuses a corrupted generated digest before changing output or index', () => stagedFixture(({root, git, write, cli}) => {
+  const original = readFileSync(join(root, policyPath), 'utf8');
+  const index = git('write-tree');
+  const healthy = cli('--write-staged');
+  assert.equal(healthy.status, 0, healthy.stdout + healthy.stderr);
+  assert.notEqual(readFileSync(join(root, policyPath), 'utf8'), original);
+  assert.equal(git('write-tree'), index);
+  writeFileSync(join(root, policyPath), original);
+
+  // Corrupt only output serialization: staged input parsing and real Git reads still run.
+  write('corrupt-generated-audit.mjs', `const stringify = JSON.stringify;
+JSON.stringify = function(value, replacer, space) {
+  if (space === 2 && value?.docsInputSha256) {
+    JSON.stringify = stringify;
+    process.stderr.write('Injected invalid generated digest\\n');
+    return stringify({...value, docsInputSha256: 'invalid-generated-digest'}, replacer, space);
+  }
+  return stringify(value, replacer, space);
+};
+`);
+  const before = git('status', '--porcelain');
+  const result = spawnSync(process.execPath, ['--import', pathToFileURL(join(root, 'corrupt-generated-audit.mjs')).href,
+    fileURLToPath(new URL('./ci-input-audit.mjs', import.meta.url)), '--write-staged'],
+  {cwd: root, encoding: 'utf8', timeout: 10_000});
+  assert.ifError(result.error);
+  assert.match(result.stderr, /Injected invalid generated digest/);
+  assert.equal(result.status, 1, `Invalid generated output must be refused: ${result.stdout}${result.stderr}`);
+  assert.match(result.stderr, /Invalid input audit digest: docsInputSha256/);
+  assert.equal(readFileSync(join(root, policyPath), 'utf8'), original, 'Refusal must preserve the existing output');
+  assert.equal(git('write-tree'), index, 'Refusal must preserve staged inputs');
+  assert.equal(git('status', '--porcelain'), before, 'Refusal must leave the working tree unchanged');
 }));
