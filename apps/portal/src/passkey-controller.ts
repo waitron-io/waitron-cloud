@@ -66,6 +66,7 @@ export class PasskeyController {
   }
 
   #cancelled(error: unknown) {
+    if (error instanceof Error && error.cause instanceof DOMException) error = error.cause;
     return error instanceof DOMException && ['NotAllowedError', 'AbortError'].includes(error.name);
   }
 

@@ -64,6 +64,20 @@ test('unsupported browsers retain password sign-in and do not start ceremonies',
   assert.equal(calls, 0);
 });
 
+test('wrapped browser cancellation keeps cancellation feedback distinct from other failures', async () => {
+  for (const name of ['NotAllowedError', 'AbortError', 'SecurityError']) {
+    const cause = new DOMException('Browser refused the prompt', name);
+    const wrapped = new Error(cause.message, {cause});
+    wrapped.name = name;
+    const controller = new PasskeyController(() => {}, async <T>(): Promise<ApiResult<T>> =>
+      ({ok: true, value: authenticationOptions as T}), browser({authenticate: async () => {throw wrapped;}}));
+    assert.equal(await controller.signIn(), false);
+    assert.equal(controller.pending, false);
+    assert.equal(controller.notice, name === 'SecurityError' ? undefined : 'passkeyCancelled', name);
+    assert.equal(controller.error, name === 'SecurityError' ? 'passkeyUnavailable' : undefined, name);
+  }
+});
+
 test('enrolment requires the current password, refreshes the list, and fences account changes', async () => {
   const calls: Array<{path: string; body: unknown}> = [];
   let wrongPassword = true;
