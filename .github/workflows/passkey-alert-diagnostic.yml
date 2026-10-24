@@ -27,7 +27,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: pnpm --filter @waitron-cloud/portal exec playwright install --with-deps chromium
-      - name: Observe bounded original journeys
+      - name: Observe the delayed activity reply ordering
         run: |
           mkdir -p diagnostics
           python3 -u - <<'PYTHON'
@@ -36,14 +36,15 @@ jobs:
           import subprocess, json
           def observe(index):
               result = subprocess.run(['node', '--test', '--test-timeout=120000', 'test/passkey-error-browser.test.ts'],
-                  cwd='apps/portal', capture_output=True, text=True, timeout=150)
+                  cwd='apps/portal', capture_output=True, text=True, timeout=150,
+                  env={**__import__('os').environ, 'D196_ORDER_ACTIVITY': '1'})
               Path(f'diagnostics/journey-{index}.log').write_text(result.stdout + result.stderr)
               print(json.dumps({'journey': index, 'exit': result.returncode}), flush=True)
               if result.returncode:
                   print(result.stdout + result.stderr, flush=True)
               return result.returncode
           with ThreadPoolExecutor(max_workers=2) as workers:
-              results = [future.result() for future in as_completed([workers.submit(observe, i) for i in range(12)])]
+              results = [future.result() for future in as_completed([workers.submit(observe, i) for i in range(2)])]
           print(json.dumps({'runs': len(results), 'failed': sum(bool(r) for r in results)}), flush=True)
           PYTHON
       - uses: actions/upload-artifact@v4

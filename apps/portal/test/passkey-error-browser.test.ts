@@ -47,8 +47,18 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             isUserVerified: true, automaticPresenceSimulation: true,
           }});
           const c = translations[locale], account = path !== '/login';
+          const delayedActivity = process.env.D196_ORDER_ACTIVITY === '1' && path === '/';
+          let finishActivity!: () => void;
+          const activityFinished = new Promise<void>(resolve => { finishActivity = resolve; });
           await page.route('https://portal.test' + path, route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
-          await page.route('**/api/account/**', route => {
+          await page.route('**/api/account/**', async route => {
+            if (delayedActivity && new URL(route.request().url()).pathname.endsWith('/session/activity')) {
+              await page.waitForFunction(() => (window as any).diagnosticApp.passkeys.error === 'passkeyPasswordInvalid');
+              record({kind: 'release-activity-after-wrong-password'});
+              await route.fulfill({json: {accountId: 'owner', expiresAt: '2099-01-01T00:00:00Z'}});
+              finishActivity();
+              return;
+            }
             const endpoint = new URL(route.request().url()).pathname;
             if (endpoint.endsWith('/session') || endpoint.endsWith('/session/activity')) return account
               ? route.fulfill({json: {accountId: 'owner', expiresAt: '2099-01-01T00:00:00Z'}})
@@ -66,6 +76,10 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             await page.locator('input[name=passkeyPassword]').fill('An incorrect account password');
             await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
           } else await page.getByRole('button', {name: c.passkeySignIn, exact: true}).click();
+          if (delayedActivity) {
+            await activityFinished;
+            await page.waitForFunction(() => (window as any).diagnosticApp.passkeys.loaded);
+          }
           const message = account ? c.passkeyPasswordInvalid : c.passkeyUnavailable;
           const localAlert = page.locator(account ? '.passkeys' : 'wt-form-error-summary').getByRole('alert').filter({hasText: message});
           await localAlert.waitFor();
