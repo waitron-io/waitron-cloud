@@ -272,6 +272,45 @@ test('all four audits pass together in a committed checkout and check never writ
   assert.notEqual(cli('--check', old).status, 0, 'New head cannot qualify old placeholders');
 }));
 
+test('staged generation from a subfolder refuses without overwriting a lookalike policy', () => stagedFixture(({root, git, write, cli}) => {
+  const original = readFileSync(join(root, policyPath), 'utf8');
+  const healthy = cli('--write-staged');
+  assert.equal(healthy.status, 0, healthy.stdout + healthy.stderr);
+  assert.notEqual(readFileSync(join(root, policyPath), 'utf8'), original);
+  writeFileSync(join(root, policyPath), original);
+  const nestedPath = 'packages/example/scripts/ci-input-audit.json';
+  const nestedContent = 'Unrelated nested policy\n';
+  write(nestedPath, nestedContent);
+  const index = git('write-tree');
+  const before = git('status', '--porcelain');
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./ci-input-audit.mjs', import.meta.url)), '--write-staged'],
+    {cwd: join(root, 'packages/example'), encoding: 'utf8', timeout: 10_000});
+  assert.ifError(result.error);
+  assert.equal(result.status, 1, `Subfolder generation must refuse: ${result.stdout}${result.stderr}`);
+  assert.match(result.stderr, /repository root/i);
+  assert.equal(readFileSync(join(root, policyPath), 'utf8'), original, 'Refusal must preserve the root policy');
+  assert.equal(readFileSync(join(root, nestedPath), 'utf8'), nestedContent, 'Refusal must preserve the nested policy');
+  assert.equal(git('write-tree'), index, 'Refusal must preserve staged inputs');
+  assert.equal(git('status', '--porcelain'), before, 'Refusal must leave the working tree unchanged');
+}));
+
+test('committed audit checking from a subfolder remains read only', () => stagedFixture(({root, git, cli, save}) => {
+  const generated = cli('--write-staged');
+  assert.equal(generated.status, 0, generated.stdout + generated.stderr);
+  const head = save();
+  const policyBefore = readFileSync(join(root, policyPath), 'utf8');
+  const index = git('write-tree');
+  const before = git('status', '--porcelain');
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./ci-input-audit.mjs', import.meta.url)), '--check', head],
+    {cwd: join(root, 'packages/example'), encoding: 'utf8', timeout: 10_000});
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  for (const mode of modes) assert.match(result.stdout, new RegExp('^' + mode + ': current$', 'm'));
+  assert.equal(readFileSync(join(root, policyPath), 'utf8'), policyBefore);
+  assert.equal(git('write-tree'), index);
+  assert.equal(git('status', '--porcelain'), before);
+}));
+
 test('staged renewal refuses unsupported incomplete and nonregular workspace inputs without writing', () => stagedFixture(({root, git, write, cli}) => {
   const baseline = git('rev-parse', 'HEAD').trim();
   const cases = [
