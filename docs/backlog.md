@@ -3736,8 +3736,13 @@ notifications separately.
   installation, probe and alert-outcome counts use your language's number grouping
   without losing integer precision, including values larger than JavaScript's exact
   number range. Native formatter and stubbed browser checks cover all six count fields
-  in English and Spanish; byte formatting keeps its separate scale rules. PostgreSQL and
-  browser tests prove retry rollback, tenant isolation and fresh/incomplete views. This is
+  in English and Spanish; byte formatting keeps its separate scale rules. A failed usage
+  read shows one alert, while a rate-limited read keeps the page countdown. Pending reads
+  still show their wait message; an idle empty view explains unavailable totals, and a
+  failed refresh retains earlier totals. Stubbed browser checks cover 503 and 429 replies,
+  retry and empty states in both languages, light and dark, at phone and desktop widths.
+  PostgreSQL and browser tests prove retry rollback, tenant isolation and fresh/incomplete
+  views. This is
   observational only. A bounded watch worker now runs in the local deployment, retries
   failed passes and exposes stalled progress through existing operations freshness.
   PostgreSQL CLI tests cover competing workers, rollback/interruption, restart catch-up,
