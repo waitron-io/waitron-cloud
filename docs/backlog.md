@@ -3238,7 +3238,10 @@ notifications separately.
   exact-origin and exact-RP checks are enforced, and a real Chromium virtual authenticator
   proves enrolment, sign-in, replay rejection, account isolation and removal in English
   and Spanish. Passkey failures appear once in the relevant alert: beside your passkeys
-  on Account (including `/`), or in the sign-in error summary. Stubbed Chromium checks
+  on Account (including `/`), or in the sign-in error summary. Passkey and session
+  controls honour the server’s Retry-After wait, show its countdown and become available
+  when it ends. Navigation retains the wait; follow-up reads still reconcile uncertain
+  changes without shortening a longer wait. Stubbed Chromium checks
   cover both languages, light/dark themes and phone/desktop widths, with a Chromium
   virtual authenticator so the fixture offers passkeys on Linux too. Qualification
   also exposed an independent rotation wait-observer failure in
