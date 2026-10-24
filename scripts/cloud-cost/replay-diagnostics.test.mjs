@@ -22,3 +22,49 @@ test('pacedReplayReporterLeavesSuccessfulResultsUnchanged', async () => {
   assert.equal(await helper.withReplayDiagnostics(async () => 207, text => messages.push(text)), 207);
   assert.deepEqual(messages, []);
 });
+
+for (const [name, makeError] of [
+  ['null', () => null],
+  ['undefined', () => undefined],
+  ['throwing descriptor trap', () => new Proxy(Error('Replay refused'), {
+    getOwnPropertyDescriptor() { throw Error('Descriptor inspection refused'); },
+    get() { throw Error('Property read refused'); },
+  })],
+  ['revoked proxy', () => {
+    const {proxy, revoke} = Proxy.revocable(Error('Replay refused'), {});
+    revoke();
+    return proxy;
+  }],
+  ['circular diagnostic', () => {
+    const diagnostic = {stage: 'replay'};
+    diagnostic.trace = diagnostic;
+    return Object.assign(Error('Replay refused'), {diagnostic});
+  }],
+  ['unserializable diagnostic', () => Object.assign(Error('Replay refused'), {diagnostic: {elapsed: 1n}})],
+]) test('pacedReplayReporterPreservesTheOriginalRefusalWith_' + name, async () => {
+  const original = makeError(), messages = [];
+  let caught = false;
+  try { await helper.withReplayDiagnostics(async () => { throw original; }, text => messages.push(text)); }
+  catch (error) { caught = true; assert.ok(error === original, 'preserve the exact thrown value'); }
+  assert.equal(caught, true, 'the replay must still refuse');
+  assert.deepEqual(messages, []);
+});
+
+test('pacedReplayReporterDoesNotInvokeDiagnosticAccessors', async () => {
+  const original = Error('Replay refused'), messages = [];
+  let reads = 0;
+  Object.defineProperty(original, 'diagnostic', {get() { reads++; return {stage: 'replay'}; }});
+  await assert.rejects(helper.withReplayDiagnostics(async () => { throw original; }, text => messages.push(text)), error => error === original);
+  assert.equal(reads, 0, 'diagnostics must not execute error accessors');
+  assert.deepEqual(messages, []);
+});
+
+test('pacedReplayReporterPreservesTheOriginalRefusalWhenTheReporterThrows', async () => {
+  const original = Object.assign(Error('Replay refused'), {diagnostic: {stage: 'replay'}});
+  let attempts = 0;
+  await assert.rejects(helper.withReplayDiagnostics(async () => { throw original; }, () => {
+    attempts++;
+    throw Error('Report output refused');
+  }), error => error === original);
+  assert.equal(attempts, 1);
+});

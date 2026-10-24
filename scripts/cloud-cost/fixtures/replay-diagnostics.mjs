@@ -2,7 +2,11 @@
 export async function withReplayDiagnostics(operation, report) {
   try { return await operation(); }
   catch (error) {
-    if (error.diagnostic) report(JSON.stringify(error.diagnostic));
+    // Diagnostic inspection and output must preserve the original replay refusal.
+    try {
+      const diagnostic = error && Object.getOwnPropertyDescriptor(error, 'diagnostic')?.value;
+      if (diagnostic) report(JSON.stringify(diagnostic));
+    } catch {}
     throw error;
   }
 }
