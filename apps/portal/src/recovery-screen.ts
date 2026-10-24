@@ -7,6 +7,7 @@ export function recoveryScreen(app:PortalApp){
  if(app.session.state.kind!=='authenticated')return html`<p role="status">${c.checking}</p><wt-button .disabled=${!!app.waiting} @click=${()=>{void app.session.check();}}>${c.retry}</wt-button>`;
  const disabled=r.pending||!!app.waiting,op=r.view?.operation,replacement=r.view?.replacement,complete=replacement?.state==='complete',expired=!!r.view&&!complete&&Date.parse(op?.expiresAt??r.view.expiresAt)<=Date.now();
  const venues=[...new Map(installations.visible.filter(i=>i.canRevoke&&i.environment==='test').map(i=>[i.venueId,i])).values()];
+ const selectionDisabled=disabled||installations.pending;
  const available=venues.some(i=>i.venueId===b.venueId);
  const selected=b.page?.points.find(p=>p.id===b.selected&&p.verification==='verified'),continuous=b.page?.continuousRecovery,selectionTime=b.selectedSource==='continuous'?continuous?.recoverableAt:selected?.capturedAt,ready=available&&(b.selectedSource==='continuous'?!!continuous:!!selected);
  return html`<p>${c.recoveryIntro}</p><p>${c.recoveryLocal}</p>
@@ -29,13 +30,13 @@ export function recoveryScreen(app:PortalApp){
    </section>`:nothing}
   ${r.view&&!op&&!expired?html`
     ${installations.error?html`<p role="alert">${c[installations.error]}</p>`:nothing}
-    <wt-button .disabled=${disabled||installations.pending} @click=${()=>{void installations.load();}}>${c.refreshStatus}</wt-button>
-    ${installations.organisations.length>1?html`<label>${c.recoveryOrganisation}<select aria-label=${c.recoveryOrganisation} ?disabled=${disabled||installations.pending} @change=${(e:Event)=>{installations.selectOrganisation((e.target as HTMLSelectElement).value);}}>${installations.organisations.map(o=>html`<option value=${o.id} .selected=${o.id===installations.selectedOrganisation}>${o.name}</option>`)}</select></label>`:nothing}
-    <label class="business-choice">${c.recoveryVenue}<select aria-label=${c.recoveryVenue} ?disabled=${disabled} @change=${(e:Event)=>{const value=(e.target as HTMLSelectElement).value;if(value)void b.open(value);else{b.close();r.choose(undefined,undefined);app.draw();}}}><option value="" .selected=${!b.venueId}>${c.recoveryChooseVenue}</option>${venues.map(i=>html`<option value=${i.venueId} .selected=${i.venueId===b.venueId}>${i.overview?.businessName??i.legalBusinessId} · ${i.venueId}</option>`)}</select></label>
+    <wt-button .disabled=${selectionDisabled} @click=${()=>{void installations.load();}}>${c.refreshStatus}</wt-button>
+    ${installations.organisations.length>1?html`<label>${c.recoveryOrganisation}<select aria-label=${c.recoveryOrganisation} ?disabled=${selectionDisabled} @change=${(e:Event)=>{installations.selectOrganisation((e.target as HTMLSelectElement).value);}}>${installations.organisations.map(o=>html`<option value=${o.id} .selected=${o.id===installations.selectedOrganisation}>${o.name}</option>`)}</select></label>`:nothing}
+    <label class="business-choice">${c.recoveryVenue}<select aria-label=${c.recoveryVenue} ?disabled=${selectionDisabled} @change=${(e:Event)=>{const value=(e.target as HTMLSelectElement).value;if(value)void b.open(value);else{b.close();r.choose(undefined,undefined);app.draw();}}}><option value="" .selected=${!b.venueId}>${c.recoveryChooseVenue}</option>${venues.map(i=>html`<option value=${i.venueId} .selected=${i.venueId===b.venueId}>${i.overview?.businessName??i.legalBusinessId} · ${i.venueId}</option>`)}</select></label>
     ${available&&b.venueId?backupScreen(app,b.venueId):nothing}
     ${ready&&selectionTime?html`<p><strong>${c.recoveryLoss} ${new Date(selectionTime).toLocaleString(app.locale)}</strong></p>
-      <label class="disclosure"><input type="checkbox" .checked=${r.stopped} ?disabled=${disabled||r.uncertain} @change=${(e:Event)=>{r.stopped=(e.target as HTMLInputElement).checked;app.draw();}}> ${c.recoveryStopped}</label>
-      <label class="disclosure"><input type="checkbox" .checked=${r.acceptLoss} ?disabled=${disabled||r.uncertain} @change=${(e:Event)=>{r.acceptLoss=(e.target as HTMLInputElement).checked;app.draw();}}> ${c.recoveryAcceptLoss}</label>
-      <wt-button variant="primary" .disabled=${disabled||r.uncertain||!r.stopped||!r.acceptLoss} @click=${()=>{void r.approve();}}>${c.recoveryApprove}</wt-button>`:nothing}`:nothing}
+      <label class="disclosure"><input type="checkbox" .checked=${r.stopped} ?disabled=${selectionDisabled||r.uncertain} @change=${(e:Event)=>{r.stopped=(e.target as HTMLInputElement).checked;app.draw();}}> ${c.recoveryStopped}</label>
+      <label class="disclosure"><input type="checkbox" .checked=${r.acceptLoss} ?disabled=${selectionDisabled||r.uncertain} @change=${(e:Event)=>{r.acceptLoss=(e.target as HTMLInputElement).checked;app.draw();}}> ${c.recoveryAcceptLoss}</label>
+      <wt-button variant="primary" .disabled=${selectionDisabled||r.uncertain||!r.stopped||!r.acceptLoss} @click=${()=>{void r.approve();}}>${c.recoveryApprove}</wt-button>`:nothing}`:nothing}
   <wt-form-actions><wt-button .disabled=${disabled||app.logoutDisabled} @click=${()=>{void app.logout();}}>${c.signout}</wt-button><a href="/account" @click=${(e:MouseEvent)=>app.follow(e,'/account')}>${c.account}</a></wt-form-actions>`;
 }

@@ -4543,3 +4543,17 @@ changes and the unchanged action. The browser checks cover English and Spanish,
 light and dark, at 390 and 1280 pixels. Removing each new reconciliation guard
 in a disposable copy makes its regression fail. PostgreSQL suites run in GitHub
 CI while Docker is down locally.
+
+## Venue actions during installation refresh (D166)
+
+Recovery now waits for an installation refresh before you change its venue,
+recovery source or confirmations, or approve recovery. Account also waits before
+you open or update snapshots and remote access, change translation consent or
+download installation diagnostics. Closing an open panel remains available.
+
+Stubbed Chromium checks hold the refresh and prove that Approve sends no request.
+Removing the chosen venue clears its recovery source and open Account panels;
+retaining it restores the controls. A failed refresh restores Recovery's controls
+and shows the error. Both languages, themes and widths are covered. These screen
+checks use supplied server responses; PostgreSQL checks run in GitHub CI while
+local Docker is down. Server permission checks and request contents are unchanged.
