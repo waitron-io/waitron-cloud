@@ -3378,7 +3378,11 @@ notifications separately.
   The portal removes whitespace, preserves recovery-code hyphens and refuses empty proof
   or activation codes before sending. Passwords and server validation stay unchanged.
   `node --test apps/portal/test/authenticator-controller.test.ts` covers each request path.
-  Local refusal of blank codes still needs visible form feedback as a portal follow-up.
+  Blank codes and missing passwords now show a message in English or Spanish before
+  any request. Sign-in, setup, replacement, activation, removal and code regeneration
+  retain the entered values for correction; pending requests and cooldowns keep their
+  existing feedback. Stubbed-route Chromium checks cover correction and submission
+  in both themes and phone/desktop widths without changing server authority checks.
   The populated 34-to-35 upgrade/restore rehearsal and packaged stack clean-install,
   restart, rebuild/upgrade and cleanup proofs passed with 35 migrations for the
   authenticator release. Current packaged proofs follow the selected release manifest.

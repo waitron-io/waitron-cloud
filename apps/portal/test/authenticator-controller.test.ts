@@ -137,3 +137,42 @@ test('sign-in invalid input is a validation refusal rather than a service outage
   assert.equal(await c.startLogin('ana..garcia@example.com','secret'),false);
   assert.equal(c.error,'invalid');assert.equal(c.pending,false);assert.equal(redraws,2);
 });
+
+for(const action of ['completeLogin','begin','activate','remove','regenerate'] as const)for(const kind of ['totp','recovery'] as const){
+  test(`${action}: blank ${kind} proof gives feedback without a request or lost input`,async()=>{
+    let redraws=0,requests=0;
+    const c=new module!.AuthenticatorController(()=>{redraws++;},async()=>{requests++;return lost;});
+    c.account('owner');c.status=status;c.challenge={factorRequired:true,challengeToken:token,expiresAt};c.enrolment=enrolment;
+    c.password=' current password ';c.proofKind=kind;c.proofCode=' \t\u00a0\n ';c.confirmation='654321';
+    assert.equal(await c[action](),action==='begin'?undefined:false);
+    assert.equal(c.error,'factorCodeRequired');assert.equal(redraws,1);assert.equal(requests,0);assert.equal(c.pending,false);
+    assert.equal(c.password,' current password ');assert.equal(c.proofCode,' \t\u00a0\n ');assert.equal(c.confirmation,'654321');
+    assert.equal(c.enrolment,enrolment);assert.equal(c.challenge?.challengeToken,token);
+  });
+}
+for(const action of ['begin','activate','remove','regenerate'] as const)for(const active of [false,true]){
+  test(`${action}: blank password gives feedback with active factor ${active}`,async()=>{
+    let redraws=0,requests=0;
+    const c=new module!.AuthenticatorController(()=>{redraws++;},async()=>{requests++;return lost;});
+    c.account('owner');c.status={...status,active};c.enrolment=enrolment;c.proofCode='123456';c.confirmation='654321';
+    assert.equal(await c[action](),action==='begin'?undefined:false);
+    assert.equal(c.error,'requiredPassword');assert.equal(redraws,1);assert.equal(requests,0);assert.equal(c.pending,false);
+    assert.equal(c.proofCode,'123456');assert.equal(c.confirmation,'654321');assert.equal(c.enrolment,enrolment);
+  });
+}
+for(const active of [false,true])test(`activation: blank new code gives feedback with active factor ${active}`,async()=>{
+  let redraws=0,requests=0;
+  const c=new module!.AuthenticatorController(()=>{redraws++;},async()=>{requests++;return lost;});
+  c.account('owner');c.status={...status,active};c.enrolment=enrolment;c.password='current';c.proofCode='123456';c.confirmation=' \t\u00a0\n ';
+  assert.equal(await c.activate(),false);assert.equal(c.error,'factorCodeRequired');assert.equal(redraws,1);assert.equal(requests,0);
+  assert.equal(c.pending,false);assert.equal(c.enrolment,enrolment);assert.equal(c.password,'current');assert.equal(c.proofCode,'123456');
+});
+for(const action of ['completeLogin','begin','activate','remove','regenerate'] as const)for(const gate of ['pending','cooldown'] as const){
+  test(`${action}: blank input cannot replace an error during ${gate}`,async()=>{
+    let redraws=0,requests=0;
+    const c=new module!.AuthenticatorController(()=>{redraws++;},async()=>{requests++;return lost;});
+    c.account('owner');c.status=status;c.challenge={factorRequired:true,challengeToken:token,expiresAt};c.enrolment=enrolment;c.error='limited';
+    c.pending=gate==='pending';c.retryAt=gate==='cooldown'?Date.now()+60_000:0;
+    await c[action]();assert.equal(c.error,'limited');assert.equal(redraws,0);assert.equal(requests,0);assert.equal(c.pending,gate==='pending');
+  });
+}
