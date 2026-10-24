@@ -78,6 +78,19 @@ test('wrapped browser cancellation keeps cancellation feedback distinct from oth
   }
 });
 
+test('sign-in uses the browser cause and does not mistake a named JavaScript error for cancellation', async () => {
+  for (const browserCause of [true, false]) {
+    const cause = browserCause ? new DOMException('Prompt cancelled', 'NotAllowedError') : new Error('Other failure');
+    const wrapped = new Error('Browser operation failed', {cause});
+    wrapped.name = browserCause ? 'Error' : 'NotAllowedError';
+    const controller = new PasskeyController(() => {}, async <T>(): Promise<ApiResult<T>> =>
+      ({ok: true, value: authenticationOptions as T}), browser({authenticate: async () => {throw wrapped;}}));
+    assert.equal(await controller.signIn(), false);
+    assert.equal(controller.notice, browserCause ? 'passkeyCancelled' : undefined);
+    assert.equal(controller.error, browserCause ? undefined : 'passkeyUnavailable');
+  }
+});
+
 test('enrolment requires the current password, refreshes the list, and fences account changes', async () => {
   const calls: Array<{path: string; body: unknown}> = [];
   let wrongPassword = true;

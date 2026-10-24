@@ -29,6 +29,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         const endpoint = new URL(route.request().url()).pathname;
         calls.push(endpoint);
         if (endpoint.endsWith('/session') || endpoint.endsWith('/session/activity')) return route.fulfill({status: 401, json: {error: 'credentials_invalid'}});
+        if (endpoint.endsWith('/login')) return route.fulfill({status: 401, json: {error: 'credentials_invalid'}});
         if (endpoint.endsWith('/passkeys/authentication/options')) return refused
           ? route.fulfill({status: 503, json: {error: 'unavailable'}})
           : route.fulfill({json: {ceremonyId: '12345678-1234-4234-8234-123456789abc', options: {challenge: 'YWJj', rpId: 'portal.test', userVerification: 'required'}}});
@@ -53,6 +54,14 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await mkdir(process.env.PASSKEY_CANCEL_RECEIPT_DIR, {recursive: true});
         await page.screenshot({path: `${process.env.PASSKEY_CANCEL_RECEIPT_DIR}/${locale}-${theme}-${width}.png`, fullPage: true});
       }
+      await page.locator('input[name=email]').fill('owner@example.test');
+      await page.locator('input[name=password]').fill('An incorrect account password');
+      await page.getByRole('button', {name: c.login, exact: true}).click();
+      await page.getByRole('alert').filter({hasText: c.credentials}).waitFor();
+      assert.equal(await page.getByText(c.passkeyCancelled, {exact: true}).count(), 0);
+      assert.equal(calls.filter(path => path.endsWith('/login')).length, 1);
+      await button.click();
+      await page.getByRole('status').filter({hasText: c.passkeyCancelled}).waitFor();
       refused = true;
       await button.click();
       await page.getByRole('alert').filter({hasText: c.passkeyUnavailable}).waitFor();

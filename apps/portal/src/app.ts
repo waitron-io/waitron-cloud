@@ -229,6 +229,7 @@ export class PortalApp {
     if (this.path === '/connect') { await this.submitPairing(); return; }
     if (this.pending || this.waiting) return;
     this.readFields(); this.errors = {}; this.error = undefined;
+    if (this.path === '/login') this.passkeys.notice = undefined;
     const f = this.fields;
     const emailNeeded = this.path === '/login' || !this.completion;
     const passwordNeeded = this.path === '/login' || this.completion;
