@@ -193,7 +193,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const content = JSON.stringify(generated, null, 2) + '\n';
       parsePolicy(content);
       assert.ok(lstatSync('scripts').isDirectory(), 'Audit output directory must be a real directory');
-      assert.ok(lstatSync(policyPath).isFile(), 'Audit output must be a regular file');
+      const output = lstatSync(policyPath);
+      assert.ok(output.isFile(), 'Audit output must be a regular file');
+      assert.equal(output.nlink, 1, 'Audit output must have exactly one hard link');
       writeFileSync(policyPath, content);
       console.log(`Wrote ${policyPath} from staged inputs; inspect and stage it explicitly`);
     }

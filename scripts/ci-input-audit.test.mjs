@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import test from 'node:test';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync, renameSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync, renameSync, linkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
@@ -478,6 +478,50 @@ test('committed audit checking through a linked scripts directory stays read onl
     assert.equal(result.status, 0, result.stdout + result.stderr);
     for (const mode of modes) assert.match(result.stdout, new RegExp('^' + mode + ': current$', 'm'));
     assert.equal(readFileSync(target, 'utf8'), original);
+    assert.equal(git('write-tree'), index);
+    assert.equal(git('status', '--porcelain'), before);
+  } finally {rmSync(outside, {recursive: true, force: true});}
+}));
+
+test('committed audit checking with a hard-linked live policy stays read only', () => stagedFixture(({root, git, cli, save}) => {
+  const generated = cli('--write-staged');
+  assert.ifError(generated.error);
+  assert.equal(generated.status, 0, generated.stdout + generated.stderr);
+  const head = save();
+  const outside = mkdtempSync(join(tmpdir(), 'cloud-audit-check-hardlink-'));
+  try {
+    const target = join(outside, 'owner-policy.json');
+    linkSync(join(root, policyPath), target);
+    const original = 'Unrelated live content\n';
+    writeFileSync(target, original);
+    const index = git('write-tree');
+    const before = git('status', '--porcelain');
+    const result = cli('--check', head);
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    for (const mode of modes) assert.match(result.stdout, new RegExp('^' + mode + ': current$', 'm'));
+    assert.equal(readFileSync(target, 'utf8'), original);
+    assert.equal(readFileSync(join(root, policyPath), 'utf8'), original);
+    assert.equal(git('write-tree'), index);
+    assert.equal(git('status', '--porcelain'), before);
+  } finally {rmSync(outside, {recursive: true, force: true});}
+}));
+
+
+test('staged generation refuses a hard-linked policy without overwriting its outside alias', () => stagedFixture(({root, git, cli}) => {
+  const outside = mkdtempSync(join(tmpdir(), 'cloud-audit-hardlink-'));
+  try {
+    const target = join(outside, 'owner-policy.json');
+    const original = readFileSync(join(root, policyPath), 'utf8');
+    linkSync(join(root, policyPath), target);
+    const index = git('write-tree');
+    const before = git('status', '--porcelain');
+    const result = cli('--write-staged');
+    assert.ifError(result.error);
+    assert.equal(readFileSync(target, 'utf8'), original, 'Generation must preserve the outside alias');
+    assert.equal(result.status, 1, `Hard-linked output must refuse: ${result.stdout}${result.stderr}`);
+    assert.match(result.stderr, /Audit output must have exactly one hard link/);
+    assert.equal(readFileSync(join(root, policyPath), 'utf8'), original);
     assert.equal(git('write-tree'), index);
     assert.equal(git('status', '--porcelain'), before);
   } finally {rmSync(outside, {recursive: true, force: true});}
