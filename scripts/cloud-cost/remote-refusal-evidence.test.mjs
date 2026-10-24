@@ -60,6 +60,16 @@ test('remoteHealthyAndUnstartedEvidenceDoNotInventASocketFailure', {timeout: 300
   evidence(empty, 'final-accounting');
 });
 
+test('remoteCompletedMeasurementSurvivesALaterCallerAbort', {timeout: 3000}, async t => {
+  const controller = new AbortController();
+  const meter = await fixture(t, socket => {socket.resume(); socket.once('end', () => socket.end('ok'));}, {signal: controller.signal});
+  await exchange(t, meter); await meter.close();
+  controller.abort(Error('PRIVATE_LATER_ABORT'));
+  evidence(meter, 'none');
+  assert.deepEqual(meter.snapshot().producer, {connections: 1, bytesToGateway: 15, bytesFromGateway: 2});
+  await meter.close();
+});
+
 for (const mode of ['cancelled', 'window']) test('remoteRetainsFirstStopReason_' + mode, {timeout: 3000}, async t => {
   const controller = new AbortController();
   let admitted;

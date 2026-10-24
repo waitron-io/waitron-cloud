@@ -1813,13 +1813,15 @@ notifications separately.
   requests. These counts do not identify the underlying connection failure.
   Reconnect refusals now retain the byte-counting relay's first refusal category
   before browser cleanup. You can distinguish a socket reset, refused connection,
-  broken pipe, timeout, incomplete close, empty exchange or accounting refusal;
+  broken pipe or other socket error, timeout, incomplete close, empty exchange,
+  admission or byte limit, cancellation, observation-window end, listener error
+  or accounting refusal.
   `none` means the relay had not refused when the browser error was caught.
   Later cleanup cannot replace the first category. Socket sides identify the
   browser-facing client or gateway-facing upstream; raw network errors and payloads
   stay private. Run `node --test scripts/cloud-cost/remote-refusal-evidence.test.mjs scripts/cloud-cost/browser-relay-evidence.test.mjs`
-  for real socket faults, preserved accounting refusals and the child-process
-  diagnostic boundary. These controls do not establish the historical Linux cause.
+  for real relay sockets with controlled resets and injected faults, preserved
+  accounting refusals and the child-process diagnostic boundary. These controls do not establish the historical Linux cause.
   The temporary observation workflow is removed. Retain the next instrumented
   refusal before repairing browser behavior; all existing checks and deadlines remain.
   The reporter preserves the original refusal when a diagnostic property cannot
