@@ -49,15 +49,15 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await Promise.all([initialActivity,initialReload,section.getByText(c.unavailable,{exact:true}).click()]);
   await section.getByText(c.unavailable,{exact:true}).waitFor();
   primingActivity=false;record('initial activity and consent settled');
-  await section.getByRole('button',{name:c.refreshStatus,exact:true}).click();
+  await section.getByRole('button',{name:c.translationConsentRefresh,exact:true}).click();
   await section.getByText(c.limited,{exact:true}).waitFor();
-  assert.equal(await section.getByRole('button',{name:c.refreshStatus,exact:true}).isEnabled(),false);
+  assert.equal(await section.getByRole('button',{name:c.translationConsentRefresh,exact:true}).isEnabled(),false);
   // A session reply can reload consent and replace its retry button between pointerdown and click.
   record('manual retry starts');holdActivity=true;
   await page.clock.fastForward(61_000);record('manual clock returned');
   const retryReply=page.waitForResponse(response=>response.url().endsWith('/api/account/translation-consent')&&response.request().method()==='GET'&&response.status()===200);
   record('manual response listener registered');
-  await Promise.all([retryReply,section.getByRole('button',{name:c.refreshStatus,exact:true}).click()]);
+  await Promise.all([retryReply,section.getByRole('button',{name:c.translationConsentRefresh,exact:true}).click()]);
   record('manual retry replied');holdActivity=false;releaseActivity();
   await section.getByRole('button',{name:allow,exact:true}).waitFor();
   assert.equal(new URL(page.url()).pathname,'/account');
