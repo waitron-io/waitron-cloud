@@ -3,6 +3,7 @@ import type {PortalApp} from './app.ts';
 import type {Locale} from './locale.ts';
 
 const maximumSafe=BigInt(Number.MAX_SAFE_INTEGER),units=['bytes','KiB','MiB','GiB','TiB'] as const;
+export function formatCount(decimal:string,locale:Locale){return new Intl.NumberFormat(locale).format(BigInt(decimal));}
 export function formatBytes(decimal:string,locale:Locale,byteLabel:string){
  const value=BigInt(decimal),absolute=value<0n?-value:value,number=new Intl.NumberFormat(locale);
  if(absolute>maximumSafe)return `${number.format(value)} ${byteLabel}`;
@@ -20,6 +21,7 @@ export function usageScreen(app:PortalApp){
  const usage=app.usage,c=app.copy,summary=usage.summary,disabled=usage.pending||!!usage.waiting;
  if(!usage.organisationId)return nothing;
  const bytes=(value:string)=>formatBytes(value,app.locale,c.usageBytes);
+ const count=(value:string)=>formatCount(value,app.locale);
  const refresh=()=>{usage.refresh();void usage.load();};
  return html`<section class="usage" aria-label=${c.usageTitle}><h2>${c.usageTitle}</h2><p>${c.usageIntro}</p>
   ${usage.error?html`<p role="alert">${c[usage.error]}</p>`:nothing}
@@ -29,8 +31,8 @@ export function usageScreen(app:PortalApp){
    <div class="usage-groups">
     <section aria-label=${c.usageStorage}><h3>${c.usageStorage}</h3><dl><dt>${c.usageStorageCurrent}</dt><dd>${bytes(summary.storage.currentBytes)}</dd><dt>${c.usageStorageAdded}</dt><dd>${bytes(summary.storage.addedBytes)}</dd><dt>${c.usageStorageRemoved}</dt><dd>${bytes(summary.storage.removedBytes)}</dd></dl></section>
     <section aria-label=${c.usageTransfer}><h3>${c.usageTransfer}</h3><dl><dt>${c.usageUploaded}</dt><dd>${bytes(summary.transfer.uploadedBytes)}</dd><dt>${c.usageRestored}</dt><dd>${bytes(summary.transfer.restoredBytes)}</dd></dl></section>
-    <section aria-label=${c.usageOperations}><h3>${c.usageOperations}</h3><dl><dt>${c.usageInstallations}</dt><dd>${summary.operations.installationCompleted}</dd><dt>${c.usageProbes}</dt><dd>${summary.operations.monitoringProbes}</dd></dl></section>
-    <section aria-label=${c.usageMessages}><h3>${c.usageMessages}</h3><dl><dt>${c.usageSent}</dt><dd>${summary.messages.sent}</dd><dt>${c.usageFailed}</dt><dd>${summary.messages.failed}</dd><dt>${c.usageExpired}</dt><dd>${summary.messages.expired}</dd><dt>${c.usageCancelled}</dt><dd>${summary.messages.cancelled}</dd></dl></section>
+    <section aria-label=${c.usageOperations}><h3>${c.usageOperations}</h3><dl><dt>${c.usageInstallations}</dt><dd>${count(summary.operations.installationCompleted)}</dd><dt>${c.usageProbes}</dt><dd>${count(summary.operations.monitoringProbes)}</dd></dl></section>
+    <section aria-label=${c.usageMessages}><h3>${c.usageMessages}</h3><dl><dt>${c.usageSent}</dt><dd>${count(summary.messages.sent)}</dd><dt>${c.usageFailed}</dt><dd>${count(summary.messages.failed)}</dd><dt>${c.usageExpired}</dt><dd>${count(summary.messages.expired)}</dd><dt>${c.usageCancelled}</dt><dd>${count(summary.messages.cancelled)}</dd></dl></section>
    </div><p class="help">${c.usageExclusions}</p><p class="help">${c.usageHistory}</p>`}
   <wt-button .disabled=${disabled} @click=${refresh}>${c.usageRefresh}</wt-button>
  </section>`;
