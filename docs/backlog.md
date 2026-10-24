@@ -3199,7 +3199,10 @@ notifications separately.
   Cloud approval derives the account from the live session in its transaction.
   The signup backend now issues hashed, expiring email tokens with a shared per-address
   cooldown and creates a verified customer account, named organisation, first legal
-  business and owner membership atomically. It grants no platform access. The email
+  business and owner membership atomically. It grants no platform access. Account
+  and fiscal cooldowns use the singular word for the final second in English and
+  Spanish; `apps/portal/test/cooldown-browser.test.ts` exercises real 429 replies,
+  the two-to-one-second transition and expiry with a controlled browser clock. The email
   adapter is tested with capture/failure adapters and SMTP through local Mailpit.
   Password recovery now uses expiring single-use tokens bound to the account, email
   and current password hash; completion invalidates older links and revokes all existing
