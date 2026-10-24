@@ -3270,7 +3270,15 @@ notifications separately.
   business and owner membership atomically. It grants no platform access. Account
   and fiscal cooldowns use the singular word for the final second in English and
   Spanish; `apps/portal/test/cooldown-browser.test.ts` exercises real 429 replies,
-  the two-to-one-second transition and expiry with a controlled browser clock. The email
+  the two-to-one-second transition and expiry with a controlled browser clock.
+  Sign-in, signup requests and password recovery trim surrounding email whitespace
+  before validation and sending, including non-breaking spaces left by the browser.
+  Stubbed Chromium checks cover all three forms in English and Spanish, both themes
+  and phone/desktop widths; blank, internally spaced and overlong addresses stay
+  refused, passwords retain their exact bytes and login refusals keep the generic
+  credentials message. The portal still sends some addresses the server refuses,
+  including a leading zero-width space (U+200B); align its field feedback with the
+  server’s address grammar in a separate portal follow-up. The email
   adapter is tested with capture/failure adapters and SMTP through local Mailpit.
   Password recovery now uses expiring single-use tokens bound to the account, email
   and current password hash; completion invalidates older links and revokes all existing

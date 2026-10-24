@@ -2,8 +2,10 @@
 
 Recover your Cloud password independently of the venue server. Supply your email,
 follow a single-use link valid for 30 minutes, choose a new password, then sign in
-normally. Completion changes the password and ends every existing session in one
-transaction. Your memberships and platform permissions stay unchanged.
+normally. The portal removes surrounding spaces from your email before checking
+and sending it, as it does for sign-in and signup. Spaces inside an address still
+produce a field error. Completion changes the password and ends every existing
+session in one transaction. Your memberships and platform permissions stay unchanged.
 
 ## Backend boundary
 
