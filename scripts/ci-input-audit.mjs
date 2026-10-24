@@ -174,6 +174,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const check = args.length === 2 && args[0] === '--check' && /^[a-f0-9]{40}$/.test(args[1]);
     assert.ok(write || check, 'Usage: ci-input-audit.mjs --write-staged | --check <commit>');
     const git = (...args) => execFileSync('git', args, {encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe']});
+    if (write) {
+      assert.equal(git('rev-parse', '--is-inside-work-tree').trim(), 'true', 'Generate input audits from the repository root');
+      assert.equal(git('rev-parse', '--show-prefix').trim(), '', 'Generate input audits from the repository root');
+    }
     const revision = write ? git('write-tree').trim() : args[1];
     if (check) assert.equal(git('cat-file', '-t', revision).trim(), 'commit', 'Check requires an immutable commit');
     const {policy, entries} = readInputAudit(revision, git);

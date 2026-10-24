@@ -2012,7 +2012,13 @@ notifications separately.
   now runs Git directly without the unused API callback or historical tree-fetch
   wrapper. Its public function signature stays compatible; existing CLI checks
   retain full main runs, exact output fields and zero PR API calls. Generation
-  is a repository-root command; subfolder invocation refuses without writing.
+  is a repository-root command. A real temporary Git repository reproduces a
+  subfolder invocation overwriting a nested lookalike policy. Generation now
+  requires a working tree and an empty current-directory prefix before reading
+  staged inputs or writing output, including refusal inside Git's metadata directory.
+  Regressions preserve both policies, staged inputs and the working tree on refusal;
+  normal root generation still succeeds. Read-only
+  checking of a committed audit remains available from subfolders.
   An independent subprocess check corrupts only the generated audit digest after
   valid staged inputs have passed. The final validation refuses that output without
   changing the existing policy, staged inputs or working tree. Removing that final
