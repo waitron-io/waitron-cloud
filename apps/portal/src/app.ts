@@ -136,7 +136,7 @@ export class PortalApp {
     if (this.path === '/fiscal-allocations') return Math.max(this.fiscal.waiting,this.installations.waiting,Math.max(0,Math.ceil((this.session.retryAt-Date.now())/1000)));
     if (this.path === '/recover') return Math.max(this.recovery.waiting,this.backups.waiting,this.installations.waiting,Math.max(0,Math.ceil((this.session.retryAt-Date.now())/1000)));
     if (this.path === '/connect') return Math.max(this.pairing.waiting, Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)));
-    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt,this.alerts.retryAt,this.translationConsent.retryAt,this.remote.retryAt,this.usage.retryAt,this.diagnostics.retryAt,this.authenticator.retryAt) : Math.max(this.cooldownOperation === this.operation ? this.cooldownUntil : 0, this.path === '/login' ? this.authenticator.retryAt : 0);
+    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt,this.alerts.retryAt,this.translationConsent.retryAt,this.remote.retryAt,this.usage.retryAt,this.diagnostics.retryAt,this.authenticator.retryAt,this.passkeys.retryAt,this.security.retryAt) : Math.max(this.cooldownOperation === this.operation ? this.cooldownUntil : 0, this.path === '/login' ? Math.max(this.authenticator.retryAt,this.passkeys.retryAt) : 0);
     return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
   }
   #clearUnavailableFiscalDraft() {

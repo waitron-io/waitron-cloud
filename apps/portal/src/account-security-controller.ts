@@ -8,6 +8,7 @@ export class AccountSecurityController {
   sessions: AccountSessionSummary[] = [];
   loaded = false;
   pending = false;
+  retryAt = 0;
   error: keyof Copy | undefined;
   notice: keyof Copy | undefined;
   #account: string | undefined;
@@ -22,6 +23,8 @@ export class AccountSecurityController {
     this.#request = request;
   }
 
+  get waiting() { return Math.max(0, Math.ceil((this.retryAt - Date.now()) / 1000)); }
+
   fence() { this.#generation++; this.pending = false; this.loaded = false; this.error = undefined; this.notice = undefined; }
 
   account(id: string | undefined) {
@@ -35,6 +38,7 @@ export class AccountSecurityController {
   async #list(generation: number): Promise<ApiResult<{sessions: AccountSessionSummary[]}>> {
     const result = await this.#request<{sessions: AccountSessionSummary[]}>('/sessions');
     if (generation === this.#generation) {
+      if (!result.ok) this.retryAt = Math.max(this.retryAt, Date.now() + result.retryAfterMs);
       this.loaded = result.ok;
       this.sessions = result.ok ? result.value.sessions : [];
     }
@@ -42,7 +46,7 @@ export class AccountSecurityController {
   }
 
   async load() {
-    if (!this.#account || this.pending) return;
+    if (!this.#account || this.pending || this.waiting) return;
     const generation = this.#generation;
     this.pending = true; this.error = undefined; this.notice = undefined; this.#changed();
     const result = await this.#list(generation);
@@ -57,11 +61,12 @@ export class AccountSecurityController {
 
   async revoke(id: string) {
     const target = this.sessions.find(session => session.id === id);
-    if (!this.#account || this.pending || !target) return;
+    if (!this.#account || this.pending || this.waiting || !target) return;
     const generation = this.#generation;
     this.pending = true; this.error = undefined; this.notice = undefined; this.#changed();
     const result = await this.#request<void>('/sessions/revoke', {id});
     if (generation !== this.#generation) return;
+    if (!result.ok) this.retryAt = Math.max(this.retryAt, Date.now() + result.retryAfterMs);
     if (!result.ok && result.status === 401) {
       this.pending = false; this.#sessionEnded(); this.#changed(); return;
     }

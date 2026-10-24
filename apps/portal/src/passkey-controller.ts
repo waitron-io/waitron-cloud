@@ -29,6 +29,7 @@ export class PasskeyController {
   passkeys: PasskeySummary[] = [];
   password = '';
   pending = false;
+  retryAt = 0;
   loaded = false;
   error: keyof Copy | undefined;
   notice: keyof Copy | undefined;
@@ -43,6 +44,8 @@ export class PasskeyController {
     this.#request = request;
     this.#browser = browser;
   }
+
+  get waiting() { return Math.max(0, Math.ceil((this.retryAt - Date.now()) / 1000)); }
 
   fence() { this.#generation++; this.pending = false; this.error = undefined; this.notice = undefined; }
 
@@ -67,6 +70,7 @@ export class PasskeyController {
   }
 
   #failure(result: Extract<ApiResult<unknown>, {ok: false}>, password = false) {
+    this.retryAt = Math.max(this.retryAt, Date.now() + result.retryAfterMs);
     this.error = password && result.code === 'credentials_invalid' ? 'passkeyPasswordInvalid'
       : result.status === 429 ? 'limited'
       : result.status === 401 ? 'pairSession'
@@ -84,7 +88,7 @@ export class PasskeyController {
   }
 
   async load() {
-    if (!this.#account || this.pending) return;
+    if (!this.#account || this.pending || this.waiting) return;
     const generation = this.#generation;
     this.pending = true; this.error = undefined; this.notice = undefined; this.#changed();
     await this.#list(generation);
@@ -93,7 +97,7 @@ export class PasskeyController {
   }
 
   async signIn(): Promise<'authenticated' | 'reconcile' | false> {
-    if (this.pending) return false;
+    if (this.pending || this.waiting) return false;
     if (this.supported === undefined) await this.checkSupport();
     if (!this.supported) { this.notice = 'passkeyUnsupported'; this.#changed(); return false; }
     const generation = this.#generation;
@@ -118,7 +122,7 @@ export class PasskeyController {
   }
 
   async enroll(password: string) {
-    if (!this.#account || this.pending || !password) return;
+    if (!this.#account || this.pending || this.waiting || !password) return;
     const generation = this.#generation;
     const before = new Set(this.passkeys.map(passkey => passkey.id));
     this.pending = true; this.error = undefined; this.notice = undefined; this.#changed();
@@ -135,6 +139,7 @@ export class PasskeyController {
     }
     const result = await this.#request<PasskeySummary>('/passkeys/registration/verify', {ceremonyId: options.value.ceremonyId, response});
     if (generation !== this.#generation) return;
+    if (!result.ok) this.retryAt = Math.max(this.retryAt, Date.now() + result.retryAfterMs);
     const listed = await this.#list(generation);
     if (generation !== this.#generation) return;
     this.pending = false; this.password = '';
@@ -145,11 +150,12 @@ export class PasskeyController {
   }
 
   async remove(id: string, password: string) {
-    if (!this.#account || this.pending || !password || !this.passkeys.some(passkey => passkey.id === id)) return;
+    if (!this.#account || this.pending || this.waiting || !password || !this.passkeys.some(passkey => passkey.id === id)) return;
     const generation = this.#generation;
     this.pending = true; this.error = undefined; this.notice = undefined; this.#changed();
     const result = await this.#request<void>('/passkeys/remove', {id, password});
     if (generation !== this.#generation) return;
+    if (!result.ok) this.retryAt = Math.max(this.retryAt, Date.now() + result.retryAfterMs);
     const listed = await this.#list(generation);
     if (generation !== this.#generation) return;
     this.pending = false; this.password = '';

@@ -15,7 +15,7 @@ export function accountSecurityScreen(app: PortalApp) {
       <h3 id="sessions-heading">${c.activeSessions}</h3>
       <p class="help">${c.sessionsIntro}</p>
       ${message ? html`<p role=${app.security.error ? 'alert' : 'status'}>${c[message]}</p>` : nothing}
-      ${app.security.error && !app.security.loaded ? html`<wt-button .disabled=${app.security.pending}
+      ${app.security.error && !app.security.loaded ? html`<wt-button .disabled=${app.security.pending || !!app.security.waiting}
         @click=${() => {void app.security.load();}}>${c.retry}</wt-button>` : nothing}
       <ul class="session-list">${app.security.sessions.map(session => html`<li>
         <div class="security-details">
@@ -24,7 +24,7 @@ export function accountSecurityScreen(app: PortalApp) {
           <span><span class="security-label">${c.sessionLastUsed}</span> ${dateTime.format(new Date(session.lastUsedAt))}</span>
           <span><span class="security-label">${c.sessionExpires}</span> ${dateTime.format(new Date(session.expiresAt))}</span>
         </div>
-        <wt-button .disabled=${app.security.pending}
+        <wt-button .disabled=${app.security.pending || !!app.security.waiting}
           @click=${() => {void app.revokeSession(session.id);}}>${session.current ? c.sessionSignOut : c.sessionRevoke}</wt-button>
       </li>`)}</ul>
     </section>
