@@ -2695,8 +2695,12 @@ notifications separately.
   directory and a newly added backend package. They require a compiler diagnostic
   for each file, then pass after correcting all injected errors. Excluding those
   test directories in a disposable copy makes the new check fail. Missing
-  package compiler scripts and the equivalent `--project` spelling already fail
-  the inventory or trace checks, but need clearer test diagnostics. Bootstrap setup now gives npm
+  package compiler scripts now fail with the affected package name, including
+  absent scripts objects and non-string commands. Isolated workspace checks
+  remove each package command in turn, require the named inventory failure and
+  pass after restoration. Every compiler assertion and command remains unchanged.
+  The equivalent `--project` spelling still fails the inventory or trace checks
+  and needs clearer trace diagnostics. Bootstrap setup now gives npm
   registry requests 15 seconds with one retry after one second, so a stalled
   tarball fetch cannot consume minutes before tests start. A real local `npm ci`
   against a held tarball request exceeds 35 seconds under the defaults and fails

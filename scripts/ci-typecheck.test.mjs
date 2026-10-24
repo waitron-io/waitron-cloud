@@ -115,7 +115,8 @@ test('all declared package compiler configurations are included in the consolida
   const configurations = new Set();
   for (const member of members) {
     const manifest = JSON.parse(readFileSync(join(member.path, 'package.json'), 'utf8'));
-    const command = manifest.scripts.typecheck.match(/^tsc -p (\S+)$/);
+    const script = manifest.scripts?.typecheck;
+    const command = typeof script === 'string' ? script.match(/^tsc -p (\S+)$/) : null;
     assert.ok(command, `Unmapped typecheck command in ${manifest.name}`);
     configurations.add(relative(repository, resolve(member.path, command[1])));
   }
