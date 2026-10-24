@@ -4588,18 +4588,31 @@ checks are unavailable while Docker is down; GitHub CI supplies that evidence.
 [Cost run 40015106057, job 120625121669](https://github.com/waitron-io/waitron-cloud/actions/runs/40015106057/job/120625121669)
 refused the Litestream storage-lifetime case at replication transport close with
 `transfer-interrupted`, after 21 completed attempts and no remaining requests or
-connections. Those final counts do not identify the earlier failed I/O event.
-The transport now retains the first event category, known network code and
-operation category through cleanup. Controlled HTTP checks interrupt request and
-response bodies and verify that accounting still refuses. Paths, headers, object
-names and unknown diagnostic fields stay private.
+connections. Later PR377 reported `response-pipeline` during a `put`. Those final
+counts do not identify the earlier failed I/O event. The transport retains the
+first event category, known network code and operation category through cleanup.
+Paths, headers, object names and unknown diagnostic fields stay private.
 
-Reproduce the newly named event on Linux before changing transport or shutdown
-behavior. The historical cause remains unknown; a passing run alone does not
-explain it. Four independent Linux observations in
-[run 40017505833](https://github.com/waitron-io/waitron-cloud/actions/runs/40017505833)
-passed both original cases without a recurrence. Preserve every storage,
-accounting and cleanup assertion and deadline.
+The smoke fixture now waits for its active transfers to finish before stopping
+Litestream. A restore can see a committed object while the writer still awaits
+its PUT reply; stopping at that point cancels the pending exchange. Two controlled
+[Linux observations](https://github.com/waitron-io/waitron-cloud/actions/runs/40075195985)
+delayed successful replies after the real storage commit and failed at transport
+close. Both [fixed observations](https://github.com/waitron-io/waitron-cloud/actions/runs/40075626914)
+pass with the same delay and unchanged assertions and deadlines. A native real-HTTP
+probe also reproduces the historical `response-pipeline` / `put` diagnostic when
+the client exits before its committed reply arrives. That reproduction proves a
+possible cause; the old logs cannot establish the cause of every historical event.
+
+A Docker-free regression runs the actual smoke and transport with a real HTTP
+writer child. Removing the wait-before-stop guard fails; restoring it passes.
+A separate pinned-Litestream case delays committed PUT replies and checks the
+original restore, integrity, fiscal, request, byte, version-history and cleanup
+invariants. Every earlier test assertion and deadline remains unchanged. Existing
+interrupted-I/O checks still require accounting refusal. Local Docker-backed
+qualification is unavailable until Docker returns; GitHub CI supplies the genuine
+Linux checks. Reproduce any new diagnostic recurrence before changing transport,
+accounting or cleanup behavior.
 
 ## Recovery screen scope and supplied choices (D158)
 

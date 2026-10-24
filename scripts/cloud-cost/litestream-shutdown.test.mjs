@@ -35,7 +35,7 @@ test('the smoke waits for a committed PUT reply before stopping its writer', () 
       export const spawnSync=()=>({stdout:'0.5.17'});
       export function spawn(binary,args){const state=globalThis.shutdownFixture;
         if(args[0]==='replicate'){
-          const code="import {request} from 'node:http';const headers={'amz-sdk-invocation-id':'11111111-2222-4333-8444-555555555555','amz-sdk-request':'attempt=1; max=3','content-length':'100'};const req=request("+JSON.stringify(state.url+"/synthetic/key")+",{method:'PUT',headers},res=>{res.on('error',()=>{});res.resume();});req.on('error',()=>{});process.on('SIGTERM',()=>{req.destroy();process.exitCode=0;});req.end('x'.repeat(100));setInterval(()=>{},10000).unref();";
+          const code="import {request} from 'node:http';const headers={'amz-sdk-invocation-id':'11111111-2222-4333-8444-555555555555','amz-sdk-request':'attempt=1; max=3','content-length':'100'};const req=request("+JSON.stringify(state.url+"/synthetic/key")+",{method:'PUT',headers},res=>{res.on('error',()=>{});res.resume();});req.on('error',()=>{});const alive=setInterval(()=>{},1000),deadline=setTimeout(()=>process.exit(2),2000);process.on('SIGTERM',()=>{req.destroy();clearInterval(alive);clearTimeout(deadline);process.exitCode=0;});req.end('x'.repeat(100));";
           return process.getBuiltinModule('child_process').spawn(process.execPath,['--input-type=module','--eval',code],{stdio:['ignore','ignore','pipe']});
         }
         const child=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>true;
