@@ -47,7 +47,12 @@ async function abortable<T>(promise:Promise<T>,options:ScopedProbeOptions):Promi
 }
 async function connections(hostname:string,options:ScopedProbeOptions):Promise<ProbeConnection[]> {
  if(options.signal?.aborted)throw new ProbeError(abortFailure(options));
- if(options.connect)return [await options.connect(hostname)];
+ if(options.connect){
+  // Attach cancellation and rejection handlers before a resolver can cancel synchronously.
+  const connection=await abortable(Promise.resolve().then(()=>options.connect!(hostname)),options);
+  if(options.signal?.aborted)throw new ProbeError(abortFailure(options));
+  return [connection];
+ }
  let answers;try{answers=await abortable(lookup(hostname,{all:true,verbatim:true}),options);}catch(error){if(error instanceof ProbeError)throw error;if(options.signal?.aborted)throw new ProbeError(abortFailure(options));throw new ProbeError('dns');}
  const values=answers.slice(0,4),allowed=values.filter(v=>isPublicProbeAddress(v.address,v.family)).map(v=>({address:v.address,family:v.family as 4|6,port:443}));
  if(!allowed.length)throw new ProbeError(values.length?'address_forbidden':'dns');return allowed;

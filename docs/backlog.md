@@ -3939,6 +3939,13 @@ notifications separately.
   regressions preserve refusal of genuine Domain attributes, including empty/bare
   forms and real/lookalike pairs. Chromium controls confirm that the unrelated
   names leave protected cookies usable; bare/empty refusal is the probe's policy.
+  Configured asynchronous probe connection resolvers now share the probe's
+  cancellation wait and overall deadline. Cancellation before their result is
+  consumed refuses both public and staff checks before opening a connection;
+  a resolver that never returns cannot hold shutdown open. Native trusted TLS
+  fixtures cover cancellation boundaries, pending resolution, rejected resolution
+  and successful deferred resolution. Live DNS and production shutdown still
+  need separate qualification.
   The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
   separates existing local detection from proposed production operator alerts and
   opted-in venue mail, with worked outage and backup timelines. The owner approved
