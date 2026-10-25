@@ -20,7 +20,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       page.setDefaultTimeout(4000);
       let release!: () => void;
       const checked = new Promise<void>(resolve => {release = resolve;});
-      let checking = false, refused = false, reads = 0, added = false, removed = false, optionsCount = 0;
+      let checking = false, refused = false, refusingAgain = false, reads = 0, added = false, removed = false, optionsCount = 0;
       const writes: {path: string; body: Record<string, unknown>}[] = [];
       const c = translations[locale], text = labels[locale];
       try {
@@ -34,7 +34,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           if (path === '/passkeys') {reads++; if (checking) await checked; return route.fulfill({json: {passkeys: removed ? [] : added ? [key, {...key, id: addedId}] : [key]}});}
           if (path.startsWith('/passkeys/')) {
             writes.push({path, body: req.postDataJSON()});
-            if (!refused && path.endsWith(flow === 'options' ? '/options' : flow === 'verify' ? '/verify' : '/remove')) {refused = true; return route.fulfill({status: 400, json: {error: 'invalid_input'}});}
+            if (refusingAgain || (!refused && path.endsWith(flow === 'options' ? '/options' : flow === 'verify' ? '/verify' : '/remove'))) {refused = true; return route.fulfill({status: 400, headers: refusingAgain ? {'Retry-After': '60'} : {}, json: {error: 'invalid_input'}});}
             if (path.endsWith('/options')) {
               optionsCount++;
               return route.fulfill({json: {ceremonyId: optionsCount === 1 ? id : addedId, options: {challenge: optionsCount === 1 ? 'YWJj' : 'ZGVm', rp: {name: 'Waitron Cloud', id: 'portal.test'}, user: {id: 'b3duZXI', name: 'owner@example.test', displayName: 'Owner'}, pubKeyCredParams: [{type: 'public-key', alg: -7}]}}});
@@ -78,6 +78,14 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           assert.equal(change[1]!.body.ceremonyId, flow === 'verify' ? addedId : id, 'restart uses a new server-issued prompt');
         }
         assert.equal(await password.inputValue(), '');
+        if (flow === 'options') {
+          refusingAgain = true; await password.fill('Fresh password'); await action.click();
+          await section.getByRole('alert').getByText(text.registration, {exact: true}).waitFor();
+          const beforeWaitReads = reads, beforeWaitWrites = writes.length;
+          assert.equal(await refresh.isDisabled(), true, 'the check button honors the response retry delay');
+          await refresh.evaluate(el => (el as HTMLButtonElement).click());
+          assert.equal(reads, beforeWaitReads); assert.equal(writes.length, beforeWaitWrites);
+        }
       } finally {release(); await page.close();}
     }); } finally {await browser.close();}
   });

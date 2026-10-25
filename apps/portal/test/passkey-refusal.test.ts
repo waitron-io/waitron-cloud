@@ -35,7 +35,7 @@ for (const stage of ['options', 'verify', 'remove'] as const) {
     assert.equal(calls.filter(call => call.path === '/passkeys/remove').length, stage === 'remove' ? 1 : 0);
   });
   for (const [status, code, expected] of [
-    [400, 'conflict', 'passkeyUnavailable'], [403, 'invalid_input', 'forbidden'],
+    [400, 'conflict', 'passkeyUnavailable'], [422, 'invalid_input', 'passkeyUnavailable'], [403, 'invalid_input', 'forbidden'],
     [403, 'credentials_invalid', stage === 'verify' ? 'forbidden' : 'passkeyPasswordInvalid'],
     [401, 'credentials_invalid', stage === 'verify' ? 'pairSession' : 'passkeyPasswordInvalid'], [429, 'rate_limited', 'limited'],
     [503, 'unavailable', stage === 'options' ? 'passkeyUnavailable' : 'passkeyChangeUncertain'],
