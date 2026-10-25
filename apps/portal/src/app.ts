@@ -314,6 +314,11 @@ export class PortalApp {
     await this.session.check();
     if (route === this.#route && this.session.state.kind !== 'authenticated') this.draw();
   }
+  async refreshPasskeys() {
+    const route = this.#route;
+    await this.passkeys.refresh();
+    if (route === this.#route) { this.draw(); this.focusHeading(); }
+  }
   async addPasskey() {
     this.readFields();
     if (!this.passkeys.password) { this.passkeys.error = 'requiredPassword'; this.draw(); return; }

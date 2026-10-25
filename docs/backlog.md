@@ -5536,8 +5536,16 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   uncertain-write reconciliation remain unchanged. Native and stubbed-browser
   checks cover stale setup, changed status and restart; database qualification
   runs in CI. The audit records each server cause and the remaining shared-code limit.
-- R2: explain passkey ceremony expiry, duplication and verification failures with
-  an actual restart/list/password path, without disclosing another account's keys.
+- R2 delivered: refused passkey registration and removal requests offer Check
+  passkeys in English and Spanish. The read-only action clears the old password
+  and refreshes your account's list before you start a fresh prompt or removal.
+  The shared 400 response gives general guidance, including choosing another
+  passkey if already registered; it does not identify expiry, duplication or a
+  verification failure. Password sign-in, credential feedback, rate waits and
+  uncertain-write reconciliation remain available. Native and stubbed-browser
+  checks cover the path; database and HTTP qualification runs in CI. Request-body
+  limits/formats/interruption and other browser failures keep their previous
+  feedback and remain follow-ups.
 - R3: explain recovery confirmation, active-operation, verification and fresh-target
   refusals; reconcile uncertain writes before suggesting another approval.
 - R4: recovery now explains a refused test-only action in English and Spanish.
