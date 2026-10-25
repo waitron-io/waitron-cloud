@@ -216,3 +216,15 @@ for(const context of [
     assert.equal(c.password,input==='filled'?'current':'');assert.equal(c.proofCode,input==='filled'?'123456':'');
   });
 }
+
+for(const reset of ['fence','account','load'] as const)test(`required field moves between missing inputs and clears on ${reset}`,async()=>{
+  const c=controller([ok(status)]);c.account('owner');c.status=status;c.enrolment=enrolment;
+  await c.activate();assert.equal(c.requiredField,'password');assert.equal(c.error,'requiredPassword');
+  c.password='current';await c.activate();assert.equal(c.requiredField,'proof');
+  c.proofCode='123456';await c.activate();assert.equal(c.requiredField,'confirmation');
+  c.pending=true;c.password='';await c.activate();assert.equal(c.requiredField,'confirmation');
+  c.pending=false;c.retryAt=Date.now()+60_000;await c.activate();assert.equal(c.requiredField,'confirmation');
+  c.retryAt=0;
+  if(reset==='fence')c.fence();else if(reset==='account')c.account('other');else await c.load();
+  assert.equal(c.requiredField,undefined);assert.equal(c.error,undefined);
+});
