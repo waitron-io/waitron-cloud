@@ -4936,7 +4936,15 @@ The owner decided against a custom Litestream binary on 25 October. Keep the
 official 0.5.17 release and its pins. The revised [after-stop accounting design](superpowers/specs/2026-10-24-litestream-native-drain-design.md)
 and [implementation plan](superpowers/plans/2026-10-24-litestream-native-drain.md)
 replace the unbuilt native extension with a small, separately counted shutdown
-allowance. This documentation milestone does not implement or qualify that change.
+allowance. Its first implementation step adds the optional session ledger and
+real HTTP boundary tests. The audit, first transport and independent storage
+counter share attempt identities, preserve each counter's actual bytes, and
+count at most three distinct affected attempts across admissions and settlements.
+Only the exact post-acknowledgement list interruption is accepted; its response
+remains incomplete and its billing unknown. Ordinary callers remain strict.
+This ledger is not yet enabled in the smoke. Upload commit evidence, lifetime
+reader settlement, controlled shutdown, final restore and Linux qualification
+remain open in the next plan tasks.
 
 [PR428's cost run 40144823848, job 121023853072](https://github.com/waitron-io/waitron-cloud/actions/runs/40144823848/job/121023853072)
 refuses during `stop`; cleanup records `active-close` after 21 completed attempts.

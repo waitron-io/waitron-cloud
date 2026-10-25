@@ -48,13 +48,16 @@ The driver updates `docs/backlog.md` separately. No other runtime path is author
 ## Task 1: establish attempt boundaries and the separate ledger
 
 **Files:** `litestream.mjs`, `meter.mjs` and their audit/transport/interruption/meter tests above.
+
+Task 1 is implemented on the runtime branch. The smoke remains strict until
+Tasks 2–4 supply upload evidence, lifetime settlement and shutdown/recovery wiring.
 **Interface:** export `createLitestreamAfterStop({clock})` from `litestream.mjs`; return a session object passed as optional `afterStop` to `createLitestreamRequestAudit`, `createLitestreamTransport` and `createMeter`. No caller-supplied cap override. Ordinary signatures/results remain compatible.
 **Ledger inputs:** `acknowledgeStop` validates the bounded reply; `issue`, `admit` and `settle` accept private invocation+ordinal, operation, hop and the applicable outcome/byte/commit evidence, with monotonic event order. `snapshot()` returns only the aggregate contract in the spec. Validate closed event shapes; classify by admission time, never log arrival or response finish.
 
-- [ ] RED: add real HTTP holds in existing transport/audit tests for a pre-issued list released to storage after ack, a pre-admitted successful late response, two chained lists, duplicate identities, unknown pairing, retry ordinals and cross-hop counting. Require cap=3 success and fourth-attempt failure, including an incomplete response with nonzero observed bytes retained. Reject new retries after ack; ordinals never reset.
-- [ ] Run `node --test scripts/cloud-cost/litestream.test.mjs scripts/cloud-cost/litestream-transport.test.mjs scripts/cloud-cost/litestream-interruption.test.mjs scripts/cloud-cost/meter.test.mjs`; save the expected behavioral failures before implementing.
-- [ ] Add the minimal ledger and immutable request phase/admission facts. Independent proxy admission supplies the storage boundary. Preserve all-attempt snapshots; `afterStop` is a separate labelled subset, never added twice. Record counter settlement even when lifetime completion refuses.
-- [ ] GREEN: rerun that command. In further RED/GREEN cycles, prove ordinary-mode phase-change and interrupted-I/O assertions remain strict; cover cap+1, duplicate-hop, missing-identity, pre-ack interruption, the spec's exact post-ack list-interruption signature, upstream-error and timeout. Each non-list/new PUT/GET/HEAD/delete/bulk-delete/multipart variant after ack fails before forwarding.
+- [x] RED: add real HTTP holds in existing transport/audit tests for a pre-issued list released to storage after ack, a pre-admitted successful late response, two chained lists, duplicate identities, unknown pairing, retry ordinals and cross-hop counting. Require cap=3 success and fourth-attempt failure, including an incomplete response with nonzero observed bytes retained. Reject new retries after ack; ordinals never reset.
+- [x] Run `node --test scripts/cloud-cost/litestream.test.mjs scripts/cloud-cost/litestream-transport.test.mjs scripts/cloud-cost/litestream-interruption.test.mjs scripts/cloud-cost/meter.test.mjs`; save the expected behavioral failures before implementing.
+- [x] Add the minimal ledger and immutable request phase/admission facts. Independent proxy admission supplies the storage boundary. Preserve all-attempt snapshots; `afterStop` is a separate labelled subset, never added twice. Record counter settlement even when lifetime completion refuses.
+- [x] GREEN: rerun that command. In further RED/GREEN cycles, prove ordinary-mode phase-change and interrupted-I/O assertions remain strict; cover cap+1, duplicate-hop, missing-identity, pre-ack interruption, the spec's exact post-ack list-interruption signature, upstream-error and timeout. Each non-list/new PUT/GET/HEAD/delete/bulk-delete/multipart variant after ack fails before forwarding.
 
 ## Task 2: preserve storage evidence without inventing completion
 

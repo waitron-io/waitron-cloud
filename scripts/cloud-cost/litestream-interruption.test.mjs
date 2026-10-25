@@ -194,3 +194,87 @@ for (const responseHeadersSeen of [false, true]) test(`upstream resets retain cl
   assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
   assert.equal(JSON.stringify(records).includes('PRIVATE_CANARY'), false);
 });
+
+// Accepting arbitrary cancellations, or accepting them before acknowledgement, would hide real failures.
+for (const stopped of [false, true]) test(`only the known post-acknowledgement list interruption can settle: stopped=${stopped}`, async t => {
+  const stream = await import('./litestream.mjs');
+  const afterStop = stream.createLitestreamAfterStop({ clock: () => 0 });
+  const audit = stream.createLitestreamRequestAudit({ phase: 'workload', afterStop });
+  audit.write(Buffer.from(`SDK 2026/10/25 03:00:00 DEBUG Request\nGET /PRIVATE_CANARY?list-type=2 HTTP/1.1\r\nAmz-Sdk-Invocation-Id: ${headers['amz-sdk-invocation-id']}\r\nAmz-Sdk-Request: attempt=1; max=3\r\n\r\n`));
+  const { createMeteringProxy, classifyStorageOperation } = await import('./meter.mjs');
+  let release, arrived, settled, clientClosed;
+  const active = new Promise(resolve => { arrived = resolve; });
+  const finished = new Promise(resolve => { settled = resolve; });
+  const destinationClosed = new Promise(resolve => { clientClosed = resolve; });
+  const backend = createServer((req, res) => {
+    req.resume(); req.on('end', () => { release = () => res.end('metadata'); arrived(); });
+  });
+  backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
+  t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
+  const meter = createMeter({ phase: 'workload', clock: () => 0, afterStop });
+  const observer = await createMeteringProxy({ target: `http://127.0.0.1:${backend.address().port}`, meter,
+    classify: input => audit.observe({ headers: input.headers, operation: classifyStorageOperation(input) }) });
+  t.after(() => observer.close().catch(() => {}));
+  const transport = await createLitestreamTransport({ target: observer.url, phase: 'workload', afterStop,
+    meter: { ...meter, observeAttempt: (...args) => { try { return meter.observeAttempt(...args); } finally { settled(); } } } });
+  t.after(() => transport.close().catch(() => {}));
+  const emit = Server.prototype.emit;
+  t.mock.method(Server.prototype, 'emit', function (event, ...args) {
+    if (event === 'request' && args[0].socket.localPort === Number(new URL(transport.url).port)) args[1].once('close', clientClosed);
+    return emit.call(this, event, ...args);
+  });
+  const caller = request(transport.url + '/PRIVATE_CANARY?list-type=2', { headers });
+  caller.on('error', () => {}); const closed = new Promise(resolve => caller.once('close', resolve)); caller.end();
+  await active;
+  if (stopped) afterStop.acknowledgeStop({ statusCode: 200, ownedPath: '/owned/PRIVATE_CANARY.db',
+    body: Buffer.from('{"status":"stopped","path":"/owned/PRIVATE_CANARY.db","txid":0}') });
+  caller.destroy(); await closed; await destinationClosed; release(); await finished;
+  audit.end();
+  if (!stopped) {
+    await assert.rejects(transport.close(), /Invalid cloud cost Litestream audit/);
+    assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+    // A subsequent valid acknowledgement cannot retrospectively forgive the interruption.
+    assert.throws(() => afterStop.acknowledgeStop({ statusCode: 200, ownedPath: '/owned/PRIVATE_CANARY.db',
+      body: Buffer.from('{"status":"stopped","path":"/owned/PRIVATE_CANARY.db","txid":0}') }), /Invalid cloud cost Litestream audit/);
+  } else {
+    await transport.close();
+    const subset = afterStop.snapshot(), all = meter.snapshot();
+    assert.equal(subset.used, 1); assert.equal(subset.lateAdmissions, 0); assert.equal(subset.lateSettlements, 1);
+    assert.deepEqual(subset.producer, { attempts: 1, bytesIn: 0, bytesOut: 0 });
+    assert.deepEqual(subset.observer, { attempts: 1, bytesIn: 8, bytesOut: 0 });
+    assert.equal(subset.requests.find(r => r.hop === 'producer').outcome, 'transport-error');
+    assert.equal(subset.requestsReconciled, true); assert.equal(subset.bodiesReconciled, false);
+    assert.ok(subset.gaps.includes('after-stop:list-response-interrupted'));
+    assert.equal(all.status, 'unknown'); assert.equal(all.reconciled, false);
+    assert.ok(all.gaps.includes('after-stop:list-response-interrupted'));
+    assert.deepEqual(all.accounting.discrepancy, { attempts: 0, bytesIn: 8, bytesOut: 0 });
+    assert.equal(all.billing[0].status, 'unknown'); assert.equal(all.billing[0].quantity, null);
+    assert.equal(JSON.stringify(subset).includes('PRIVATE_CANARY'), false);
+  }
+});
+
+test('ordinary transport never accepts an interruption because a counter callback returns true', async t => {
+  let arrived, release, settled, clientClosed;
+  const active = new Promise(resolve => { arrived = resolve; });
+  const observed = new Promise(resolve => { settled = resolve; });
+  const destinationClosed = new Promise(resolve => { clientClosed = resolve; });
+  const backend = createServer((req, res) => {
+    req.resume(); req.on('end', () => { release = () => res.end('metadata'); arrived(); });
+  });
+  backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
+  t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
+  const meter = createMeter({ phase: 'workload', clock: () => 0 });
+  const transport = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`, phase: 'workload',
+    meter: { ...meter, observeAttempt: (...args) => { meter.observeAttempt(...args); settled(); return true; } } });
+  t.after(() => transport.close().catch(() => {}));
+  const emit = Server.prototype.emit;
+  t.mock.method(Server.prototype, 'emit', function (event, ...args) {
+    if (event === 'request' && args[0].socket.localPort === Number(new URL(transport.url).port)) args[1].once('close', clientClosed);
+    return emit.call(this, event, ...args);
+  });
+  const client = request(transport.url + '/PRIVATE_CANARY?list-type=2', { headers });
+  client.on('error', () => {}); const closed = new Promise(resolve => client.once('close', resolve)); client.end();
+  await active; client.destroy(); await closed; await destinationClosed; release(); await observed;
+  await assert.rejects(transport.close(), /Invalid cloud cost Litestream audit/);
+  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+});

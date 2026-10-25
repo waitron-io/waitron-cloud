@@ -252,3 +252,183 @@ test('litestreamTransportLateResponseAfterClientCloseRefusesWithoutAnUncaughtExc
   try { const [exit] = await once(child, 'close'); assert.equal(exit, 0, Buffer.concat(output).toString()); }
   finally { clearTimeout(timer); }
 });
+
+const afterStopPath = '/owned/PRIVATE_CANARY.db';
+const stopAcknowledgement = () => ({ statusCode: 200, ownedPath: afterStopPath,
+  body: Buffer.from(JSON.stringify({ status: 'stopped', path: afterStopPath, txid: 0 })) });
+const invocationFor = n => `${String(n).padStart(8, '0')}-2222-4333-8444-555555555555`;
+function issueList(audit, invocation, attempt = 1) {
+  audit.write(Buffer.from(`SDK 2026/10/25 03:00:00 DEBUG Request\nGET /bucket?list-type=2 HTTP/1.1\r\nAmz-Sdk-Invocation-Id: ${invocation}\r\nAmz-Sdk-Request: attempt=${attempt}; max=3\r\n\r\n`));
+}
+async function afterStopTransport(t, { target, gate } = {}) {
+  assert.equal(typeof stream.createLitestreamAfterStop, 'function', 'bound after-stop work to distinct SDK attempts');
+  const afterStop = stream.createLitestreamAfterStop({ clock: () => 0 });
+  const meter = createMeter({ phase: 'workload', clock: () => 0, afterStop });
+  const audit = stream.createLitestreamRequestAudit({ phase: 'workload', afterStop });
+  target ??= await server(t, (req, res) => { req.resume(); req.on('end', () => res.end('list')); });
+  const observer = await createMeteringProxy({ target, meter,
+    classify: input => audit.observe({ headers: input.headers, operation: classifyStorageOperation(input) }) });
+  t.after(() => observer.close().catch(() => {}));
+  const endpoint = gate ? await gate(observer.url) : observer.url;
+  const front = await stream.createLitestreamTransport({ target: endpoint, meter, phase: 'workload', afterStop });
+  t.after(() => front.close().catch(() => {}));
+  return { afterStop, audit, meter, front };
+}
+
+// Counting each hop separately rejects three legitimate attempts; a reset permits the fourth.
+for (const count of [3, 4]) test(`after-stop lists share one cap across both independent hops: ${count}`, async t => {
+  const { afterStop, audit, meter, front } = await afterStopTransport(t);
+  afterStop.acknowledgeStop(stopAcknowledgement());
+  for (let n = 1; n <= count; n++) {
+    const invocation = invocationFor(n); issueList(audit, invocation);
+    const result = await send(front.url, { method: 'GET', path: '/bucket?list-type=2', headers: headers(invocation) });
+    assert.equal(result.code, n <= 3 ? 200 : 400);
+  }
+  if (count === 4) {
+    assert.throws(() => audit.end(), /Invalid cloud cost Litestream audit/);
+    await assert.rejects(front.close(), /Invalid cloud cost Litestream audit/);
+    assert.throws(() => afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
+    assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+  } else {
+    audit.end(); await front.close(); assert.equal(audit.snapshot().requestsReconciled, true);
+    const result = afterStop.snapshot();
+    assert.equal(result.used, 3); assert.equal(result.cap, 3);
+    assert.equal(result.lateAdmissions, 3); assert.equal(result.lateSettlements, 0);
+    assert.deepEqual(result.producer, { attempts: 3, bytesIn: 12, bytesOut: 0 });
+    assert.deepEqual(result.observer, { attempts: 3, bytesIn: 12, bytesOut: 0 });
+    assert.equal(result.requestsReconciled, true); assert.equal(result.bodiesReconciled, true);
+    assert.equal(meter.snapshot().accounting.producer.attempts, 3, 'subset never doubles all-attempt totals');
+    assert.equal(JSON.stringify(result).includes('PRIVATE_CANARY'), false);
+    assert.equal(JSON.stringify(result).includes(invocationFor(1)), false);
+  }
+});
+
+// The storage admission boundary, rather than issuance or response completion, determines the subset.
+for (const heldAt of ['before-storage', 'after-storage']) test(`a pre-issued list held ${heldAt} is classified at admission`, async t => {
+  let arrived, release; const active = new Promise(resolve => { arrived = resolve; });
+  const target = heldAt === 'after-storage' ? await server(t, (req, res) => {
+    req.resume(); req.on('end', () => { release = () => res.end('list'); arrived(); });
+  }) : undefined;
+  const gate = heldAt === 'before-storage' ? async endpoint => server(t, (req, res) => {
+    release = () => {
+      const upstream = request(endpoint, { method: req.method, path: req.url, headers: req.headers }, response => {
+        res.writeHead(response.statusCode, response.headers); response.pipe(res);
+      });
+      upstream.on('error', () => res.destroy()); req.pipe(upstream);
+    }; arrived();
+  }) : undefined;
+  const { afterStop, audit, meter, front } = await afterStopTransport(t, { target, gate });
+  issueList(audit, id);
+  const pending = send(front.url, { method: 'GET', path: '/bucket?list-type=2', headers: headers() });
+  await active; afterStop.acknowledgeStop(stopAcknowledgement()); release(); await pending;
+  audit.end(); await front.close();
+  const result = afterStop.snapshot();
+  assert.equal(result.used, heldAt === 'before-storage' ? 1 : 0);
+  assert.equal(result.lateAdmissions, heldAt === 'before-storage' ? 1 : 0);
+  assert.equal(result.lateSettlements, 0);
+  assert.equal(meter.snapshot().reconciled, true);
+});
+
+// A lifetime error must not erase body evidence which the independent counter already observed.
+test('counter settlement survives a lifetime-completion refusal', async t => {
+  const target = await server(t, (req, res) => { req.resume(); req.on('end', () => res.end('saved')); });
+  const meter = createMeter({ phase: 'workload', clock: () => 0 }), recorded = [];
+  const front = await stream.createLitestreamTransport({ target, phase: 'workload',
+    meter: { ...meter, observeAttempt: e => { meter.observeAttempt(e); recorded.push(e); } },
+    lifetimes: { begin: () => () => { throw Error('lifetime evidence refused'); } } });
+  t.after(() => front.close().catch(() => {}));
+  await send(front.url, { method: 'GET', headers: headers() });
+  await assert.rejects(front.close(), /Invalid cloud cost Litestream audit/);
+  assert.equal(recorded.length, 1);
+  assert.equal(recorded[0].bytesIn, 5); assert.equal(recorded[0].outcome, 'success');
+  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+});
+
+// An old SDK issue is never permission for a new mutation or read admitted after acknowledgement.
+for (const [method, path, operation] of [['PUT', '/bucket/key', 'put'], ['GET', '/bucket/key', 'get'],
+  ['HEAD', '/bucket/key', 'head'], ['DELETE', '/bucket/key', 'delete'],
+  ['POST', '/bucket?delete=', 'delete-many'], ['POST', '/bucket/key?uploads=', 'multipart-create'],
+  ['PUT', '/bucket/key?uploadId=x&partNumber=1', 'multipart-upload'],
+  ['POST', '/bucket/key?uploadId=x', 'multipart-complete'], ['DELETE', '/bucket/key?uploadId=x', 'multipart-abort']])
+  test(`after-stop ${operation} is refused before forwarding even with a pre-stop issue`, async t => {
+    let forwarded = 0;
+    const target = await server(t, (req, res) => { forwarded++; req.resume(); res.end(); });
+    const afterStop = stream.createLitestreamAfterStop({ clock: () => 0 });
+    const meter = createMeter({ phase: 'workload', clock: () => 0, afterStop });
+    const audit = stream.createLitestreamRequestAudit({ phase: 'workload', allowBulkDeletes: true, afterStop });
+    const front = await stream.createLitestreamTransport({ target, phase: 'workload', allowBulkDeletes: true, meter, afterStop });
+    t.after(() => front.close().catch(() => {}));
+    audit.write(Buffer.from(`SDK 2026/10/25 03:00:00 DEBUG Request\n${method} ${path} HTTP/1.1\r\nAmz-Sdk-Invocation-Id: ${id}\r\nAmz-Sdk-Request: attempt=1; max=3\r\n\r\n`));
+    afterStop.acknowledgeStop(stopAcknowledgement());
+    assert.equal((await send(front.url, { method, path, headers: headers() })).code, 400);
+    assert.equal(forwarded, 0);
+    await assert.rejects(front.close(), /Invalid cloud cost Litestream audit/);
+    assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+    assert.throws(() => afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
+  });
+
+test('an after-stop retry cannot reset the same invocation or consume a new allowance', async t => {
+  let forwarded = 0;
+  const target = await server(t, (req, res) => { forwarded++; req.resume(); req.on('end', () => res.end('ok')); });
+  const { afterStop, audit, meter, front } = await afterStopTransport(t, { target });
+  issueList(audit, id); await send(front.url, { method: 'GET', path: '/bucket?list-type=2', headers: headers() });
+  afterStop.acknowledgeStop(stopAcknowledgement()); issueList(audit, id, 2);
+  assert.equal((await send(front.url, { method: 'GET', path: '/bucket?list-type=2', headers: headers(id, 2) })).code, 400);
+  assert.equal(forwarded, 1);
+  await assert.rejects(front.close(), /Invalid cloud cost Litestream audit/);
+  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+});
+
+test('after-stop accounting never reconciles missing SDK issuance from equal byte counts', async t => {
+  const { afterStop, audit, meter, front } = await afterStopTransport(t);
+  afterStop.acknowledgeStop(stopAcknowledgement());
+  await send(front.url, { method: 'GET', path: '/bucket?list-type=2', headers: headers() });
+  audit.end(); await front.close();
+  assert.equal(audit.snapshot().requestsReconciled, false);
+  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+  assert.throws(() => afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
+});
+
+// A phase change during active I/O must poison both the optional ledger and ordinary evidence.
+test('a separate after-stop dimension cannot authorize a phase change during a live request', async t => {
+  let arrived, release; const active = new Promise(resolve => { arrived = resolve; });
+  const target = await server(t, (req, res) => { req.resume(); req.on('end', () => { release = () => res.end('list'); arrived(); }); });
+  const { afterStop, audit, meter, front } = await afterStopTransport(t, { target });
+  issueList(audit, id);
+  const pending = send(front.url, { method: 'GET', path: '/bucket?list-type=2', headers: headers() });
+  await active;
+  assert.throws(() => front.setPhase('idle'), /Invalid cloud cost Litestream audit/);
+  release(); await pending;
+  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+  assert.throws(() => afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
+  await assert.rejects(front.close(), /Invalid cloud cost Litestream audit/);
+});
+
+for (const source of ['audit', 'meter']) test(`a later ${source} validation failure poisons the shared session`, async t => {
+  const { afterStop, audit, meter, front } = await afterStopTransport(t);
+  afterStop.acknowledgeStop(stopAcknowledgement()); issueList(audit, id);
+  await send(front.url, { method: 'GET', path: '/bucket?list-type=2', headers: headers() }); await front.close();
+  assert.equal(afterStop.snapshot().used, 1);
+  if (source === 'audit') assert.throws(() => audit.write(Buffer.from('x'.repeat(65537))), /Invalid cloud cost Litestream audit/);
+  else assert.throws(() => meter.observeAttempt({ private: 'PRIVATE_CANARY' }), /Invalid cloud cost meter/);
+  assert.throws(() => afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
+});
+
+test('a PUT admitted at the first hop before stop cannot reach storage for the first time after stop', async t => {
+  let arrived, release, forwarded = 0; const active = new Promise(resolve => { arrived = resolve; });
+  const target = await server(t, (req, res) => { forwarded++; req.resume(); res.end(); });
+  const gate = async endpoint => server(t, (req, res) => {
+    release = () => {
+      const upstream = request(endpoint, { method: req.method, path: req.url, headers: req.headers }, response => {
+        res.writeHead(response.statusCode, response.headers); response.pipe(res);
+      }); upstream.on('error', () => res.destroy()); req.pipe(upstream);
+    }; arrived();
+  });
+  const { afterStop, audit, meter, front } = await afterStopTransport(t, { target, gate });
+  audit.write(Buffer.from(`SDK 2026/10/25 03:00:00 DEBUG Request\nPUT /bucket/PRIVATE_CANARY HTTP/1.1\r\nAmz-Sdk-Invocation-Id: ${id}\r\nAmz-Sdk-Request: attempt=1; max=3\r\n\r\n`));
+  const pending = send(front.url, { method: 'PUT', headers: headers(), body: 'upload' });
+  await active; afterStop.acknowledgeStop(stopAcknowledgement()); release();
+  assert.equal((await pending).code, 400); assert.equal(forwarded, 0);
+  await assert.rejects(front.close(), /Invalid cloud cost Litestream audit/);
+  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+});

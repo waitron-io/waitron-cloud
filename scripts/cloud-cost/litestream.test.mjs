@@ -115,3 +115,172 @@ test('nativeDeletionBatchHeaderAuditRequiresIndependentOptInAndMatchingSdkHint',
     assert.throws(() => b.write(Buffer.from(log({ method: 'POST', path: options.allowBulkDeletes ? path.replace('DeleteObjects', 'DeleteObject') : path }))), /Invalid cloud cost Litestream audit/);
   }
 });
+
+const ownedStopPath = '/owned/PRIVATE_CANARY.db';
+const ack = (reply = { status: 'stopped', path: ownedStopPath, txid: 0 }) => ({ statusCode: 200,
+  ownedPath: ownedStopPath, body: Buffer.from(JSON.stringify(reply)) });
+const afterStopSession = clock => stream.createLitestreamAfterStop({ clock: clock ?? (() => 0) });
+const issued = (ordinal = 0, operation = 'list') => ({ invocation: id, ordinal, operation });
+const admitted = (hop, ordinal = 0, operation = 'list') => ({ ...issued(ordinal, operation), hop, phase: 'workload' });
+const settled = (channel, { ordinal = 0, operation = 'list', ...changes } = {}) => ({ token: `${id}:${ordinal + 1}`,
+  channel, phase: 'workload', operation, retryOrdinal: ordinal, outcome: 'success', statusCode: 200,
+  errorCode: null, sameAccount: null, bytesIn: 4, bytesOut: 0, attemptedBytesIn: 4, attemptedBytesOut: 0, ...changes });
+const knownInterruption = () => ({ reason: 'transfer-interrupted', ioEvent: 'response-pipeline',
+  code: 'ERR_STREAM_UNABLE_TO_PIPE', clientClosed: true, responseHeadersSeen: true });
+function startAttempt(session, operation = 'list') {
+  session.issue(issued(0, operation)); session.admit(admitted('producer', 0, operation)); session.admit(admitted('observer', 0, operation));
+}
+
+// Weakening any acknowledgement check would authorize the exception without the runtime boundary.
+for (const [label, input] of [
+  ['status', { ...ack(), statusCode: 201 }],
+  ['already stopped', ack({ status: 'already_stopped', path: ownedStopPath, txid: 0 })],
+  ['wrong path', ack({ status: 'stopped', path: '/other/PRIVATE_CANARY.db', txid: 0 })],
+  ['negative txid', ack({ status: 'stopped', path: ownedStopPath, txid: -1 })],
+  ['unsafe txid', ack({ status: 'stopped', path: ownedStopPath, txid: Number.MAX_SAFE_INTEGER + 1 })],
+  ['fractional txid', ack({ status: 'stopped', path: ownedStopPath, txid: 0.5 })],
+  ['string txid', ack({ status: 'stopped', path: ownedStopPath, txid: '0' })],
+  ['missing key', ack({ status: 'stopped', path: ownedStopPath })],
+  ['extra key', ack({ status: 'stopped', path: ownedStopPath, txid: 0, private: 'PRIVATE_CANARY' })],
+  ['malformed JSON', { ...ack(), body: Buffer.from('{') }],
+  ['oversized', { ...ack(), body: Buffer.concat([ack().body, Buffer.alloc(1024, ' ')]) }],
+  ['unknown envelope', { ...ack(), private: 'PRIVATE_CANARY' }],
+]) test(`after-stop acknowledgement refuses ${label} and poisons the session`, () => {
+  const session = afterStopSession();
+  assert.throws(() => session.acknowledgeStop(input), /Invalid cloud cost Litestream audit/);
+  assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+});
+
+test('after-stop boundary is one-way and cannot be moved or configured to forgive more attempts', () => {
+  assert.throws(() => stream.createLitestreamAfterStop({ clock: () => 0, cap: 100 }), /Invalid cloud cost Litestream audit/);
+  const session = afterStopSession(); session.acknowledgeStop(ack());
+  assert.throws(() => session.acknowledgeStop(ack()), /Invalid cloud cost Litestream audit/);
+  assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+});
+
+// Equal timestamps use event order; a backwards clock or changed phase must refuse evidence.
+for (const action of ['backwards-clock', 'duplicate-issue', 'duplicate-admission', 'duplicate-settlement', 'unknown-hop',
+  'missing-producer', 'missing-issue', 'wrong-operation', 'wrong-phase', 'ordinal-reset', 'private-field', 'unknown-outcome', 'invalid-status'])
+  test(`after-stop correlation cannot accept ${action}`, () => {
+    let now = 1; const session = afterStopSession(() => now);
+    if (action !== 'missing-issue') session.issue(issued());
+    const run = () => {
+      if (action === 'backwards-clock') now = 0;
+      if (action === 'duplicate-issue') return session.issue(issued());
+      if (action === 'unknown-hop') return session.admit({ ...admitted('producer'), hop: 'PRIVATE_CANARY' });
+      if (action === 'missing-producer') return session.admit(admitted('observer'));
+      if (action === 'private-field') return session.admit({ ...admitted('producer'), private: 'PRIVATE_CANARY' });
+      session.admit(admitted('producer'));
+      if (action === 'duplicate-admission') return session.admit(admitted('producer'));
+      if (action === 'wrong-operation') return session.admit(admitted('observer', 0, 'get'));
+      if (action === 'wrong-phase') return session.admit({ ...admitted('observer'), phase: 'idle' });
+      if (action === 'ordinal-reset') return session.admit(admitted('producer', 2));
+      session.admit(admitted('observer'));
+      if (action === 'unknown-outcome') return session.settle(settled('producer', { outcome: 'PRIVATE_CANARY' }));
+      if (action === 'invalid-status') return session.settle(settled('producer', { statusCode: 503 }));
+      session.settle(settled('producer')); session.settle(settled('observer'));
+      if (action === 'duplicate-settlement') return session.settle(settled('producer'));
+      return session.snapshot();
+    };
+    assert.throws(run, /Invalid cloud cost Litestream audit/);
+    assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+  });
+
+// The exception is a closed signature, not permission to ignore arbitrary I/O failure.
+for (const [label, change] of [['event', { ioEvent: 'response-aborted' }], ['code', { code: 'ECONNRESET' }],
+  ['reason', { reason: 'upstream-error' }], ['client open', { clientClosed: false }], ['no headers', { responseHeadersSeen: false }],
+  ['extra key', { private: 'PRIVATE_CANARY' }]]) test(`after-stop interrupted list refuses unrelated ${label}`, () => {
+    const session = afterStopSession(); startAttempt(session); session.acknowledgeStop(ack());
+    assert.throws(() => session.settle(settled('producer', { outcome: 'transport-error' }), { ...knownInterruption(), ...change }), /Invalid cloud cost Litestream audit/);
+    assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+  });
+
+// Buffering SDK logs cannot backdate a real storage admission; identities must still pair by completion.
+test('late SDK log arrival cannot relabel an admitted list or create an extra counted hop', () => {
+  const session = afterStopSession(); session.admit(admitted('producer')); session.admit(admitted('observer'));
+  session.acknowledgeStop(ack()); session.issue(issued());
+  session.settle(settled('producer')); session.settle(settled('observer'));
+  assert.equal(session.snapshot().used, 0);
+});
+
+for (const changes of [{ errorCode: 'PRIVATE_CANARY' }, { sameAccount: 'PRIVATE_CANARY' }, { bytesOut: -1 },
+  { attemptedBytesIn: 3 }]) test(`after-stop event refuses invalid public counter metadata ${Object.keys(changes)[0]}`, () => {
+    const session = afterStopSession(); startAttempt(session);
+    assert.throws(() => session.settle(settled('producer', changes)), /Invalid cloud cost Litestream audit/);
+    assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+  });
+
+// A response fragment is an observed byte, not proof of full-body equality or a second affected attempt.
+for (const count of [3, 4]) test(`after-stop list settlements share the admission cap and retain fragments: ${count}`, () => {
+  const session = afterStopSession();
+  for (let n = 1; n <= count; n++) {
+    const invocation = `${String(n).padStart(8, '0')}-2222-4333-8444-555555555555`;
+    session.issue({ ...issued(), invocation });
+    for (const hop of ['producer', 'observer']) session.admit({ ...admitted(hop), invocation });
+  }
+  session.acknowledgeStop(ack());
+  for (let n = 1; n <= count; n++) {
+    const token = `${String(n).padStart(8, '0')}-2222-4333-8444-555555555555:1`;
+    session.settle({ ...settled('observer'), token });
+    const finish = () => session.settle({ ...settled('producer', { outcome: 'transport-error', bytesIn: 2 }), token }, knownInterruption());
+    if (n === 4) {
+      assert.throws(finish, /Invalid cloud cost Litestream audit/);
+      assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+    } else finish();
+  }
+  if (count === 3) {
+    const result = session.snapshot();
+    assert.equal(result.used, 3); assert.equal(result.lateAdmissions, 0); assert.equal(result.lateSettlements, 3);
+    assert.deepEqual(result.producer, { attempts: 3, bytesIn: 6, bytesOut: 0 });
+    assert.deepEqual(result.observer, { attempts: 3, bytesIn: 12, bytesOut: 0 });
+    assert.equal(result.requests.find(r => r.hop === 'producer').attemptedBytesIn, 12);
+    assert.equal(result.bodiesReconciled, false); assert.equal(result.status, 'unknown');
+  }
+});
+
+test('late admission and interrupted settlement count the same SDK attempt only once', () => {
+  const session = afterStopSession(); session.acknowledgeStop(ack()); startAttempt(session);
+  session.settle(settled('observer'));
+  session.settle(settled('producer', { outcome: 'transport-error' }), knownInterruption());
+  const result = session.snapshot();
+  assert.equal(result.used, 1); assert.equal(result.lateAdmissions, 1); assert.equal(result.lateSettlements, 1);
+  assert.equal(result.bodiesReconciled, false, 'equal fragments still do not prove a complete response');
+});
+
+for (const invalid of ['missing storage admission', 'observer interruption', 'changed settlement phase'])
+  test(`after-stop settlement refuses ${invalid} immediately`, () => {
+    const session = afterStopSession(); session.issue(issued()); session.admit(admitted('producer'));
+    if (invalid !== 'missing storage admission') session.admit(admitted('observer'));
+    session.acknowledgeStop(ack());
+    const input = invalid === 'changed settlement phase' ? settled('producer', { phase: 'idle' })
+      : settled(invalid === 'observer interruption' ? 'observer' : 'producer', { outcome: 'transport-error' });
+    assert.throws(() => session.settle(input, invalid === 'changed settlement phase' ? null : knownInterruption()), /Invalid cloud cost Litestream audit/);
+    assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+  });
+
+test('changing phases cannot reset the one session allowance', () => {
+  const session = afterStopSession(); session.acknowledgeStop(ack());
+  for (const [index, phase] of ['startup', 'workload', 'idle', 'verification'].entries()) {
+    const invocation = `${String(index + 1).padStart(8, '0')}-2222-4333-8444-555555555555`, token = invocation + ':1';
+    session.issue({ ...issued(), invocation }); session.admit({ ...admitted('producer'), invocation, phase });
+    if (index === 3) {
+      assert.throws(() => session.admit({ ...admitted('observer'), invocation, phase }), /Invalid cloud cost Litestream audit/);
+      assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+    } else {
+      session.admit({ ...admitted('observer'), invocation, phase });
+      for (const channel of ['producer', 'observer']) session.settle({ ...settled(channel), token, phase });
+    }
+  }
+});
+
+test('after-stop aggregate refuses byte totals that no longer fit a safe integer', () => {
+  const session = afterStopSession(); session.acknowledgeStop(ack());
+  for (let n = 1; n <= 2; n++) {
+    const invocation = `${String(n).padStart(8, '0')}-2222-4333-8444-555555555555`, token = invocation + ':1';
+    session.issue({ ...issued(), invocation });
+    for (const hop of ['producer', 'observer']) session.admit({ ...admitted(hop), invocation });
+    for (const channel of ['producer', 'observer']) session.settle({ ...settled(channel, {
+      bytesIn: Number.MAX_SAFE_INTEGER, attemptedBytesIn: Number.MAX_SAFE_INTEGER }), token });
+  }
+  assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+});
