@@ -245,7 +245,7 @@ const en = {
   pairUnavailable:'This request is unavailable. Check the code, or start again from Cloud services in Waitron.',
   pairPermission:'You cannot approve this request with this account and business. Check your account or start again from Waitron.',
   pairSession:'Your session has ended. Sign in again to continue.', pairUncertain:'We could not confirm the approval. Try again to check or recover it, then return to Waitron.',
-  pairNoBusinesses:'This account has no businesses that you can connect venues to.', pairLoading:'Loading your businesses…',
+  pairNoBusinesses:'This account has no businesses that you can connect venues to. Sign out, then sign in with the account that owns the business.', pairLoading:'Loading your businesses…',
 
   language:'Language', login:'Sign in', signup:'Create an account', completeSignup:'Complete your account',
   forgot:'Forgot your password?', reset:'Choose a new password', account:'Your account',
@@ -525,7 +525,7 @@ const es: Copy = {
   pairUnavailable:'Esta solicitud no está disponible. Comprueba el código o empieza de nuevo desde Servicios Cloud en Waitron.',
   pairPermission:'No puedes aprobar esta solicitud con esta cuenta y este negocio. Comprueba tu cuenta o empieza de nuevo desde Waitron.',
   pairSession:'Tu sesión ha terminado. Inicia sesión de nuevo para continuar.', pairUncertain:'No hemos podido confirmar la aprobación. Vuelve a intentarlo para comprobarla o recuperarla y vuelve a Waitron.',
-  pairNoBusinesses:'Esta cuenta no tiene negocios para los que puedas conectar locales.', pairLoading:'Cargando tus negocios…',
+  pairNoBusinesses:'Esta cuenta no tiene negocios para los que puedas conectar locales. Cierra sesión e inicia sesión con la cuenta propietaria del negocio.', pairLoading:'Cargando tus negocios…',
 
   language:'Idioma', login:'Inicia sesión', signup:'Crea una cuenta', completeSignup:'Completa tu cuenta',
   forgot:'¿Has olvidado tu contraseña?', reset:'Elige una nueva contraseña', account:'Tu cuenta',

@@ -5512,8 +5512,10 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   record missing provisioning paths without changing fiscal authority or history.
 - R7: distinguish temporary fiscal continuity access from missing configuration,
   uncertain history and allocation contention; retain original-request inspection.
-- R8: connect the no-eligible-business message to the existing sign-out path;
-  same-account membership/business creation remains a separate missing capability.
+- R8 delivered: the no-eligible-business message explains the existing sign-out
+  and owning-account sign-in path in English and Spanish. Stubbed-browser checks
+  cover the account switch, retained connection request and recoverable sign-out
+  failure. Same-account membership/business creation remains a missing capability.
 - R9: make persistent public availability refusal honest while retaining retry;
   give owners useful diagnostics without exposing private state to visitors.
 - R10: provide safe next actions for empty public-gate rejection pages and reproduce
