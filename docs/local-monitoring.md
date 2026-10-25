@@ -105,9 +105,11 @@ and the verified certificate validity dates and SHA-256 fingerprint on success.
 The public check receives and solves the normal bot challenge before requesting
 `/public/availability`; there is no unprotected health bypass. Browsers reject a
 host-only cookie that names a domain. The probe refuses any `Domain` attribute,
-including empty and bare attributes that some browsers ignore. It also checks the
-last effective `Path` attribute: values over 1,024 bytes are ignored, as in
-Chromium. A later non-root, empty or bare path within that limit makes the
+including empty and bare attributes that some browsers ignore. Attribute names
+trim only ASCII spaces and tabs. A no-break space leaves a different name, so
+a protected host-only cookie with that unrelated attribute can still pass.
+The probe also checks the last effective `Path` attribute. Values over 1,024 bytes
+are ignored, as in Chromium. A later non-root, empty or bare path within that limit makes the
 host-prefixed cookie unusable, even when an earlier attribute says `Path=/`. Its Path comparison
 trims ordinary spaces and tabs, preserving other bytes so it cannot mistake a
 no-break space for a browser-accepted root path. It also refuses zero or negative

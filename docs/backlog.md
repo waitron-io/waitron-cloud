@@ -3934,6 +3934,10 @@ notifications separately.
   literal `Path=/` attribute. Real HTTPS cases and independent Chromium controls
   cover replacement, ignored oversized values and missing or invalid paths.
   The last effective path must still be `/`; refused cookies never reach availability.
+  Domain-name recognition now trims only ASCII spaces and tabs, so an unrelated
+  attribute containing a no-break space no longer causes a false unhealthy result.
+  Real HTTPS regressions and independent Chromium controls preserve refusal of
+  every genuine Domain attribute, including empty/bare forms and duplicates.
   The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
   separates existing local detection from proposed production operator alerts and
   opted-in venue mail, with worked outage and backup timelines. The owner approved

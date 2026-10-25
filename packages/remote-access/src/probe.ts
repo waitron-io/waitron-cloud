@@ -129,7 +129,7 @@ function accessCookie(headers:import('node:http').IncomingHttpHeaders){
  const values=headers['set-cookie'];if(!values||values.length!==1)throw new ProbeError('challenge');
  // Trim only ASCII space and tab around cookie parts; broader trimming can invent required tokens.
  const parts=values[0]!.split(';').map(value=>value.replace(/^[ \t]+|[ \t]+$/g,'')),match=/^__Host-waitron-public=([A-Za-z0-9._~-]{1,1024})$/.exec(parts[0]??'');if(!match)throw new ProbeError('challenge');
- if(parts.slice(1).some(part=>part.split('=',1)[0]!.trim().toLowerCase()==='domain'))throw new ProbeError('challenge');
+ if(parts.slice(1).some(part=>part.split('=',1)[0]!.replace(/^[ \t]+|[ \t]+$/g,'').toLowerCase()==='domain'))throw new ProbeError('challenge');
  // Host-prefixed cookies require the last effective Path to be root.
  // Chromium ignores oversized values, leaving the earlier Path effective.
  const trimPath=(value:string)=>value.replace(/^[ \t]+|[ \t]+$/g,'');
