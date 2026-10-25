@@ -5075,10 +5075,14 @@ Native checks cover three/four-attempt boundaries with real HTTP requests; the
 official held-list control observes one affected attempt and does not claim that
 four official attempts occurred. Whole-branch review found no blocking defect;
 the existing retry-output test also catches deletion of its guard when included
-in the review matrix. Keep a test-hardening follow-up for independently exercising
-the smoke's request-complete witness, pre-ack child-exit race and child-running
-check at acknowledgement; their individual deletion currently leaves other
-checks as backstops. Do not claim the exact refusal step independently proved.
+in the review matrix. A separate native child-process check now holds the stop
+reply open in the parent while the writer exits. It requires the pending control
+request to be cancelled before the next event-loop turn and refusal at the control
+step, with the request fully received and no cleanup signal sent to the writer.
+Removing the writer-exit race fails this check while the original early-exit
+case still passes; restoring it passes. The smoke's request-complete witness and
+child-running check at acknowledgement still need independent tests. Do not claim
+those two refusal steps independently proved.
 Genuine Linux/SeaweedFS and PostgreSQL qualification run in current-head CI before
 landing. Historical attribution remains open.
 
@@ -5098,7 +5102,7 @@ and [merge cost checks](https://github.com/waitron-io/waitron-cloud/actions/runs
 passed, including all six genuine smoke cases and the held-list control. Each
 head/merge pair recorded 10,167 passing tests and the same 19 optional skips.
 These runs qualify that delivery; they do not attribute every historical refusal.
-The three independent guard checks named above remain open. A generic
+The two independent guard checks named above remain open. A generic
 `active-close` still refuses measurement publication. Preserve the official pin,
 three-attempt cap, ordinary accounting, restore and deadline checks in any repair;
 local Docker qualification remains unavailable until 3 November.
