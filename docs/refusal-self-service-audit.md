@@ -39,8 +39,8 @@ demonstrated invariant at its source.
 ## Fixes to make one screen at a time
 
 Each row gives the current English/Spanish wording, the cause and the action to
-implement or clarify. R1, R2, R4 and R8 are implemented; seven rows remain
-open. No row authorizes a permission bypass.
+implement or clarify. R1, R4 and R8 are implemented. R2's shared-400 and browser-duplicate paths
+are implemented; seven other rows and the remaining R2 feedback stay open. No row authorizes a permission bypass.
 
 | ID and screen | Response and current wording, English / Spanish | Cause and evidence | Way forward and next change |
 | --- | --- | --- | --- |
@@ -108,12 +108,12 @@ that a key belongs to any account, so it gives conditional guidance instead.
 
 | Producer | Causes of the shared response | Portal boundary |
 | --- | --- | --- |
-| [HTTP parser](../packages/account-http/src/passkeys.ts#L79) | Missing/extra fields, invalid IDs, passwords or credential structures, malformed JSON and oversized field values. | General registration/removal feedback; no field is blamed without evidence. |
+| [HTTP parser](../packages/account-http/src/passkeys.ts#L80) | Missing/extra fields, invalid IDs, passwords or credential structures, malformed JSON and oversized field values. | General registration/removal feedback; no field is blamed without evidence. |
 | [Registration options](../packages/registration/src/passkeys.ts#L92) | The adapter returns an invalid challenge. | Read the list before a fresh prompt; do not promise waiting repairs configuration. |
 | [Registration state](../packages/registration/src/passkeys.ts#L205) | Malformed/missing, differently bound, consumed or expired registration setup. | Start a new prompt with your password; do not reuse the old setup. |
 | [Registration verification](../packages/registration/src/passkeys.ts#L108) | Verification throws or fails, user verification is absent, returned credential/counter is invalid, the account binding differs, or a credential already exists. | General feedback without identifying the key's owner. Check your own list and choose another key if already registered. |
 | [Removal](../packages/account-http/src/passkeys.ts#L51) | Malformed request/ID/password; deleting a missing or differently owned ID still returns 204. | Refresh your own list before choosing a remaining key. Removal always needs your current password. |
-| [Authority and outages](../packages/account-http/src/passkeys.ts#L67) | Credentials, session, request-token, rate-limit and service failures retain their existing responses. | Keep their messages and retry delays. An uncertain change still reads the list before suggesting another change. |
+| [Authority and rate admission](../packages/account-http/src/passkeys.ts#L57), [credential handling](../packages/account-http/src/passkeys.ts#L72) and [common errors](../packages/account-http/src/app.ts#L53) | Credentials, session, request-token, rate-limit and service failures retain their existing responses. | Keep their messages and retry delays. An uncertain change still reads the list before suggesting another change. |
 
 Native checks exercise mapping boundaries, fresh password, read failure, pending
 work, delays and account switches. Browser checks use the real portal and browser

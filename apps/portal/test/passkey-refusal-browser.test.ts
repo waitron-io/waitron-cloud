@@ -4,7 +4,7 @@ import {test} from 'node:test';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
 import {translations} from '../src/locale.ts';
-const bundle = await build({stdin: {contents: `import {applyTokens} from '@waitron-io/ui-core/tokens'; import {PortalApp} from './src/app.ts'; applyTokens(document.body); new PortalApp(document.querySelector('#portal'));`, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
+const bundle = await build({stdin: {contents: `import {applyTokens} from '@waitron-io/ui-core/tokens'; import {PortalApp} from './src/app.ts'; applyTokens(document.body); window.passkeyRefusalApp = new PortalApp(document.querySelector('#portal'));`, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const id = '12345678-1234-4234-8234-123456789abc', addedId = '22345678-1234-4234-8234-123456789abc';
 const key = {id, createdAt: '2026-09-26T00:00:00.000Z', lastUsedAt: null};
@@ -15,7 +15,7 @@ const labels = {
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
   test(`${locale} ${theme} ${width}: refused passkey changes have a read-only check and fresh attempt`, async t => {
     const browser = await chromium.launch({headless: true});
-    try { for (const flow of ['options', 'verify', 'remove', 'browser-duplicate'] as const) await t.test(flow, async () => {
+    try { for (const flow of ['options', 'verify', 'remove', 'browser-duplicate', 'failed-list', 'navigation'] as const) await t.test(flow, async () => {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
       page.setDefaultTimeout(4000);
       let release!: () => void;
@@ -23,6 +23,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       let checking = false, refused = false, refusingAgain = false, reads = 0, added = false, removed = false, optionsCount = 0;
       const writes: {path: string; body: Record<string, unknown>}[] = [];
       const c = translations[locale], text = labels[locale];
+      const failureAt = flow === 'failed-list' || flow === 'navigation' ? 'verify' : flow;
       try {
         const virtual = await page.context().newCDPSession(page);
         await virtual.send('WebAuthn.enable');
@@ -38,10 +39,10 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await page.route('**/api/account/**', async route => {
           const req = route.request(), path = new URL(req.url()).pathname.replace('/api/account', '');
           if (path === '/session' || path === '/session/activity') return route.fulfill({json: {accountId: 'owner', expiresAt: '2099-01-01T00:00:00Z'}});
-          if (path === '/passkeys') {reads++; if (checking) await checked; return route.fulfill({json: {passkeys: removed ? [] : added ? [key, {...key, id: addedId}] : [key]}});}
+          if (path === '/passkeys') {reads++; if (checking) await checked; if (flow === 'failed-list' && refused && !checking) return route.fulfill({status: 503, json: {error: 'unavailable'}}); return route.fulfill({json: {passkeys: removed ? [] : added ? [key, {...key, id: addedId}] : [key]}});}
           if (path.startsWith('/passkeys/')) {
             writes.push({path, body: req.postDataJSON()});
-            if (refusingAgain || (flow !== 'browser-duplicate' && !refused && path.endsWith(flow === 'options' ? '/options' : flow === 'verify' ? '/verify' : '/remove'))) {refused = true; return route.fulfill({status: 400, headers: refusingAgain ? {'Retry-After': '60'} : {}, json: {error: 'invalid_input'}});}
+            if (refusingAgain || (flow !== 'browser-duplicate' && !refused && path.endsWith(failureAt === 'options' ? '/options' : failureAt === 'verify' ? '/verify' : '/remove'))) {refused = true; return route.fulfill({status: 400, headers: refusingAgain ? {'Retry-After': '60'} : {}, json: {error: 'invalid_input'}});}
             if (path.endsWith('/options')) {
               optionsCount++;
               return route.fulfill({json: {ceremonyId: optionsCount === 1 ? id : addedId, options: {challenge: optionsCount === 1 ? 'YWJj' : 'ZGVm', rp: {name: 'Waitron Cloud', id: 'portal.test'}, user: {id: 'b3duZXI', name: 'owner@example.test', displayName: 'Owner'}, pubKeyCredParams: [{type: 'public-key', alg: -7}]}}});
@@ -60,14 +61,28 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await section.getByRole('alert').getByText(flow === 'remove' ? text.removal : text.registration, {exact: true}).waitFor();
         assert.equal(await section.getByText(c.passkeyUnavailable, {exact: true}).count(), 0);
         assert.equal(await section.getByRole('alert').count(), 1);
+        assert.equal(await section.getByRole('button', {name: c.retry, exact: true}).count(), 0, 'one list-check action even if the automatic read failed');
+        assert.equal(await section.getByText(c.passkeyNone, {exact: true}).count(), 0);
         const refresh = section.getByRole('button', {name: text.check, exact: true});
         assert.equal(await refresh.isEnabled(), true);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         if (process.env.PASSKEY_REFUSAL_RECEIPT_DIR && flow === 'verify') {await mkdir(process.env.PASSKEY_REFUSAL_RECEIPT_DIR, {recursive: true}); await section.screenshot({path: `${process.env.PASSKEY_REFUSAL_RECEIPT_DIR}/${locale}-${theme}-${width}.png`});}
         const before = writes.length, beforeReads = reads; checking = true;
+        if (flow === 'navigation') await page.evaluate(() => {
+          const w = window as unknown as {passkeyRefusalApp: {refreshPasskeys(): Promise<void>}; passkeyRefreshDone: Promise<void>};
+          const original = w.passkeyRefusalApp.refreshPasskeys.bind(w.passkeyRefusalApp);
+          w.passkeyRefusalApp.refreshPasskeys = () => w.passkeyRefreshDone = original();
+        });
         const requested = page.waitForRequest('**/api/account/passkeys'); await refresh.click(); await requested;
         assert.equal(writes.length, before, 'checking never repeats registration or removal'); assert.equal(reads, beforeReads + 1);
         assert.equal(await password.inputValue(), ''); assert.equal(await password.isDisabled(), true, 'the check keeps password entry disabled while pending');
+        if (flow === 'navigation') {
+          await page.evaluate(() => (window as unknown as {passkeyRefusalApp: {navigate(path: string): void}}).passkeyRefusalApp.navigate('/login'));
+          const email = page.locator('input[name=email]'); await email.focus(); release();
+          await page.evaluate(() => (window as unknown as {passkeyRefreshDone: Promise<void>}).passkeyRefreshDone);
+          assert.equal(await email.evaluate(el => el === (el.getRootNode() as ShadowRoot).activeElement), true, 'an old refresh cannot steal focus on the new page');
+          return;
+        }
         release();
         await page.waitForFunction(() => document.querySelector('h1') === document.activeElement);
         assert.equal(await section.getByRole('alert').count(), 0); assert.equal(await refresh.count(), 0);
@@ -82,7 +97,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         else {
           assert.deepEqual(change.map(x => x.path), ['/passkeys/registration/options', '/passkeys/registration/verify']);
           assert.deepEqual(change[0]!.body, {password: 'Fresh password'});
-          assert.equal(change[1]!.body.ceremonyId, flow === 'verify' || flow === 'browser-duplicate' ? addedId : id, 'restart uses a new server-issued prompt');
+          assert.equal(change[1]!.body.ceremonyId, flow === 'verify' || flow === 'browser-duplicate' || flow === 'failed-list' ? addedId : id, 'restart uses a new server-issued prompt');
         }
         assert.equal(await password.inputValue(), '');
         if (flow === 'options') {

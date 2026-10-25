@@ -17,16 +17,17 @@ export function passkeySignInScreen(app: PortalApp) {
 export function passkeyAccountScreen(app: PortalApp) {
   const c = app.copy;
   const message = app.passkeys.error ?? app.passkeys.notice;
+  const check = app.passkeys.error === 'passkeyRegistrationRefused' || app.passkeys.error === 'passkeyRemovalRefused';
   const date = new Intl.DateTimeFormat(app.locale, {dateStyle: 'medium'});
   const dateTime = new Intl.DateTimeFormat(app.locale, {dateStyle: 'medium', timeStyle: 'short'});
   return html`<section class="passkeys" aria-labelledby="passkeys-heading">
     <h3 id="passkeys-heading">${c.passkeys}</h3>
     <p>${c.passkeyIntro}</p>
     ${message ? html`<p role=${app.passkeys.error ? 'alert' : 'status'}>${c[message]}</p>` : nothing}
-    ${app.passkeys.error === 'passkeyRegistrationRefused' || app.passkeys.error === 'passkeyRemovalRefused' ? html`<wt-button .disabled=${app.passkeys.pending || !!app.passkeys.waiting}
+    ${check ? html`<wt-button .disabled=${app.passkeys.pending || !!app.passkeys.waiting}
       @click=${() => {void app.refreshPasskeys();}}>${c.passkeyRefresh}</wt-button>` : nothing}
     ${app.passkeys.listLoaded && !app.passkeys.passkeys.length ? html`<p>${c.passkeyNone}</p>` : nothing}
-    ${app.passkeys.loaded && !app.passkeys.listLoaded ? html`<wt-button .disabled=${app.passkeys.pending || !!app.passkeys.waiting}
+    ${app.passkeys.loaded && !app.passkeys.listLoaded && !check ? html`<wt-button .disabled=${app.passkeys.pending || !!app.passkeys.waiting}
       @click=${() => {void app.passkeys.load();}}>${c.retry}</wt-button>` : nothing}
     ${app.passkeys.passkeys.length ? html`<ul class="passkey-list">${app.passkeys.passkeys.map(passkey => html`<li>
       <span class="security-details"><span><span class="security-label">${c.passkeyCreated}</span> ${date.format(new Date(passkey.createdAt))}</span>
