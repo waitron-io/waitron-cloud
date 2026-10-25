@@ -5334,3 +5334,10 @@ request. Server refusals and uncertain outcomes stay visible while you type;
 choosing a business still leaves code errors alone. Browser checks cover English
 and Spanish, both themes and phone/desktop widths, including pasted code trimming
 and values retained across a language change.
+
+Lane D's Litestream investigation has another observation from
+[cost run 40181699752, job 121133970845](https://github.com/waitron-io/waitron-cloud/actions/runs/40181699752/job/121133970845).
+The committed-PUT-reply shutdown check refuses at `idle` with one pending exchange
+and 20 completed exchanges; transport cleanup then reports `active-close`.
+Reproduce this refusal before attributing its cause. Keep the existing limits
+and assertions; the code-feedback fix does not resolve this investigation.
