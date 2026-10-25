@@ -21,6 +21,10 @@ export class AuthenticatorController {
     this.error=result.status===429?'limited':result.code==='credentials_invalid'?'credentials':result.status===403?'forbidden'
       :change&&(result.status===0||result.status>=500)?'factorChangeUncertain':'factorUnavailable';
   }
+  #managementFailure(result:Extract<ApiResult<unknown>,{ok:false}>,change=false){
+    this.#failure(result,change);
+    if(result.status===400&&result.code==='invalid_input')this.error='factorCheckSettings';
+  }
   #start(){if(this.pending||Date.now()<this.retryAt)return undefined;this.pending=true;this.error=undefined;this.requiredField=undefined;this.#changed();return this.#generation;}
   #required(error:'requiredPassword'|'factorCodeRequired'|'factorCodeInvalid'|'factorConfirmationInvalid',field:NonNullable<AuthenticatorController['requiredField']>){if(!this.pending&&Date.now()>=this.retryAt){this.error=error;this.requiredField=field;this.#changed();}return false as const;}
   async startLogin(email:string,password:string):Promise<'authenticated'|'factor'|'reconcile'|false>{
@@ -47,6 +51,11 @@ export class AuthenticatorController {
   async load(){if(!this.#account)return;const generation=this.#start();if(generation===undefined)return;
     const result=await this.#request<FactorStatus>('/authenticator');if(generation!==this.#generation)return;
     this.pending=false;this.loaded=result.ok;if(result.ok)this.status=result.value;else this.#failure(result);this.#changed();}
+  async refresh(){
+    if(!this.#account||this.pending||Date.now()<this.retryAt)return;
+    this.enrolment=undefined;this.status=undefined;this.loaded=false;this.#clearInput();
+    await this.load();
+  }
   #authority(){if(!this.password){this.#required('requiredPassword','password');return undefined;}
     const code=normaliseCode(this.proofCode);if(this.status?.active&&!code){this.#required('factorCodeRequired','proof');return undefined;}
     if(this.status?.active&&!validCode(code,this.proofKind)){this.#required('factorCodeInvalid','proof');return undefined;}
@@ -55,7 +64,7 @@ export class AuthenticatorController {
     const generation=this.#start();if(generation===undefined)return;
     this.#clearInput();const result=await this.#request<FactorEnrolment>('/authenticator/begin',body);
     if(generation!==this.#generation)return;this.pending=false;this.enrolment=undefined;
-    if(result.ok)this.enrolment=result.value;else this.#failure(result,true);this.#changed();}
+    if(result.ok)this.enrolment=result.value;else this.#managementFailure(result,true);this.#changed();}
   async #change(action:'activate'|'remove'|'regenerate'):Promise<FactorChange|'reconcile'|false>{
     const code=normaliseCode(this.confirmation);
     if(!this.#account||action==='activate'&&!this.enrolment)return false;
@@ -67,7 +76,7 @@ export class AuthenticatorController {
     const result=await this.#request<FactorChange>(`/authenticator/${action}`,body);
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){this.fence();this.#changed();return result.value;}
-    this.#failure(result,true);
+    this.#managementFailure(result,true);
     if(result.status===403&&result.code==='credentials_invalid'){
       this.pending=true;const session=await this.#request<{accountId:string}>('/session');
       if(generation!==this.#generation)return false;this.pending=false;
@@ -80,5 +89,5 @@ export class AuthenticatorController {
   activate(){return this.#change('activate');}remove(){return this.#change('remove');}regenerate(){return this.#change('regenerate');}
   async cancel(){if(!this.#account||!this.enrolment)return;const generation=this.#start();if(generation===undefined)return;
     const pendingToken=this.enrolment.pendingToken;this.#clearInput();const result=await this.#request<void>('/authenticator/cancel',{pendingToken});
-    if(generation!==this.#generation)return;this.pending=false;this.enrolment=undefined;if(!result.ok)this.#failure(result);this.#changed();}
+    if(generation!==this.#generation)return;this.pending=false;this.enrolment=undefined;if(!result.ok)this.#managementFailure(result);this.#changed();}
 }

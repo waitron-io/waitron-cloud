@@ -44,7 +44,7 @@ other nine rows remain open. No row authorizes a permission bypass.
 
 | ID and screen | Response and current wording, English / Spanish | Cause and evidence | Way forward and next change |
 | --- | --- | --- | --- |
-| R1: authenticator setup and management | `400 invalid_input` → “Authenticator settings are temporarily unavailable.” / “La configuración del autenticador no está disponible temporalmente.” | Not bug-only. [HTTP parsing (authenticator-factor.ts:17)](../packages/account-http/src/authenticator-factor.ts#L17) rejects oversized passwords, malformed tokens and proof shapes. [Management (authenticator-factor.ts:103)](../packages/registration/src/authenticator-factor.ts#L103) uses the same code for missing, expired, consumed, superseded or attempt-exhausted setup and for removing/regenerating an absent factor. The native controller probe confirms the outage message. | Split actionable setup-state outcomes from malformed input. Let you refresh factor status and start a fresh setup when appropriate. Keep wrong proof and credential feedback private, and preserve proof requirements. This is the named server-code follow-up left by D237; do not turn every server 400 into a code-field error. |
+| R1: authenticator setup and management | Delivered: management `400 invalid_input` asks you to check current settings and start again with your password and fresh codes, in English and Spanish. | The shared code covers malformed input, unavailable setup state and absent factors. The inventory below traces every producer. It cannot identify one precise cause. | Check authenticator settings discards the local setup and inputs, reads status and exposes the existing setup/replacement actions. It sends no change or cancellation. Password and current-factor proof remain required by the refreshed state. Credentials, rate limits and uncertain writes retain their handling; sign-in errors retain their separate feedback. |
 | R2: passkey registration and removal | Registration failures → “Passkeys are temporarily unavailable. Try again.” / “Las llaves de acceso no están disponibles temporalmente. Vuelve a intentarlo.” | Not bug-only. [HTTP mapping (passkeys.ts:68)](../packages/account-http/src/passkeys.ts#L68) maps management `PasskeyError` to `400 invalid_input`; [the store (passkeys.ts:205)](../packages/registration/src/passkeys.ts#L205) includes expired/consumed or differently bound ceremonies, duplicate credentials and failed verification. Malformed request fields also use 400. | Distinguish restarting an expired ceremony, choosing an existing key and an actual outage without revealing another account's keys. Keep the refreshed list and password sign-in available. Test each cause before choosing its message. |
 | R3: recovery approval and replacement | `400` or `409` → “This service is temporarily unavailable. Try again.” / “El servicio no está disponible temporalmente. Vuelve a intentarlo.” | Not bug-only. [HTTP recovery (recovery.ts:83)](../packages/account-http/src/recovery.ts#L83) exposes `confirmation_required`, `unverified`, `target_not_fresh`, `recovery_active` and `conflict`. [Recovery (recovery.ts:202)](../packages/backups/src/recovery.ts#L202), [requests (recovery-request.ts:38)](../packages/backups/src/recovery-request.ts#L38) and [replacement (replacement.ts:29)](../packages/backups/src/replacement.ts#L29) distinguish missing confirmation, verification/target mismatch, another recovery and reused machine keys. [The API reader (api.ts:68)](../apps/portal/src/api.ts#L68) drops several specific codes; [the controller (recovery-controller.ts:40)](../apps/portal/src/recovery-controller.ts#L40) then shows generic failure or reconciles a write. | Preserve read-after-uncertain-write behavior. Separate “check the existing request”, “close the other recovery”, “choose a verified compatible source” and “start from a fresh replacement”. Confirm which action each request state actually permits before adding a button. Never tell you to repeat an approval whose result is uncertain. |
 | R4: recovery outside the local test scope | `403 local_integration_only` now explains that recovery supports test venues only, tells you to open a new recovery link from the replacement server’s setup and choose a test venue on the Cloud page, and says production recovery is unavailable. Both English and Spanish name this restriction in the recovery page’s error message. | [Catalogue](../packages/backups/src/catalogue.ts#L82), [managed streams](../packages/backups/src/managed-streams.ts#L199) and [replacement](../packages/backups/src/replacement.ts#L29) retain their server restrictions. The API client recognises this code only for a recovery HTTP 403; other paths and statuses retain their prior handling. | Implemented with new native API/controller and browser checks. Permission refusals still clear the displayed authority and confirmations; unexpected write results still reconcile without replay. Production recovery remains unfinished. Existing PostgreSQL scope tests run in CI. |
@@ -69,6 +69,35 @@ custodio.”; `fiscalConflict`: “This evidence conflicts with recorded history
 Check with your custodian.” / “Esta prueba contradice el historial registrado.
 Consulta al custodio.” None identifies a Cloud support contact or provisions the
 outside authority.
+
+## Authenticator refusal inventory and refresh boundary (R1)
+
+An old setup can no longer be usable while your account session still works.
+Waiting does not repair it. Choose Check authenticator settings to discard the
+local setup and read whether your authenticator is on or off. Start setup or
+replacement again with your password and any required fresh code. A new setup
+supersedes prior pending setups; the refresh itself only reads status.
+
+The server keeps its shared `invalid_input` response. This avoids guessing
+whether a token exists or belongs to another account. These are source receipts,
+not local database execution; PostgreSQL qualification runs in CI while local
+Docker is unavailable.
+
+| Producer | Causes and boundary | Portal handling |
+| --- | --- | --- |
+| [HTTP parser](../packages/account-http/src/authenticator-factor.ts#L16) | Wrong/extra fields, oversized or absent password, malformed token, confirmation or proof. | General guidance and a status check. No server 400 becomes a code-field error. |
+| [Activation before proof](../packages/registration/src/authenticator-factor.ts#L103) | Malformed/missing token; account, session, password fingerprint or factor version mismatch; consumed, expired or attempt-exhausted setup. A new begin consumes older pending setups. | Same guidance for every cause; no token-existence or other-account detail. Discard the old local secret before reading current status. |
+| [Regenerate/remove](../packages/registration/src/authenticator-factor.ts#L180) | No active factor after account/password authority was checked. | Read current status before choosing a new setup or replacement. No automatic repeat of the refused change. |
+| [Cancel](../packages/registration/src/authenticator-factor.ts#L201) | Malformed/missing, differently bound, consumed or expired setup, including expiry during cancellation. | Same general guidance and read-only status check, without automatically repeating cancellation. |
+| [Credential and outage mapping](../packages/account-http/src/authenticator-factor.ts#L75) | Wrong authority/proof remains `403 credentials_invalid`; configuration failure remains 503, and request limits remain 429. | Keep credential feedback, session reconciliation for uncertain changes, and the server's retry delay. The new action does not reinterpret these responses. |
+
+Native controller tests inject the shared response and verify refresh clears
+local authority, respects pending work/rate waits, ignores a reply after an
+account switch, and requires fresh proof according to the new status. Stubbed
+browser checks exercise first setup, replacement, a newly active factor and an
+absent factor in both languages, themes and widths. They qualify the portal path,
+not database expiry, attempt accounting or cross-account security by themselves.
+The existing database and HTTP tests remain unchanged and run in CI.
 
 ## Existing actions to preserve
 
@@ -95,7 +124,7 @@ authentication/recovery/authority review path. R6/R7 must first respect the owne
 fiscal approval rule. A wording-only public-page change may use focused review;
 changing bot checks or permissions may not.
 
-Start with R1's server-code inventory and tests for each setup state, then make
-the smallest corresponding screen change. Reserve each file against both Cloud
+R1's inventory and status-refresh path are delivered. Later server-code changes
+need their own cause-specific database and HTTP checks. Reserve each file against both Cloud
 lanes before starting. This document records missing actions; it neither approves
 a new membership flow nor enables production services.

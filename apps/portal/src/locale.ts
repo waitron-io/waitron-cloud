@@ -82,6 +82,8 @@ const en = {
   factorRemaining:'Unused recovery codes:', factorLoginHelp:'Enter an authenticator code or an unused recovery code.', factorVerify:'Verify code', factorRestart:'Start sign-in again',
   factorCodesTitle:'Save your recovery codes', factorCodesHelp:'Save these codes somewhere safe. Each works once with your password. You cannot view them again.', factorCodesSaved:'I have saved these codes',
   factorChanged:'Your authenticator settings changed. Sign in again.', factorRemoved:'Your authenticator was removed. Sign in again.',
+  factorCheckSettings:'Check your current authenticator settings, then start again with your password and fresh codes.',
+  factorRefresh:'Check authenticator settings',
   factorUnavailable:'Authenticator settings are temporarily unavailable.', factorLoginUncertain:'We could not confirm sign-in. Your session was checked. Start again if you are still signed out.',
   factorChangeUncertain:'We could not confirm the change. Sign in again, check your authenticator settings, then create new recovery codes with fresh proof if needed.',
 
@@ -362,6 +364,8 @@ const es: Copy = {
   factorRemaining:'Códigos de recuperación disponibles:', factorLoginHelp:'Introduce un código del autenticador o un código de recuperación sin usar.', factorVerify:'Verificar código', factorRestart:'Volver a iniciar sesión',
   factorCodesTitle:'Guarda tus códigos de recuperación', factorCodesHelp:'Guarda estos códigos en un lugar seguro. Cada uno funciona una vez con tu contraseña. No podrás volver a verlos.', factorCodesSaved:'He guardado estos códigos',
   factorChanged:'La configuración del autenticador ha cambiado. Vuelve a iniciar sesión.', factorRemoved:'Se ha quitado el autenticador. Vuelve a iniciar sesión.',
+  factorCheckSettings:'Comprueba la configuración actual del autenticador y vuelve a empezar con tu contraseña y códigos nuevos.',
+  factorRefresh:'Comprobar configuración del autenticador',
   factorUnavailable:'La configuración del autenticador no está disponible temporalmente.', factorLoginUncertain:'No hemos confirmado el acceso. Se ha comprobado tu sesión. Vuelve a empezar si aún no has accedido.',
   factorChangeUncertain:'No hemos confirmado el cambio. Vuelve a acceder, revisa el autenticador y crea nuevos códigos de recuperación con una prueba nueva si hace falta.',
 

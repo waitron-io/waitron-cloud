@@ -50,7 +50,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
      await page.getByRole('combobox',{name:c.factorProofType,exact:true}).selectOption('totp');
     }
     await enter(' \t ');await submit.click();await feedback.getByText(c.factorCodeRequired,{exact:true}).waitFor();assert.deepEqual(writes,[]);
-    await enter('123 456');await submit.click();await feedback.getByText(c.factorUnavailable,{exact:true}).waitFor();assert.equal(await field.getByText(message,{exact:true}).count(),0);assert.equal(await input.getAttribute('aria-invalid'),'false');
+    await enter('123 456');await submit.click();await feedback.getByText(login?c.factorUnavailable:c.factorCheckSettings,{exact:true}).waitFor();assert.equal(await field.getByText(message,{exact:true}).count(),0);assert.equal(await input.getAttribute('aria-invalid'),'false');
     const endpoint=login?'/login/factor':`/authenticator/${flow}`;
     assert.deepEqual(writes,[{path:endpoint,body:login?{challengeToken:token,proof:{kind:'totp',code:'123456'}}:flow==='remove'?{password,proof:{kind:'totp',code:'123456'}}:{password,pendingToken:token,code:'123456'}}]);
     responseStatus=403;await enter('654321');await submit.click();await feedback.getByText(c.credentials,{exact:true}).waitFor();assert.equal(await input.getAttribute('aria-invalid'),'false');assert.equal(await field.getByText(message,{exact:true}).count(),0);
