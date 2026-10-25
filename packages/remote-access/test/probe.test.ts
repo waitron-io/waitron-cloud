@@ -328,6 +328,12 @@ test('public probe refuses challenge cookies expired by Expires before replay',a
   ['invalid leap day','; Expires=29 Feb 2001 00:00:00 GMT',true],
   ['invalid day zero','; Expires=00 Jan 1970 00:00:00 GMT',true],
   ['missing month','; Expires=01 1970 00:00:00 GMT',true],
+  ['zoneless expired','; Expires=01 Jan 2000 11:30:00 GMT',false,'Sat, 01 Jan 2000 12:00:00'],
+  ['zoneless valid','; Expires=01 Jan 2000 12:30:00 GMT',true,'Sat, 01 Jan 2000 12:00:00'],
+  ['asctime expired','; Expires=01 Jan 2000 11:30:00 GMT',false,'Sat Jan  1 12:00:00 2000'],
+  ['asctime valid','; Expires=01 Jan 2000 12:30:00 GMT',true,'Sat Jan  1 12:00:00 2000'],
+  ['explicit server zone expired','; Expires=01 Jan 2000 19:30:00 GMT',false,'Sat, 01 Jan 2000 12:00:00 PST'],
+  ['explicit server zone valid','; Expires=01 Jan 2000 20:30:00 GMT',true,'Sat, 01 Jan 2000 12:00:00 PST'],
   ['server clock behind','; Expires=01 Jan 2001 00:00:00 GMT',true,'Sat, 01 Jan 2000 00:00:00 GMT'],
   ['server clock ahead','; Expires=01 Jan 2099 00:00:00 GMT',false,'Fri, 01 Jan 2100 00:00:00 GMT'],
   ['equal server date','; Expires=01 Jan 2000 00:00:00 GMT',false,'Sat, 01 Jan 2000 00:00:00 GMT'],
@@ -352,4 +358,17 @@ test('public probe refuses challenge cookies expired by Expires before replay',a
    assert.equal(replays,healthy?1:0,'An expired cookie must not be sent to the availability endpoint');
   }finally{await fixture.close();}
  });
+});
+
+
+test('public probe expiry is independent of the probing machine time zone',()=>{
+ for(const zone of ['UTC','Asia/Tokyo','America/Los_Angeles']){
+  // A new test runner must not inherit this worker's runner context.
+  const env:NodeJS.ProcessEnv={...process.env,TZ:zone};delete env.NODE_TEST_CONTEXT;
+  const output=execFileSync(process.execPath,[
+   '--test','--test-reporter=tap','--test-name-pattern=^public probe refuses challenge cookies expired by Expires before replay$',import.meta.filename,
+  ],{env,encoding:'utf8'});
+  assert.match(output,/ok \d+ - zoneless expired/);
+  assert.match(output,/ok \d+ - asctime valid/);
+ }
 });

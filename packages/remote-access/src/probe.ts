@@ -147,7 +147,8 @@ function accessCookie(headers:import('node:http').IncomingHttpHeaders){
   const expires=values[0]!.split(';').slice(1).map(value=>value.split('=')).filter(value=>trimPath(value[0]!).toLowerCase()==='expires').filter(value=>trimPath(value.slice(1).join('=')).length<=1024);
   const expiry=cookieExpiry(trimPath(expires.at(-1)?.slice(1).join('=')??''));
   // Browsers adjust Expires for the server clock carried by the response Date.
-  const serverTime=Date.parse(headers.date??'');
+  // HTTP dates without a time zone are UTC on every probing machine.
+  const serverDate=headers.date??'',serverTime=Date.parse(/(?:[A-Za-z]|[+-]\d{2}:?\d{2})[ \t]*$/.test(serverDate)?serverDate:serverDate+' GMT');
   if(expiry!==undefined&&expiry<=(Number.isFinite(serverTime)?serverTime:Date.now()))throw new ProbeError('challenge');
  }
  const attributes=new Set(parts.slice(1).map(value=>value.toLowerCase()));if(!attributes.has('path=/')||!attributes.has('secure')||!attributes.has('httponly')||!attributes.has('samesite=strict'))throw new ProbeError('challenge');
