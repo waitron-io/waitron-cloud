@@ -5265,3 +5265,13 @@ the existing explanation beside it and is marked as required. Editing clears the
 message; server hostname refusals mark the same field. The section alert, hostname
 rules and refusal before any DNS request remain. Browser checks cover English and
 Spanish, both themes and phone/desktop widths.
+
+## Clear resolved account-form feedback (D240)
+
+When you edit a field on sign-in, signup or password recovery, its old message
+and error marker clear so they describe the last submitted value only. Other
+fields keep their messages. Hiding the optional organisation field clears its
+message too. Submit still validates every required field and focuses the first
+problem before sending. Server refusals, retry limits and uncertain results stay
+visible while you type; language changes retain your values. English/Spanish
+browser checks cover all five forms, both themes and phone/desktop widths.
