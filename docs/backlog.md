@@ -5266,6 +5266,15 @@ run does not close the historical timeout. Local Docker and PostgreSQL checks
 remain unavailable until 3 November; full qualification uses GitHub CI. D152's
 separate native-writer drain decision remains open.
 
+## Correcting required security fields on Account (D239)
+
+When you enter a missing password or authenticator code on Account, its required-input
+message and field marker now clear before you submit again. Editing another field or
+leaving a code blank keeps the message. Malformed-code messages, server refusals and
+uncertain results remain visible; typing sends no request. English/Spanish browser
+checks cover both themes and phone/desktop widths, including language changes that
+keep your input. Password, proof and request rules remain unchanged.
+
 ## Authenticator code format feedback (D237)
 
 Malformed authenticator codes now stay in their field with an explanation, before
