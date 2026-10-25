@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import * as local from '../local.mjs';
-import { assertSmokeAccounting, delayLitestreamPutReplies } from '../litestream-smoke-test-utils.mjs';
+import { assertSmokeAccounting, prepareDelayedLitestreamStop } from '../litestream-smoke-test-utils.mjs';
 import { cleanupRecordedStack } from './stack-parent-cleanup.mjs';
 const prepared = JSON.parse(readFileSync(process.env.COST_STACK_FIXTURE, 'utf8'));
 const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', env: { PATH: process.env.PATH }, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -501,7 +501,7 @@ test('genuinePinnedLitestreamDrainsCommittedPutRepliesBeforeShutdown', async t =
   // Delay the reply after the real storage backend commits; restore can already see that object.
   const smokePath = join(f.codeRoot, 'cost-litestream-smoke.mjs');
   const originalSmoke = readFileSync(smokePath, 'utf8');
-  writeFileSync(smokePath, delayLitestreamPutReplies(originalSmoke));
+  writeFileSync(smokePath, prepareDelayedLitestreamStop(originalSmoke));
   let stack;
   f.onCleanup(async () => { await stack?.close(); });
   stack = await local.startIsolatedStack({ ...f, prepared: plan });

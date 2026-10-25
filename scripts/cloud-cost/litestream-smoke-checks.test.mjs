@@ -72,3 +72,39 @@ test('the delayed PUT injection refuses missing or ambiguous anchors in the real
     assert.throws(() => checks.delayLitestreamPutReplies(source + '\n' + anchor));
   }
 });
+
+test('the delayed stop proof waits for a final-sale PUT commit while its reply remains held', async () => {
+  assert.equal(typeof checks.prepareDelayedLitestreamStop, 'function');
+  const source = `let stage = 'prepare'; const version='0.5.17',injectedFailures=1;
+    const forwardReply=(req,incoming,res)=>{${forwarding}};
+    const sale=async number=>onSale(number,forwardReply);
+    stage='second-sale'; await sale(2); stage = 'stop'; stopping();
+    const result = { version, injectedFailures, stage }; publish(result);`;
+  const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
+  const timers = [], stopped = [], published = [];
+  let dispatch, forwarded = 0;
+  const done = new AsyncFunction('onSale','stopping','publish','setTimeout','clearTimeout',checks.prepareDelayedLitestreamStop(source))(
+    async (number, forward) => { assert.equal(number, 2); dispatch = forward; }, () => stopped.push(true), result => published.push(result),
+    (action, milliseconds) => { const timer = { action, milliseconds }; timers.push(timer); return timer; }, () => {});
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(stopped.length, 0, 'do not spend the stop budget waiting for the final upload to start');
+  const reply = (method, statusCode) => dispatch({ method }, { statusCode, headers:{}, on(){}, pipe(){forwarded++;} }, { writeHead(){} });
+  reply('GET',200); reply('POST',200); reply('PUT',503);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(stopped.length, 0, 'only a successful final-sale PUT can release the barrier');
+  reply('PUT',200); await done;
+  assert.equal(stopped.length, 1);
+  assert.equal(forwarded, 3, 'the final committed upload reply is still held when stop begins');
+  const held = timers.filter(timer => timer.milliseconds === 1500);
+  assert.equal(held.length, 1); held[0].action(); assert.equal(forwarded, 4);
+  assert.equal(published[0].delayedPutReplies, 1);
+});
+
+test('final PUT readiness refuses changed or repeated integration anchors', () => {
+  const source = readFileSync(new URL('./fixtures/litestream-smoke.mjs', import.meta.url), 'utf8');
+  assert.doesNotThrow(() => checks.prepareDelayedLitestreamStop(source));
+  for (const anchor of ['await sale(2);', "stage = 'stop';"]) {
+    assert.throws(() => checks.prepareDelayedLitestreamStop(source.replace(anchor, '')));
+    assert.throws(() => checks.prepareDelayedLitestreamStop(source + '\n' + anchor));
+  }
+});
