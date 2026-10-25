@@ -20,7 +20,7 @@ export function monitoringScreen(app:PortalApp,installation:AccountInstallation)
  const copy={disconnected:c.monitorDisconnected,snapshot_stale:c.monitorSnapshotStale,verification_failed:c.monitorVerificationFailed};
  const current=new Set<MonitoringIncidentKind>(m.incidents.map(i=>i.kind));
  const remote=(['public','staff'] as const).map(kind=>{
-  const check=m.remoteChecks?.[kind],stale=current.has(`${kind}_probe_stale`),failed=current.has(`${kind}_route_failed`),certificate=current.has(`${kind}_certificate_expiring`);
+  const check=m.remoteChecks?.[kind],stale=current.has(`${kind}_probe_stale`),failed=check?.status==='failed',certificate=current.has(`${kind}_certificate_expiring`);
   const state=!fresh||!check||stale?(kind==='public'?c.monitorPublicUnknown:c.monitorStaffUnknown):failed?(kind==='public'?c.monitorPublicFailed:c.monitorStaffFailed):(kind==='public'?c.monitorPublicHealthy:c.monitorStaffHealthy);
   return html`<section role="group" aria-label=${kind==='public'?c.monitorPublic:c.monitorStaff}><h5>${kind==='public'?c.monitorPublic:c.monitorStaff}</h5><p>${state}</p>
    ${check?html`<p>${c.monitorRouteChecked}: <time datetime=${check.checkedAt}>${formatDateTime(check.checkedAt,app.locale)}</time></p>`:nothing}

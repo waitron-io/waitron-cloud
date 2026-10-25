@@ -304,6 +304,10 @@ Monitoring, Public website and Staff access are groups within each venue entry,
 so two monitored venues do not repeat page-region names. Database-free browser
 checks cover both venues, current and unknown health, evidence dates and disabled
 monitoring in English/Spanish, both themes and phone/desktop widths.
+Route pass/fail messages follow the latest external check, including the gap
+before its incident opens or closes. Unknown evidence and certificate warnings
+keep their separate rules. Database-free browser checks cover both routes and
+those transitions in English/Spanish, light/dark and phone/desktop widths.
 Installation, snapshot, monitoring and recovery dates spell out the month in
 English and Spanish. Local time and seconds are retained, including the warning
 about changes lost during recovery. Database-free browser checks cover both
