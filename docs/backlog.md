@@ -5480,7 +5480,7 @@ historical refusal. Three inspected failed main runs have passing mail jobs.
 
 Cloud follow-up: use a labelled recurrence to reproduce and fix the demonstrated
 cause, test-first. Keep measurement guards, accounting and deadlines intact.
-Do not rerun an unchanged red branch. Local Docker is down until 3 November.
+Do not rerun an unchanged red branch.
 Real PostgreSQL/Mailpit reproduction waits for local Docker or a separately
 qualified CI diagnostic change. This is separate from reset-mail capture and
 Mailpit fixture-startup failures recorded above.
