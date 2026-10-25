@@ -56,6 +56,10 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
      await page.evaluate(()=>{const app=(window as any).app;return app.remote.preview().then(()=>app.remote.apply());});
      assert.equal(await confirmation.count(),0);assert.equal(calls.length,start,'unchanged names send no DNS or apply');
     }
+    await input.fill(current+'..');assert.equal(await review.isEnabled(),true,'two trailing dots still need invalid-name feedback');
+    await review.click();await section.locator('wt-input[name=remoteHostname]').getByText(c.remoteInvalid,{exact:true}).waitFor();
+    assert.equal(await input.getAttribute('aria-invalid'),'true');assert.equal(calls.length,start);
+    await input.fill(current);assert.equal(await review.isDisabled(),true);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     if(custom&&kind==='staff'&&process.env.REMOTE_UNCHANGED_RECEIPT_DIR){
      await mkdir(process.env.REMOTE_UNCHANGED_RECEIPT_DIR,{recursive:true});

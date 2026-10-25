@@ -76,4 +76,22 @@ for(const kind of ['staff','public'] as const)for(const custom of [false,true])t
   await c.apply();
   assert.deepEqual(calls,['/remote-access/status'],'unchanged names cause no DNS or save request');
  }
+ c.edit(current+'..');await c.preview();
+ assert.equal(c.error,'remoteInvalid','two trailing dots remain malformed even on the saved name');
+ assert.equal(c.confirmation,undefined);
+ assert.deepEqual(calls,['/remote-access/status']);
+});
+
+test('a saved name becomes unchanged for direct controller calls',async()=>{
+ let saved=view;const calls:string[]=[];
+ const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{
+  calls.push(path);
+  if(path.endsWith('/dns'))return {ok:true,value:dns as T};
+  if(path.endsWith('/apply'))saved={...view,revision:2,names:{...view.names,staff:{...view.names.staff,current:dns.hostname}}};
+  return {ok:true,value:saved as T};
+ });
+ c.account('owner');await c.open(id);c.edit(dns.hostname);await c.preview();await c.apply();
+ assert.equal(c.view?.names?.staff.current,dns.hostname);assert.equal(c.notice,'remoteSaved');
+ await c.preview();assert.equal(c.confirmation,undefined,'the saved name no longer has a change to confirm');await c.apply();
+ assert.deepEqual(calls,['/remote-access/status','/remote-access/dns','/remote-access/apply']);
 });
