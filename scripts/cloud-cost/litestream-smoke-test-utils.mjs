@@ -19,13 +19,15 @@ export function delayLitestreamPutReplies(source) {
 
 export function prepareDelayedLitestreamStop(source) {
   source = delayLitestreamPutReplies(source);
-  // Start the stop budget with the final upload committed and its delayed reply still outstanding.
+  // Start the stop budget with a post-sale upload committed and its delayed reply still outstanding.
   // Otherwise periodic replication and the stop flush can incur successive 1,500 ms holds inside two seconds.
   for (const [anchor, replacement] of [
     ["let delayedPutReplies = 0;", "let finalPutCommit, finalSaleWritten = false; const finalPutCommitted = new Promise(resolve => finalPutCommit = resolve); let delayedPutReplies = 0;"],
     ["await sale(2);", "await sale(2); finalSaleWritten = true;"],
-    ["delayedPutReplies++; setTimeout(forward, 1500);", "delayedPutReplies++; if (stage === 'second-sale' && finalSaleWritten) finalPutCommit(); setTimeout(forward, 1500);"],
+    ["let requestBytes = 0;", "const postSaleRequest = finalSaleWritten; let requestBytes = 0;"],
+    ["delayedPutReplies++; setTimeout(forward, 1500);", "delayedPutReplies++; if (postSaleRequest) finalPutCommit(); setTimeout(forward, 1500);"],
     ["stage = 'stop';", `let finalPutTimer;
+      stage = 'final-put-readiness';
       try { await Promise.race([finalPutCommitted, new Promise((_, reject) => {
         finalPutTimer = setTimeout(() => reject(Error('Final synthetic PUT did not commit')), 5000);
       })]); } finally { clearTimeout(finalPutTimer); }

@@ -73,34 +73,50 @@ test('the delayed PUT injection refuses missing or ambiguous anchors in the real
   }
 });
 
-test('the delayed stop proof waits for a final-sale PUT commit while its reply remains held', async () => {
+const delayedStopSource = `let stage = 'prepare'; const version='0.5.17',injectedFailures=1;
+  const admit=req=>{let requestBytes = 0; return (incoming,res)=>{${forwarding}};};
+  const sale=async number=>onSale(number,admit);
+  try { stage='second-sale'; await sale(2); stage = 'stop'; stopping();
+  const result = { version, injectedFailures, stage }; publish(result);
+  } finally { if (typeof publishPhase === 'function') publishPhase(stage); }`;
+const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
+
+test('the delayed stop proof requires a post-sale PUT admission while keeping its reply held', { timeout: 1000 }, async () => {
   assert.equal(typeof checks.prepareDelayedLitestreamStop, 'function');
-  const source = `let stage = 'prepare'; const version='0.5.17',injectedFailures=1;
-    const forwardReply=(req,incoming,res)=>{${forwarding}};
-    const sale=async number=>onSale(number,forwardReply);
-    stage='second-sale'; await sale(2); stage = 'stop'; stopping();
-    const result = { version, injectedFailures, stage }; publish(result);`;
-  const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
   const timers = [], stopped = [], published = [];
-  let dispatch, forwarded = 0;
-  const done = new AsyncFunction('onSale','stopping','publish','setTimeout','clearTimeout',checks.prepareDelayedLitestreamStop(source))(
-    async (number, forward) => {
-      assert.equal(number, 2); dispatch = forward;
-      forward({method:'PUT'}, {statusCode:200, headers:{}, on(){}, pipe(){forwarded++;}}, {writeHead(){}});
+  let admit, earlierPut, forwarded = 0;
+  const done = new AsyncFunction('onSale','stopping','publish','setTimeout','clearTimeout',checks.prepareDelayedLitestreamStop(delayedStopSource))(
+    async (number, admission) => {
+      assert.equal(number, 2); admit = admission; earlierPut = admit({method:'PUT'});
     }, () => stopped.push(true), result => published.push(result),
     (action, milliseconds) => { const timer = { action, milliseconds }; timers.push(timer); return timer; }, () => {});
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(stopped.length, 0, 'do not spend the stop budget waiting for the final upload to start');
-  const reply = (method, statusCode) => dispatch({ method }, { statusCode, headers:{}, on(){}, pipe(){forwarded++;} }, { writeHead(){} });
-  reply('GET',200); reply('POST',200); reply('PUT',503);
+  const respond = (complete, statusCode) => complete({statusCode, headers:{}, on(){}, pipe(){forwarded++;}}, {writeHead(){}});
+  respond(earlierPut,200);
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(stopped.length, 0, 'only a successful final-sale PUT can release the barrier');
-  reply('PUT',200); await done;
+  assert.equal(stopped.length, 0, 'a PUT admitted before the final sale cannot release readiness with a later reply');
+  respond(admit({method:'GET'}),200); respond(admit({method:'POST'}),200); respond(admit({method:'PUT'}),503);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(stopped.length, 0, 'only a successful post-sale PUT can release the barrier');
+  respond(admit({method:'PUT'}),200); await done;
   assert.equal(stopped.length, 1);
-  assert.equal(forwarded, 3, 'the final committed upload reply is still held when stop begins');
+  assert.equal(forwarded, 3, 'the post-sale committed upload reply is still held when stop begins');
   const held = timers.filter(timer => timer.milliseconds === 1500);
   assert.equal(held.length, 2); for (const timer of held) timer.action(); assert.equal(forwarded, 5);
   assert.equal(published[0].delayedPutReplies, 2);
+});
+
+test('the post-sale readiness deadline refuses without starting stop when no PUT commits', async () => {
+  const timers = [], stopped = [], phases = [];
+  const done = new AsyncFunction('onSale','stopping','publish','setTimeout','clearTimeout','publishPhase',checks.prepareDelayedLitestreamStop(delayedStopSource))(
+    async () => {}, () => stopped.push(true), () => {},
+    (action, milliseconds) => { const timer = { action, milliseconds }; timers.push(timer); return timer; }, () => {}, value => phases.push(value));
+  const refusal = assert.rejects(done, /Final synthetic PUT did not commit/);
+  await new Promise(resolve => setImmediate(resolve));
+  const deadline = timers.find(timer => timer.milliseconds === 5000); assert.ok(deadline);
+  deadline.action(); await refusal; assert.deepEqual(stopped, []);
+  assert.deepEqual(phases, ['final-put-readiness']);
 });
 
 test('final PUT readiness refuses changed or repeated integration anchors', () => {
