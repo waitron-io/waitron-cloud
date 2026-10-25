@@ -374,9 +374,13 @@ test('public probe expiry is independent of the probing machine time zone',()=>{
 });
 
 
-test('public probe does not normalize non-ASCII whitespace into required cookie attributes',async t=>{
+test('public probe does not normalize non-ASCII whitespace into required cookie parts',async t=>{
  const material=await certificate('probe.example.test');
- for(const [label,attributes,healthy] of [
+ for(const [label,attributes,healthy,pair='__Host-waitron-public=fixture'] of [
+  ['cookie name leading no-break space','Path=/; Secure; HttpOnly; SameSite=Strict',false,'\u00a0__Host-waitron-public=fixture'],
+  ['cookie value trailing no-break space','Path=/; Secure; HttpOnly; SameSite=Strict',false,'__Host-waitron-public=fixture\u00a0'],
+  ['cookie name ASCII padding','Path=/; Secure; HttpOnly; SameSite=Strict',true,' \t__Host-waitron-public=fixture'],
+  ['cookie value ASCII padding','Path=/; Secure; HttpOnly; SameSite=Strict',true,'__Host-waitron-public=fixture \t'],
   ['Secure trailing no-break space','Path=/; Secure\u00a0; HttpOnly; SameSite=Strict',false],
   ['Secure leading no-break space','Path=/; \u00a0Secure; HttpOnly; SameSite=Strict',false],
   ['HttpOnly trailing no-break space','Path=/; Secure; HttpOnly\u00a0; SameSite=Strict',false],
@@ -395,7 +399,7 @@ test('public probe does not normalize non-ASCII whitespace into required cookie 
    }else if(req.url==='/_cloud/challenge'){
     res.setHeader('content-type','application/json');res.end('{"challenge":"fixture-challenge","difficulty":8}');
    }else if(req.url==='/_cloud/solve'){
-    res.statusCode=204;res.setHeader('set-cookie','__Host-waitron-public=fixture; '+attributes);res.end();
+    res.statusCode=204;res.setHeader('set-cookie',pair+'; '+attributes);res.end();
    }else{res.statusCode=404;res.end();}
   });
   try{
