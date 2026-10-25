@@ -5242,6 +5242,19 @@ initial request failure and success. Token checks, proof difficulty, lifetimes,
 paths and the content security policy are unchanged. Production browser and
 network qualification remains part of public deployment.
 
+## Public browser challenge language marking (D252)
+
+Your public bot-check tab now names the check in English and Spanish. Spanish
+heading, waiting and reload text carries its own language marking so assistive
+technology can choose Spanish pronunciation. The page keeps English as its base
+language and retains the bilingual reload instruction.
+
+Native HTTP and served-script checks cover both request languages and all five
+failure paths. Controlled Chromium checks cover both languages, light and dark,
+and 390- and 1280-pixel widths, including waiting and reload states. Challenge
+status, script path, security policy, proofs and lifetimes are unchanged.
+Production browser and network qualification remains part of public deployment.
+
 ## Public gateway source limits (D191)
 
 The public gate now counts an IPv6 /64 network as one source, while IPv4-mapped
