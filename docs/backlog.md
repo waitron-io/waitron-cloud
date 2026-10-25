@@ -5552,7 +5552,11 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   passkey if already registered; it does not identify expiry, duplication or a
   verification failure. Password sign-in, credential feedback, rate waits and
   uncertain-write reconciliation remain available. Native and stubbed-browser
-  checks cover the path; database and HTTP qualification runs in CI. Request-body
+  checks cover the path; database and HTTP qualification runs in CI. The browser
+  checks wait until the list handler counts the refresh before asserting its count,
+  while still holding the reply. A delayed-handler probe reproduces the earlier
+  ordering failure and passes with that wait; all read, write and password
+  assertions and deadlines remain unchanged. Request-body
   limits/formats/interruption and other browser failures keep their previous
   feedback and remain follow-ups.
 - R3: explain recovery confirmation, active-operation, verification and fresh-target
