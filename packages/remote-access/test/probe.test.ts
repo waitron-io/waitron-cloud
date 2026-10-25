@@ -554,3 +554,48 @@ test('public probe accepts effective root Path attributes with ASCII whitespace 
   }finally{await fixture.close();}
  });
 });
+
+
+test('public probe recognises Domain attribute names using only ASCII whitespace',async t=>{
+ const material=await certificate('probe.example.test');
+ for(const [label,attributes,healthy] of [
+  ['domain name trailing no-break space','Domain\u00a0=probe.example.test',true],
+  ['domain name leading no-break space','\u00a0Domain=probe.example.test',true],
+  ['domain bare name trailing no-break space','Domain\u00a0',true],
+  ['domain bare name leading no-break space','\u00a0Domain',true],
+  ['domain name surrounded by no-break spaces','\u00a0Domain\u00a0=probe.example.test',true],
+  ['domain mixed case with no-break space','dOmAiN\u00a0=probe.example.test',true],
+  ['domain lookalike with ordinary outer spaces',' \tDomain\u00a0 \t=probe.example.test',true],
+  ['domain lookalike empty value','Domain\u00a0=',true],
+  ['domain name ordinary spaces',' \tDomain \t=probe.example.test',false],
+  ['domain name ordinary tabs','Domain\t=probe.example.test',false],
+  ['domain real populated name','Domain=probe.example.test',false],
+  ['domain real mixed case','dOmAiN=probe.example.test',false],
+  ['domain real bare name','Domain',false],
+  ['domain real empty value','Domain=',false],
+  ['domain real name with no-break value','Domain=\u00a0probe.example.test',false],
+  ['domain real after lookalike','Domain\u00a0=probe.example.test; Domain=probe.example.test',false],
+  ['domain real before lookalike','Domain=probe.example.test; Domain\u00a0=probe.example.test',false],
+  ['domain bare real after lookalike','Domain\u00a0=probe.example.test; Domain',false],
+  ['domain unrelated hint','DomainHint=probe.example.test',true],
+  ['domain no attribute','Other=fixture',true],
+ ] as const)await t.test(label,async()=>{
+  let replays=0;
+  const fixture=await listenHttps(material,(req,res)=>{
+   if(req.url==='/public/availability'){
+    if(req.headers.cookie){replays++;assert.equal(req.headers.cookie,'__Host-waitron-public=fixture');res.setHeader('content-type','application/json');res.end('{}');}
+    else{res.statusCode=403;res.setHeader('content-type','text/html');res.end('<script src="/_cloud/challenge.js"></script>');}
+   }else if(req.url==='/_cloud/challenge'){
+    res.setHeader('content-type','application/json');res.end('{"challenge":"fixture-challenge","difficulty":8}');
+   }else if(req.url==='/_cloud/solve'){
+    res.statusCode=204;res.setHeader('set-cookie','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict; '+attributes);res.end();
+   }else{res.statusCode=404;res.end();}
+  });
+  try{
+   const result=await probeTarget(target(),{ca:material.cert,connect:connect(fixture.port)});
+   assert.equal(result.public.status,healthy?'healthy':'failed');
+   if(!healthy)assert.equal(result.public.status==='failed'&&result.public.failure,'challenge');
+   assert.equal(replays,healthy?1:0,'Only a cookie without a genuine Domain attribute may reach availability');
+  }finally{await fixture.close();}
+ });
+});
