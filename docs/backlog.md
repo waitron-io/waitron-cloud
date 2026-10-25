@@ -5554,9 +5554,9 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   uncertain-write reconciliation remain available. Native and stubbed-browser
   checks cover the path; database and HTTP qualification runs in CI. The browser
   checks wait until the list handler counts the refresh before asserting its count,
-  while still holding the reply. A delayed-handler probe reproduces the earlier
-  ordering failure and passes with that wait; all read, write and password
-  assertions and deadlines remain unchanged. Request-body
+  while still holding the reply. A missing handler signal still reaches the existing
+  120-second runner timeout; concurrent background list reads remain unqualified.
+  Request-body
   limits/formats/interruption and other browser failures keep their previous
   feedback and remain follow-ups.
 - R3: explain recovery confirmation, active-operation, verification and fresh-target
