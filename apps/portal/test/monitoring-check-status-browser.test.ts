@@ -25,6 +25,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.clock.pauseAt(new Date('2026-10-24T12:01:01Z'));
       const c = translations[locale], writes: string[] = [];
       let fresh = true, monitorCheckedAt: string | null = checkedAt;
+      let staffStatus: 'healthy' | 'failed' = 'failed';
       let status: 'healthy' | 'failed' = 'failed', incident = false, stale = false, missing = false;
       const installations = (): AccountInstallation[] => [1].map(n => ({
         installationId: `00000000-0000-4000-8000-00000000000${n}`,
@@ -43,7 +44,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           {kind: `${kind}_certificate_expiring` as const, openedAt, changedAt: checkedAt},
         ]), remoteChecks: {
           public: missing ? null : {status, checkedAt, certificateNotAfter: expiresAt},
-          staff: missing ? null : {status, checkedAt, certificateNotAfter: expiresAt},
+          staff: missing ? null : {status: staffStatus, checkedAt, certificateNotAfter: expiresAt},
         }},
       }));
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html',
@@ -71,6 +72,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         {name: 'healthy before an incident closes', status: 'healthy', incident: true, want: 'Healthy'},
         {name: 'failed with an incident', status: 'failed', incident: true, want: 'Failed'},
         {name: 'healthy without an incident', status: 'healthy', incident: false, want: 'Healthy'},
+        {name: 'failed public with recovered staff', status: 'failed', incident: true, staffStatus: 'healthy', want: 'Failed', staffWant: 'Healthy'},
+        {name: 'healthy public with failed staff', status: 'healthy', incident: false, staffStatus: 'failed', want: 'Healthy', staffWant: 'Failed'},
         {name: 'probe stale', status: 'failed', incident: false, stale: true, want: 'Unknown'},
         {name: 'missing check', status: 'failed', incident: true, missing: true, want: 'Unknown'},
         {name: 'monitor not fresh', status: 'healthy', incident: false, fresh: false, want: 'Unknown'},
@@ -79,16 +82,18 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       ] as const;
       for (const scenario of cases) await t.test(scenario.name, async () => {
         status = scenario.status; incident = scenario.incident;
+        staffStatus = 'staffStatus' in scenario ? scenario.staffStatus : status;
         stale = 'stale' in scenario; missing = 'missing' in scenario;
         fresh = !('fresh' in scenario); monitorCheckedAt = 'date' in scenario ? scenario.date : checkedAt;
         const response = page.waitForResponse('**/api/account/installations');
         await page.getByRole('button', {name: c.refreshStatus, exact: true}).click();
         await response;
         for (const kind of ['Public', 'Staff'] as const) {
+          const want = kind === 'Staff' && 'staffWant' in scenario ? scenario.staffWant : scenario.want;
           const group = monitoring.getByRole('group', {name: c[`monitor${kind}`], exact: true});
-          await group.getByText(c[`monitor${kind}${scenario.want}`], {exact: true}).waitFor();
+          await group.getByText(c[`monitor${kind}${want}`], {exact: true}).waitFor();
           for (const other of ['Healthy', 'Failed', 'Unknown'] as const) {
-            assert.equal(await group.getByText(c[`monitor${kind}${other}`], {exact: true}).count(), other === scenario.want ? 1 : 0);
+            assert.equal(await group.getByText(c[`monitor${kind}${other}`], {exact: true}).count(), other === want ? 1 : 0);
           }
           assert.equal(await group.getByText(c[`monitor${kind}Certificate`], {exact: true}).isVisible(), true);
           assert.deepEqual(await group.locator('time').evaluateAll(nodes => nodes.map(node => node.getAttribute('datetime'))), missing ? [] : [checkedAt, expiresAt]);
