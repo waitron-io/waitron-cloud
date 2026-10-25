@@ -3407,6 +3407,10 @@ notifications separately.
   Frozen-clock keyboard checks cover both languages, themes and phone/desktop widths;
   enrollment still disables Add and its password field, keeps password bytes across language
   changes and clears the password after success.
+  Removing a passkey with a blank password marks the password field and shows its
+  required message beside it, with one section alert and no removal request.
+  Stubbed Chromium checks cover both languages, themes and phone/desktop widths;
+  wrong-password alerts and server cooldowns keep their existing behavior.
   If reading your passkeys fails, Account offers Retry and does not claim you have
   none. Only a successful empty list shows that message. Retry waits for any server
   cooldown and disables itself during the read. Navigation keeps the explicit retry
