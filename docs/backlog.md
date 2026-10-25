@@ -4971,8 +4971,14 @@ now also requires that initial transfer to settle before the second sale. The
 No stop deadline, cap, official pin or pre-acknowledgement refusal is relaxed.
 Native checks cover three/four-attempt boundaries with real HTTP requests; the
 official held-list control observes one affected attempt and does not claim that
-four official attempts occurred. Genuine Linux/SeaweedFS qualification and the
-whole-branch review remain before landing.
+four official attempts occurred. Whole-branch review found no blocking defect;
+the existing retry-output test also catches deletion of its guard when included
+in the review matrix. Keep a test-hardening follow-up for independently exercising
+the smoke's request-complete witness, pre-ack child-exit race and child-running
+check at acknowledgement; their individual deletion currently leaves other
+checks as backstops. Do not claim the exact refusal step independently proved.
+Genuine Linux/SeaweedFS and PostgreSQL qualification run in current-head CI before
+landing. Historical attribution remains open.
 
 [PR428's cost run 40144823848, job 121023853072](https://github.com/waitron-io/waitron-cloud/actions/runs/40144823848/job/121023853072)
 refuses during `stop`; cleanup records `active-close` after 21 completed attempts.
