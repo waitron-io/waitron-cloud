@@ -3472,7 +3472,8 @@ notifications separately.
   Blank codes and missing passwords show the existing alert or sign-in summary and
   mark only the missing password, proof or confirmation field in English or Spanish
   before any request. Correcting and submitting clears the field marker; account
-  changes, leaving the flow and new requests clear it too. Sign-in, setup, replacement, activation, removal and code regeneration
+  changes, leaving the flow and new requests clear it too. Sign-in, setup, replacement,
+  activation, removal and code regeneration
   retain the entered values for correction; pending requests and cooldowns keep their
   existing feedback. Stubbed-route Chromium checks cover correction and submission
   in both themes and phone/desktop widths without changing server authority checks.
