@@ -3966,8 +3966,12 @@ notifications separately.
   child-process regressions reproduce the former successful probe that could not
   exit, and verify completion with finished TLS 1.2 and 1.3 server handshakes.
   Existing certificate, trust, hostname, cancellation and deadline checks remain.
-  Separate child-process checks for timeout/cancellation socket release and
-  production shutdown qualification remain open.
+  Native child-process checks also cover timeout and cancellation while the
+  staff handshake and public HTTPS response remain unfinished, both before
+  response headers and during the body. Each probe reports the expected failure,
+  and its process exits while the peers keep their write sides open. Removing
+  any of the four failure cleanup operations makes the checks fail. Production
+  shutdown qualification remains open.
   The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
   separates existing local detection from proposed production operator alerts and
   opted-in venue mail, with worked outage and backup timelines. The owner approved
