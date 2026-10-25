@@ -229,3 +229,35 @@ for(const language of ['en-GB','es-ES, en;q=0.5'])test(`the bot-check page marks
   assert.equal(f.count(),0);
  }finally{await f.close();}
 });
+
+
+for(const disconnect of [false,true])test(`unavailable response respects application wildcard preferences (${disconnect?'connection lost':'HTTP error'})`,async t=>{
+ const f=await fixture();try{
+  const challenge=await (await f.send('/_cloud/challenge')).json() as {challenge:string;difficulty:number};
+  const answer=await f.send('/_cloud/solve',{'content-type':'application/json'},'POST',JSON.stringify({challenge:challenge.challenge,nonce:solve(challenge.challenge,challenge.difficulty)}));
+  assert.equal(answer.status,204);const cookie=answer.headers.get('set-cookie')!.split(';')[0]!;
+  f.unavailable(disconnect);
+  for(const [label,accept,json] of [
+   ['application wildcard only','application/*',true],
+   ['application wildcard preferred','text/html;q=0.5,application/*;q=1',true],
+   ['case and whitespace',' Application/* ; q=0.8, text/html;q=0.2',true],
+   ['HTML preferred','application/*;q=0.5,text/html;q=1',false],
+   ['explicit JSON exclusion','application/*;q=1,application/json;q=0,text/html;q=0.5',false],
+   ['explicit JSON overrides wildcard','application/*;q=0,application/json;q=0.8,text/html;q=0.5',true],
+   ['explicit JSON lower preference','application/*;q=1,application/json;q=0.2,text/html;q=0.5',false],
+   ['wildcard exclusion','application/*;q=0,text/html;q=0.5',false],
+   ['invalid wildcard quality','application/*;q=invalid,text/html;q=0.5',false],
+   ['browser default','*/*',false],
+   ['HTML type wildcard','application/*;q=0.5,text/*;q=1',false],
+  ] as const)await t.test(label,async()=>{
+   const response=await f.send('/public/availability',{cookie,accept,'accept-language':'es'}),body=await response.text();
+   assert.equal(response.status,503);assert.equal(response.headers.get('retry-after'),'30');
+   assert.equal(response.headers.get('cache-control'),'no-store');assert.equal(response.headers.get('vary'),'Accept, Accept-Language');
+   assert.equal(response.headers.get('set-cookie'),null);assert.equal(response.headers.get('x-content-type-options'),'nosniff');
+   assert.doesNotMatch(body,/staff\.sol|database|internal failure|127\.0\.0\.1/);
+   if(json){assert.match(response.headers.get('content-type')!,/^application\/json/);assert.deepEqual(JSON.parse(body),{error:'venue_unavailable'});}
+   else{assert.match(response.headers.get('content-type')!,/^text\/html/);assert.equal(response.headers.get('content-language'),'es');assert.match(body,/No disponible temporalmente/);}
+  });
+  assert.equal(f.gate.stats().active,0);
+ }finally{await f.close();}
+});
