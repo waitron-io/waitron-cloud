@@ -27,7 +27,7 @@ export function authenticatorAccountScreen(app:PortalApp){const c=app.copy,f=app
     @click=${()=>{void app.manageFactor(action);}}>${label}</wt-button>`;
   return html`<section class="authenticator" aria-labelledby="authenticator-heading"><h3 id="authenticator-heading">${c.factorTitle}</h3>
     <p>${c.factorIntro}</p>${f.error?html`<p role="alert">${c[f.error]}</p>`:nothing}
-    ${f.error==='factorCheckSettings'?html`<wt-button .disabled=${f.pending||Date.now()<f.retryAt} @click=${()=>{void f.refresh();}}>${c.factorRefresh}</wt-button>`:nothing}
+    ${f.error==='factorCheckSettings'?html`<wt-button .disabled=${f.pending||Date.now()<f.retryAt} @click=${()=>{void app.manageFactor('refresh');}}>${c.factorRefresh}</wt-button>`:nothing}
     ${f.status?html`<p>${f.status.active?c.factorOn:c.factorOff}</p>${f.status.active?html`<p>${c.factorRemaining} ${f.status.recoveryCodesRemaining}</p>`:nothing}`:nothing}
     ${!f.loaded?html`<wt-button .disabled=${f.pending||Date.now()<f.retryAt} @click=${()=>{void f.load();}}>${c.retry}</wt-button>`:nothing}
     ${f.status?.available?html`<p class="help">${c.factorSessions}</p><p class="help">${c.factorRecoveryHelp}</p>

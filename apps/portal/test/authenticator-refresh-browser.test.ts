@@ -17,7 +17,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    {name:'absent factor',active:true,nowActive:false,action:'remove'},
   ] as const)await t.test(flow.name,async()=>{
    const c=translations[locale],page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(4000);
-   const writes:{path:string;body:unknown}[]=[];let reads=0,active=flow.active as boolean;
+   const writes:{path:string;body:unknown}[]=[];let reads=0,responseWait=0,active=flow.active as boolean;
    try{
     await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
     await page.route('**/api/account/**',route=>{
@@ -26,7 +26,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
      if(path==='/authenticator'){reads++;return route.fulfill({json:{active,version:reads,recoveryCodesRemaining:active?8:0,available:true}});}
      if(request.method()==='POST')writes.push({path,body:request.postDataJSON()});
      if(path==='/authenticator/begin')return route.fulfill({json:{pendingToken:token,secret:'JBSWY3DPEHPK3PXP',uri:'otpauth://totp/Cloud?secret=JBSWY3DPEHPK3PXP',expiresAt}});
-     if(path===`/authenticator/${flow.action}`)return route.fulfill({status:400,json:{error:'invalid_input'}});
+     if(path==='/authenticator/activate'||path==='/authenticator/remove')return route.fulfill({status:400,headers:{'Retry-After':String(responseWait)},json:{error:'invalid_input'}});
      return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
     });
     await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
@@ -46,6 +46,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     if(receipt){await mkdir(receipt,{recursive:true});await factor.scrollIntoViewIfNeeded();await factor.screenshot({path:`${receipt}/${locale}-${theme}-${width}-${flow.name.replaceAll(' ','-')}-refused.png`});}
     await factor.getByRole('button',{name:locale==='en'?'Check authenticator settings':'Comprobar configuración del autenticador',exact:true}).click();
     await factor.getByText(flow.nowActive?c.factorOn:c.factorOff,{exact:true}).waitFor();
+    assert.equal(await page.locator('h1').evaluate(el=>el===document.activeElement),true,'refresh keeps keyboard focus on the account heading');
     assert.equal(reads,2);assert.equal(writes.length,before);assert.equal(await factor.locator('.factor-secret').count(),0);assert.equal(await page.locator('input[name=factorConfirmation]').count(),0);assert.equal(await password.inputValue(),'');
     if(flow.nowActive)assert.equal(await page.locator('input[name=factorProof]').inputValue(),'');
     const begin=factor.getByRole('button',{name:flow.nowActive?c.factorReplace:c.factorEnable,exact:true});
@@ -56,6 +57,12 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     assert.deepEqual(writes.at(-1),{path:'/authenticator/begin',body:{password:'fresh password',...(flow.nowActive?{proof:{kind:'totp',code:'345678'}}:{})}});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     if(receipt){await factor.scrollIntoViewIfNeeded();await factor.screenshot({path:`${receipt}/${locale}-${theme}-${width}-${flow.name.replaceAll(' ','-')}-restarted.png`});}
+    responseWait=60;await password.fill('fresh password');if(flow.nowActive)await page.locator('input[name=factorProof]').fill('456789');await page.locator('input[name=factorConfirmation]').fill('654321');
+    await factor.getByRole('button',{name:c.factorActivate,exact:true}).click();await factor.getByRole('alert').getByText(guidance,{exact:true}).waitFor();
+    const refresh=factor.getByRole('button',{name:locale==='en'?'Check authenticator settings':'Comprobar configuración del autenticador',exact:true});
+    assert.equal(await refresh.isDisabled(),true,'status checks respect the response retry delay');
+    const after=writes.length;await refresh.evaluate(el=>(el as HTMLButtonElement).click());assert.equal(reads,2);assert.equal(writes.length,after);
+
    }finally{await page.close();}
   });}finally{await browser.close();}
  });

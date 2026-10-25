@@ -292,9 +292,9 @@ export class PortalApp {
     this.draw();if(this.authenticator.error)this.#focusErrors();else this.focusHeading();
   }
   async completeFactorLogin(){this.readFields();const route=this.#route;const previouslyAnonymous=this.session.state.kind==='anonymous';const result=await this.authenticator.completeLogin();if(route===this.#route)await this.#factorLoginResult(result,route,previouslyAnonymous);}
-  async manageFactor(action:'begin'|'activate'|'regenerate'|'remove'|'cancel'){
+  async manageFactor(action:'begin'|'activate'|'regenerate'|'remove'|'cancel'|'refresh'){
     this.readFields();const route=this.#route;
-    if(action==='begin'||action==='cancel'){await this.authenticator[action]();if(route===this.#route){this.draw();this.focusHeading();}return;}
+    if(action==='begin'||action==='cancel'||action==='refresh'){await this.authenticator[action]();if(route===this.#route){this.draw();this.focusHeading();}return;}
     const result=await this.authenticator[action]();if(route!==this.#route||!result)return;
     const codes=typeof result==='object'&&result.active?[...result.recoveryCodes]:[];
     this.session.dispose();this.session=this.#session();

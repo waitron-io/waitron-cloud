@@ -48,3 +48,8 @@ test('an account change fences an in-flight refresh',async()=>{
  assert.equal(c.pending,true);assert.equal(c.status,undefined);assert.equal(c.enrolment,undefined);
  c.account('other');resolve({ok:true,value:active});await pending;assert.equal(c.status,undefined);assert.equal(c.loaded,false);assert.equal(c.pending,false);
 });
+
+for(const response of [{status:400,code:'conflict',expected:'factorUnavailable'},{status:403,code:'invalid_input',expected:'forbidden'}])test(`management ${response.status} ${response.code} retains its own feedback`,async()=>{
+ const {c,calls}=fixture([{ok:false,status:response.status,code:response.code,retryAfterMs:0}]);
+ await c.begin();assert.equal(c.error,response.expected);assert.equal(c.requiredField,undefined);assert.equal(calls.length,1);
+});
