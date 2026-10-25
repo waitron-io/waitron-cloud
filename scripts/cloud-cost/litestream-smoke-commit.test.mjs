@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 
 // The real smoke, audit, counters and forwarding proxy run against a local HTTP store.
 // Only the external venue, SDK administration, SQLite reader and native process are substituted.
-function run({ backendStatus = 200, versionId = null, transport = '1', holdInitialReply = false, holdRetry = false } = {}) {
+function run({ backendStatus = 200, versionId = null, transport = '1', holdInitialReply = false, holdRetry = false, incomplete = null } = {}) {
   const actual = new URL('./litestream.mjs', import.meta.url).href;
   const meter = new URL('./meter.mjs', import.meta.url).href;
   const fixture = new URL('./fixtures/litestream-smoke.mjs', import.meta.url).href;
@@ -24,13 +24,30 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
       export * from ${JSON.stringify(actual)};
       export const createLitestreamTransport=async options=>options.phase==='restore'
         ? {url:options.target,whenIdle:async action=>action(),snapshot:()=>({}),close:async()=>{}}:open(options);`,
-    'node:http': `const http=process.getBuiltinModule('http');export const createServer=http.createServer;
+    'node:http': `const http=process.getBuiltinModule('http');let firstServer=true;
+      export function createServer(listener){
+        if(!firstServer)return http.createServer(listener);firstServer=false;
+        return http.createServer((req,res)=>{
+          if(req.headers['amz-sdk-invocation-id']==='22222222-2222-4333-8444-555555555555')globalThis.commitRequest=req;
+          listener(req,res);
+        });
+      }
       export function request(...args){
         if(args[0]==='http://127.0.0.1:8333'){
           args[0]='http://127.0.0.1:'+globalThis.backendPort;
           const callback=args[2];args[2]=incoming=>{
             if(args[1].headers['amz-sdk-invocation-id']==='22222222-2222-4333-8444-555555555555'){
-              globalThis.releaseBackend=()=>callback(incoming);globalThis.secondCommitted();
+              globalThis.releaseBackend=()=>{
+                if(${incomplete !== null})incoming.prependOnceListener('end',()=>{
+                  const req=globalThis.commitRequest;
+                  if(${JSON.stringify(incomplete)}==='request')req.complete=false;
+                  if(${JSON.stringify(incomplete)}==='response')incoming.complete=false;
+                  console.error(JSON.stringify({kind:'commit-completeness',requestComplete:req.complete,responseComplete:incoming.complete}));
+                });
+                callback(incoming);
+                // Restore the parser observations after the smoke's commit listener has read them.
+                if(${incomplete !== null})incoming.once('end',()=>{globalThis.commitRequest.complete=true;incoming.complete=true;});
+              };globalThis.secondCommitted();
             }else if(${holdInitialReply} && args[1].headers['amz-sdk-invocation-id']==='11111111-2222-4333-8444-555555555555'){
               globalThis.initialStored();setTimeout(()=>callback(incoming),50);
             }else callback(incoming);
@@ -126,4 +143,16 @@ test('initial readiness waits for the injected upload retry across an idle backo
   const output = JSON.parse(result.stdout);
   assert.equal(output.restoredSales, 2); assert.equal(output.injectedFailures, 1);
   assert.ok(output.replication.requests.some(r => r.operation === 'put' && r.retryOrdinal === 1));
+});
+
+// Equal byte counts and a 200 reply cannot replace either HTTP completeness observation.
+for (const incomplete of ['request', 'response']) test(`the smoke refuses an incomplete ${incomplete} in its backend commit witness`, () => {
+  const result = run({ incomplete });
+  assert.equal(result.error, undefined, 'the refusal must finish inside the process deadline');
+  const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+  assert.deepEqual(records.filter(row => row.kind === 'commit-completeness'), [{ kind: 'commit-completeness',
+    requestComplete: incomplete !== 'request', responseComplete: incomplete !== 'response' }]);
+  assert.equal(result.status, 1, result.stderr);
+  assert.equal(result.stdout, '');
+  assert.doesNotMatch(result.stderr, /Synthetic Litestream phase: restore/);
 });

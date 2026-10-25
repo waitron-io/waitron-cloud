@@ -5080,9 +5080,13 @@ reply open in the parent while the writer exits. It requires the pending control
 request to be cancelled before the next event-loop turn and refusal at the control
 step, with the request fully received and no cleanup signal sent to the writer.
 Removing the writer-exit race fails this check while the original early-exit
-case still passes; restoring it passes. The smoke's request-complete witness and
-child-running check at acknowledgement still need independent tests. Do not claim
-those two refusal steps independently proved.
+case still passes; restoring it passes. Native HTTP boundary checks now independently
+replace the request and backend reply completeness observations with false after
+full delivery. Both cases refuse certification despite matching bytes and a 200
+reply. Removing either observation from the smoke's commit witness fails only its
+new check; the five original commit tests still pass. These controlled observations
+prove witness wiring, not actual truncated-stream handling. The child-running check
+at acknowledgement still needs an independent test.
 Genuine Linux/SeaweedFS and PostgreSQL qualification run in current-head CI before
 landing. Historical attribution remains open.
 
