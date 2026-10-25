@@ -192,3 +192,21 @@ test('receipt selector fixtures retain their positive checks after deployment an
     ].sort(), 'Every positive receipt check must execute with saved deployment and installation inputs');
   } finally {rmSync(root, {recursive: true, force: true});}
 });
+
+
+test('receipt fixtures keep the audited unavailable page after current source changes', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cloud-unavailable-fixture-control-'));
+  try {
+    execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
+    cpSync('scripts', join(root, 'scripts'), {recursive: true});
+    appendFileSync(join(root, 'packages/remote-access/src/public-unavailable.ts'), '\n// Changed current page input\n');
+    const env = {...process.env}; delete env.NODE_TEST_CONTEXT;
+    const result = spawnSync('node', ['--test', '--test-reporter=tap',
+      '--test-name-pattern=^unrelated package changes omit public gateway while retaining packages, types and other receipts$',
+      'scripts/ci-gateway-receipt.test.mjs'], {cwd: root, env, encoding: 'utf8', timeout: 60_000});
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /# tests 1\b/); assert.match(result.stdout, /# pass 1\b/);
+    assert.match(result.stdout, /^ok 1 - unrelated package changes omit public gateway while retaining packages, types and other receipts$/m);
+  } finally {rmSync(root, {recursive: true, force: true});}
+});

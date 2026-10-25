@@ -242,6 +242,8 @@ for(const disconnect of [false,true])test(`unavailable response respects applica
    ['application wildcard preferred','text/html;q=0.5,application/*;q=1',true],
    ['case and whitespace',' Application/* ; q=0.8, text/html;q=0.2',true],
    ['HTML preferred','application/*;q=0.5,text/html;q=1',false],
+   ['equal preference application first','application/*,text/html',true],
+   ['equal preference HTML first','text/html,application/*',true],
    ['explicit JSON exclusion','application/*;q=1,application/json;q=0,text/html;q=0.5',false],
    ['explicit JSON overrides wildcard','application/*;q=0,application/json;q=0.8,text/html;q=0.5',true],
    ['explicit JSON lower preference','application/*;q=1,application/json;q=0.2,text/html;q=0.5',false],
