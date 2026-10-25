@@ -5325,3 +5325,12 @@ message too. Submit still validates every required field and focuses the first
 problem before sending. Server refusals, retry limits and uncertain results stay
 visible while you type; language changes retain your values. English/Spanish
 browser checks cover all five forms, both themes and phone/desktop widths.
+
+## Clear stale connection and recovery code feedback (D249)
+
+When you edit the code on Connect a venue or Recover, the old malformed-code
+message and field marker clear. Submit checks the edited code again before any
+request. Server refusals and uncertain outcomes stay visible while you type;
+choosing a business still leaves code errors alone. Browser checks cover English
+and Spanish, both themes and phone/desktop widths, including pasted code trimming
+and values retained across a language change.

@@ -13,7 +13,7 @@ export function recoveryScreen(app:PortalApp){
  const selected=b.page?.points.find(p=>p.id===b.selected&&p.verification==='verified'),continuous=b.page?.continuousRecovery,selectionTime=b.selectedSource==='continuous'?continuous?.recoverableAt:selected?.capturedAt,ready=available&&(b.selectedSource==='continuous'?!!continuous:!!selected);
  return html`<p>${c.recoveryIntro}</p><p>${c.recoveryLocal}</p>
   ${r.error?html`<p role="alert">${c[r.error]}</p>`:nothing}
-  <wt-input name="recoveryCode" .label=${c.pairCode} .value=${r.code} .error=${r.error==='pairCodeError'?c.pairCodeError:''} .required=${true} .disabled=${disabled||!!r.view} autocomplete="off" @wt-change=${(e:CustomEvent<{value:string}>)=>{r.code=e.detail.value;}}></wt-input>
+  <wt-input name="recoveryCode" .label=${c.pairCode} .value=${r.code} .error=${r.error==='pairCodeError'?c.pairCodeError:''} .required=${true} .disabled=${disabled||!!r.view} autocomplete="off" @wt-change=${(e:CustomEvent<{value:string}>)=>{r.code=e.detail.value;if(r.error==='pairCodeError')r.error=undefined;app.draw();}}></wt-input>
   <wt-button id="submit" .disabled=${disabled} @click=${()=>{app.readFields();void r.inspect();}}>${r.view?c.retry:c.pairInspect}</wt-button>
   ${r.view?html`<p>${c.recoveryExpires} <time datetime=${op?.expiresAt??r.view.expiresAt}>${formatDateTime(op?.expiresAt??r.view.expiresAt,app.locale)}</time></p>`:nothing}
   ${expired?html`<p role="status">${c.recoveryExpired}</p>`:nothing}
