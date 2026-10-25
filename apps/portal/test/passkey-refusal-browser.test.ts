@@ -15,7 +15,7 @@ const labels = {
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
   test(`${locale} ${theme} ${width}: refused passkey changes have a read-only check and fresh attempt`, async t => {
     const browser = await chromium.launch({headless: true});
-    try { for (const flow of ['options', 'verify', 'remove'] as const) await t.test(flow, async () => {
+    try { for (const flow of ['options', 'verify', 'remove', 'browser-duplicate'] as const) await t.test(flow, async () => {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
       page.setDefaultTimeout(4000);
       let release!: () => void;
@@ -27,6 +27,13 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         const virtual = await page.context().newCDPSession(page);
         await virtual.send('WebAuthn.enable');
         await virtual.send('WebAuthn.addVirtualAuthenticator', {options: {protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true}});
+        if (flow === 'browser-duplicate') await page.addInitScript(() => {
+          const create = navigator.credentials.create.bind(navigator.credentials); let refused = false;
+          navigator.credentials.create = async options => {
+            if (!refused) {refused = true; throw new DOMException('Already registered', 'InvalidStateError');}
+            return create(options);
+          };
+        });
         await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
         await page.route('**/api/account/**', async route => {
           const req = route.request(), path = new URL(req.url()).pathname.replace('/api/account', '');
@@ -34,7 +41,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           if (path === '/passkeys') {reads++; if (checking) await checked; return route.fulfill({json: {passkeys: removed ? [] : added ? [key, {...key, id: addedId}] : [key]}});}
           if (path.startsWith('/passkeys/')) {
             writes.push({path, body: req.postDataJSON()});
-            if (refusingAgain || (!refused && path.endsWith(flow === 'options' ? '/options' : flow === 'verify' ? '/verify' : '/remove'))) {refused = true; return route.fulfill({status: 400, headers: refusingAgain ? {'Retry-After': '60'} : {}, json: {error: 'invalid_input'}});}
+            if (refusingAgain || (flow !== 'browser-duplicate' && !refused && path.endsWith(flow === 'options' ? '/options' : flow === 'verify' ? '/verify' : '/remove'))) {refused = true; return route.fulfill({status: 400, headers: refusingAgain ? {'Retry-After': '60'} : {}, json: {error: 'invalid_input'}});}
             if (path.endsWith('/options')) {
               optionsCount++;
               return route.fulfill({json: {ceremonyId: optionsCount === 1 ? id : addedId, options: {challenge: optionsCount === 1 ? 'YWJj' : 'ZGVm', rp: {name: 'Waitron Cloud', id: 'portal.test'}, user: {id: 'b3duZXI', name: 'owner@example.test', displayName: 'Owner'}, pubKeyCredParams: [{type: 'public-key', alg: -7}]}}});
@@ -75,7 +82,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         else {
           assert.deepEqual(change.map(x => x.path), ['/passkeys/registration/options', '/passkeys/registration/verify']);
           assert.deepEqual(change[0]!.body, {password: 'Fresh password'});
-          assert.equal(change[1]!.body.ceremonyId, flow === 'verify' ? addedId : id, 'restart uses a new server-issued prompt');
+          assert.equal(change[1]!.body.ceremonyId, flow === 'verify' || flow === 'browser-duplicate' ? addedId : id, 'restart uses a new server-issued prompt');
         }
         assert.equal(await password.inputValue(), '');
         if (flow === 'options') {

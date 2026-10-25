@@ -119,6 +119,9 @@ Native checks exercise mapping boundaries, fresh password, read failure, pending
 work, delays and account switches. Browser checks use the real portal and browser
 passkey prompt with synthetic HTTP responses; they qualify the displayed action
 and a new server-issued prompt, not database expiry or cryptographic verification.
+The browser's already-registered (`InvalidStateError`) refusal uses the same
+general registration guidance, without sending a verification request. Other
+browser failures and cancellations keep their existing feedback.
 Existing PostgreSQL store and HTTP tests run in CI; Docker is unavailable locally.
 The server and its disclosure policy are unchanged.
 

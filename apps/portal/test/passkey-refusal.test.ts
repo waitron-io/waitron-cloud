@@ -97,3 +97,18 @@ test('a refused change retains its retry delay before a read-only check', async 
   await c.enroll(c.password); assert.equal(c.error, 'passkeyRegistrationRefused'); assert.ok(c.waiting > 0);
   const before = c.password; await c.refresh(); assert.equal(c.password, before); assert.equal(calls.length, 1);
 });
+for (const wrapped of [false, true]) test(`an already-registered browser passkey offers a list check, wrapped=${wrapped}`, async () => {
+  const cause = new DOMException('Already registered', 'InvalidStateError');
+  const calls: string[] = [];
+  const c = new PasskeyController(() => {}, async <T>(path: string): Promise<ApiResult<T>> => {
+    calls.push(path); return {ok: true, value: options as T};
+  }, {...browser, register: async () => {throw wrapped ? new Error('Browser refused', {cause}) : cause;}});
+  c.account('owner'); await c.enroll('Current password');
+  assert.equal(c.error, 'passkeyRegistrationRefused'); assert.equal(c.notice, undefined); assert.equal(c.pending, false);
+  assert.deepEqual(calls, ['/passkeys/registration/options'], 'a browser refusal never submits a verification');
+});
+test('a JavaScript error named InvalidStateError does not claim a browser duplicate', async () => {
+  const c = new PasskeyController(() => {}, async <T>(): Promise<ApiResult<T>> => ({ok: true, value: options as T}),
+    {...browser, register: async () => {throw Object.assign(new Error('Other failure'), {name: 'InvalidStateError'});}});
+  c.account('owner'); await c.enroll('Current password'); assert.equal(c.error, 'passkeyUnavailable');
+});

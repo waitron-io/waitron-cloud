@@ -146,7 +146,8 @@ export class PasskeyController {
       if (generation !== this.#generation) return;
       this.pending = false;
       if (error instanceof Error && error.cause instanceof DOMException) error = error.cause;
-      if (this.#cancelled(error)) this.notice = 'passkeyCancelled'; else this.error = 'passkeyUnavailable';
+      if (this.#cancelled(error)) this.notice = 'passkeyCancelled';
+      else this.error = error instanceof DOMException && error.name === 'InvalidStateError' ? 'passkeyRegistrationRefused' : 'passkeyUnavailable';
       this.#changed(); return;
     }
     const result = await this.#request<PasskeySummary>('/passkeys/registration/verify', {ceremonyId: options.value.ceremonyId, response});
