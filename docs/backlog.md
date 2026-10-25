@@ -5514,8 +5514,10 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   uncertain history and allocation contention; retain original-request inspection.
 - R8 delivered: the no-eligible-business message explains the existing sign-out
   and owning-account sign-in path in English and Spanish. Stubbed-browser checks
-  cover the account switch, retained connection request and recoverable sign-out
-  failure. Same-account membership/business creation remains a missing capability.
+  cover the same-page account switch, retained connection request and recoverable
+  sign-out failure. Reloading loses the in-memory request; reopen the connection
+  link from Waitron. Preserving it across reloads and same-account membership/business
+  creation remain separate missing capabilities.
 - R9: make persistent public availability refusal honest while retaining retry;
   give owners useful diagnostics without exposing private state to visitors.
 - R10: provide safe next actions for empty public-gate rejection pages and reproduce
