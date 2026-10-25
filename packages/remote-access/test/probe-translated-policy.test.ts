@@ -23,6 +23,7 @@ for(const address of [
 
 // A similar suffix is insufficient: only the exact translated prefix carries this endpoint.
 for(const address of [
+ '1::ffff:0:7f00:1','0:1::ffff:0:7f00:1','0:0:1:0:ffff:0:7f00:1',
  '::fffe:0:7f00:1','::ffff:1:7f00:1','0:0:0:1:ffff:0:7f00:1',
  '::1:7f00:1','2606:4700:4700::7f00:1',
 ])test(`translated endpoint detection preserves the existing policy outside its prefix: ${address}`,()=>{
