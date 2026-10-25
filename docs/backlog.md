@@ -3946,6 +3946,12 @@ notifications separately.
   Native trusted TLS/HTTPS cases cover cancellation boundaries, pending and
   rejected resolution, the unchanged deadline and successful deferred resolution.
   Live DNS and production shutdown still need separate qualification.
+  If a probe result cannot be stored, the runner stops starting targets or
+  delivering further results. It waits for already-started probes and writes
+  before reporting the first failure, so the caller can close shared resources.
+  Native ordering tests cover pending probes, concurrent writes, later success
+  or failure, and an error reporter that throws. Production shutdown and real
+  database-failure qualification remain separate.
   The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
   separates existing local detection from proposed production operator alerts and
   opted-in venue mail, with worked outage and backup timelines. The owner approved

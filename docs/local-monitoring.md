@@ -134,6 +134,10 @@ At most four venues run concurrently. DNS answers, TLS/request time, total servi
 response bytes and proof work are bounded. Shutdown aborts pending sockets and suppresses
 their results, so an interrupted check cannot store or print fresh success. Failures use fixed
 codes rather than raw addresses or network errors.
+If storing a result fails, the runner stops starting targets and suppresses results
+from probes still running. It waits for started probes and writes to finish before
+reporting the first failure, so the CLI can close its database pool afterwards.
+Writes already in progress can still complete; the batch is not one transaction.
 
 The database keeps the current result, the last success and failure times, the last fixed
 failure code and the most recently verified certificate evidence. A newer result can
