@@ -4964,7 +4964,10 @@ unversioned inventories. That probe substitutes the venue and fiscal adapter;
 it does not qualify the real fiscal workload. All six genuine smoke consumers now
 check the separate ledger, preserve incomplete billing and display its cost caveat.
 An official-binary held-list control retains a real interrupted response and the
-two different byte observations. The delayed-PUT probe exposed initial readiness
+two different byte observations. Its startup barrier requires an actual completed
+upload before stop, while the controlled retention list stays held. The toy store
+returns the uploads it acknowledges; the control also asserts the real upload
+bytes. Deleting the startup barrier fails the native readiness assertion. The delayed-PUT probe exposed initial readiness
 accepting storage visibility before the upload reply; the existing 40-poll loop
 now also requires that initial transfer to settle before the second sale. Linux
 qualification then exposed an idle gap during SDK retry backoff: a different

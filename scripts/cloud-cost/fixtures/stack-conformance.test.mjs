@@ -535,6 +535,8 @@ test('genuinePinnedLitestreamCountsHeldMetadataAfterValidatedRuntimeStop', async
   const result = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-litestream-list-control.mjs'],
     { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 15000, stdio: ['ignore', 'pipe', 'pipe'] }));
   assert.equal(result.version, '0.5.17'); assert.equal(result.afterStop.used, 1); assert.equal(result.afterStop.lateAdmissions, 1);
+  assert.equal(result.initialUploadComplete, true);
+  assert.ok(result.observed.accounting.requests.some(r => r.operation === 'put' && r.outcome === 'success' && r.bytesOut > 0));
   assertSmokeAccounting(result);
   assert.equal(/synthetic|Authorization|Invocation|127\.0\.0\.1|\/state\/|\.ltx/.test(JSON.stringify(result)), false);
   t.diagnostic(JSON.stringify(result));

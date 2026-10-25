@@ -19,12 +19,44 @@ async function run() {
   const afterStop = createLitestreamAfterStop({ clock: () => performance.now() / 1000 });
   const audit = createLitestreamRequestAudit({ phase: 'workload', afterStop });
   const meter = createMeter({ phase: 'workload', clock: () => performance.now() / 1000, afterStop });
+  let uploaded;
+  const initialUpload = new Promise(resolve => { uploaded = resolve; });
+  const counter = { ...meter, observeAttempt(...args) {
+    const accepted = meter.observeAttempt(...args), [row] = args;
+    if (row.channel === 'producer' && row.operation === 'put' && row.outcome === 'success') uploaded();
+    return accepted;
+  } };
   let release, held, child, ended, control, front, proxy, timer, invalid = false;
+  const objects = new Map();
   const waiting = new Promise(resolve => { held = resolve; });
   const backend = createServer((req, res) => {
-    req.resume(); req.on('end', () => {
-      const xml = '<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>synthetic</Name><Prefix></Prefix><KeyCount>0</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated></ListBucketResult>';
-      res.writeHead(200, { 'content-type': 'application/xml', 'content-length': Buffer.byteLength(xml) }); res.end(xml);
+    const url = new URL(req.url, 'http://local'), key = decodeURIComponent(url.pathname.split('/').slice(2).join('/'));
+    const chunks = []; req.on('data', bytes => chunks.push(bytes));
+    req.on('end', () => {
+      if (req.method === 'PUT') {
+        if (key) objects.set(key, { body: Buffer.concat(chunks), modified: new Date().toISOString() });
+        res.writeHead(200, { 'content-length': '0', etag: '"synthetic"' }); res.end(); return;
+      }
+      if (req.method === 'DELETE') { objects.delete(key); res.writeHead(204); res.end(); return; }
+      if (!key) {
+        const prefix = url.searchParams.get('prefix') ?? '', rows = [...objects].filter(([name]) => name.startsWith(prefix));
+        const xml = '<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>synthetic</Name><Prefix>' + prefix
+          + '</Prefix><KeyCount>' + rows.length + '</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated>'
+          + rows.map(([name, object]) => '<Contents><Key>' + name + '</Key><Size>' + object.body.length
+            + '</Size><LastModified>' + object.modified + '</LastModified><ETag>"synthetic"</ETag><StorageClass>STANDARD</StorageClass></Contents>').join('')
+          + '</ListBucketResult>';
+        res.writeHead(200, { 'content-type': 'application/xml', 'content-length': Buffer.byteLength(xml) }); res.end(xml); return;
+      }
+      const body = objects.get(key)?.body;
+      if (!body) { res.writeHead(404); res.end('<Error><Code>NoSuchKey</Code></Error>'); return; }
+      const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range ?? '');
+      let output = body;
+      if (range) {
+        const start = Number(range[1]), end = range[2] ? Number(range[2]) : body.length - 1;
+        output = body.subarray(start, end + 1); res.setHeader('content-range', `bytes ${start}-${end}/${body.length}`);
+      }
+      res.writeHead(range ? 206 : 200, { 'content-length': output.length, etag: '"synthetic"' });
+      res.end(req.method === 'HEAD' ? undefined : output);
     });
   });
   const gate = createServer((req, res) => {
@@ -36,15 +68,19 @@ async function run() {
       res.on('close', () => { if (!res.writableFinished) upstream.destroy(); });
       req.pipe(upstream);
     };
-    if (!release) { release = forward; held({ method: req.method, list: req.url.includes('list-type=2') }); }
+    // Hold the observed snapshot-retention list; initialization must remain able to read its committed uploads.
+    const url = new URL(req.url, 'http://local');
+    if (!release && req.method === 'GET' && url.searchParams.get('list-type') === '2' && url.searchParams.get('prefix') === 'stream/0009/') {
+      release = forward; held({ method: req.method, list: true });
+    }
     else forward();
   });
   try {
     backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
-    proxy = await createMeteringProxy({ target: 'http://127.0.0.1:' + backend.address().port, meter,
+    proxy = await createMeteringProxy({ target: 'http://127.0.0.1:' + backend.address().port, meter: counter,
       classify: input => audit.observe({ headers: input.headers, operation: classifyStorageOperation(input) }) });
     gate.listen(0, '127.0.0.1'); await once(gate, 'listening');
-    front = await createLitestreamTransport({ target: 'http://127.0.0.1:' + gate.address().port, meter, phase: 'workload', afterStop });
+    front = await createLitestreamTransport({ target: 'http://127.0.0.1:' + gate.address().port, meter: counter, phase: 'workload', afterStop });
     checkpoint = () => front.checkpoint();
     const file = join(root, 'config.json'), socketPath = join(root, 'control.sock');
     writeFileSync(file, JSON.stringify({ socket: { enabled: true, path: socketPath }, dbs: [{ path, 'monitor-interval': '10ms',
@@ -63,6 +99,8 @@ async function run() {
     try {
       stage = 'held-list';
       assert.deepEqual(await Promise.race([waiting, ended.then(() => assert.fail('writer ended before held list'))]), { method: 'GET', list: true });
+      stage = 'initial-upload';
+      await Promise.race([initialUpload, ended.then(() => assert.fail('writer ended before initial upload'))]);
       await Promise.race([
         (async () => {
           stage = 'stop-control';
@@ -88,7 +126,7 @@ async function run() {
       stage = 'snapshot';
       const subset = afterStop.snapshot();
       assert.equal(subset.used, 1); assert.equal(subset.lateAdmissions, 1);
-      return { version, replication: audit.snapshot(), observed: meter.snapshot(), ...litestreamAfterStopOutput(subset) };
+      return { version, initialUploadComplete: true, replication: audit.snapshot(), observed: meter.snapshot(), ...litestreamAfterStopOutput(subset) };
     } finally { clearTimeout(watchdog); clearTimeout(timer); control?.destroy(); }
   } catch (error) {
     diagnostic = checkpoint?.();
