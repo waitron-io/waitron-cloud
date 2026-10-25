@@ -4290,8 +4290,9 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   list reads remain unqualified.
   Generic passkey failures now give neutral English/Spanish feedback with the
   existing password sign-in as an alternative. Browser checks exercise a refused
-  prompt and unavailable options, a rejected password then successful password
-  sign-in, and a failed list read followed by a successful retry. They use synthetic
+  prompt and unavailable options, a second refused passkey attempt, a rejected
+  password then successful password sign-in, and a failed list read followed by
+  a successful retry. They use synthetic
   HTTP responses; real credential and database checks remain in CI. The shared
   message cannot diagnose browser restrictions, configuration or transport faults.
   Request-body limits/formats/interruption still need cause-specific feedback.

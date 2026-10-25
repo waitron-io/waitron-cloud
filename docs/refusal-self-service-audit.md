@@ -128,14 +128,14 @@ Oversized bodies (413), unsupported request formats (415) and interrupted bodies
 (408) still share generic feedback. Their cause-specific messages remain
 follow-ups. The server and its disclosure policy are unchanged.
 
-Generic passkey failures say “Passkeys are unavailable. You can try again or sign
-in with your password.” / “Las llaves de acceso no están disponibles. Puedes
-volver a intentarlo o entrar con tu contraseña.” The shared message covers failed
-list/options requests and browser prompt errors; it cannot establish a temporary
-cause. Password sign-in remains on the sign-in screen. On Account, a failed list
+Generic passkey failures say “Passkeys are unavailable. You can try again.
+Password sign-in remains available.” / “Las llaves de acceso no están disponibles.
+Puedes volver a intentarlo. Puedes seguir entrando con tu contraseña.” The shared
+message covers failed list/options requests, other refused sign-in or management
+requests, and browser prompt errors; it cannot establish a temporary cause. Password sign-in remains on the sign-in screen. On Account, a failed list
 read retains Retry and does not claim that your list is empty. Browser checks use
-synthetic HTTP responses to follow both paths, including an incorrect password
-before a successful sign-in. They do not qualify real credential verification or
+synthetic HTTP responses to follow both paths, including a second refused
+passkey attempt and an incorrect password before a successful sign-in. They do not qualify real credential verification or
 repair a browser or service restriction. Request-body limits, malformed requests
 and interrupted requests still need cause-specific feedback.
 
