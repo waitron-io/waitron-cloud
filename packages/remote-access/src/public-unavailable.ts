@@ -14,7 +14,7 @@ function preferences(header:string|undefined){
 
 export function publicUnavailable(accept:string|undefined,language:string|undefined){
  const types=preferences(accept);
- const json=types.find(p=>p.value==='application/json')?.q??0;
+ const json=types.find(p=>p.value==='application/json')?.q??types.find(p=>p.value==='application/*')?.q??0;
  const html=types.find(p=>p.value==='text/html')?.q??types.find(p=>p.value==='text/*')?.q??types.find(p=>p.value==='*/*')?.q??0;
  const headers:Record<string,string>={'Retry-After':'30','Vary':'Accept, Accept-Language'};
  if(json>0&&json>=html)return {body:JSON.stringify({error:'venue_unavailable'}),type:'application/json',headers};

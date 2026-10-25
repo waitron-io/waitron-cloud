@@ -948,7 +948,12 @@ approved contract; the partial runtime above does not complete joint proof or re
   30-second retry hint and no caching. Clients requesting JSON receive a generic
   error with the same 503 status. Real HTTP and Chromium tests cover failed venue
   responses, lost connections, language/content preferences and all eight visual
-  states. The D88 extension proposes concrete customer function/method families;
+  states. The unavailable response also honours `application/*` preferences for
+  JSON, while exact JSON exclusions and stronger HTML preferences still win.
+  Native HTTP regressions cover upstream errors and lost connections, preserving
+  the private 503 response, no caching and the default browser page. Production
+  traffic remains unqualified.
+  The D88 extension proposes concrete customer function/method families;
   exact Waitron routes/assets and session/retry semantics need joint acceptance
   before implementation. No offsite booking/order queue is included; a lost reply
   requires outcome reconciliation, not a blind retry.
