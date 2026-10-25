@@ -4917,19 +4917,27 @@ macOS task; it does not identify the historical Linux request. Waiting until jus
 one active stack frame disappears also fails to establish that all background
 work has finished. Native stack dumps remain local diagnostic evidence.
 
-The shutdown repair remains open. The proposed [native drain design](superpowers/specs/2026-10-24-litestream-native-drain-design.md)
+The owner decided against a custom Litestream binary on 25 October. Keep the
+official 0.5.17 release and its pins. The revised [after-stop accounting design](superpowers/specs/2026-10-24-litestream-native-drain-design.md)
 and [implementation plan](superpowers/plans/2026-10-24-litestream-native-drain.md)
-close background-cycle admission, join admitted work and finish the final flush
-before acknowledging shutdown. This is an unbuilt proposal. Before implementing
-or building a custom binary, the owner must decide whether to pursue a separately
-pinned patched Litestream build for the synthetic smoke. A custom build changes
-what is measured; its qualification cannot certify the unchanged official pin.
-Preserve full-session request, byte and lifetime evidence and the existing refusal
-for interrupted I/O. Merely waiting for an empty transport does not prevent new
-requests from that separate process.
-Any proposal to exclude shutdown traffic or accept incomplete evidence requires
-a separately reviewed change to the audit contract. This diagnostic milestone
-does not qualify either alternative.
+replace the unbuilt native extension with a small, separately counted shutdown
+allowance. This documentation milestone does not implement or qualify that change.
+
+[PR428's cost run 40144823848, job 121023853072](https://github.com/waitron-io/waitron-cloud/actions/runs/40144823848/job/121023853072)
+refuses during `stop`; cleanup records `active-close` after 21 completed attempts.
+This is an unfinished-transfer refusal, not an excess-count check. Pending zero
+is measured after destructive cleanup. The log does not establish which stop
+outcome fired, or prove a native caller or historical cause. The earlier list
+interruptions during the stop callback remain distinct evidence.
+
+The proposed equivalent records a validated runtime stop acknowledgement before
+allowing bounded after-stop lists and completion of an upload already in progress.
+Retain their attempts, actual bytes and outcomes separately, and state the possible
+request-cost shortfall. Keep ordinary accounting strict, refuse traffic outside
+the cap or allowed operations, and preserve required upload completion, final
+sale restore, integrity, fiscal, privacy, cleanup and deadline checks. A generic
+`active-close` is still a failure. Runtime implementation and genuine Linux
+qualification remain open; Docker is unavailable locally until 3 November.
 
 ## Recovery refusal messages and pasted codes (D192)
 
