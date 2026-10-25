@@ -302,3 +302,29 @@ test('unversioned history reader requires its own producer settlement', async t 
     headers: { 'amz-sdk-invocation-id': invocation, 'amz-sdk-request': 'attempt=1; max=3' } });
   assert.throws(() => finish({ statusCode: 200, bytesOut: 0 }), bad);
 });
+
+// Final restore uses the same history, with ordinary strict read completion after replication stops.
+test('the shared history keeps final restore reads strict after runtime stop', async t => {
+  const { createLitestreamAfterStop } = await import('./litestream.mjs');
+  const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
+  const reader = await storage.openLitestreamHistories({ ...f.args, afterStop });
+  afterStop.acknowledgeStop({statusCode:200,ownedPath:'/owned.db',body:Buffer.from('{"status":"stopped","path":"/owned.db","txid":0}')});
+  const finish = reader.strictReads.begin({ method: 'GET', path, headers: {} });
+  finish({ statusCode: 200, bytesOut: 0, interrupted: false, responseHeaders: {} });
+  await reader.verify();assert.equal(reader.snapshot().objects.bytes, 0);assert.equal(afterStop.snapshot().used, 0);
+});
+for (const method of ['PUT', 'DELETE', 'POST']) test(`the strict restore view refuses ${method} before storage`, async t => {
+  const { createLitestreamAfterStop } = await import('./litestream.mjs');
+  const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
+  const reader = await storage.openLitestreamHistories({ ...f.args, afterStop });
+  assert.throws(() => reader.strictReads.begin({ method, path, headers: {'content-length':'4'} }), bad);
+  await assert.rejects(reader.verify(), bad);assert.throws(() => afterStop.snapshot());
+});
+test('an interrupted final restore read still poisons the shared history', async t => {
+  const { createLitestreamAfterStop } = await import('./litestream.mjs');
+  const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
+  const reader = await storage.openLitestreamHistories({ ...f.args, afterStop });
+  const finish = reader.strictReads.begin({ method: 'GET', path, headers: {} });
+  assert.throws(() => finish({ statusCode: 200, bytesOut: 0, interrupted: true, responseHeaders: {} }), bad);
+  await assert.rejects(reader.verify(), bad);assert.throws(() => afterStop.snapshot());
+});

@@ -8,7 +8,7 @@ import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { openReplay } from '/code/cost-waitron-adapter.mjs';
-import { createLitestreamRequestAudit, createLitestreamTransport, withLitestreamCloseDiagnostics } from '/code/litestream.mjs';
+import { createLitestreamAfterStop, litestreamAfterStopOutput, createLitestreamRequestAudit, createLitestreamTransport, withLitestreamCloseDiagnostics } from '/code/litestream.mjs';
 
 import { createMeter, createMeteringProxy, classifyStorageOperation, instrumentStorageClient, correlatedStorageAttempt } from '/code/meter.mjs';
 const require = createRequire('/app/packages/backups/package.json');
@@ -22,11 +22,26 @@ async function smoke() {
   const replay = await openReplay({ codeRoot: '/code', stateRoot, config, initial });
   const database = stateRoot + '/venue/venue.db', output = stateRoot + '/restored.db';
   const children = new Set(); let injectedFailures = 0;
+  const afterStop = createLitestreamAfterStop({ clock: () => performance.now() / 1000 });
+  const controlSocket = stateRoot + '/control.sock';
   const fault = createServer((req, res) => {
+    let requestBytes = 0; req.on('data', bytes => { requestBytes += bytes.length; });
     if (req.method === 'PUT' && injectedFailures === 0) {
       injectedFailures++; req.resume(); req.on('end', () => { res.writeHead(503, { 'content-length': '0' }); res.end(); }); return;
     }
     const upstream = request('http://127.0.0.1:8333', { method: req.method, path: req.url, headers: req.headers }, incoming => {
+      if (req.method === 'PUT' && incoming.statusCode >= 200 && incoming.statusCode < 300) {
+        incoming.once('end', () => {
+          try {
+            const ordinal = /^attempt=([1-9]\d*); max=[1-9]\d*$/.exec(req.headers['amz-sdk-request']);
+            if (!ordinal) fail();
+            afterStop.commit({ token: req.headers['amz-sdk-invocation-id'] + ':' + ordinal[1], statusCode: incoming.statusCode,
+              bytesOut: requestBytes, expectedBytesOut: Number(req.headers['content-length'] ?? 0),
+              requestComplete: req.complete && incoming.complete,
+              versionId: incoming.headers['x-amz-version-id'] ?? null, deleteMarker: incoming.headers['x-amz-delete-marker'] ?? null });
+          } catch { afterStop.invalidate(); res.destroy(); }
+        });
+      }
       res.writeHead(incoming.statusCode, incoming.headers); incoming.on('error', () => res.destroy()); incoming.pipe(res);
     });
     upstream.on('error', () => res.destroy()); req.on('aborted', () => upstream.destroy()); req.pipe(upstream);
@@ -34,12 +49,12 @@ async function smoke() {
   fault.listen(0, '127.0.0.1'); await once(fault, 'listening');
   let lifetimes, replication, restore;
   const phase = async name => {
-    const audit = createLitestreamRequestAudit({ phase: name });
-    const meter = createMeter({ phase: name, clock: () => performance.now() / 1000 });
+    const session = name === 'workload' ? afterStop : undefined;
+    const audit = createLitestreamRequestAudit({ phase: name, afterStop: session });
+    const meter = createMeter({ phase: name, clock: () => performance.now() / 1000, afterStop: session });
     const proxy = await createMeteringProxy({ target: `http://127.0.0.1:${fault.address().port}`, meter,
       classify: input => audit.observe({ headers: input.headers, operation: classifyStorageOperation(input) }) });
-    const transport = process.env.COST_LITESTREAM_TRANSPORT === '1'
-      ? await createLitestreamTransport({ target: proxy.url, meter, phase: name, lifetimes }) : null;
+    const transport = await createLitestreamTransport({ target: proxy.url, meter, phase: name, lifetimes: name === 'restore' && lifetimes?.afterStop ? lifetimes.strictReads : lifetimes, afterStop: session });
     return { audit, meter, proxy, transport, endpoint: transport?.url ?? proxy.url };
   };
   const adminMeter = createMeter({ phase: 'observer', clock: () => performance.now() / 1000 });
@@ -63,14 +78,14 @@ async function smoke() {
     });
     return { child, done };
   };
-  const stop = async process => {
+  const stop = process => process.stopping ??= (async () => {
     if (!children.has(process.child)) return process.done;
     process.child.kill('SIGTERM'); const force = setTimeout(() => process.child.kill('SIGKILL'), 2000);
     try { return await process.done; } finally { clearTimeout(force); }
-  };
+  })();
   const configFile = (name, endpoint) => {
     const file = stateRoot + '/' + name + '.json';
-    writeFileSync(file, JSON.stringify({ snapshot: { interval: '24h', retention: '168h' },
+    writeFileSync(file, JSON.stringify({ ...(name === 'replicate' ? { socket: { enabled: true, path: controlSocket } } : {}), snapshot: { interval: '24h', retention: '168h' },
       dbs: [{ path: database, 'monitor-interval': '1s', replica: { type: 's3', bucket: Bucket, path: 'stream', endpoint,
         region: 'eu-north-1', 'force-path-style': true, 'sync-interval': '1s' } }] }), { mode: 0o600 });
     return file;
@@ -96,7 +111,8 @@ async function smoke() {
       const storage = await import(versioned ? '/code/stream-versions.mjs' : '/code/storage-lifetimes.mjs');
       const open = versioned ? storage.openLitestreamVersionHistories
         : process.env.COST_LITESTREAM_HISTORIES === '1' ? storage.openLitestreamHistories : storage.openLitestreamLifetimes;
-      lifetimes = await open({ client: clients[1], sdk, meter: adminMeter, bucket: Bucket, clock: () => performance.now() / 1000 });
+      lifetimes = await open({ client: clients[1], sdk, meter: adminMeter, bucket: Bucket, clock: () => performance.now() / 1000,
+        afterStop });
     }
     replication = await phase('workload'); restore = await phase('restore'); await sale(1);
     stage = 'replicate'; replicator = launch(['replicate', '-config', configFile('replicate', replication.endpoint)], replication.audit);
@@ -107,6 +123,49 @@ async function smoke() {
       await delay(500);
     }
     if (!uploaded) fail(); stage = 'second-sale'; await sale(2);
+    stage = 'stop';
+    let drainTimer, control, stopStep = 'control';
+    try {
+      await Promise.race([
+        (async () => {
+          if (!children.has(replicator.child)) fail();
+          await Promise.race([
+            new Promise((resolve, reject) => {
+              control = request({ socketPath: controlSocket, method: 'POST', path: '/stop',
+                headers: { 'content-type': 'application/json' } }, response => {
+                let size = 0; const chunks = [];
+                response.on('error', reject);
+                response.on('data', bytes => {
+                  size += bytes.length;
+                  if (size > 1024) { response.destroy(); reject(Error('Synthetic Litestream stop reply refused')); }
+                  else chunks.push(bytes);
+                });
+                response.once('end', () => {
+                  try {
+                    if (!children.has(replicator.child)) fail();
+                    afterStop.acknowledgeStop({ statusCode: response.statusCode, ownedPath: database, body: Buffer.concat(chunks) });
+                    resolve();
+                  } catch (error) { reject(error); }
+                });
+              });
+              control.on('error', reject);
+              control.end(JSON.stringify({ path: database, timeout: 2 }));
+            }),
+            replicator.done.then(() => fail()),
+          ]);
+          stopStep = 'exit';
+          const ended = await stop(replicator);
+          if (ended.invalid || ended.code !== 0) fail();
+          stopStep = 'idle';
+          await replication.transport?.whenIdle(() => {});
+        })(),
+        new Promise((_, reject) => { drainTimer = setTimeout(() => reject(Error('Synthetic Litestream stop timed out')), 2000); }),
+      ]);
+    } catch (error) {
+      console.error(JSON.stringify({ kind: 'litestream-stop', status: 'rejected', step: stopStep,
+        ...(replication.transport?.checkpoint ? { diagnostic: replication.transport.checkpoint() } : {}) }));
+      throw error;
+    } finally { clearTimeout(drainTimer); control?.destroy(); }
     stage = 'restore'; let restoredSales = 0, integrity;
     for (let n = 0; n < 12; n++) {
       rmSync(output, { force: true });
@@ -123,16 +182,6 @@ async function smoke() {
       await delay(1000);
     }
     if (restoredSales !== 2 || integrity !== 'ok') fail();
-    stage = 'stop';
-    // Committed objects can be restored before the writer has received its PUT reply.
-    let drainTimer, ended;
-    try {
-      ended = await (replication.transport ? Promise.race([
-        replication.transport.whenIdle(() => stop(replicator)),
-        new Promise((_, reject) => { drainTimer = setTimeout(() => reject(Error('Synthetic Litestream stop timed out')), 2000); }),
-      ]) : stop(replicator));
-    } finally { clearTimeout(drainTimer); }
-    if (ended.invalid || ended.code !== 0) fail();
     stage = 'audit-end'; replication.audit.end(); restore.audit.end();
     await delay(20);
     stage = 'replication-transport-close';
@@ -141,6 +190,7 @@ async function smoke() {
     await withLitestreamCloseDiagnostics({ stage: 'restore-transport', close: () => restore.transport?.close() });
     const result = { version, injectedFailures, restoredSales, integrity, sales: replay.counts(), fiscal: await replay.verify(),
       replication: replication.audit.snapshot(), restore: restore.audit.snapshot(), observed: replication.meter.snapshot() };
+    Object.assign(result, litestreamAfterStopOutput(afterStop.snapshot()));
     if (replication.transport) result.transport = { replication: replication.transport.snapshot(), restore: restore.transport.snapshot() };
     if (lifetimes) {
       stage = 'lifetimes'; await lifetimes.verify();

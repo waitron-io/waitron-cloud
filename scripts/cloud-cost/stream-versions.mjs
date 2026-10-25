@@ -102,7 +102,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
       pending.delete(token);
     });
   };
-  const begin = guarded(({ method, path, headers, body }) => {
+  const beginOperation = ({ method, path, headers, body }, strictRead) => {
     need(!verifying && pending.size < 100000 && sequence < 100000 && !multipart?.active());
     const operation = classifyStorageOperation({ method, path, allowBulkDeletes });
     if (operation === 'delete-many') {
@@ -136,7 +136,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
       if (row && !row.deleted) row.removing ??= time;
       verified = false;
     }
-    const settleLifetime = afterStop?.beginLifetime({ headers, operation, versioned: true });
+    const settleLifetime = strictRead ? undefined : afterStop?.beginLifetime({ headers, operation, versioned: true });
     const token = {}; pending.add(token);
     return guarded(({ statusCode, bytesOut, interrupted = false, responseHeaders }) => {
       if (settleLifetime) ({ statusCode, responseHeaders } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
@@ -162,7 +162,13 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
       }
       pending.delete(token);
     });
-  });
+  };
+  const begin = guarded(input => beginOperation(input, false));
+  // Final restore shares inventory and pending-token guards, with no replication shutdown allowance.
+  const strictReads = { begin: guarded(input => {
+    need(['get', 'head', 'list'].includes(classifyStorageOperation(input)));
+    return beginOperation(input, true);
+  }) };
   const verify = async () => {
     try {
       need(!invalid && !verifying && pending.size === 0); verifying = true; verified = false; now();
@@ -243,5 +249,5 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
       return { status: 'measured', scope: 'versioned-object-history', windowSeconds: time - start, objects, byteSeconds: { low, high } };
     })();
   };
-  await verify(); return { begin, verify, snapshot, ...(afterStop ? { afterStop } : {}) };
+  await verify(); return { begin, verify, snapshot, ...(afterStop ? { afterStop, strictReads } : {}) };
 }

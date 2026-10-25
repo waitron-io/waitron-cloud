@@ -144,7 +144,18 @@ export function createMeter({ phase, clock, afterStop }) {
     try { token(id); requireThat(!pending.has(id) && !attempts.observer.has(id)); pending.add(id); }
     catch { invalid = true; afterStop?.invalidate(); fail(); }
   };
-  return { observeAttempt, observeObject, snapshot, beginAttempt, ...(afterStop ? { afterStop } : {}),
+  const checkpoint = () => {
+    const producer = totals(), observer = totals(), outcomes = new Map();
+    for (const hop of ['producer', 'observer']) for (const row of attempts[hop].values()) {
+      const sum = hop === 'producer' ? producer : observer;
+      sum.attempts++; sum.bytesIn += row.bytesIn; sum.bytesOut += row.bytesOut;
+      const key = hop + ':' + row.outcome;
+      if (!outcomes.has(key)) outcomes.set(key, { hop, outcome: row.outcome, attempts: 0 });
+      outcomes.get(key).attempts++;
+    }
+    return { pending: pending.size, producer, observer, outcomes: [...outcomes.values()] };
+  };
+  return { observeAttempt, observeObject, snapshot, checkpoint, beginAttempt, ...(afterStop ? { afterStop } : {}),
     invalidate: () => { invalid = true; afterStop?.invalidate(); } };
 }
 

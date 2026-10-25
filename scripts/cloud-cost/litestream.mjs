@@ -228,6 +228,67 @@ export function createLitestreamAfterStop(options) {
   return { acknowledgeStop, issue, admit, commit, beginLifetime, settle, snapshot, invalidate: () => { invalid = true; } };
 }
 
+// Smoke accounting is a separate, bounded subset; it never upgrades the measured-cost schema.
+export function litestreamAfterStopOutput(input) {
+  exactFields(input, ['cap', 'used', 'lateAdmissions', 'lateSettlements', 'requests', 'producer', 'observer',
+    'requestsReconciled', 'bodiesReconciled', 'status', 'gaps']);
+  requireThat(input.cap === 3 && nonnegative(input.used) && input.used <= 3
+    && ['lateAdmissions', 'lateSettlements'].every(k => nonnegative(input[k]) && input[k] <= input.used)
+    && input.used <= input.lateAdmissions + input.lateSettlements && input.requestsReconciled === true
+    && typeof input.bodiesReconciled === 'boolean' && input.status === (input.bodiesReconciled ? 'measured' : 'unknown')
+    && Array.isArray(input.requests) && input.requests.length <= 6 && Array.isArray(input.gaps));
+  const totals = { producer: { attempts: 0, bytesIn: 0, bytesOut: 0 }, observer: { attempts: 0, bytesIn: 0, bytesOut: 0 } };
+  const keys = new Set(); let listInterrupted = false, putInterrupted = false, putAttempts = 0, interruptedLists = 0, listAttempts = 0;
+  for (const r of input.requests) {
+    exactFields(r, ['hop', 'phase', 'operation', 'retryOrdinal', 'outcome', 'attempts', 'bytesIn', 'bytesOut', 'attemptedBytesIn', 'attemptedBytesOut']);
+    requireThat(['producer', 'observer'].includes(r.hop) && phases.includes(r.phase) && ['list', 'put'].includes(r.operation)
+      && r.retryOrdinal === 0 && ['success', 'transport-error'].includes(r.outcome)
+      && ['attempts', 'bytesIn', 'bytesOut', 'attemptedBytesIn', 'attemptedBytesOut'].every(k => nonnegative(r[k]))
+      && r.attempts > 0 && r.bytesIn <= r.attemptedBytesIn && r.bytesOut <= r.attemptedBytesOut
+      && (r.outcome !== 'transport-error' || r.hop === 'producer'));
+    const key = [r.hop, r.phase, r.operation, r.retryOrdinal, r.outcome].join(':');
+    requireThat(!keys.has(key)); keys.add(key);
+    for (const k of ['attempts', 'bytesIn', 'bytesOut']) totals[r.hop][k] += r[k];
+    if (r.hop === 'producer' && r.operation === 'put') putAttempts += r.attempts;
+    if (r.hop === 'producer' && r.operation === 'list') {
+      listAttempts += r.attempts;
+      if (r.outcome === 'transport-error') interruptedLists += r.attempts;
+    }
+    listInterrupted ||= r.operation === 'list' && r.outcome === 'transport-error';
+    putInterrupted ||= r.operation === 'put' && r.outcome === 'transport-error';
+  }
+  requireThat(putAttempts <= 1 && input.lateAdmissions <= listAttempts
+    && input.lateSettlements === putAttempts + interruptedLists
+    && (input.used > 0 || input.bodiesReconciled));
+  for (const r of input.requests.filter(r => r.hop === 'producer')) {
+    const paired = input.requests.filter(o => o.hop === 'observer' && o.phase === r.phase && o.operation === r.operation)
+      .reduce((n, o) => n + o.attempts, 0);
+    const issued = input.requests.filter(o => o.hop === 'producer' && o.phase === r.phase && o.operation === r.operation)
+      .reduce((n, o) => n + o.attempts, 0);
+    requireThat(paired === issued);
+  }
+  for (const hop of ['producer', 'observer']) {
+    exactFields(input[hop], ['attempts', 'bytesIn', 'bytesOut']);
+    requireThat(Object.keys(totals[hop]).every(k => nonnegative(totals[hop][k]) && input[hop][k] === totals[hop][k])
+      && input[hop].attempts === input.used);
+  }
+  const expectedGaps = [...(listInterrupted ? ['after-stop:list-response-interrupted'] : []),
+    ...(putInterrupted ? ['after-stop:put-response-interrupted'] : []),
+    ...(!input.bodiesReconciled ? ['after-stop:body-bytes-unpaired'] : [])];
+  requireThat(new Set(input.gaps).size === input.gaps.length && input.gaps.length === expectedGaps.length
+    && input.gaps.every(g => expectedGaps.includes(g)));
+  if (input.bodiesReconciled) {
+    requireThat(!listInterrupted && !putInterrupted);
+    for (const r of input.requests.filter(r => r.hop === 'producer')) {
+      const observer = input.requests.find(o => o.hop === 'observer' && o.phase === r.phase && o.operation === r.operation && o.outcome === r.outcome);
+      requireThat(observer && ['attempts', 'bytesIn', 'bytesOut', 'attemptedBytesIn', 'attemptedBytesOut'].every(k => observer[k] === r[k]));
+    }
+  }
+  const afterStop = structuredClone(input);
+  return { afterStop, ...(afterStop.used ? { costAccuracy: { status: 'incomplete', reason: 'after-stop',
+    message: 'Cost may be a few requests short after stop.' } } : {}) };
+}
+
 export function createLitestreamRequestAudit({ phase, allowBulkDeletes = false, afterStop }) {
   requireThat(phases.includes(phase));
   const decoder = new StringDecoder('utf8'), producer = new Map(), observer = new Map(), sequences = new Map();
@@ -451,7 +512,8 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   });
   server.on('clientError', (error, socket) => { poison('client-error', error, 'client-error'); socket.destroy(); });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  return { url: `http://127.0.0.1:${server.address().port}`, whenIdle: async action => {
+  return { url: `http://127.0.0.1:${server.address().port}`, checkpoint: () => ({ ...refusal, pending: pending.size, completed,
+    connections: connections.size, ...(meter.checkpoint ? { accounting: meter.checkpoint() } : {}) }), whenIdle: async action => {
     requireThat(!invalid && !closing && typeof action === 'function');
     if (pending.size === 0) return runIdleAction(action);
     return new Promise((resolve, reject) => idleWaiters.add({ action, resolve, reject }));

@@ -190,3 +190,20 @@ test('a refused phase change stays the first cause during subsequent close', asy
   assert.equal(records.at(-1).diagnostic.reason, 'phase-change');
   assert.equal(JSON.stringify(records).includes('PRIVATE'), false);
 });
+
+test('a stop checkpoint preserves active work before destructive transport cleanup', async t => {
+  let admitted;const ready = new Promise(resolve => admitted = resolve);
+  const { transport, meter } = await fixture(t, (req, res) => {
+    req.resume();req.on('end', () => { res.writeHead(200);res.write('partial');admitted(); });
+  });
+  const pending = send(transport.url, { headers }).catch(() => {});
+  await ready;
+  assert.deepEqual(transport.checkpoint(), { pending: 1, completed: 0, connections: 1,
+    accounting: { pending: 0, producer: { attempts: 0, bytesIn: 0, bytesOut: 0 },
+      observer: { attempts: 0, bytesIn: 0, bytesOut: 0 }, outcomes: [] } });
+  assert.throws(() => transport.snapshot(), /Invalid cloud cost Litestream audit/);
+  await assert.rejects(transport.close());await pending;
+  const final = transport.checkpoint();assert.equal(final.reason, 'active-close');assert.equal(final.pending, 0);
+  assert.equal(final.accounting.producer.attempts, 1);assert.equal(final.accounting.outcomes[0].outcome, 'transport-error');
+  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+});
