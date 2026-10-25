@@ -5225,6 +5225,17 @@ run does not close the historical timeout. Local Docker and PostgreSQL checks
 remain unavailable until 3 November; full qualification uses GitHub CI. D152's
 separate native-writer drain decision remains open.
 
+## Authenticator code format feedback (D237)
+
+Malformed authenticator codes now stay in their field with an explanation, before
+any request. App codes require six digits; recovery proofs accept 32 hexadecimal
+characters or four groups of eight. The portal still removes whitespace and keeps
+recovery hyphens. New-app confirmation accepts only its six-digit app code.
+A server invalid-input refusal marks the relevant code field;
+blank-code, incorrect-code and outage feedback remain distinct. The server remains
+the authority for accepting a proof. Controller and English/Spanish browser checks
+cover sign-in, management and new-app confirmation without changing server rules.
+
 ## Business choice feedback when connecting a venue (D234)
 
 Choosing a business now clears the resolved “Choose a business for this venue”
