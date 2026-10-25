@@ -8,6 +8,7 @@ import { workerFailureTrace } from './worker-diagnostic.mjs';
 import { replayPrivateDay } from './private-replay.mjs';
 
 let stage = 'configuration';
+let storageStage;
 const trace = [];
 const onDiagnostic = event => { trace.push(event); if (trace.length > 32) trace.shift(); };
 function recordFailure() {
@@ -36,7 +37,7 @@ async function run() {
     if (options.stream) {
       stage = 'storage-open';
       const sdk = createRequire('/app/packages/backups/package.json')('@aws-sdk/client-s3');
-      storage = await openWorkerStorage({ source, root, journal, sdk });
+      storage = await openWorkerStorage({ source, root, journal, sdk, onDiagnostic });
       const { binarySha256, startupSeconds, idleSeconds, windowSeconds } = options.stream;
       stream = { binary: '/code/litestream', binarySha256, startupSeconds, idleSeconds, windowSeconds,
         target: storage.target, bucket: storage.bucket, versioned: false, sdk };
@@ -45,11 +46,16 @@ async function run() {
     const result = await replayPrivateDay({ ...options, ...(stream ? { stream } : {}), source, root, journal, database, onDiagnostic, codeRoot: '/code', stateRoot: root + '/replay' });
     if (storage) {
       stage = 'storage-cleanup';
+      storageStage = 'storage-finish-input';
       const native = result.stream;
-      const { retainedStorage, ...administration } = await storage.finish({ retained: {
+      const retained = {
         since: native.stream.storageEndedAt, bytes: native.stream.storage.objects.bytes,
         objects: native.stream.storage.objects.currentVersions,
-      } });
+      };
+      storageStage = 'storage-finish';
+      const finished = await storage.finish({ retained });
+      storageStage = 'storage-finish-result';
+      const { retainedStorage, ...administration } = finished;
       result.stream = { phases: native.stream.phases, requests: streamCounters(native.stream.requests),
         administration, retainedStorage, storage: native.stream.storage, native: native.native, restored: native.restored,
         cleanup: { ...native.cleanup, listeners: 0, clients: 0, buckets: 0, objects: 0, multipartUploads: 0 } };
@@ -57,7 +63,11 @@ async function run() {
     stage = 'result';
     writeFileSync('/state/worker-trace.json', JSON.stringify(workerFailureTrace(trace)), { mode: 0o600, flag: 'wx' });
     writeFileSync('/state/result.json', JSON.stringify(result), { mode: 0o600, flag: 'wx' });
-  } catch { recordFailure(); throw Error('Invalid cloud cost replay worker'); }
+  } catch {
+    if (stage === 'storage-cleanup' && ['storage-finish-input', 'storage-finish-result'].includes(storageStage))
+      onDiagnostic({ kind: 'replay-refusal', stage: storageStage });
+    recordFailure(); throw Error('Invalid cloud cost replay worker');
+  }
   finally { stage = 'storage-cleanup'; await storage?.close(); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

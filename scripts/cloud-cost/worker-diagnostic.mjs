@@ -25,10 +25,15 @@ export function workerFailureTrace(value) {
   for (const event of value) {
     need(event && Object.getPrototypeOf(event) === Object.prototype
       && Object.getOwnPropertyDescriptor(event, 'kind')?.get === undefined);
-    if (['replay', 'replay-refusal', 'stream', 'stream-refusal'].includes(event.kind)) {
+    if (event.kind === 'storage-refusal') {
+      exact(event, ['kind', 'stage']);
+      need(['storage-health', 'finish-input', 'cleanup-client-open', 'bucket-ownership', 'bucket-inventory',
+        'bucket-present', 'multipart-list', 'object-list', 'retained-inventory', 'abort-upload', 'delete-object',
+        'delete-bucket', 'accounting', 'retained-accounting', 'client-close', 'proxy-close', 'process-collect', 'root-remove'].includes(event.stage));
+    } else if (['replay', 'replay-refusal', 'stream', 'stream-refusal'].includes(event.kind)) {
       exact(event, ['kind', 'stage']);
       const stages = event.kind.startsWith('replay')
-        ? ['configuration', 'input', 'adapter-open', 'selection', 'stream-open', 'startup', 'workload', 'idle', 'verification', 'stream-finish', 'archive', 'restore', 'cleanup']
+        ? ['configuration', 'input', 'adapter-open', 'selection', 'stream-open', 'startup', 'workload', 'idle', 'verification', 'stream-finish', 'archive', 'restore', 'cleanup', 'storage-finish-input', 'storage-finish-result']
         : ['admission', 'measurement-open', 'version', 'replicate', 'phase', 'quiesce', 'restore', 'restore-file', 'restore-integrity', 'restore-sales', 'accounting', 'cleanup'];
       need(stages.includes(event.stage));
     } else {

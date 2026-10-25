@@ -253,3 +253,31 @@ for (const mode of ['bytes', 'objects', 'future', 'extra', 'fractional', 'untrac
     assert.equal(f.entries().some(e => e.kind === 'storage-process' && e.state === 'collected'), true);
   });
 }
+
+// The real SDK and backend must reach the same diagnostic boundary as generated local faults.
+for (const [commandType, stage] of [[sdk.ListBucketsCommand, 'bucket-inventory'], [sdk.HeadBucketCommand, 'bucket-present'],
+  [sdk.ListObjectsV2Command, 'object-list'], [sdk.ListMultipartUploadsCommand, 'multipart-list'], [sdk.DeleteBucketCommand, 'delete-bucket']]) {
+  test('workerStorageReportsItsFirstCleanupRefusal_' + stage, async t => {
+    let cleanup = false, reached = false;
+    const records = [];
+    const f = fixture(t, { before: command => {
+      if (cleanup && command instanceof commandType) { reached = true; throw Error('PRIVATE_STORAGE_CANARY'); }
+    } });
+    const storage = await open(t, { ...f, onDiagnostic: event => records.push(event) });
+    cleanup = true;
+    await assert.rejects(storage.finish(), bad);
+    assert.equal(reached, true, 'reach the chosen operation after real backend setup');
+    assert.deepEqual(records, [{ kind: 'storage-refusal', stage }]);
+    assert.equal(f.entries().some(e => e.kind === 'storage-process' && e.state === 'collected'), true);
+    assert.equal(existsSync(join(f.root, 'local-storage')), true, 'failed cleanup must retain its private evidence');
+    assert.equal(JSON.stringify(records).includes('PRIVATE'), false);
+  });
+}
+
+test('workerStorageReportsRetainedInventoryMismatchBeforeLaterAccountingFailure', async t => {
+  const f = fixture(t), records = [];
+  const storage = await open(t, { ...f, clock: () => 12, onDiagnostic: event => records.push(event) });
+  await assert.rejects(storage.finish({ retained: { since: 10, bytes: 4, objects: 1 } }), bad);
+  assert.deepEqual(records, [{ kind: 'storage-refusal', stage: 'retained-inventory' }]);
+  assert.equal(f.entries().some(e => e.kind === 'storage-process' && e.state === 'collected'), true);
+});

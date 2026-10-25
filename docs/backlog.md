@@ -1772,6 +1772,19 @@ notifications separately.
   That diagnostic head changed no cost-model files relative to `5b709aa`.
   Its saved log has no underlying worker stage; the later bounded traces and
   separate startup correction do not establish that historical failure's cause.
+  The D121 recurrence in [cost run 40144665901, job 121023380173](https://github.com/waitron-io/waitron-cloud/actions/runs/40144665901/job/121023380173)
+  reaches `storage-cleanup` after successful native replicate and restore exits.
+  Cleanup now retains its first refused operation as a fixed `storage-refusal`
+  stage in the worker trace, including inventory, deletion, accounting and resource
+  collection. Generated failures exercise persistence and reporting containment;
+  real-backend checks cover SDK refusals and retained-inventory disagreement.
+  Separate worker codes identify failure while constructing cleanup input or
+  shaping its result. All eighteen storage codes have generated fault checks.
+  The historical cleanup operation and cause still need an instrumented recurrence
+  and reproduction. Accounting, ownership checks and deadlines remain unchanged.
+  A generated SDK client-destruction throw also stops collection before its first
+  bucket request on both the base and candidate. Its diagnostic is retained; a
+  cleanup correction remains open. Whether the real SDK throws there is unverified.
   The successful browser journey also refused in
   [run 39890570428](https://github.com/waitron-io/waitron-cloud/actions/runs/39890570428/job/120209134728),
   while all six deliberate-fault journeys passed. Its wrapper retained only the
