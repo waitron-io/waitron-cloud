@@ -5162,15 +5162,7 @@ control reconciles both counters and completes the stand-in restore. These check
 use the existing generated writer and substitute venue, SDK administration and
 SQLite reader. They qualify actual HTTP truncation through the smoke; official
 Litestream, production shutdown and historical attribution remain open. Every
-original assertion and runtime file is unchanged. D275's current-head
-qualification is blocked by the separate passkey browser check from PR483:
-[CI40232457076](https://github.com/waitron-io/waitron-cloud/actions/runs/40232457076)
-records `reads: 1` instead of `2` in the English, light, desktop options case at
-`apps/portal/test/passkey-refusal-browser.test.ts:77`. A local 50 ms delay before
-the route callback reproduces that assertion; waiting for callback entry passes
-with the original assertion intact. This proves a fixture ordering mechanism,
-not the exact timing of the uninstrumented Linux failure. Lane G's D254/R2 owns
-the repair; D275 waits for it before rebasing and requalifying.
+original assertion and runtime file is unchanged.
 
 A generic `active-close` still refuses measurement publication. Preserve the official pin,
 three-attempt cap, ordinary accounting, restore and deadline checks in any repair;
