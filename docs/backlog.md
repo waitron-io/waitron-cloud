@@ -5514,8 +5514,14 @@ refusal code is classified as possible only through a product bug.
 
 Cloud follow-ups, each a separate small change with tests before implementation:
 
-- R1: distinguish expired/consumed authenticator setup and absent factors from an
-  outage; preserve every proof requirement and D237's general-400 restriction.
+- R1 delivered: refused authenticator management requests offer Check authenticator
+  settings in English and Spanish. The read-only refresh discards the old local
+  setup and inputs, reads current status and requires fresh password/codes before
+  another change. General 400 responses retain general feedback, without blaming
+  a code field or claiming a specific cause. Server responses, proof checks and
+  uncertain-write reconciliation remain unchanged. Native and stubbed-browser
+  checks cover stale setup, changed status and restart; database qualification
+  runs in CI. The audit records each server cause and the remaining shared-code limit.
 - R2: explain passkey ceremony expiry, duplication and verification failures with
   an actual restart/list/password path, without disclosing another account's keys.
 - R3: explain recovery confirmation, active-operation, verification and fresh-target
