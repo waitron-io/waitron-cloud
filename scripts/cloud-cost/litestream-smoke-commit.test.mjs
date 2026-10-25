@@ -185,6 +185,9 @@ test('the smoke handles an actually truncated backend PUT reply without certifyi
     requestComplete: true, responseComplete: false, requestBytes: 4, expectedRequestBytes: 4,
     statusCode: 200, expectedResponseBytes: 4 }]);
   assert.equal(records.find(row => row.kind === 'litestream-stop')?.step, 'idle', result.stderr);
+  const diagnostic = records.find(row => row.kind === 'litestream-stop')?.diagnostic;
+  assert.equal(diagnostic?.reason, 'upstream-response-interrupted');
+  assert.equal(diagnostic?.ioEvent, 'response-aborted');
   assert.match(result.stderr, /Synthetic Litestream phase: stop/);
   assert.doesNotMatch(result.stderr, /Unhandled 'error' event|uncaughtException|Synthetic Litestream phase: restore/);
 });

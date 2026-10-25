@@ -5128,8 +5128,8 @@ head/merge pair recorded 10,167 passing tests and the same 19 optional skips.
 These runs qualify that delivery; they do not attribute every historical refusal.
 A native HTTP control now truncates an actual successful upload reply after one
 of its four declared bytes. The unchanged smoke handles the interruption at stop
-and publishes no measurement. Its paired complete-reply control restores both
-synthetic sales and reconciles all four response bytes at both hops. Removing
+and publishes no measurement. Its paired complete-reply control reports both
+synthetic sales through its stand-in restore and reconciles all four response bytes at both hops. Removing
 only backend-response error forwarding leaves the truncated case waiting until
 its existing subprocess deadline, while the seven original commit checks and the
 complete-reply control pass; restoring it passes all nine. Original assertion
