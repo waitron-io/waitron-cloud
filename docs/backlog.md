@@ -3888,8 +3888,11 @@ notifications separately.
   including signed zero. Real HTTPS regressions and independent Chromium
   controls cover deletion, replacement, malformed values and whitespace.
   Positive/session cookies and the genuine gateway journey still pass.
-  Other expiry rules, including `Expires`-only deletion, remain open. Whether
-  oversized Path values need the same treatment needs a separate browser control.
+  Path selection also ignores values over 1,024 bytes before choosing the last
+  effective attribute, matching Chromium. Real HTTPS regressions and independent
+  Chromium controls cover the size boundary, replacement, whitespace and equals
+  signs. An earlier non-root path still refuses before replay, and a valid root
+  still succeeds. Other expiry rules, including `Expires`-only deletion, remain open.
   The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
   separates existing local detection from proposed production operator alerts and
   opted-in venue mail, with worked outage and backup timelines. The owner approved

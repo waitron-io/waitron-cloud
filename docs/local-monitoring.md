@@ -106,8 +106,9 @@ The public check receives and solves the normal bot challenge before requesting
 `/public/availability`; there is no unprotected health bypass. Browsers reject a
 host-only cookie that names a domain. The probe refuses any `Domain` attribute,
 including empty and bare attributes that some browsers ignore. It also checks the
-last `Path` attribute: a later non-root, empty or bare path makes the host-prefixed
-cookie unusable, even when an earlier attribute says `Path=/`. Its Path comparison
+last effective `Path` attribute: values over 1,024 bytes are ignored, as in
+Chromium. A later non-root, empty or bare path within that limit makes the
+host-prefixed cookie unusable, even when an earlier attribute says `Path=/`. Its Path comparison
 trims ordinary spaces and tabs, preserving other bytes so it cannot mistake a
 no-break space for a browser-accepted root path. It also refuses zero or negative
 whole numbers, including `+0`, in the last `Max-Age` attribute within Chromium's

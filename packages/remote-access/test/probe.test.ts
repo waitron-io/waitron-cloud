@@ -216,3 +216,42 @@ test('public probe refuses a challenge cookie deleted by its last Max-Age attrib
   }finally{await fixture.close();}
  });
 });
+
+
+test('public probe ignores oversized Path attributes while enforcing the last effective root path',async t=>{
+ const material=await certificate('probe.example.test');
+ for(const [label,paths,healthy] of [
+  ['oversized after root','Path=/; Path=/'+'x'.repeat(1024),true],
+  ['boundary after root','Path=/; Path=/'+'x'.repeat(1023),false],
+  ['oversized after wrong path','Path=/; Path=/other; Path=/'+'x'.repeat(1024),false],
+  ['oversized then root','Path=/'+'x'.repeat(1024)+'; Path=/',true],
+  ['spaced oversized','Path=/; pAtH = \t/'+'x'.repeat(1024)+' \t',true],
+  ['spaced boundary','Path=/; pAtH = \t/'+'x'.repeat(1023)+' \t',false],
+  ['oversized with equals','Path=/; Path=/'+'x'.repeat(1022)+'=x',true],
+  ['boundary with equals','Path=/; Path=/'+'x'.repeat(1021)+'=x',false],
+  ['oversized without root','Path=/'+'x'.repeat(1024),false],
+  ['UTF-8 bytes over limit','Path=/; Path=/'+Buffer.from('é'.repeat(512),'utf8').toString('latin1'),true],
+  ['UTF-8 bytes at limit','Path=/; Path=/x'+Buffer.from('é'.repeat(511),'utf8').toString('latin1'),false],
+  ['UTF-8 oversized without root','Path=/'+Buffer.from('é'.repeat(512),'utf8').toString('latin1'),false],
+  ['ordinary root','Path=/',true],
+  ['ordinary wrong path','Path=/; Path=/other',false],
+ ] as const)await t.test(label,async()=>{
+  let replays=0;
+  const fixture=await listenHttps(material,(req,res)=>{
+   if(req.url==='/public/availability'){
+    if(req.headers.cookie){replays++;res.setHeader('content-type','application/json');res.end('{}');}
+    else{res.statusCode=403;res.setHeader('content-type','text/html');res.end('<script src="/_cloud/challenge.js"></script>');}
+   }else if(req.url==='/_cloud/challenge'){
+    res.setHeader('content-type','application/json');res.end('{"challenge":"fixture-challenge","difficulty":8}');
+   }else if(req.url==='/_cloud/solve'){
+    res.statusCode=204;res.setHeader('set-cookie','__Host-waitron-public=fixture; Secure; HttpOnly; SameSite=Strict; '+paths);res.end();
+   }else{res.statusCode=404;res.end();}
+  });
+  try{
+   const result=await probeTarget(target(),{ca:material.cert,connect:connect(fixture.port)});
+   assert.equal(result.public.status,healthy?'healthy':'failed');
+   if(!healthy)assert.equal(result.public.status==='failed'&&result.public.failure,'challenge');
+   assert.equal(replays,healthy?1:0,'Only an effective root-path cookie may reach availability');
+  }finally{await fixture.close();}
+ });
+});
