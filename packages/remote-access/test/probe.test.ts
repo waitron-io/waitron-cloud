@@ -605,7 +605,7 @@ import {setTimeout as setWatchdog,clearTimeout as clearWatchdog} from 'node:time
 
 test('probe cancellation during connection resolution prevents network work',async t=>{
  const material=await certificate('probe.example.test');
- for(const turns of [0,1,2,3,4])await t.test(`abort after ${turns} promise turns`,async()=>{
+ for(const turns of [0,1,2,3,4,5,6,7,8])await t.test(`abort after ${turns} promise turns`,async()=>{
   const stop=new AbortController();let connections=0;
   const fixture=await listenHttps(material,(_req,res)=>{res.end();});
   fixture.server.on('connection',()=>connections++);
@@ -690,4 +690,17 @@ test('probe cancellation consumes an address resolver rejection',async()=>{
   assert.equal(service.status,'failed');
   if(service.status==='failed')assert.equal(service.failure,'cancelled');
  }
+});
+
+
+test('probe cancellation prevents queued resolver invocation',async()=>{
+ const stop=new AbortController();let calls=0;
+ const result=await probeTarget(target(),{signal:stop.signal,connect:()=>{
+  calls++;stop.abort();return {address:'127.0.0.1',family:4,port:1};
+ }});
+ for(const service of [result.public,result.staff]){
+  assert.equal(service.status,'failed');
+  if(service.status==='failed')assert.equal(service.failure,'cancelled');
+ }
+ assert.equal(calls,1,'A resolver queued before cancellation must not run after cancellation');
 });
