@@ -21,12 +21,13 @@ async function smoke() {
   const { config, initial } = JSON.parse(readFileSync('/state/replay-config.json', 'utf8'));
   const replay = await openReplay({ codeRoot: '/code', stateRoot, config, initial });
   const database = stateRoot + '/venue/venue.db', output = stateRoot + '/restored.db';
-  const children = new Set(); let injectedFailures = 0;
+  const children = new Set(); let injectedFailures = 0, failedUploadInvocation, retryAcknowledged = false;
   const afterStop = createLitestreamAfterStop({ clock: () => performance.now() / 1000 });
   const controlSocket = stateRoot + '/control.sock';
   const fault = createServer((req, res) => {
     let requestBytes = 0; req.on('data', bytes => { requestBytes += bytes.length; });
     if (req.method === 'PUT' && injectedFailures === 0) {
+      failedUploadInvocation = req.headers['amz-sdk-invocation-id'];
       injectedFailures++; req.resume(); req.on('end', () => { res.writeHead(503, { 'content-length': '0' }); res.end(); }); return;
     }
     const upstream = request('http://127.0.0.1:8333', { method: req.method, path: req.url, headers: req.headers }, incoming => {
@@ -39,6 +40,7 @@ async function smoke() {
               bytesOut: requestBytes, expectedBytesOut: Number(req.headers['content-length'] ?? 0),
               requestComplete: req.complete && incoming.complete,
               versionId: incoming.headers['x-amz-version-id'] ?? null, deleteMarker: incoming.headers['x-amz-delete-marker'] ?? null });
+            if (req.headers['amz-sdk-invocation-id'] === failedUploadInvocation && ordinal[1] === '2') retryAcknowledged = true;
           } catch { afterStop.invalidate(); res.destroy(); }
         });
       }
@@ -119,8 +121,9 @@ async function smoke() {
     let uploaded = false;
     for (let n = 0; n < 40; n++) {
       if (!children.has(replicator.child)) fail();
-      // Storage visibility can precede the successful upload reply; finish initial readiness before the next write.
-      if ((await list()).some(r => r.Key.endsWith('.ltx')) && replication.transport.checkpoint().pending === 0) { uploaded = true; break; }
+      // An idle transfer counter excludes SDK backoff; require the injected upload's retry as well as its reply.
+      if ((await list()).some(r => r.Key.endsWith('.ltx')) && replication.transport.checkpoint().pending === 0
+        && (injectedFailures === 0 || retryAcknowledged)) { uploaded = true; break; }
       await delay(500);
     }
     if (!uploaded) fail(); stage = 'second-sale'; await sale(2);

@@ -83,7 +83,8 @@ qualification before landing.
 ## Task 4: qualify the official binary and finish through the driver
 
 Local checkpoint: all six consumers check the ledger/caveat. Initial readiness now
-requires the visible upload's reply to settle within the original 40 polls; the
+requires the visible upload's reply and the injected failed upload's successful
+first retry within the original 40 polls; the
 1,500 ms official macOS probe passes after reproducing the old pre-ack interruption.
 The official held-list control observes one affected attempt; cap/cap+1 is proved
 with deterministic real HTTP attempts, not fabricated extra native attempts.

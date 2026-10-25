@@ -4966,8 +4966,13 @@ check the separate ledger, preserve incomplete billing and display its cost cave
 An official-binary held-list control retains a real interrupted response and the
 two different byte observations. The delayed-PUT probe exposed initial readiness
 accepting storage visibility before the upload reply; the existing 40-poll loop
-now also requires that initial transfer to settle before the second sale. The
-1,500 ms delayed replies then restore both synthetic rows with integrity intact.
+now also requires that initial transfer to settle before the second sale. Linux
+qualification then exposed an idle gap during SDK retry backoff: a different
+object was visible, but the injected failed upload had not retried. The same
+40-poll readiness loop now also requires a successful backend acknowledgement
+for that upload's first retry. The existing native retry assertion is retained;
+a deterministic idle-backoff regression fails before this guard and passes with
+it. The 1,500 ms delayed replies restore both synthetic rows with integrity intact.
 No stop deadline, cap, official pin or pre-acknowledgement refusal is relaxed.
 Native checks cover three/four-attempt boundaries with real HTTP requests; the
 official held-list control observes one affected attempt and does not claim that
