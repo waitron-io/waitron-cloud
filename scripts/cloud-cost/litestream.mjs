@@ -380,7 +380,8 @@ export async function withLitestreamCloseDiagnostics({ stage, close, report = li
     const raw = own(error, 'litestreamCloseDiagnostic'), reason = own(raw, 'reason');
     const diagnostic = {};
     if (closeReasons.has(reason)) diagnostic.reason = reason;
-    for (const key of ['pending', 'completed', 'connections', 'idleActionsAtAdmission']) {
+    for (const key of ['pending', 'completed', 'connections', 'idleActionsAtAdmission', 'activeTransfers',
+      'bytesIn', 'expectedIn', 'bytesOut', 'expectedOut']) {
       const value = own(raw, key);
       if (Number.isSafeInteger(value) && value >= 0) diagnostic[key] = value;
     }
@@ -411,6 +412,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   let invalid = false, closing, refusal, currentPhase = phase;
   const invocations = new Map(), pending = new Set(), connections = new Set();
   const transfers = new Map();
+  const socketTransfers = new WeakMap();
   const idleWaiters = new Set();
   let completed = 0, idleActionsStarted = 0;
   const runIdleAction = action => { idleActionsStarted++; return action(); };
@@ -459,11 +461,17 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       idleActionsAtAdmission,
       clientClosed: destination.destroyed, responseHeadersSeen: statusCode !== null,
     });
+    const clientSocket = source.socket;
+    if (!socketTransfers.has(clientSocket)) socketTransfers.set(clientSocket, new Map());
+    socketTransfers.get(clientSocket).set(id.key, () => ({ operation: name, idleActionsAtAdmission,
+      clientClosed: destination.destroyed, responseHeadersSeen: statusCode !== null,
+      bytesIn, expectedIn, bytesOut, expectedOut }));
     const responseChunks = lifetimes && ['delete-many', 'multipart-create', 'multipart-complete'].includes(name) ? [] : null;
     const finish = (interrupted, reason = 'transfer-interrupted', error, ioEvent) => {
       if (settled || !interrupted && (!sent || !received)) return;
       settled = true; pending.delete(id.key); completed++;
       transfers.delete(id.key);
+      socketTransfers.get(clientSocket).delete(id.key);
       let completing = 'body-accounting', acceptedInterruption = false;
       try {
         const outcome = interrupted ? 'transport-error' : statusCode >= 500 ? 'server-error' : statusCode >= 300 ? 'client-error' : 'success';
@@ -516,7 +524,13 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       pipeline(source, counter, upstream, error => { sent = !error; finish(!!error, 'transfer-interrupted', error, 'request-pipeline'); });
     }
   });
-  server.on('clientError', (error, socket) => { poison('client-error', error, 'client-error'); socket.destroy(); });
+  server.on('clientError', (error, socket) => {
+    const active = socketTransfers.get(socket);
+    // A pipelined socket can have several requests; attribute only an unambiguous active transfer.
+    const { operation, ...context } = active?.size === 1 ? active.values().next().value() : {};
+    remember('client-error', error, 'client-error', operation, { activeTransfers: active?.size ?? 0, ...context });
+    poison('client-error', error, 'client-error'); socket.destroy();
+  });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   return { url: `http://127.0.0.1:${server.address().port}`, pendingTransfers: () => [...transfers.values()].map(snapshot => snapshot()), checkpoint: () => ({ ...refusal, pending: pending.size, completed,
     connections: connections.size, ...(meter.checkpoint ? { accounting: meter.checkpoint() } : {}) }), whenIdle: async action => {
