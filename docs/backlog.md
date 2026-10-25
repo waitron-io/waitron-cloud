@@ -5121,6 +5121,15 @@ pending, so a fixed sleep cannot replace it. Each subprocess exits after fixture
 cleanup with zero transport connections. Removing only the smoke's passive idle wait exposes early
 restore in the new held-reply case. This qualifies forwarding order with a
 controlled close notification, not actual writer-process exit or production timing.
+A separate generated Node writer now owns the actual upload socket and exits after
+valid stop acknowledgement. With one of four reply bytes received, the smoke refuses
+at the idle step, starts no restore and publishes no measurement. Its paired
+complete-reply control reconciles all three attempts and exact bytes before the
+stand-in restore. Both checks collect the writer and transport connections.
+Removing or not awaiting the passive idle wait exposes early restore in the held
+case while the complete control passes. This qualifies generated-process exit
+with real HTTP forwarding; official Litestream, production shutdown and historical
+Linux timing remain unqualified.
 Genuine Linux/SeaweedFS and PostgreSQL qualification run in current-head CI before
 landing. Historical attribution remains open.
 
