@@ -29,6 +29,8 @@ test('failed probes release sockets and let their process exit while peers stay 
     if(stage==='during body'){res.setHeader('content-type','application/json');res.write('{');}
     publicEntered=true;cancelWhenReady();
    });
+   // The HTTP layer must not answer a client half-close and hide a leaked client socket.
+   Object.assign(publicServer,{httpAllowHalfOpen:true});
    for(const server of [staff,publicServer])server.on('connection',socket=>{
     sockets.add(socket);socket.once('close',()=>sockets.delete(socket));socket.on('error',()=>{});
    });
@@ -56,21 +58,22 @@ test('failed probes release sockets and let their process exit while peers stay 
     assert(staffAddress&&typeof staffAddress!=='string');assert(publicAddress&&typeof publicAddress!=='string');
     child=spawn(process.execPath,['--input-type=module','--eval',source,JSON.stringify({staffPort:staffAddress.port,publicPort:publicAddress.port,ca:material.cert.toString()})],{stdio:['ignore','pipe','pipe','ipc']});
     child.on('message',message=>{if(message==='public-body'){bodyReceived=true;cancelWhenReady();}});
-    const processChild=child;let output='',errors='',forced=false;
+    const processChild=child;let output='',errors='',forced:string|undefined;
     exited=new Promise((resolve,reject)=>{processChild.once('error',reject);processChild.once('close',(code,signal)=>resolve({code,signal}));});
-    watchdog=setTimeout(()=>{forced=true;processChild.kill('SIGKILL');},8000);
+    watchdog=setTimeout(()=>{forced='overall watchdog';processChild.kill('SIGKILL');},8000);
     processChild.stdout!.on('data',chunk=>{
      output+=chunk;
-     if(output.includes('\n')&&!finishTimer)finishTimer=setTimeout(()=>{forced=true;processChild.kill('SIGKILL');},1000);
+     if(output.includes('\n')&&!finishTimer)finishTimer=setTimeout(()=>{forced='result printed but process stayed open';processChild.kill('SIGKILL');},1000);
     });
     processChild.stderr!.on('data',chunk=>{errors+=chunk;});
     const exit=await exited;
-    assert(staffEntered,'The staff connection must reach its unfinished TLS handshake');
+    const diagnostic=JSON.stringify({forced,output,errors,staffEntered,publicEntered,bodyReceived,exit});
+    assert.equal(forced,undefined,'The failed probes must release sockets without a peer close or forced process exit; '+diagnostic);
+    assert.deepEqual(exit,{code:0,signal:null},diagnostic);
+    assert(staffEntered,'The staff connection must reach its unfinished TLS handshake; '+diagnostic);
     assert(publicEntered,'The public request must reach the selected unfinished response');
     assert.equal(bodyReceived,stage==='during body','The child must receive the partial body before cancellation or timeout');
     assert.equal(cancelSent,failure==='cancelled');
-    assert.equal(forced,false,'The failed probes must release sockets without a peer close or forced process exit; '+errors);
-    assert.deepEqual(exit,{code:0,signal:null},errors);
     const value=JSON.parse(output);
     for(const service of [value.public,value.staff]){
      assert.equal(service.status,'failed');assert.equal(service.failure,failure);
