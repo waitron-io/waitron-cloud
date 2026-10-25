@@ -230,6 +230,9 @@ test('public probe ignores oversized Path attributes while enforcing the last ef
   ['oversized with equals','Path=/; Path=/'+'x'.repeat(1022)+'=x',true],
   ['boundary with equals','Path=/; Path=/'+'x'.repeat(1021)+'=x',false],
   ['oversized without root','Path=/'+'x'.repeat(1024),false],
+  ['UTF-8 bytes over limit','Path=/; Path=/'+Buffer.from('é'.repeat(512),'utf8').toString('latin1'),true],
+  ['UTF-8 bytes at limit','Path=/; Path=/x'+Buffer.from('é'.repeat(511),'utf8').toString('latin1'),false],
+  ['UTF-8 oversized without root','Path=/'+Buffer.from('é'.repeat(512),'utf8').toString('latin1'),false],
   ['ordinary root','Path=/',true],
   ['ordinary wrong path','Path=/; Path=/other',false],
  ] as const)await t.test(label,async()=>{
