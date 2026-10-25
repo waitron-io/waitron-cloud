@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 
 // The real smoke, audit, counters and forwarding proxy run against a local HTTP store.
 // Only the external venue, SDK administration, SQLite reader and native process are substituted.
-function run({ backendStatus = 200, versionId = null, transport = '1', holdInitialReply = false, holdRetry = false, incomplete = null } = {}) {
+function run({ backendStatus = 200, versionId = null, transport = '1', holdInitialReply = false, holdRetry = false, incomplete = null, backendReply = null } = {}) {
   const actual = new URL('./litestream.mjs', import.meta.url).href;
   const meter = new URL('./meter.mjs', import.meta.url).href;
   const fixture = new URL('./fixtures/litestream-smoke.mjs', import.meta.url).href;
@@ -48,7 +48,16 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
                   console.error(JSON.stringify({kind:'commit-completeness',requestComplete:req.complete,responseComplete:incoming.complete,
                     requestBytes:globalThis.commitRequestBytes,expectedRequestBytes:Number(req.headers['content-length']),statusCode:incoming.statusCode}));
                 });
+                if(${backendReply !== null}){
+                  let responseBytes=0;incoming.on('data',bytes=>responseBytes+=bytes.length);
+                  const report=()=>console.error(JSON.stringify({kind:'backend-reply',responseBytes,
+                  requestComplete:globalThis.commitRequest.complete,responseComplete:incoming.complete,
+                  requestBytes:globalThis.commitRequestBytes,expectedRequestBytes:Number(globalThis.commitRequest.headers['content-length']),
+                  statusCode:incoming.statusCode,expectedResponseBytes:Number(incoming.headers['content-length'])}));
+                  incoming.once('aborted',report);incoming.once('end',report);
+                }
                 callback(incoming);
+                if(${backendReply === 'truncated'})setImmediate(()=>globalThis.truncateBackend());
               };globalThis.secondCommitted();
             }else if(${holdInitialReply} && args[1].headers['amz-sdk-invocation-id']==='11111111-2222-4333-8444-555555555555'){
               globalThis.initialStored();setTimeout(()=>callback(incoming),50);
@@ -76,6 +85,10 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
           setTimeout(()=>globalThis.releaseBackend?.(),25);
         });});socket.listen('/tmp/d152-commit-'+process.pid+'.sock');
         const backend=http.createServer((req,res)=>{req.resume();req.on('end',()=>{requests++;
+          if(${backendReply !== null} && requests===2){
+            res.writeHead(200,{'content-length':'4'});res.write('o');
+            if(${backendReply === 'complete'})res.end('kay');else globalThis.truncateBackend=()=>res.destroy();return;
+          }
           res.writeHead(requests===2?${backendStatus}:200,${versionId === null ? '{}' : JSON.stringify({ 'x-amz-version-id': versionId })});res.end();});});
         backend.listen(0,'127.0.0.1',()=>{
           globalThis.backendPort=backend.address().port;
@@ -159,4 +172,39 @@ for (const incomplete of ['request', 'response']) test(`the smoke refuses an inc
   assert.equal(result.stdout, '');
   assert.equal(records.find(row => row.kind === 'litestream-stop')?.step, 'idle');
   assert.doesNotMatch(result.stderr, /Synthetic Litestream phase: restore/);
+});
+
+// Forwarding backend errors releases the writer so an interrupted reply can finish its refusal.
+test('the smoke handles an actually truncated backend PUT reply without certifying it', () => {
+  const result = run({ backendReply: 'truncated' });
+  assert.equal(result.error, undefined, 'collect the smoke before its subprocess deadline');
+  assert.equal(result.status, 1, result.stderr);
+  assert.equal(result.stdout, '', 'an interrupted reply cannot publish a measurement');
+  const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+  assert.deepEqual(records.filter(row => row.kind === 'backend-reply'), [{ kind: 'backend-reply', responseBytes: 1,
+    requestComplete: true, responseComplete: false, requestBytes: 4, expectedRequestBytes: 4,
+    statusCode: 200, expectedResponseBytes: 4 }]);
+  assert.equal(records.find(row => row.kind === 'litestream-stop')?.step, 'idle', result.stderr);
+  const diagnostic = records.find(row => row.kind === 'litestream-stop')?.diagnostic;
+  assert.equal(diagnostic?.reason, 'upstream-response-interrupted');
+  assert.equal(diagnostic?.ioEvent, 'response-aborted');
+  assert.match(result.stderr, /Synthetic Litestream phase: stop/);
+  assert.doesNotMatch(result.stderr, /Unhandled 'error' event|uncaughtException|Synthetic Litestream phase: restore/);
+});
+
+test('the smoke certifies the paired complete backend PUT reply with its actual response bytes', () => {
+  const result = run({ backendReply: 'complete' });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
+  const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+  assert.deepEqual(records.filter(row => row.kind === 'backend-reply'), [{ kind: 'backend-reply', responseBytes: 4,
+    requestComplete: true, responseComplete: true, requestBytes: 4, expectedRequestBytes: 4,
+    statusCode: 200, expectedResponseBytes: 4 }]);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.afterStop.used, 1);
+  assert.equal(output.afterStop.bodiesReconciled, true);
+  assert.deepEqual(output.afterStop.producer, { attempts: 1, bytesIn: 4, bytesOut: 4 });
+  assert.deepEqual(output.afterStop.observer, { attempts: 1, bytesIn: 4, bytesOut: 4 });
+  assert.equal(output.restoredSales, 2);
+  assert.equal(output.integrity, 'ok');
 });
