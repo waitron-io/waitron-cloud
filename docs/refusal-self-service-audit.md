@@ -108,7 +108,7 @@ that a key belongs to any account, so it gives conditional guidance instead.
 
 | Producer | Causes of the shared response | Portal boundary |
 | --- | --- | --- |
-| [HTTP parser](../packages/account-http/src/passkeys.ts#L79) | Missing/extra fields, invalid IDs, passwords or credential structures, malformed JSON and oversized bodies. | General registration/removal feedback; no field is blamed without evidence. |
+| [HTTP parser](../packages/account-http/src/passkeys.ts#L79) | Missing/extra fields, invalid IDs, passwords or credential structures, malformed JSON and oversized field values. | General registration/removal feedback; no field is blamed without evidence. |
 | [Registration options](../packages/registration/src/passkeys.ts#L92) | The adapter returns an invalid challenge. | Read the list before a fresh prompt; do not promise waiting repairs configuration. |
 | [Registration state](../packages/registration/src/passkeys.ts#L205) | Malformed/missing, differently bound, consumed or expired registration setup. | Start a new prompt with your password; do not reuse the old setup. |
 | [Registration verification](../packages/registration/src/passkeys.ts#L108) | Verification throws or fails, user verification is absent, returned credential/counter is invalid, the account binding differs, or a credential already exists. | General feedback without identifying the key's owner. Check your own list and choose another key if already registered. |
@@ -123,7 +123,10 @@ The browser's already-registered (`InvalidStateError`) refusal uses the same
 general registration guidance, without sending a verification request. Other
 browser failures and cancellations keep their existing feedback.
 Existing PostgreSQL store and HTTP tests run in CI; Docker is unavailable locally.
-The server and its disclosure policy are unchanged.
+Oversized bodies (413), unsupported request formats (415), interrupted bodies
+(408) and other browser failures retain their previous feedback; this cut handles
+the shared 400 and the browser's already-registered refusal. Those other refusal
+messages remain follow-ups. The server and its disclosure policy are unchanged.
 
 ## Existing actions to preserve
 

@@ -5543,7 +5543,9 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   passkey if already registered; it does not identify expiry, duplication or a
   verification failure. Password sign-in, credential feedback, rate waits and
   uncertain-write reconciliation remain available. Native and stubbed-browser
-  checks cover the path; database and HTTP qualification runs in CI.
+  checks cover the path; database and HTTP qualification runs in CI. Request-body
+  limits/formats/interruption and other browser failures keep their previous
+  feedback and remain follow-ups.
 - R3: explain recovery confirmation, active-operation, verification and fresh-target
   refusals; reconcile uncertain writes before suggesting another approval.
 - R4: recovery now explains a refused test-only action in English and Spanish.
