@@ -157,7 +157,7 @@ function accessCookie(headers:import('node:http').IncomingHttpHeaders){
  if(trimPath(sameSites.at(-1)?.slice(1).join('=')??'').toLowerCase()!=='strict')throw new ProbeError('challenge');
  // Secure and HttpOnly are presence flags, even with values; oversized values are ignored.
  const flags=new Set(parts.slice(1).map(value=>value.split('=')).filter(value=>trimPath(value.slice(1).join('=')).length<=1024).map(value=>trimPath(value[0]!).toLowerCase()));
- if(!parts.some(value=>value.toLowerCase()==='path=/')||!flags.has('secure')||!flags.has('httponly'))throw new ProbeError('challenge');
+ if(!flags.has('secure')||!flags.has('httponly'))throw new ProbeError('challenge');
  return parts[0]!;
 }
 async function publicOnce(target:RemoteProbeTarget,connection:ProbeConnection,options:ScopedProbeOptions):Promise<ProbeCertificate> {
