@@ -5085,8 +5085,16 @@ replace the request and backend reply completeness observations with false after
 full delivery. Both cases refuse certification despite matching bytes and a 200
 reply. Removing either observation from the smoke's commit witness fails only its
 new check; the five original commit tests still pass. These controlled observations
-prove witness wiring, not actual truncated-stream handling. The child-running check
-at acknowledgement still needs an independent test.
+prove witness wiring, not actual truncated-stream handling. Separate native HTTP
+controls now test the writer-running check at acknowledgement. A controlled close
+notification is delivered in the complete, valid reply's end event, before the
+smoke's response-end handler. The real allowance ledger must retain its pre-acknowledgement new-upload permission, and
+the smoke must refuse before restore without signalling that already-closed writer.
+The paired running-writer control accepts stop and completes its synthetic restore.
+Removing only the response-end writer check fails the new closed-writer case while
+all original shutdown checks still pass; restoring it passes both new cases.
+These controls substitute the writer, venue and storage. They qualify this guard's
+wiring, not operating-system exit timing or production shutdown.
 Genuine Linux/SeaweedFS and PostgreSQL qualification run in current-head CI before
 landing. Historical attribution remains open.
 
@@ -5106,7 +5114,7 @@ and [merge cost checks](https://github.com/waitron-io/waitron-cloud/actions/runs
 passed, including all six genuine smoke cases and the held-list control. Each
 head/merge pair recorded 10,167 passing tests and the same 19 optional skips.
 These runs qualify that delivery; they do not attribute every historical refusal.
-The two independent guard checks named above remain open. A generic
+Actual truncated-stream handling remains open. A generic
 `active-close` still refuses measurement publication. Preserve the official pin,
 three-attempt cap, ordinary accounting, restore and deadline checks in any repair;
 local Docker qualification remains unavailable until 3 November.
