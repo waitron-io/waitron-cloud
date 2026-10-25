@@ -63,7 +63,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       });
       await t.test('venue shows the supplied venue on first render', async () => {
         assert.equal(await venue.inputValue(), input.venueId);
-        assert.equal(await venue.locator('option:checked').textContent(), 'Supplied venue');
+        assert.equal(await venue.locator('option:checked').textContent(), locale === 'en' ? 'Supplied venue · Preproduction · 10000000' : 'Supplied venue · Preproducción · 10000000');
       });
       await t.test('mode shows initial setup on first render', async () => {
         assert.equal(await mode.inputValue(), 'initial-setup');
