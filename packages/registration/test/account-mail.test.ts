@@ -36,3 +36,18 @@ test('direct local-mailer rendering failures are asynchronous promise rejections
   });
   await assert.rejects(sending!, /Invalid account email/);
 });
+
+for (const locale of ['en', 'es', undefined] as const) {
+  test(`password_changed links to the reset request page in ${locale ?? 'legacy English'}`, () => {
+    for (const origin of ['https://cloud.example', 'http://localhost:3000']) {
+      const mail = accountMail(new URL(origin), 'password_changed', {
+        email: 'owner@example.com', ...(locale === undefined ? {} : {locale}),
+      });
+      const links = mail.text.match(/https?:\/\/\S+/g);
+      assert.deepEqual(links, [`${origin}/forgot-password#lang=${locale ?? 'en'}`]);
+      assert.equal(mail.subject, locale === 'es'
+        ? 'Tu contraseña de Waitron Cloud ha cambiado' : 'Your Waitron Cloud password changed');
+      assert.doesNotMatch(mail.text, /token=/);
+    }
+  });
+}

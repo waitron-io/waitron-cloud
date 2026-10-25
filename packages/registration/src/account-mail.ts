@@ -49,7 +49,11 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
     const when=(value:string,label:string)=>`${label}: ${new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeStyle:'long',timeZone:'UTC'}).format(new Date(value))}.`;
     return {subject,text:[subject,'',`${locale==='es'?'Local':'Venue'}: ${message.venueId}`,labels[message.issue],detail,...(message.checkedAt?['',when(message.checkedAt,locale==='es'?'Última comprobación externa':'Last external check')]:[]),...(message.certificateNotAfter?[when(message.certificateNotAfter,locale==='es'?'El certificado caduca':'The certificate expires')]:[]),'',new URL('/account',origin).href].join('\n')};
   }
-  if (kind === 'password_changed') return {subject: text.password_changed, text: text.changed};
+  if (kind === 'password_changed') {
+    const link = new URL('/forgot-password', origin);
+    link.hash = new URLSearchParams({lang: locale}).toString();
+    return {subject: text.password_changed, text: [text.changed, '', link.href].join('\n')};
+  }
   if (!('token' in message)) throw new Error('Invalid account email');
   const link = new URL(kind === 'verification' ? '/signup' : '/reset-password', origin);
   link.hash = new URLSearchParams({token: message.token, lang: locale}).toString();
