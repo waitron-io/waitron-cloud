@@ -5192,6 +5192,13 @@ IPv6 connection accounting with HAProxy's configured `stick-table type ip`; nati
 gate checks do not qualify that separate layer.
 
 
+## Failed sign-out focus (D238)
+
+If signing out fails, the existing error summary now comes into view and receives
+focus, so you can read the failure from the bottom of a long Account page. The
+message and retry behaviour remain; sign-out stays disabled while pending. Browser
+checks cover English and Spanish, both themes and phone/desktop widths.
+
 ## Storage-authority request timeout evidence (D212)
 
 The provisioning check in [run 40120697007](https://github.com/waitron-io/waitron-cloud/actions/runs/40120697007)

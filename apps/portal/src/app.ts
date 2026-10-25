@@ -336,5 +336,6 @@ export class PortalApp {
     if (success) { if (this.path !== '/login') this.navigate('/login'); this.notice = 'signedOut'; }
     else if (route === this.#route) this.error = 'logoutFailed';
     this.pending = false; this.draw();
+    if (this.error === 'logoutFailed') this.#focusErrors();
   }
 }
