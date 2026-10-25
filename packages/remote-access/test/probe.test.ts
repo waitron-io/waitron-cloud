@@ -708,11 +708,14 @@ test('probe cancellation prevents queued resolver invocation',async()=>{
 
 import {spawn} from 'node:child_process';
 
-test('staff probe releases its verified TLS connection without waiting for the peer',async()=>{
+test('staff probe releases its verified TLS connection without waiting for the peer',async t=>{
+ for(const version of ['TLSv1.2','TLSv1.3'] as const)await t.test(version,async()=>{
  const material=await certificate('staff.probe.example.test'),sockets=new Set<import('node:net').Socket>();
- const server=tlsServer({...material,allowHalfOpen:true},socket=>{
-  socket.on('error',()=>{});socket.resume();
+ let handshakes=0;const handshakeErrors:string[]=[];
+ const server=tlsServer({...material,allowHalfOpen:true,minVersion:version,maxVersion:version},socket=>{
+  handshakes++;socket.on('error',()=>{});socket.resume();
  });
+ server.on('tlsClientError',error=>handshakeErrors.push(error.message));
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address();assert(address&&typeof address!=='string');
  server.on('connection',socket=>{sockets.add(socket);socket.once('close',()=>sockets.delete(socket));});
  const publicPort=await unusedPort(),source=`
@@ -730,13 +733,17 @@ test('staff probe releases its verified TLS connection without waiting for the p
  const exited=new Promise<{code:number|null;signal:NodeJS.Signals|null}>((resolve,reject)=>{child.once('error',reject);child.once('close',(code,signal)=>resolve({code,signal}));});
  child.stdin.end(JSON.stringify({target:target(),ca:material.cert.toString(),staffPort:address.port,publicPort}));
  try{
-  const exit=await exited,value=JSON.parse(output);
-  assert.equal(value.staff.status,'healthy');assert.equal(value.staff.certificate.fingerprint256,new X509Certificate(material.cert).fingerprint256);
-  assert.equal(forced,false,'The completed probe must let its process exit while the peer keeps its write side open');
+  const exit=await exited;
+  assert.equal(forced,false,'The completed probe must let its process exit while the peer keeps its write side open; '+errors);
   assert.deepEqual(exit,{code:0,signal:null},errors);
+  const value=JSON.parse(output);
+  assert.equal(value.staff.status,'healthy');assert.equal(value.staff.certificate.fingerprint256,new X509Certificate(material.cert).fingerprint256);
+  assert.equal(handshakes,1,'The staff endpoint must receive the completed TLS handshake');
+  assert.deepEqual(handshakeErrors,[],'The verified connection must not become a handshake error at the endpoint');
  }finally{
   clearWatchdog(watchdog);if(finishTimer)clearWatchdog(finishTimer);
   if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await exited;
   for(const socket of sockets)socket.destroy();await new Promise<void>(resolve=>server.close(()=>resolve()));
  }
+ });
 });
