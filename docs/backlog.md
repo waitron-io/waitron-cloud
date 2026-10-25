@@ -5126,7 +5126,16 @@ and [merge cost checks](https://github.com/waitron-io/waitron-cloud/actions/runs
 passed, including all six genuine smoke cases and the held-list control. Each
 head/merge pair recorded 10,167 passing tests and the same 19 optional skips.
 These runs qualify that delivery; they do not attribute every historical refusal.
-Actual truncated-stream handling remains open. A generic
+A native HTTP control now truncates an actual successful upload reply after one
+of its four declared bytes. The unchanged smoke handles the interruption at stop
+and publishes no measurement. Its paired complete-reply control restores both
+synthetic sales and reconciles all four response bytes at both hops. Removing
+only backend-response error forwarding leaves the truncated case waiting until
+its existing subprocess deadline, while the seven original commit checks and the
+complete-reply control pass; restoring it passes all nine. Original assertion
+bodies and runtime bytes are unchanged. The writer, venue, SDK administration and
+SQLite reader remain substitutes, so official-binary and production truncated-stream
+handling still need qualification. A generic
 `active-close` still refuses measurement publication. Preserve the official pin,
 three-attempt cap, ordinary accounting, restore and deadline checks in any repair;
 local Docker qualification remains unavailable until 3 November.
