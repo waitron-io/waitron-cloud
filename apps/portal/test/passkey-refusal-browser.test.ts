@@ -20,6 +20,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       page.setDefaultTimeout(4000);
       let release!: () => void;
       const checked = new Promise<void>(resolve => {release = resolve;});
+      let counted!: () => void;
+      const handled = new Promise<void>(resolve => {counted = resolve;});
       let checking = false, refused = false, refusingAgain = false, reads = 0, added = false, removed = false, optionsCount = 0;
       const writes: {path: string; body: Record<string, unknown>}[] = [];
       const c = translations[locale], text = labels[locale];
@@ -39,7 +41,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await page.route('**/api/account/**', async route => {
           const req = route.request(), path = new URL(req.url()).pathname.replace('/api/account', '');
           if (path === '/session' || path === '/session/activity') return route.fulfill({json: {accountId: 'owner', expiresAt: '2099-01-01T00:00:00Z'}});
-          if (path === '/passkeys') {reads++; if (checking) await checked; if (flow === 'failed-list' && refused && !checking) return route.fulfill({status: 503, json: {error: 'unavailable'}}); return route.fulfill({json: {passkeys: removed ? [] : added ? [key, {...key, id: addedId}] : [key]}});}
+          if (path === '/passkeys') {reads++; if (checking) {counted(); await checked;} if (flow === 'failed-list' && refused && !checking) return route.fulfill({status: 503, json: {error: 'unavailable'}}); return route.fulfill({json: {passkeys: removed ? [] : added ? [key, {...key, id: addedId}] : [key]}});}
           if (path.startsWith('/passkeys/')) {
             writes.push({path, body: req.postDataJSON()});
             if (refusingAgain || (flow !== 'browser-duplicate' && !refused && path.endsWith(failureAt === 'options' ? '/options' : failureAt === 'verify' ? '/verify' : '/remove'))) {refused = true; return route.fulfill({status: 400, headers: refusingAgain ? {'Retry-After': '60'} : {}, json: {error: 'invalid_input'}});}
@@ -74,6 +76,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           w.passkeyRefusalApp.refreshPasskeys = () => w.passkeyRefreshDone = original();
         });
         const requested = page.waitForRequest('**/api/account/passkeys'); await refresh.click(); await requested;
+        // The request event can precede the route handler that counts and holds the read.
+        await handled;
         assert.equal(writes.length, before, 'checking never repeats registration or removal'); assert.equal(reads, beforeReads + 1);
         assert.equal(await password.inputValue(), ''); assert.equal(await password.isDisabled(), true, 'the check keeps password entry disabled while pending');
         if (flow === 'navigation') {
