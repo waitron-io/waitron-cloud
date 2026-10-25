@@ -36,7 +36,7 @@ async function run() {
     if (options.stream) {
       stage = 'storage-open';
       const sdk = createRequire('/app/packages/backups/package.json')('@aws-sdk/client-s3');
-      storage = await openWorkerStorage({ source, root, journal, sdk });
+      storage = await openWorkerStorage({ source, root, journal, sdk, onDiagnostic });
       const { binarySha256, startupSeconds, idleSeconds, windowSeconds } = options.stream;
       stream = { binary: '/code/litestream', binarySha256, startupSeconds, idleSeconds, windowSeconds,
         target: storage.target, bucket: storage.bucket, versioned: false, sdk };

@@ -16,6 +16,13 @@ export async function openWorkerStorage(args) {
   const { sdk, signal } = args, directory = join(args.root, 'local-storage');
   let identity, child, done, proxy, client, meter, created = false, stopping = false, exited = false, bad = false, disposal, evidence;
   let retained, retainedInvalid = false, last = -Infinity;
+  let stage = 'storage-health', reported = false;
+  const refused = () => {
+    if (reported) return;
+    reported = true;
+    // Keep the first fixed operation code; private SDK errors and object names never leave here.
+    try { args.onDiagnostic?.({ kind: 'storage-refusal', stage }); } catch { /* Reporting cannot interrupt collection. */ }
+  };
   const clock = args.clock ?? (() => performance.now() / 1000);
   const now = () => {
     const time = clock(); need(typeof time === 'number' && Number.isFinite(time) && time >= 0 && time >= last);
@@ -38,6 +45,7 @@ export async function openWorkerStorage(args) {
     instrumentStorageClient({ client: value, meter, phase, endpoint: proxy.url }); return value;
   };
   const listObjects = async () => {
+    stage = 'object-list';
     const rows = [], seen = new Set(); let ContinuationToken;
     do {
       const found = await send(new sdk.ListObjectsV2Command({ Bucket: bucket, MaxKeys: 1000, ContinuationToken }));
@@ -54,40 +62,48 @@ export async function openWorkerStorage(args) {
     return rows;
   };
   const uploads = async () => {
+    stage = 'multipart-list';
     const result = await send(new sdk.ListMultipartUploadsCommand({ Bucket: bucket, MaxUploads: 1000 }));
     need(result.IsTruncated === false && Array.isArray(result.Uploads ?? [])); return result.Uploads ?? [];
   };
   const bucketPresent = async () => {
+    stage = 'bucket-present';
     let result;
     try { result = await send(new sdk.HeadBucketCommand({ Bucket: bucket })); }
     catch (error) { if (error.$metadata?.httpStatusCode === 404) return false; throw error; }
     need(result.$metadata?.httpStatusCode === 200); return true;
   };
   const bucketInventory = async () => {
+    stage = 'bucket-inventory';
     const result = await send(new sdk.ListBucketsCommand({}));
     need(result.ContinuationToken === undefined && Array.isArray(result.Buckets ?? [])
       && (result.Buckets ?? []).every(b => typeof b?.Name === 'string' && b.Name.length > 0));
     return result.Buckets ?? [];
   };
   const dispose = () => disposal ??= (async () => {
+    stage = 'cleanup-client-open';
     cleanupSignal = AbortSignal.timeout(10000);
     if (proxy) { client?.destroy(); client = makeClient('cleanup'); }
-    const failures = []; const attempt = async fn => { try { await fn(); } catch { failures.push(true); } };
+    const failures = []; const attempt = async fn => { try { await fn(); } catch { refused(); failures.push(true); } };
     if (created) await attempt(async () => {
+      stage = 'bucket-ownership';
       assertOwnedRoot(args); record({ kind: 'storage-bucket', state: 'cleanup-intent', bucket });
       // Bucket lists can omit a created bucket; only the owned bucket's direct 404 proves absence.
       await bucketInventory();
       if (await bucketPresent()) {
         // The caller has stopped its writer. Match the final native inventory before pricing cleanup.
         const pending = await uploads(), objects = await listObjects();
+        stage = 'retained-inventory';
         if (retained && (pending.length !== 0 || objects.length !== retained.objects
           || objects.some(row => !Number.isSafeInteger(row.Size) || row.Size < 0)
-          || objects.reduce((n, row) => n + row.Size, 0) !== retained.bytes)) retainedInvalid = true;
+          || objects.reduce((n, row) => n + row.Size, 0) !== retained.bytes)) { retainedInvalid = true; refused(); }
         for (const row of pending) {
+          stage = 'abort-upload';
           need(typeof row.Key === 'string' && row.Key.startsWith('stream/') && typeof row.UploadId === 'string' && row.UploadId.length > 0);
           await send(new sdk.AbortMultipartUploadCommand({ Bucket: bucket, Key: row.Key, UploadId: row.UploadId }));
         }
         for (const row of objects) {
+          stage = 'delete-object';
           const from = now();
           await send(new sdk.DeleteObjectCommand({ Bucket: bucket, Key: row.Key }));
           const by = now();
@@ -98,15 +114,19 @@ export async function openWorkerStorage(args) {
           }
         }
         need((await listObjects()).length === 0 && (await uploads()).length === 0);
+        stage = 'delete-bucket';
         await send(new sdk.DeleteBucketCommand({ Bucket: bucket }));
       }
       need(!await bucketPresent() && !(await bucketInventory()).some(b => b.Name === bucket));
+      stage = 'bucket-ownership';
       record({ kind: 'storage-bucket', state: 'removed', bucket }); created = false;
     });
     let counters;
     await attempt(async () => { if (meter) {
+      stage = 'accounting';
       const value = meter.snapshot(); need(value.reconciled); counters = streamCounters(value);
       if (retained) {
+        stage = 'retained-accounting';
         need(!retainedInvalid && retained.deleted === retained.objects);
         const windowSeconds = now() - retained.since;
         need(Number.isFinite(retained.high) && retained.high >= retained.low && retained.low >= 0
@@ -116,9 +136,10 @@ export async function openWorkerStorage(args) {
           byteSeconds: { low: retained.low, high: retained.high } };
       }
     } });
-    await attempt(async () => { client?.destroy(); });
-    await attempt(async () => { await proxy?.close(); });
+    await attempt(async () => { stage = 'client-close'; client?.destroy(); });
+    await attempt(async () => { stage = 'proxy-close'; await proxy?.close(); });
     if (child) await attempt(async () => {
+      stage = 'process-collect';
       assertOwnedRoot(args); stopping = true;
       if (!exited) child.kill('SIGTERM');
       // All storage requests have settled; forced backend teardown cannot alter their evidence.
@@ -127,6 +148,7 @@ export async function openWorkerStorage(args) {
       need(!bad); record({ kind: 'storage-process', state: 'collected', pid: child.pid });
     });
     if (failures.length === 0 && identity) await attempt(async () => {
+      stage = 'root-remove';
       assertOwnedRoot(args); const s = lstatSync(directory);
       need(realpathSync(directory) === directory && s.ino === identity.ino && s.dev === identity.dev);
       record({ kind: 'storage-root', state: 'cleanup-intent', path: directory }); rmSync(directory, { recursive: true });
@@ -166,6 +188,7 @@ export async function openWorkerStorage(args) {
     record({ kind: 'storage-bucket', state: 'ready', bucket });
     return { target, bucket, finish: async (options = {}) => {
       try {
+        stage = 'finish-input';
         need(options && Object.getPrototypeOf(options) === Object.prototype
           && Reflect.ownKeys(options).every(k => k === 'retained'));
         const input = options.retained;
@@ -179,8 +202,8 @@ export async function openWorkerStorage(args) {
           else { need(!disposal); retained = { ...input, low: 0, high: 0, deleted: 0 }; }
         } else need(!retained);
         if (evidence) return structuredClone(evidence);
-        healthy(); evidence = await dispose(); return structuredClone(evidence);
-      } catch { await dispose().catch(() => {}); fail(); }
+        stage = 'storage-health'; healthy(); evidence = await dispose(); return structuredClone(evidence);
+      } catch { refused(); await dispose().catch(() => {}); fail(); }
     }, close: async () => { await dispose(); } };
   } catch { await dispose().catch(() => {}); fail(); }
 }
