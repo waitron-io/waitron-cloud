@@ -1,0 +1,64 @@
+// Shared assertions for the native smoke's independently counted storage traffic.
+import assert from 'node:assert/strict';
+import { litestreamAfterStopOutput } from './litestream.mjs';
+
+export function delayLitestreamPutReplies(source) {
+  const forwarding = "res.writeHead(incoming.statusCode, incoming.headers); incoming.on('error', () => res.destroy()); incoming.pipe(res);";
+  const replacements = [
+    ["let stage = 'prepare';", "let delayedPutReplies = 0; let stage = 'prepare';"],
+    [forwarding, `const forward = () => { ${forwarding} };
+      if (req.method === 'PUT' && incoming.statusCode < 300) { delayedPutReplies++; setTimeout(forward, 1500); } else forward();`],
+    ['const result = { version, injectedFailures,', 'const result = { delayedPutReplies, version, injectedFailures,'],
+  ];
+  for (const [anchor, replacement] of replacements) {
+    assert.equal(source.split(anchor).length, 2, 'delayed reply injection requires one unambiguous anchor');
+    source = source.replace(anchor, replacement);
+  }
+  return source;
+}
+
+export function assertSmokeAccounting(result) {
+  const subset = result.afterStop;
+  const output = litestreamAfterStopOutput(subset);
+  assert.deepEqual(result.costAccuracy, output.costAccuracy);
+  assert.equal(result.replication.requestsReconciled, true);
+  const fields = ['attempts', 'bytesIn', 'bytesOut'];
+  const rowFields = [...fields, 'attemptedBytesIn', 'attemptedBytesOut'];
+  const residual = (rows, hop) => {
+    const grouped = new Map();
+    for (const [source, sign] of [[rows, 1], [subset.requests.filter(r => r.hop === hop), -1]]) {
+      for (const row of source) {
+        const key = [row.phase, row.operation, row.retryOrdinal, row.outcome].join(':');
+        const total = grouped.get(key) ?? Object.fromEntries(rowFields.map(k => [k, 0]));
+        for (const k of rowFields) total[k] += sign * row[k];
+        grouped.set(key, total);
+      }
+    }
+    for (const [key, total] of grouped) {
+      for (const n of Object.values(total)) assert.ok(Number.isSafeInteger(n) && n >= 0);
+      if (rowFields.every(k => total[k] === 0)) grouped.delete(key);
+    }
+    return grouped;
+  };
+  for (const proof of [result.observed, result.transport?.replication].filter(Boolean)) {
+    assert.equal(proof.reconciled, subset.bodiesReconciled);
+    assert.equal(proof.accounting.producer.attempts, result.replication.producerAttempts);
+    assert.equal(proof.accounting.observer.attempts, result.replication.producerAttempts);
+    for (const [hop, rows] of [['producer', proof.accounting.requests], ['observer', proof.observedRequests]]) {
+      for (const k of fields) assert.equal(proof.accounting[hop][k], rows.reduce((n, r) => n + r[k], 0));
+    }
+    for (const k of fields) {
+      const difference = proof.accounting.observer[k] - proof.accounting.producer[k];
+      assert.equal(difference, subset.observer[k] - subset.producer[k]);
+      assert.equal(proof.accounting.discrepancy[k], difference);
+    }
+    assert.deepEqual(residual(proof.accounting.requests, 'producer'), residual(proof.observedRequests, 'observer'),
+      'ordinary traffic outside the after-stop subset must still match in both counters');
+    if (!subset.bodiesReconciled) {
+      assert.equal(proof.status, 'unknown');
+      assert.ok(proof.gaps.includes('accounting:unreconciled'));
+      assert.ok(proof.billing.length > 0);
+      for (const row of proof.billing) { assert.equal(row.status, 'unknown'); assert.equal(row.quantity, null); }
+    }
+  }
+}

@@ -13,16 +13,22 @@ function run(failure) {
     'node:child_process': `import {EventEmitter} from 'node:events';
       export const spawnSync=()=>({stdout:'0.5.17'});
       export function spawn(binary,args){ const child=new EventEmitter(); child.stderr=new EventEmitter();
-        child.kill=()=>{setImmediate(()=>child.emit('close',0));return true;};
+        child.kill=()=>{child.server?.close(()=>{});setImmediate(()=>child.emit('close',0));return true;};
+        if(args[0]==='replicate'){
+          const http=process.getBuiltinModule('http');child.server=http.createServer((req,res)=>{req.resume();req.on('end',()=>res.end(JSON.stringify({status:'stopped',path:'/state/synthetic-litestream-proof/venue/venue.db',txid:0})));});
+          child.server.listen('/tmp/d152-diagnostics-'+process.pid+'.sock');
+        }
         if(args[0]==='restore')setImmediate(()=>child.emit('close',0));return child; }`,
+    'node:http': `const http=process.getBuiltinModule('http');export const createServer=http.createServer;
+      export const request=(options,...args)=>http.request(options?.socketPath?{...options,socketPath:'/tmp/d152-diagnostics-'+process.pid+'.sock'}:options,...args);`,
     'node:sqlite': `export class DatabaseSync {prepare(){return {get:()=>({integrity_check:'ok',n:2})};}close(){}}`,
     'node:module': `class Command{}; export const createRequire=()=>()=>({S3Client:class {async send(){return {Contents:[{Key:'stream/one.ltx',Size:1024}]};}destroy(){}},
       CreateBucketCommand:Command,ListObjectsV2Command:Command,DeleteObjectCommand:Command,DeleteBucketCommand:Command});`,
     '/code/cost-waitron-adapter.mjs': `export const openReplay=async()=>({recordSale:async()=>{},counts:()=>({attempted:2,successful:2,failed:0}),
       verify:async()=>({ok:true,issues:0}),close:async()=>{}});`,
-    '/code/litestream.mjs': `export {withLitestreamCloseDiagnostics} from ${JSON.stringify(actual)};
+    '/code/litestream.mjs': `export {createLitestreamAfterStop,litestreamAfterStopOutput,withLitestreamCloseDiagnostics} from ${JSON.stringify(actual)};
       export const createLitestreamRequestAudit=()=>({write(){},end(){},snapshot:()=>({})});
-      export const createLitestreamTransport=async({phase})=>({url:'http://127.0.0.1:1',snapshot:()=>({}),whenIdle:async action=>action(),
+      export const createLitestreamTransport=async({phase})=>({url:'http://127.0.0.1:1',checkpoint:()=>({pending:0}),snapshot:()=>({}),whenIdle:async action=>action(),
         close:async()=>{if(process.env.CLOSE_FAILURE===(phase==='workload'?'replication-transport':'restore-transport'))throw Error('PRIVATE_CANARY');}});`,
     '/code/meter.mjs': `export const createMeter=({phase})=>({phase,snapshot:()=>({})});
       export const createMeteringProxy=async({meter})=>({url:'http://127.0.0.1:1',snapshot:()=>({}),close:async()=>{

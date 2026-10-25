@@ -10,11 +10,11 @@ const identity = (key, version) => JSON.stringify([key, version]);
 
 // Versioning retains a failed write's possible extra version until an independent inventory resolves it.
 // Payloads and provider identities stay private; only counts and conservative storage bounds are returned.
-export async function openLitestreamVersionHistories({ client, sdk, meter, bucket, clock, allowBulkDeletes = false, allowMultipart = false, resolveMultipartReplies = false }) {
+export async function openLitestreamVersionHistories({ client, sdk, meter, bucket, clock, afterStop, allowBulkDeletes = false, allowMultipart = false, resolveMultipartReplies = false }) {
   const rows = new Map(), unresolved = [], pending = new Set(), activeKeys = new Set();
   let invalid = false, verifying = false, verified = false, last = -Infinity, sequence = 0, endpoint, start;
   let retiredLow = 0, retiredHigh = 0;
-  const poison = () => { invalid = true; try { meter?.invalidate?.(); } finally { fail(); } };
+  const poison = () => { invalid = true; try { afterStop?.invalidate(); meter?.invalidate?.(); } finally { fail(); } };
   const guarded = fn => (...args) => { try { need(!invalid); return fn(...args); } catch { poison(); } };
   const now = () => {
     const time = clock(); need(Number.isFinite(time) && time >= 0 && time >= last); last = time; return time;
@@ -102,7 +102,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
       pending.delete(token);
     });
   };
-  const begin = guarded(({ method, path, headers, body }) => {
+  const beginOperation = ({ method, path, headers, body }, strictRead) => {
     need(!verifying && pending.size < 100000 && sequence < 100000 && !multipart?.active());
     const operation = classifyStorageOperation({ method, path, allowBulkDeletes });
     if (operation === 'delete-many') {
@@ -136,9 +136,11 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
       if (row && !row.deleted) row.removing ??= time;
       verified = false;
     }
+    const settleLifetime = strictRead ? undefined : afterStop?.beginLifetime({ headers, operation, versioned: true });
     const token = {}; pending.add(token);
     return guarded(({ statusCode, bytesOut, interrupted = false, responseHeaders }) => {
-      need(pending.has(token) && !interrupted && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
+      if (settleLifetime) ({ statusCode, responseHeaders } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
+      need(pending.has(token) && (!interrupted || settleLifetime) && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
       const time = now();
       if (mutation) {
         need(bytesOut === (operation === 'put' ? mutation.bytes : 0));
@@ -160,7 +162,13 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
       }
       pending.delete(token);
     });
-  });
+  };
+  const begin = guarded(input => beginOperation(input, false));
+  // Final restore shares inventory and pending-token guards, with no replication shutdown allowance.
+  const strictReads = { begin: guarded(input => {
+    need(['get', 'head', 'list'].includes(classifyStorageOperation(input)));
+    return beginOperation(input, true);
+  }) };
   const verify = async () => {
     try {
       need(!invalid && !verifying && pending.size === 0); verifying = true; verified = false; now();
@@ -241,5 +249,5 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
       return { status: 'measured', scope: 'versioned-object-history', windowSeconds: time - start, objects, byteSeconds: { low, high } };
     })();
   };
-  await verify(); return { begin, verify, snapshot };
+  await verify(); return { begin, verify, snapshot, ...(afterStop ? { afterStop, strictReads } : {}) };
 }

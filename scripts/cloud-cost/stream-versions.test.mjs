@@ -528,3 +528,73 @@ for (const encoded of [false, true]) test(`nativeVersionBatchRefusesNoncharacter
   const f = await fixture(t), audit = await openBulk(f), body = batchBody([[encoded ? '&#65534;' : '\ufffe']]);
   assert.throws(() => audit.begin(batchInput(body)), bad);
 });
+
+import { lifetimeExchange, assertIncompleteList } from './litestream-lifetime-test-utils.mjs';
+test('versioned histories settle a ledger-accepted interrupted list without inventing a version', async t => {
+  const f = await fixture(t);
+  const e = await lifetimeExchange(t, { open: afterStop => storage.openLitestreamVersionHistories({ ...f.args, afterStop }),
+    input: { method: 'GET', path: '/synthetic?list-type=2', headers: {} } });
+  await assertIncompleteList(f, e);
+  f.add('UNPAIRED_PRIVATE_CANARY', 1);
+  await assert.rejects(e.lifetimes.verify(), bad);
+  assert.throws(() => e.afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
+});
+for (const interrupted of [false, true]) test(`versioned histories retain the actual backend commit version: interrupted=${interrupted}`, async t => {
+  const f = await fixture(t);
+  const e = await lifetimeExchange(t, { open: afterStop => storage.openLitestreamVersionHistories({ ...f.args, afterStop }),
+    input: put(4), interrupted, versionId: 'COMMIT_PRIVATE_CANARY', commit: () => f.add('COMMIT_PRIVATE_CANARY', 4) });
+  await e.transport.close(); f.time(10); await e.lifetimes.verify();
+  assert.deepEqual(e.lifetimes.snapshot().objects, { class: 'stream', bytes: 4, currentVersions: 1,
+    noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
+  assert.equal(e.afterStop.snapshot().used, 1);
+  assert.deepEqual(e.lifetimes.snapshot().byteSeconds, { low: 40, high: 40 });
+  assert.equal(JSON.stringify(e.afterStop.snapshot()).includes('COMMIT_PRIVATE_CANARY'), false);
+  f.add('UNOBSERVED_PRIVATE_CANARY', 4);
+  await assert.rejects(e.lifetimes.verify(), bad);
+  assert.throws(() => e.afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
+});
+
+for (const versionId of [null, 'null']) test(`after-stop versioned PUT refuses an unknown committed version: ${typeof versionId}:${versionId}`, async t => {
+  const f = await fixture(t);
+  const e = await lifetimeExchange(t, { open: afterStop => storage.openLitestreamVersionHistories({ ...f.args, afterStop }),
+    input: put(4), versionId, commit: () => f.add('INVENTORY_GUESS_PRIVATE_CANARY', 4) });
+  await assert.rejects(e.transport.close(), /Invalid cloud cost Litestream audit/);
+  await assert.rejects(e.lifetimes.verify(), bad); assert.throws(() => e.afterStop.snapshot());
+});
+
+test('versioned history reader requires its own producer settlement', async t => {
+  const { createLitestreamAfterStop } = await import('./litestream.mjs');
+  const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
+  const invocation = '11111111-2222-4333-8444-555555555555';
+  afterStop.admit({ invocation, ordinal: 0, operation: 'list', hop: 'producer', phase: 'workload' });
+  const reader = await storage.openLitestreamVersionHistories({ ...f.args, afterStop });
+  const finish = reader.begin({ method: 'GET', path: '/synthetic?list-type=2',
+    headers: { 'amz-sdk-invocation-id': invocation, 'amz-sdk-request': 'attempt=1; max=3' } });
+  assert.throws(() => finish({ statusCode: 200, bytesOut: 0 }), bad);
+});
+
+// Final restore uses the same history, with ordinary strict read completion after replication stops.
+test('the shared history keeps final restore reads strict after runtime stop', async t => {
+  const { createLitestreamAfterStop } = await import('./litestream.mjs');
+  const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
+  const reader = await storage.openLitestreamVersionHistories({ ...f.args, afterStop });
+  afterStop.acknowledgeStop({statusCode:200,ownedPath:'/owned.db',body:Buffer.from('{"status":"stopped","path":"/owned.db","txid":0}')});
+  const finish = reader.strictReads.begin({ method: 'GET', path, headers: {} });
+  finish({ statusCode: 200, bytesOut: 0, interrupted: false, responseHeaders: {} });
+  await reader.verify();assert.equal(reader.snapshot().objects.bytes, 0);assert.equal(afterStop.snapshot().used, 0);
+});
+for (const method of ['PUT', 'DELETE', 'POST']) test(`the strict restore view refuses ${method} before storage`, async t => {
+  const { createLitestreamAfterStop } = await import('./litestream.mjs');
+  const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
+  const reader = await storage.openLitestreamVersionHistories({ ...f.args, afterStop });
+  assert.throws(() => reader.strictReads.begin({ method, path, headers: {'content-length':'4'} }), bad);
+  await assert.rejects(reader.verify(), bad);assert.throws(() => afterStop.snapshot());
+});
+test('an interrupted final restore read still poisons the shared history', async t => {
+  const { createLitestreamAfterStop } = await import('./litestream.mjs');
+  const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
+  const reader = await storage.openLitestreamVersionHistories({ ...f.args, afterStop });
+  const finish = reader.strictReads.begin({ method: 'GET', path, headers: {} });
+  assert.throws(() => finish({ statusCode: 200, bytesOut: 0, interrupted: true, responseHeaders: {} }), bad);
+  await assert.rejects(reader.verify(), bad);assert.throws(() => afterStop.snapshot());
+});

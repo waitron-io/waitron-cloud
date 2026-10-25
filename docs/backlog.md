@@ -4844,7 +4844,7 @@ counts do not identify the earlier failed I/O event. The transport retains the
 first event category, known network code and operation category through cleanup.
 Paths, headers, object names and unknown diagnostic fields stay private.
 
-The smoke fixture now waits for its active transfers to finish before stopping
+The earlier smoke change waited for active transfers before stopping
 Litestream. A restore can see a committed object while the writer still awaits
 its PUT reply; stopping at that point cancels the pending exchange. Two controlled
 [Linux observations](https://github.com/waitron-io/waitron-cloud/actions/runs/40075195985)
@@ -4856,10 +4856,10 @@ the client exits before its committed reply arrives. That reproduction proves a
 possible cause; the old logs cannot establish the cause of every historical event.
 
 A Docker-free regression runs the actual smoke and transport with a real HTTP
-writer child. Removing the wait-before-stop guard fails; restoring it passes.
-A silent-backend case requires refusal at the stop step before its outer process
-deadline. The new drain wait has a two-second limit; the existing signal and
-force-stop limits remain unchanged. The native harness owns a separate process
+writer child. The current checks require a validated runtime stop before signalling, then
+writer exit and passive transfer settlement before final restore. Invalid replies,
+early exit and silent storage refuse within the same two-second stop budget.
+Cleanup sends its signal only once; the force-stop limit remains unchanged. The native harness owns a separate process
 group and collects it even when its outer deadline fires.
 A separate pinned-Litestream case delays committed PUT replies and checks the
 original restore, integrity, fiscal, request, byte, version-history and cleanup
@@ -4936,7 +4936,57 @@ The owner decided against a custom Litestream binary on 25 October. Keep the
 official 0.5.17 release and its pins. The revised [after-stop accounting design](superpowers/specs/2026-10-24-litestream-native-drain-design.md)
 and [implementation plan](superpowers/plans/2026-10-24-litestream-native-drain.md)
 replace the unbuilt native extension with a small, separately counted shutdown
-allowance. This documentation milestone does not implement or qualify that change.
+allowance. Its first implementation step adds the optional session ledger and
+real HTTP boundary tests. The audit, first transport and independent storage
+counter share attempt identities, preserve each counter's actual bytes, and
+count at most three distinct affected attempts across admissions and settlements.
+The exact post-acknowledgement list interruption can settle each storage reader's
+pending token; its response stays incomplete and its billing unknown. The three
+readers also retain one already-admitted upload completion when a real backend
+success acknowledges its complete body and, for versioned storage, its exact
+version. Both hops must precede acknowledgement. A lost client reply stays a
+transport error in the counters; only storage history uses the commit witness.
+Native HTTP tests preserve storage time bounds and refuse uncommitted, partial,
+retried or second late uploads, missing versions and mismatched inventories.
+An inventory mismatch invalidates the shared session. Ordinary callers stay strict.
+The smoke now shares this ledger and records commit evidence from the actual
+backend response. It validates the official Unix stop reply before signalling,
+requires writer exit and passive idle within one two-second budget, then runs its
+single final-restore loop. Restore uses a strict read-only view of the same
+storage history. Failures record active counts and completed outcomes before
+cleanup. Closed output preserves the two counters and labels any nonempty
+allowance with the possible request-cost shortfall.
+
+Native HTTP controls cover invalid acknowledgement, early exit, shared deadlines,
+failed backend commits and post-stop missing sales. The official macOS 0.5.17
+binary also restores both synthetic SQLite rows from final storage and verifies
+unversioned inventories. That probe substitutes the venue and fiscal adapter;
+it does not qualify the real fiscal workload. All six genuine smoke consumers now
+check the separate ledger, preserve incomplete billing and display its cost caveat.
+An official-binary held-list control retains a real interrupted response and the
+two different byte observations. Its startup barrier requires an actual completed
+upload before stop, while the controlled retention list stays held. The toy store
+returns the uploads it acknowledges; the control also asserts the real upload
+bytes. Deleting the startup barrier fails the native readiness assertion. The delayed-PUT probe exposed initial readiness
+accepting storage visibility before the upload reply; the existing 40-poll loop
+now also requires that initial transfer to settle before the second sale. Linux
+qualification then exposed an idle gap during SDK retry backoff: a different
+object was visible, but the injected failed upload had not retried. The same
+40-poll readiness loop now also requires a successful backend acknowledgement
+for that upload's first retry. The existing native retry assertion is retained;
+a deterministic idle-backoff regression fails before this guard and passes with
+it. The 1,500 ms delayed replies restore both synthetic rows with integrity intact.
+No stop deadline, cap, official pin or pre-acknowledgement refusal is relaxed.
+Native checks cover three/four-attempt boundaries with real HTTP requests; the
+official held-list control observes one affected attempt and does not claim that
+four official attempts occurred. Whole-branch review found no blocking defect;
+the existing retry-output test also catches deletion of its guard when included
+in the review matrix. Keep a test-hardening follow-up for independently exercising
+the smoke's request-complete witness, pre-ack child-exit race and child-running
+check at acknowledgement; their individual deletion currently leaves other
+checks as backstops. Do not claim the exact refusal step independently proved.
+Genuine Linux/SeaweedFS and PostgreSQL qualification run in current-head CI before
+landing. Historical attribution remains open.
 
 [PR428's cost run 40144823848, job 121023853072](https://github.com/waitron-io/waitron-cloud/actions/runs/40144823848/job/121023853072)
 refuses during `stop`; cleanup records `active-close` after 21 completed attempts.
@@ -4951,8 +5001,8 @@ Retain their attempts, actual bytes and outcomes separately, and state the possi
 request-cost shortfall. Keep ordinary accounting strict, refuse traffic outside
 the cap or allowed operations, and preserve required upload completion, final
 sale restore, integrity, fiscal, privacy, cleanup and deadline checks. A generic
-`active-close` is still a failure. Runtime implementation and genuine Linux
-qualification remain open; Docker is unavailable locally until 3 November.
+`active-close` is still a failure. Require exact-head Linux CI for this runtime
+change; local Docker is unavailable until 3 November.
 
 ## Recovery refusal messages and pasted codes (D192)
 

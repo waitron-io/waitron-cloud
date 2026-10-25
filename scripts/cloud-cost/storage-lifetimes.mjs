@@ -239,10 +239,10 @@ export async function openStorageLifetimes({ clients, sdk, meter, bucket, versio
 
 // Owned, initially empty unversioned buckets only. No deletion or size-changing replacement is admitted.
 // A failed reply can follow a commit; bound its first possible write until an independent inventory.
-export async function openLitestreamLifetimes({ client, sdk, meter, bucket, clock }) {
+export async function openLitestreamLifetimes({ client, sdk, meter, bucket, clock, afterStop }) {
   const rows = new Map(), pending = new Set();
   let invalid = false, verifying = false, verified = false, last = -Infinity, endpoint;
-  const poison = () => { invalid = true; meter?.invalidate(); fail(); };
+  const poison = () => { invalid = true; afterStop?.invalidate(); meter?.invalidate(); fail(); };
   const guarded = fn => (...args) => {
     try { requireThat(!invalid); return fn(...args); } catch { poison(); }
   };
@@ -265,7 +265,7 @@ export async function openLitestreamLifetimes({ client, sdk, meter, bucket, cloc
     requireThat(result.$metadata?.httpStatusCode === 200 && result.$metadata.attempts === 1);
     return result;
   };
-  const begin = guarded(({ method, path, headers }) => {
+  const beginOperation = ({ method, path, headers }, strictRead) => {
     requireThat(!verifying && pending.size < 100000);
     const operation = classifyStorageOperation({ method, path });
     requireThat(['put', 'get', 'head', 'list'].includes(operation));
@@ -285,9 +285,11 @@ export async function openLitestreamLifetimes({ client, sdk, meter, bucket, cloc
       if (!row) { requireThat(rows.size < 100000); row = { bytes, from: time, by: null }; rows.set(key, row); }
       row.pending = true; verified = false;
     } else now();
+    const settleLifetime = strictRead ? undefined : afterStop?.beginLifetime({ headers, operation, versioned: false });
     const token = {}; pending.add(token);
-    return guarded(({ statusCode, bytesOut, interrupted = false }) => {
-      requireThat(pending.has(token) && !interrupted && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
+    return guarded(({ statusCode, bytesOut, interrupted = false, responseHeaders }) => {
+      if (settleLifetime) ({ statusCode } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
+      requireThat(pending.has(token) && (!interrupted || settleLifetime) && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
       const time = now();
       if (row) {
         requireThat(bytesOut === bytes);
@@ -296,7 +298,13 @@ export async function openLitestreamLifetimes({ client, sdk, meter, bucket, cloc
       }
       pending.delete(token);
     });
-  });
+  };
+  const begin = guarded(input => beginOperation(input, false));
+  // Final restore shares inventory and pending-token guards, with no replication shutdown allowance.
+  const strictReads = { begin: guarded(input => {
+    requireThat(['get', 'head', 'list'].includes(classifyStorageOperation(input)));
+    return beginOperation(input, true);
+  }) };
   const verify = async () => {
     try {
       requireThat(!invalid && !verifying && pending.size === 0); verifying = true; verified = false; now();
@@ -342,16 +350,16 @@ export async function openLitestreamLifetimes({ client, sdk, meter, bucket, cloc
     })();
   };
   await verify();
-  return { begin, verify, snapshot };
+  return { begin, verify, snapshot, ...(afterStop ? { afterStop, strictReads } : {}) };
 }
 
 // Owned, initially empty unversioned buckets only. Commit times are bounded by request and reply;
 // an ambiguous reply stays unresolved until inventory or an identical successful retry bounds it.
-export async function openLitestreamHistories({ client, sdk, meter, bucket, clock, allowBulkDeletes = false, allowMultipart = false, resolveMultipartReplies = false }) {
+export async function openLitestreamHistories({ client, sdk, meter, bucket, clock, afterStop, allowBulkDeletes = false, allowMultipart = false, resolveMultipartReplies = false }) {
   const rows = new Map(), pending = new Set();
   let invalid = false, verifying = false, verified = false, last = -Infinity, endpoint, start;
   let retiredLow = 0, retiredHigh = 0;
-  const poison = () => { invalid = true; meter?.invalidate(); fail(); };
+  const poison = () => { invalid = true; afterStop?.invalidate(); meter?.invalidate(); fail(); };
   const guarded = fn => (...args) => {
     try { requireThat(!invalid); return fn(...args); } catch { poison(); }
   };
@@ -433,7 +441,7 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
       pending.delete(token);
     });
   };
-  const begin = guarded(({ method, path, headers, body }) => {
+  const beginOperation = ({ method, path, headers, body }, strictRead) => {
     requireThat(!verifying && pending.size < 100000 && !multipart?.active());
     const operation = classifyStorageOperation({ method, path, allowBulkDeletes });
     if (operation === 'delete-many') {
@@ -469,9 +477,11 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
       mutation = { method, bytes, from: row.uncertain?.from ?? time };
       row.active = true; verified = false;
     }
+    const settleLifetime = strictRead ? undefined : afterStop?.beginLifetime({ headers, operation, versioned: false });
     const token = {}; pending.add(token);
-    return guarded(({ statusCode, bytesOut, interrupted = false }) => {
-      requireThat(pending.has(token) && !interrupted && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
+    return guarded(({ statusCode, bytesOut, interrupted = false, responseHeaders }) => {
+      if (settleLifetime) ({ statusCode } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
+      requireThat(pending.has(token) && (!interrupted || settleLifetime) && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
       const time = now();
       if (mutation) {
         requireThat(bytesOut === mutation.bytes);
@@ -481,7 +491,13 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
       }
       pending.delete(token);
     });
-  });
+  };
+  const begin = guarded(input => beginOperation(input, false));
+  // Final restore shares inventory and pending-token guards, with no replication shutdown allowance.
+  const strictReads = { begin: guarded(input => {
+    requireThat(['get', 'head', 'list'].includes(classifyStorageOperation(input)));
+    return beginOperation(input, true);
+  }) };
   const verify = async () => {
     try {
       requireThat(!invalid && !verifying && pending.size === 0); verifying = true; verified = false; now();
@@ -539,7 +555,7 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     })();
   };
   await verify();
-  return { begin, verify, snapshot };
+  return { begin, verify, snapshot, ...(afterStop ? { afterStop, strictReads } : {}) };
 }
 
 // A full-body failed reply may have committed. The opt-in resolver blocks further requests

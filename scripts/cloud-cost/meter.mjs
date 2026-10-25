@@ -49,7 +49,7 @@ function billable(e) {
   return null;
 }
 
-export function createMeter({ phase, clock }) {
+export function createMeter({ phase, clock, afterStop }) {
   requireThat(phases.includes(phase) && typeof clock === 'function');
   const attempts = { producer: new Map(), observer: new Map() }; const objects = new Map(); const rows = new Map();
   const pending = new Set();
@@ -61,12 +61,14 @@ export function createMeter({ phase, clock }) {
     requireThat([...rows.values()].every(r => Number.isFinite(r.byteSeconds)));
     lastTime = time;
   };
-  const observeAttempt = event => {
+  const observeAttempt = (event, interruption = null) => {
     try {
       const e = validateAttempt(event);
       requireThat(!attempts[e.channel].has(e.token)); advance(); attempts[e.channel].set(e.token, e);
+      const acceptedInterruption = afterStop?.settle(e, interruption) ?? false;
       if (e.channel === 'observer') pending.delete(e.token);
-    } catch { invalid = true; fail(); }
+      return acceptedInterruption;
+    } catch { invalid = true; afterStop?.invalidate(); fail(); }
   };
   const observeObject = event => {
     try {
@@ -92,7 +94,7 @@ export function createMeter({ phase, clock }) {
       else if (e.action === 'multipart-part') { requireThat(count(existing.bytes + e.bytes)); existing.bytes += e.bytes; }
       else if (e.action === 'multipart-resize') existing.bytes = e.bytes;
       else if (e.action === 'multipart-complete') existing.state = 'current';
-    } catch { invalid = true; fail(); }
+    } catch { invalid = true; afterStop?.invalidate(); fail(); }
   };
   const snapshot = () => {
     try {
@@ -115,13 +117,16 @@ export function createMeter({ phase, clock }) {
         if (quantity === null) { b.quantity = null; b.status = 'unknown'; gaps.push('request-billing:unknown'); }
         else if (b.quantity !== null) b.quantity += quantity;
       }
+      const subset = afterStop?.snapshot();
+      const incomplete = subset?.gaps.includes('after-stop:list-response-interrupted') === true;
       const discrepancy = Object.fromEntries(Object.keys(producer).map(k => [k, observer[k] - producer[k]]));
       const same = (p, o) => o && ['phase', 'operation', 'retryOrdinal', 'outcome', 'statusCode', 'bytesIn', 'bytesOut',
         'attemptedBytesIn', 'attemptedBytesOut'].every(k => p[k] === o[k]);
       const reconciled = attempts.producer.size === attempts.observer.size
         && [...attempts.producer].every(([id, p]) => same(p, attempts.observer.get(id)));
-      if (!reconciled) {
-        gaps.push('accounting:unreconciled');
+      if (!reconciled || incomplete) {
+        if (!reconciled) gaps.push('accounting:unreconciled');
+        if (incomplete) gaps.push('request-billing:unknown', 'after-stop:list-response-interrupted');
         for (const row of billing.values()) { row.quantity = null; row.status = 'unknown'; }
       }
       const aggregatedObjects = [...rows.values()].map(r => ({ ...r, bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 }));
@@ -130,16 +135,28 @@ export function createMeter({ phase, clock }) {
         r[{ current: 'currentVersions', noncurrent: 'noncurrentVersions', marker: 'deleteMarkers', multipart: 'unfinishedMultipart' }[o.state]]++;
       }
       requireThat([producer, observer].every(t => Object.values(t).every(count)));
-      return { status: reconciled ? 'measured' : 'unknown', reconciled, gaps: [...new Set(gaps)], billing: [...billing.values()],
+      return { status: reconciled && !incomplete ? 'measured' : 'unknown', reconciled, gaps: [...new Set(gaps)], billing: [...billing.values()],
         observedRequests: [...observedRequests.values()],
         accounting: { requests: [...requests.values()], objects: aggregatedObjects, producer, observer, discrepancy } };
     } catch { fail(); }
   };
   const beginAttempt = id => {
     try { token(id); requireThat(!pending.has(id) && !attempts.observer.has(id)); pending.add(id); }
-    catch { invalid = true; fail(); }
+    catch { invalid = true; afterStop?.invalidate(); fail(); }
   };
-  return { observeAttempt, observeObject, snapshot, beginAttempt, invalidate: () => { invalid = true; } };
+  const checkpoint = () => {
+    const producer = totals(), observer = totals(), outcomes = new Map();
+    for (const hop of ['producer', 'observer']) for (const row of attempts[hop].values()) {
+      const sum = hop === 'producer' ? producer : observer;
+      sum.attempts++; sum.bytesIn += row.bytesIn; sum.bytesOut += row.bytesOut;
+      const key = hop + ':' + row.outcome;
+      if (!outcomes.has(key)) outcomes.set(key, { hop, outcome: row.outcome, attempts: 0 });
+      outcomes.get(key).attempts++;
+    }
+    return { pending: pending.size, producer, observer, outcomes: [...outcomes.values()] };
+  };
+  return { observeAttempt, observeObject, snapshot, checkpoint, beginAttempt, ...(afterStop ? { afterStop } : {}),
+    invalidate: () => { invalid = true; afterStop?.invalidate(); } };
 }
 
 // Query names affect the S3 operation; values and object names never leave this classifier.
