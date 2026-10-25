@@ -128,7 +128,8 @@ async function smoke() {
     }
     if (!uploaded) fail(); stage = 'second-sale'; await sale(2);
     stage = 'stop';
-    let drainTimer, control, stopStep = 'control';
+    let drainTimer, control, stopStep = 'control', controlMs, exitMs;
+    const stopStarted = performance.now(), stopElapsed = () => Math.max(0, Math.round(performance.now() - stopStarted));
     try {
       await Promise.race([
         (async () => {
@@ -157,9 +158,11 @@ async function smoke() {
             }),
             replicator.done.then(() => fail()),
           ]);
+          controlMs = stopElapsed();
           stopStep = 'exit';
           const ended = await stop(replicator);
           if (ended.invalid || ended.code !== 0) fail();
+          exitMs = stopElapsed();
           stopStep = 'idle';
           await replication.transport?.whenIdle(() => {});
         })(),
@@ -167,6 +170,8 @@ async function smoke() {
       ]);
     } catch (error) {
       console.error(JSON.stringify({ kind: 'litestream-stop', status: 'rejected', step: stopStep,
+        timing: { elapsedMs: stopElapsed(), controlMs, exitMs },
+        ...(replication.transport?.pendingTransfers ? { pendingTransfers: replication.transport.pendingTransfers() } : {}),
         ...(replication.transport?.checkpoint ? { diagnostic: replication.transport.checkpoint() } : {}) }));
       throw error;
     } finally { clearTimeout(drainTimer); control?.destroy(); }

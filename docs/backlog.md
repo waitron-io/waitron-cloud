@@ -5103,6 +5103,20 @@ The three independent guard checks named above remain open. A generic
 three-attempt cap, ordinary accounting, restore and deadline checks in any repair;
 local Docker qualification remains unavailable until 3 November.
 
+
+### Delayed PUT shutdown investigation (D268)
+
+The delayed-PUT case failed on three of the 103 cost-workflow runs started on
+25 October through the initial D268 audit. All three failures were on PRs;
+40 main runs included four other failures. D266 changes tests and backlog only,
+so it does not repair this runtime refusal. The failed stop reaches `idle` after
+writer exit with one transport exchange still pending. Its cause remains unknown.
+Stop refusals now include elapsed control/exit timings and active transfer
+progress, with fixed operation names and byte counts rather than request paths,
+credentials or invocation IDs. Native held-response tests qualify those
+observations. Repeated CI trials must identify the pending operation and timing
+before a repair is chosen. Keep all accounting, stop limits and existing checks.
+
 ## Recovery refusal messages and pasted codes (D192)
 
 Recovery now keeps the server's definite refusal message for approval, close and

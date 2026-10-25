@@ -28,7 +28,9 @@ function run(failure) {
       verify:async()=>({ok:true,issues:0}),close:async()=>{}});`,
     '/code/litestream.mjs': `export {createLitestreamAfterStop,litestreamAfterStopOutput,withLitestreamCloseDiagnostics} from ${JSON.stringify(actual)};
       export const createLitestreamRequestAudit=()=>({write(){},end(){},snapshot:()=>({})});
-      export const createLitestreamTransport=async({phase})=>({url:'http://127.0.0.1:1',checkpoint:()=>({pending:0}),snapshot:()=>({}),whenIdle:async action=>action(),
+      export const createLitestreamTransport=async({phase})=>({url:'http://127.0.0.1:1',checkpoint:()=>({pending:0}),snapshot:()=>({}),
+        pendingTransfers:()=>[{operation:'put',phase:'workload',retryOrdinal:0,elapsedMs:1501,bytesOut:5,expectedOut:5,bytesIn:0,expectedIn:0,requestSent:true,responseReceived:false,statusCode:null,clientClosed:true}],
+        whenIdle:async action=>{if(process.env.CLOSE_FAILURE==='idle'&&phase==='workload')throw Error('PRIVATE_CANARY');return action();},
         close:async()=>{if(process.env.CLOSE_FAILURE===(phase==='workload'?'replication-transport':'restore-transport'))throw Error('PRIVATE_CANARY');}});`,
     '/code/meter.mjs': `export const createMeter=({phase})=>({phase,snapshot:()=>({})});
       export const createMeteringProxy=async({meter})=>({url:'http://127.0.0.1:1',snapshot:()=>({}),close:async()=>{
@@ -47,6 +49,20 @@ function run(failure) {
     encoding: 'utf8', timeout: 5000,
   });
 }
+
+test('the smoke idle refusal includes stop timings and the pending transfer progress', () => {
+  const result = run('idle');
+  assert.equal(result.error, undefined); assert.equal(result.signal, null); assert.equal(result.status, 1);
+  const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+  const refusal = records.find(row => row.kind === 'litestream-stop');
+  assert.equal(refusal.step, 'idle');
+  assert.deepEqual(refusal.pendingTransfers, [{ operation:'put', phase:'workload', retryOrdinal:0, elapsedMs:1501,
+    bytesOut:5, expectedOut:5, bytesIn:0, expectedIn:0, requestSent:true, responseReceived:false, statusCode:null, clientClosed:true }]);
+  assert.ok(Number.isInteger(refusal.timing.controlMs) && refusal.timing.controlMs >= 0);
+  assert.ok(refusal.timing.exitMs >= refusal.timing.controlMs);
+  assert.ok(refusal.timing.elapsedMs >= refusal.timing.exitMs);
+  assert.doesNotMatch(result.stderr, /PRIVATE_CANARY/);
+});
 
 for (const failure of ['', 'replication-transport', 'restore-transport', 'cleanup-admin-proxy']) {
   test(`the smoke fixture reports its actual main and cleanup closes: ${failure || 'success'}`, () => {
