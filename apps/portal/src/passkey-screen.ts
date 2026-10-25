@@ -32,7 +32,7 @@ export function passkeyAccountScreen(app: PortalApp) {
       <wt-button .disabled=${app.passkeys.pending || !!app.passkeys.waiting} @click=${() => {void app.removePasskey(passkey.id);}}>${c.passkeyRemove}</wt-button>
     </li>`)}</ul>` : nothing}
     ${app.passkeys.supported === false ? html`<p class="help" role="status">${c.passkeyUnsupported}</p>` : nothing}
-    <wt-input name="passkeyPassword" .label=${c.passkeyCurrentPassword} .value=${app.passkeys.password} .type=${'password'}
+    <wt-input name="passkeyPassword" .error=${app.passkeys.error === 'requiredPassword' ? c.requiredPassword : ''} .label=${c.passkeyCurrentPassword} .value=${app.passkeys.password} .type=${'password'}
       .autocomplete=${'current-password'} .disabled=${app.passkeys.pending || !!app.passkeys.waiting} .required=${true}
       @wt-change=${(event: CustomEvent<{value: string}>) => {app.passkeys.password = event.detail.value; app.draw();}}></wt-input>
     ${app.passkeys.supported === false ? nothing : html`<wt-form-actions>
