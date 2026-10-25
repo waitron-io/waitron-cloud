@@ -4047,11 +4047,17 @@ notifications separately.
   IPv4-translated `::ffff:0:0:0/96` addresses now apply the same embedded IPv4
   refusal as compatible and 6to4 addresses. Native regressions cover loopback,
   private and reserved endpoints in hex, dotted, expanded and scoped forms;
-  public endpoints and near-prefix controls retain their existing classification.
-  Removing translated-prefix detection fails the new refusals while original
-  address-policy controls pass. Actual translated routing remains unqualified.
-  Other reserved `::/8` forms, including `::1:7f00:1`, still need classification
-  and routing checks; loopback reachability has not been tested.
+  public embedded endpoints retain their existing classification. Removing
+  translated-prefix detection fails those public controls. Actual translated
+  routing remains unqualified.
+  Otherwise-unhandled addresses in IANA's reserved `::/8` range now refuse,
+  including `::1:7f00:1` and translated-prefix lookalikes. Native regressions
+  cover hex, dotted, expanded and scoped forms and the range boundary. Existing
+  public embedded-IPv4 exceptions and other prefixes keep their classification;
+  seven reserved lookalike controls now require refusal. These checks qualify
+  address filtering only. Actual routing, loopback reachability and reserved
+  ranges outside `::/8` remain unqualified. See the
+  [IANA address-space registry](https://www.iana.org/assignments/ipv6-address-space).
   The monitor rejects
   late results after hostname changes, replacement or revocation, treats stale evidence as
   unknown, and records deduplicated route-failure, certificate-expiry and recovery

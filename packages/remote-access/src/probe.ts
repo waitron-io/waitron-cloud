@@ -38,7 +38,8 @@ export function isPublicProbeAddress(address:string,family:number):address is st
  // Translated addresses carry IPv4 after ::ffff:0:0:0/96, distinct from mapped addresses.
  const translated=words.slice(0,4).every(word=>word===0)&&words[4]===0xffff&&words[5]===0;
  const offset=words[0]===0x2002?1:translated||words.slice(0,6).every(word=>word===0)?6:undefined;
- if(offset===undefined)return true;
+ // Unhandled ::/8 forms are reserved; embedded IPv4 keeps its separate validation.
+ if(offset===undefined)return words[0]!>=0x100;
  const high=words[offset]!,low=words[offset+1]!,ipv4=[high>>>8,high&255,low>>>8,low&255].join('.');
  return !ipv4Blocked.check(ipv4,'ipv4');
 }
