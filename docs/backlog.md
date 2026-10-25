@@ -5459,3 +5459,20 @@ Cloud follow-ups, each a separate small change with tests before implementation:
 
 Authentication, recovery, tenant permissions and fiscal changes keep their full
 review and owner gates. This audit does not enable services or change policy.
+
+## Cost-mail reconciliation refusal observed during D262
+
+[PR #467's cost job](https://github.com/waitron-io/waitron-cloud/actions/runs/40201247616/job/121192744128)
+fails `genuineEmailQueueRetryAndBilingualMailpitDeliveryReconcileWithoutRawExport`
+at `scripts/cloud-cost/mail.mjs:134`, called from fixture line 65. Measurement
+close rejects its invalid-state or producer/observer-count check; the generic
+error does not identify which condition failed. The following signup/recovery
+mail case passes. The cause remains unknown; D262's reviewed heading branch is
+parked and must not land red or receive an unchanged rerun.
+
+Cloud follow-up: capture the close refusal's invalid-state flag and both count
+sets without message bodies or addresses, reproduce the cause, then fix it with
+a failing test first. Keep measurement guards, accounting and deadlines intact.
+Real PostgreSQL/Mailpit reproduction waits for local Docker or a separately
+qualified CI diagnostic change. This is separate from reset-mail capture and
+Mailpit fixture-startup failures recorded above.
