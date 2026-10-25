@@ -5121,13 +5121,14 @@ accounting attempt remained unsettled. D268 changes the delayed-PUT fixture;
 it does not cover this server-level socket error.
 
 The transport now records the failing socket's active operation, observed and
-expected body bytes, response-header state and admission ordering. It attributes
+expected body bytes, response-header state and the idle-action count at admission. It attributes
 only a single active request; pipelined requests remain explicitly ambiguous,
 and completed requests supply no stale context. Native HTTP controls inject a
 socket error while retaining real parsing, counters and refusal. A separate native
 loopback probe reproduces actual `EPIPE` by closing the caller while a large list
 reply starts. This demonstrates one mechanism; the historical official-binary
-failure still needs a labelled recurrence before attribution. All broken pipes
+failure still needs a labelled recurrence before attribution. All 80 genuine
+Linux request-log trials in [run 40218943112](https://github.com/waitron-io/waitron-cloud/actions/runs/40218943112) pass. All broken pipes
 continue to refuse measurement. Preserve the existing after-stop signature,
 three-attempt cap, official 0.5.17 pin, restore assertions and deadlines.
 
