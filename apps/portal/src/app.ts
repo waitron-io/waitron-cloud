@@ -59,7 +59,14 @@ export class PortalApp {
     this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
     this.authenticator = new AuthenticatorController(() => this.draw());
     this.passkeys = new PasskeyController(() => this.draw());
-    this.security = new AccountSecurityController(() => this.draw(), () => {void this.session.check();});
+    this.security = new AccountSecurityController(() => this.draw(), async reason => {
+      const session = this.session, route = this.#route;
+      await session.check();
+      if (reason === 'signedOut' && this.session === session && this.#route === route + 1 && this.path === '/login'
+        && session.state.kind === 'anonymous' && !session.state.expired) {
+        this.notice = 'signedOut'; this.draw();
+      }
+    });
     void this.passkeys.checkSupport();
     this.alerts = new AlertController(() => this.draw());
     this.translationConsent = new TranslationConsentController(() => this.draw());

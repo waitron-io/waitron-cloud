@@ -14,10 +14,10 @@ export class AccountSecurityController {
   #account: string | undefined;
   #generation = 0;
   readonly #changed: () => void;
-  readonly #sessionEnded: () => void;
+  readonly #sessionEnded: (reason?: 'signedOut') => void;
   readonly #request: Request;
 
-  constructor(changed: () => void, sessionEnded: () => void, request: Request = accountRequest) {
+  constructor(changed: () => void, sessionEnded: (reason?: 'signedOut') => void, request: Request = accountRequest) {
     this.#changed = changed;
     this.#sessionEnded = sessionEnded;
     this.#request = request;
@@ -74,7 +74,7 @@ export class AccountSecurityController {
     if (generation !== this.#generation) return;
     this.pending = false;
     if (!listed.ok && listed.status === 401) {
-      this.error = undefined; this.#sessionEnded(); this.#changed(); return;
+      this.error = undefined; this.#sessionEnded(target.current ? 'signedOut' : undefined); this.#changed(); return;
     }
     if (listed.ok && !this.sessions.some(session => session.id === id)) this.notice = 'sessionRevoked';
     else if (!result.ok) this.#failure(result, true);
