@@ -71,12 +71,13 @@ export class PasskeyController {
     return error instanceof DOMException && ['NotAllowedError', 'AbortError'].includes(error.name);
   }
 
-  #failure(result: Extract<ApiResult<unknown>, {ok: false}>, password = false) {
+  #failure(result: Extract<ApiResult<unknown>, {ok: false}>, password = false, refusal?: 'passkeyRegistrationRefused' | 'passkeyRemovalRefused') {
     this.retryAt = Math.max(this.retryAt, Date.now() + result.retryAfterMs);
     this.error = password && result.code === 'credentials_invalid' ? 'passkeyPasswordInvalid'
       : result.status === 429 ? 'limited'
       : result.status === 401 ? 'pairSession'
       : result.status === 403 ? 'forbidden'
+      : result.status === 400 && result.code === 'invalid_input' && refusal ? refusal
       : 'passkeyUnavailable';
   }
 
@@ -97,6 +98,12 @@ export class PasskeyController {
     await this.#list(generation);
     if (generation !== this.#generation) return;
     this.pending = false; this.#changed();
+  }
+
+  async refresh() {
+    if (!this.#account || this.pending || this.waiting) return;
+    this.password = '';
+    await this.load();
   }
 
   async signIn(): Promise<'authenticated' | 'reconcile' | false> {
@@ -132,7 +139,7 @@ export class PasskeyController {
     this.pending = true; this.error = undefined; this.notice = undefined; this.#changed();
     const options = await this.#request<RegistrationOptions>('/passkeys/registration/options', {password});
     if (generation !== this.#generation) return;
-    if (!options.ok) { this.pending = false; this.#failure(options, true); this.#changed(); return; }
+    if (!options.ok) { this.pending = false; this.#failure(options, true, 'passkeyRegistrationRefused'); this.#changed(); return; }
     let response: RegistrationResponseJSON;
     try { response = await this.#browser.register(options.value.options); }
     catch (error) {
@@ -150,7 +157,7 @@ export class PasskeyController {
     this.pending = false; this.password = '';
     if (listed && (result.ok || this.passkeys.some(passkey => !before.has(passkey.id)))) this.notice = 'passkeyAdded';
     else if (!result.ok && (result.status === 0 || result.status >= 500)) this.error = 'passkeyChangeUncertain';
-    else if (!result.ok) this.#failure(result);
+    else if (!result.ok) this.#failure(result, false, 'passkeyRegistrationRefused');
     this.#changed();
   }
 
@@ -166,7 +173,7 @@ export class PasskeyController {
     this.pending = false; this.password = '';
     if (listed && !this.passkeys.some(passkey => passkey.id === id)) this.notice = 'passkeyRemoved';
     else if (!result.ok && (result.status === 0 || result.status >= 500)) this.error = 'passkeyChangeUncertain';
-    else if (!result.ok) this.#failure(result, true);
+    else if (!result.ok) this.#failure(result, true, 'passkeyRemovalRefused');
     else if (!listed) this.error = 'passkeyChangeUncertain';
     this.#changed();
   }

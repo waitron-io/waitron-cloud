@@ -23,6 +23,8 @@ export function passkeyAccountScreen(app: PortalApp) {
     <h3 id="passkeys-heading">${c.passkeys}</h3>
     <p>${c.passkeyIntro}</p>
     ${message ? html`<p role=${app.passkeys.error ? 'alert' : 'status'}>${c[message]}</p>` : nothing}
+    ${app.passkeys.error === 'passkeyRegistrationRefused' || app.passkeys.error === 'passkeyRemovalRefused' ? html`<wt-button .disabled=${app.passkeys.pending || !!app.passkeys.waiting}
+      @click=${() => {void app.refreshPasskeys();}}>${c.passkeyRefresh}</wt-button>` : nothing}
     ${app.passkeys.listLoaded && !app.passkeys.passkeys.length ? html`<p>${c.passkeyNone}</p>` : nothing}
     ${app.passkeys.loaded && !app.passkeys.listLoaded ? html`<wt-button .disabled=${app.passkeys.pending || !!app.passkeys.waiting}
       @click=${() => {void app.passkeys.load();}}>${c.retry}</wt-button>` : nothing}

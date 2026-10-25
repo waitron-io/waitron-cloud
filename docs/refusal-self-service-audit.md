@@ -39,13 +39,13 @@ demonstrated invariant at its source.
 ## Fixes to make one screen at a time
 
 Each row gives the current English/Spanish wording, the cause and the action to
-implement or clarify. R4 and R8's account-switch guidance are implemented; the
-other nine rows remain open. No row authorizes a permission bypass.
+implement or clarify. R1, R2, R4 and R8 are implemented; seven rows remain
+open. No row authorizes a permission bypass.
 
 | ID and screen | Response and current wording, English / Spanish | Cause and evidence | Way forward and next change |
 | --- | --- | --- | --- |
 | R1: authenticator setup and management | Delivered: management `400 invalid_input` asks you to check current settings and start again with your password and fresh codes, in English and Spanish. | The shared code covers malformed input, unavailable setup state and absent factors. The inventory below traces every producer. It cannot identify one precise cause. | Check authenticator settings discards the local setup and inputs, reads status and exposes the existing setup/replacement actions. It sends no change or cancellation. Password and current-factor proof remain required by the refreshed state. Credentials, rate limits and uncertain writes retain their handling; sign-in errors retain their separate feedback. |
-| R2: passkey registration and removal | Registration failures → “Passkeys are temporarily unavailable. Try again.” / “Las llaves de acceso no están disponibles temporalmente. Vuelve a intentarlo.” | Not bug-only. [HTTP mapping (passkeys.ts:68)](../packages/account-http/src/passkeys.ts#L68) maps management `PasskeyError` to `400 invalid_input`; [the store (passkeys.ts:205)](../packages/registration/src/passkeys.ts#L205) includes expired/consumed or differently bound ceremonies, duplicate credentials and failed verification. Malformed request fields also use 400. | Distinguish restarting an expired ceremony, choosing an existing key and an actual outage without revealing another account's keys. Keep the refreshed list and password sign-in available. Test each cause before choosing its message. |
+| R2: passkey registration and removal | Delivered: management `400 invalid_input` offers Check passkeys and explains a fresh password/prompt or removal, in English and Spanish. | The shared server code includes malformed input, unusable registration state, duplicate credentials and failed verification. The inventory below traces each producer; the response cannot identify one cause. | The read-only check clears the old password and refreshes your account's list. Start another prompt with a fresh password, or choose another key if already registered. Removal guidance is separate. Password sign-in, credential errors, limits and uncertain-write reconciliation retain their handling. No other account's keys or existence is disclosed. |
 | R3: recovery approval and replacement | `400` or `409` → “This service is temporarily unavailable. Try again.” / “El servicio no está disponible temporalmente. Vuelve a intentarlo.” | Not bug-only. [HTTP recovery (recovery.ts:83)](../packages/account-http/src/recovery.ts#L83) exposes `confirmation_required`, `unverified`, `target_not_fresh`, `recovery_active` and `conflict`. [Recovery (recovery.ts:202)](../packages/backups/src/recovery.ts#L202), [requests (recovery-request.ts:38)](../packages/backups/src/recovery-request.ts#L38) and [replacement (replacement.ts:29)](../packages/backups/src/replacement.ts#L29) distinguish missing confirmation, verification/target mismatch, another recovery and reused machine keys. [The API reader (api.ts:68)](../apps/portal/src/api.ts#L68) drops several specific codes; [the controller (recovery-controller.ts:40)](../apps/portal/src/recovery-controller.ts#L40) then shows generic failure or reconciles a write. | Preserve read-after-uncertain-write behavior. Separate “check the existing request”, “close the other recovery”, “choose a verified compatible source” and “start from a fresh replacement”. Confirm which action each request state actually permits before adding a button. Never tell you to repeat an approval whose result is uncertain. |
 | R4: recovery outside the local test scope | `403 local_integration_only` now explains that recovery supports test venues only, tells you to open a new recovery link from the replacement server’s setup and choose a test venue on the Cloud page, and says production recovery is unavailable. Both English and Spanish name this restriction in the recovery page’s error message. | [Catalogue](../packages/backups/src/catalogue.ts#L82), [managed streams](../packages/backups/src/managed-streams.ts#L199) and [replacement](../packages/backups/src/replacement.ts#L29) retain their server restrictions. The API client recognises this code only for a recovery HTTP 403; other paths and statuses retain their prior handling. | Implemented with new native API/controller and browser checks. Permission refusals still clear the displayed authority and confirmations; unexpected write results still reconcile without replay. Production recovery remains unfinished. Existing PostgreSQL scope tests run in CI. |
 | R5: Account permission refusals | `403 forbidden` / `permission_denied` → “Your request could not be verified. Reload this page and try again.” / “No hemos podido verificar la solicitud. Recarga esta página y vuelve a intentarlo.” | Not bug-only. [Common mapping (app.ts:53)](../packages/account-http/src/app.ts#L53) merges cross-site request protection and denied permission. Installation, backups, diagnostics, usage, alert and translation handlers also check current account/venue authority. Native controllers confirm the common message. | Keep reload for a stale request token, but give denied authority a distinct safe response: check the signed-in account and selected business, sign out/in if needed, and return to an accessible view. Adding or changing business membership needs a real product path; do not invent one or imply reload grants access. Split by screen, retaining tenant checks. |
@@ -98,6 +98,29 @@ browser checks exercise first setup, replacement, a newly active factor and an
 absent factor in both languages, themes and widths. They qualify the portal path,
 not database expiry, attempt accounting or cross-account security by themselves.
 The existing database and HTTP tests remain unchanged and run in CI.
+
+## Passkey refusal inventory and refresh boundary (R2)
+
+The portal recognizes `400 invalid_input` only for registration options,
+registration verification and removal. A list or sign-in failure keeps its own
+feedback. The registration message cannot establish that your prompt expired or
+that a key belongs to any account, so it gives conditional guidance instead.
+
+| Producer | Causes of the shared response | Portal boundary |
+| --- | --- | --- |
+| [HTTP parser](../packages/account-http/src/passkeys.ts#L79) | Missing/extra fields, invalid IDs, passwords or credential structures, malformed JSON and oversized bodies. | General registration/removal feedback; no field is blamed without evidence. |
+| [Registration options](../packages/registration/src/passkeys.ts#L92) | The adapter returns an invalid challenge. | Read the list before a fresh prompt; do not promise waiting repairs configuration. |
+| [Registration state](../packages/registration/src/passkeys.ts#L205) | Malformed/missing, differently bound, consumed or expired registration setup. | Start a new prompt with your password; do not reuse the old setup. |
+| [Registration verification](../packages/registration/src/passkeys.ts#L108) | Verification throws or fails, user verification is absent, returned credential/counter is invalid, the account binding differs, or a credential already exists. | General feedback without identifying the key's owner. Check your own list and choose another key if already registered. |
+| [Removal](../packages/account-http/src/passkeys.ts#L51) | Malformed request/ID/password; deleting a missing or differently owned ID still returns 204. | Refresh your own list before choosing a remaining key. Removal always needs your current password. |
+| [Authority and outages](../packages/account-http/src/passkeys.ts#L67) | Credentials, session, request-token, rate-limit and service failures retain their existing responses. | Keep their messages and retry delays. An uncertain change still reads the list before suggesting another change. |
+
+Native checks exercise mapping boundaries, fresh password, read failure, pending
+work, delays and account switches. Browser checks use the real portal and browser
+passkey prompt with synthetic HTTP responses; they qualify the displayed action
+and a new server-issued prompt, not database expiry or cryptographic verification.
+Existing PostgreSQL store and HTTP tests run in CI; Docker is unavailable locally.
+The server and its disclosure policy are unchanged.
 
 ## Existing actions to preserve
 
