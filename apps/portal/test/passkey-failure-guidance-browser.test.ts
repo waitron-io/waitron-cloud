@@ -8,11 +8,11 @@ import {translations} from '../src/locale.ts';
 const bundle = await build({stdin: {contents: `import {applyTokens} from '@waitron-io/ui-core/tokens'; import {PortalApp} from './src/app.ts'; applyTokens(document.body); new PortalApp(document.querySelector('#portal'));`, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const guidance = {
-  en: 'Passkeys are unavailable. You can try again or sign in with your password.',
-  es: 'Las llaves de acceso no están disponibles. Puedes volver a intentarlo o entrar con tu contraseña.',
+  en: 'Passkeys are unavailable. You can try again. Password sign-in remains available.',
+  es: 'Las llaves de acceso no están disponibles. Puedes volver a intentarlo. Puedes seguir entrando con tu contraseña.',
 };
 
-// Losing password guidance after a generic refusal strands a person whose browser cannot use passkeys.
+// Generic failures need an available password alternative and a repeatable passkey attempt.
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
   test(`${locale} ${theme} ${width}: generic passkey failures offer a working password path`, async t => {
     const browser = await chromium.launch({headless: true});
@@ -60,6 +60,13 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           assert.equal(calls.some(path => path.endsWith('/verify')), false, 'no credential was submitted after a browser/options failure');
           assert.equal(new URL(page.url()).pathname, '/login');
           assert.equal(await page.getByRole('button', {name: c.login, exact: true}).isEnabled(), true);
+          const retry = page.getByRole('button', {name: c.passkeySignIn, exact: true, disabled: false});
+          await retry.waitFor();
+          const retried = page.waitForResponse('**/api/account/passkeys/authentication/options');
+          await retry.click(); await retried;
+          await retry.waitFor();
+          assert.equal(calls.filter(path => path === '/passkeys/authentication/options').length, 2);
+          assert.equal(calls.some(path => path.endsWith('/verify')), false, 'a second refusal still submits no credential');
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
           if (process.env.PASSKEY_GUIDANCE_RECEIPT_DIR && failure === 'browser') {
             await mkdir(process.env.PASSKEY_GUIDANCE_RECEIPT_DIR, {recursive: true});
