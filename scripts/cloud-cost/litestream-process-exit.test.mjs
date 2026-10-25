@@ -136,6 +136,9 @@ for (const held of [true, false]) test(`real writer exit before final smoke rest
   assert.equal(closed.length, 1, result.stderr);
   assert.equal(closed[0].code, 0);
   assert.equal(closed[0].signal, null);
+  for (const idle of records.filter(row => row.kind === 'idle-admission')) {
+    assert.equal(idle.writerClosed, true, 'the actual writer must close before the transport idle wait');
+  }
   assert.deepEqual(records.filter(row => row.kind === 'writer-signal'),
     [{ kind: 'writer-signal', signal: 'SIGTERM', pending: held ? 1 : 0, replyEnded: !held }]);
   assert.ok(Number.isSafeInteger(closed[0].pid) && closed[0].pid > 0);
