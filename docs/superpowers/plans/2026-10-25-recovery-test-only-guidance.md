@@ -9,7 +9,7 @@ Scope: R4 of the [self-service refusal audit](../../refusal-self-service-audit.m
 5. Add fault cases proving other 403 codes, other statuses, unknown codes, transport failures, and 5xx retain their existing behavior. Assert cooldown, uncertain-write reconciliation, and no automatic replay.
 6. Recognise `local_integration_only` only for HTTP 403 on `/recovery/` API paths. Leave other statuses and paths as `unexpected_response`, with API-through-controller regression cases for 400/409/503 and non-recovery paths.
 7. Map only status 403/code `local_integration_only` to `recoveryTestOnly`. Preserve every server gate and existing controller safeguard.
-8. Add English and Spanish guidance stating: recovery is for test venues only; return to replacement server setup to start recovery for a test venue; production recovery is unavailable.
+8. Add English and Spanish guidance stating: recovery is for test venues only; open a new link from replacement server setup, then choose a test venue on the Cloud page; production recovery is unavailable.
 9. Run focused native tests through GREEN, then required native local checks. Do not start, repair or call Docker; it is unavailable.
 10. Exercise the browser close flow through the real API client with a stubbed HTTP boundary, checking the returned code, displayed guidance, permission controls, and absence of replay.
 11. Inspect all eight views: EN/ES × light/dark × 390/1280. Verify readable guidance and usable controls.

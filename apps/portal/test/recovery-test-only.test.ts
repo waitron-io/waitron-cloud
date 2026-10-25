@@ -64,10 +64,12 @@ for(const status of [400,409,503])test(`real API keeps an unexpected ${status} t
  t.after(()=>{for(const [key,prior]of [['location',priorLocation],['document',priorDocument]]as const){if(prior)Object.defineProperty(globalThis,key,prior);else Reflect.deleteProperty(globalThis,key);}});
  const calls:unknown[]=[];
  t.mock.method(globalThis,'fetch',async(url:unknown)=>{calls.push(url);return Response.json({error:'local_integration_only'},{status});});
- const c=new RecoveryController(()=>{});c.open(id);c.account('owner');c.code='00123456';c.view=ready;
+ const outcomes:ApiResult<unknown>[]=[];
+ const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,unknown>)=>{const result=await accountRequest<T>(path,body);outcomes.push(result);return result;});c.open(id);c.account('owner');c.code='00123456';c.view=ready;
  await c.close();
  assert.equal(c.uncertain,true);assert.equal(c.error,'unavailable');assert.equal(c.confirmReplacement,false);
  assert.deepEqual(calls,['/api/account/recovery/close','/api/account/recovery/inspect']);
+ assert.deepEqual(outcomes.map(result=>!result.ok&&result.code),['unexpected_response','unexpected_response']);
 });
 for(const path of ['/session','/authenticator'])test(`test-only recognition does not change ${path} refusals`,async t=>{
  t.mock.method(globalThis,'fetch',async()=>Response.json({error:'local_integration_only'},{status:403}));

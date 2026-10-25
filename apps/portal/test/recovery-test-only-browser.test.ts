@@ -36,6 +36,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   const text=await alert.innerText();
   assert.match(text,locale==='en'?/test venues only/i:/solo.*locales de prueba/i);
   assert.match(text,locale==='en'?/replacement server.*setup/i:/configuración.*servidor de sustitución/i);
+  assert.match(text,locale==='en'?/choose a test venue on this page/i:/elige un local de prueba en esta página/i);
   assert.match(text,locale==='en'?/production recovery is not available/i:/recuperación.*producción no está disponible/i);
   assert.doesNotMatch(text,/reload|recarga|support|soporte/i);
   assert.equal(await page.getByRole('button',{name:c.recoveryCancel,exact:true}).count(),0);

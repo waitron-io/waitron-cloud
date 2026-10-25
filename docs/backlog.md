@@ -5474,7 +5474,7 @@ Cloud follow-ups, each a separate small change with tests before implementation:
 - R3: explain recovery confirmation, active-operation, verification and fresh-target
   refusals; reconcile uncertain writes before suggesting another approval.
 - R4: recovery now explains a refused test-only action in English and Spanish.
-  Return to the replacement server’s setup to start recovery for a test venue;
+  Open a new recovery link from the replacement server’s setup, then choose a test venue;
   production recovery remains unavailable. Native API/controller and browser
   checks cover the 403 restriction, cleared authority, retained permission errors
   and uncertain-write reconciliation. Server scope and proof requirements stay
