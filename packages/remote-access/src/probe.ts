@@ -103,6 +103,28 @@ async function solve(challenge:string,difficulty:number,options:ScopedProbeOptio
  }
  throw new ProbeError('challenge');
 }
+function cookieExpiry(value:string):number|undefined {
+ // Cookie dates accept legacy separators and year forms, but not calendar rollover.
+ const months=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+ let day:number|undefined,month:number|undefined,year:number|undefined,time:number[]|undefined;
+ for(const token of value.split(/[\t\x20-\x2f\x3b-\x40\x5b-\x60\x7b-\x7e]+/).filter(Boolean)){
+  if(!/^[0-9]/.test(token)){
+   if(month===undefined){const index=months.indexOf(token.slice(0,3).toLowerCase());if(index>=0)month=index;}
+  }else if(token.includes(':')){
+   if(time===undefined&&/^\d+:\d+:\d+$/.test(token))time=token.split(':').map(Number);
+  }else if(/^\d+$/.test(token)){
+   if(day===undefined&&token.length<=2)day=Number(token);
+   else if(year===undefined&&token.length<=5)year=Number(token);
+  }
+ }
+ if(day===undefined||month===undefined||year===undefined||!time)return;
+ if(year<=69)year+=2000;else if(year<=99)year+=1900;
+ const [hour,minute,second]=time as [number,number,number];
+ if(day<1||day>31||hour>23||minute>59||second>59)return;
+ const date=new Date(Date.UTC(year,month,day,hour,minute,second));
+ if(date.getUTCFullYear()!==year||date.getUTCMonth()!==month||date.getUTCDate()!==day)return;
+ return date.getTime();
+}
 function accessCookie(headers:import('node:http').IncomingHttpHeaders){
  const values=headers['set-cookie'];if(!values||values.length!==1)throw new ProbeError('challenge');
  const parts=values[0]!.split(';').map(value=>value.trim()),match=/^__Host-waitron-public=([A-Za-z0-9._~-]{1,1024})$/.exec(parts[0]??'');if(!match)throw new ProbeError('challenge');
@@ -116,7 +138,18 @@ function accessCookie(headers:import('node:http').IncomingHttpHeaders){
  // Chromium ignores oversized attribute values, leaving the earlier one effective.
  const maxAges=values[0]!.split(';').slice(1).map(value=>value.split('=')).filter(value=>trimPath(value[0]!).toLowerCase()==='max-age').filter(value=>trimPath(value.slice(1).join('=')).length<=1024);
  const maxAge=trimPath(maxAges.at(-1)?.slice(1).join('=')??'');
- if(/^[+-]?\d+$/.test(maxAge)&&Number(maxAge)<=0)throw new ProbeError('challenge');
+ // Chromium also saturates a signed 64-bit limit reached before an invalid suffix.
+ const agePrefix=/^[+-]?\d+/.exec(maxAge)?.[0];
+ const validMaxAge=/^[+-]?\d+$/.test(maxAge)||(agePrefix!==undefined&&(BigInt(agePrefix)>=9223372036854775807n||BigInt(agePrefix)<=-9223372036854775808n));
+ if(validMaxAge&&Number(agePrefix)<=0)throw new ProbeError('challenge');
+ // A valid Max-Age takes precedence; otherwise the final effective Expires applies.
+ if(!validMaxAge){
+  const expires=values[0]!.split(';').slice(1).map(value=>value.split('=')).filter(value=>trimPath(value[0]!).toLowerCase()==='expires').filter(value=>trimPath(value.slice(1).join('=')).length<=1024);
+  const expiry=cookieExpiry(trimPath(expires.at(-1)?.slice(1).join('=')??''));
+  // Browsers adjust Expires for the server clock carried by the response Date.
+  const serverTime=Date.parse(headers.date??'');
+  if(expiry!==undefined&&expiry<=(Number.isFinite(serverTime)?serverTime:Date.now()))throw new ProbeError('challenge');
+ }
  const attributes=new Set(parts.slice(1).map(value=>value.toLowerCase()));if(!attributes.has('path=/')||!attributes.has('secure')||!attributes.has('httponly')||!attributes.has('samesite=strict'))throw new ProbeError('challenge');
  return parts[0]!;
 }

@@ -113,10 +113,14 @@ trims ordinary spaces and tabs, preserving other bytes so it cannot mistake a
 no-break space for a browser-accepted root path. It also refuses zero or negative
 whole numbers, including `+0`, in the last `Max-Age` attribute within Chromium's
 1,024-byte value limit. Oversized values leave an earlier attribute effective.
-Real HTTPS fixtures and independent Chromium controls cover these cases. This
-checks immediate Max-Age deletion; other expiry rules, including `Expires`, remain
-open. The staff check
-performs only a trusted hostname-verifying TLS handshake and sends no HTTP request or login.
+When no valid `Max-Age` overrides it, the last `Expires` value within the same
+limit sets the expiry. The probe reads legacy cookie dates and adjusts for the
+server clock in the response `Date`, refusing expired cookies before replay.
+Invalid dates leave a session cookie; an invalid final value replaces an earlier
+expiry. Real HTTPS fixtures and independent Chromium controls cover date forms,
+clock differences, attribute replacement and signed `Max-Age` saturation.
+The staff check performs only a trusted hostname-verifying TLS handshake and
+sends no HTTP request or login.
 Production resolution refuses private, loopback, link-local and reserved addresses,
 including deprecated site-local IPv6. IPv4-compatible (`::/96`) and 6to4 (`2002::/16`)
 addresses must also contain a public IPv4 address. Teredo and NAT64 prefixes remain

@@ -255,3 +255,97 @@ test('public probe ignores oversized Path attributes while enforcing the last ef
   }finally{await fixture.close();}
  });
 });
+
+
+test('public probe refuses challenge cookies expired by Expires before replay',async t=>{
+ const material=await certificate('probe.example.test');
+ const past='Thu, 01 Jan 1970 00:00:00 GMT',future='Thu, 01 Jan 2099 00:00:00 GMT';
+ for(const [label,extra,healthy,date] of [
+  ['past date',`; Expires=${past}`,false],
+  ['future date',`; Expires=${future}`,true],
+  ['session control','',true],
+  ['mixed case and whitespace',`; eXpIrEs = \t${past} \t`,false],
+  ['expired last',`; Expires=${future}; Expires=${past}`,false],
+  ['future restored last',`; Expires=${past}; Expires=${future}`,true],
+  ['invalid last',`; Expires=${past}; Expires=invalid`,true],
+  ['empty last',`; Expires=${past}; Expires=`,true],
+  ['bare last',`; Expires=${past}; Expires`,true],
+  ['oversized future ignored',`; Expires=${past}; Expires=${future}${' '.repeat(1025-future.length-1)}x`,false],
+  ['oversized past ignored',`; Expires=${future}; Expires=${past}${' '.repeat(1025-past.length-1)}x`,true],
+  ['boundary past effective',`; Expires=${future}; Expires=${past}${' '.repeat(1024-past.length-1)}x`,false],
+  ['boundary future effective',`; Expires=${past}; Expires=${future}${' '.repeat(1024-future.length-1)}x`,true],
+  ['positive Max-Age wins',`; Expires=${past}; Max-Age=300`,true],
+  ['positive Max-Age before Expires',`; Max-Age=300; Expires=${past}`,true],
+  ['zero Max-Age wins',`; Expires=${future}; Max-Age=0`,false],
+  ['invalid Max-Age falls back',`; Expires=${past}; Max-Age=invalid`,false],
+  ['empty Max-Age falls back',`; Expires=${past}; Max-Age=`,false],
+  ['bare Max-Age falls back',`; Expires=${past}; Max-Age`,false],
+  ['invalid last Max-Age falls back',`; Expires=${past}; Max-Age=300; Max-Age=invalid`,false],
+  ['oversized Max-Age falls back',`; Expires=${past}; Max-Age=${'1'.repeat(1025)}`,false],
+  ['positive saturated Max-Age wins',`; Expires=${past}; Max-Age=${'1'.repeat(1024)}`,true],
+  ['positive overflow with junk',`; Expires=${past}; Max-Age=${'1'.repeat(30)}x`,true],
+  ['negative overflow with junk',`; Expires=${future}; Max-Age=-${'1'.repeat(30)}x`,false],
+  ['positive saturated boundary with junk',`; Expires=${past}; Max-Age=9223372036854775807x`,true],
+  ['negative saturated boundary with junk',`; Expires=${future}; Max-Age=-9223372036854775808x`,false],
+  ['positive below saturation with junk',`; Expires=${past}; Max-Age=9223372036854775806x`,false],
+  ['decimal invalid age',`; Expires=${past}; Max-Age=1.2`,false],
+  ['extra equals date',`; Expires=${past}=extra`,false],
+  ['first invalid time retained','; Expires=01 Jan 1970 24:00:00 00:00:00 GMT',true],
+  ['broken time then valid','; Expires=01 Jan 1970 0: 00:00:00 GMT',false],
+  ['year before epoch','; Expires=01 Jan 1600 00:00:00 GMT',false],
+  ['non-ASCII date separator','; Expires=01\u00a0Jan 1970 00:00:00 GMT',true],
+  ['time lower-width fields','; Expires=1 Jan 1970 0:0:0 GMT',false],
+  ['time zero-padded fields','; Expires=1 Jan 1970 000:000:000 GMT',false],
+  ['legacy hyphenated date','; Expires=Thursday, 01-Jan-70 00:00:00 GMT',false],
+  ['legacy asctime date','; Expires=Thu Jan  1 00:00:00 1970',false],
+  ['quoted date',`; Expires="${past}"`,false],
+  ['full month name','; Expires=01 January 1970 00:00:00 GMT',false],
+  ['early year','; Expires=1970 Jan 01 00:00:00 GMT',false],
+  ['abbreviated year zero','; Expires=01 Jan 00 00:00:00 GMT',false],
+  ['abbreviated year sixty-nine','; Expires=01 Jan 69 00:00:00 GMT',true],
+  ['invalid day','; Expires=32 Jan 1970 00:00:00 GMT',true],
+  ['invalid calendar date','; Expires=31 Feb 1970 00:00:00 GMT',true],
+  ['invalid hour','; Expires=01 Jan 1970 24:00:00 GMT',true],
+  ['invalid minute','; Expires=01 Jan 1970 00:60:00 GMT',true],
+  ['invalid second','; Expires=01 Jan 1970 00:00:60 GMT',true],
+  ['missing time','; Expires=01 Jan 1970 GMT',true],
+  ['missing year','; Expires=01 Jan 00:00:00 GMT',true],
+  ['numeric month ignored','; Expires=1970-01-01 00:00:00 GMT',true],
+  ['non-ASCII name ignored',`; Expires\u00a0=${past}`,true],
+  ['unrelated hint',`; ExpiresHint=${past}`,true],
+  ['expiry second after server','; Expires=01 Jan 2000 00:00:01 GMT',true,'Sat, 01 Jan 2000 00:00:00 GMT'],
+  ['expiry second before server','; Expires=01 Jan 2000 00:00:00 GMT',false,'Sat, 01 Jan 2000 00:00:01 GMT'],
+  ['expiry minute after server','; Expires=01 Jan 2000 00:01:00 GMT',true,'Sat, 01 Jan 2000 00:00:00 GMT'],
+  ['expiry hour after server','; Expires=01 Jan 2000 01:00:00 GMT',true,'Sat, 01 Jan 2000 00:00:00 GMT'],
+  ['expiry day after server','; Expires=02 Jan 2000 00:00:00 GMT',true,'Sat, 01 Jan 2000 00:00:00 GMT'],
+  ['expiry month after server','; Expires=01 Feb 2000 00:00:00 GMT',true,'Sat, 01 Jan 2000 00:00:00 GMT'],
+  ['December before server','; Expires=31 Dec 1999 23:59:59 GMT',false,'Sat, 01 Jan 2000 00:00:00 GMT'],
+  ['valid leap day','; Expires=29 Feb 2000 00:00:00 GMT',false,'Wed, 01 Mar 2000 00:00:00 GMT'],
+  ['invalid leap day','; Expires=29 Feb 2001 00:00:00 GMT',true],
+  ['invalid day zero','; Expires=00 Jan 1970 00:00:00 GMT',true],
+  ['missing month','; Expires=01 1970 00:00:00 GMT',true],
+  ['server clock behind','; Expires=01 Jan 2001 00:00:00 GMT',true,'Sat, 01 Jan 2000 00:00:00 GMT'],
+  ['server clock ahead','; Expires=01 Jan 2099 00:00:00 GMT',false,'Fri, 01 Jan 2100 00:00:00 GMT'],
+  ['equal server date','; Expires=01 Jan 2000 00:00:00 GMT',false,'Sat, 01 Jan 2000 00:00:00 GMT'],
+  ['invalid server date falls back',`; Expires=${past}`,false,'invalid'],
+ ] as const)await t.test(label,async()=>{
+  let replays=0;
+  const fixture=await listenHttps(material,(req,res)=>{
+   if(req.url==='/public/availability'){
+    if(req.headers.cookie){replays++;res.setHeader('content-type','application/json');res.end('{}');}
+    else{res.statusCode=403;res.setHeader('content-type','text/html');res.end('<script src="/_cloud/challenge.js"></script>');}
+   }else if(req.url==='/_cloud/challenge'){
+    res.setHeader('content-type','application/json');res.end('{"challenge":"fixture-challenge","difficulty":8}');
+   }else if(req.url==='/_cloud/solve'){
+    res.sendDate=false;if(date)res.setHeader('date',date);
+    res.statusCode=204;res.setHeader('set-cookie','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict'+extra);res.end();
+   }else{res.statusCode=404;res.end();}
+  });
+  try{
+   const result=await probeTarget(target(),{ca:material.cert,connect:connect(fixture.port)});
+   assert.equal(result.public.status,healthy?'healthy':'failed');
+   if(!healthy)assert.equal(result.public.status==='failed'&&result.public.failure,'challenge');
+   assert.equal(replays,healthy?1:0,'An expired cookie must not be sent to the availability endpoint');
+  }finally{await fixture.close();}
+ });
+});
