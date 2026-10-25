@@ -5476,3 +5476,19 @@ a failing test first. Keep measurement guards, accounting and deadlines intact.
 Real PostgreSQL/Mailpit reproduction waits for local Docker or a separately
 qualified CI diagnostic change. This is separate from reset-mail capture and
 Mailpit fixture-startup failures recorded above.
+
+## Unchanged remote hostname review (D259)
+
+On Account, Review DNS settings is available only when the entered name differs
+from the selected saved name after trimming spaces, lowercasing and removing one
+trailing dot. The controller also refuses an unchanged review, so clicking or
+pressing Enter cannot create a confirmation or send a redundant save that puts
+remote access back into setup. Changed names still need review and confirmation;
+Use assigned name still lets you switch back from a custom name.
+
+Stubbed portal and controller checks cover assigned and custom names, staff and
+public access, equivalent input, saving a different name and switching back. The
+existing Enter, installation-refresh and uncertain-save checks retain their
+assertions and deadlines with the three owner-approved setup changes. Server
+behaviour and the outstanding live DNS/ACME and deployment qualification are
+unchanged.

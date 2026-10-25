@@ -82,7 +82,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(dnsRequests.length, 2, 'malformed input is refused before DNS');
       assert.equal(await confirmation.count(), 0);
       limited = true;
-      await input.fill('staff.cafe.example'); await input.press('Enter');
+      await input.fill('staff.other.example'); await input.press('Enter');
       await section.getByRole('alert').filter({hasText: c.limited}).waitFor();
       assert.equal(await input.isDisabled(), true);
       assert.equal(await review.isDisabled(), true);

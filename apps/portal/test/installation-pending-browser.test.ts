@@ -41,6 +41,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       calls.push({path, body: route.request().postData() ? route.request().postDataJSON() : null});
       if (path.endsWith('/backups/list')) return route.fulfill({json: {venueId: route.request().postDataJSON().venueId, points: [{id: point, capturedAt: '2026-10-23T10:00:00.000Z', verification: 'verified', retention: 'daily', expiresAt: '2026-11-23T10:00:00.000Z', protection: 'fallback'}], nextCursor: 'older', defaultPointId: point, continuousRecovery: {recoverableAt: '2026-10-23T10:00:00.000Z', checkedAt: '2026-10-23T10:00:00.000Z', sourceNodeId: second}}});
       if (path.endsWith('/translation-consent')) return route.fulfill({json: {consents: []}});
+      if (path.endsWith('/remote-access/dns')) return route.fulfill({json: {installationId: second, kind: 'staff', hostname: 'staff.cafe.example', records: [{type: 'CNAME', name: 'staff.cafe.example', value: 'staff.example.test'}, {type: 'CNAME', name: '_acme-challenge.staff.cafe.example', value: '_acme-challenge.staff.example.test'}]}});
       if (path.endsWith('/remote-access/status')) return route.fulfill({json: {installationId: second, revision: 0, revoked: false, names: {staff: {assigned: 'staff.example.test', current: 'staff.example.test'}, public: {assigned: 'public.example.test', current: 'public.example.test'}}, service: {state: 'unconfigured', health: 'unknown', observedAt: null, validUntil: null}}});
       return route.fulfill({status: 403, json: {error: 'forbidden'}});
     });
@@ -122,6 +123,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await article.getByRole('button', {name: c.viewSnapshots, exact: true}).click();
         await article.getByLabel(c.chooseSnapshot, {exact: true}).waitFor();
         await article.getByRole('button', {name: c.remoteSetup, exact: true}).click();
+        await article.locator('wt-input[name=remoteHostname] input').fill('staff.cafe.example');
         await article.getByRole('button', {name: c.remoteReview, exact: true}).click();
         await article.getByRole('button', {name: c.remoteConfirm, exact: true}).waitFor();
       }
