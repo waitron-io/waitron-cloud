@@ -5348,3 +5348,15 @@ The committed-PUT-reply shutdown check refuses at `idle` with one pending exchan
 and 20 completed exchanges; transport cleanup then reports `active-close`.
 Reproduce this refusal before attributing its cause. Keep the existing limits
 and assertions; the code-feedback fix does not resolve this investigation.
+
+## Remote hostname keyboard review (D250)
+
+Press Enter in the remote-access Hostname field to review the DNS settings.
+Enter keeps you at the review step; applying the change requires clicking Confirm.
+Malformed names still show their field message before any DNS request, and pending
+operations and server retry waits keep review disabled. English/Spanish browser
+checks cover both themes and phone/desktop widths.
+
+The passkey and authenticator password fields still need their own Enter handling.
+Cloud portal follow-up: connect each field to its existing review or submit action,
+keeping authority checks and explicit confirmations intact, with browser coverage.
