@@ -432,6 +432,14 @@ pending or uncertain fiscal operation and Retry-After delays. Stubbed Chromium
 checks cover failed and recovered reads in both languages, themes and widths,
 plus rate-limit waits and retained write evidence. Existing draft, selection,
 request and receipt rules remain covered by the fiscal browser journeys.
+When several venues share a business name, the Venue choices now include the
+translated fiscal environment and short venue ID, so you can tell them apart
+before selecting one. Chromium checks cover both environments, two production
+venues of one business, unchanged full venue IDs and the resulting draft, in
+both languages, themes and phone/desktop widths. The creation date remains a
+follow-up: the venue read and venue table have no creation timestamp. Add a
+persisted venue creation date and its overview read before showing a localised
+date here; a connection-request timestamp is not a substitute.
 Stored fiscal status reads check entitlement and custody once before returning the exact
 receipt. PostgreSQL checks cover that count and refusal after entitlement, custody or
 venue ownership is withdrawn; history reconstruction keeps its checks around database work.
