@@ -21,7 +21,8 @@ const flows = [
  {path:'/reset-password', button:'savePassword', fields:['password'], completion:true},
 ] as const;
 type Flow = typeof flows[number];
-const values = {email:'\u00a0owner@example.es\u00a0', password, legalBusinessName:'Bar Pepe SL', organisationName:'Grupo Pepe'};
+const nonbreakingSpace = String.fromCodePoint(0xa0);
+const values = {email:nonbreakingSpace+'owner@example.es'+nonbreakingSpace, password, legalBusinessName:'Bar Pepe SL', organisationName:'Grupo Pepe'};
 async function open(browser:Browser, flow:Flow, locale:Locale, theme:'light'|'dark', width:number, failure=503) {
  const page = await browser.newPage({locale, colorScheme:theme, viewport:{width,height:900}});
  page.setDefaultTimeout(3000);
