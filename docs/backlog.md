@@ -5109,13 +5109,21 @@ local Docker qualification remains unavailable until 3 November.
 The delayed-PUT case failed on three of the 103 cost-workflow runs started on
 25 October through the initial D268 audit. All three failures were on PRs;
 40 main runs included four other failures. D266 changes tests and backlog only,
-so it does not repair this runtime refusal. The failed stop reaches `idle` after
-writer exit with one transport exchange still pending. Its cause remains unknown.
-Stop refusals now include elapsed control/exit timings and active transfer
-progress, with fixed operation names and byte counts rather than request paths,
-credentials or invocation IDs. Native held-response tests qualify those
-observations. Repeated CI trials must identify the pending operation and timing
-before a repair is chosen. Keep all accounting, stop limits and existing checks.
+so it does not repair this runtime refusal. An instrumented CI run then reproduced
+one failure in 80 trials: control acknowledged at 1,517 ms and the writer exited at
+1,520 ms, but a complete PUT had started only 612 ms before the 2,001 ms cutoff.
+Its injected 1,500 ms reply hold could not finish within that stop budget.
+
+The delayed-reply fixture now waits for a successful backend PUT after the final
+sale before asking the writer to stop, while that reply remains held. Every
+successful PUT reply still waits 1,500 ms. The shared two-second stop budget,
+accounting guards and all original assertions remain. Native checks refuse an
+earlier sale's commit, failed PUTs and unrelated operations as readiness evidence.
+Stop refusals also include control/exit timings and active transfer progress,
+using operation names and byte counts without paths, credentials or invocation IDs.
+Repeated real-backend CI qualification is required before landing. This fixture
+sequencing correction does not attribute the separate historical list interruptions
+or qualify production shutdown.
 
 ## Recovery refusal messages and pasted codes (D192)
 

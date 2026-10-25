@@ -84,7 +84,10 @@ test('the delayed stop proof waits for a final-sale PUT commit while its reply r
   const timers = [], stopped = [], published = [];
   let dispatch, forwarded = 0;
   const done = new AsyncFunction('onSale','stopping','publish','setTimeout','clearTimeout',checks.prepareDelayedLitestreamStop(source))(
-    async (number, forward) => { assert.equal(number, 2); dispatch = forward; }, () => stopped.push(true), result => published.push(result),
+    async (number, forward) => {
+      assert.equal(number, 2); dispatch = forward;
+      forward({method:'PUT'}, {statusCode:200, headers:{}, on(){}, pipe(){forwarded++;}}, {writeHead(){}});
+    }, () => stopped.push(true), result => published.push(result),
     (action, milliseconds) => { const timer = { action, milliseconds }; timers.push(timer); return timer; }, () => {});
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(stopped.length, 0, 'do not spend the stop budget waiting for the final upload to start');
@@ -96,8 +99,8 @@ test('the delayed stop proof waits for a final-sale PUT commit while its reply r
   assert.equal(stopped.length, 1);
   assert.equal(forwarded, 3, 'the final committed upload reply is still held when stop begins');
   const held = timers.filter(timer => timer.milliseconds === 1500);
-  assert.equal(held.length, 1); held[0].action(); assert.equal(forwarded, 4);
-  assert.equal(published[0].delayedPutReplies, 1);
+  assert.equal(held.length, 2); for (const timer of held) timer.action(); assert.equal(forwarded, 5);
+  assert.equal(published[0].delayedPutReplies, 2);
 });
 
 test('final PUT readiness refuses changed or repeated integration anchors', () => {
