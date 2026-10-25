@@ -28,7 +28,10 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
       export function createServer(listener){
         if(!firstServer)return http.createServer(listener);firstServer=false;
         return http.createServer((req,res)=>{
-          if(req.headers['amz-sdk-invocation-id']==='22222222-2222-4333-8444-555555555555')globalThis.commitRequest=req;
+          if(req.headers['amz-sdk-invocation-id']==='22222222-2222-4333-8444-555555555555'){
+            globalThis.commitRequest=req;globalThis.commitRequestBytes=0;
+            req.on('data',bytes=>globalThis.commitRequestBytes+=bytes.length);
+          }
           listener(req,res);
         });
       }
@@ -42,11 +45,10 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
                   const req=globalThis.commitRequest;
                   if(${JSON.stringify(incomplete)}==='request')req.complete=false;
                   if(${JSON.stringify(incomplete)}==='response')incoming.complete=false;
-                  console.error(JSON.stringify({kind:'commit-completeness',requestComplete:req.complete,responseComplete:incoming.complete}));
+                  console.error(JSON.stringify({kind:'commit-completeness',requestComplete:req.complete,responseComplete:incoming.complete,
+                    requestBytes:globalThis.commitRequestBytes,expectedRequestBytes:Number(req.headers['content-length']),statusCode:incoming.statusCode}));
                 });
                 callback(incoming);
-                // Restore the parser observations after the smoke's commit listener has read them.
-                if(${incomplete !== null})incoming.once('end',()=>{globalThis.commitRequest.complete=true;incoming.complete=true;});
               };globalThis.secondCommitted();
             }else if(${holdInitialReply} && args[1].headers['amz-sdk-invocation-id']==='11111111-2222-4333-8444-555555555555'){
               globalThis.initialStored();setTimeout(()=>callback(incoming),50);
@@ -151,8 +153,10 @@ for (const incomplete of ['request', 'response']) test(`the smoke refuses an inc
   assert.equal(result.error, undefined, 'the refusal must finish inside the process deadline');
   const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
   assert.deepEqual(records.filter(row => row.kind === 'commit-completeness'), [{ kind: 'commit-completeness',
-    requestComplete: incomplete !== 'request', responseComplete: incomplete !== 'response' }]);
+    requestComplete: incomplete !== 'request', responseComplete: incomplete !== 'response',
+    requestBytes: 4, expectedRequestBytes: 4, statusCode: 200 }]);
   assert.equal(result.status, 1, result.stderr);
   assert.equal(result.stdout, '');
+  assert.equal(records.find(row => row.kind === 'litestream-stop')?.step, 'idle');
   assert.doesNotMatch(result.stderr, /Synthetic Litestream phase: restore/);
 });
