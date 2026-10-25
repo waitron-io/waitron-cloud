@@ -16,9 +16,8 @@ export class AuthenticatorController {
   #clearInput(){this.password='';this.proofCode='';this.confirmation='';}
   fence(){this.#generation++;this.pending=false;this.loaded=false;this.error=undefined;this.requiredField=undefined;this.challenge=undefined;this.enrolment=undefined;this.status=undefined;this.#clearInput();}
   account(id:string|undefined){if(id===this.#account)return;this.#account=id;this.fence();}
-  #failure(result:Extract<ApiResult<unknown>,{ok:false}>,change=false,field?:'proof'|'confirmation'){
+  #failure(result:Extract<ApiResult<unknown>,{ok:false}>,change=false){
     this.retryAt=Date.now()+result.retryAfterMs;
-    if(field&&result.status===400&&result.code==='invalid_input'){this.error=field==='confirmation'?'factorConfirmationInvalid':'factorCodeInvalid';this.requiredField=field;return;}
     this.error=result.status===429?'limited':result.code==='credentials_invalid'?'credentials':result.status===403?'forbidden'
       :change&&(result.status===0||result.status>=500)?'factorChangeUncertain':'factorUnavailable';
   }
@@ -40,7 +39,7 @@ export class AuthenticatorController {
     const result=await this.#request<{accountId:string}>('/login/factor',body);
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){this.challenge=undefined;this.#changed();return 'authenticated';}
-    this.#failure(result,false,'proof');
+    this.#failure(result);
     // An uncertain completion may have consumed its proof; only a session read can reconcile it.
     if(result.status===0||result.status>=500){this.challenge=undefined;this.error='factorLoginUncertain';this.#changed();return 'reconcile';}
     if(result.status===401){this.challenge=undefined;this.#changed();return 'reconcile';}this.#changed();return false;
@@ -56,7 +55,7 @@ export class AuthenticatorController {
     const generation=this.#start();if(generation===undefined)return;
     this.#clearInput();const result=await this.#request<FactorEnrolment>('/authenticator/begin',body);
     if(generation!==this.#generation)return;this.pending=false;this.enrolment=undefined;
-    if(result.ok)this.enrolment=result.value;else this.#failure(result,true,this.status?.active?'proof':undefined);this.#changed();}
+    if(result.ok)this.enrolment=result.value;else this.#failure(result,true);this.#changed();}
   async #change(action:'activate'|'remove'|'regenerate'):Promise<FactorChange|'reconcile'|false>{
     const code=normaliseCode(this.confirmation);
     if(!this.#account||action==='activate'&&!this.enrolment)return false;
@@ -68,7 +67,7 @@ export class AuthenticatorController {
     const result=await this.#request<FactorChange>(`/authenticator/${action}`,body);
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){this.fence();this.#changed();return result.value;}
-    this.#failure(result,true,action==='activate'?'confirmation':'proof');
+    this.#failure(result,true);
     if(result.status===403&&result.code==='credentials_invalid'){
       this.pending=true;const session=await this.#request<{accountId:string}>('/session');
       if(generation!==this.#generation)return false;this.pending=false;

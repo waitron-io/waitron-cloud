@@ -5231,10 +5231,20 @@ Malformed authenticator codes now stay in their field with an explanation, befor
 any request. App codes require six digits; recovery proofs accept 32 hexadecimal
 characters or four groups of eight. The portal still removes whitespace and keeps
 recovery hyphens. New-app confirmation accepts only its six-digit app code.
-A server invalid-input refusal marks the relevant code field;
-blank-code, incorrect-code and outage feedback remain distinct. The server remains
-the authority for accepting a proof. Controller and English/Spanish browser checks
-cover sign-in, management and new-app confirmation without changing server rules.
+Blank-code, incorrect-code and outage feedback remain distinct. Server refusals
+keep their general feedback without marking a code field: an invalid-input reply
+can also mean the setup or account state changed. The server remains the authority
+for accepting a proof. Controller and English/Spanish browser checks cover sign-in,
+management and new-app confirmation without changing server rules.
+
+### Distinguish server refusals during authenticator changes
+
+An expired, consumed or superseded setup, a removed factor, and an over-long
+password can all produce the same invalid-input reply. Give these causes distinct
+server codes, then map them to guidance that explains what you can do next, such
+as starting setup again. Cloud owns this follow-up across the registration,
+account HTTP and portal packages. Keep proof acceptance and account authority
+checks intact; cover each refusal with a server test and matching portal feedback.
 
 ## Business choice feedback when connecting a venue (D234)
 
