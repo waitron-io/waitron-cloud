@@ -5366,3 +5366,12 @@ checks cover both themes and phone/desktop widths.
 The passkey and authenticator password fields still need their own Enter handling.
 Cloud portal follow-up: connect each field to its existing review or submit action,
 keeping authority checks and explicit confirmations intact, with browser coverage.
+
+## Email resend waits when correcting an address (D251)
+
+Sign-up and password recovery now keep the one-minute resend wait per address and
+operation. You can correct an address and send immediately; returning to an earlier
+address keeps its remaining wait, including case and surrounding-space variations.
+Server Retry-After still blocks every address for that operation across navigation.
+Stubbed Chromium journeys cover both forms, languages, themes and narrow/wide views,
+with exact request bodies, independent address deadlines and refused early submits.
