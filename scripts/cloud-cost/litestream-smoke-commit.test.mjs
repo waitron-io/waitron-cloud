@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 
 // The real smoke, audit, counters and forwarding proxy run against a local HTTP store.
 // Only the external venue, SDK administration, SQLite reader and native process are substituted.
-function run({ backendStatus = 200, versionId = null, transport = '1', holdInitialReply = false, holdRetry = false, incomplete = null, backendReply = null } = {}) {
+function run({ backendStatus = 200, versionId = null, transport = '1', holdInitialReply = false, holdRetry = false, incomplete = null, backendReply = null, uploadBody = null } = {}) {
   const actual = new URL('./litestream.mjs', import.meta.url).href;
   const meter = new URL('./meter.mjs', import.meta.url).href;
   const fixture = new URL('./fixtures/litestream-smoke.mjs', import.meta.url).href;
@@ -30,7 +30,14 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
         return http.createServer((req,res)=>{
           if(req.headers['amz-sdk-invocation-id']==='22222222-2222-4333-8444-555555555555'){
             globalThis.commitRequest=req;globalThis.commitRequestBytes=0;
-            req.on('data',bytes=>globalThis.commitRequestBytes+=bytes.length);
+            req.on('data',bytes=>{
+              globalThis.commitRequestBytes+=bytes.length;
+              if(${uploadBody === 'truncated'}){
+                globalThis.releaseBackend=()=>globalThis.abortUpload();globalThis.secondCommitted();
+              }
+            });
+            if(${uploadBody !== null})req.once('close',()=>console.error(JSON.stringify({kind:'upload-body',
+              requestBytes:globalThis.commitRequestBytes,expectedRequestBytes:Number(req.headers['content-length']),requestComplete:req.complete})));
           }
           listener(req,res);
         });
@@ -78,13 +85,16 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
           const headers={'content-length':'4','amz-sdk-invocation-id':invocation,'amz-sdk-request':'attempt='+ordinal+'; max=3'};
           child.stderr.emit('data',Buffer.from('SDK 2026/10/25 03:00:00 DEBUG Request\\nPUT '+path+' HTTP/1.1\\r\\nAmz-Sdk-Invocation-Id: '+invocation+'\\r\\nAmz-Sdk-Request: attempt='+ordinal+'; max=3\\r\\n\\r\\n'));
           return new Promise((resolve,reject)=>{const req=http.request(endpoint+path,{method:'PUT',headers},res=>{
-            res.on('error',reject);res.resume();res.on('end',()=>resolve(res.statusCode));});req.on('error',reject);req.end('four');});
+            res.on('error',reject);res.resume();res.on('end',()=>resolve(res.statusCode));});req.on('error',reject);
+              if(${uploadBody === 'truncated'} && invocation==='22222222-2222-4333-8444-555555555555'){
+                globalThis.abortUpload=()=>req.destroy();req.write('f');
+              }else req.end('four');});
         };
         const socket=http.createServer((req,res)=>{req.resume();req.on('end',()=>{
           res.end(JSON.stringify({status:'stopped',path:'/state/synthetic-litestream-proof/venue/venue.db',txid:0}));
           setTimeout(()=>globalThis.releaseBackend?.(),25);
         });});socket.listen('/tmp/d152-commit-'+process.pid+'.sock');
-        const backend=http.createServer((req,res)=>{req.resume();req.on('end',()=>{requests++;
+        const backend=http.createServer((req,res)=>{req.on('error',()=>{});req.resume();req.on('end',()=>{requests++;
           if(${backendReply !== null} && requests===2){
             res.writeHead(200,{'content-length':'4'});res.write('o');
             if(${backendReply === 'complete'})res.end('kay');else globalThis.truncateBackend=()=>res.destroy();return;
@@ -207,4 +217,44 @@ test('the smoke certifies the paired complete backend PUT reply with its actual 
   assert.deepEqual(output.afterStop.observer, { attempts: 1, bytesIn: 4, bytesOut: 4 });
   assert.equal(output.restoredSales, 2);
   assert.equal(output.integrity, 'ok');
+});
+
+// A real short body must finish refusal and collection without publishing restore evidence.
+test('the smoke collects a genuinely truncated PUT body without certifying it', () => {
+  const result = run({ uploadBody: 'truncated' });
+  assert.equal(result.error, undefined, 'collect the smoke within its subprocess deadline');
+  assert.equal(result.status, 1, result.stderr);
+  assert.equal(result.stdout, '', 'a short upload cannot publish a measurement');
+  const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+  assert.deepEqual(records.filter(row => row.kind === 'upload-body'), [{ kind: 'upload-body',
+    requestBytes: 1, expectedRequestBytes: 4, requestComplete: false }]);
+  const stop = records.find(row => row.kind === 'litestream-stop');
+  assert.equal(stop?.step, 'idle', result.stderr);
+  assert.equal(stop.diagnostic.pending, 0);
+  assert.equal(stop.diagnostic.completed, 3);
+  const collected = records.find(row => row.kind === 'litestream-close'
+    && row.stage === 'cleanup-replication-transport' && row.status === 'rejected');
+  assert.equal(collected?.diagnostic.pending, 0, result.stderr);
+  assert.equal(collected?.diagnostic.connections, 0, result.stderr);
+  for (const stage of ['cleanup-replication-transport', 'cleanup-restore-transport',
+    'cleanup-replication-proxy', 'cleanup-restore-proxy', 'cleanup-admin-proxy']) {
+    assert.ok(records.some(row => row.kind === 'litestream-close' && row.stage === stage
+      && ['fulfilled', 'rejected'].includes(row.status)), stage);
+  }
+  assert.doesNotMatch(result.stderr, /Unhandled 'error' event|uncaughtException|Synthetic Litestream phase: restore/);
+});
+
+test('the paired complete PUT body reconciles both hops and completes the stand-in restore', () => {
+  const result = run({ uploadBody: 'complete' });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
+  const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+  assert.deepEqual(records.filter(row => row.kind === 'upload-body'), [{ kind: 'upload-body',
+    requestBytes: 4, expectedRequestBytes: 4, requestComplete: true }]);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.restoredSales, 2);
+  assert.equal(output.integrity, 'ok');
+  assert.equal(output.afterStop.bodiesReconciled, true);
+  assert.deepEqual(output.afterStop.producer, { attempts: 1, bytesIn: 0, bytesOut: 4 });
+  assert.deepEqual(output.afterStop.observer, { attempts: 1, bytesIn: 0, bytesOut: 4 });
 });
