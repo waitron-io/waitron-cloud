@@ -5473,8 +5473,12 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   an actual restart/list/password path, without disclosing another account's keys.
 - R3: explain recovery confirmation, active-operation, verification and fresh-target
   refusals; reconcile uncertain writes before suggesting another approval.
-- R4: show the existing test-only recovery restriction beside a refused action;
-  reloading must not imply production recovery becomes available.
+- R4: recovery now explains a refused test-only action in English and Spanish.
+  Return to the replacement server’s setup to start recovery for a test venue;
+  production recovery remains unavailable. Native API/controller and browser
+  checks cover the 403 restriction, cleared authority, retained permission errors
+  and uncertain-write reconciliation. Server scope and proof requirements stay
+  unchanged; PostgreSQL scope checks run in CI.
 - R5: separate stale request-token guidance from denied account/business authority.
   Check-account/sign-in paths exist; membership changes need a separate real flow.
 - R6: make outside fiscal-custodian, entitlement and identity-space guidance usable;
