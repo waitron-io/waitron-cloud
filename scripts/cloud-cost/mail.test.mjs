@@ -267,3 +267,66 @@ test('mailDeadlineRejectsBeforeTheServerResponds', async t => {
     assert.equal(await Promise.race([pending, new Promise(resolve => { timer = setTimeout(() => resolve('still-running'), 250); })]), 'refused');
   } finally { clearTimeout(timer); for (const s of f.sockets) s.destroy(); await pending; await run.close().catch(() => {}); }
 });
+
+// A close refusal must distinguish an empty run from a real SMTP/client disagreement without exposing mail.
+test('mailCloseRefusalsIdentifyTheFirstInvalidStateAndIndependentCounts', async t => {
+  const f = await fixture(t), { run: empty } = await open(t, f);
+  await assert.rejects(empty.close(), error => {
+    assert.deepEqual(error.diagnostic, { reason: 'empty-measurement', invalid: false,
+      producer: { attempts: 0, accepted: 0, refused: 0, retried: 0 },
+      observer: { attempts: 0, accepted: 0, refused: 0 } });
+    return bad.test(error.message);
+  });
+  const { run } = await open(t, f), actual = createLocalAccountMailer({ port: run.port }), identity = context();
+  const mailer = run.wrapMailer({ async sendPasswordChanged(m, c) {
+    await actual.sendPasswordChanged(m, c); throw Error('private-canary');
+  } });
+  await assert.rejects(mailer.sendPasswordChanged(message, identity), bad);
+  let first;
+  await assert.rejects(run.close(), error => {
+    first = error;
+    assert.deepEqual(error.diagnostic, { reason: 'delivery-outcome-mismatch', invalid: true,
+      producer: { attempts: 0, accepted: 0, refused: 0, retried: 0 },
+      observer: { attempts: 1, accepted: 1, refused: 0 } });
+    assert.equal([message.email, identity.deliveryId, 'private-canary', f.target].some(value =>
+      JSON.stringify(error).includes(value) || error.message.includes(value)), false);
+    return bad.test(error.message);
+  });
+  await assert.rejects(run.close(), error => error === first);
+  assert.throws(() => run.snapshot(), bad);
+});
+
+// Later cleanup cannot replace the protocol failure that first invalidated the measurement.
+test('mailCloseDiagnosticRetainsTheProtocolFailureAfterCancellation', async t => {
+  const f = await fixture(t, ['malformed']), controller = new AbortController();
+  const { run, mailer } = await open(t, f, { signal: controller.signal });
+  await assert.rejects(mailer.sendPasswordChanged(message, context()), bad);
+  controller.abort();
+  await assert.rejects(run.close(), error => {
+    assert.deepEqual(error.diagnostic, { reason: 'upstream-protocol', invalid: true,
+      producer: { attempts: 0, accepted: 0, refused: 0, retried: 0 },
+      observer: { attempts: 1, accepted: 0, refused: 0 } });
+    assert.equal(JSON.stringify(error).includes('private-canary'), false);
+    return bad.test(error.message);
+  });
+});
+
+// Identical zero-result counts need different explanations for timeouts, cancellation and active close.
+test('mailCloseDiagnosticsDistinguishDeadlineCancellationAndActiveClose', async t => {
+  for (const [mode, reason] of [['deadline', 'delivery-timeout'], ['signal', 'measurement-aborted'], ['close', 'close-during-delivery']]) {
+    const f = await fixture(t, ['hang']), controller = new AbortController();
+    const { run, mailer } = await open(t, f, { timeoutMs: mode === 'deadline' ? 50 : 30000, signal: controller.signal });
+    const pending = assert.rejects(mailer.sendPasswordChanged(message, context()), bad);
+    while (f.calls() === 0) await new Promise(resolve => setTimeout(resolve, 1));
+    if (mode === 'signal') controller.abort();
+    if (mode !== 'close') await pending;
+    await assert.rejects(run.close(), error => {
+      assert.deepEqual(error.diagnostic, { reason, invalid: true,
+        producer: { attempts: 0, accepted: 0, refused: 0, retried: 0 },
+        observer: { attempts: 1, accepted: 0, refused: 0 } });
+      return bad.test(error.message);
+    });
+    await pending;
+    assert.throws(() => run.snapshot(), bad);
+  }
+});

@@ -21,15 +21,17 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
   const sockets = new Set(), histories = new Map(), operations = [];
   const producer = { attempts: 0, accepted: 0, refused: 0, retried: 0 };
   const observer = { attempts: 0, accepted: 0, refused: 0 };
-  let invalid = false, active, closing, closed = false;
-  const poison = () => {
+  let invalid = false, invalidReason, active, closing, closed = false;
+  const poison = reason => {
+    invalidReason ??= reason;
     invalid = true;
     for (const socket of sockets) socket.destroy();
     active?.cancel();
   };
+  const abort = () => poison('measurement-aborted');
   const server = createServer(client => {
     client.on('error', () => {});
-    if (invalid || closing || !active || active.record) { poison(); client.destroy(); return; }
+    if (invalid || closing || !active || active.record) { poison('unpaired-connection'); client.destroy(); return; }
     const record = { outcome: null, done: null };
     let finish;
     record.done = new Promise(resolve => { finish = resolve; }); active.record = record;
@@ -37,7 +39,7 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
     const upstream = connect(Number(endpoint.port), '127.0.0.1');
     for (const socket of [client, upstream]) sockets.add(socket);
     let pending = ['greeting'], data = false, uploaded = 0, multiline = null, recipients = 0;
-    const lines = callback => {
+    const lines = (reason, callback) => {
       let buffer = '';
       return chunk => {
         try {
@@ -47,10 +49,10 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
             const line = buffer.slice(0, end); buffer = buffer.slice(end + 2); callback(line);
           }
           requireThat(buffer.length <= 16384);
-        } catch { poison(); }
+        } catch { poison(reason); }
       };
     };
-    client.on('data', lines(line => {
+    client.on('data', lines('client-protocol', line => {
       if (data) {
         uploaded += line.length + 2; requireThat(uploaded <= 1048576);
         if (line === '.') { data = false; pending.push('body'); }
@@ -62,7 +64,7 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
       if (command === 'RCPT') requireThat(++recipients === 1);
       pending.push(command);
     }));
-    upstream.on('data', lines(line => {
+    upstream.on('data', lines('upstream-protocol', line => {
       const match = /^(\d{3})([ -])/.exec(line); requireThat(match && pending.length > 0);
       const code = Number(match[1]);
       requireThat(multiline === null || code === multiline);
@@ -76,25 +78,27 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
       } else if (command === 'DATA') { requireThat(code === 354); data = true; }
       else requireThat(code === (command === 'greeting' ? 220 : command === 'QUIT' ? 221 : 250));
     }));
-    upstream.on('error', poison);
+    upstream.on('error', () => poison('upstream-connection-error'));
     client.once('close', () => { sockets.delete(client); upstream.destroy(); });
     upstream.once('close', () => { sockets.delete(upstream); client.destroy(); finish(); });
     client.pipe(upstream); upstream.pipe(client);
   });
-  server.on('error', poison);
+  server.on('error', () => poison('capture-server-error'));
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  signal?.addEventListener('abort', poison, { once: true });
-  if (signal?.aborted) poison();
+  signal?.addEventListener('abort', abort, { once: true });
+  if (signal?.aborted) abort();
 
   const wrapMailer = mailer => {
-    try { requireThat(mailer && !invalid && !closing); } catch { poison(); fail(); }
+    try { requireThat(mailer && !invalid && !closing); } catch { poison('mailer-registration'); fail(); }
     return Object.fromEntries(Object.entries(actions).map(([method, action]) => [method, async (message, context) => {
-      let timer, observedRefusal = false;
+      let timer, observedRefusal = false, failureReason = 'delivery-admission';
+      const deliveryAbort = () => poison('delivery-aborted');
       try {
         requireThat(!invalid && !closing && !active && !signal?.aborted && !context?.signal?.aborted && observer.attempts < maxAttempts
           && typeof mailer[method] === 'function' && typeof context?.deliveryId === 'string'
           && /^[a-f0-9-]{36}$/.test(context.deliveryId));
         const previous = histories.get(context.deliveryId);
+        failureReason = 'delivery-action-mismatch';
         requireThat(!previous || previous.action === action);
         const ordinal = previous?.attempts ?? 0;
         histories.set(context.deliveryId, { action, attempts: ordinal + 1 });
@@ -102,14 +106,16 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
         const cancelled = new Promise((_, reject) => { cancel = () => reject(Error('Invalid cloud cost mail measurement')); });
         active = { cancel, record: null };
         const current = active;
-        timer = setTimeout(poison, timeoutMs);
-        context.signal?.addEventListener('abort', poison, { once: true });
+        timer = setTimeout(() => poison('delivery-timeout'), timeoutMs);
+        context.signal?.addEventListener('abort', deliveryAbort, { once: true });
         try {
           let receipt, failed = false;
           await Promise.race([cancelled, (async () => {
             try { receipt = await mailer[method](message, context); } catch { failed = true; }
+            failureReason = 'unobserved-delivery';
             requireThat(current.record); await current.record.done;
           })()]);
+          failureReason = 'delivery-outcome-mismatch';
           requireThat(!invalid && current.record?.outcome === (failed ? 'refused' : 'accepted'));
           const outcome = current.record.outcome;
           producer.attempts++; producer[outcome]++; if (ordinal > 0) producer.retried++;
@@ -117,22 +123,30 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
           if (row) row.attempts++; else operations.push({ action, outcome, retryOrdinal: ordinal, attempts: 1 });
           if (failed) { observedRefusal = true; throw Error('Captured email delivery refused'); }
           return receipt;
-        } finally { clearTimeout(timer); context.signal?.removeEventListener('abort', poison); active = null; }
+        } finally { clearTimeout(timer); context.signal?.removeEventListener('abort', deliveryAbort); active = null; }
       } catch {
         // An observed SMTP refusal is valid evidence; all uncertain or unmatched outcomes poison it.
         if (observedRefusal && !invalid) throw Error('Captured email delivery refused');
-        poison(); fail();
+        poison(failureReason); fail();
       }
     }]));
   };
   const close = () => {
     if (closing) return closing;
-    if (active) poison();
+    if (active) poison('close-during-delivery');
     closing = (async () => {
       for (const socket of sockets) socket.destroy();
-      await new Promise(resolve => server.close(resolve)); signal?.removeEventListener('abort', poison);
-      requireThat(!invalid && producer.attempts > 0 && producer.attempts === observer.attempts
-        && producer.accepted === observer.accepted && producer.refused === observer.refused);
+      await new Promise(resolve => server.close(resolve)); signal?.removeEventListener('abort', abort);
+      try {
+        requireThat(!invalid && producer.attempts > 0 && producer.attempts === observer.attempts
+          && producer.accepted === observer.accepted && producer.refused === observer.refused);
+      } catch {
+        const error = Error('Invalid cloud cost mail measurement');
+        // Keep only the first fixed reason and independent counts; protocol text and mail stay private.
+        error.diagnostic = structuredClone({ reason: invalidReason ?? (producer.attempts === 0 ? 'empty-measurement' : 'count-mismatch'),
+          invalid, producer, observer });
+        throw error;
+      }
       closed = true;
     })();
     return closing;
