@@ -5156,3 +5156,10 @@ reproduce and repair that operation's cause. A passing controlled abort or nativ
 run does not close the historical timeout. Local Docker and PostgreSQL checks
 remain unavailable until 3 November; full qualification uses GitHub CI. D152's
 separate native-writer drain decision remains open.
+
+## Business choice feedback when connecting a venue (D234)
+
+Choosing a business now clears the resolved “Choose a business for this venue”
+message and field marker. Approval still requires a business and an explicit click;
+code errors, server refusals, uncertain replies and the single-business path remain.
+English/Spanish browser checks cover both themes and phone/desktop widths.

@@ -20,7 +20,7 @@ export function pairingScreen(app:PortalApp){
       <p>${p.view.environment==='test'?c.pairTest:c.pairProduction}</p>
       ${p.businesses.length===1?html`<p>${choice?.organisationName}</p><p>${choice?.legalBusinessName}</p>`:
         html`<label class="business-choice">${c.pairBusiness} *<select name="legalBusinessId" aria-invalid=${p.error==='pairChoice'?'true':'false'} aria-describedby="business-error" ?disabled=${p.pending}
-          @change=${(event:Event)=>{p.selected=(event.target as HTMLSelectElement).value;app.draw();}}>
+          @change=${(event:Event)=>{p.selected=(event.target as HTMLSelectElement).value;if(p.selected&&p.error==='pairChoice')p.error=undefined;app.draw();}}>
           <option value="" .selected=${!p.selected}>${c.pairChoice}</option>${p.businesses.map(b=>html`<option value=${b.legalBusinessId} .selected=${b.legalBusinessId===p.selected}>${b.organisationName} · ${b.legalBusinessName} (${b.countryCode})</option>`)}</select></label><p id="business-error">${p.error==='pairChoice'?c.pairChoice:''}</p>`}`:nothing}
     <wt-form-actions>${logout}<wt-button id="submit" variant="primary" .disabled=${p.pending||!!p.waiting} .loading=${p.pending}
       @click=${()=>{void app.submitPairing();}}>${p.view?c.pairApprove:c.pairInspect}</wt-button></wt-form-actions>
