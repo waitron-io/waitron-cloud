@@ -74,6 +74,13 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         ...[c.usageStorage, c.usageTransfer, c.usageOperations, c.usageMessages].map(name => ({level: 4, name})),
         {level: 3, name: 'Sol SL · 10000000'}, {level: 3, name: 'Sol SL · 20000000'},
       ]);
+      assert.deepEqual(await usage.getByRole('heading').evaluateAll(nodes => nodes.map(node => {
+        const style = getComputedStyle(node);
+        return {fontSize: style.fontSize, marginTop: style.marginTop, marginBottom: style.marginBottom};
+      })), [
+        {fontSize: '20px', marginTop: '16.6px', marginBottom: '16.6px'},
+        ...[0, 1, 2, 3].map(() => ({fontSize: '16.8px', marginTop: '16.8px', marginBottom: '6.4px'})),
+      ]);
       for (const name of [c.usageStorage, c.usageTransfer, c.usageOperations, c.usageMessages]) {
         assert.equal(await usage.getByRole('region', {name, exact: true}).getByRole('heading', {level: 4, name, exact: true}).isVisible(), true);
       }
