@@ -27,6 +27,12 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     try {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
       page.setDefaultTimeout(4000);
+      const authenticator = await page.context().newCDPSession(page);
+      await authenticator.send('WebAuthn.enable');
+      await authenticator.send('WebAuthn.addVirtualAuthenticator', {options: {
+        protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true,
+        isUserVerified: true, automaticPresenceSimulation: true,
+      }});
       const c = translations[locale];
       let ended = false;
       let revoked = false;
