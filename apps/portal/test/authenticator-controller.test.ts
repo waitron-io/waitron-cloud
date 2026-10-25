@@ -146,6 +146,7 @@ for(const action of ['completeLogin','begin','activate','remove','regenerate'] a
     c.password=' current password ';c.proofKind=kind;c.proofCode=' \t\u00a0\n ';c.confirmation='654321';
     assert.equal(await c[action](),action==='begin'?undefined:false);
     assert.equal(c.error,'factorCodeRequired');assert.equal(redraws,1);assert.equal(requests,0);assert.equal(c.pending,false);
+    assert.equal(c.requiredField,'proof');
     assert.equal(c.password,' current password ');assert.equal(c.proofCode,' \t\u00a0\n ');assert.equal(c.confirmation,'654321');
     assert.equal(c.enrolment,enrolment);assert.equal(c.challenge?.challengeToken,token);
   });
@@ -189,6 +190,7 @@ for(const action of ['completeLogin','begin','activate','remove','regenerate'] a
     await c[action]();assert.equal(c.error,action==='completeLogin'?'factorCodeRequired':'requiredPassword');assert.deepEqual(calls,[]);
     c.password=' current password ';c.proofCode='123 456';
     const pending=c[action]();assert.equal(c.pending,true);assert.equal(c.error,undefined);assert.equal(redraws,2);
+    assert.equal(c.requiredField,undefined);
     assert.deepEqual(calls,[{path:action==='completeLogin'?'/login/factor':`/authenticator/${action}`,body:action==='completeLogin'
       ?{challengeToken:token,proof:{kind:'totp',code:'123456'}}
       :{password:' current password ',proof:{kind:'totp',code:'123456'},...(action==='activate'?{pendingToken:token,code:'654321'}:{})}}]);
