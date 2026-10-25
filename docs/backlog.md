@@ -3929,9 +3929,11 @@ notifications separately.
   1,024 bytes are ignored; missing effective protection still refuses before
   replay. Real HTTPS and independent Chromium controls cover values, duplicates,
   ASCII whitespace and the size boundary. These are local protocol checks;
-  production observation remains unqualified. A spaced root `Path = /` still
-  produces a false unhealthy result although Chromium retains the cookie; that
-  separate Path-validation correction remains open.
+  production observation remains unqualified. Root `Path` attributes now accept
+  ASCII spaces and tabs around `=`, matching Chromium, without requiring another
+  literal `Path=/` attribute. Real HTTPS cases and independent Chromium controls
+  cover replacement, ignored oversized values and missing or invalid paths.
+  The last effective path must still be `/`; refused cookies never reach availability.
   The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
   separates existing local detection from proposed production operator alerts and
   opted-in venue mail, with worked outage and backup timelines. The owner approved

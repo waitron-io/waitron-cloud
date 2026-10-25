@@ -505,3 +505,52 @@ test('public probe recognizes effective Secure and HttpOnly flag names with valu
   }finally{await fixture.close();}
  });
 });
+
+
+test('public probe accepts effective root Path attributes with ASCII whitespace before replay',async t=>{
+ const material=await certificate('probe.example.test');
+ for(const [label,paths,healthy] of [
+  ['space before equals','Path =/',true],
+  ['space after equals','Path= /',true],
+  ['spaces around equals','Path = /',true],
+  ['tabs around equals','Path\t=\t/',true],
+  ['mixed case and outer whitespace',' \tpAtH \t= \t/ \t',true],
+  ['non-root replaced by spaced root','Path=/other; Path = /',true],
+  ['oversized replaced by spaced root','Path=/'+'x'.repeat(1024)+'; Path = /',true],
+  ['spaced root survives oversized duplicate','Path = /; Path=/'+'x'.repeat(1024),true],
+  ['spaced duplicate roots','Path = /; pAtH\t=\t/',true],
+  ['root restored after empty attribute','Path=; Path = /',true],
+  ['ordinary root control','Path=/',true],
+  ['missing path','PathHint=/',false],
+  ['bare path','Path',false],
+  ['empty path','Path = ',false],
+  ['non-root path','Path = /other',false],
+  ['spaced root overridden by non-root','Path = /; Path=/other',false],
+  ['spaced root overridden by empty','Path = /; Path=',false],
+  ['spaced root overridden by bare','Path = /; Path',false],
+  ['spaced root overridden at byte boundary','Path = /; Path=/'+'x'.repeat(1023),false],
+  ['oversized without effective root','Path = /'+'x'.repeat(1024),false],
+  ['no-break space in name','Path\u00a0=/',false],
+  ['no-break space before value','Path=\u00a0/',false],
+  ['no-break space after value','Path=/\u00a0',false],
+  ['equals in value','Path = /=',false],
+ ] as const)await t.test(label,async()=>{
+  let replays=0;
+  const fixture=await listenHttps(material,(req,res)=>{
+   if(req.url==='/public/availability'){
+    if(req.headers.cookie){replays++;assert.equal(req.headers.cookie,'__Host-waitron-public=fixture');res.setHeader('content-type','application/json');res.end('{}');}
+    else{res.statusCode=403;res.setHeader('content-type','text/html');res.end('<script src="/_cloud/challenge.js"></script>');}
+   }else if(req.url==='/_cloud/challenge'){
+    res.setHeader('content-type','application/json');res.end('{"challenge":"fixture-challenge","difficulty":8}');
+   }else if(req.url==='/_cloud/solve'){
+    res.statusCode=204;res.setHeader('set-cookie','__Host-waitron-public=fixture; Secure; HttpOnly; SameSite=Strict; '+paths);res.end();
+   }else{res.statusCode=404;res.end();}
+  });
+  try{
+   const result=await probeTarget(target(),{ca:material.cert,connect:connect(fixture.port)});
+   assert.equal(result.public.status,healthy?'healthy':'failed');
+   if(!healthy)assert.equal(result.public.status==='failed'&&result.public.failure,'challenge');
+   assert.equal(replays,healthy?1:0,'Only an effective root-path cookie may reach availability');
+  }finally{await fixture.close();}
+ });
+});
