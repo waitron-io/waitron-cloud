@@ -3441,7 +3441,9 @@ notifications separately.
   the passive list. Revoking the current session returns you to sign-in with the
   signed-out notice once the session check confirms it ended. Lost replies still
   reconcile; passive session loss stays quiet and expiry keeps its own notice.
-  Database-free English and Spanish browser checks cover both themes and widths. Passkey rows
+  Database-free English and Spanish browser checks cover both themes and widths.
+  Whether an already pending session check can suppress this notice is unverified;
+  reproduce that request ordering before changing how session reads share a reply. Passkey rows
   show their nullable last-use time. English and Spanish Chromium checks cover phone and
   desktop layouts, stale authority, concurrent logout/revocation, account isolation and
   lost replies. The [bounded history cleanup command](history-cleanup.md) now previews and

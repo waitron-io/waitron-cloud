@@ -74,7 +74,7 @@ export class AccountSecurityController {
     if (generation !== this.#generation) return;
     this.pending = false;
     if (!listed.ok && listed.status === 401) {
-      this.error = undefined; this.#sessionEnded(target.current ? 'signedOut' : undefined); this.#changed(); return;
+      this.error = undefined; this.#sessionEnded(target.current && (result.ok || result.status === 0) ? 'signedOut' : undefined); this.#changed(); return;
     }
     if (listed.ok && !this.sessions.some(session => session.id === id)) this.notice = 'sessionRevoked';
     else if (!result.ok) this.#failure(result, true);

@@ -50,6 +50,7 @@ export class PortalApp {
   usage: UsageController;
   diagnostics: DiagnosticController;
   #route = 0;
+  #signOutCheck: PortalSession | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   constructor(root: HTMLElement) {
     this.root = root;
@@ -60,12 +61,10 @@ export class PortalApp {
     this.authenticator = new AuthenticatorController(() => this.draw());
     this.passkeys = new PasskeyController(() => this.draw());
     this.security = new AccountSecurityController(() => this.draw(), async reason => {
-      const session = this.session, route = this.#route;
-      await session.check();
-      if (reason === 'signedOut' && this.session === session && this.#route === route + 1 && this.path === '/login'
-        && session.state.kind === 'anonymous' && !session.state.expired) {
-        this.notice = 'signedOut'; this.draw();
-      }
+      const session = this.session;
+      if (reason === 'signedOut') this.#signOutCheck = session;
+      try { await session.check(); }
+      finally { if (this.#signOutCheck === session) this.#signOutCheck = undefined; }
     });
     void this.passkeys.checkSupport();
     this.alerts = new AlertController(() => this.draw());
@@ -128,8 +127,9 @@ export class PortalApp {
     this.pairing.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (this.path === '/connect' && state.kind === 'authenticated' && !this.pairing.loaded) void this.pairing.load();
     if ((['/', '/account', '/connect', '/recover', '/fiscal-allocations'].includes(this.path)) && state.kind === 'anonymous') {
+      const signedOut = this.#signOutCheck === this.session;
       this.navigate('/login');
-      if (state.expired) { this.notice = 'sessionExpired'; this.draw(); }
+      if (state.expired || signedOut) { this.notice = state.expired ? 'sessionExpired' : 'signedOut'; this.draw(); }
     }
     else this.draw();
   }
@@ -177,6 +177,7 @@ export class PortalApp {
     return c.login;
   }
   navigate(path: string, push = true) {
+    this.#signOutCheck = undefined;
     this.#route++; this.path = path; this.passkeys.fence(); this.security.fence(); this.authenticator.fence(); this.fiscal.fence(); this.factorCodes = [];
     if (push) history.pushState(null, '', path);
     this.link = this.#capture();

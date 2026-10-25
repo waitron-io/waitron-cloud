@@ -15,11 +15,11 @@ const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'ut
 const current = {id: '12345678-1234-4234-8234-123456789abc', createdAt: '2026-09-26T00:00:00Z',
   lastUsedAt: '2026-09-26T00:20:00Z', expiresAt: '2099-01-01T00:00:00Z', current: true};
 const other = {...current, id: '22345678-1234-4234-8234-123456789abc', current: false};
-type Scenario = 'current' | 'lost-reply' | 'other' | 'stale-revoke' | 'passive' | 'expired' | 'logout' | 'recheck-expired' | 'navigate-away';
+type Scenario = 'current' | 'lost-reply' | 'other' | 'stale-revoke' | 'passive' | 'expired' | 'logout' | 'recheck-expired' | 'navigate-away' | 'single-navigation' | 'navigate-signup' | 'rejected-revoke' | 'passive-list' | 'recheck-unavailable' | 'new-session' | 'navigate-protected';
 
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
   const scenarios: Scenario[] = theme === 'light' && width === 390
-    ? ['current', 'lost-reply', 'other', 'stale-revoke', 'passive', 'expired', 'logout', 'recheck-expired', 'navigate-away'] : ['current'];
+    ? ['current', 'lost-reply', 'other', 'stale-revoke', 'passive', 'expired', 'logout', 'recheck-expired', 'navigate-away', 'single-navigation', 'navigate-signup', 'rejected-revoke', 'passive-list', 'recheck-unavailable', 'new-session', 'navigate-protected'] : ['current'];
   for (const scenario of scenarios) test(`${locale} ${theme} ${width}: ${scenario} session sign-out feedback`, async () => {
     const browser = await chromium.launch({headless: true});
     let releaseCheck!: () => void;
@@ -30,6 +30,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       const c = translations[locale];
       let ended = false;
       let revoked = false;
+      let rechecks = 0;
       const writes: {path: string; body: unknown}[] = [];
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html',
         body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
@@ -38,7 +39,11 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         const anonymous = () => route.fulfill({status: 401, json: {error: scenario === 'expired' || scenario === 'recheck-expired' ? 'session_expired' : 'unauthenticated'}});
         if (route.request().method() === 'POST' && path !== '/session/activity') writes.push({path, body: route.request().postDataJSON()});
         if (path === '/session' || path === '/session/activity') {
-          if (ended && scenario === 'navigate-away') await checkReply;
+          if (ended && ['navigate-away', 'single-navigation', 'navigate-signup', 'navigate-protected'].includes(scenario)) await checkReply;
+          if (ended && path === '/session' && rechecks++ === 0) {
+            if (scenario === 'recheck-unavailable') return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
+            if (scenario === 'new-session') await checkReply;
+          }
           return ended ? anonymous() : route.fulfill({json: {accountId: 'owner', expiresAt: current.expiresAt}});
         }
         if (path === '/sessions/revoke') {
@@ -46,6 +51,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           ended = scenario !== 'other';
           if (scenario === 'lost-reply') return route.abort('connectionreset');
           if (scenario === 'stale-revoke') return anonymous();
+          if (scenario === 'rejected-revoke') return route.fulfill({status: 403, json: {error: 'forbidden'}});
           return route.fulfill({status: 204});
         }
         if (path === '/logout') { ended = true; return route.fulfill({status: 204}); }
@@ -61,35 +67,56 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.addStyleTag({content: styles});
       await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       await page.locator('.sessions').getByRole('button', {name: c.sessionSignOut, exact: true}).waitFor();
-      if (scenario === 'passive' || scenario === 'expired') {
+      if (scenario === 'passive' || scenario === 'expired' || scenario === 'passive-list') {
         ended = true;
-        await page.evaluate(async () => {
-          await (window as unknown as {signoutApp: {session: {check(): Promise<void>}}}).signoutApp.session.check();
-        });
+        await page.evaluate(async scenario => {
+          const app = (window as unknown as {signoutApp: {session: {check(): Promise<void>}; security: {load(): Promise<void>}}}).signoutApp;
+          if (scenario === 'passive-list') await app.security.load();
+          else await app.session.check();
+        }, scenario);
       } else if (scenario === 'logout') {
         await page.getByRole('button', {name: c.signout, exact: true}).click();
       } else {
-        const recheck = scenario === 'navigate-away' ? page.waitForRequest('**/api/account/session') : undefined;
+        const recheck = ['navigate-away', 'single-navigation', 'navigate-signup', 'new-session', 'navigate-protected'].includes(scenario) ? page.waitForRequest('**/api/account/session') : undefined;
         await page.locator('.sessions').getByRole('button', {name: scenario === 'other' ? c.sessionRevoke : c.sessionSignOut, exact: true}).click();
         if (recheck) {
           await recheck;
-          await page.evaluate(() => {
+          await page.evaluate(scenario => {
+            if (scenario === 'new-session') {
+              window.dispatchEvent(new PageTransitionEvent('pagehide'));
+              window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}));
+              return;
+            }
             const app = (window as unknown as {signoutApp: {navigate(path: string): void}}).signoutApp;
-            app.navigate('/signup'); app.navigate('/login');
-          });
-          releaseCheck();
+            if (scenario === 'navigate-protected') { app.navigate('/recover'); return; }
+            if (scenario !== 'single-navigation') app.navigate('/signup');
+            if (scenario !== 'navigate-signup') app.navigate('/login');
+          }, scenario);
+          if (scenario !== 'new-session') releaseCheck();
           await page.waitForFunction(() => (window as unknown as {signoutApp: {session: {state: {kind: string}}}}).signoutApp.session.state.kind === 'anonymous');
+          releaseCheck();
+        }
+        if (scenario === 'recheck-unavailable') {
+          await page.getByRole('status').filter({hasText: c.sessionUnavailable}).waitFor();
+          // The finished failed check must not leave intent for a later passive read.
+          await page.evaluate(async () => {
+            await (window as unknown as {signoutApp: {session: {check(): Promise<void>}}}).signoutApp.session.check();
+          });
         }
       }
       if (scenario === 'other') {
         await page.locator('.sessions').getByRole('status').filter({hasText: c.sessionRevoked}).waitFor();
         assert.equal(new URL(page.url()).pathname, '/account');
         assert.equal(await page.locator('.session-list li').count(), 1);
+      } else if (scenario === 'navigate-signup') {
+        await page.getByRole('heading', {name: c.signup, exact: true}).waitFor();
+        assert.equal(new URL(page.url()).pathname, '/signup');
+        assert.equal(await page.getByRole('status').count(), 0);
       } else {
         await page.getByRole('heading', {name: c.login, exact: true}).waitFor();
         assert.equal(new URL(page.url()).pathname, '/login');
         const expected = scenario === 'expired' || scenario === 'recheck-expired' ? c.sessionExpired
-          : scenario === 'passive' || scenario === 'stale-revoke' || scenario === 'navigate-away' ? undefined : c.signedOut;
+          : ['passive', 'passive-list', 'stale-revoke', 'navigate-away', 'single-navigation', 'rejected-revoke', 'recheck-unavailable', 'new-session', 'navigate-protected'].includes(scenario) ? undefined : c.signedOut;
         if (expected) await page.getByRole('status').filter({hasText: expected}).waitFor();
         else assert.equal(await page.getByRole('status').count(), 0);
         assert.equal(await page.getByRole('alert').count(), 0);
@@ -101,7 +128,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await page.getByRole('link', {name: c.signup, exact: true}).click();
         assert.equal(await page.getByText(c.signedOut, {exact: true}).count(), 0, 'navigation clears sign-out feedback');
       }
-      assert.deepEqual(writes, scenario === 'passive' || scenario === 'expired' ? []
+      assert.deepEqual(writes, scenario === 'passive' || scenario === 'expired' || scenario === 'passive-list' ? []
         : [{path: scenario === 'logout' ? '/logout' : '/sessions/revoke',
           body: scenario === 'logout' ? {} : {id: scenario === 'other' ? other.id : current.id}}]);
     } finally { releaseCheck(); await browser.close(); }

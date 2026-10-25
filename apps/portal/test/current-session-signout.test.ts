@@ -29,6 +29,16 @@ test('a passive unauthorized list rechecks without a sign-out reason', async () 
   assert.deepEqual(reasons, [undefined]);
 });
 
+for (const status of [403, 404, 429, 503]) test(`a refused revoke (${status}) cannot claim sign-out after passive session loss`, async () => {
+  const reasons: unknown[] = [];
+  const request = async <T>(path: string): Promise<ApiResult<T>> => path === '/sessions/revoke'
+    ? {ok: false, status, code: status === 429 ? 'rate_limited' : 'forbidden', retryAfterMs: 0} : unauthorized;
+  const controller = new AccountSecurityController(() => {}, (...args: unknown[]) => {reasons.push(args[0]);}, request);
+  controller.account('owner'); controller.sessions = [session];
+  await controller.revoke(session.id);
+  assert.deepEqual(reasons, [undefined]);
+});
+
 test('an unavailable reconciliation does not claim current-session sign-out', async () => {
   const reasons: unknown[] = [];
   const request = async <T>(path: string): Promise<ApiResult<T>> => path === '/sessions/revoke'
