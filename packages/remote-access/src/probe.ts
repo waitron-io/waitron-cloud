@@ -47,7 +47,14 @@ async function abortable<T>(promise:Promise<T>,options:ScopedProbeOptions):Promi
 }
 async function connections(hostname:string,options:ScopedProbeOptions):Promise<ProbeConnection[]> {
  if(options.signal?.aborted)throw new ProbeError(abortFailure(options));
- if(options.connect)return [await options.connect(hostname)];
+ if(options.connect){
+  // Attach cancellation and rejection handlers before a resolver can cancel synchronously.
+  const connection=await abortable(Promise.resolve().then(()=>{
+   if(options.signal?.aborted)throw new ProbeError(abortFailure(options));
+   return options.connect!(hostname);
+  }),options);
+  return [connection];
+ }
  let answers;try{answers=await abortable(lookup(hostname,{all:true,verbatim:true}),options);}catch(error){if(error instanceof ProbeError)throw error;if(options.signal?.aborted)throw new ProbeError(abortFailure(options));throw new ProbeError('dns');}
  const values=answers.slice(0,4),allowed=values.filter(v=>isPublicProbeAddress(v.address,v.family)).map(v=>({address:v.address,family:v.family as 4|6,port:443}));
  if(!allowed.length)throw new ProbeError(values.length?'address_forbidden':'dns');return allowed;
@@ -61,6 +68,7 @@ function classify(error:unknown,options:ScopedProbeOptions):ProbeFailure {
  if(error instanceof ProbeError)return error.failure;if(options.signal?.aborted)return abortFailure(options);return 'tls';
 }
 async function staffOnce(hostname:string,connection:ProbeConnection,options:ScopedProbeOptions):Promise<ProbeCertificate> {
+ if(options.signal?.aborted)throw new ProbeError(abortFailure(options));
  return new Promise((resolve,reject)=>{
   let settled=false;const done=(error?:unknown,value?:ProbeCertificate)=>{if(settled)return;settled=true;clearTimeout(timer);options.signal?.removeEventListener('abort',abort);if(error)reject(error);else resolve(value!);};
   const settings:ConnectionOptions={host:connection.address,port:connection.port,servername:hostname,ca:options.ca,rejectUnauthorized:true};
@@ -81,6 +89,7 @@ async function probeStaff(target:RemoteProbeTarget,options:ScopedProbeOptions):P
 }
 interface HttpsResult {status:number;headers:import('node:http').IncomingHttpHeaders;body:Buffer;certificate:ProbeCertificate}
 async function https(target:string,connection:ProbeConnection,path:string,method:'GET'|'POST',options:ScopedProbeOptions,body?:string,cookie?:string):Promise<HttpsResult> {
+ if(options.signal?.aborted)throw new ProbeError(abortFailure(options));
  return new Promise((resolve,reject)=>{
   let settled=false,req:ReturnType<typeof request>;
   const done=(error?:unknown,value?:HttpsResult)=>{if(settled)return;settled=true;clearTimeout(timer);options.signal?.removeEventListener('abort',abort);if(error)reject(error);else resolve(value!);};

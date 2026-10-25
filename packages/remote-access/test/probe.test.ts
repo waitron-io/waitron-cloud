@@ -599,3 +599,108 @@ test('public probe recognises Domain attribute names using only ASCII whitespace
   }finally{await fixture.close();}
  });
 });
+
+
+import {setTimeout as setWatchdog,clearTimeout as clearWatchdog} from 'node:timers';
+
+test('probe cancellation during connection resolution prevents network work',async t=>{
+ const material=await certificate('probe.example.test');
+ for(const turns of [0,1,2,3,4,5,6,7,8])await t.test(`abort after ${turns} promise turns`,async()=>{
+  const stop=new AbortController();let connections=0;
+  const fixture=await listenHttps(material,(_req,res)=>{res.end();});
+  fixture.server.on('connection',()=>connections++);
+  try{
+   const result=await probeTarget(target('probe.example.test'),{ca:material.cert,signal:stop.signal,connect:()=>{
+    const abortLater=(remaining:number)=>remaining?queueMicrotask(()=>abortLater(remaining-1)):stop.abort();
+    abortLater(turns);return Promise.resolve({address:'127.0.0.1',family:4,port:fixture.port});
+   }});
+   for(const service of [result.public,result.staff]){
+    assert.equal(service.status,'failed');
+    if(service.status==='failed')assert.equal(service.failure,'cancelled');
+   }
+   assert.equal(connections,0,'Cancelled resolution must not open a network connection');
+  }finally{await fixture.close();}
+ });
+});
+
+test('probe cancellation finishes while both connection resolvers are pending',async()=>{
+ const stop=new AbortController();let announce!:()=>void;
+ const entered=new Promise<void>(resolve=>{announce=resolve;});
+ let count=0;const finish:((value:{address:string;family:4;port:number})=>void)[]=[];
+ const result=probeTarget(target(),{signal:stop.signal,connect:()=>new Promise(resolve=>{
+  finish.push(resolve);if(++count===2)announce();
+ })});
+ await entered;stop.abort();
+ let cancelWatchdog=()=>{};
+ try{
+  const value=await Promise.race([result,new Promise<undefined>(resolve=>{const timer=setWatchdog(()=>resolve(undefined),1000);cancelWatchdog=()=>clearWatchdog(timer);})]);
+  assert.ok(value,'Cancellation must finish without waiting for the address resolver');
+  for(const service of [value.public,value.staff]){
+   assert.equal(service.status,'failed');
+   if(service.status==='failed')assert.equal(service.failure,'cancelled');
+  }
+ }finally{
+  cancelWatchdog();
+  for(const resolve of finish)resolve({address:'127.0.0.1',family:4,port:1});
+  await result;
+ }
+});
+
+test('public and staff probes retain successful deferred connection resolution',async()=>{
+ const material=await certificate('probe.example.test');let replays=0;
+ const fixture=await listenHttps(material,(req,res)=>{
+  if(req.url==='/public/availability'&&!req.headers.cookie){res.statusCode=403;res.setHeader('content-type','text/html');res.end('<script src="/_cloud/challenge.js"></script>');}
+  else if(req.url==='/_cloud/challenge'){res.setHeader('content-type','application/json');res.end('{"challenge":"fixture-challenge","difficulty":8}');}
+  else if(req.url==='/_cloud/solve'){res.statusCode=204;res.setHeader('set-cookie','__Host-waitron-public=fixture; Path=/; Secure; HttpOnly; SameSite=Strict');res.end();}
+  else{replays++;assert.equal(req.headers.cookie,'__Host-waitron-public=fixture');res.setHeader('content-type','application/json');res.end('{}');}
+ });
+ try{
+  const result=await probeTarget(target('probe.example.test'),{ca:material.cert,connect:async()=>{
+   await Promise.resolve();return {address:'127.0.0.1',family:4,port:fixture.port};
+  }});
+  assert.equal(result.public.status,'healthy');assert.equal(result.staff.status,'healthy');assert.equal(replays,1);
+ }finally{await fixture.close();}
+});
+
+
+test('probe connection resolution retains the overall deadline failure',async()=>{
+ const finish:((value:{address:string;family:4;port:number})=>void)[]=[];
+ const result=probeTarget(target(),{connect:()=>new Promise(resolve=>finish.push(resolve))});
+ let cancelWatchdog=()=>{};
+ try{
+  const value=await Promise.race([result,new Promise<undefined>(resolve=>{const timer=setWatchdog(()=>resolve(undefined),17000);cancelWatchdog=()=>clearWatchdog(timer);})]);
+  assert.ok(value,'The overall deadline must finish even when address resolution never returns');
+  for(const service of [value.public,value.staff]){
+   assert.equal(service.status,'failed');
+   if(service.status==='failed')assert.equal(service.failure,'timeout');
+  }
+ }finally{
+  cancelWatchdog();
+  for(const resolve of finish)resolve({address:'127.0.0.1',family:4,port:1});
+  await result;
+ }
+});
+
+test('probe cancellation consumes an address resolver rejection',async()=>{
+ const stop=new AbortController();
+ const result=await probeTarget(target(),{signal:stop.signal,connect:async()=>{
+  stop.abort();throw new Error('fixture-resolution-refused');
+ }});
+ for(const service of [result.public,result.staff]){
+  assert.equal(service.status,'failed');
+  if(service.status==='failed')assert.equal(service.failure,'cancelled');
+ }
+});
+
+
+test('probe cancellation prevents queued resolver invocation',async()=>{
+ const stop=new AbortController();let calls=0;
+ const result=await probeTarget(target(),{signal:stop.signal,connect:()=>{
+  calls++;stop.abort();return {address:'127.0.0.1',family:4,port:1};
+ }});
+ for(const service of [result.public,result.staff]){
+  assert.equal(service.status,'failed');
+  if(service.status==='failed')assert.equal(service.failure,'cancelled');
+ }
+ assert.equal(calls,1,'A resolver queued before cancellation must not run after cancellation');
+});
