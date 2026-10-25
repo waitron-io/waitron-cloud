@@ -380,7 +380,7 @@ export async function withLitestreamCloseDiagnostics({ stage, close, report = li
     const raw = own(error, 'litestreamCloseDiagnostic'), reason = own(raw, 'reason');
     const diagnostic = {};
     if (closeReasons.has(reason)) diagnostic.reason = reason;
-    for (const key of ['pending', 'completed', 'connections', 'idleActionsAtAdmission', 'activeTransfers',
+    for (const key of ['pending', 'completed', 'connections', 'idleActionsAtAdmission', 'forwardingTransfers',
       'bytesIn', 'expectedIn', 'bytesOut', 'expectedOut']) {
       const value = own(raw, key);
       if (Number.isSafeInteger(value) && value >= 0) diagnostic[key] = value;
@@ -526,9 +526,9 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   });
   server.on('clientError', (error, socket) => {
     const active = socketTransfers.get(socket);
-    // A pipelined socket can have several requests; attribute only an unambiguous active transfer.
-    const { operation, ...context } = active?.size === 1 ? active.values().next().value() : {};
-    remember('client-error', error, 'client-error', operation, { activeTransfers: active?.size ?? 0, ...context });
+    // Parser errors can belong to the next message; only network errors can name a sole forwarding request.
+    const { operation, ...context } = networkErrors.has(own(error, 'code')) && active?.size === 1 ? active.values().next().value() : {};
+    remember('client-error', error, 'client-error', operation, { forwardingTransfers: active?.size ?? 0, ...context });
     poison('client-error', error, 'client-error'); socket.destroy();
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');

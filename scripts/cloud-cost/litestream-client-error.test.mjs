@@ -52,12 +52,12 @@ for (const operation of ['list', 'put']) test(`a socket write error identifies i
   assert.equal(JSON.stringify(records).includes('PRIVATE_CANARY'), false);
 });
 
-async function heldFixture(t) {
+async function heldFixture(t, options = {}) {
   const backend = createServer((req, res) => { req.on('error', () => {}); req.resume(); });
   backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
   t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
   const meter = createMeter({ phase: 'workload', clock: () => 0 });
-  const front = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`, meter, phase: 'workload' });
+  const front = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`, meter, phase: 'workload', ...options });
   t.after(() => front.close().catch(() => {}));
   const sockets = [], waiters = [];
   const emit = Server.prototype.emit;
@@ -91,7 +91,7 @@ test('a client error identifies its own socket while another operation is active
     await f.waitFor(index + 1);
   }
   const diagnostic = await f.refuse(f.sockets[0]);
-  assert.equal(diagnostic.activeTransfers, 1); assert.equal(diagnostic.operation, 'list');
+  assert.equal(diagnostic.forwardingTransfers, 1); assert.equal(diagnostic.operation, 'list');
   assert.equal(diagnostic.responseHeadersSeen, false);
 });
 
@@ -106,7 +106,7 @@ test('a pipelined socket error reports ambiguity instead of guessing an operatio
     + message('PUT', '/PRIVATE_CANARY/key', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'));
   await f.waitFor(2); assert.equal(f.sockets[0], f.sockets[1]);
   const diagnostic = await f.refuse(f.sockets[0]);
-  assert.equal(diagnostic.activeTransfers, 2); assert.equal(Object.hasOwn(diagnostic, 'operation'), false);
+  assert.equal(diagnostic.forwardingTransfers, 2); assert.equal(Object.hasOwn(diagnostic, 'operation'), false);
   assert.equal(Object.hasOwn(diagnostic, 'bytesIn'), false);
 });
 
@@ -134,14 +134,14 @@ test('a socket error after settlement leaves its earlier operation unattributed'
   const records = [];
   await assert.rejects(withLitestreamCloseDiagnostics({ stage: 'replication-transport', close: () => front.close(),
     report: line => records.push(JSON.parse(line)) }));
-  assert.equal(records.at(-1).diagnostic.activeTransfers, 0);
+  assert.equal(records.at(-1).diagnostic.forwardingTransfers, 0);
   assert.equal(Object.hasOwn(records.at(-1).diagnostic, 'operation'), false);
   assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
 });
 
 // New diagnostic counters must never turn an arbitrary error property into published content.
 test('socket diagnostic counters reject private values, accessors and invalid counts', async () => {
-  const fields = ['activeTransfers', 'bytesIn', 'expectedIn', 'bytesOut', 'expectedOut'];
+  const fields = ['forwardingTransfers', 'bytesIn', 'expectedIn', 'bytesOut', 'expectedOut'];
   let reads = 0;
   for (const invalid of ['PRIVATE_CANARY', -1, 0.5, Number.MAX_SAFE_INTEGER + 1, undefined]) {
     const raw = { reason: 'client-error' };
@@ -156,4 +156,38 @@ test('socket diagnostic counters reject private values, accessors and invalid co
     assert.equal(JSON.stringify(records).includes('PRIVATE_CANARY'), false);
   }
   assert.equal(reads, 0);
+});
+
+
+// A parser failure in the next message cannot identify the earlier valid request as its cause.
+test('a malformed next message does not attribute its parser error to a waiting list', async t => {
+  const { connect } = await import('node:net');
+  const f = await heldFixture(t), url = new URL(f.front.url);
+  const caller = connect(Number(url.port), url.hostname); caller.on('error', () => {});
+  t.after(() => caller.destroy()); await once(caller, 'connect');
+  caller.write(`GET /PRIVATE_CANARY?list-type=2 HTTP/1.1\r\nHost: local\r\nAmz-Sdk-Invocation-Id: ${headers['amz-sdk-invocation-id']}\r\nAmz-Sdk-Request: attempt=1; max=3\r\n\r\n`);
+  await f.waitFor(1);
+  const closed = new Promise(resolve => caller.once('close', resolve));
+  caller.write('\x01\x02 PRIVATE_CANARY\r\n\r\n'); await closed;
+  const records = [];
+  await assert.rejects(withLitestreamCloseDiagnostics({ stage: 'replication-transport', close: () => f.front.close(),
+    report: line => records.push(JSON.parse(line)) }));
+  const diagnostic = records.at(-1).diagnostic;
+  assert.equal(diagnostic.reason, 'client-error'); assert.equal(diagnostic.ioEvent, 'client-error');
+  assert.equal(Object.hasOwn(diagnostic, 'operation'), false);
+  assert.equal(Object.hasOwn(diagnostic, 'bytesIn'), false);
+  assert.equal(JSON.stringify(records).includes('PRIVATE_CANARY'), false);
+});
+
+// Pending body validation is separate from the fully validated requests available for attribution.
+test('a partial mutation body reports no validated forwarding transfer while validation is pending', async t => {
+  const { connect } = await import('node:net');
+  const f = await heldFixture(t, { allowBulkDeletes: true }), url = new URL(f.front.url);
+  const caller = connect(Number(url.port), url.hostname); caller.on('error', () => {});
+  t.after(() => caller.destroy()); await once(caller, 'connect');
+  caller.write(`POST /PRIVATE_CANARY?delete HTTP/1.1\r\nHost: local\r\nAmz-Sdk-Invocation-Id: ${headers['amz-sdk-invocation-id']}\r\nAmz-Sdk-Request: attempt=1; max=3\r\nContent-Length: 100\r\n\r\npartial!`);
+  await f.waitFor(1); assert.equal(f.front.checkpoint().pending, 1);
+  const diagnostic = await f.refuse(f.sockets[0]);
+  assert.equal(diagnostic.forwardingTransfers, 0);
+  assert.equal(Object.hasOwn(diagnostic, 'operation'), false);
 });

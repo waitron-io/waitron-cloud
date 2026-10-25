@@ -5120,10 +5120,12 @@ and `EPIPE`, a broken pipe. All 25 attempts had left the transport, but one
 accounting attempt remained unsettled. D268 changes the delayed-PUT fixture;
 it does not cover this server-level socket error.
 
-The transport now records the failing socket's active operation, observed and
-expected body bytes, response-header state and the idle-action count at admission. It attributes
-only a single active request; pipelined requests remain explicitly ambiguous,
-and completed requests supply no stale context. Native HTTP controls inject a
+For a network error, the transport now records the failing socket's sole
+forwarding operation, observed and expected body bytes, response-header state
+and the idle-action count at admission. Its `forwardingTransfers` count covers
+fully validated requests; `pending` also includes bodies still being checked.
+Parser errors name no operation, pipelined requests remain ambiguous, and
+completed requests supply no stale context. Native HTTP controls inject a
 socket error while retaining real parsing, counters and refusal. A separate native
 loopback probe reproduces actual `EPIPE` by closing the caller while a large list
 reply starts. This demonstrates one mechanism; the historical official-binary
