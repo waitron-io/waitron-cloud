@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {isPublicProbeAddress} from '../src/probe.ts';
 
-// Omitting or narrowing the reserved subnet must expose these valid IPv6 targets.
+// Removing the subnet must expose every target; narrowing it must expose a subset.
 for(const address of [
  'fe00::','fe00::1','fe00::8.8.8.8','FE00:0000:0000:0000:0000:0000:0000:0001',
  'fe00::1%eth0','fe3f:ffff:ffff:ffff:ffff:ffff:ffff:ffff','fe40::',
