@@ -5087,8 +5087,8 @@ reply. Removing either observation from the smoke's commit witness fails only it
 new check; the five original commit tests still pass. These controlled observations
 prove witness wiring, not actual truncated-stream handling. Separate native HTTP
 controls now test the writer-running check at acknowledgement. A controlled close
-notification arrives just before the complete, valid stop reply ends. The real
-allowance ledger must retain its pre-acknowledgement new-upload permission, and
+notification is delivered in the complete, valid reply's end event, before the
+smoke's response-end handler. The real allowance ledger must retain its pre-acknowledgement new-upload permission, and
 the smoke must refuse before restore without signalling that already-closed writer.
 The paired running-writer control accepts stop and completes its synthetic restore.
 Removing only the response-end writer check fails the new closed-writer case while
