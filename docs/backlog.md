@@ -300,6 +300,10 @@ Connect a venue and Recover offer Retry only after the session check fails.
 While it runs, you see the checking message without an inactive retry action.
 Browser checks cover both routes in English/Spanish, light/dark and phone/desktop,
 including HTTP and network failures, retry to sign-in and Retry-After disabling.
+Monitoring, Public website and Staff access are groups within each venue entry,
+so two monitored venues do not repeat page-region names. Database-free browser
+checks cover both venues, current and unknown health, evidence dates and disabled
+monitoring in English/Spanish, both themes and phone/desktop widths.
 Installation, snapshot, monitoring and recovery dates spell out the month in
 English and Spanish. Local time and seconds are retained, including the warning
 about changes lost during recovery. Database-free browser checks cover both
