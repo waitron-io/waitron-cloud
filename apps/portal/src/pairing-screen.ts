@@ -4,7 +4,7 @@ export function pairingScreen(app:PortalApp){
   const p=app.pairing,c=app.copy;
   if(!p.requestId||app.link.invalid)return html`<p>${c.pairMissing}</p>`;
   if(app.session.state.kind!=='authenticated')return html`<p role="status">${app.session.state.kind==='unavailable'?c.sessionUnavailable:c.checking}</p>
-    <wt-button .disabled=${!!app.waiting} @click=${()=>{void app.session.check();}}>${c.retry}</wt-button>`;
+    ${app.session.state.kind==='unavailable'?html`<wt-button .disabled=${!!app.waiting} @click=${()=>{void app.session.check();}}>${c.retry}</wt-button>`:nothing}`;
   const logout=html`<wt-button .disabled=${app.logoutDisabled} @click=${()=>{void app.logout();}}>${c.signout}</wt-button>`;
   if(!p.loaded)return html`${p.pending?html`<p role="status">${c.pairLoading}</p>`:nothing}
     <wt-button .disabled=${p.pending||!!p.waiting} @click=${()=>{void p.load();}}>${c.retry}</wt-button>${logout}`;
