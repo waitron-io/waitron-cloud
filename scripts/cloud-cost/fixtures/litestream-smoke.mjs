@@ -119,7 +119,8 @@ async function smoke() {
     let uploaded = false;
     for (let n = 0; n < 40; n++) {
       if (!children.has(replicator.child)) fail();
-      if ((await list()).some(r => r.Key.endsWith('.ltx'))) { uploaded = true; break; }
+      // Storage visibility can precede the successful upload reply; finish initial readiness before the next write.
+      if ((await list()).some(r => r.Key.endsWith('.ltx')) && replication.transport.checkpoint().pending === 0) { uploaded = true; break; }
       await delay(500);
     }
     if (!uploaded) fail(); stage = 'second-sale'; await sale(2);

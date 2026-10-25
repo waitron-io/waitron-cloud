@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 
 // The real smoke, audit, counters and forwarding proxy run against a local HTTP store.
 // Only the external venue, SDK administration, SQLite reader and native process are substituted.
-function run({ backendStatus = 200, versionId = null, transport = '1' } = {}) {
+function run({ backendStatus = 200, versionId = null, transport = '1', holdInitialReply = false } = {}) {
   const actual = new URL('./litestream.mjs', import.meta.url).href;
   const meter = new URL('./meter.mjs', import.meta.url).href;
   const fixture = new URL('./fixtures/litestream-smoke.mjs', import.meta.url).href;
@@ -14,7 +14,7 @@ function run({ backendStatus = 200, versionId = null, transport = '1' } = {}) {
       export const readFileSync=()=>JSON.stringify({config:{},initial:{}});`,
     'node:sqlite': `export class DatabaseSync {prepare(){return {get:()=>({integrity_check:'ok',n:globalThis.closedWriter?2:0})};}close(){}}`,
     'node:module': `class Command{};export const createRequire=()=>()=>({S3Client:class {
-      async send(){if(globalThis.writerReady)await globalThis.writerReady;return {Contents:[{Key:'stream/one.ltx',Size:4}]};}destroy(){}},
+      async send(){if(globalThis.writerReady)await (globalThis.initialReplyHeld??globalThis.writerReady);return {Contents:[{Key:'stream/one.ltx',Size:4}]};}destroy(){}},
       CreateBucketCommand:Command,ListObjectsV2Command:Command,DeleteObjectCommand:Command,DeleteBucketCommand:Command});`,
     '/code/cost-waitron-adapter.mjs': `export const openReplay=async()=>({recordSale:async()=>{if(globalThis.secondSale)await globalThis.secondSale();},
       counts:()=>({attempted:2,successful:2,failed:0}),verify:async()=>({ok:true,issues:0}),close:async()=>{}});`,
@@ -31,6 +31,8 @@ function run({ backendStatus = 200, versionId = null, transport = '1' } = {}) {
           const callback=args[2];args[2]=incoming=>{
             if(args[1].headers['amz-sdk-invocation-id']==='22222222-2222-4333-8444-555555555555'){
               globalThis.releaseBackend=()=>callback(incoming);globalThis.secondCommitted();
+            }else if(${holdInitialReply} && args[1].headers['amz-sdk-invocation-id']==='11111111-2222-4333-8444-555555555555'){
+              globalThis.initialStored();setTimeout(()=>callback(incoming),50);
             }else callback(incoming);
           };
         }else if(args[0]?.socketPath)args[0]={...args[0],socketPath:'/tmp/d152-commit-'+process.pid+'.sock'};
@@ -59,10 +61,12 @@ function run({ backendStatus = 200, versionId = null, transport = '1' } = {}) {
         backend.listen(0,'127.0.0.1',()=>{
           globalThis.backendPort=backend.address().port;
           active=put('11111111-2222-4333-8444-555555555555',1).then(status=>status===503?put('11111111-2222-4333-8444-555555555555',2):Promise.reject(Error('missing injected retry')));
-          ready(active);
+          active.then(()=>globalThis.initialReplyComplete=true);ready(active);
         });
         let ready;globalThis.writerReady=new Promise(resolve=>ready=resolve);
+        if(${holdInitialReply})globalThis.initialReplyHeld=new Promise(resolve=>globalThis.initialStored=resolve);
         globalThis.secondSale=async()=>{let committed;const wait=new Promise(resolve=>committed=resolve);globalThis.secondCommitted=committed;
+          if(${holdInitialReply} && !globalThis.initialReplyComplete)throw Error('INITIAL_REPLY_PENDING');
           active=put('22222222-2222-4333-8444-555555555555',1);active.catch(()=>{});await wait;};
         let stopping=false;child.kill=()=>{if(stopping)return true;stopping=true;
           active.catch(()=>{}).then(()=>{globalThis.closedWriter=true;socket.close(()=>{});backend.closeAllConnections();backend.close(()=>{});child.emit('close',0);});return true;};
@@ -101,4 +105,11 @@ test('the basic smoke also measures both hops for its after-stop allowance', () 
   assert.deepEqual(output.afterStop.producer, { attempts: 1, bytesIn: 0, bytesOut: 4 });
   assert.deepEqual(output.afterStop.observer, { attempts: 1, bytesIn: 0, bytesOut: 4 });
   assert.equal(output.costAccuracy.status, 'incomplete');
+});
+
+test('initial upload readiness waits for its reply even when the stored object is visible', () => {
+  const result = run({ holdInitialReply: true });
+  assert.equal(result.error, undefined); assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.restoredSales, 2); assert.equal(output.injectedFailures, 1);
 });

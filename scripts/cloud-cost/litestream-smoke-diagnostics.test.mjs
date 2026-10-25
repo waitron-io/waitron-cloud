@@ -28,7 +28,7 @@ function run(failure) {
       verify:async()=>({ok:true,issues:0}),close:async()=>{}});`,
     '/code/litestream.mjs': `export {createLitestreamAfterStop,litestreamAfterStopOutput,withLitestreamCloseDiagnostics} from ${JSON.stringify(actual)};
       export const createLitestreamRequestAudit=()=>({write(){},end(){},snapshot:()=>({})});
-      export const createLitestreamTransport=async({phase})=>({url:'http://127.0.0.1:1',snapshot:()=>({}),whenIdle:async action=>action(),
+      export const createLitestreamTransport=async({phase})=>({url:'http://127.0.0.1:1',checkpoint:()=>({pending:0}),snapshot:()=>({}),whenIdle:async action=>action(),
         close:async()=>{if(process.env.CLOSE_FAILURE===(phase==='workload'?'replication-transport':'restore-transport'))throw Error('PRIVATE_CANARY');}});`,
     '/code/meter.mjs': `export const createMeter=({phase})=>({phase,snapshot:()=>({})});
       export const createMeteringProxy=async({meter})=>({url:'http://127.0.0.1:1',snapshot:()=>({}),close:async()=>{

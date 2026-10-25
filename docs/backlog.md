@@ -4961,8 +4961,18 @@ Native HTTP controls cover invalid acknowledgement, early exit, shared deadlines
 failed backend commits and post-stop missing sales. The official macOS 0.5.17
 binary also restores both synthetic SQLite rows from final storage and verifies
 unversioned inventories. That probe substitutes the venue and fiscal adapter;
-it does not qualify the real fiscal workload. Genuine Linux/SeaweedFS cases,
-all six summary consumers and whole-branch review remain in the final plan task.
+it does not qualify the real fiscal workload. All six genuine smoke consumers now
+check the separate ledger, preserve incomplete billing and display its cost caveat.
+An official-binary held-list control retains a real interrupted response and the
+two different byte observations. The delayed-PUT probe exposed initial readiness
+accepting storage visibility before the upload reply; the existing 40-poll loop
+now also requires that initial transfer to settle before the second sale. The
+1,500 ms delayed replies then restore both synthetic rows with integrity intact.
+No stop deadline, cap, official pin or pre-acknowledgement refusal is relaxed.
+Native checks cover three/four-attempt boundaries with real HTTP requests; the
+official held-list control observes one affected attempt and does not claim that
+four official attempts occurred. Genuine Linux/SeaweedFS qualification and the
+whole-branch review remain before landing.
 
 [PR428's cost run 40144823848, job 121023853072](https://github.com/waitron-io/waitron-cloud/actions/runs/40144823848/job/121023853072)
 refuses during `stop`; cleanup records `active-close` after 21 completed attempts.

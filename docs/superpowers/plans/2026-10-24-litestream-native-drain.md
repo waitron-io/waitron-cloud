@@ -1,6 +1,6 @@
 # D152: official-Litestream after-stop accounting implementation plan
 
-Status: revised 25 October 2026. The reviewed documentation landed in PR432. Tasks 1–3 are implemented on the runtime branch; Task 4 remains before review and landing. **Custom binary, Go extension and custom build pipeline: REJECTED by the owner on 25 October.** Keep official **0.5.17** pins.
+Status: revised 25 October 2026. The reviewed documentation landed in PR432. Tasks 1–3 and Task 4 local checks are implemented on the runtime branch; whole-branch review and Linux CI remain before landing. **Custom binary, Go extension and custom build pipeline: REJECTED by the owner on 25 October.** Keep official **0.5.17** pins.
 
 > Execute inline, using `superpowers:executing-plans` and the TDD skill before writing implementation or tests. The driver handles campaign/backlog edits, review and landing. Keep runtime work on its implementation branch.
 
@@ -49,8 +49,9 @@ The driver updates `docs/backlog.md` separately. No other runtime path is author
 
 **Files:** `litestream.mjs`, `meter.mjs` and their audit/transport/interruption/meter tests above.
 
-Tasks 1–3 are implemented on the runtime branch. The smoke shares the ledger,
-backend commit evidence and strict restore view. Task 4 qualification remains.
+Tasks 1–3 and Task 4 local checks are implemented on the runtime branch. The smoke
+shares the ledger, backend commit evidence and strict restore view. Review and Linux
+qualification remain.
 **Interface:** export `createLitestreamAfterStop({clock})` from `litestream.mjs`; return a session object passed as optional `afterStop` to `createLitestreamRequestAudit`, `createLitestreamTransport` and `createMeter`. No caller-supplied cap override. Ordinary signatures/results remain compatible.
 **Ledger inputs:** `acknowledgeStop` validates the bounded reply; `issue`, `admit` and `settle` accept private invocation+ordinal, operation, hop and the applicable outcome/byte/commit evidence, with monotonic event order. `snapshot()` returns only the aggregate contract in the spec. Validate closed event shapes; classify by admission time, never log arrival or response finish.
 
@@ -80,6 +81,14 @@ backend commit evidence and strict restore view. Task 4 qualification remains.
 - [x] Add closed validation for the smoke's aggregate `afterStop` output and `costAccuracy` caveat from the spec. Tests require actual attempts, outcomes and both observed byte counts to survive accepted incomplete metadata; discrepancies stay unknown. Empty ledger preserves exact expectations. Reject unknown fields and private canaries in exported data/diagnostics.
 
 ## Task 4: qualify the official binary and finish through the driver
+
+Local checkpoint: all six consumers check the ledger/caveat. Initial readiness now
+requires the visible upload's reply to settle within the original 40 polls; the
+1,500 ms official macOS probe passes after reproducing the old pre-ack interruption.
+The official held-list control observes one affected attempt; cap/cap+1 is proved
+with deterministic real HTTP attempts, not fabricated extra native attempts.
+Shutdown harnesses start their deliberately held PUT at the second sale, preserving
+all original assertions and the stop budget. Linux/SeaweedFS and review remain.
 
 **Files:** `fixtures/stack-conformance.test.mjs`; preparation/discovery tests only if discovered wiring requires a change. Reuse existing files instead of inventing an unprepared conformance target.
 

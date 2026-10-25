@@ -9,10 +9,13 @@ function shutdownWriter(options, url) {
   const { request, createServer } = process.getBuiltinModule('http');
   const headers = { 'amz-sdk-invocation-id': '11111111-2222-4333-8444-555555555555',
     'amz-sdk-request': 'attempt=1; max=3', 'content-length': '100' };
-  const upload = request(url + '/synthetic/key', { method: 'PUT', headers }, response => {
-    response.on('error', () => {}); response.resume();
+  let upload;
+  process.once('message', () => {
+    upload = request(url + '/synthetic/key', { method: 'PUT', headers }, response => {
+      response.on('error', () => {}); response.resume();
+    });
+    upload.on('error', () => {}); upload.end('x'.repeat(100));
   });
-  upload.on('error', () => {});
   let acknowledged = false;
   const server = createServer((request, response) => {
     let body = ''; request.on('data', bytes => body += bytes);
@@ -39,12 +42,11 @@ function shutdownWriter(options, url) {
   process.on('SIGTERM', () => {
     if (options.requireControl && !acknowledged) { process.stderr.write('CONTROL_BEFORE_SIGNAL_REQUIRED'); process.exit(3); }
     setTimeout(() => {
-      const finish = () => { clearInterval(alive); clearTimeout(deadline); server.close(() => {}); process.exitCode = 0; };
+      const finish = () => { clearInterval(alive); clearTimeout(deadline); server.close(() => {}); process.disconnect(); process.exitCode = 0; };
       if (options.reply) { if (upload.closed) finish(); else upload.once('close', finish); }
       else { upload.destroy(); finish(); }
     }, options.exitDelay);
   });
-  upload.end('x'.repeat(100));
 }
 
 // Cancelling the native writer after commit can still cut off its unacknowledged PUT.
@@ -63,9 +65,11 @@ function run({ reply, ack = 'valid', controlDelay = 0, exitDelay = 0, requireCon
     'node:timers/promises': `export const setTimeout=async ms=>{if(ms!==1000)await process.getBuiltinModule('timers/promises').setTimeout(ms);};`,
     'node:sqlite': `export class DatabaseSync {prepare(){return {get:()=>({integrity_check:'ok',n:globalThis.writerEnded?${finalSales}:2})};}close(){}}`,
     'node:module': `class Command{}; export const createRequire=()=>()=>({S3Client:class {
-      async send(){if(globalThis.shutdownFixture)await globalThis.shutdownFixture.stored;return {Contents:[{Key:'stream/one.ltx',Size:100}]};}destroy(){}},
+      async send(){return {Contents:[{Key:'stream/one.ltx',Size:100}]};}destroy(){}},
       CreateBucketCommand:Command,ListObjectsV2Command:Command,DeleteObjectCommand:Command,DeleteBucketCommand:Command});`,
-    '/code/cost-waitron-adapter.mjs': `export const openReplay=async()=>({recordSale:async()=>{},counts:()=>({attempted:2,successful:2,failed:0}),
+    '/code/cost-waitron-adapter.mjs': `export const openReplay=async()=>({recordSale:async()=>{
+      if(globalThis.writerChild){globalThis.writerChild.send('sale');await globalThis.shutdownFixture.stored;}
+    },counts:()=>({attempted:2,successful:2,failed:0}),
       verify:async()=>({ok:true,issues:0}),close:async()=>{}});`,
     '/code/meter.mjs': `export const createMeter=()=>({observeAttempt(){},invalidate(){},snapshot:()=>({})});
       export const createMeteringProxy=async()=>({url:'http://127.0.0.1:1',close:async()=>{}});
@@ -89,7 +93,8 @@ function run({ reply, ack = 'valid', controlDelay = 0, exitDelay = 0, requireCon
       export function spawn(binary,args){const state=globalThis.shutdownFixture;
         if(args[0]==='replicate'){
           const code='('+${JSON.stringify(shutdownWriter.toString())}+')('+JSON.stringify(${JSON.stringify(options)})+','+JSON.stringify(state.url)+')';
-          const child=process.getBuiltinModule('child_process').spawn(process.execPath,['--input-type=module','--eval',code],{stdio:['ignore','ignore','pipe']});child.once('close',()=>globalThis.writerEnded=true);return child;
+          const child=process.getBuiltinModule('child_process').spawn(process.execPath,['--input-type=module','--eval',code],{stdio:['ignore','ignore','pipe','ipc']});
+          globalThis.writerChild=child;child.once('close',()=>globalThis.writerEnded=true);return child;
         }
         const child=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>true;
         state.stored.then(()=>{if(${reply})setTimeout(()=>state.reply(),75);setImmediate(()=>child.emit('close',0));});
