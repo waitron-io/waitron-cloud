@@ -4059,8 +4059,11 @@ notifications separately.
   addresses. Native checks cover both ends, its midpoint, expanded, dotted and
   scoped forms, neighbouring refusals and preserved public IPv4/IPv6 decisions.
   Removing or narrowing the subnet fails the new checks while the original policy
-  tests pass. Actual routing, loopback reachability and other reserved ranges
-  remain unqualified. See the
+  tests pass. The filter also refuses IANA's reserved `4000::/3` range.
+  Native regressions cover both ends, its midpoint, expanded, dotted and scoped
+  forms, with existing decisions outside this range preserved. Removing, narrowing
+  or shifting this subnet fails the new checks. Actual routing, loopback reachability
+  and other reserved ranges remain unqualified. See the
   [IANA address-space registry](https://www.iana.org/assignments/ipv6-address-space).
   The monitor rejects
   late results after hostname changes, replacement or revocation, treats stale evidence as
