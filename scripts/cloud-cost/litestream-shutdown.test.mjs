@@ -37,7 +37,8 @@ function shutdownWriter(options, url) {
       }, options.controlDelay);
     });
   });
-  server.listen(process.env.STOP_TEST_SOCKET);
+  if (options.ack !== 'exit-held-reply') server.listen(process.env.STOP_TEST_SOCKET);
+  process.on('message', message => { if (message === 'exit-held-reply') process.exit(0); });
   const alive = setInterval(() => {}, 1000), deadline = setTimeout(() => process.exit(2), 2500);
   process.on('SIGTERM', () => {
     if (options.requireControl && !acknowledged) { process.stderr.write('CONTROL_BEFORE_SIGNAL_REQUIRED'); process.exit(3); }
@@ -59,9 +60,11 @@ function run({ reply, ack = 'valid', controlDelay = 0, exitDelay = 0, requireCon
     'node:fs': `export const mkdirSync=()=>{},writeFileSync=()=>{},rmSync=()=>{};
       export const readFileSync=()=>JSON.stringify({config:{},initial:{}});`,
     'node:http': `const http=process.getBuiltinModule('http');export const createServer=http.createServer;
-      export const request=(...args)=>{if(args[0]?.socketPath){args[0]={...args[0],socketPath:process.env.STOP_TEST_SOCKET};
+      export const request=(...args)=>{const isControl=Boolean(args[0]?.socketPath);if(isControl){args[0]={...args[0],socketPath:process.env.STOP_TEST_SOCKET};
         if(${reply})setTimeout(()=>globalThis.shutdownFixture.reply(),75);}
-        return http.request(...args);};`,
+        const control = http.request(...args);
+        if (isControl && ${JSON.stringify(ack === 'exit-held-reply')}) globalThis.heldStopControl = control;
+        return control;};`,
     'node:timers/promises': `export const setTimeout=async ms=>{if(ms!==1000)await process.getBuiltinModule('timers/promises').setTimeout(ms);};`,
     'node:sqlite': `export class DatabaseSync {prepare(){return {get:()=>({integrity_check:'ok',n:globalThis.writerEnded?${finalSales}:2})};}close(){}}`,
     'node:module': `class Command{}; export const createRequire=()=>()=>({S3Client:class {
@@ -94,7 +97,18 @@ function run({ reply, ack = 'valid', controlDelay = 0, exitDelay = 0, requireCon
         if(args[0]==='replicate'){
           const code='('+${JSON.stringify(shutdownWriter.toString())}+')('+JSON.stringify(${JSON.stringify(options)})+','+JSON.stringify(state.url)+')';
           const child=process.getBuiltinModule('child_process').spawn(process.execPath,['--input-type=module','--eval',code],{stdio:['ignore','ignore','pipe','ipc']});
-          globalThis.writerChild=child;child.once('close',()=>globalThis.writerEnded=true);return child;
+          globalThis.writerChild=child;child.once('close',()=>globalThis.writerEnded=true);
+          if (${JSON.stringify(ack === 'exit-held-reply')}) {
+            // The parent holds the reply open so socket closure cannot stand in for the writer-exit race.
+            const http=process.getBuiltinModule('http');
+            const server=http.createServer((req,res)=>{req.resume();req.on('end',()=>child.send('exit-held-reply'));});
+            server.listen(process.env.STOP_TEST_SOCKET);
+            child.once('close',(code,signal)=>setImmediate(()=>{
+              console.error(JSON.stringify({kind:'held-stop-at-writer-exit',code,signal,cancelled:globalThis.heldStopControl?.destroyed===true}));
+              server.closeAllConnections();server.close(()=>{});
+            }));
+          }
+          return child;
         }
         const child=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>true;
         state.stored.then(()=>{if(${reply})setTimeout(()=>state.reply(),75);setImmediate(()=>child.emit('close',0));});
@@ -213,4 +227,18 @@ test('after-stop output cannot pair different operations under equal request tot
 test('an interrupted list must retain its late-settlement count', () => {
   const input = incompleteLedger();input.lateSettlements = 0;input.lateAdmissions = 1;
   assert.throws(() => stream.litestreamAfterStopOutput(input), /Invalid cloud cost Litestream audit/);
+});
+
+// A dead writer cannot leave its separately hosted control request waiting for the stop timeout.
+test('writer exit cancels a pending stop request before the next event-loop turn', () => {
+  const result = run({ reply: true, ack: 'exit-held-reply' });
+  assert.equal(result.error, undefined, 'the smoke must collect the writer and its pending control');
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 1, result.stderr);
+  assert.equal(result.stdout, '');
+  const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+  assert.deepEqual(records.filter(row => row.kind === 'held-stop-at-writer-exit'),
+    [{ kind: 'held-stop-at-writer-exit', code: 0, signal: null, cancelled: true }]);
+  assert.equal(records.find(row => row.kind === 'litestream-stop')?.step, 'control');
+  assert.doesNotMatch(result.stderr, /Synthetic Litestream phase: restore/);
 });
