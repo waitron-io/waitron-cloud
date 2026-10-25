@@ -5149,8 +5149,22 @@ its existing subprocess deadline, while the seven original commit checks and the
 complete-reply control pass; restoring it passes all nine. Original assertion
 bodies and runtime bytes are unchanged. The writer, venue, SDK administration and
 SQLite reader remain substitutes, so official-binary and production truncated-stream
-handling still need qualification. A generic
-`active-close` still refuses measurement publication. Preserve the official pin,
+handling still need qualification.
+
+A paired native HTTP check now sends one of four declared upload bytes, then
+closes the writer's request after stop acknowledgement. The smoke records a
+client-error refusal at the stop's idle step, publishes no measurement and never
+invokes restore. The actual request at the writer-facing replication proxy is
+incomplete; cleanup collects all transports and proxies before the subprocess
+exits. The case catches broken request-error settlement and socket collection;
+it does not prove that the idle wait blocks while a transfer is active. Its complete four-byte
+control reconciles both counters and completes the stand-in restore. These checks
+use the existing generated writer and substitute venue, SDK administration and
+SQLite reader. They qualify actual HTTP truncation through the smoke; official
+Litestream, production shutdown and historical attribution remain open. Every
+original assertion and runtime file is unchanged.
+
+A generic `active-close` still refuses measurement publication. Preserve the official pin,
 three-attempt cap, ordinary accounting, restore and deadline checks in any repair;
 local Docker qualification remains unavailable until 3 November.
 
