@@ -4295,6 +4295,8 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   a successful retry. They use synthetic
   HTTP responses; real credential and database checks remain in CI. The shared
   message cannot diagnose browser restrictions, configuration or transport faults.
+  These failure checks explicitly provide a simulated passkey device; a paired
+  native check records whether the machine can begin without it.
   Request-body limits/formats/interruption still need cause-specific feedback.
 - R3 delivered: recovery approval and replacement refusals now distinguish missing
   confirmations, unverified or incompatible sources, reused replacement keys,

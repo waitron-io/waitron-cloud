@@ -5,7 +5,7 @@ import {build} from 'esbuild';
 import {chromium} from 'playwright';
 import {translations} from '../src/locale.ts';
 
-const bundle = await build({stdin: {contents: `import {applyTokens} from '@waitron-io/ui-core/tokens'; import {PortalApp} from './src/app.ts'; applyTokens(document.body); new PortalApp(document.querySelector('#portal'));`, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
+const bundle = await build({stdin: {contents: `import {applyTokens} from '@waitron-io/ui-core/tokens'; import {PortalApp} from './src/app.ts'; applyTokens(document.body); window.guidanceApp = new PortalApp(document.querySelector('#portal'));`, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const guidance = {
   en: 'Passkeys are unavailable. You can try again. Password sign-in remains available.',
@@ -50,8 +50,29 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             if (path === '/installations') return route.fulfill({json: {installations: []}});
             return route.fulfill({status: 503, json: {error: 'unavailable'}});
           });
+          const nativeControl = locale === 'en' && theme === 'light' && width === 390 && failure === 'browser';
+          if (nativeControl) {
+            await page.goto('https://portal.test/login'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+            const native = await page.evaluate(async () => {
+              const app = (window as unknown as {guidanceApp: {signInWithPasskey(): Promise<void>; passkeys: {supported?: boolean; error?: string; notice?: string}}}).guidanceApp;
+              await app.signInWithPasskey();
+              return {supported: app.passkeys.supported, error: app.passkeys.error, notice: app.passkeys.notice};
+            });
+            t.diagnostic(`Native passkey control: ${JSON.stringify({...native, optionsRequests: calls.filter(path => path.endsWith('/options')).length})}`);
+            calls.length = 0;
+          }
+          // A virtual platform authenticator makes the failure journey independent of host hardware.
+          const virtual = await page.context().newCDPSession(page);
+          await virtual.send('WebAuthn.enable');
+          await virtual.send('WebAuthn.addVirtualAuthenticator', {options: {protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true}});
           await page.goto('https://portal.test/login');
           await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+          const supported = await page.evaluate(async () => {
+            const passkeys = (window as unknown as {guidanceApp: {passkeys: {checkSupport(): Promise<void>; supported?: boolean}}}).guidanceApp.passkeys;
+            await passkeys.checkSupport(); return passkeys.supported;
+          });
+          assert.equal(supported, true, 'the virtual platform authenticator admits the intended failure journey');
+          if (nativeControl) t.diagnostic(`Virtual passkey control: ${JSON.stringify({supported})}`);
           await page.getByRole('button', {name: c.passkeySignIn, exact: true}).click();
           const alert = page.getByRole('alert').filter({hasText: c.passkeyUnavailable});
           await alert.waitFor();

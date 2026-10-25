@@ -135,8 +135,10 @@ message covers failed list/options requests, other refused sign-in or management
 requests, and browser prompt errors; it cannot establish a temporary cause. Password sign-in remains on the sign-in screen. On Account, a failed list
 read retains Retry and does not claim that your list is empty. Browser checks use
 synthetic HTTP responses to follow both paths, including a second refused
-passkey attempt and an incorrect password before a successful sign-in. They do not qualify real credential verification or
-repair a browser or service restriction. Request-body limits, malformed requests
+passkey attempt and an incorrect password before a successful sign-in. The fixture explicitly provides a simulated passkey
+device, while a native check records whether the machine could begin the
+passkey journey without one. These checks do not qualify real credential
+verification or repair a browser or service restriction. Request-body limits, malformed requests
 and interrupted requests still need cause-specific feedback.
 
 ## Existing actions to preserve
