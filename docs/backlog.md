@@ -5152,10 +5152,12 @@ SQLite reader remain substitutes, so official-binary and production truncated-st
 handling still need qualification.
 
 A paired native HTTP check now sends one of four declared upload bytes, then
-closes the writer's request after stop acknowledgement. The smoke refuses at
-passive transfer settlement, publishes no measurement and never starts restore.
-The request observed at its backend boundary is incomplete, and cleanup collects
-all transports and proxies before the subprocess exits. Its complete four-byte
+closes the writer's request after stop acknowledgement. The smoke records a
+client-error refusal at the stop's idle step, publishes no measurement and never
+invokes restore. The actual request at the writer-facing replication proxy is
+incomplete; cleanup collects all transports and proxies before the subprocess
+exits. The case catches broken request-error settlement and socket collection;
+it does not prove that the idle wait blocks while a transfer is active. Its complete four-byte
 control reconciles both counters and completes the stand-in restore. These checks
 use the existing generated writer and substitute venue, SDK administration and
 SQLite reader. They qualify actual HTTP truncation through the smoke; official

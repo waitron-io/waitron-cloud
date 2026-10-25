@@ -77,7 +77,7 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
       export const spawnSync=()=>({stdout:'0.5.17'});
       export function spawn(binary,args){
         const child=new EventEmitter();child.stderr=new EventEmitter();
-        if(args[0]==='restore'){child.kill=()=>true;setImmediate(()=>child.emit('close',0));return child;}
+        if(args[0]==='restore'){if(${uploadBody !== null})console.error(JSON.stringify({kind:'restore-started'}));child.kill=()=>true;setImmediate(()=>child.emit('close',0));return child;}
         const http=process.getBuiltinModule('http'),endpoint=globalThis.nativeConfig.dbs[0].replica.endpoint;
         let active=Promise.resolve();let requests=0;
         const put=async(invocation,ordinal)=>{
@@ -94,7 +94,7 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
           res.end(JSON.stringify({status:'stopped',path:'/state/synthetic-litestream-proof/venue/venue.db',txid:0}));
           setTimeout(()=>globalThis.releaseBackend?.(),25);
         });});socket.listen('/tmp/d152-commit-'+process.pid+'.sock');
-        const backend=http.createServer((req,res)=>{req.on('error',()=>{});req.resume();req.on('end',()=>{requests++;
+        const backend=http.createServer((req,res)=>{req.resume();req.on('end',()=>{requests++;
           if(${backendReply !== null} && requests===2){
             res.writeHead(200,{'content-length':'4'});res.write('o');
             if(${backendReply === 'complete'})res.end('kay');else globalThis.truncateBackend=()=>res.destroy();return;
@@ -230,6 +230,9 @@ test('the smoke collects a genuinely truncated PUT body without certifying it', 
     requestBytes: 1, expectedRequestBytes: 4, requestComplete: false }]);
   const stop = records.find(row => row.kind === 'litestream-stop');
   assert.equal(stop?.step, 'idle', result.stderr);
+  assert.equal(stop.diagnostic.reason, 'client-error', result.stderr);
+  assert.equal(stop.diagnostic.ioEvent, 'client-error', result.stderr);
+  assert.equal(records.some(row => row.kind === 'restore-started'), false);
   assert.equal(stop.diagnostic.pending, 0);
   assert.equal(stop.diagnostic.completed, 3);
   const collected = records.find(row => row.kind === 'litestream-close'
@@ -241,7 +244,7 @@ test('the smoke collects a genuinely truncated PUT body without certifying it', 
     assert.ok(records.some(row => row.kind === 'litestream-close' && row.stage === stage
       && ['fulfilled', 'rejected'].includes(row.status)), stage);
   }
-  assert.doesNotMatch(result.stderr, /Unhandled 'error' event|uncaughtException|Synthetic Litestream phase: restore/);
+  assert.doesNotMatch(result.stderr, /Unhandled 'error' event|uncaughtException/);
 });
 
 test('the paired complete PUT body reconciles both hops and completes the stand-in restore', () => {
@@ -257,4 +260,5 @@ test('the paired complete PUT body reconciles both hops and completes the stand-
   assert.equal(output.afterStop.bodiesReconciled, true);
   assert.deepEqual(output.afterStop.producer, { attempts: 1, bytesIn: 0, bytesOut: 4 });
   assert.deepEqual(output.afterStop.observer, { attempts: 1, bytesIn: 0, bytesOut: 4 });
+  assert.equal(records.filter(row => row.kind === 'restore-started').length, 1);
 });
