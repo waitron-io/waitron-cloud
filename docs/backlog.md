@@ -4993,7 +4993,8 @@ Retain their attempts, actual bytes and outcomes separately, and state the possi
 request-cost shortfall. Keep ordinary accounting strict, refuse traffic outside
 the cap or allowed operations, and preserve required upload completion, final
 sale restore, integrity, fiscal, privacy, cleanup and deadline checks. A generic
-`active-close` is still a failure. Genuine Linux qualification remains open; Docker is unavailable locally until 3 November.
+`active-close` is still a failure. Require exact-head Linux CI for this runtime
+change; local Docker is unavailable until 3 November.
 
 ## Recovery refusal messages and pasted codes (D192)
 
