@@ -19,7 +19,7 @@ export function publicUnavailable(accept:string|undefined,language:string|undefi
  const headers:Record<string,string>={'Retry-After':'30','Vary':'Accept, Accept-Language'};
  if(json>0&&json>=html)return {body:JSON.stringify({error:'venue_unavailable'}),type:'application/json',headers};
  const locale=preferences(language).filter(p=>p.q>0).sort((a,b)=>b.q-a.q).map(p=>p.value.split('-')[0]).find(value=>value==='en'||value==='es')??'en';
- const text=locale==='es'?{title:'No disponible temporalmente',message:'El local no está disponible ahora. Vuelve a intentarlo en unos momentos.',retry:'Volver a intentar'}:{title:'Temporarily unavailable',message:'The venue is unavailable right now. Please try again in a moment.',retry:'Try again'};
+ const text=locale==='es'?{title:'Local no disponible',message:'La página de este local no está disponible. Puedes volver a intentarlo.',retry:'Volver a intentar'}:{title:'Venue unavailable',message:'This venue’s page is unavailable. You can try again.',retry:'Try again'};
  headers['Content-Language']=locale;headers['Content-Security-Policy']=policy;
  return {body:`<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${text.title}</title><style>${style}</style></head><body><main><h1>${text.title}</h1><p>${text.message}</p><a href="/public/availability">${text.retry}</a></main></body></html>`,type:'text/html; charset=utf-8',headers};
 }

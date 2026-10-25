@@ -151,7 +151,7 @@ test('the unavailable page stays readable and retryable in both languages, theme
     const page=await context.newPage();const errors=[];page.on('pageerror',error=>errors.push(error.message));
     const response=await page.goto(url+'/public/availability');assert.equal(response.status(),503);
     assert.equal(await page.locator('html').getAttribute('lang'),language);
-    assert.match(await page.locator('h1').innerText(),language==='es'?/No disponible temporalmente/:/Temporarily unavailable/);
+    assert.match(await page.locator('h1').innerText(),language==='es'?/^Local no disponible$/:/^Venue unavailable$/);
     const layout=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,background:getComputedStyle(document.body).backgroundColor,main:document.querySelector('main').getBoundingClientRect().toJSON()}));
     assert.equal(layout.overflow,false);assert.equal(layout.background,theme==='light'?'rgb(247, 248, 250)':'rgb(17, 24, 39)');assert(layout.main.width<=width);
     if(process.env.CLOUD_UNAVAILABLE_SCREENSHOTS)await page.screenshot({path:join(process.env.CLOUD_UNAVAILABLE_SCREENSHOTS,`${language}-${theme}-${width}.png`),fullPage:true});

@@ -5593,8 +5593,12 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   sign-out failure. Reloading loses the in-memory request; reopen the connection
   link from Waitron. Preserving it across reloads and same-account membership/business
   creation remain separate missing capabilities.
-- R9: make persistent public availability refusal honest while retaining retry;
-  give owners useful diagnostics without exposing private state to visitors.
+- R9 visitor guidance delivered: the public availability page uses neutral English
+  and Spanish wording without promising a quick recovery. Its existing retry link
+  can show another refusal or a recovered response. Native HTTPS checks cover
+  persistent 403/404/503 replies and dropped connections, then recovery, while
+  preserving private upstream details. Cause-specific diagnostics for owners in
+  Account remain open; visitor guidance does not diagnose or repair the cause.
 - R10: provide safe next actions for empty public-gate rejection pages and reproduce
   browser-check failure/exhaustion before adding a bounded failure outcome.
 - R11: connect monitoring/certificate alert guidance to concrete owner actions;
