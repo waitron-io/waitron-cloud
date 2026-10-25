@@ -5112,6 +5112,29 @@ three-attempt cap, ordinary accounting, restore and deadline checks in any repai
 local Docker qualification remains unavailable until 3 November.
 
 
+### Broken-pipe shutdown investigation (D270)
+
+The [main cost run 40216346521](https://github.com/waitron-io/waitron-cloud/actions/runs/40216346521/job/121238245625)
+refused the original request-log smoke at the stop's idle step with `client-error`
+and `EPIPE`, a broken pipe. All 25 attempts had left the transport, but one
+accounting attempt remained unsettled. D268 changes the delayed-PUT fixture;
+it does not cover this server-level socket error.
+
+For a network error, the transport now records the failing socket's sole
+forwarding operation, observed and expected body bytes, response-header state
+and the idle-action count at admission. Its `forwardingTransfers` count covers
+fully validated requests; `pending` also includes bodies still being checked.
+Parser errors name no operation, pipelined requests remain ambiguous, and
+completed requests supply no stale context. Native HTTP controls inject a
+socket error while retaining real parsing, counters and refusal. A separate native
+loopback probe reproduces actual `EPIPE` by closing the caller while a large list
+reply starts. This demonstrates one mechanism; the historical official-binary
+failure still needs a labelled recurrence before attribution. All 80 genuine
+Linux request-log trials in [run 40218943112](https://github.com/waitron-io/waitron-cloud/actions/runs/40218943112) pass. All broken pipes
+continue to refuse measurement. Preserve the existing after-stop signature,
+three-attempt cap, official 0.5.17 pin, restore assertions and deadlines.
+
+
 ### Delayed PUT shutdown investigation (D268)
 
 The delayed-PUT case failed on three of the 103 cost-workflow runs started on
