@@ -185,3 +185,70 @@ test('streamStorageIntegratesEachObjectWindowAndReadsEveryInventoryPage', async 
   assert.equal(audit.snapshot().objects.bytes, 6); assert.equal(audit.snapshot().objects.currentVersions, 2);
   assert.deepEqual(audit.snapshot().byteSeconds, { low: 36, high: 44 });
 });
+
+// A known interrupted list can retire its pending token only after the validated runtime boundary.
+import { lifetimeExchange, assertIncompleteList } from './litestream-lifetime-test-utils.mjs';
+for (const stopped of [false, true]) test(`put-only lifetimes retain narrow interrupted-list settlement: stopped=${stopped}`, async t => {
+  const f = await fixture(t);
+  const e = await lifetimeExchange(t, { open: afterStop => storage.openLitestreamLifetimes({ ...f.args, afterStop }),
+    input: { method: 'GET', path: '/synthetic?list-type=2', headers: {} }, stopped });
+  if (stopped) {
+    await assertIncompleteList(f, e);
+    f.rows.set('UNPAIRED_PRIVATE_CANARY', 1);
+    await assert.rejects(e.lifetimes.verify(), bad);
+    assert.throws(() => e.afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
+  }
+  else {
+    await assert.rejects(e.transport.close(), /Invalid cloud cost Litestream audit/);
+    await assert.rejects(e.lifetimes.verify(), bad); assert.throws(() => e.meter.snapshot());
+  }
+});
+for (const interrupted of [false, true]) test(`put-only lifetimes require a real committed prior PUT after stop: interrupted=${interrupted}`, async t => {
+  const f = await fixture(t);
+  const e = await lifetimeExchange(t, { open: afterStop => storage.openLitestreamLifetimes({ ...f.args, afterStop }),
+    input: put(), interrupted, commit: () => f.rows.set(key, 4) });
+  await e.transport.close(); f.time(10); await e.lifetimes.verify();
+  assert.equal(e.lifetimes.snapshot().objects.bytes, 4); assert.equal(e.afterStop.snapshot().used, 1);
+  assert.deepEqual(e.lifetimes.snapshot().byteSeconds, { low: 40, high: 40 });
+  assert.equal(e.afterStop.snapshot().gaps.includes('after-stop:put-response-interrupted'), interrupted);
+  assert.equal(e.afterStop.snapshot().lateSettlements, 1);
+  assert.equal(e.meter.snapshot().accounting.requests[0].outcome, interrupted ? 'transport-error' : 'success');
+  assert.equal(e.meter.snapshot().status, interrupted ? 'unknown' : 'measured');
+});
+
+// An inventory containing the bytes must never substitute for an independently witnessed commit.
+for (const mode of ['missing-witness', 'incomplete-body', 'partial-body', 'failed-backend', 'unknown-token', 'unknown-field']) {
+  test(`put-only after-stop refuses uncertain commit evidence: ${mode}`, async t => {
+    const f = await fixture(t);
+    const run = () => lifetimeExchange(t, { open: afterStop => storage.openLitestreamLifetimes({ ...f.args, afterStop }),
+      input: put(), commit: () => f.rows.set(key, 4), witness: mode !== 'missing-witness', statusCode: mode === 'failed-backend' ? 503 : 200,
+      witnessChange: event => mode === 'incomplete-body' ? { ...event, requestComplete: false }
+        : mode === 'partial-body' ? { ...event, bytesOut: 3 }
+        : mode === 'unknown-token' ? { ...event, token: event.token.replace('11111111', '22222222') }
+        : mode === 'unknown-field' ? { ...event, privateCanary: 'PRIVATE_CANARY' } : event });
+    if (mode === 'missing-witness') {
+      const e = await run(); await assert.rejects(e.transport.close(), /Invalid cloud cost Litestream audit/);
+      await assert.rejects(e.lifetimes.verify(), bad); assert.throws(() => e.afterStop.snapshot());
+    } else await assert.rejects(run(), /Invalid cloud cost Litestream audit/);
+  });
+}
+
+test('transport refuses a lifetime reader from another stop-accounting session before accepting traffic', async t => {
+  const { createLitestreamAfterStop } = await import('./litestream.mjs');
+  const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
+  const lifetimes = await storage.openLitestreamLifetimes({ ...f.args, afterStop: createLitestreamAfterStop({ clock: () => 0 }) });
+  let created;
+  t.after(() => created?.close().catch(() => {}));
+  await assert.rejects(async () => { created = await createLitestreamTransport({ target: f.target, lifetimes, afterStop,
+    phase: 'workload', meter: createMeter({ phase: 'workload', clock: () => 0, afterStop }) }); }, /Invalid cloud cost Litestream audit/);
+});
+
+test('put-only reader cannot settle a bound lifetime before its producer counter', async t => {
+  const { createLitestreamAfterStop } = await import('./litestream.mjs');
+  const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
+  const invocation = headers['amz-sdk-invocation-id'];
+  afterStop.admit({ invocation, ordinal: 0, operation: 'list', hop: 'producer', phase: 'workload' });
+  const reader = await storage.openLitestreamLifetimes({ ...f.args, afterStop });
+  const finish = reader.begin({ method: 'GET', path: '/synthetic?list-type=2', headers });
+  assert.throws(() => finish({ statusCode: 200, bytesOut: 0 }), bad);
+});

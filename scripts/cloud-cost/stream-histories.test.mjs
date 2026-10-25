@@ -272,3 +272,33 @@ test('streamHistoryTransportBlocksMultipartBeforeForwarding', async t => {
   await assert.rejects(front.close(), /Invalid cloud cost Litestream audit/);
   assert.throws(() => lifetimes.snapshot(), bad); assert.throws(() => producer.snapshot(), /Invalid cloud cost meter/);
 });
+
+import { lifetimeExchange, assertIncompleteList } from './litestream-lifetime-test-utils.mjs';
+test('unversioned histories settle only a ledger-accepted interrupted list without creating an object', async t => {
+  const f = await fixture(t);
+  const e = await lifetimeExchange(t, { open: afterStop => storage.openLitestreamHistories({ ...f.args, afterStop }),
+    input: { method: 'GET', path: '/synthetic?list-type=2', headers: {} } });
+  await assertIncompleteList(f, e);
+  f.rows.set('UNPAIRED_PRIVATE_CANARY', 1);
+  await assert.rejects(e.lifetimes.verify(), bad);
+  assert.throws(() => e.afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
+});
+for (const interrupted of [false, true]) test(`unversioned histories retain a witnessed committed prior PUT: interrupted=${interrupted}`, async t => {
+  const f = await fixture(t);
+  const e = await lifetimeExchange(t, { open: afterStop => storage.openLitestreamHistories({ ...f.args, afterStop }),
+    input: put(4), interrupted, commit: () => f.rows.set(key, 4) });
+  await e.transport.close(); f.time(10); await e.lifetimes.verify();
+  assert.equal(e.lifetimes.snapshot().objects.bytes, 4); assert.equal(e.afterStop.snapshot().used, 1);
+  assert.deepEqual(e.lifetimes.snapshot().byteSeconds, { low: 40, high: 40 });
+});
+
+test('unversioned history reader requires its own producer settlement', async t => {
+  const { createLitestreamAfterStop } = await import('./litestream.mjs');
+  const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
+  const invocation = '11111111-2222-4333-8444-555555555555';
+  afterStop.admit({ invocation, ordinal: 0, operation: 'list', hop: 'producer', phase: 'workload' });
+  const reader = await storage.openLitestreamHistories({ ...f.args, afterStop });
+  const finish = reader.begin({ method: 'GET', path: '/synthetic?list-type=2',
+    headers: { 'amz-sdk-invocation-id': invocation, 'amz-sdk-request': 'attempt=1; max=3' } });
+  assert.throws(() => finish({ statusCode: 200, bytesOut: 0 }), bad);
+});

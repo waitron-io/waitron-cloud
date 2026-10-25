@@ -4940,11 +4940,18 @@ allowance. Its first implementation step adds the optional session ledger and
 real HTTP boundary tests. The audit, first transport and independent storage
 counter share attempt identities, preserve each counter's actual bytes, and
 count at most three distinct affected attempts across admissions and settlements.
-Only the exact post-acknowledgement list interruption is accepted; its response
-remains incomplete and its billing unknown. Ordinary callers remain strict.
-This ledger is not yet enabled in the smoke. Upload commit evidence, lifetime
-reader settlement, controlled shutdown, final restore and Linux qualification
-remain open in the next plan tasks.
+The exact post-acknowledgement list interruption can settle each storage reader's
+pending token; its response stays incomplete and its billing unknown. The three
+readers also retain one already-admitted upload completion when a real backend
+success acknowledges its complete body and, for versioned storage, its exact
+version. Both hops must precede acknowledgement. A lost client reply stays a
+transport error in the counters; only storage history uses the commit witness.
+Native HTTP tests preserve storage time bounds and refuse uncommitted, partial,
+retried or second late uploads, missing versions and mismatched inventories.
+An inventory mismatch invalidates the shared session. Ordinary callers stay strict.
+This ledger is not yet enabled in the smoke. Controlled shutdown, the real backend
+callback, final restore, official-binary and genuine Linux qualification remain
+open in the next plan tasks.
 
 [PR428's cost run 40144823848, job 121023853072](https://github.com/waitron-io/waitron-cloud/actions/runs/40144823848/job/121023853072)
 refuses during `stop`; cleanup records `active-close` after 21 completed attempts.

@@ -284,3 +284,135 @@ test('after-stop aggregate refuses byte totals that no longer fit a safe integer
   }
   assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
 });
+
+const putCommit = (changes = {}) => ({ token: `${id}:1`, statusCode: 200, bytesOut: 4, expectedBytesOut: 4,
+  requestComplete: true, versionId: null, deleteMarker: null, ...changes });
+const putSettlement = (hop, changes = {}) => settled(hop, { operation: 'put', bytesOut: 4, attemptedBytesOut: 4, ...changes });
+// Recording ordinary retry success must not activate the shutdown exception or alter strict counts.
+test('ordinary successful retry can retain backend evidence before stop without consuming the cap', () => {
+  const s = afterStopSession(); startAttempt(s, 'put');
+  for (const hop of ['producer', 'observer']) s.settle(putSettlement(hop, { statusCode: 503, outcome: 'server-error' }));
+  s.issue(issued(1, 'put'));
+  for (const hop of ['producer', 'observer']) s.admit(admitted(hop, 1, 'put'));
+  s.commit(putCommit({ token: `${id}:2` }));
+  for (const hop of ['producer', 'observer']) s.settle(putSettlement(hop, { ordinal: 1 }));
+  assert.equal(s.snapshot().used, 0); assert.equal(s.snapshot().status, 'measured');
+});
+for (const mode of ['second-upload', 'retry', 'uncommitted', 'partial-settlement', 'pre-ack-interruption', 'wrong-signature']) {
+  test(`prior PUT completion remains bounded: ${mode}`, () => {
+    const s = afterStopSession(); startAttempt(s, 'put');
+    if (mode === 'retry') {
+      for (const hop of ['producer', 'observer']) s.settle(putSettlement(hop, { outcome: 'server-error', statusCode: 503 }));
+      s.issue(issued(1, 'put')); for (const hop of ['producer', 'observer']) s.admit(admitted(hop, 1, 'put'));
+    }
+    const ordinal = mode === 'retry' ? 1 : 0;
+    if (mode !== 'uncommitted') s.commit(putCommit({ token: `${id}:${ordinal + 1}` }));
+    if (mode === 'second-upload') {
+      const invocation = id.replace('11111111', '22222222');
+      s.issue({ ...issued(0, 'put'), invocation });
+      for (const hop of ['producer', 'observer']) s.admit({ ...admitted(hop, 0, 'put'), invocation });
+      s.commit(putCommit({ token: `${invocation}:1` }));
+    }
+    if (mode !== 'pre-ack-interruption') s.acknowledgeStop(ack());
+    const run = () => {
+      if (mode === 'second-upload') {
+        for (const hop of ['producer', 'observer']) s.settle(putSettlement(hop));
+        return s.settle(putSettlement('producer', { token: id.replace('11111111', '22222222') + ':1' }));
+      }
+      const interrupted = ['pre-ack-interruption', 'wrong-signature'].includes(mode);
+      return s.settle(putSettlement('producer', { ordinal, ...(mode === 'partial-settlement' ? { bytesOut: 3 } : {}),
+        ...(interrupted ? { outcome: 'transport-error' } : {}) }), interrupted
+        ? { ...knownInterruption(), ...(mode === 'wrong-signature' ? { code: 'ECONNRESET' } : {}) } : null);
+    };
+    assert.throws(run, /Invalid cloud cost Litestream audit/);
+    assert.throws(() => s.snapshot(), /Invalid cloud cost Litestream audit/);
+  });
+}
+
+// A PUT response marked as a delete marker is not a successful object-version witness.
+test('after-stop PUT cannot erase a conflicting delete-marker response while normalizing its commit', () => {
+  const s = afterStopSession(); startAttempt(s, 'put');
+  const finish = s.beginLifetime({ headers: headers(), operation: 'put', versioned: true });
+  s.commit(putCommit({ versionId: 'COMMIT_PRIVATE_CANARY' })); s.acknowledgeStop(ack());
+  s.settle(putSettlement('producer'));
+  assert.throws(() => finish({ statusCode: 200, bytesOut: 4, interrupted: false,
+    responseHeaders: { 'x-amz-version-id': 'COMMIT_PRIVATE_CANARY', 'x-amz-delete-marker': 'true' } }), /Invalid cloud cost Litestream audit/);
+});
+
+for (const [label, change] of [
+  ['unfinished request', { requestComplete: false }], ['partial body', { bytesOut: 3 }],
+  ['unsafe byte count', { bytesOut: Number.MAX_SAFE_INTEGER + 1, expectedBytesOut: Number.MAX_SAFE_INTEGER + 1 }],
+  ['negative byte count', { bytesOut: -1, expectedBytesOut: -1 }], ['failed status', { statusCode: 503 }],
+  ['fractional status', { statusCode: 200.5 }], ['null status', { statusCode: null }],
+  ['unknown identity', { token: '22222222-2222-4333-8444-555555555555:1' }],
+  ['malformed identity', { token: 'PRIVATE_CANARY' }], ['empty version', { versionId: '' }],
+  ['private control character', { versionId: 'PRIVATE\nCANARY' }], ['oversized version', { versionId: 'x'.repeat(1025) }],
+  ['delete marker', { deleteMarker: 'true' }], ['unexpected marker', { deleteMarker: false }],
+  ['unknown field', { PRIVATE_CANARY: true }],
+]) test(`backend commit witness refuses ${label}`, () => {
+  const s = afterStopSession(); startAttempt(s, 'put');
+  assert.throws(() => s.commit(putCommit(change)), /Invalid cloud cost Litestream audit/);
+  assert.throws(() => s.snapshot(), /Invalid cloud cost Litestream audit/);
+});
+for (const mode of ['missing-observer', 'wrong-operation', 'duplicate']) test(`commit witnesses cannot invent or replace an upload: ${mode}`, () => {
+  const s = afterStopSession(), operation = mode === 'wrong-operation' ? 'list' : 'put';
+  s.issue(issued(0, operation)); s.admit(admitted('producer', 0, operation));
+  if (mode !== 'missing-observer') s.admit(admitted('observer', 0, operation));
+  if (mode === 'duplicate') s.commit(putCommit());
+  assert.throws(() => s.commit(putCommit()), /Invalid cloud cost Litestream audit/);
+});
+for (const mode of ['twice', 'unsettled', 'wrong-bytes', 'wrong-status', 'wrong-interruption', 'wrong-version', 'unexpected-version']) {
+  test(`lifetime completion stays paired to its own producer and version: ${mode}`, () => {
+    const s = afterStopSession(); startAttempt(s, 'put');
+    const finish = s.beginLifetime({ headers: headers(), operation: 'put', versioned: mode !== 'unexpected-version' });
+    s.commit(putCommit({ versionId: 'COMMIT_PRIVATE_CANARY' })); s.acknowledgeStop(ack());
+    if (mode !== 'unsettled') s.settle(putSettlement('producer'));
+    const event = { statusCode: mode === 'wrong-status' ? 201 : 200, bytesOut: mode === 'wrong-bytes' ? 3 : 4,
+      interrupted: mode === 'wrong-interruption', responseHeaders: { 'x-amz-version-id': mode === 'wrong-version' ? 'OTHER_PRIVATE_CANARY' : 'COMMIT_PRIVATE_CANARY' } };
+    if (mode === 'twice') finish(event);
+    assert.throws(() => finish(event), /Invalid cloud cost Litestream audit/);
+    assert.throws(() => s.snapshot(), /Invalid cloud cost Litestream audit/);
+  });
+}
+// Both hops share one late PUT allowance and that allowance shares the existing three-attempt cap.
+for (const listCount of [2, 3]) test(`late committed PUT and lists share the distinct-attempt cap: lists=${listCount}`, () => {
+  const s = afterStopSession(); startAttempt(s, 'put'); s.commit(putCommit()); s.acknowledgeStop(ack());
+  for (const hop of ['producer', 'observer']) s.settle(putSettlement(hop));
+  for (let n = 0; n < listCount; n++) {
+    const invocation = `${String(n + 2).padStart(8, '0')}-2222-4333-8444-555555555555`;
+    s.issue({ ...issued(), invocation }); s.admit({ ...admitted('producer'), invocation });
+    const admit = () => s.admit({ ...admitted('observer'), invocation });
+    if (n === 2) { assert.throws(admit, /Invalid cloud cost Litestream audit/); return; }
+    admit(); for (const hop of ['producer', 'observer']) s.settle({ ...settled(hop), token: `${invocation}:1` });
+  }
+  assert.equal(s.snapshot().used, 3); assert.equal(s.snapshot().lateAdmissions, 2); assert.equal(s.snapshot().lateSettlements, 1);
+  assert.equal(s.snapshot().bodiesReconciled, true);
+});
+
+for (const mode of ['changed-status', 'changed-request-length']) test(`a late committed PUT must agree with the backend response and complete body: ${mode}`, () => {
+  const s = afterStopSession(); startAttempt(s, 'put'); s.commit(putCommit()); s.acknowledgeStop(ack());
+  assert.throws(() => s.settle(putSettlement('producer', { outcome: 'transport-error',
+    ...(mode === 'changed-status' ? { statusCode: 201 } : { attemptedBytesOut: 5 }) }), knownInterruption()), /Invalid cloud cost Litestream audit/);
+});
+
+// Read lifetimes still correlate their actual request bytes, even though they mutate no objects.
+test('interrupted list lifetime cannot claim body bytes absent from its producer counter', () => {
+  const s = afterStopSession(); startAttempt(s);
+  const finish = s.beginLifetime({ headers: headers(), operation: 'list', versioned: false });
+  s.acknowledgeStop(ack()); s.settle(settled('producer', { outcome: 'transport-error' }), knownInterruption());
+  assert.throws(() => finish({ statusCode: 200, bytesOut: 1, interrupted: true }), /Invalid cloud cost Litestream audit/);
+});
+for (const versionId of [null, 'null']) test(`versioned lifetime cannot use an unknown backend version as a commit: ${typeof versionId}:${versionId}`, () => {
+  const s = afterStopSession(); startAttempt(s, 'put');
+  const finish = s.beginLifetime({ headers: headers(), operation: 'put', versioned: true });
+  s.commit(putCommit({ versionId })); s.acknowledgeStop(ack()); s.settle(putSettlement('producer'));
+  assert.throws(() => finish({ statusCode: 200, bytesOut: 4, interrupted: false }), /Invalid cloud cost Litestream audit/);
+});
+
+test('a bound versioned lifetime cannot be changed into an unversioned reader by mutating its input', () => {
+  const s = afterStopSession(); startAttempt(s, 'put');
+  const input = { headers: headers(), operation: 'put', versioned: true };
+  const finish = s.beginLifetime(input); input.versioned = false;
+  s.commit(putCommit()); s.acknowledgeStop(ack()); s.settle(putSettlement('producer'));
+  assert.throws(() => finish({ statusCode: 200, bytesOut: 4, interrupted: false }), /Invalid cloud cost Litestream audit/);
+});

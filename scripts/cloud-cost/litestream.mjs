@@ -112,6 +112,50 @@ export function createLitestreamAfterStop(options) {
     row.admissions[input.hop] = { ...event(), phase: input.phase };
     if (acknowledged && input.hop === 'observer') { row.lateAdmission = true; affect(row); }
   });
+  const attemptForToken = token => {
+    requireThat(typeof token === 'string');
+    const match = /^(.+):([1-9]\d*)$/.exec(token); requireThat(match);
+    identity(match[1], `attempt=${match[2]}; max=${match[2]}`);
+    const row = attempts.get(token); requireThat(row); return row;
+  };
+  // Only the real storage response supplies this witness; finishing a request body is not a commit.
+  const commit = guarded(input => {
+    exactFields(input, ['token', 'statusCode', 'bytesOut', 'expectedBytesOut', 'requestComplete', 'versionId', 'deleteMarker']);
+    const row = attemptForToken(input.token);
+    requireThat(row.operation === 'put' && !row.commit && row.admissions.producer && row.admissions.observer
+      && (!acknowledged || Object.values(row.admissions).every(a => a.sequence < acknowledged.sequence))
+      && (input.deleteMarker === null || input.deleteMarker === 'false')
+      && input.requestComplete === true && nonnegative(input.bytesOut) && input.bytesOut === input.expectedBytesOut
+      && Number.isInteger(input.statusCode) && input.statusCode >= 200 && input.statusCode < 300
+      && (input.versionId === null || typeof input.versionId === 'string' && input.versionId.length > 0
+        && input.versionId.length <= 1024 && !/[\x00-\x1f\x7f]/.test(input.versionId)));
+    row.commit = { ...structuredClone(input), ...event() };
+  });
+  const beginLifetime = guarded(input => {
+    exactFields(input, ['headers', 'operation', 'versioned']);
+    requireThat(typeof input.versioned === 'boolean');
+    const id = identity(input.headers?.['amz-sdk-invocation-id'], input.headers?.['amz-sdk-request']);
+    const row = attempts.get(id.key);
+    requireThat(row && row.operation === input.operation && row.admissions.producer && !row.lifetime);
+    row.lifetime = { versioned: input.versioned, completed: false };
+    return guarded(({ statusCode, bytesOut, interrupted, responseHeaders }) => {
+      const producer = row.settlements.producer;
+      requireThat(!row.lifetime.completed && producer && producer.statusCode === statusCode && producer.bytesOut === bytesOut
+        && interrupted === (producer.outcome === 'transport-error'));
+      row.lifetime.completed = true;
+      if (row.latePut) {
+        requireThat(row.commit && bytesOut === row.commit.bytesOut);
+        const version = row.commit.versionId;
+        requireThat(row.lifetime.versioned ? typeof version === 'string' && version !== 'null' : version === null || version === 'null');
+        requireThat(responseHeaders?.['x-amz-delete-marker'] === undefined || responseHeaders['x-amz-delete-marker'] === 'false');
+        requireThat(responseHeaders?.['x-amz-version-id'] === undefined || responseHeaders['x-amz-version-id'] === version);
+        // Normalize storage history only. Both HTTP counters retain the actual client outcome and bytes.
+        return { statusCode: row.commit.statusCode, responseHeaders: version === null ? {} : { 'x-amz-version-id': version } };
+      }
+      requireThat(!interrupted || row.operation === 'list' && row.lateSettlement);
+      return { statusCode, responseHeaders };
+    });
+  });
   const settle = guarded((input, interruption = null) => {
     exactFields(input, ['token', 'channel', 'phase', 'operation', 'retryOrdinal', 'outcome', 'statusCode', 'errorCode', 'sameAccount',
       'bytesIn', 'bytesOut', 'attemptedBytesIn', 'attemptedBytesOut']);
@@ -133,13 +177,21 @@ export function createLitestreamAfterStop(options) {
     const interrupted = input.outcome === 'transport-error';
     if (interrupted) {
       exactFields(interruption, ['reason', 'ioEvent', 'code', 'clientClosed', 'responseHeadersSeen']);
-      requireThat(acknowledged && hop === 'producer' && row.operation === 'list' && row.admissions.observer
+      requireThat(acknowledged && hop === 'producer' && ['list', 'put'].includes(row.operation) && row.admissions.observer
         && interruption.reason === 'transfer-interrupted' && interruption.ioEvent === 'response-pipeline'
         && interruption.code === 'ERR_STREAM_UNABLE_TO_PIPE' && interruption.clientClosed === true
         && interruption.responseHeadersSeen === true && input.statusCode >= 200 && input.statusCode < 300);
       row.lateSettlement = true; affect(row);
     } else requireThat(interruption === null);
-    if (acknowledged) requireThat(input.operation === 'list');
+    if (acknowledged && input.operation !== 'list') {
+      requireThat(input.operation === 'put' && row.ordinal === 0 && row.commit
+        && Object.values(row.admissions).length === 2
+        && Object.values(row.admissions).every(a => a.sequence < acknowledged.sequence)
+        && input.bytesOut === row.commit.bytesOut && input.attemptedBytesOut === row.commit.expectedBytesOut
+        && input.statusCode === row.commit.statusCode && (interrupted || input.outcome === 'success'));
+      requireThat(![...attempts.values()].some(other => other !== row && other.latePut));
+      row.latePut = true; row.lateSettlement = true; affect(row);
+    }
     row.settlements[hop] = { ...structuredClone(input), ...event() };
     return interrupted;
   });
@@ -148,12 +200,13 @@ export function createLitestreamAfterStop(options) {
     for (const row of attempts.values()) requireThat(row.issued && row.admissions.producer && row.admissions.observer
       && row.settlements.producer && row.settlements.observer);
     const selected = [...attempts.values()].filter(row => row.affected);
-    const incomplete = selected.some(row => row.lateSettlement);
+    const incompleteList = selected.some(row => row.operation === 'list' && row.lateSettlement);
+    const incompletePut = selected.some(row => row.latePut && Object.values(row.settlements).some(s => s.outcome === 'transport-error'));
     const total = () => ({ attempts: 0, bytesIn: 0, bytesOut: 0 });
     const producer = total(), observer = total(), requests = new Map(); let bodiesReconciled = true;
     for (const row of selected) {
       const p = row.settlements.producer, o = row.settlements.observer;
-      bodiesReconciled &&= !row.lateSettlement && ['outcome', 'statusCode', 'bytesIn', 'bytesOut', 'attemptedBytesIn', 'attemptedBytesOut'].every(key => p[key] === o[key]);
+      bodiesReconciled &&= p.outcome !== 'transport-error' && o.outcome !== 'transport-error' && ['outcome', 'statusCode', 'bytesIn', 'bytesOut', 'attemptedBytesIn', 'attemptedBytesOut'].every(key => p[key] === o[key]);
       for (const [hop, sum] of [['producer', producer], ['observer', observer]]) {
         const e = row.settlements[hop]; sum.attempts++; sum.bytesIn += e.bytesIn; sum.bytesOut += e.bytesOut;
         const key = [hop, e.phase, e.operation, e.retryOrdinal, e.outcome].join(':');
@@ -168,10 +221,11 @@ export function createLitestreamAfterStop(options) {
     return { cap, used: selected.length, lateAdmissions: selected.filter(r => r.lateAdmission).length,
       lateSettlements: selected.filter(r => r.lateSettlement).length, requests: [...requests.values()], producer, observer,
       requestsReconciled: true, bodiesReconciled, status: bodiesReconciled ? 'measured' : 'unknown',
-      gaps: [...(incomplete ? ['after-stop:list-response-interrupted'] : []),
+      gaps: [...(incompleteList ? ['after-stop:list-response-interrupted'] : []),
+        ...(incompletePut ? ['after-stop:put-response-interrupted'] : []),
         ...(!bodiesReconciled ? ['after-stop:body-bytes-unpaired'] : [])] };
   });
-  return { acknowledgeStop, issue, admit, settle, snapshot, invalidate: () => { invalid = true; } };
+  return { acknowledgeStop, issue, admit, commit, beginLifetime, settle, snapshot, invalidate: () => { invalid = true; } };
 }
 
 export function createLitestreamRequestAudit({ phase, allowBulkDeletes = false, afterStop }) {
@@ -290,7 +344,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     requireThat(endpoint.protocol === 'http:' && endpoint.hostname === '127.0.0.1' && endpoint.port !== ''
       && endpoint.pathname === '/' && endpoint.search === '' && endpoint.hash === '' && endpoint.username === '' && endpoint.password === '');
     requireThat(phases.includes(phase) && typeof meter?.observeAttempt === 'function' && typeof meter?.invalidate === 'function');
-    requireThat(lifetimes === undefined || typeof lifetimes?.begin === 'function');
+    requireThat(lifetimes === undefined || typeof lifetimes?.begin === 'function' && lifetimes.afterStop === afterStop);
     requireThat(meter.afterStop === afterStop);
   } catch { fail(); }
   let invalid = false, closing, refusal, currentPhase = phase;
