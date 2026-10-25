@@ -109,7 +109,12 @@ including empty and bare attributes that some browsers ignore. It also checks th
 last `Path` attribute: a later non-root, empty or bare path makes the host-prefixed
 cookie unusable, even when an earlier attribute says `Path=/`. Its Path comparison
 trims ordinary spaces and tabs, preserving other bytes so it cannot mistake a
-no-break space for a browser-accepted root path. The staff check
+no-break space for a browser-accepted root path. It also refuses zero or negative
+whole numbers, including `+0`, in the last `Max-Age` attribute within Chromium's
+1,024-byte value limit. Oversized values leave an earlier attribute effective.
+Real HTTPS fixtures and independent Chromium controls cover these cases. This
+checks immediate Max-Age deletion; other expiry rules, including `Expires`, remain
+open. The staff check
 performs only a trusted hostname-verifying TLS handshake and sends no HTTP request or login.
 Production resolution refuses private, loopback, link-local and reserved addresses,
 including deprecated site-local IPv6. IPv4-compatible (`::/96`) and 6to4 (`2002::/16`)

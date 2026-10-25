@@ -3859,6 +3859,13 @@ notifications separately.
   checks confirm the refusal and valid root/ordinary-whitespace controls. Rejected
   cookies never reach availability; the genuine gateway challenge still passes.
   This corrects local monitoring, not production qualification.
+  Immediately deleting `Max-Age` values now refuse before replay. The probe
+  follows Chromium's last-attribute precedence and 1,024-byte value limit,
+  including signed zero. Real HTTPS regressions and independent Chromium
+  controls cover deletion, replacement, malformed values and whitespace.
+  Positive/session cookies and the genuine gateway journey still pass.
+  Other expiry rules, including `Expires`-only deletion, remain open. Whether
+  oversized Path values need the same treatment needs a separate browser control.
   The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
   separates existing local detection from proposed production operator alerts and
   opted-in venue mail, with worked outage and backup timelines. The owner approved
