@@ -122,7 +122,9 @@ Invalid dates leave a session cookie; an invalid final value replaces an earlier
 expiry. Real HTTPS fixtures and independent Chromium controls cover date forms,
 clock differences, attribute replacement and signed `Max-Age` saturation.
 The staff check performs only a trusted hostname-verifying TLS handshake and
-sends no HTTP request or login.
+sends no HTTP request or login. It finishes sending the handshake, then releases
+the verified connection without waiting for the peer to close its side. A peer
+that keeps its side open cannot keep your completed probe process alive.
 Production resolution refuses private, loopback, link-local and reserved addresses,
 including deprecated site-local IPv6. IPv4-compatible (`::/96`) and 6to4 (`2002::/16`)
 addresses must also contain a public IPv4 address. Teredo and NAT64 prefixes remain

@@ -73,7 +73,8 @@ async function staffOnce(hostname:string,connection:ProbeConnection,options:Scop
   let settled=false;const done=(error?:unknown,value?:ProbeCertificate)=>{if(settled)return;settled=true;clearTimeout(timer);options.signal?.removeEventListener('abort',abort);if(error)reject(error);else resolve(value!);};
   const settings:ConnectionOptions={host:connection.address,port:connection.port,servername:hostname,ca:options.ca,rejectUnauthorized:true};
   const socket=tlsConnect(settings,()=>{
-   try{const peer=socket.getPeerCertificate(true);if(!peer.raw)throw new ProbeError('tls');const evidence=certificate(peer.raw);socket.end();done(undefined,evidence);}catch(error){socket.destroy();done(error);}
+   // Flush the handshake before releasing the socket without waiting for the peer.
+   try{const peer=socket.getPeerCertificate(true);if(!peer.raw)throw new ProbeError('tls');const evidence=certificate(peer.raw);socket.end(()=>socket.destroy());done(undefined,evidence);}catch(error){socket.destroy();done(error);}
   });
   const timer=setTimeout(()=>{socket.destroy();done(new ProbeError('timeout'));},5000);
   const abort=()=>{socket.destroy();done(new ProbeError(abortFailure(options)));};
