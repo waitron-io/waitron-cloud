@@ -3447,6 +3447,10 @@ notifications separately.
   signed-out notice once the session check confirms it ended. Lost replies still
   reconcile; passive session loss stays quiet and expiry keeps its own notice.
   Database-free English and Spanish browser checks cover both themes and widths.
+  While your session is checked, the home page uses the account heading in the page
+  and browser tab. If the check fails, that heading stays above the retry message.
+  Stubbed Chromium checks cover both languages, themes and phone/desktop widths,
+  retries and the existing redirects to sign-in or Account.
   Whether an already pending session check can suppress this notice is unverified;
   reproduce that request ordering before changing how session reads share a reply. Passkey rows
   show their nullable last-use time. English and Spanish Chromium checks cover phone and

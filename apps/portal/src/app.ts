@@ -173,7 +173,7 @@ export class PortalApp {
     if (this.path === '/signup') return c[this.link.token ? 'completeSignup' : 'signup'];
     if (this.path === '/forgot-password') return c.forgot;
     if (this.path === '/reset-password') return c.reset;
-    if (this.path === '/account') return c.account;
+    if (['/', '/account'].includes(this.path)) return c.account;
     return c.login;
   }
   navigate(path: string, push = true) {
