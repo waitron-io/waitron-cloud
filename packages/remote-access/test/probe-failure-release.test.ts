@@ -15,10 +15,10 @@ test('failed probes release sockets and let their process exit while peers stay 
   execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','2','-subj','/CN=probe.example.test','-addext','subjectAltName=DNS:probe.example.test','-keyout',key,'-out',cert],{stdio:'ignore'});
   const material={key:await readFile(key),cert:await readFile(cert)};
   for(const failure of ['cancelled','timeout'] as const)for(const stage of ['before headers','during body'] as const)await t.test(`${failure} ${stage}`,async()=>{
-   const sockets=new Set<Socket>();let staffEntered=false,publicEntered=false,cancelSent=false;
+   const sockets=new Set<Socket>();let staffEntered=false,publicEntered=false,bodyReceived=false,cancelSent=false;
    let child:ReturnType<typeof spawn>|undefined;
    const cancelWhenReady=()=>{
-    if(failure==='cancelled'&&staffEntered&&publicEntered&&!cancelSent){cancelSent=true;child!.send!('cancel');}
+    if(failure==='cancelled'&&staffEntered&&publicEntered&&(stage==='before headers'||bodyReceived)&&!cancelSent){cancelSent=true;child!.send!('cancel');}
    };
    const staff=netServer({allowHalfOpen:true},socket=>{
     socket.on('error',()=>{});
@@ -34,6 +34,13 @@ test('failed probes release sockets and let their process exit while peers stay 
    });
    const source=`
     import {probeTarget} from ${JSON.stringify(new URL('../src/probe.ts',import.meta.url).href)};
+    import https from 'node:https';
+    import {syncBuiltinESMExports} from 'node:module';
+    const request=https.request;
+    https.request=(...args)=>{
+     const req=request(...args);req.once('response',res=>res.once('data',()=>process.send('public-body')));return req;
+    };
+    syncBuiltinESMExports();
     const {staffPort,publicPort,ca}=JSON.parse(process.argv[1]);
     const stop=new AbortController();process.once('message',()=>stop.abort());
     const target={installationId:'10000000-0000-4000-8000-000000000001',venueId:'20000000-0000-4000-8000-000000000002',revision:7,staffHostname:'staff.probe.example.test',publicHostname:'probe.example.test'};
@@ -48,6 +55,7 @@ test('failed probes release sockets and let their process exit while peers stay 
     const staffAddress=staff.address(),publicAddress=publicServer.address();
     assert(staffAddress&&typeof staffAddress!=='string');assert(publicAddress&&typeof publicAddress!=='string');
     child=spawn(process.execPath,['--input-type=module','--eval',source,JSON.stringify({staffPort:staffAddress.port,publicPort:publicAddress.port,ca:material.cert.toString()})],{stdio:['ignore','pipe','pipe','ipc']});
+    child.on('message',message=>{if(message==='public-body'){bodyReceived=true;cancelWhenReady();}});
     const processChild=child;let output='',errors='',forced=false;
     exited=new Promise((resolve,reject)=>{processChild.once('error',reject);processChild.once('close',(code,signal)=>resolve({code,signal}));});
     watchdog=setTimeout(()=>{forced=true;processChild.kill('SIGKILL');},8000);
@@ -59,6 +67,7 @@ test('failed probes release sockets and let their process exit while peers stay 
     const exit=await exited;
     assert(staffEntered,'The staff connection must reach its unfinished TLS handshake');
     assert(publicEntered,'The public request must reach the selected unfinished response');
+    assert.equal(bodyReceived,stage==='during body','The child must receive the partial body before cancellation or timeout');
     assert.equal(cancelSent,failure==='cancelled');
     assert.equal(forced,false,'The failed probes must release sockets without a peer close or forced process exit; '+errors);
     assert.deepEqual(exit,{code:0,signal:null},errors);
