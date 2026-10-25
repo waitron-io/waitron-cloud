@@ -38,6 +38,7 @@ for (const [name, mutate] of [
   ['false reconciliation', r => r.transport.replication.reconciled = true],
   ['unrelated byte discrepancy', r => r.observed.accounting.observer.bytesOut++],
   ['moved ordinary outcome', r => r.observed.observedRequests[1].outcome = 'server-error'],
+  ['unrelated attempted-byte discrepancy', r => r.observed.observedRequests[1].attemptedBytesOut++],
   ['incomplete billing hidden', r => r.observed.billing[0].quantity = 3],
   ['private ledger field', r => r.afterStop.path = 'PRIVATE_CANARY'],
 ]) test(`smoke consumers reject ${name}`, () => {

@@ -23,19 +23,20 @@ export function assertSmokeAccounting(result) {
   assert.deepEqual(result.costAccuracy, output.costAccuracy);
   assert.equal(result.replication.requestsReconciled, true);
   const fields = ['attempts', 'bytesIn', 'bytesOut'];
+  const rowFields = [...fields, 'attemptedBytesIn', 'attemptedBytesOut'];
   const residual = (rows, hop) => {
     const grouped = new Map();
     for (const [source, sign] of [[rows, 1], [subset.requests.filter(r => r.hop === hop), -1]]) {
       for (const row of source) {
         const key = [row.phase, row.operation, row.retryOrdinal, row.outcome].join(':');
-        const total = grouped.get(key) ?? Object.fromEntries(fields.map(k => [k, 0]));
-        for (const k of fields) total[k] += sign * row[k];
+        const total = grouped.get(key) ?? Object.fromEntries(rowFields.map(k => [k, 0]));
+        for (const k of rowFields) total[k] += sign * row[k];
         grouped.set(key, total);
       }
     }
     for (const [key, total] of grouped) {
       for (const n of Object.values(total)) assert.ok(Number.isSafeInteger(n) && n >= 0);
-      if (fields.every(k => total[k] === 0)) grouped.delete(key);
+      if (rowFields.every(k => total[k] === 0)) grouped.delete(key);
     }
     return grouped;
   };
