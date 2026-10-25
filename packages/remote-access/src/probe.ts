@@ -111,7 +111,7 @@ function cookieExpiry(value:string):number|undefined {
   if(!/^[0-9]/.test(token)){
    if(month===undefined){const index=months.indexOf(token.slice(0,3).toLowerCase());if(index>=0)month=index;}
   }else if(token.includes(':')){
-   if(time===undefined&&/^\d+:\d+:\d+$/.test(token))time=token.split(':').map(Number);
+   if(time===undefined&&/^\d+:\d+:\d+$/.test(token)){const fields=token.split(':').map(Number);if(fields.every(value=>value<=4294967295))time=fields;}
   }else if(/^\d+$/.test(token)){
    if(day===undefined&&token.length<=2)day=Number(token);
    else if(year===undefined&&token.length<=5)year=Number(token);
