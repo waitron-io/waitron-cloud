@@ -6,7 +6,7 @@ function proof(app:PortalApp){const c=app.copy,f=app.authenticator;
   return html`<label class="factor-proof-type">${c.factorProofType}<select aria-label=${c.factorProofType} .value=${f.proofKind} ?disabled=${f.pending}
     @change=${(e:Event)=>{app.readFields();f.proofKind=(e.target as HTMLSelectElement).value as typeof f.proofKind;f.proofCode='';app.draw();}}>
     <option value="totp">${c.factorTotp}</option><option value="recovery">${c.factorRecovery}</option></select></label>
-    <wt-input name="factorProof" .error=${f.requiredField==='proof'&&f.error==='factorCodeRequired'?c.factorCodeRequired:''} .label=${c.factorProof} .value=${f.proofCode} .autocomplete=${'one-time-code'} .disabled=${f.pending}
+    <wt-input name="factorProof" .error=${f.requiredField==='proof'&&(f.error==='factorCodeRequired'||f.error==='factorCodeInvalid')?c[f.error]:''} .label=${c.factorProof} .value=${f.proofCode} .autocomplete=${'one-time-code'} .disabled=${f.pending}
       @wt-change=${(e:CustomEvent<{value:string}>)=>{f.proofCode=e.detail.value;}}></wt-input>`;}
 export function authenticatorLoginScreen(app:PortalApp){const c=app.copy,f=app.authenticator;
   return html`<p>${c.factorLoginHelp}</p>${proof(app)}<wt-form-actions>
@@ -30,7 +30,7 @@ export function authenticatorAccountScreen(app:PortalApp){const c=app.copy,f=app
         void QRCode.toCanvas(element,uri,{width:240,margin:4}).then(()=>{if(!element.isConnected||f.enrolment?.uri!==uri)element.width=0;}).catch(()=>{element.width=0;});
       })}></canvas><code class="factor-secret">${f.enrolment.secret}</code><p class="help">${c.factorConfirmHelp}</p>`:nothing}
       ${password}${f.status.active?proof(app):nothing}
-      ${f.enrolment?html`<wt-input name="factorConfirmation" .error=${f.requiredField==='confirmation'&&f.error==='factorCodeRequired'?c.factorCodeRequired:''} .label=${c.factorConfirmation} .value=${f.confirmation} .autocomplete=${'one-time-code'} .disabled=${f.pending}
+      ${f.enrolment?html`<wt-input name="factorConfirmation" .error=${f.requiredField==='confirmation'&&(f.error==='factorCodeRequired'||f.error==='factorConfirmationInvalid')?c[f.error]:''} .label=${c.factorConfirmation} .value=${f.confirmation} .autocomplete=${'one-time-code'} .disabled=${f.pending}
         @wt-change=${(e:CustomEvent<{value:string}>)=>{f.confirmation=e.detail.value;}}></wt-input><div class="factor-actions">${button(c.factorActivate,'activate')}${button(c.factorCancel,'cancel')}</div>`
         :html`<div class="factor-actions">${button(f.status.active?c.factorReplace:c.factorEnable,'begin')}${f.status.active?html`${button(c.factorRegenerate,'regenerate')}${button(c.factorRemove,'remove')}`:nothing}</div>`}`
       :f.loaded?html`<p role="status">${c.factorUnavailable}</p>${f.enrolment?button(c.factorCancel,'cancel'):nothing}`:nothing}
