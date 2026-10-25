@@ -4056,8 +4056,13 @@ notifications separately.
   public embedded-IPv4 exceptions and other prefixes keep their classification;
   seven reserved lookalike controls now require refusal. These checks qualify
   address filtering only. Actual routing, loopback reachability and reserved
-  ranges outside `::/8` remain unqualified. See the
-  [IANA address-space registry](https://www.iana.org/assignments/ipv6-address-space).
+  ranges outside `::/8` remain unqualified except for the separately checked
+  reserved `fe00::/9` range. The probe now refuses that range too; native checks
+  cover both ends, its midpoint, expanded, dotted and scoped forms, neighbouring
+  refusals and preserved public IPv4/IPv6 decisions. Deleting or narrowing this
+  subnet fails the new checks while the original policy tests pass. These checks
+  qualify address filtering; actual routing and other reserved ranges remain open.
+  See the [IANA address-space registry](https://www.iana.org/assignments/ipv6-address-space).
   The monitor rejects
   late results after hostname changes, replacement or revocation, treats stale evidence as
   unknown, and records deduplicated route-failure, certificate-expiry and recovery
